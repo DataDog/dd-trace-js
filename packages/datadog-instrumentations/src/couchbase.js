@@ -4,7 +4,7 @@ const { errorMonitor } = require('events')
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 function findCallbackIndex (args, lowerbound = 2) {
@@ -20,7 +20,9 @@ function getQueryResource (q) {
 }
 
 function wrapAllNames (names, action) {
-  names.forEach(name => action(name))
+  for (const name of names) {
+    action(name)
+  }
 }
 
 function wrapCallback (callback, ctx, channelPrefix) {
@@ -96,7 +98,7 @@ function wrap (prefix, fn) {
         return fn.apply(this, arguments)
       } catch (error) {
         ctx.error = error
-        error.stack // trigger getting the stack at the original throwing point
+        void error.stack // trigger getting the stack at the original throwing point
         errorCh.publish(ctx)
 
         throw error
@@ -162,7 +164,7 @@ function wrapCBandPromise (fn, name, startData, thisArg, args) {
       )
       return res
     } catch (e) {
-      e.stack
+      void e.stack
       ctx.error = e
       errorCh.publish(ctx)
       throw e
@@ -176,7 +178,7 @@ function wrapWithName (name) {
       return wrapCBandPromise(operation, name, {
         collection: { name: this._name || '_default' },
         bucket: { name: this._scope._bucket._name },
-        seedNodes: this._dd_connStr
+        seedNodes: this._dd_connStr,
       }, this, arguments)
     }
   }
@@ -226,7 +228,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
       try {
         return _n1qlReq.apply(this, arguments)
       } catch (err) {
-        err.stack // trigger getting the stack at the original throwing point
+        void err.stack // trigger getting the stack at the original throwing point
         ctx.error = err
         errorCh.publish(ctx)
 

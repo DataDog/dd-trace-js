@@ -5,7 +5,7 @@ const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
@@ -33,7 +33,7 @@ function commitsFromEvent (event) {
         groupId,
         partition,
         offset,
-        topic
+        topic,
       })
     }
   }
@@ -66,7 +66,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
           clusterId,
           disableHeaderInjection: disabledHeaderWeakSet.has(producer),
           messages,
-          topic
+          topic,
         }
 
         for (const message of messages) {
@@ -93,9 +93,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                   // This approach is implemented by other tracers as well.
                   if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
                     disabledHeaderWeakSet.add(producer)
-                    log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
-                      'Please look at broker logs for more information. ' +
-                      'Tracer message header injection for Kafka is disabled.')
+                    log.error(
+                      // eslint-disable-next-line @stylistic/max-len
+                      'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
+                    )
                   }
                   producerErrorCh.publish(err)
                 }
@@ -169,7 +170,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             eachBatchExtractor,
             clusterId
           ),
-          ...runArgs
+          ...runArgs,
         })
       }
 
@@ -193,7 +194,7 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
     ? function (...args) {
       const extractedArgs = extractArgs(args, clusterId)
       const ctx = {
-        extractedArgs
+        extractedArgs,
       }
 
       return startCh.runStores(ctx, () => {

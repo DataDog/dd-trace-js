@@ -42,7 +42,7 @@ describe('code origin', () => {
         '_dd.code_origin.frames.0.line': String(line),
         '_dd.code_origin.frames.0.column': '20',
         '_dd.code_origin.frames.0.method': '<anonymous>',
-        '_dd.code_origin.frames.0.type': 'Test'
+        '_dd.code_origin.frames.0.type': 'Context',
       })
     })
 
@@ -60,7 +60,7 @@ describe('code origin', () => {
       const frames = [
         { file: testedFile, method: 'tag' },
         { file: testedFile, method: 'exitTags' },
-        { file: __filename, line, column: 20, method: '<anonymous>', type: 'Test' }
+        { file: __filename, line, column: 20, method: '<anonymous>', type: 'Context' },
       ]
       assert.strictEqual(tags['_dd.code_origin.type'], 'exit')
 

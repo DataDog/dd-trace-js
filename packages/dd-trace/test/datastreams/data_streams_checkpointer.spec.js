@@ -68,7 +68,7 @@ describe('data streams checkpointer manual api', () => {
     }, { timeoutMs: 5000 }).then(done, done)
 
     const headers = {
-      [DSM_CONTEXT_HEADER]: 'ncfR5V9FDZ3E58Cfj2LI2cOfj2I=' // same context as previous produce
+      [DSM_CONTEXT_HEADER]: 'ncfR5V9FDZ3E58Cfj2LI2cOfj2I=', // same context as previous produce
     }
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('testConsume', 'test-queue', headers)

@@ -17,9 +17,9 @@ describe('Disabled APM Tracing or Standalone - Product', () => {
       '../rate_limiter': sinon.stub(RateLimiter.prototype, 'constructor').callsFake((limit, interval = 'second') => {
         return {
           limit,
-          interval
+          interval,
         }
-      })
+      }),
 
     }).getProductRateLimiter
   })

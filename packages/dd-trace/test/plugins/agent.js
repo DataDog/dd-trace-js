@@ -120,7 +120,7 @@ function unformatSpanEvents (span) {
       return {
         name: event.name,
         startTime: event.time_unix_nano / 1e6, // Convert from nanoseconds back to milliseconds
-        attributes: event.attributes ? event.attributes : undefined
+        attributes: event.attributes ? event.attributes : undefined,
       }
     })
 
@@ -195,8 +195,8 @@ function handleTraceRequest (req, res, sendToTestAgent) {
         headers: {
           ...req.headers,
           'X-Datadog-Agent-Proxy-Disabled': 'True',
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
 
     testAgentReq.on('response', testAgentRes => {
@@ -340,7 +340,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
         error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
         // Mark errors enumerable for older Node.js versions to be visible.
         Object.defineProperty(error, 'errors', {
-          enumerable: true
+          enumerable: true,
         })
       }
       // Hack for the information to be fully visible.
@@ -351,7 +351,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   const handlerPayload = {
     handler,
-    spanResourceMatch: options.spanResourceMatch
+    spanResourceMatch: options.spanResourceMatch,
   }
 
   /**
@@ -414,14 +414,17 @@ module.exports = {
     currentIntegrationName = getCurrentIntegrationName()
 
     const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+    // Reload dogstatsd to avoid adding new events to the global process object
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
     const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh
+      './config': getConfigFresh,
+      './dogstatsd': dogstatsd,
     })
     const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy
+      './proxy': proxy,
     })
     tracer = proxyquire('../../', {
-      './src': TracerProxy
+      './src': TracerProxy,
     })
 
     agent = express()
@@ -445,7 +448,7 @@ module.exports = {
 
     agent.get('/info', (req, res) => {
       res.status(202).send({
-        endpoints: availableEndpoints
+        endpoints: availableEndpoints,
       })
     })
 
@@ -479,7 +482,7 @@ module.exports = {
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
       dsmStats.push(req.body)
-      statsHandlers.forEach(({ handler, spanResourceMatch }) => {
+      statsHandlers.forEach(({ handler }) => {
         handler(dsmStats)
       })
       res.status(200).send()
@@ -506,7 +509,7 @@ module.exports = {
           env: 'tester',
           port,
           flushInterval: 0,
-          plugins: false
+          plugins: false,
         }, tracerConfig))
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
@@ -719,6 +722,9 @@ module.exports = {
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
 
+    process.removeAllListeners('exit')
+    process.removeAllListeners('beforeExit')
+
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
     const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
       .map(exception => new RegExp(exception))
@@ -735,5 +741,5 @@ module.exports = {
   getDsmStats,
   dsmStatsExist,
   dsmStatsExistWithParentHash,
-  unformatSpanEvents
+  unformatSpanEvents,
 }

@@ -13,7 +13,7 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       # NOTE: Ok this next bit seems unnecessary, right? The problem is that
       # this repo is currently incompatible with npm, at least with the
@@ -46,10 +46,27 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run lint
+
+  verify-exercised-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      - run: npm run verify-exercised-tests
+
+  workflow-job-names:
+    runs-on: ubuntu-latest
+    name: Workflow job names (unique)
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
+      - run: npm run verify:workflow-job-names
 
   # The package size is especially useful in constrained environments, so the
   # computation is done only on the package that would be installed there.
@@ -60,7 +77,7 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
       - run: rm -rf *
@@ -78,10 +95,10 @@ jobs:
     if: github.actor != 'dependabot[bot]' && github.event_name != 'pull_request'
     steps:
     - name: Checkout
-      uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - name: Check code meets quality and security standards
       id: datadog-static-analysis
-      uses: DataDog/datadog-static-analyzer-github-action@2cc0e0621ea2863272b29d9aea230d9aad238086 # v2.0.0
+      uses: DataDog/datadog-static-analyzer-github-action@8340f18875fcefca86844b5f947ce2431387e552 # v3.0.0
       with:
         dd_api_key: ${{ secrets.DD_API_KEY }}
         dd_app_key: ${{ secrets.DD_APP_KEY }}
@@ -91,7 +108,7 @@ jobs:
   typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run type:doc:test
@@ -101,7 +118,7 @@ jobs:
   # verify-yaml:
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+  #     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
   #     - uses: ./.github/actions/node/latest
   #     - uses: ./.github/actions/install
   #     - run: node scripts/verify-ci-config.js
@@ -109,14 +126,15 @@ jobs:
   yarn-dedupe:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: read
+      contents: read
+    outputs:
+      has_changes: ${{ steps.diff.outputs.has_changes }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: ./.github/actions/node/latest
@@ -127,9 +145,96 @@ jobs:
       - name: Run yarn dependencies:dedupe
         run: yarn dependencies:dedupe
 
-      - name: Run yarn dedupe check
-        run: ./.github/scripts/yarn-dedupe.sh
+      - name: Prepare yarn.lock update (same-repo PRs only; restricted paths)
+        id: diff
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          fail_message() { cat <<'EOF'
+          ❌ The yarn.lock file needs deduplication!
+
+          The yarn dedupe command has modified your yarn.lock file.
+          This means there were duplicate dependencies that could be optimized.
+
+          To fix this issue:
+          1. Run 'yarn dependencies:dedupe' locally
+          2. Commit the updated yarn.lock file
+          3. Push your changes
+
+          This helps keep the dependency tree clean.
+          EOF
+          }
+
+          changes="$(git diff --name-only)"
+          if [ "$changes" != "yarn.lock" ]; then
+            echo "Unexpected changed paths during yarn dedupe:"
+            echo "$changes"
+            exit 1
+          fi
+
+          # Never push updates to fork PR branches, and don't auto-fix outside PRs.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            fail_message
+            exit 1
+          fi
+          if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            fail_message
+            exit 1
+          fi
+
+          cp yarn.lock "${RUNNER_TEMP}/yarn.lock"
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: steps.diff.outputs.has_changes == 'true'
+        with:
+          name: yarn-lock
+          path: ${{ runner.temp }}/yarn.lock
+          if-no-files-found: error
+
+  yarn-dedupe-push:
+    # If this job pushes a commit, GitHub will re-trigger the workflow on `pull_request:synchronize`
+    # with `github.actor == 'dd-octo-sts[bot]'`. Never attempt to mint another token / push again on
+    # that follow-up run.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.yarn-dedupe.outputs.has_changes == 'true' && github.actor != 'dd-octo-sts[bot]'
+    runs-on: ubuntu-latest
+    needs: yarn-dedupe
+    # Security: this job has an STS-minted token, but never runs installs/builds.
+    # It only updates yarn.lock via the GitHub API.
+    permissions:
+      id-token: write
+    steps:
+      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: yarn-dedupe
+
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: yarn-lock
+          path: ${{ runner.temp }}/yarn-lock-artifact
+
+      - name: Update yarn.lock via GitHub API (server-created verified commit)
         env:
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          test -f "${{ runner.temp }}/yarn-lock-artifact/yarn.lock"
+          sha="$(gh api -q '.sha' "repos/${OWNER}/${REPO}/contents/yarn.lock?ref=${BRANCH}")"
+          content="$(base64 -w 0 "${{ runner.temp }}/yarn-lock-artifact/yarn.lock")"
+
+          gh api -X PUT "repos/${OWNER}/${REPO}/contents/yarn.lock" \
+            -f message="chore: deduplicate yarn.lock" \
+            -f content="${content}" \
+            -f sha="${sha}" \
+            -f branch="${BRANCH}"

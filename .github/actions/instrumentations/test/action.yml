@@ -14,8 +14,10 @@ runs:
     - uses: ./.github/actions/node/latest
     - run: yarn test:instrumentations:ci
       shell: bash
-    - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-    - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+    - uses: ./.github/actions/coverage
+      with:
+        flags: instrumentations-${{ github.job }}
+    - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
       if: always() && github.actor != 'dependabot[bot]'
       with:
         api_key: ${{ inputs.dd_api_key }}

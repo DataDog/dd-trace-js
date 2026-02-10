@@ -48,8 +48,8 @@ describe('plugins/util/web', () => {
       method: 'GET',
       headers: {
         host: 'localhost',
-        date: 'now'
-      }
+        date: 'now',
+      },
     }
     end = sinon.stub()
     res = {
@@ -57,7 +57,7 @@ describe('plugins/util/web', () => {
       getHeader: sinon.stub(),
       getHeaders: sinon.stub().returns({}),
       setHeader: sinon.spy(),
-      writeHead: () => {}
+      writeHead: () => {},
     }
     res.getHeader.withArgs('server').returns('test')
     config = { hooks: {} }
@@ -92,8 +92,8 @@ describe('plugins/util/web', () => {
         headers: ['test'],
         validateStatus: code => false,
         hooks: {
-          request: () => 'test'
-        }
+          request: () => 'test',
+        },
       })
 
       assert.deepStrictEqual(config.headers, [['test', undefined]])
@@ -105,7 +105,7 @@ describe('plugins/util/web', () => {
     describe('queryStringObfuscation', () => {
       it('should keep booleans as is', () => {
         const config = web.normalizeConfig({
-          queryStringObfuscation: false
+          queryStringObfuscation: false,
         })
 
         assert.strictEqual(config.queryStringObfuscation, false)
@@ -113,7 +113,7 @@ describe('plugins/util/web', () => {
 
       it('should change to false when passed empty string', () => {
         const config = web.normalizeConfig({
-          queryStringObfuscation: ''
+          queryStringObfuscation: '',
         })
 
         assert.strictEqual(config.queryStringObfuscation, false)
@@ -121,7 +121,7 @@ describe('plugins/util/web', () => {
 
       it('should change to true when passed ".*"', () => {
         const config = web.normalizeConfig({
-          queryStringObfuscation: '.*'
+          queryStringObfuscation: '.*',
         })
 
         assert.strictEqual(config.queryStringObfuscation, true)
@@ -129,7 +129,7 @@ describe('plugins/util/web', () => {
 
       it('should convert to regex when passed valid string', () => {
         const config = web.normalizeConfig({
-          queryStringObfuscation: 'a*'
+          queryStringObfuscation: 'a*',
         })
 
         assert.ok('queryStringObfuscation' in config)
@@ -138,7 +138,7 @@ describe('plugins/util/web', () => {
 
       it('should default to true when passed a bad regex', () => {
         const config = web.normalizeConfig({
-          queryStringObfuscation: '(?)'
+          queryStringObfuscation: '(?)',
         })
 
         assert.strictEqual(config.queryStringObfuscation, true)
@@ -151,7 +151,7 @@ describe('plugins/util/web', () => {
       it('should set the parent from the request headers', () => {
         req.headers = {
           'x-datadog-trace-id': '123',
-          'x-datadog-parent-id': '456'
+          'x-datadog-parent-id': '456',
         }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -191,7 +191,7 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'http://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
           })
         })
       })
@@ -208,7 +208,7 @@ describe('plugins/util/web', () => {
           res.end()
 
           assertObjectContains(tags, {
-            [HTTP_CLIENT_IP]: '8.8.8.8'
+            [HTTP_CLIENT_IP]: '8.8.8.8',
           })
         })
       })
@@ -226,7 +226,7 @@ describe('plugins/util/web', () => {
           res.end()
 
           assertObjectContains(tags, {
-            [HTTP_CLIENT_IP]: '8.8.8.8'
+            [HTTP_CLIENT_IP]: '8.8.8.8',
           })
         })
       })
@@ -274,7 +274,7 @@ describe('plugins/util/web', () => {
           res.end()
 
           assertObjectContains(tags, {
-            [HTTP_CLIENT_IP]: '1.1.1.1'
+            [HTTP_CLIENT_IP]: '1.1.1.1',
           })
         })
       })
@@ -306,7 +306,7 @@ describe('plugins/util/web', () => {
             [`${HTTP_REQUEST_HEADERS}.host`]: 'localhost',
             'http.req': 'incoming',
             [`${HTTP_RESPONSE_HEADERS}.server`]: 'test',
-            'http.res': 'outgoing'
+            'http.res': 'outgoing',
           })
         })
       })
@@ -349,7 +349,7 @@ describe('plugins/util/web', () => {
         config.headers = ['host']
 
         const override = web.normalizeConfig({
-          headers: ['date']
+          headers: ['date'],
         })
 
         web.instrument(tracer, config, req, res, 'test.request', () => {
@@ -359,7 +359,7 @@ describe('plugins/util/web', () => {
             res.end()
 
             assertObjectContains(tags, {
-              [`${HTTP_REQUEST_HEADERS}.date`]: 'now'
+              [`${HTTP_REQUEST_HEADERS}.date`]: 'now',
             })
           })
         })
@@ -367,7 +367,7 @@ describe('plugins/util/web', () => {
 
       it('should obfuscate the query string from the URL', () => {
         const config = web.normalizeConfig({
-          queryStringObfuscation: 'secret=.*?(&|$)'
+          queryStringObfuscation: 'secret=.*?(&|$)',
         })
 
         req.method = 'GET'
@@ -380,7 +380,7 @@ describe('plugins/util/web', () => {
           res.end()
 
           assertObjectContains(tags, {
-            [HTTP_URL]: 'http://localhost/user/123?<redacted>foo=bar'
+            [HTTP_URL]: 'http://localhost/user/123?<redacted>foo=bar',
           })
         })
       })
@@ -392,7 +392,7 @@ describe('plugins/util/web', () => {
           'x-datadog-sampled',
           'x-datadog-sampling-priority',
           'x-datadog-trace-id',
-          'x-datadog-tags'
+          'x-datadog-tags',
         ].join(',')
 
         req.method = 'OPTIONS'
@@ -400,7 +400,7 @@ describe('plugins/util/web', () => {
         req.headers['access-control-request-headers'] = headers
 
         res.getHeaders.returns({
-          'access-control-allow-origin': 'http://test.com'
+          'access-control-allow-origin': 'http://test.com',
         })
 
         web.instrument(tracer, config, req, res, 'test.request')
@@ -413,7 +413,7 @@ describe('plugins/util/web', () => {
       it('should handle CORS preflight with partial headers', () => {
         const headers = [
           'x-datadog-parent-id',
-          'x-datadog-trace-id'
+          'x-datadog-trace-id',
         ].join(',')
 
         req.method = 'OPTIONS'
@@ -421,7 +421,7 @@ describe('plugins/util/web', () => {
         req.headers['access-control-request-headers'] = headers
 
         res.getHeaders.returns({
-          'access-control-allow-origin': 'http://test.com'
+          'access-control-allow-origin': 'http://test.com',
         })
 
         web.instrument(tracer, config, req, res, 'test.request')
@@ -450,7 +450,7 @@ describe('plugins/util/web', () => {
         req.headers.origin = 'http://test.com'
 
         res.getHeaders.returns({
-          'access-control-allow-origin': 'http://test.com'
+          'access-control-allow-origin': 'http://test.com',
         })
 
         web.instrument(tracer, config, req, res, 'test.request')
@@ -476,7 +476,7 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
           })
         })
       })
@@ -490,7 +490,7 @@ describe('plugins/util/web', () => {
           ':method': 'GET',
           ':path': '/user/123',
           'user-agent': 'curl',
-          'x-forwarded-for': '8.8.8.8'
+          'x-forwarded-for': '8.8.8.8',
         }
         res.statusCode = '200'
 
@@ -504,7 +504,7 @@ describe('plugins/util/web', () => {
             [HTTP_URL]: 'https://localhost/user/123',
             [HTTP_METHOD]: 'GET',
             [SPAN_KIND]: SERVER,
-            [HTTP_USERAGENT]: 'curl'
+            [HTTP_USERAGENT]: 'curl',
           })
         })
       })
@@ -587,7 +587,7 @@ describe('plugins/util/web', () => {
 
         assertObjectContains(tags, {
           [RESOURCE_NAME]: 'GET',
-          [HTTP_STATUS_CODE]: 200
+          [HTTP_STATUS_CODE]: 200,
         })
       })
 
@@ -597,7 +597,7 @@ describe('plugins/util/web', () => {
         res.end()
 
         assertObjectContains(tags, {
-          [ERROR]: true
+          [ERROR]: true,
         })
       })
 
@@ -607,7 +607,7 @@ describe('plugins/util/web', () => {
         res.end()
 
         assertObjectContains(tags, {
-          [ERROR]: true
+          [ERROR]: true,
         })
       })
 
@@ -617,7 +617,7 @@ describe('plugins/util/web', () => {
         res.end()
 
         assertObjectContains(tags, {
-          [HTTP_ROUTE]: '/custom/route'
+          [HTTP_ROUTE]: '/custom/route',
         })
       })
 
@@ -631,7 +631,7 @@ describe('plugins/util/web', () => {
 
       it('should execute multiple end hooks', () => {
         config.hooks = {
-          request: sinon.spy()
+          request: sinon.spy(),
         }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -643,7 +643,7 @@ describe('plugins/util/web', () => {
 
       it('should set the resource name from the http.route tag set in the hooks', () => {
         config.hooks = {
-          request: span => span.setTag('http.route', '/custom/route')
+          request: span => span.setTag('http.route', '/custom/route'),
         }
 
         web.instrument(tracer, config, req, res, 'test.request', span => {
@@ -826,7 +826,7 @@ describe('plugins/util/web', () => {
       web.addStatusError(req, 500)
 
       assertObjectContains(tags, {
-        [ERROR]: error
+        [ERROR]: error,
       })
     })
 
@@ -838,7 +838,7 @@ describe('plugins/util/web', () => {
       web.addStatusError(req, 500)
 
       assertObjectContains(tags, {
-        [ERROR]: error
+        [ERROR]: error,
       })
     })
   })
@@ -856,7 +856,7 @@ describe('plugins/util/web', () => {
       web.addStatusError(req, 500)
 
       assertObjectContains(tags, {
-        [ERROR]: true
+        [ERROR]: true,
       })
     })
 

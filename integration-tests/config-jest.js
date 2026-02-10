@@ -5,8 +5,8 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
   testMatch: [
-    process.env.TESTS_TO_RUN || '**/ci-visibility/test/ci-visibility-test*'
+    process.env.TESTS_TO_RUN || '**/ci-visibility/test/ci-visibility-test*',
   ],
   testRunner: 'jest-circus/runner',
-  testEnvironment: 'node'
+  testEnvironment: 'node',
 }

@@ -8,7 +8,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnProc
+  spawnProcAndExpectExit,
 } = require('../../../../../../integration-tests/helpers')
 const { assertLlmObsSpanEvent } = require('../../util')
 
@@ -25,13 +25,13 @@ const testVersions = [
   '^2',
   '^3',
   '^4',
-  '^5'
+  '^5',
 ]
 
 const testCases = [
   {
     name: 'not initialized',
-    file: 'noop'
+    file: 'noop',
   },
   {
     name: 'instruments an application with decorators',
@@ -56,15 +56,15 @@ const testCases = [
         tags: {
           ml_app: 'test',
           foo: 'bar',
-          bar: 'baz'
+          bar: 'baz',
         },
         inputValue: 'this is a',
-        outputValue: 'test'
+        outputValue: 'test',
       }]
 
       check(expected, actual)
-    }
-  }
+    },
+  },
 ]
 
 describe('typescript', () => {
@@ -104,7 +104,7 @@ describe('typescript', () => {
             { cwd, stdio: 'inherit' }
           )
 
-          proc = await spawnProc(
+          proc = await spawnProcAndExpectExit(
             path.join(cwd, `${file}.js`),
             { cwd, env: { DD_TRACE_AGENT_PORT: agent.port, DD_TAGS: 'foo:bar, bar:baz' } }
           )

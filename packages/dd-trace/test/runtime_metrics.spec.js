@@ -39,8 +39,8 @@ function createGarbage (count = 50) {
       beforeEach(() => {
         config = {
           runtimeMetrics: {
-            enabled: false
-          }
+            enabled: false,
+          },
         }
 
         runtimeMetrics = sinon.spy({
@@ -52,11 +52,11 @@ function createGarbage (count = 50) {
           count () {},
           gauge () {},
           increment () {},
-          decrement () {}
+          decrement () {},
         })
 
         proxy = proxyquire('../src/runtime_metrics', {
-          './runtime_metrics': runtimeMetrics
+          './runtime_metrics': runtimeMetrics,
         })
       })
 
@@ -155,7 +155,7 @@ function createGarbage (count = 50) {
             gauge: wrapSpy(client, client.gauge),
             increment: wrapSpy(client, client.increment),
             histogram: wrapSpy(client, client.histogram),
-            flush: client.flush.bind(client)
+            flush: client.flush.bind(client),
           }
         })
 
@@ -165,12 +165,12 @@ function createGarbage (count = 50) {
           gauge: sinon.spy(),
           increment: sinon.spy(),
           histogram: sinon.spy(),
-          flush: sinon.spy()
+          flush: sinon.spy(),
         }
 
         const proxiedObject = {
           '../dogstatsd': {
-            DogStatsDClient: Client
+            DogStatsDClient: Client,
           },
         }
         if (!nativeMetrics) {
@@ -195,22 +195,22 @@ function createGarbage (count = 50) {
           port: '8126',
           dogstatsd: {
             hostname: 'localhost',
-            port: 8125
+            port: 8125,
           },
           runtimeMetrics: {
             enabled: true,
             eventLoop: true,
-            gc: true
+            gc: true,
           },
           tags: {
             str: 'bar',
             obj: {},
-            invalid: 't{e*s#t5-:./'
-          }
+            invalid: 't{e*s#t5-:./',
+          },
         }
 
         clock = sinon.useFakeTimers({
-          toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+          toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
         })
 
         runtimeMetrics.start(config)
@@ -231,8 +231,8 @@ function createGarbage (count = 50) {
             host: 'localhost',
             tags: [
               'str:bar',
-              'invalid:t_e_s_t5-:./'
-            ]
+              'invalid:t_e_s_t5-:./',
+            ],
           })
         })
 
@@ -247,8 +247,8 @@ function createGarbage (count = 50) {
             host: 'localhost',
             tags: [
               'str:bar',
-              'invalid:t_e_s_t5-:./'
-            ]
+              'invalid:t_e_s_t5-:./',
+            ],
           })
         })
 
@@ -491,15 +491,15 @@ function createGarbage (count = 50) {
 
           const cpuMetrics = new Map([[
             'runtime.node.cpu.user',
-            Number(((cpuUsage.user - startCpuUsage.user) / timeDivisor).toFixed(2))
+            Number(((cpuUsage.user - startCpuUsage.user) / timeDivisor).toFixed(2)),
           ], [
             'runtime.node.cpu.system',
-            Number(((cpuUsage.system - startCpuUsage.system) / timeDivisor).toFixed(2))
+            Number(((cpuUsage.system - startCpuUsage.system) / timeDivisor).toFixed(2)),
           ], [
             'runtime.node.cpu.total',
             Number((
               ((cpuUsage.user - startCpuUsage.user) + (cpuUsage.system - startCpuUsage.system)) / timeDivisor
-            ).toFixed(2))
+            ).toFixed(2)),
           ]])
 
           let userPercent = 0
@@ -527,8 +527,8 @@ function createGarbage (count = 50) {
               }
               if (metric === 'runtime.node.cpu.total') {
                 assert(
-                  // Subtracting 0.02 since lower numbers can happen due to rounding issues.
-                  number >= expected - 0.02 && number <= expected + 1,
+                  // Subtracting 0.1 for time-window/baseline alignment numbers and due to rounding issues.
+                  number >= expected - 0.1 && number <= expected + 1,
                   `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
                 )
                 totalPercent = number

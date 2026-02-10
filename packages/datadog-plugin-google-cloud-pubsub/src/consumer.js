@@ -68,7 +68,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       }
 
       if (api === 'acknowledge') {
-        ackIds.forEach(ackId => ackIdToMessage.delete(ackId))
+        for (const ackId of ackIds) {
+          ackIdToMessage.delete(ackId)
+        }
       }
     })
   }
@@ -90,7 +92,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     return new SpanContext({
       traceId,
       spanId: parentId,
-      tags
+      tags,
     })
   }
 
@@ -126,28 +128,25 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
       'span.kind': 'consumer',
-      'pubsub.delivery_method': 'pull',
+      'pubsub.subscription_type': 'pull',
       'pubsub.span_type': 'message_processing',
       'messaging.operation': 'receive',
       base_service: baseService,
-      service_override_type: 'custom'
+      service_override_type: 'custom',
     }
 
     if (batchRequestTraceId && batchRequestSpanId) {
       meta['pubsub.batch.request_trace_id'] = batchRequestTraceId
-      meta['pubsub.batch.request_span_id'] = batchRequestSpanId
-      meta['_dd.pubsub_request.trace_id'] = batchRequestTraceId
-      meta['_dd.pubsub_request.span_id'] = batchRequestSpanId
       // Use JSON format like producer for proper span link parsing
       meta['_dd.span_links'] = JSON.stringify([{
         trace_id: batchRequestTraceId,
         span_id: batchRequestSpanId,
-        flags: 0
+        flags: 0,
       }])
     }
 
     const metrics = {
-      'pubsub.ack': 0
+      'pubsub.ack': 0,
     }
 
     if (batchSize) {
@@ -169,7 +168,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       type: 'worker',
       service: serviceName,
       meta,
-      metrics
+      metrics,
     }, ctx)
 
     if (message.id) {

@@ -7,7 +7,7 @@ const SpanProcessor = require('../../../packages/dd-trace/src/span_processor')
 const Exporter = require('../../../packages/dd-trace/src/exporters/agent/index')
 const PrioritySampler = require('../../../packages/dd-trace/src/priority_sampler')
 const id = require('../../../packages/dd-trace/src/id')
-const defaults = require('../../../packages/dd-trace/src/config_defaults')
+const defaults = require('../../../packages/dd-trace/src/config/defaults')
 
 const config = {
   url: `http://${defaults.hostname}:${defaults.port}`,
@@ -15,8 +15,8 @@ const config = {
   flushMinSpans: 100,
   protocolVersion: process.env.ENCODER_VERSION,
   stats: {
-    enabled: process.env.WITH_STATS === '1'
-  }
+    enabled: process.env.WITH_STATS === '1',
+  },
 }
 const prioritySampler = new PrioritySampler()
 const exporter = new Exporter(config, prioritySampler)
@@ -41,15 +41,15 @@ function createSpan (parent) {
       and: 'this is a longer string, just because we want to test some longer strongs, got it? okay',
       b: 45,
       something: 98764389,
-      afloaty: 203987465.756754
-    }
+      afloaty: 203987465.756754,
+    },
   }
   const span = {
     context: () => context,
     tracer: () => { return { _service: 'exporting-pipeline-sirun' } },
     setTag: () => {},
     _startTime: 1415926,
-    _duration: 100
+    _duration: 100,
   }
   finished.push(span)
   return span

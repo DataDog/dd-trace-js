@@ -29,16 +29,18 @@ describe('IAST - overhead-controller - integration', () => {
   })
 
   describe('vulnerability sampling algorithm', () => {
-    beforeEach(async () => {
+    beforeEach(async function () {
+      this.timeout(30_000)
+
       proc = await spawnProc(path.join(cwd, 'resources', 'overhead-controller.js'), {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-          NODE_OPTIONS: '--require ./resources/init.js'
-        }
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          NODE_OPTIONS: '--require ./resources/init.js',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })

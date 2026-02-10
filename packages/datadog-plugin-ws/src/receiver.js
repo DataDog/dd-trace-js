@@ -4,12 +4,12 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const {
   WEBSOCKET_PTR_KIND,
   SPAN_POINTER_DIRECTION,
-  SPAN_POINTER_DIRECTION_NAME
+  SPAN_POINTER_DIRECTION_NAME,
 } = require('../../dd-trace/src/constants')
 const {
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
-  hasDistributedTracingContext
+  hasDistributedTracingContext,
 } = require('./util')
 
 class WSReceiverPlugin extends TracingPlugin {
@@ -20,16 +20,14 @@ class WSReceiverPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const {
-      traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces
+      traceWebsocketMessagesSeparateTraces,
     } = this.config
-    if (!traceWebsocketMessagesEnabled) return
 
     const { byteLength, socket, binary } = ctx
     if (!socket.spanContext) return
 
-    const spanTags = socket.spanContext.spanTags
+    const spanTags = socket.spanTags
     const path = spanTags['resource.name'].split(' ')[1]
     const opCode = binary ? 'binary' : 'text'
 
@@ -45,7 +43,7 @@ class WSReceiverPlugin extends TracingPlugin {
       },
       metrics: {
         'websocket.message.length': byteLength,
-      }
+      },
 
     }, ctx)
 
@@ -74,13 +72,12 @@ class WSReceiverPlugin extends TracingPlugin {
       const linkAttributes = { 'dd.kind': 'executed_by' }
 
       // Add span pointer for context propagation
-      if (this.config.traceWebsocketMessagesEnabled && ctx.socket.handshakeSpan) {
-        const handshakeSpan = ctx.socket.handshakeSpan
+      if (this.config.traceWebsocketMessagesEnabled && ctx.socket.spanContext) {
+        const handshakeContext = ctx.socket.spanContext
 
         // Only add span pointers if distributed tracing is enabled and handshake has distributed context
-        if (hasDistributedTracingContext(handshakeSpan, ctx.socket)) {
+        if (hasDistributedTracingContext(handshakeContext, ctx.socket)) {
           const counter = incrementWebSocketCounter(ctx.socket, 'receiveCounter')
-          const handshakeContext = handshakeSpan.context()
 
           const ptrHash = buildWebSocketSpanPointerHash(
             handshakeContext._traceId,

@@ -20,7 +20,7 @@ if (isMainThread) {
     const worker = new Worker(__filename,
       {
         argv: [0, ...process.argv.slice(3)],
-        ...(workerMaxOldGenerationSizeMb ? { resourceLimits: { maxOldGenerationSizeMb: 50 } } : {})
+        ...(workerMaxOldGenerationSizeMb ? { resourceLimits: { maxOldGenerationSizeMb: 50 } } : {}),
       })
     const threadId = worker.threadId
     worker

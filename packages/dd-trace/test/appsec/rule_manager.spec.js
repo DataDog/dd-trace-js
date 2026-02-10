@@ -79,7 +79,7 @@ describe('AppSec Rule Manager', () => {
       return {
         ...changes,
         ack: sinon.spy(),
-        error: sinon.spy()
+        error: sinon.spy(),
       }
     }
 
@@ -90,7 +90,7 @@ describe('AppSec Rule Manager', () => {
           product: 'ASM_DD',
           path: 'test/rule_manager/updateWafFromRC/ASM_DD/01',
           file: {},
-          apply_state: UNACKNOWLEDGED
+          apply_state: UNACKNOWLEDGED,
         }],
         toModify: [{
           id: 'test.toModify',
@@ -99,13 +99,13 @@ describe('AppSec Rule Manager', () => {
           file: {
             rules_data: [{
               data: [
-                { value: '1.2.3.4' }
+                { value: '1.2.3.4' },
               ],
               id: 'blocked_ips',
-              type: 'data_with_expiration'
-            }]
+              type: 'data_with_expiration',
+            }],
           },
-          apply_state: UNACKNOWLEDGED
+          apply_state: UNACKNOWLEDGED,
         }],
         toApply: [{
           id: 'test.toApply',
@@ -113,17 +113,17 @@ describe('AppSec Rule Manager', () => {
           path: 'test/rule_manager/updateWafFromRC/ASM/01',
           file: {
             exclusions: [{
-              ekey: 'eValue'
+              ekey: 'eValue',
             }],
             rules_override: [{
-              roKey: 'roValue'
+              roKey: 'roValue',
             }],
             custom_rules: [{
               id: 'custom_rule1',
               name: 'custom_rule1',
               tags: {
                 tag1: 'flow1',
-                type: 'type1'
+                type: 'type1',
               },
               conditions: [
                 {
@@ -131,20 +131,20 @@ describe('AppSec Rule Manager', () => {
                   parameters: {
                     inputs: [
                       {
-                        address: 'server.request.headers.no_cookies'
+                        address: 'server.request.headers.no_cookies',
                       },
                       {
-                        address: 'server.request.query'
-                      }
+                        address: 'server.request.query',
+                      },
                     ],
-                    regex: 'custom_rule1'
-                  }
-                }
-              ]
-            }]
+                    regex: 'custom_rule1',
+                  },
+                },
+              ],
+            }],
           },
-          apply_state: UNACKNOWLEDGED
-        }]
+          apply_state: UNACKNOWLEDGED,
+        }],
       }
     }
 
@@ -158,11 +158,11 @@ describe('AppSec Rule Manager', () => {
 
       RuleManager = proxyquire('../../src/appsec/rule_manager', {
         './reporter': {
-          reportWafUpdate
+          reportWafUpdate,
         },
         './blocking': {
-          setDefaultBlockingActionParameters
-        }
+          setDefaultBlockingActionParameters,
+        },
       })
 
       waf.init.callThrough()
@@ -184,22 +184,22 @@ describe('AppSec Rule Manager', () => {
           product: 'NON_ASM_PRODUCT',
           path: 'test/rule_manager/updateWafFromRC/NON_ASM_PRODUCT/01',
           file: {},
-          apply_state: UNACKNOWLEDGED
+          apply_state: UNACKNOWLEDGED,
         }],
         toModify: [{
           id: 'test.toModify',
           product: 'NON_ASM_PRODUCT',
           path: 'test/rule_manager/updateWafFromRC/NON_ASM_PRODUCT/02',
           file: {},
-          apply_state: UNACKNOWLEDGED
+          apply_state: UNACKNOWLEDGED,
         }],
         toApply: [{
           id: 'test.toApply',
           product: 'NON_ASM_PRODUCT',
           path: 'test/rule_manager/updateWafFromRC/NON_ASM_PRODUCT/03',
           file: {},
-          apply_state: UNACKNOWLEDGED
-        }]
+          apply_state: UNACKNOWLEDGED,
+        }],
       }
 
       const transaction = createTransaction(changes)
@@ -244,7 +244,7 @@ describe('AppSec Rule Manager', () => {
       assert.deepStrictEqual(waf.wafManager.ddwaf.configPaths.sort(), [
         waf.wafManager.constructor.defaultWafConfigPath,
         changes.toApply[0].path,
-        changes.toModify[0].path
+        changes.toModify[0].path,
       ].sort())
 
       // Should ack for each ASM product config.
@@ -289,14 +289,14 @@ describe('AppSec Rule Manager', () => {
           skipped: [],
           errors: {
             'missing key operator': [
-              'blk-001-001'
-            ]
+              'blk-001-001',
+            ],
           },
           warnings: {
             'invalid tag': [
-              'blk-001-001'
-            ]
-          }
+              'blk-001-001',
+            ],
+          },
         },
         processors: {
           loaded: ['http-endpoint-fingerprint'],
@@ -304,30 +304,30 @@ describe('AppSec Rule Manager', () => {
           skipped: [],
           errors: {
             'missing mapping definition': [
-              'http-endpoint-fingerprint'
-            ]
+              'http-endpoint-fingerprint',
+            ],
           },
           warnings: {
             'no mappings defined': [
-              'http-endpoint-fingerprint'
-            ]
-          }
+              'http-endpoint-fingerprint',
+            ],
+          },
         },
         scanners: {
-          error: 'Fatal error'
-        }
+          error: 'Fatal error',
+        },
       }
 
       const expectedApplyError = {
         rules: {
-          errors: diagnostics.rules.errors
+          errors: diagnostics.rules.errors,
         },
         processors: {
-          errors: diagnostics.processors.errors
+          errors: diagnostics.processors.errors,
         },
         scanners: {
-          error: diagnostics.scanners.error
-        }
+          error: diagnostics.scanners.error,
+        },
       }
 
       waf.updateConfig.throws(new waf.WafUpdateError(diagnostics))
@@ -381,11 +381,11 @@ describe('AppSec Rule Manager', () => {
               id: 'asm_dd.test.failed',
               product: 'ASM_DD',
               path: 'test/rule_manager/updateWafFromRC/ASM_DD/01',
-              file: { rules: [{ name: 'rule_with_missing_id' }] }
-            }
+              file: { rules: [{ name: 'rule_with_missing_id' }] },
+            },
           ],
           toModify: [],
-          toUnapply: []
+          toUnapply: [],
         }
 
         const transaction = createTransaction(changes)
@@ -411,11 +411,11 @@ describe('AppSec Rule Manager', () => {
                   id: 'notblock',
                   parameters: {
                     location: '/notfound',
-                    status_code: 404
-                  }
-                }
-              ]
-            }
+                    status_code: 404,
+                  },
+                },
+              ],
+            },
           },
           {
             product: 'ASM',
@@ -426,12 +426,12 @@ describe('AppSec Rule Manager', () => {
                   id: 'block',
                   parameters: {
                     location: '/redirected',
-                    status_code: 302
-                  }
-                }
-              ]
-            }
-          }
+                    status_code: 302,
+                  },
+                },
+              ],
+            },
+          },
         ]
 
         RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply, toModify: [] }))
@@ -441,16 +441,16 @@ describe('AppSec Rule Manager', () => {
             id: 'notblock',
             parameters: {
               location: '/notfound',
-              status_code: 404
-            }
+              status_code: 404,
+            },
           },
           {
             id: 'block',
             parameters: {
               location: '/redirected',
-              status_code: 302
-            }
-          }
+              status_code: 302,
+            },
+          },
         ]
 
         sinon.assert.calledOnceWithExactly(setDefaultBlockingActionParameters, expectedActions)
@@ -463,20 +463,20 @@ describe('AppSec Rule Manager', () => {
           actions: [
             {
               id: 'block',
-              otherParam: 'other'
+              otherParam: 'other',
             },
             {
               id: 'otherId',
-              moreParams: 'more'
-            }
-          ]
+              moreParams: 'more',
+            },
+          ],
         }
         const toApply = [
           {
             product: 'ASM',
             id: '1',
-            file: asm
-          }
+            file: asm,
+          },
         ]
 
         RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply, toModify: [] }))
@@ -487,8 +487,8 @@ describe('AppSec Rule Manager', () => {
         const toUnapply = [
           {
             product: 'ASM',
-            id: '1'
-          }
+            id: '1',
+          },
         ]
 
         RuleManager.updateWafFromRC(createTransaction({ toUnapply, toApply: [], toModify: [] }))

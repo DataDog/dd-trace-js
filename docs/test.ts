@@ -434,6 +434,8 @@ span = tracer.startSpan('test', {
     foo: 'bar'
   }
 });
+span = tracer.startSpan('test', { childOf: null })
+span = tracer.startSpan('test', { integrationName: 'testIntegration' })
 
 tracer.trace('test', () => {})
 tracer.trace('test', { tags: { foo: 'bar' } }, () => {})
@@ -681,7 +683,12 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {}
+  tags: {},
+  prompt: {
+    id: '123',
+    version: '1.0.0',
+    template: 'this is a {message}',
+  }
 })
 llmobs.annotate(span, {
   inputData: 'input',

@@ -10,9 +10,13 @@ const {
   clearState,
   locationToBreakpoint,
   breakpointToProbes,
-  probeToLocation
+  probeToLocation,
 } = require('./state')
 const log = require('./log')
+
+/**
+ * @typedef {import('inspector').Debugger.SetBreakpointReturnType} SetBreakpointResponse
+ */
 
 let sessionStarted = false
 const probes = new Map()
@@ -38,7 +42,7 @@ session.on('scriptLoadingStabilized', () => {
 module.exports = {
   addBreakpoint: lock(addBreakpoint),
   removeBreakpoint: lock(removeBreakpoint),
-  modifyBreakpoint: lock(modifyBreakpoint)
+  modifyBreakpoint: lock(modifyBreakpoint),
 }
 
 async function addBreakpoint (probe) {
@@ -50,7 +54,7 @@ async function addBreakpoint (probe) {
   let lineNumber = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
   let columnNumber = 0 // Probes do not contain/support column information
 
-  // Optimize for sending data to /debugger/v1/input endpoint
+  // Optimize for sending data to debugger input endpoint
   probe.location = { file, lines: [String(lineNumber)] }
 
   // Optimize for fast calculations when probe is hit
@@ -119,14 +123,14 @@ async function addBreakpoint (probe) {
     const location = {
       scriptId,
       lineNumber: lineNumber - 1, // Beware! lineNumber is zero-indexed
-      columnNumber
+      columnNumber,
     }
     let result
     try {
-      result = await session.post('Debugger.setBreakpoint', {
+      result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
         location,
-        condition: probe.condition
-      })
+        condition: probe.condition,
+      }))
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
@@ -200,10 +204,10 @@ async function updateBreakpointInternal (breakpoint, probe) {
     breakpointToProbes.delete(breakpoint.id)
     let result
     try {
-      result = await session.post('Debugger.setBreakpoint', {
+      result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
         location: breakpoint.location,
-        condition
-      })
+        condition,
+      }))
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }

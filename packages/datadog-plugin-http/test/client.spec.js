@@ -116,8 +116,8 @@ describe('Plugin', () => {
                 'http.status_code': '200',
                 component: 'http',
                 '_dd.integration': 'http',
-                'out.host': 'localhost'
-              }
+                'out.host': 'localhost',
+              },
             })
               .then(done)
               .catch(done)
@@ -171,8 +171,8 @@ describe('Plugin', () => {
                 'http.method': 'CONNECT',
                 'http.status_code': '200',
                 component: 'http',
-                'out.host': 'localhost'
-              }
+                'out.host': 'localhost',
+              },
             })
               .then(done)
               .catch(done)
@@ -190,7 +190,7 @@ describe('Plugin', () => {
               port,
               method: 'CONNECT',
               hostname: 'localhost',
-              path: '/user'
+              path: '/user',
             })
 
             req.on('connect', (res, socket) => socket.end())
@@ -215,8 +215,8 @@ describe('Plugin', () => {
                 'http.url': `${protocol}://localhost:${port}/user`,
                 'http.method': 'GET',
                 'http.status_code': '101',
-                component: 'http'
-              }
+                component: 'http',
+              },
             })
               .then(done)
               .catch(done)
@@ -236,8 +236,8 @@ describe('Plugin', () => {
               path: '/user',
               headers: {
                 Connection: 'Upgrade',
-                Upgrade: 'websocket'
-              }
+                Upgrade: 'websocket',
+              },
             })
 
             req.on('upgrade', (res, socket) => socket.end())
@@ -264,7 +264,7 @@ describe('Plugin', () => {
               protocol: `${protocol}:`,
               hostname: 'localhost',
               port,
-              path: '/user'
+              path: '/user',
             }
             const req = http.request(uri)
 
@@ -283,8 +283,8 @@ describe('Plugin', () => {
             agent.assertFirstTraceSpan({
               meta: {
                 'http.status_code': '200',
-                'http.url': `${protocol}://localhost:${port}/user`
-              }
+                'http.url': `${protocol}://localhost:${port}/user`,
+              },
             })
               .then(done)
               .catch(done)
@@ -310,8 +310,8 @@ describe('Plugin', () => {
               agent.assertFirstTraceSpan({
                 meta: {
                   'http.status_code': '200',
-                  'http.url': `${protocol}://localhost:${port}/user`
-                }
+                  'http.url': `${protocol}://localhost:${port}/user`,
+                },
               })
                 .then(done)
                 .catch(done)
@@ -334,8 +334,8 @@ describe('Plugin', () => {
             agent.assertFirstTraceSpan({
               meta: {
                 'http.status_code': '200',
-                'http.url': `${protocol}://localhost:${port}/user`
-              }
+                'http.url': `${protocol}://localhost:${port}/user`,
+              },
             })
               .then(done)
               .catch(done)
@@ -344,7 +344,7 @@ describe('Plugin', () => {
               protocol: `${protocol}:`,
               hostname: 'localhost',
               port,
-              pathname: '/another-path'
+              pathname: '/another-path',
             }
             const req = http.request(uri, { path: '/user' })
 
@@ -363,8 +363,8 @@ describe('Plugin', () => {
             agent.assertFirstTraceSpan({
               meta: {
                 'http.status_code': '200',
-                'http.url': `${protocol}://localhost:${port}/user`
-              }
+                'http.url': `${protocol}://localhost:${port}/user`,
+              },
             }).then(done, done)
 
             const req = http.request(url)
@@ -389,7 +389,7 @@ describe('Plugin', () => {
 
             const req = http.request({
               protocol: `${protocol}:`,
-              port
+              port,
             })
 
             req.end()
@@ -468,7 +468,7 @@ describe('Plugin', () => {
           const app = express()
 
           const originalHeaders = {
-            Authorization: 'AWS4-HMAC-SHA256 ...'
+            Authorization: 'AWS4-HMAC-SHA256 ...',
           }
 
           app.get('/', (req, res) => {
@@ -490,7 +490,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             const req = http.request({
               port,
-              headers: originalHeaders
+              headers: originalHeaders,
             })
 
             req.end()
@@ -566,8 +566,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message || error.code,
                   [ERROR_STACK]: error.stack,
-                  component: 'http'
-                }
+                  component: 'http',
+                },
               })
             })
             .then(done)
@@ -643,8 +643,8 @@ describe('Plugin', () => {
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_TYPE]: error.name,
                   [ERROR_STACK]: error.stack,
-                  component: 'http'
-                }
+                  component: 'http',
+                },
               })
 
               assert.ok(!('http.status_code' in traces[0][0].meta))
@@ -761,7 +761,7 @@ describe('Plugin', () => {
               .catch(done)
 
             const options = {
-              agent: new http.Agent({ keepAlive: true, timeout: 5000 }) // custom agent with same default timeout
+              agent: new http.Agent({ keepAlive: true, timeout: 5000 }), // custom agent with same default timeout
             }
 
             appListener = server(app, port => {
@@ -882,8 +882,8 @@ describe('Plugin', () => {
             agent.assertFirstTraceSpan({
               meta: {
                 'http.status_code': '200',
-                'http.url': `${protocol}://localhost:${port}/user`
-              }
+                'http.url': `${protocol}://localhost:${port}/user`,
+              },
             })
               .then(done)
               .catch(done)
@@ -891,7 +891,7 @@ describe('Plugin', () => {
             const req = http.request({
               hostname: 'localhost',
               port,
-              path: '/user?foo=bar'
+              path: '/user?foo=bar',
             }, res => {
               res.on('data', () => {})
             })
@@ -914,8 +914,8 @@ describe('Plugin', () => {
                   error: 0,
                   meta: {
                     'http.status_code': '200',
-                    'http.url': `${protocol}://localhost:${port}/user`
-                  }
+                    'http.url': `${protocol}://localhost:${port}/user`,
+                  },
                 })
               })
               .then(done)
@@ -1032,8 +1032,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              service: 'custom'
-            }
+              service: 'custom',
+            },
           }
 
           return agent.load('http', config)
@@ -1074,8 +1074,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              validateStatus: status => status < 500
-            }
+              validateStatus: status => status < 500,
+            },
           }
 
           return agent.load('http', config)
@@ -1117,8 +1117,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              splitByDomain: true
-            }
+              splitByDomain: true,
+            },
           }
 
           return agent.load('http', config)
@@ -1145,12 +1145,12 @@ describe('Plugin', () => {
           {
             v0: {
               serviceName: () => `localhost:${serverPort}`,
-              opName: 'http.request'
+              opName: 'http.request',
             },
             v1: {
               serviceName: () => `localhost:${serverPort}`,
-              opName: 'http.client.request'
-            }
+              opName: 'http.client.request',
+            },
           }
         )
 
@@ -1185,8 +1185,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz']
-            }
+              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz'],
+            },
           }
 
           return agent.load('http', config)
@@ -1291,9 +1291,9 @@ describe('Plugin', () => {
               hooks: {
                 request: (span, req, res) => {
                   span.setTag('resource.name', `${req.method} ${req._route}`)
-                }
-              }
-            }
+                },
+              },
+            },
           }
 
           return agent.load('http', config)
@@ -1336,8 +1336,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              propagationBlocklist: [/\/users/]
-            }
+              propagationBlocklist: [/\/users/],
+            },
           }
 
           return agent.load('http', config)
@@ -1366,7 +1366,7 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             const req = http.request({
               port,
-              path: '/users'
+              path: '/users',
             })
 
             req.end()
@@ -1381,8 +1381,8 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              blocklist: [/\/user/]
-            }
+              blocklist: [/\/user/],
+            },
           }
 
           return agent.load('http', config)
@@ -1414,6 +1414,95 @@ describe('Plugin', () => {
             })
 
             req.end()
+          })
+        })
+      })
+
+      describe('with filter configuration', () => {
+        describe('when filter is only applied to client', () => {
+          beforeEach(() => {
+            const config = {
+              server: false,
+              client: {
+                filter: (url) => !url.includes('/health'),
+              },
+            }
+
+            return agent.load('http', config)
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
+          })
+
+          it('should skip recording if the filter function returns false', done => {
+            const app = express()
+
+            app.get('/health', (req, res) => {
+              res.status(200).send()
+            })
+
+            const timer = setTimeout(done, 100)
+
+            agent.assertSomeTraces(() => {
+              clearTimeout(timer)
+              done(new Error('Filtered requests should not be recorded.'))
+            })
+
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/health`, res => {
+                res.on('data', () => {})
+              })
+              req.end()
+            })
+          })
+        })
+
+        // This tests that multiple filters do not conflict
+        describe('when both server and client apply a filter', () => {
+          beforeEach(() => {
+            const config = {
+              server: {
+                filter: (url) => !url.includes('/health'),
+              },
+              client: {
+                filter: () => true,
+              },
+            }
+
+            return agent.load('http', config)
+              .then(() => {
+                http = require(pluginToBeLoaded)
+                express = require('express')
+              })
+          })
+
+          it('should record only the client span', done => {
+            const allSpans = []
+            const app = express()
+
+            app.get('/health', (req, res) => {
+              res.status(200).send()
+            })
+
+            agent
+              .assertSomeTraces(traces => {
+                allSpans.push(...traces.flat())
+                const clientSpans = allSpans.filter(span => span.meta['span.kind'] === 'client')
+                const serverSpans = allSpans.filter(span => span.meta['span.kind'] === 'server')
+
+                assert.strictEqual(clientSpans.length, 1)
+                assert.strictEqual(serverSpans.length, 0)
+              })
+              .then(done)
+              .catch(done)
+
+            appListener = server(app, port => {
+              const req = http.request(`${protocol}://localhost:${port}/health`, res => {
+                res.on('data', () => {})
+              })
+              req.end()
+            })
           })
         })
       })

@@ -1,6 +1,5 @@
 'use strict'
 
-const { URL, format } = require('url')
 const uuid = require('../../../../vendor/dist/crypto-randomuuid')
 const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
@@ -8,7 +7,7 @@ const log = require('../log')
 const { getExtraServices } = require('../service-naming/extra-services')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
-const defaults = require('../config_defaults')
+const { getAgentUrl } = require('../agent/url')
 const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
@@ -29,21 +28,17 @@ class RemoteConfig {
   constructor (config) {
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
-    this.url = config.url || new URL(format({
-      protocol: 'http:',
-      hostname: config.hostname || defaults.hostname,
-      port: config.port
-    }))
+    this.url = getAgentUrl(config)
 
     tagger.add(config.tags, {
-      '_dd.rc.client_id': clientId
+      '_dd.rc.client_id': clientId,
     })
 
     const tags = config.repositoryUrl
       ? {
           ...config.tags,
           [GIT_REPOSITORY_URL]: config.repositoryUrl,
-          [GIT_COMMIT_SHA]: config.commitSHA
+          [GIT_COMMIT_SHA]: config.commitSHA,
         }
       : config.tags
 
@@ -65,14 +60,14 @@ class RemoteConfig {
                 version: conf.version,
                 product: conf.product,
                 apply_state: conf.apply_state,
-                apply_error: conf.apply_error
+                apply_error: conf.apply_error,
               })
             }
             return configs
           },
           has_error: false,
           error: '',
-          backend_client_state: ''
+          backend_client_state: '',
         },
         id: clientId,
         products: /** @type {string[]} */ ([]), // updated by `updateProducts()`
@@ -86,11 +81,11 @@ class RemoteConfig {
           app_version: config.version,
           extra_services: /** @type {string[]} */ ([]),
           tags: Object.entries(tags).map((pair) => pair.join(':')),
-          [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray
+          [processTags.REMOTE_CONFIG_FIELD_NAME]: processTags.tagsArray,
         },
-        capabilities: DEFAULT_CAPABILITY // updated by `updateCapabilities()`
+        capabilities: DEFAULT_CAPABILITY, // updated by `updateCapabilities()`
       },
-      cached_target_files: /** @type {RcCachedTargetFile[]} */ ([]) // updated by `parseConfig()`
+      cached_target_files: /** @type {RcCachedTargetFile[]} */ ([]), // updated by `parseConfig()`
     }
   }
 
@@ -220,8 +215,8 @@ class RemoteConfig {
       method: 'POST',
       path: '/v0.7/config',
       headers: {
-        'Content-Type': 'application/json; charset=utf-8'
-      }
+        'Content-Type': 'application/json; charset=utf-8',
+      },
     }
 
     request(this.getPayload(), options, (err, data, statusCode) => {
@@ -260,7 +255,7 @@ class RemoteConfig {
   parseConfig ({
     client_configs: clientConfigs = [],
     targets,
-    target_files: targetFiles = []
+    target_files: targetFiles = [],
   }) {
     const toUnapply = /** @type {RcConfigState[]} */ ([])
     const toApply = /** @type {RcConfigState[]} */ ([])
@@ -315,7 +310,7 @@ class RemoteConfig {
           apply_error: '',
           length: meta.length,
           hashes: meta.hashes,
-          file: fromBase64JSON(file.raw)
+          file: fromBase64JSON(file.raw),
         })
         transactionByPath.set(path, newConf)
       }
@@ -356,7 +351,7 @@ class RemoteConfig {
         this.state.cached_target_files.push({
           path: conf.path,
           length: conf.length,
-          hashes
+          hashes,
         })
       }
     }
@@ -489,7 +484,7 @@ function createUpdateTransaction ({ toUnapply, toApply, toModify }, handledPaths
     error (path, err) {
       outcomes.set(path, { state: ERROR, error: err ? err.toString() : 'Error' })
       handledPaths.add(path)
-    }
+    },
   }
 }
 
@@ -523,7 +518,7 @@ function filterTransactionByProducts (transaction, products) {
     toApply,
     toModify,
     ack: transaction.ack,
-    error: transaction.error
+    error: transaction.error,
   }
 }
 
@@ -554,7 +549,7 @@ function parseConfigPath (configPath) {
 
   return {
     product: match[1],
-    id: match[2]
+    id: match[2],
   }
 }
 

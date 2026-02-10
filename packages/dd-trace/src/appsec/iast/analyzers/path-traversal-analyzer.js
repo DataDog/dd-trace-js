@@ -14,7 +14,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
     super(PATH_TRAVERSAL)
 
     this.exclusionList = [
-      path.join('node_modules', 'send') + path.sep
+      path.join('node_modules', 'send') + path.sep,
     ]
 
     this.internalExclusionList = [
@@ -23,7 +23,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       String.raw`node:internal\fs`,
       'fs.js',
       'internal/fs',
-      String.raw`internal\fs`
+      String.raw`internal\fs`,
     ]
   }
 

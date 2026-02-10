@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const {
   useSandbox, sandboxCwd, varySandbox, curl,
-  FakeAgent, spawnPluginIntegrationTestProc
+  FakeAgent, spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
 
 describe('ESM', () => {
@@ -13,7 +13,7 @@ describe('ESM', () => {
     ['./packages/datadog-plugin-process/test/integration-test/*'])
 
   before(function () {
-    variants = varySandbox('server.mjs', 'node:process')
+    variants = varySandbox('server.mjs', 'process', undefined, 'node:process')
   })
 
   beforeEach(async () => {

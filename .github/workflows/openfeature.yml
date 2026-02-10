@@ -19,9 +19,10 @@ jobs:
     strategy:
       matrix:
         version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / unit (node-${{ matrix.version }})
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -32,30 +33,34 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: openfeature-${{ github.job }}-${{ matrix.version }}
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-unit-${{ matrix.version }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
   macos:
+    name: ${{ github.workflow }} / macos
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
   ubuntu:
+    name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature
@@ -65,22 +70,23 @@ jobs:
       - run: yarn test:integration:openfeature
       - uses: ./.github/actions/node/latest
       - run: yarn test:integration:openfeature
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
   windows:
+    name: ${{ github.workflow }} / windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
           cache: 'true'
       - run: yarn test:integration:openfeature
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}

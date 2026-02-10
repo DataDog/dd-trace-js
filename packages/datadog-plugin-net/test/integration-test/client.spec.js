@@ -5,10 +5,10 @@ const assert = require('node:assert/strict')
 const {
   FakeAgent,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 describe('esm', () => {
   let agent
@@ -42,7 +42,7 @@ describe('esm', () => {
           assert.strictEqual(metaContainsNet, true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

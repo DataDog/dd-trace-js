@@ -12,8 +12,9 @@ const LLMObsEvalMetricsWriter = require('../../../src/llmobs/writers/evaluations
 const LLMObsSpanWriter = require('../../../src/llmobs/writers/spans')
 const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
-
 const agent = require('../../plugins/agent')
+const { removeDestroyHandler } = require('../util')
+
 const injectCh = channel('dd-trace:span:inject')
 
 describe('sdk', () => {
@@ -29,8 +30,8 @@ describe('sdk', () => {
       service: 'service',
       llmobs: {
         mlApp: 'mlApp',
-        agentlessEnabled: false
-      }
+        agentlessEnabled: false,
+      },
     })
     llmobs = tracer.llmobs
 
@@ -50,10 +51,10 @@ describe('sdk', () => {
     LLMObsSDK = require('../../../src/llmobs/sdk')
 
     // remove max listener warnings, we don't care about the writer anyways
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
 
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
   })
 
@@ -68,7 +69,7 @@ describe('sdk', () => {
     LLMObsSpanWriter.prototype.append.resetHistory()
     LLMObsSpanWriter.prototype.flush.resetHistory()
 
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   after(() => {
@@ -80,7 +81,7 @@ describe('sdk', () => {
   describe('enabled', () => {
     for (const [value, label] of [
       [true, 'enabled'],
-      [false, 'disabled']
+      [false, 'disabled'],
     ]) {
       it(`returns ${value} when llmobs is ${label}`, () => {
         const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: value } })
@@ -96,14 +97,14 @@ describe('sdk', () => {
       const config = getConfigFresh({})
       const llmobsModule = {
         enable: sinon.stub(),
-        disable () {}
+        disable () {},
       }
 
       // do not fully enable a disabled llmobs
       const disabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
 
       disabledLLMObs.enable({
-        mlApp: 'mlApp'
+        mlApp: 'mlApp',
       })
 
       assert.strictEqual(disabledLLMObs.enabled, true)
@@ -127,7 +128,7 @@ describe('sdk', () => {
     it('does not enable llmobs if env var conflicts', () => {
       const config = getConfigFresh({})
       const llmobsModule = {
-        enable: sinon.stub()
+        enable: sinon.stub(),
       }
 
       // do not fully enable a disabled llmobs
@@ -145,11 +146,11 @@ describe('sdk', () => {
   describe('disable', () => {
     it('disables llmobs if it is enabled', () => {
       const llmobsModule = {
-        disable: sinon.stub()
+        disable: sinon.stub(),
       }
 
       const config = getConfigFresh({
-        llmobs: {}
+        llmobs: {},
       })
 
       const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
@@ -351,7 +352,7 @@ describe('sdk', () => {
           mlApp: 'override',
           sessionId: 'sessionId',
           modelName: 'modelName',
-          modelProvider: 'modelProvider'
+          modelProvider: 'modelProvider',
         }, (_span) => {
           span = _span
         })
@@ -362,7 +363,7 @@ describe('sdk', () => {
           '_ml_obs.meta.model_name': 'modelName',
           '_ml_obs.meta.model_provider': 'modelProvider',
           '_ml_obs.session_id': 'sessionId',
-          '_ml_obs.llmobs_parent_id': 'undefined'
+          '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
     })
@@ -434,7 +435,7 @@ describe('sdk', () => {
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
             '_ml_obs.meta.span.kind': 'llm',
             '_ml_obs.meta.ml_app': 'mlApp',
-            '_ml_obs.llmobs_parent_id': 'undefined'
+            '_ml_obs.llmobs_parent_id': 'undefined',
           })
         })
 
@@ -453,7 +454,7 @@ describe('sdk', () => {
             '_ml_obs.meta.span.kind': 'embedding',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
-            '_ml_obs.meta.output.value': 'output'
+            '_ml_obs.meta.output.value': 'output',
           })
         })
 
@@ -472,7 +473,7 @@ describe('sdk', () => {
             '_ml_obs.meta.span.kind': 'retrieval',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
-            '_ml_obs.meta.input.value': 'input'
+            '_ml_obs.meta.input.value': 'input',
           })
         })
 
@@ -485,7 +486,7 @@ describe('sdk', () => {
             span = llmobs._active()
             llmobs.annotate({
               inputData: 'circular',
-              outputData: 'foo'
+              outputData: 'foo',
             })
             return ''
           }
@@ -498,7 +499,7 @@ describe('sdk', () => {
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': 'circular',
-            '_ml_obs.meta.output.value': 'foo'
+            '_ml_obs.meta.output.value': 'foo',
           })
         })
 
@@ -517,7 +518,7 @@ describe('sdk', () => {
             '_ml_obs.meta.span.kind': 'task',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
-            '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' })
+            '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' }),
           })
         })
 
@@ -536,7 +537,7 @@ describe('sdk', () => {
                 '_ml_obs.meta.span.kind': 'task',
                 '_ml_obs.meta.ml_app': 'mlApp',
                 '_ml_obs.llmobs_parent_id': 'undefined',
-                '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' })
+                '_ml_obs.meta.input.value': JSON.stringify({ foo: 'foo', bar: 'bar' }),
               })
             })
         })
@@ -563,7 +564,7 @@ describe('sdk', () => {
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
-            '_ml_obs.meta.output.value': 'output'
+            '_ml_obs.meta.output.value': 'output',
           })
         })
 
@@ -589,7 +590,7 @@ describe('sdk', () => {
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
-            '_ml_obs.meta.output.value': 'output'
+            '_ml_obs.meta.output.value': 'output',
           })
         })
 
@@ -615,7 +616,7 @@ describe('sdk', () => {
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
             '_ml_obs.meta.input.value': JSON.stringify({ input: 'input' }),
-            '_ml_obs.meta.output.value': 'output'
+            '_ml_obs.meta.output.value': 'output',
           })
         })
 
@@ -805,7 +806,7 @@ describe('sdk', () => {
           mlApp: 'override',
           sessionId: 'sessionId',
           modelName: 'modelName',
-          modelProvider: 'modelProvider'
+          modelProvider: 'modelProvider',
         }, () => {
           span = llmobs._active()
         })
@@ -818,7 +819,7 @@ describe('sdk', () => {
           '_ml_obs.meta.model_name': 'modelName',
           '_ml_obs.meta.model_provider': 'modelProvider',
           '_ml_obs.session_id': 'sessionId',
-          '_ml_obs.llmobs_parent_id': 'undefined'
+          '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
     })
@@ -848,7 +849,7 @@ describe('sdk', () => {
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
-          '_ml_obs.llmobs_parent_id': 'undefined'
+          '_ml_obs.llmobs_parent_id': 'undefined',
         })
       })
     })
@@ -928,7 +929,7 @@ describe('sdk', () => {
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.meta.input.messages': inputData,
-          '_ml_obs.meta.output.messages': outputData
+          '_ml_obs.meta.output.messages': outputData,
         })
       })
     })
@@ -945,7 +946,7 @@ describe('sdk', () => {
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.meta.input.documents': inputData,
-          '_ml_obs.meta.output.value': outputData
+          '_ml_obs.meta.output.value': outputData,
         })
       })
     })
@@ -962,7 +963,7 @@ describe('sdk', () => {
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.meta.input.value': inputData,
-          '_ml_obs.meta.output.documents': outputData
+          '_ml_obs.meta.output.documents': outputData,
         })
       })
     })
@@ -977,7 +978,7 @@ describe('sdk', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.meta.metadata': metadata
+          '_ml_obs.meta.metadata': metadata,
         })
       })
     })
@@ -992,7 +993,7 @@ describe('sdk', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.metrics': metrics
+          '_ml_obs.metrics': metrics,
         })
       })
     })
@@ -1007,7 +1008,7 @@ describe('sdk', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
-          '_ml_obs.tags': tags
+          '_ml_obs.tags': tags,
         })
       })
     })
@@ -1082,7 +1083,7 @@ describe('sdk', () => {
     beforeEach(() => {
       spanCtx = {
         traceId: '1234',
-        spanId: '5678'
+        spanId: '5678',
       }
     })
 
@@ -1120,7 +1121,7 @@ describe('sdk', () => {
       assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
           mlApp: 'test',
-          timestampMs: 'invalid'
+          timestampMs: 'invalid',
         })
       })
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
@@ -1130,7 +1131,7 @@ describe('sdk', () => {
       assert.throws(() => {
         llmobs.submitEvaluation(spanCtx, {
           mlApp: 'test',
-          timestampMs: 1234
+          timestampMs: 1234,
         })
       })
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
@@ -1142,7 +1143,7 @@ describe('sdk', () => {
           mlApp: 'test',
           timestampMs: 1234,
           label: 'test',
-          metricType: 'invalid'
+          metricType: 'invalid',
         })
       })
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
@@ -1155,7 +1156,7 @@ describe('sdk', () => {
           timestampMs: 1234,
           label: 'test',
           metricType: 'categorical',
-          value: 1
+          value: 1,
         })
       })
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
@@ -1168,7 +1169,7 @@ describe('sdk', () => {
           timestampMs: 1234,
           label: 'test',
           metricType: 'score',
-          value: 'string'
+          value: 'string',
         })
       })
 
@@ -1183,8 +1184,8 @@ describe('sdk', () => {
         metricType: 'score',
         value: 0.6,
         tags: {
-          host: 'localhost'
-        }
+          host: 'localhost',
+        },
       })
 
       assert.deepStrictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0], {
@@ -1195,7 +1196,7 @@ describe('sdk', () => {
         label: 'test',
         metric_type: 'score',
         score_value: 0.6,
-        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost']
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost'],
       })
     })
 
@@ -1207,8 +1208,8 @@ describe('sdk', () => {
         metricType: 'categorical',
         value: 'foo',
         tags: {
-          host: 'localhost'
-        }
+          host: 'localhost',
+        },
       })
 
       assert.ok('categorical_value' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
@@ -1221,7 +1222,7 @@ describe('sdk', () => {
         mlApp: 'test',
         label: 'test',
         metricType: 'score',
-        value: 0.6
+        value: 0.6,
       })
 
       assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
@@ -1234,7 +1235,7 @@ describe('sdk', () => {
         label: 'has_toxicity',
         metricType: 'boolean',
         value: true,
-        timestampMs: 1234
+        timestampMs: 1234,
       })
 
       const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
@@ -1247,7 +1248,7 @@ describe('sdk', () => {
         ml_app: 'mlApp',
         boolean_value: true,
         timestamp_ms: 1234,
-        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp']
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp'],
       })
     })
 
@@ -1255,7 +1256,7 @@ describe('sdk', () => {
       assert.throws(() => llmobs.submitEvaluation(spanCtx, {
         label: 'has_toxicity',
         metricType: 'boolean',
-        value: 'it is super toxic!'
+        value: 'it is super toxic!',
       }), { message: 'value must be a boolean for a boolean metric' })
     })
 
@@ -1274,7 +1275,7 @@ describe('sdk', () => {
           timestampMs: 1234,
           label: 'test',
           metricType: 'score',
-          value: 0.6
+          value: 0.6,
         })
 
         const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]

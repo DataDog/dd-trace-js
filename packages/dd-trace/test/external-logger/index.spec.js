@@ -20,8 +20,8 @@ describe('External Logger', () => {
 
     const { ExternalLogger } = proxyquire('../../src/external-logger/src', {
       '../../log': {
-        error: errorLog
-      }
+        error: errorLog,
+      },
     })
 
     externalLogger = new ExternalLogger({
@@ -30,7 +30,7 @@ describe('External Logger', () => {
       apiKey: 'API_KEY_PLACEHOLDER',
       interval: 10000,
       timeout: 5000,
-      limit: 10
+      limit: 10,
     })
   })
 
@@ -53,19 +53,19 @@ describe('External Logger', () => {
     const span = {
       service: 'openAi',
       trace_id: '000001000',
-      span_id: '9999991999'
+      span_id: '9999991999',
     }
     const tags = {
       env: 'external_logger',
       version: '1.2.3',
-      service: 'external'
+      service: 'external',
     }
     externalLogger.log({
       message: 'oh no, something is up',
       custom: 'field',
       attribute: 'funky',
       service: 'outer_space',
-      level: 'info'
+      level: 'info',
     }, span, tags)
 
     externalLogger.flush((err) => {

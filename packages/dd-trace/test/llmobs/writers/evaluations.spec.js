@@ -5,6 +5,8 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { removeDestroyHandler } = require('../util')
+
 describe('LLMObsEvalMetricsWriter', () => {
   let LLMObsEvalMetricsWriter
   let writer
@@ -16,12 +18,12 @@ describe('LLMObsEvalMetricsWriter', () => {
   })
 
   afterEach(() => {
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   it('constructs the url with the correct values', () => {
     writer = new LLMObsEvalMetricsWriter({
-      site: 'datadoghq.com'
+      site: 'datadoghq.com',
     })
     writer.setAgentless(true)
 
@@ -34,7 +36,7 @@ describe('LLMObsEvalMetricsWriter', () => {
   it('constructs the writer with the correct agent proxy values', () => {
     writer = new LLMObsEvalMetricsWriter({
       port: 8126,
-      hostname: 'localhost'
+      hostname: 'localhost',
     })
     writer.setAgentless(false)
     assert.strictEqual(writer.url, 'http://localhost:8126/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric')
@@ -44,12 +46,12 @@ describe('LLMObsEvalMetricsWriter', () => {
   it('builds the payload correctly', () => {
     writer = new LLMObsEvalMetricsWriter({
       site: 'datadoghq.com',
-      apiKey: 'test'
+      apiKey: 'test',
     })
     writer.setAgentless(true)
 
     const events = [
-      { name: 'test', value: 1 }
+      { name: 'test', value: 1 },
     ]
 
     const payload = writer.makePayload(events)

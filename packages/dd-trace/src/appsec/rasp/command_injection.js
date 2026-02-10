@@ -12,14 +12,14 @@ function enable (_config) {
   config = _config
 
   childProcessExecutionTracingChannel.subscribe({
-    start: analyzeCommandInjection
+    start: analyzeCommandInjection,
   })
 }
 
 function disable () {
   if (childProcessExecutionTracingChannel.start.hasSubscribers) {
     childProcessExecutionTracingChannel.unsubscribe({
-      start: analyzeCommandInjection
+      start: analyzeCommandInjection,
     })
   }
 }
@@ -52,5 +52,5 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
 
 module.exports = {
   enable,
-  disable
+  disable,
 }

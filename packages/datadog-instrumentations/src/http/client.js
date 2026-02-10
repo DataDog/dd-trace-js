@@ -101,8 +101,8 @@ function patch (http, methodName) {
               case 'response': {
                 const res = arg
                 ctx.res = res
-                res.on('end', finish)
-                res.on(errorMonitor, finish)
+                res.once('end', finish)
+                res.once(errorMonitor, finish)
                 break
               }
               case 'connect':
@@ -184,7 +184,7 @@ function patch (http, methodName) {
       search: url.search,
       pathname: url.pathname,
       path: `${url.pathname || ''}${url.search || ''}`,
-      href: url.href
+      href: url.href,
     }
     if (url.port !== '') {
       options.port = Number(url.port)

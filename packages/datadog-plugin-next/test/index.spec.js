@@ -55,8 +55,8 @@ describe('Plugin', function () {
               // eslint-disable-next-line n/no-path-concat
               NODE_OPTIONS: `--require ${__dirname}/datadog.js`,
               HOSTNAME: '127.0.0.1',
-              TIMES_HOOK_CALLED: 0
-            }
+              TIMES_HOOK_CALLED: 0,
+            },
           })
 
           server.once('error', done)
@@ -118,9 +118,9 @@ describe('Plugin', function () {
           cwd,
           env: {
             ...process.env,
-            VERSION: realVersion
+            VERSION: realVersion,
           },
-          stdio: ['pipe', 'ignore', 'pipe']
+          stdio: ['pipe', 'ignore', 'pipe'],
         })
 
         if (satisfiesStandalone(realVersion)) {
@@ -138,7 +138,7 @@ describe('Plugin', function () {
           'package.json',
           'node_modules',
           '.next',
-          'yarn.lock'
+          'yarn.lock',
         ]
         const paths = files.map(file => path.join(__dirname, file))
         execSync(`rm -rf ${paths.join(' ')}`)
@@ -155,9 +155,9 @@ describe('Plugin', function () {
         {
           hooks: (schemaVersion, defaultToGlobalService) => startServer({
             withConfig: false,
-            standalone: false
+            standalone: false,
           }, schemaVersion, defaultToGlobalService),
-          selectSpan: traces => traces[0][1]
+          selectSpan: traces => traces[0][1],
         }
       )
 
@@ -180,8 +180,8 @@ describe('Plugin', function () {
                     'http.method': 'GET',
                     'http.status_code': '200',
                     component: 'next',
-                    '_dd.integration': 'next'
-                  }
+                    '_dd.integration': 'next',
+                  },
                 })
               })
               .then(done)
@@ -195,7 +195,7 @@ describe('Plugin', function () {
           const pathTests = [
             ['/api/hello', '/api/hello'],
             ['/api/hello/world', '/api/hello/[name]'],
-            ['/api/hello/other', '/api/hello/other']
+            ['/api/hello/other', '/api/hello/other'],
           ]
           pathTests.forEach(([url, expectedPath]) => {
             it(`should infer the correct resource path (${expectedPath})`, done => {
@@ -237,8 +237,8 @@ describe('Plugin', function () {
                     'span.kind': 'server',
                     'http.method': 'GET',
                     'http.status_code': '404',
-                    component: 'next'
-                  }
+                    component: 'next',
+                  },
                 })
               })
               .then(done)
@@ -263,8 +263,8 @@ describe('Plugin', function () {
                     'span.kind': 'server',
                     'http.method': 'GET',
                     'http.status_code': '400',
-                    component: 'next'
-                  }
+                    component: 'next',
+                  },
                 })
               })
               .then(done)
@@ -304,8 +304,8 @@ describe('Plugin', function () {
                   meta: {
                     'next.page': '/api/hello/[name]',
                     'http.method': 'GET',
-                    'http.status_code': '200'
-                  }
+                    'http.status_code': '200',
+                  },
                 })
 
                 const webRequestSpan = spans.find(span => span.name === 'web.request')
@@ -340,8 +340,8 @@ describe('Plugin', function () {
                     'span.kind': 'server',
                     'http.method': 'GET',
                     'http.status_code': '200',
-                    component: 'next'
-                  }
+                    component: 'next',
+                  },
                 })
               })
               .then(done)
@@ -357,7 +357,7 @@ describe('Plugin', function () {
             ['/hello/world', '/hello/[name]'],
             ['/hello/other', '/hello/other'],
             ['/error/not_found', '/error/not_found', satisfies(pkg.version, '>=10') ? 404 : 500],
-            ['/error/get_server_side_props', '/error/get_server_side_props', 500]
+            ['/error/get_server_side_props', '/error/get_server_side_props', 500],
           ]
           pathTests.forEach(([url, expectedPath, statusCode]) => {
             it(`should infer the correct resource (${expectedPath})`, done => {
@@ -368,8 +368,8 @@ describe('Plugin', function () {
                   assertObjectContains(spans[1], {
                     resource: `GET ${expectedPath}`,
                     meta: {
-                      'http.status_code': `${statusCode || 200}`
-                    }
+                      'http.status_code': `${statusCode || 200}`,
+                    },
                   })
                 })
                 .then(done)
@@ -392,8 +392,8 @@ describe('Plugin', function () {
                     'span.kind': 'server',
                     'http.method': 'GET',
                     'http.status_code': '404',
-                    component: 'next'
-                  }
+                    component: 'next',
+                  },
                 })
               })
               .then(done)
@@ -431,8 +431,8 @@ describe('Plugin', function () {
                   meta: {
                     'http.status_code': '500',
                     'error.message': 'fail',
-                    'error.type': 'Error'
-                  }
+                    'error.type': 'Error',
+                  },
                 })
                 assert.ok(spans[1].meta['error.stack'])
               })
@@ -458,8 +458,8 @@ describe('Plugin', function () {
                     'span.kind': 'server',
                     'http.method': 'GET',
                     'http.status_code': '200',
-                    component: 'next'
-                  }
+                    component: 'next',
+                  },
                 })
               })
 
@@ -480,8 +480,8 @@ describe('Plugin', function () {
                   meta: {
                     'http.method': 'GET',
                     'http.status_code': '200',
-                    component: 'next'
-                  }
+                    component: 'next',
+                  },
                 })
               })
 
@@ -573,8 +573,8 @@ describe('Plugin', function () {
                   foo: 'bar',
                   req: 'IncomingMessage',
                   component: 'next',
-                  times_hook_called: '1'
-                }
+                  times_hook_called: '1',
+                },
               })
 
               // assert request hook was only called once across the whole request
@@ -598,8 +598,8 @@ describe('Plugin', function () {
                   error: 1,
                   meta: {
                     'error.message': 'error in app dir api route',
-                    'error.type': 'Error'
-                  }
+                    'error.type': 'Error',
+                  },
                 })
 
                 assert.ok(spans[1].meta['error.stack'])
@@ -628,7 +628,7 @@ describe('Plugin', function () {
           const standaloneTests = [
             ['api', '/api/hello/world', 'GET /api/hello/[name]'],
             ['pages', '/hello/world', 'GET /hello/[name]'],
-            ['static files', '/test.txt', 'GET /public/*']
+            ['static files', '/test.txt', 'GET /public/*'],
           ]
 
           standaloneTests.forEach(([test, resource, expectedResource]) => {
@@ -646,8 +646,8 @@ describe('Plugin', function () {
                       'span.kind': 'server',
                       'http.method': 'GET',
                       'http.status_code': '200',
-                      component: 'next'
-                    }
+                      component: 'next',
+                    },
                   })
                 })
 

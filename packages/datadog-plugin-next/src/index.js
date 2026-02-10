@@ -28,9 +28,9 @@ class NextPlugin extends ServerPlugin {
         'resource.name': req.method,
         'span.type': 'web',
         'span.kind': 'server',
-        'http.method': req.method
+        'http.method': req.method,
       },
-      integrationName: this.constructor.id
+      integrationName: this.constructor.id,
     })
 
     analyticsSampler.sample(span, this.config.measured, true)
@@ -77,7 +77,7 @@ class NextPlugin extends ServerPlugin {
     }
 
     span.addTags({
-      'http.status_code': res.statusCode
+      'http.status_code': res.statusCode,
     })
 
     this.config.hooks.request(span, req, res)
@@ -125,7 +125,7 @@ class NextPlugin extends ServerPlugin {
     span.addTags({
       [COMPONENT]: this.constructor.id,
       'resource.name': `${req.method} ${page}`.trim(),
-      'next.page': page
+      'next.page': page,
     })
     web.setRoute(req, page)
   }

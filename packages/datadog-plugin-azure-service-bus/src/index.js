@@ -7,7 +7,7 @@ class AzureServiceBusPlugin extends CompositePlugin {
   static get id () { return 'azure-service-bus' }
   static get plugins () {
     return {
-      producer: ProducerPlugin
+      producer: ProducerPlugin,
     }
   }
 }

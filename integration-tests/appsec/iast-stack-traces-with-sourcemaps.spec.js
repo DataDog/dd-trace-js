@@ -16,9 +16,9 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
 
     appDir = path.join(cwd, 'appsec', 'iast-stack-traces-ts-with-sourcemaps')
 
-    childProcess.execSync('yarn', { cwd })
+    childProcess.execSync('yarn || yarn', { cwd })
     childProcess.execSync('npx tsc', {
-      cwd: appDir
+      cwd: appDir,
     })
 
     appFile = path.join(appDir, 'index.js')
@@ -33,8 +33,8 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_IAST_ENABLED: 'true',
         DD_IAST_REQUEST_SAMPLING: '100',
-        NODE_OPTIONS: `--enable-source-maps --require ${appDir}/init.js`
-      }
+        NODE_OPTIONS: `--enable-source-maps --require ${appDir}/init.js`,
+      },
     })
 
     axios = Axios.create({ baseURL: proc.url })

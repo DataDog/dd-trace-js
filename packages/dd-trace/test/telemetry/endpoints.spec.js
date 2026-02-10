@@ -10,7 +10,7 @@ const dc = require('dc-polyfill')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 
-const originalSetImmediate = global.setImmediate
+const originalSetTimeout = global.setTimeout
 
 describe('endpoints telemetry', () => {
   const fastifyRouteCh = dc.channel('apm:fastify:route:added')
@@ -23,7 +23,7 @@ describe('endpoints telemetry', () => {
     const subscribe = sinon.stub()
     const dc = { channel () { return { subscribe } } }
     const endpoints = proxyquire('../../src/telemetry/endpoints', {
-      'dc-polyfill': dc
+      'dc-polyfill': dc,
     })
 
     beforeEach(() => {
@@ -58,10 +58,10 @@ describe('endpoints telemetry', () => {
       updateRetryData = sinon.stub()
 
       endpoints = proxyquire('../../src/telemetry/endpoints', {
-        './send-data': { sendData }
+        './send-data': { sendData },
       })
       scheduledCallbacks = []
-      global.setImmediate = function (callback) {
+      global.setTimeout = function (callback) {
         scheduledCallbacks.push(callback)
         return { unref () {} }
       }
@@ -70,9 +70,9 @@ describe('endpoints telemetry', () => {
         appsec: {
           apiSecurity: {
             endpointCollectionEnabled: true,
-            endpointCollectionMessageLimit: 100
-          }
-        }
+            endpointCollectionMessageLimit: 100,
+          },
+        },
       }
 
       endpoints.start(config, application, host, getRetryData, updateRetryData)
@@ -83,7 +83,7 @@ describe('endpoints telemetry', () => {
       sendData.reset()
       getRetryData.reset()
       updateRetryData.reset()
-      global.setImmediate = originalSetImmediate
+      global.setTimeout = originalSetTimeout
     })
 
     it('should not fail with invalid data', () => {
@@ -108,22 +108,22 @@ describe('endpoints telemetry', () => {
           method: 'GET',
           path: '/api',
           operation_name: 'fastify.request',
-          resource_name: 'GET /api'
+          resource_name: 'GET /api',
         },
         {
           type: 'REST',
           method: 'POST',
           path: '/api',
           operation_name: 'fastify.request',
-          resource_name: 'POST /api'
+          resource_name: 'POST /api',
         },
         {
           type: 'REST',
           method: 'PUT',
           path: '/api',
           operation_name: 'fastify.request',
-          resource_name: 'PUT /api'
-        }
+          resource_name: 'PUT /api',
+        },
       ])
     })
 
@@ -183,8 +183,8 @@ describe('endpoints telemetry', () => {
           method: 'POST',
           path: '/express-test',
           operation_name: 'express.request',
-          resource_name: 'POST /express-test'
-        }
+          resource_name: 'POST /express-test',
+        },
       ])
     })
 
@@ -201,8 +201,8 @@ describe('endpoints telemetry', () => {
           method: 'DELETE',
           path: '/router-test',
           operation_name: 'express.request',
-          resource_name: 'DELETE /router-test'
-        }
+          resource_name: 'DELETE /router-test',
+        },
       ])
     })
 
@@ -262,7 +262,7 @@ describe('endpoints telemetry', () => {
 
         getRetryData.returns({
           reqType: 'app-endpoints',
-          payload: { endpoints: [] }
+          payload: { endpoints: [] },
         })
 
         fastifyRouteCh.publish({ routeOptions: { method: 'POST', path: '/second' } })

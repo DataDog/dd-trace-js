@@ -36,25 +36,25 @@ describe('Span', () => {
     tracer = {}
 
     processor = {
-      process: sinon.stub()
+      process: sinon.stub(),
     }
 
     prioritySampler = {
-      sample: sinon.stub()
+      sample: sinon.stub(),
     }
 
     tagger = {
-      add: sinon.spy()
+      add: sinon.spy(),
     }
 
     Span = proxyquire('../../src/opentracing/span', {
       perf_hooks: {
         performance: {
-          now
-        }
+          now,
+        },
       },
       '../id': id,
-      '../tagger': tagger
+      '../tagger': tagger,
     })
   })
 
@@ -93,7 +93,7 @@ describe('Span', () => {
     now.onSecondCall().returns(100)
 
     const parent = new Span(tracer, processor, prioritySampler, {
-      operationName: 'parent'
+      operationName: 'parent',
     })
 
     now.resetHistory()
@@ -102,7 +102,7 @@ describe('Span', () => {
 
     span = new Span(tracer, processor, prioritySampler, {
       operationName: 'operation',
-      parent: parent.context()
+      parent: parent.context(),
     })
     span.finish()
 
@@ -114,7 +114,7 @@ describe('Span', () => {
     const propagator = new TextMapPropagator(getConfig())
     const parent = propagator.extract({
       'x-datadog-trace-id': '1234',
-      'x-datadog-parent-id': '5678'
+      'x-datadog-parent-id': '5678',
     })
 
     now.onFirstCall().returns(100)
@@ -123,7 +123,7 @@ describe('Span', () => {
 
     span = new Span(tracer, processor, prioritySampler, {
       operationName: 'operation',
-      parent
+      parent,
     })
     span.finish()
 
@@ -140,8 +140,8 @@ describe('Span', () => {
         started: ['span'],
         finished: [],
         tags: {},
-        origin: 'synthetics'
-      }
+        origin: 'synthetics',
+      },
     }
 
     span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
@@ -156,7 +156,7 @@ describe('Span', () => {
   it('should generate a 128-bit trace ID when configured', () => {
     span = new Span(tracer, processor, prioritySampler, {
       operationName: 'operation',
-      traceId128BitGenerationEnabled: true
+      traceId128BitGenerationEnabled: true,
     })
 
     assert.deepStrictEqual(span.context()._traceId, '123')
@@ -169,7 +169,7 @@ describe('Span', () => {
     startCh.subscribe(onSpan)
 
     const fields = {
-      operationName: 'operation'
+      operationName: 'operation',
     }
 
     try {
@@ -207,8 +207,8 @@ describe('Span', () => {
         _baggageItems: {},
         _trace: {
           started: ['span'],
-          finished: ['span']
-        }
+          finished: ['span'],
+        },
       }
 
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
@@ -224,12 +224,12 @@ describe('Span', () => {
         traceId: '123',
         spanId: '456',
         _baggageItems: {
-          foo: 'bar'
+          foo: 'bar',
         },
         _trace: {
           started: ['span'],
-          finished: ['span']
-        }
+          finished: ['span'],
+        },
       }
 
       span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
@@ -256,7 +256,7 @@ describe('Span', () => {
 
       const attributes = {
         foo: 'bar',
-        baz: 'qux'
+        baz: 'qux',
       }
       span.addLink(span2.context(), attributes)
       assert.deepStrictEqual(span._links[0].attributes, attributes)
@@ -270,7 +270,7 @@ describe('Span', () => {
         foo: true,
         bar: 'hi',
         baz: 1,
-        qux: [1, 2, 3]
+        qux: [1, 2, 3],
       }
 
       span.addLink(span2.context(), attributes)
@@ -280,7 +280,7 @@ describe('Span', () => {
         baz: '1',
         'qux.0': '1',
         'qux.1': '2',
-        'qux.2': '3'
+        'qux.2': '3',
       })
     })
 
@@ -290,12 +290,12 @@ describe('Span', () => {
       const attributes = {
         foo: () => {},
         bar: Symbol('bar'),
-        baz: 'valid'
+        baz: 'valid',
       }
 
       span.addLink(span2.context(), attributes)
       assert.deepStrictEqual(span._links[0].attributes, {
-        baz: 'valid'
+        baz: 'valid',
       })
     })
   })
@@ -315,7 +315,7 @@ describe('Span', () => {
         'ptr.kind': 'pointer_kind',
         'ptr.dir': 'd',
         'ptr.hash': 'abc123',
-        'link.kind': 'span-pointer'
+        'link.kind': 'span-pointer',
       })
 
       span.addSpanPointer('another_kind', 'd', '1234567')
@@ -324,7 +324,7 @@ describe('Span', () => {
         'ptr.kind': 'another_kind',
         'ptr.dir': 'd',
         'ptr.hash': '1234567',
-        'link.kind': 'span-pointer'
+        'link.kind': 'span-pointer',
       })
       assert.strictEqual(span._links[1].context.toTraceId(), '0')
       assert.strictEqual(span._links[1].context.toSpanId(), '0')
@@ -347,22 +347,22 @@ describe('Span', () => {
           startTime: 1714536311886,
           attributes: {
             'error.code': '403',
-            'unknown values': [1]
-          }
+            'unknown values': [1],
+          },
         },
         {
           name: 'Web page loaded',
-          startTime: 1500000000000
+          startTime: 1500000000000,
         },
         {
           name: 'Button changed color',
           attributes: {
             colors: [112, 215, 70],
             'response.time': 134.3,
-            success: true
+            success: true,
           },
-          startTime: 1500000000000
-        }
+          startTime: 1500000000000,
+        },
       ]
       assert.deepStrictEqual(events, expectedEvents)
     })
@@ -386,7 +386,7 @@ describe('Span', () => {
       span._spanContext._baggageItems.raccoon = 'cute'
       assert.strictEqual(span.getAllBaggageItems(), JSON.stringify({
         foo: 'bar',
-        raccoon: 'cute'
+        raccoon: 'cute',
       }))
     })
   })
@@ -488,21 +488,21 @@ describe('Span', () => {
           traceId: '123',
           spanId: '456',
           _baggageItems: {
-            foo: 'bar'
+            foo: 'bar',
           },
           _trace: {
             started: ['span'],
-            finished: ['span']
+            finished: ['span'],
           },
-          _isRemote: true
+          _isRemote: true,
         }
       })
 
       it('should not propagate baggage items when Trace_Propagation_Behavior_Extract is set to ignore', () => {
         tracer = {
           _config: {
-            tracePropagationBehaviorExtract: 'ignore'
-          }
+            tracePropagationBehaviorExtract: 'ignore',
+          },
         }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         assert.deepStrictEqual(span._spanContext._baggageItems, {})
@@ -511,8 +511,8 @@ describe('Span', () => {
       it('should propagate baggage items when Trace_Propagation_Behavior_Extract is set to restart', () => {
         tracer = {
           _config: {
-            tracePropagationBehaviorExtract: 'restart'
-          }
+            tracePropagationBehaviorExtract: 'restart',
+          },
         }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar' })

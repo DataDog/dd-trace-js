@@ -35,17 +35,17 @@ esbuildVersions.forEach((version) => {
     before(() => {
       process.chdir(TEST_DIR)
       execSync('npm install', {
-        timeout
+        timeout,
       })
       execSync(`npm install esbuild@${version}`, {
-        timeout
+        timeout,
       })
     })
 
     after(() => {
       process.chdir(originalDir)
       execSync('npm remove esbuild', {
-        timeout
+        timeout,
       })
     })
 
@@ -54,7 +54,7 @@ esbuildVersions.forEach((version) => {
 
       try {
         execSync('npm run built', {
-          timeout
+          timeout,
         })
       } catch (err) {
         console.error(err)
@@ -66,37 +66,43 @@ esbuildVersions.forEach((version) => {
 
     it('does not bundle modules listed in .external', () => {
       execSync('node ./build-and-test-skip-external.js', {
-        timeout
+        timeout,
       })
     })
 
     it('handles typescript apps that import without file extensions', () => {
       execSync('node ./build-and-test-typescript.mjs', {
-        timeout
+        timeout,
       })
     })
 
     it('handles the complex aws-sdk package with dynamic requires', () => {
       execSync('node ./build-and-test-aws-sdk.js', {
-        timeout
+        timeout,
       })
     })
 
     it('handles scoped node_modules', () => {
       execSync('node ./build-and-test-koa.mjs', {
-        timeout
+        timeout,
       })
     })
 
     it('handles instrumentations where the patching function is a property of the hook', () => {
       execSync('node ./build-and-test-openai.js', {
-        timeout
+        timeout,
       })
     })
 
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', {
-        timeout
+        timeout,
+      })
+    })
+
+    it('prints a warning when user opts to minify output without retaining class names', () => {
+      execSync('node ./build-and-test-minify.js', {
+        timeout,
       })
     })
 
@@ -110,13 +116,13 @@ esbuildVersions.forEach((version) => {
       it('works', () => {
         execSync('npm run build:esm')
         execSync('npm run built:esm', {
-          timeout
+          timeout,
         })
       })
 
       it('should not override existing js banner', () => {
         execSync('node ./build-and-run.esm-unrelated-js-banner.mjs', {
-          timeout
+          timeout,
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
@@ -125,7 +131,7 @@ esbuildVersions.forEach((version) => {
 
       it('should contain the definitions when esm is inferred from outfile', () => {
         execSync('node ./build-and-run.esm-relying-in-extension.mjs', {
-          timeout
+          timeout,
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
@@ -134,7 +140,7 @@ esbuildVersions.forEach((version) => {
 
       it('should contain the definitions when esm is inferred from format', () => {
         execSync('node ./build-and-run.esm-relying-in-format.mjs', {
-          timeout
+          timeout,
         })
 
         const builtFile = readFileSync('./out.mjs').toString()
@@ -143,7 +149,7 @@ esbuildVersions.forEach((version) => {
 
       it('should contain the definitions when format is inferred from out extension', () => {
         execSync('node ./build-and-run.esm-relying-in-out-extension.mjs', {
-          timeout
+          timeout,
         })
 
         const builtFile = readFileSync('./basic-test.mjs').toString()
@@ -152,7 +158,7 @@ esbuildVersions.forEach((version) => {
 
       it('should not contain the definitions when no esm is specified', () => {
         execSync('node ./build.js', {
-          timeout
+          timeout,
         })
 
         const builtFile = readFileSync('./out.js').toString()
@@ -161,13 +167,13 @@ esbuildVersions.forEach((version) => {
 
       it('should not crash when it is already patched using global', () => {
         execSync('node ./build-and-run.esm-patched-global-banner.mjs', {
-          timeout
+          timeout,
         })
       })
 
       it('should not crash when it is already patched using const', () => {
         execSync('node ./build-and-run.esm-patched-const-banner.mjs', {
-          timeout
+          timeout,
         })
       })
     })

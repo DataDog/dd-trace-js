@@ -6,7 +6,7 @@ const benchmark = require('./benchmark')
 const { createSingleExposureEvent, createExposureEventArray } = require('./stubs/exposure-events')
 
 const ExposuresWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/exposures', {
-  '../../exporters/common/request': () => {}
+  '../../exporters/common/request': () => {},
 })
 
 const config = getConfig({ service: 'benchmark', version: '1.0.0', env: 'test' })
@@ -25,7 +25,7 @@ suite
     },
     fn () {
       writer.append(singleEvent)
-    }
+    },
   })
   .add('ExposuresWriter#append (event array)', {
     onStart () {
@@ -35,7 +35,7 @@ suite
     },
     fn () {
       writer.append(eventArray)
-    }
+    },
   })
   .add('ExposuresWriter#append (disabled, single event)', {
     onStart () {
@@ -49,7 +49,7 @@ suite
       if (writer._pendingEvents.length >= 1000) {
         writer._pendingEvents = []
       }
-    }
+    },
   })
   .add('ExposuresWriter#append (disabled, event array)', {
     onStart () {
@@ -63,7 +63,7 @@ suite
       if (writer._pendingEvents.length >= 1000) {
         writer._pendingEvents = []
       }
-    }
+    },
   })
   .add('ExposuresWriter#makePayload', {
     onStart () {
@@ -72,7 +72,7 @@ suite
     },
     fn () {
       writer.makePayload(eventArray)
-    }
+    },
   })
 
 suite.run()

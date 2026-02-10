@@ -22,14 +22,14 @@ const rc = {
         maxReferenceDepth: process.env.MAX_REFERENCE_DEPTH ? parseInt(process.env.MAX_REFERENCE_DEPTH, 10) : undefined,
         maxCollectionSize: process.env.MAX_COLLECTION_SIZE ? parseInt(process.env.MAX_COLLECTION_SIZE, 10) : undefined,
         maxFieldCount: process.env.MAX_FIELD_COUNT ? parseInt(process.env.MAX_FIELD_COUNT, 10) : undefined,
-        maxLength: process.env.MAX_LENGTH ? parseInt(process.env.MAX_LENGTH, 10) : undefined
-      }
+        maxLength: process.env.MAX_LENGTH ? parseInt(process.env.MAX_LENGTH, 10) : undefined,
+      },
     })
     const id = 'id'
     const ack = () => {}
 
     cb(action, conf, id, ack)
-  }
+  },
 }
 
 start(config, rc)

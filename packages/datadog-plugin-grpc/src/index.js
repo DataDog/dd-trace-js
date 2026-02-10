@@ -9,7 +9,7 @@ class GrpcPlugin extends CompositePlugin {
   static get plugins () {
     return {
       server: GrpcServerPlugin,
-      client: GrpcClientPlugin
+      client: GrpcClientPlugin,
     }
   }
 }

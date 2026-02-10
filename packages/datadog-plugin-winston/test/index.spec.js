@@ -6,7 +6,6 @@ const http = require('node:http')
 const { inspect } = require('node:util')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
-const proxyquire = require('proxyquire').noPreserveCache()
 const semver = require('semver')
 const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -56,7 +55,7 @@ describe('Plugin', () => {
   async function setupTest (version, winstonConfiguration) {
     span = tracer.startSpan('test')
 
-    winston = proxyquire(`../../../versions/winston@${version}`, {}).get()
+    winston = require(`../../../versions/winston@${version}`).get()
 
     logServer = await createLogServer()
 
@@ -77,13 +76,13 @@ describe('Plugin', () => {
     httpTransport = new winston.transports.Http({
       host: '127.0.0.1',
       port: logServer.address().port,
-      path: '/loglog'
+      path: '/loglog',
     })
 
     if (winston.configure) {
       const configureBlock = {
         ...{ transports: [transport, httpTransport] },
-        ...winstonConfiguration
+        ...winstonConfiguration,
       }
 
       winston.configure(configureBlock)
@@ -92,7 +91,7 @@ describe('Plugin', () => {
       winston.add(winston.transports.Http, {
         host: '127.0.0.1',
         port: logServer.address().port,
-        path: '/loglog'
+        path: '/loglog',
       })
       winston.remove(winston.transports.Console)
     }
@@ -131,8 +130,8 @@ describe('Plugin', () => {
           const meta = {
             dd: {
               trace_id: span.context().toTraceId(true),
-              span_id: span.context().toSpanId()
-            }
+              span_id: span.context().toSpanId(),
+            },
           }
 
           tracer.scope().activate(span, () => {
@@ -159,8 +158,8 @@ describe('Plugin', () => {
             const meta = {
               dd: {
                 trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId()
-              }
+                span_id: span.context().toSpanId(),
+              },
             }
 
             tracer.scope().activate(span, async () => {
@@ -173,14 +172,14 @@ describe('Plugin', () => {
 
           it('should add the trace identifiers to logger instances', async () => {
             const options = {
-              transports: [transport, httpTransport]
+              transports: [transport, httpTransport],
             }
 
             const meta = {
               dd: {
                 trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId()
-              }
+                span_id: span.context().toSpanId(),
+              },
             }
 
             const logger = winston.createLogger
@@ -199,8 +198,8 @@ describe('Plugin', () => {
             const meta = {
               dd: {
                 trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId()
-              }
+                span_id: span.context().toSpanId(),
+              },
             }
             const error = new Error('boom')
 
@@ -222,15 +221,15 @@ describe('Plugin', () => {
               const meta = {
                 dd: {
                   trace_id: span.context().toTraceId(true),
-                  span_id: span.context().toSpanId()
-                }
+                  span_id: span.context().toSpanId(),
+                },
               }
               const set = new Set([1])
               Object.defineProperty(set, 'getter', {
                 get () {
                   return this.size
                 },
-                enumerable: true
+                enumerable: true,
               })
 
               tracer.scope().activate(span, () => {
@@ -248,17 +247,17 @@ describe('Plugin', () => {
 
             it('should add the trace identifiers when streaming', async () => {
               const logger = winston.createLogger({
-                transports: [transport, httpTransport]
+                transports: [transport, httpTransport],
               })
               const dd = {
                 trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId()
+                span_id: span.context().toSpanId(),
               }
 
               tracer.scope().activate(span, () => {
                 logger.write({
                   level: 'info',
-                  message: 'message'
+                  message: 'message',
                 })
 
                 sinon.assert.calledWithMatch(spy, dd)
@@ -270,7 +269,7 @@ describe('Plugin', () => {
           it('should not overwrite any existing "dd" property', async () => {
             tracer.scope().activate(span, () => {
               const meta = {
-                dd: 'something else'
+                dd: 'something else',
               }
               winston.log('info', 'test', meta)
               assert.strictEqual(meta.dd, 'something else')
@@ -304,7 +303,7 @@ describe('Plugin', () => {
           beforeEach(() => {
             if (semver.intersects(version, '>=3')) {
               const splatConfiguration = {
-                format: winston.format.combine(...[winston.format.splat(), winston.format.json()])
+                format: winston.format.combine(...[winston.format.splat(), winston.format.json()]),
               }
               return setupTest(version, splatConfiguration)
             } else {
@@ -323,8 +322,8 @@ describe('Plugin', () => {
             const meta = {
               dd: {
                 trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId()
-              }
+                span_id: span.context().toSpanId(),
+              },
             }
 
             tracer.scope().activate(span, () => {
@@ -332,7 +331,7 @@ describe('Plugin', () => {
 
               if (semver.intersects(version, '>=3')) {
                 sinon.assert.calledWithMatch(log, {
-                  message: interpolatedLog
+                  message: interpolatedLog,
                 })
               } else {
                 sinon.assert.calledWithMatch(log, 'info', interpolatedLog)
@@ -360,7 +359,7 @@ describe('Plugin', () => {
                 format: winston.format.combine(
                   winston.format.errors({ stack: true }),
                   winston.format.prettyPrint()
-                )
+                ),
               })
               spy = sinon.spy(logger.transports[0], 'log')
             })

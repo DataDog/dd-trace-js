@@ -16,13 +16,28 @@ const formattedTags = {
   isNew: 'is_new',
   isRum: 'is_rum',
   browserDriver: 'browser_driver',
-  autoInjected: 'auto_injected'
+  autoInjected: 'auto_injected',
+  isQuarantined: 'is_quarantined',
+  isDisabled: 'is_disabled',
+  isTestManagementEnabled: 'test_management_enabled',
+  isItrEnabled: 'itr_enabled',
+  isEarlyFlakeDetectionEnabled: 'early_flake_detection_enabled',
+  isFlakyTestRetriesEnabled: 'flaky_test_retries_enabled',
+  isKnownTestsEnabled: 'known_tests_enabled',
+  isImpactedTestsEnabled: 'impacted_tests_enabled',
+  isDiEnabled: 'failed_test_replay_enabled',
+  requireGit: 'require_git',
+  isModified: 'is_modified',
 }
 
 // Transform tags dictionary to array of strings.
 // If tag value is true, then only tag key is added to the array.
+/**
+ * @param {Record<string, unknown>} tagsDictionary
+ * @returns {string[]}
+ */
 function formatMetricTags (tagsDictionary) {
-  return Object.keys(tagsDictionary).reduce((acc, tagKey) => {
+  return Object.keys(tagsDictionary).reduce((/** @type {string[]} */ acc, tagKey) => {
     if (tagKey === 'statusCode') {
       const statusCode = tagsDictionary[tagKey]
       if (isStatusCode400(statusCode)) {
@@ -31,7 +46,7 @@ function formatMetricTags (tagsDictionary) {
       acc.push(`error_type:${getErrorTypeFromStatusCode(statusCode)}`)
       return acc
     }
-    const formattedTagKey = formattedTags[tagKey] || tagKey
+    const formattedTagKey = /** @type {string} */(formattedTags[tagKey] || tagKey)
     if (tagsDictionary[tagKey] === true) {
       acc.push(formattedTagKey)
     } else if (tagsDictionary[tagKey] !== undefined && tagsDictionary[tagKey] !== null) {
@@ -97,6 +112,17 @@ const TELEMETRY_KNOWN_TESTS_MS = 'early_flake_detection.request_ms'
 const TELEMETRY_KNOWN_TESTS_ERRORS = 'early_flake_detection.request_errors'
 const TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS = 'early_flake_detection.response_tests'
 const TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES = 'early_flake_detection.response_bytes'
+// coverage upload
+const TELEMETRY_COVERAGE_UPLOAD = 'coverage_upload.request'
+const TELEMETRY_COVERAGE_UPLOAD_MS = 'coverage_upload.request_ms'
+const TELEMETRY_COVERAGE_UPLOAD_ERRORS = 'coverage_upload.request_errors'
+const TELEMETRY_COVERAGE_UPLOAD_BYTES = 'coverage_upload.request_bytes'
+// test management
+const TELEMETRY_TEST_MANAGEMENT_TESTS = 'test_management_tests.request'
+const TELEMETRY_TEST_MANAGEMENT_TESTS_MS = 'test_management_tests.request_ms'
+const TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS = 'test_management_tests.request_errors'
+const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS = 'test_management_tests.response_tests'
+const TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES = 'test_management_tests.response_bytes'
 
 function isStatusCode400 (statusCode) {
   return statusCode >= 400 && statusCode < 500
@@ -160,5 +186,14 @@ module.exports = {
   TELEMETRY_KNOWN_TESTS_MS,
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
-  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
+  TELEMETRY_COVERAGE_UPLOAD,
+  TELEMETRY_COVERAGE_UPLOAD_MS,
+  TELEMETRY_COVERAGE_UPLOAD_ERRORS,
+  TELEMETRY_COVERAGE_UPLOAD_BYTES,
+  TELEMETRY_TEST_MANAGEMENT_TESTS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_MS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
 }

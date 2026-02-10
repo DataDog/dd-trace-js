@@ -75,13 +75,15 @@ withVersions('express', 'express', version => {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'rules-example.json')
-        }
+          rules: path.join(__dirname, 'rules-example.json'),
+        },
       }))
     })
 
     afterEach(() => {
       appsec.disable()
+      // TODO: Remove the workaround once https://github.com/sinonjs/sinon/issues/2671 is resolved
+      paramCallbackSpy.resetHistory()
       sinon.reset()
     })
 
@@ -225,8 +227,8 @@ withVersions('express', 'express', version => {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'rules-example.json')
-        }
+          rules: path.join(__dirname, 'rules-example.json'),
+        },
       }))
     })
 
@@ -303,9 +305,9 @@ withVersions('express', 'express', version => {
           enabled: true,
           rules: path.join(__dirname, 'api_security_rules.json'),
           apiSecurity: {
-            enabled: true
-          }
-        }
+            enabled: true,
+          },
+        },
       })
     })
 

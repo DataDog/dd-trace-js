@@ -8,7 +8,7 @@ const {
   useSandbox,
   spawnProc,
   curlAndAssertMessage,
-  assertObjectContains
+  assertObjectContains,
 } = require('./helpers')
 
 describe('Log Injection', () => {
@@ -42,7 +42,7 @@ describe('Log Injection', () => {
     it('should correctly apply rule based sampling when log injection is enabled', async () => {
       env = {
         AGENT_PORT: agent.port,
-        lOG_INJECTION: 'true'
+        lOG_INJECTION: 'true',
       }
       proc = await spawnProc(app, { cwd, env, execArgv: [] })
       const url = proc.url + '/sampled'
@@ -57,7 +57,7 @@ describe('Log Injection', () => {
     it('should correctly apply rule based sampling when log injection is disabled', async () => {
       env = {
         AGENT_PORT: agent.port,
-        lOG_INJECTION: 'false'
+        lOG_INJECTION: 'false',
       }
       proc = await spawnProc(app, { cwd, env, execArgv: [] })
       const url = proc.url + '/sampled'

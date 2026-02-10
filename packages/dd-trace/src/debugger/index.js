@@ -5,31 +5,66 @@ const { types } = require('util')
 const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const log = require('../log')
+const { fetchAgentInfo } = require('../agent/info')
+const { getAgentUrl } = require('../agent/url')
 const getDebuggerConfig = require('./config')
+const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
+
+/**
+ * @typedef {ReturnType<import('../config')>} Config
+ */
+
+/**
+ * @typedef {import('../remote_config')} RemoteConfig
+ */
 
 let worker = null
 let configChannel = null
 let ackId = 0
+let rcAckCallbacks = null
+let rc = null
+let inputPath = null
 
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const { NODE_OPTIONS, ...env } = process.env
 
 module.exports = {
+  isStarted,
   start,
-  configure
+  configure,
+  stop,
 }
 
-function start (config, rc) {
+/**
+ * Check if the Debugger worker is currently running
+ *
+ * @returns {boolean} True if the worker is started, false otherwise
+ */
+function isStarted () {
+  return worker !== null
+}
+
+/**
+ * Start the Debugger worker thread.
+ * Creates a worker thread, sets up message channels, and registers
+ * the LIVE_DEBUGGING product handler with remote config.
+ * Does nothing if the worker is already started.
+ *
+ * @param {Config} config - The tracer configuration object
+ * @param {RemoteConfig} rcInstance - The RemoteConfig instance
+ */
+function start (config, rcInstance) {
   if (worker !== null) return
 
   log.debug('[debugger] Starting Dynamic Instrumentation client...')
 
-  const rcAckCallbacks = new Map()
+  rc = rcInstance
+  rcAckCallbacks = new Map()
   const probeChannel = new MessageChannel()
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
 
-  process[Symbol.for('datadog:node:util:types')] = types
+  globalThis[Symbol.for('dd-trace')].utilTypes = types
 
   readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
     const action = 'apply'
@@ -61,58 +96,149 @@ function start (config, rc) {
   })
   logChannel.port2.on('messageerror', (err) => log.error('[debugger] received "messageerror" on log port', err))
 
-  worker = new Worker(
-    join(__dirname, 'devtools_client', 'index.js'),
-    {
-      execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
-      env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
-      workerData: {
-        config: getDebuggerConfig(config),
-        parentThreadId,
-        probePort: probeChannel.port1,
-        logPort: logChannel.port1,
-        configPort: configChannel.port1
-      },
-      transferList: [probeChannel.port1, logChannel.port1, configChannel.port1]
-    }
-  )
+  detectDebuggerEndpoint(config, (_inputPath) => {
+    inputPath = _inputPath
 
-  worker.on('online', () => {
-    log.debug('[debugger] Dynamic Instrumentation worker thread started successfully (thread id: %d)', worker.threadId)
+    worker = new Worker(
+      join(__dirname, 'devtools_client', 'index.js'),
+      {
+        name: 'dd-debugger',
+        execArgv: [], // Avoid worker thread inheriting the `-r` command line argument
+        env, // Avoid worker thread inheriting the `NODE_OPTIONS` environment variable (in case it contains `-r`)
+        workerData: {
+          config: getDebuggerConfig(config, inputPath),
+          parentThreadId,
+          probePort: probeChannel.port1,
+          logPort: logChannel.port1,
+          configPort: configChannel.port1,
+        },
+        transferList: [probeChannel.port1, logChannel.port1, configChannel.port1],
+      }
+    )
+
+    worker.on('online', () => {
+      log.debug(
+        '[debugger] Dynamic Instrumentation worker thread started successfully (thread id: %d)',
+        worker.threadId
+      )
+    })
+
+    worker.on('error', (err) => log.error('[debugger] worker thread error', err))
+    worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
+
+    worker.once('exit', (code) => {
+      const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
+      log.error('[debugger] worker thread exited unexpectedly', error)
+      cleanup(error) // Be nice, clean up now that the worker thread encountered an issue and we can't continue
+    })
+
+    worker.unref()
+    probeChannel.port1.unref()
+    probeChannel.port2.unref()
+    logChannel.port1.unref()
+    logChannel.port2.unref()
+    configChannel.port1.unref()
+    configChannel.port2.unref()
   })
+}
 
-  worker.on('error', (err) => log.error('[debugger] worker thread error', err))
-  worker.on('messageerror', (err) => log.error('[debugger] received "messageerror" from worker', err))
+/**
+ * Reconfigure the Debugger worker with updated settings.
+ * Sends the new configuration to the worker thread via the config channel.
+ * Does nothing if the worker is not started.
+ *
+ * @param {Config} config - The updated tracer configuration object
+ */
+function configure (config) {
+  if (configChannel === null) return
+  configChannel.port2.postMessage(getDebuggerConfig(config, inputPath))
+}
 
-  worker.on('exit', (code) => {
-    const error = new Error(`Dynamic Instrumentation worker thread exited unexpectedly with code ${code}`)
+/**
+ * Stop the Debugger worker thread.
+ * Terminates the worker and cleans up resources.
+ * Safe to call even if the worker is not started.
+ */
+function stop () {
+  if (worker === null) return
 
-    log.error('[debugger] worker thread exited unexpectedly', error)
+  log.debug('[debugger] Stopping Dynamic Instrumentation client...')
 
-    // Be nice, clean up now that the worker thread encountered an issue and we can't continue
+  try {
+    worker.terminate()
+    cleanup() // Graceful shutdown - termination succeeded
+  } catch (err) {
+    log.error('[debugger] Error terminating worker', err)
+    cleanup(err) // Cleanup with error - termination failed
+  }
+}
+
+/**
+ * Internal cleanup function to reset all debugger resources.
+ * Called when stopping the debugger or when the worker exits unexpectedly.
+ *
+ * @param {Error} [error] - Optional error to pass to pending ack callbacks (for unexpected exits)
+ */
+function cleanup (error) {
+  if (rc) {
     rc.removeProductHandler('LIVE_DEBUGGING')
+    rc = null
+  }
+  if (worker) {
     worker.removeAllListeners()
-    configChannel = null
+    worker = null
+  }
+  configChannel = null
+  inputPath = null
+
+  // Call any pending ack callbacks
+  // Pass error for unexpected exits, or undefined for graceful shutdown
+  if (rcAckCallbacks) {
     for (const ackId of rcAckCallbacks.keys()) {
       rcAckCallbacks.get(ackId)(error)
       rcAckCallbacks.delete(ackId)
     }
+    rcAckCallbacks = null
+  }
+}
+
+/**
+ * Detect which debugger endpoint is available on the agent
+ *
+ * @param {Config} config - The tracer configuration object
+ * @param {(endpointPath: string) => void} cb - Callback with the detected endpoint path
+ */
+function detectDebuggerEndpoint (config, cb) {
+  log.debug('[debugger] Detecting available debugger endpoints...')
+
+  fetchAgentInfo(getAgentUrl(config), (err, agentInfo) => {
+    if (err) {
+      log.warn('[debugger] Failed to query agent %s endpoint, falling back to %s',
+        DEBUGGER_INPUT_V2,
+        DEBUGGER_DIAGNOSTICS_V1,
+        err)
+      return cb(DEBUGGER_DIAGNOSTICS_V1)
+    }
+
+    const endpoints = agentInfo.endpoints || []
+
+    if (endpoints.includes(DEBUGGER_INPUT_V2)) {
+      log.debug('[debugger] Agent supports %s', DEBUGGER_INPUT_V2)
+      return cb(DEBUGGER_INPUT_V2)
+    }
+    log.debug('[debugger] Agent does not support %s, using %s', DEBUGGER_INPUT_V2, DEBUGGER_DIAGNOSTICS_V1)
+    return cb(DEBUGGER_DIAGNOSTICS_V1)
   })
-
-  worker.unref()
-  probeChannel.port1.unref()
-  probeChannel.port2.unref()
-  logChannel.port1.unref()
-  logChannel.port2.unref()
-  configChannel.port1.unref()
-  configChannel.port2.unref()
 }
 
-function configure (config) {
-  if (configChannel === null) return
-  configChannel.port2.postMessage(getDebuggerConfig(config))
-}
-
+/**
+ * Read and parse a probe configuration file.
+ * Reads the file from disk, parses it as JSON, and invokes the callback with the parsed probes.
+ * Does nothing if no path is provided. Errors are logged but do not invoke the callback.
+ *
+ * @param {string | undefined} path - Path to the probe configuration file
+ * @param {(probes: unknown[]) => void} cb - Callback invoked with the parsed probe array
+ */
 function readProbeFile (path, cb) {
   if (!path) return
 

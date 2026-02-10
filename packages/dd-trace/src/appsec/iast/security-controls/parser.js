@@ -12,23 +12,48 @@ const SANITIZER_TYPE = 'SANITIZER'
 
 const validTypes = new Set([INPUT_VALIDATOR_TYPE, SANITIZER_TYPE])
 
+/**
+ * @param {string} securityControlsConfiguration
+ * @returns {Map<string, Array<{
+ *   type: string,
+ *   secureMarks: number,
+ *   file: string,
+ *   method: string,
+ *   parameters: number[] | undefined
+ * }>>}
+ */
 function parse (securityControlsConfiguration) {
   const controls = new Map()
 
-  securityControlsConfiguration?.replaceAll(/[\r\n\t\v\f]*/g, '')
+  const potentialControls = securityControlsConfiguration
+    .replaceAll(/[\r\n\t\v\f]*/g, '')
     .split(SECURITY_CONTROL_DELIMITER)
-    .map(parseControl)
-    .filter(control => !!control)
-    .forEach(control => {
-      if (!controls.has(control.file)) {
-        controls.set(control.file, [])
+
+  for (const potentialControl of potentialControls) {
+    const control = parseControl(potentialControl)
+    if (control) {
+      const fileControls = controls.get(control.file)
+      if (fileControls) {
+        fileControls.push(control)
+      } else {
+        controls.set(control.file, [control])
       }
-      controls.get(control.file).push(control)
-    })
+    }
+  }
 
   return controls
 }
 
+/**
+ * @param {string} control
+ * @returns {{
+ *   type: string,
+ *   secureMarks: number,
+ *   file: string,
+ *   method: string,
+ *   parameters: number[] | undefined
+ * } | undefined}
+ */
 function parseControl (control) {
   if (!control) return
 
@@ -48,32 +73,39 @@ function parseControl (control) {
   }
 
   let secureMarks = CUSTOM_SECURE_MARK
-  getSecureMarks(marks).forEach(mark => { secureMarks |= mark })
+  for (const mark of getSecureMarks(marks)) {
+    secureMarks |= mark
+  }
   if (secureMarks === CUSTOM_SECURE_MARK) {
     log.warn('[ASM] Invalid security control mark: %s', marks)
     return
   }
 
-  file = file?.trim()
+  file = file.trim()
 
   method = method?.trim()
 
   try {
-    parameters = getParameters(parameters)
+    const parsedParameters = getParameters(parameters)
+    return { type, secureMarks, file, method, parameters: parsedParameters }
   } catch {
     log.warn('[ASM] Invalid non-numeric security control parameter %s', parameters)
-    return
   }
-
-  return { type, secureMarks, file, method, parameters }
 }
 
+/**
+ * @param {string} marks
+ * @returns {number[]}
+ */
 function getSecureMarks (marks) {
-  return marks?.split(SECURITY_CONTROL_ELEMENT_DELIMITER)
+  return marks.split(SECURITY_CONTROL_ELEMENT_DELIMITER)
     .map(getMarkFromVulnerabilityType)
-    .filter(mark => !!mark)
+    .filter(Boolean)
 }
 
+/**
+ * @param {string | undefined} parameters
+ */
 function getParameters (parameters) {
   return parameters?.split(SECURITY_CONTROL_ELEMENT_DELIMITER)
     .map(param => {
@@ -92,5 +124,5 @@ module.exports = {
   parse,
 
   INPUT_VALIDATOR_TYPE,
-  SANITIZER_TYPE
+  SANITIZER_TYPE,
 }

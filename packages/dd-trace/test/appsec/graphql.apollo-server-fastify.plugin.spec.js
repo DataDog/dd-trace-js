@@ -5,7 +5,7 @@ const { withVersions } = require('../setup/mocha')
 const {
   schema,
   resolvers,
-  graphqlCommonTests
+  graphqlCommonTests,
 } = require('./graphql.test-utils')
 
 withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
@@ -34,7 +34,7 @@ withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
 
       server = new ApolloServer({
         typeDefs,
-        resolvers
+        resolvers,
       })
 
       await server.start()

@@ -42,12 +42,14 @@ describe('Plugin', () => {
           if (semver.intersects(version, '>=8') && options.prettyPrint) {
             delete options.prettyPrint // deprecated
 
+            // pino-pretty uses `on-exit-leak-free` and that adds a listener to process.
+            process.setMaxListeners(process.getMaxListeners() + 1)
             const pretty = require('../../../versions/pino-pretty@8.0.0').get()
 
             stream = pretty().pipe(stream)
           }
 
-          logger = pino && pino(options, stream)
+          logger = pino(options, stream)
         }
 
         describe('without configuration', () => {
@@ -119,7 +121,7 @@ describe('Plugin', () => {
 
               assertObjectContains(record.dd, {
                 trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId()
+                span_id: span.context().toSpanId(),
               })
 
               assert.ok('msg' in record)
@@ -159,7 +161,7 @@ describe('Plugin', () => {
           it('should not alter the original record', () => {
             tracer.scope().activate(span, () => {
               const record = {
-                foo: 'bar'
+                foo: 'bar',
               }
 
               logger.info(record)
@@ -201,7 +203,7 @@ describe('Plugin', () => {
 
                 assertObjectContains(record.dd, {
                   trace_id: span.context().toTraceId(true),
-                  span_id: span.context().toSpanId()
+                  span_id: span.context().toSpanId(),
                 })
 
                 assert.ok('msg' in record)

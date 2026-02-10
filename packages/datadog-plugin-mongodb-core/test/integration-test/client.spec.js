@@ -5,10 +5,10 @@ const assert = require('node:assert/strict')
 const {
   FakeAgent,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
@@ -41,7 +41,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(30000)
@@ -54,7 +54,7 @@ describe('esm', () => {
       './packages/datadog-plugin-mongodb-core/test/integration-test/*'])
 
     before(async function () {
-      variants = varySandbox('server2.mjs', 'MongoDBCore')
+      variants = varySandbox('server2.mjs', 'MongoDBCore', undefined, 'mongodb-core')
     })
 
     beforeEach(async () => {
@@ -74,7 +74,7 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'mongodb.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(30000)

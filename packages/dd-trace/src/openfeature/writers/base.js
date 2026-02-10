@@ -1,8 +1,8 @@
 'use strict'
 
-const { URL, format } = require('node:url')
 const request = require('../../exporters/common/request')
 const { safeJSONStringify } = require('../../exporters/common/util')
+const { getAgentUrl } = require('../../agent/url')
 
 const log = require('../../log')
 
@@ -23,6 +23,7 @@ const log = require('../../log')
  * @class BaseFFEWriter
  */
 class BaseFFEWriter {
+  #destroyer
   /**
    * @param {BaseFFEWriterOptions} options - Writer configuration options
    */
@@ -44,24 +45,22 @@ class BaseFFEWriter {
     this._requestOptions = {
       headers: {
         ...this._headers,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       method: 'POST',
       timeout: this._timeout,
       url: this._baseUrl,
-      path: this._endpoint
+      path: this._endpoint,
     }
 
     this._periodic = setInterval(() => {
       this.flush()
     }, this._interval).unref()
 
-    this._beforeExitHandler = () => {
-      this.destroy()
-    }
-    process.once('beforeExit', this._beforeExitHandler)
+    const destroyer = this.destroy.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(destroyer)
 
-    this._destroyed = false
+    this.#destroyer = destroyer
     this._droppedEvents = 0
   }
 
@@ -74,7 +73,7 @@ class BaseFFEWriter {
 
     for (const event of eventArray) {
       if (this._buffer.length >= this._bufferLimit) {
-        log.warn(`${this.constructor.name} event buffer full (limit is ${this._bufferLimit}), dropping event`)
+        log.warn('%s event buffer full (limit is %d), dropping event', this.constructor.name, this._bufferLimit)
         this._droppedEvents++
         continue
       }
@@ -83,16 +82,15 @@ class BaseFFEWriter {
 
       // Check individual event size limit if configured
       if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
-        log.warn(`${this.constructor.name} event size
-          ${eventSizeBytes} bytes exceeds limit ${this._eventSizeLimit}, dropping event`)
+        log.warn('%s event size %d bytes exceeds limit %d, dropping event',
+          this.constructor.name, eventSizeBytes, this._eventSizeLimit)
         this._droppedEvents++
         continue
       }
 
       // Check if adding this event would exceed payload size limit if configured
       if (this._payloadSizeLimit && this._bufferSize + eventSizeBytes > this._payloadSizeLimit) {
-        log.debug(() => `${this.constructor.name}
-        buffer size would exceed ${this._payloadSizeLimit} bytes, flushing first`)
+        log.debug('%s buffer size would exceed %d bytes, flushing first', this.constructor.name, this._payloadSizeLimit)
         this.flush()
       }
 
@@ -114,15 +112,16 @@ class BaseFFEWriter {
 
     const payload = this._encode(this.makePayload(events))
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
 
     request(payload, this._requestOptions, (err, resp, code) => {
       if (err) {
-        log.error(`Failed to send events to ${this._baseUrl.href}${this._endpoint}: ${err.message}`)
+        log.error('Failed to send events to %s%s', this._baseUrl.href, this._endpoint, err)
       } else if (code >= 200 && code < 300) {
-        log.debug(() => `Successfully sent ${events.length} events`)
+        log.debug('Successfully sent %d events', events.length)
       } else {
-        log.warn(`Events request returned status ${code}`)
+        log.warn('Events request returned status %d', code)
       }
     })
   }
@@ -141,15 +140,15 @@ class BaseFFEWriter {
    * Cleans up resources and flushes remaining events
    */
   destroy () {
-    if (!this._destroyed) {
-      log.debug(() => `Stopping ${this.constructor.name}`)
+    if (this.#destroyer) {
+      log.debug('Stopping %s', this.constructor.name)
       clearInterval(this._periodic)
-      process.removeListener('beforeExit', this._beforeExitHandler)
       this.flush()
-      this._destroyed = true
+      globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
+      this.#destroyer = undefined
 
       if (this._droppedEvents > 0) {
-        log.warn(`${this.constructor.name} dropped ${this._droppedEvents} events due to buffer overflow`)
+        log.warn('%s dropped %d events due to buffer overflow', this.constructor.name, this._droppedEvents)
       }
     }
   }
@@ -159,13 +158,7 @@ class BaseFFEWriter {
    * @returns {URL} Constructs agent URL from config
    */
   _getAgentUrl () {
-    const { hostname, port } = this._config
-
-    return this._config.url ?? new URL(format({
-      protocol: 'http:',
-      hostname: hostname || 'localhost',
-      port: port || 8126
-    }))
+    return getAgentUrl(this._config)
   }
 
   /**

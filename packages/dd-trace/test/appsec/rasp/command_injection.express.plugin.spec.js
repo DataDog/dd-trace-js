@@ -10,6 +10,7 @@ const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { getConfigFresh } = require('../../helpers/config')
 const { withVersions } = require('../../setup/mocha')
+const { temporaryWarningExceptions } = require('../../setup/core')
 const { checkRaspExecutedAndHasThreat, checkRaspExecutedAndNotThreat } = require('./utils')
 
 describe('RASP - command_injection', () => {
@@ -75,14 +76,14 @@ describe('RASP - command_injection', () => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server = expressApp.listen(0, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
 
         done()
@@ -184,6 +185,10 @@ describe('RASP - command_injection', () => {
             app = (req, res) => {
               const childProcess = require('child_process')
 
+              temporaryWarningExceptions.add(
+                'Passing args to a child process with shell option true can lead to security vulnerabilities, ' +
+                  'as the arguments are not escaped, only concatenated.'
+              )
               childProcess.execFile('ls', [req.query.dir], { shell: true }, function (e) {
                 if (e?.name === 'DatadogRaspAbortError') {
                   res.writeHead(500)
@@ -349,6 +354,10 @@ describe('RASP - command_injection', () => {
             app = (req, res) => {
               const childProcess = require('child_process')
 
+              temporaryWarningExceptions.add(
+                'Passing args to a child process with shell option true can lead to security vulnerabilities, ' +
+                  'as the arguments are not escaped, only concatenated.'
+              )
               const child = childProcess.spawn('ls', [req.query.dir], { shell: true })
               child.on('error', (e) => {
                 if (e.name === 'DatadogRaspAbortError') {

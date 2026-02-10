@@ -35,7 +35,7 @@ const { readFileSync } = require('fs')
 const { join } = require('path')
 const semifies = require('../../../../../vendor/dist/semifies')
 const log = require('../../../../dd-trace/src/log')
-const { getEnvironmentVariable } = require('../../../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../../../dd-trace/src/config/helper')
 const transforms = require('./transforms')
 const { generate, parse, traverse } = require('./compiler')
 const instrumentations = require('./instrumentations')
@@ -127,6 +127,7 @@ function fromFunctionQuery (functionQuery) {
   if (className) {
     queries.push(
       `[id.name="${className}"]`,
+      `[id.name="${className}"] > ClassExpression`,
       `[id.name="${className}"] > ClassBody > [key.name="${methodName}"] > [async]`,
       `[id.name="${className}"] > ClassExpression > ClassBody > [key.name="${methodName}"] > [async]`
     )

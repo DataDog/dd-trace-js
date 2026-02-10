@@ -17,15 +17,15 @@ describe('span-stats exporter', () => {
   let writer
 
   beforeEach(() => {
-    url = 'www.example.com'
+    url = 'http://www.example.com:8126'
     writer = {
       append: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.spy(),
     }
     Writer = sinon.stub().returns(writer)
 
     Exporter = proxyquire('../../../src/exporters/span-stats', {
-      './writer': { Writer }
+      './writer': { Writer },
     }).SpanStatsExporter
   })
 
@@ -51,18 +51,6 @@ describe('span-stats exporter', () => {
     assert.deepStrictEqual(exporter._url, url)
     sinon.assert.calledWith(Writer, {
       url: exporter._url,
-      tags: undefined
-    })
-  })
-
-  it('should pass tags through to writer', () => {
-    const tags = { foo: 'bar' }
-
-    exporter = new Exporter({ url, tags })
-
-    sinon.assert.calledWith(Writer, {
-      url: exporter._url,
-      tags
     })
   })
 })

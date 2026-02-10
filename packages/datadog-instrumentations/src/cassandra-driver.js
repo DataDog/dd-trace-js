@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const startCh = channel('apm:cassandra-driver:query:start')

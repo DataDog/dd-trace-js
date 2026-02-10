@@ -1,10 +1,9 @@
 import 'dd-trace/init.js'
 import path from 'path'
-import * as grpc from '@grpc/grpc-js'
+import grpc from '@grpc/grpc-js'
 import * as protoLoader from '@grpc/proto-loader'
 
 const currentDirectoryPath = path.dirname(new URL(import.meta.url).pathname)
-const parentDirectoryPath = path.resolve(currentDirectoryPath, '..')
 
 let server
 let port = 0
@@ -15,12 +14,12 @@ function buildClient (service, callback) {
       getBidi: () => {},
       getServerStream: () => {},
       getClientStream: () => {},
-      getUnary: () => {}
+      getUnary: () => {},
     },
     service
   )
 
-  const definition = protoLoader.loadSync(`${parentDirectoryPath}/test.proto`)
+  const definition = protoLoader.loadSync(`${currentDirectoryPath}/test.proto`)
   const TestService = grpc.loadPackageDefinition(definition).test.TestService
 
   server = new grpc.Server()
@@ -47,7 +46,7 @@ function buildClient (service, callback) {
 }
 
 const client = await buildClient({
-  getUnary: (_, callback) => callback()
+  getUnary: (_, callback) => callback(),
 })
 
 client.getUnary({ first: 'foobar' }, () => {})

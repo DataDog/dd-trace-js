@@ -17,7 +17,7 @@ class DatabasePlugin extends StoragePlugin {
       ddps: '',
       encodedDdps: '',
       ddpv: '',
-      encodedDdpv: ''
+      encodedDdpv: '',
     }
   }
 

@@ -18,7 +18,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
 
     // Stub the collector with the stubbed session
     const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
-      '../session': session
+      '../session': session,
     })
     collectObjectProperties = collectorWithStub.collectObjectProperties
 
@@ -35,7 +35,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   it('should not mark properties with timeout when deadline is not exceeded', async function () {
     const ctx = {
       deadlineReached: false,
-      captureErrors: []
+      captureErrors: [],
     }
 
     const opts = {
@@ -43,7 +43,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
       maxCollectionSize: 100,
       maxFieldCount: 100,
       deadlineNs: 100_000_000n, // 100ms
-      ctx
+      ctx,
     }
 
     const obj = { a: 1, b: 2, c: 3 }
@@ -73,7 +73,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
 
     const ctx = {
       deadlineReached: false,
-      captureErrors: []
+      captureErrors: [],
     }
 
     const opts = {
@@ -81,7 +81,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
       maxCollectionSize: 100,
       maxFieldCount: 100,
       deadlineNs: 10_000_000n, // 10ms (very tight deadline)
-      ctx
+      ctx,
     }
 
     // Create a nested object structure that will take time to collect
@@ -90,11 +90,11 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
         level2: {
           level3: {
             level4: {
-              level5: { a: 1, b: 2, c: 3 }
-            }
-          }
-        }
-      }
+              level5: { a: 1, b: 2, c: 3 },
+            },
+          },
+        },
+      },
     }
 
     const objectId = await getObjectIdForObject(nestedObj)
@@ -119,7 +119,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
 
     const ctx = {
       deadlineReached: false,
-      captureErrors: []
+      captureErrors: [],
     }
 
     const opts = {
@@ -127,7 +127,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
       maxCollectionSize: 100,
       maxFieldCount: 100,
       deadlineNs: 50_000_000n, // 50ms (will be exceeded after a few calls)
-      ctx
+      ctx,
     }
 
     // Create an object with multiple nested properties to trigger multiple overBudget checks
@@ -135,7 +135,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
       a: { nested: { deep: 1 } },
       b: { nested: { deep: 2 } },
       c: { nested: { deep: 3 } },
-      d: { nested: { deep: 4 } }
+      d: { nested: { deep: 4 } },
     }
 
     const objectId = await getObjectIdForObject(objWithManyProps)
@@ -155,7 +155,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
 
     const ctx = {
       deadlineReached: true, // Already marked as reached
-      captureErrors: []
+      captureErrors: [],
     }
 
     const opts = {
@@ -163,7 +163,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
       maxCollectionSize: 100,
       maxFieldCount: 100,
       deadlineNs: 100_000_000n, // 100ms
-      ctx
+      ctx,
     }
 
     // Track CDP calls to verify we short-circuit
@@ -181,7 +181,7 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
       a: { nested: { deep: 1 } },
       b: { nested: { deep: 2 } },
       c: { nested: { deep: 3 } },
-      d: { nested: { deep: 4 } }
+      d: { nested: { deep: 4 } },
     }
 
     const objectId = await getObjectIdForObject(nestedObj)

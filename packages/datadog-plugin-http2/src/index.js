@@ -9,7 +9,7 @@ class Http2Plugin extends CompositePlugin {
   static get plugins () {
     return {
       server: Http2ServerPlugin,
-      client: Http2ClientPlugin
+      client: Http2ClientPlugin,
     }
   }
 }

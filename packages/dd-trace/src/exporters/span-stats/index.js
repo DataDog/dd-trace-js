@@ -1,19 +1,12 @@
 'use strict'
 
-const { URL, format } = require('url')
-
-const defaults = require('../../config_defaults')
+const { getAgentUrl } = require('../../agent/url')
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {
   constructor (config) {
-    const { hostname = defaults.hostname, port = defaults.port, tags, url } = config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port
-    }))
-    this._writer = new Writer({ url: this._url, tags })
+    this._url = getAgentUrl(config)
+    this._writer = new Writer({ url: this._url })
   }
 
   export (payload) {
@@ -23,5 +16,5 @@ class SpanStatsExporter {
 }
 
 module.exports = {
-  SpanStatsExporter
+  SpanStatsExporter,
 }

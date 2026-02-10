@@ -11,7 +11,8 @@ const { assertObjectContains } = require('../helpers')
 const {
   sandboxCwd,
   useSandbox,
-  getCiVisAgentlessConfig
+  getCiVisAgentlessConfig,
+  getCiVisEvpProxyConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
@@ -54,9 +55,12 @@ const {
   TEST_IS_MODIFIED,
   DD_CAPABILITIES_IMPACTED_TESTS,
   VITEST_POOL,
-  TEST_IS_TEST_FRAMEWORK_WORKER
+  TEST_IS_TEST_FRAMEWORK_WORKER,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
@@ -73,7 +77,7 @@ versions.forEach((version) => {
       `vitest@${version}`,
       `@vitest/coverage-istanbul@${version}`,
       `@vitest/coverage-v8@${version}`,
-      'tinypool'
+      'tinypool',
     ], true)
 
     before(function () {
@@ -103,9 +107,8 @@ versions.forEach((version) => {
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
               DD_TEST_SESSION_NAME: 'my-test-session',
               POOL_CONFIG: poolConfig,
-              DD_SERVICE: undefined
+              DD_SERVICE: undefined,
             },
-            stdio: 'pipe'
           }
         )
 
@@ -207,7 +210,7 @@ versions.forEach((version) => {
               [
                 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can skip',
                 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can todo',
-                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip'
+                'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs.other context can programmatic skip',
               ]
             )
 
@@ -234,9 +237,41 @@ versions.forEach((version) => {
               assert.strictEqual(testSuite.content.metrics[TEST_SOURCE_START], 1)
               assert.ok(testSuite.content.metrics[DD_HOST_CPU_COUNT])
             })
-          })
+          }),
         ])
       })
+    })
+
+    it('sends telemetry with test_session metric when telemetry is enabled', async () => {
+      const telemetryPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+          const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+          const testSessionMetric = telemetryMetrics.find(
+            ({ metric }) => metric === 'test_session'
+          )
+
+          assert.ok(testSessionMetric, 'test_session telemetry metric should be sent')
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_TRACE_AGENT_PORT: String(receiver.port),
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
+            TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-passed-suite.mjs',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        telemetryPromise,
+      ])
     })
 
     context('flaky test retries', () => {
@@ -247,8 +282,8 @@ versions.forEach((version) => {
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
@@ -270,7 +305,7 @@ versions.forEach((version) => {
             // never passes
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             // passes on the first try
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary',
           ])
           const eventuallyPassingTest = testEvents.filter(
             test => test.content.resource ===
@@ -307,9 +342,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
             },
-            stdio: 'pipe'
           }
         )
       })
@@ -321,8 +355,8 @@ versions.forEach((version) => {
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
@@ -333,7 +367,7 @@ versions.forEach((version) => {
           assertObjectContains(testEvents.map(test => test.content.resource), [
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary',
           ])
           assert.strictEqual(testEvents.filter(
             test => test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
@@ -348,9 +382,8 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
             },
-            stdio: 'pipe'
           }
         )
       })
@@ -362,8 +395,8 @@ versions.forEach((version) => {
           tests_skipping: false,
           flaky_test_retries_enabled: true,
           early_flake_detection: {
-            enabled: false
-          }
+            enabled: false,
+          },
         })
 
         receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
@@ -376,7 +409,7 @@ versions.forEach((version) => {
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that eventually pass',
             'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass',
-            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary'
+            'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries does not retry if unnecessary',
           ])
           assert.strictEqual(testEvents.filter(
             test => test.content.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
@@ -391,9 +424,8 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init' // ESM requires more flags
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
             },
-            stdio: 'pipe'
           }
         )
       })
@@ -417,9 +449,8 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            TEST_DIR: './vitest-test.mjs'
+            TEST_DIR: './vitest-test.mjs',
           },
-          stdio: 'inherit'
         }
       )
 
@@ -457,22 +488,21 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
                 COVERAGE_PROVIDER: coverageProvider,
-                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs'
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
               },
-              stdio: 'inherit'
             }
           )
 
-          childProcess.stdout.on('data', (chunk) => {
+          childProcess.stdout?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
-          childProcess.stderr.on('data', (chunk) => {
+          childProcess.stderr?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
 
           await Promise.all([
             once(childProcess, 'exit'),
-            eventsPromise
+            eventsPromise,
           ])
 
           const linePctMatch = testOutput.match(linePctMatchRegex)
@@ -505,22 +535,21 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               COVERAGE_PROVIDER: 'istanbul',
-              TEST_DIR: 'ci-visibility/vitest-tests/coverage-test-zero.mjs'
+              TEST_DIR: 'ci-visibility/vitest-tests/coverage-test-zero.mjs',
             },
-            stdio: 'inherit'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
         await Promise.all([
           once(childProcess, 'exit'),
-          eventsPromise
+          eventsPromise,
         ])
 
         const linePctMatch = testOutput.match(linePctMatchRegex)
@@ -545,10 +574,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
@@ -558,9 +587,9 @@ versions.forEach((version) => {
               // 'early flake detection can retry tests that always pass', // will be considered new
               // 'early flake detection can retry tests that eventually fail', // will be considered new
               // 'early flake detection does not retry if the test is skipped', // skipped so not retried
-              'early flake detection does not retry if it is not new'
-            ]
-          }
+              'early flake detection does not retry if it is not new',
+            ],
+          },
         })
 
         const eventsPromise = receiver
@@ -615,9 +644,8 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              SHOULD_ADD_EVENTUALLY_FAIL: '1'
+              SHOULD_ADD_EVENTUALLY_FAIL: '1',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -634,10 +662,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
@@ -646,9 +674,9 @@ versions.forEach((version) => {
               // 'early flake detection can retry tests that eventually pass', // will be considered new
               // 'early flake detection can retry tests that always pass', // will be considered new
               // 'early flake detection does not retry if the test is skipped', // skipped so not retried
-              'early flake detection does not retry if it is not new'
-            ]
-          }
+              'early flake detection does not retry if it is not new',
+            ],
+          },
         })
 
         const eventsPromise = receiver
@@ -669,7 +697,7 @@ versions.forEach((version) => {
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped'
+              'early flake detection does not retry if the test is skipped',
             ])
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             // 4 executions of the 2 new tests + 1 new skipped test (not retried)
@@ -695,9 +723,8 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              ALWAYS_FAIL: 'true'
+              ALWAYS_FAIL: 'true',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -714,15 +741,15 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
+              '5s': NUM_RETRIES_EFD,
             },
-            faulty_session_threshold: 0
+            faulty_session_threshold: 0,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
-          vitest: {}
+          vitest: {},
         }) // tests from ci-visibility/vitest-tests/early-flake-detection.mjs will be new
 
         const eventsPromise = receiver
@@ -749,9 +776,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -768,10 +794,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
@@ -780,9 +806,9 @@ versions.forEach((version) => {
               // 'early flake detection can retry tests that eventually pass', // will be considered new
               // 'early flake detection can retry tests that always pass', // will be considered new
               // 'early flake detection does not retry if the test is skipped', // will be considered new
-              'early flake detection does not retry if it is not new'
-            ]
-          }
+              'early flake detection does not retry if it is not new',
+            ],
+          },
         })
 
         const eventsPromise = receiver
@@ -797,7 +823,7 @@ versions.forEach((version) => {
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped'
+              'early flake detection does not retry if the test is skipped',
             ])
 
             // new tests are detected but not retried
@@ -821,9 +847,8 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false'
+              DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -840,10 +865,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTestsResponseCode(500)
@@ -861,7 +886,7 @@ versions.forEach((version) => {
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped'
+              'early flake detection does not retry if the test is skipped',
             ])
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.strictEqual(newTests.length, 0)
@@ -882,9 +907,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -901,18 +925,18 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
           vitest: {
             'ci-visibility/subproject/vitest-test.mjs': [
-              'context can report passed test' // no test will be considered new
-            ]
-          }
+              'context can report passed test', // no test will be considered new
+            ],
+          },
         })
 
         const eventsPromise = receiver
@@ -926,7 +950,7 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests[0].meta[TEST_SUITE], 'ci-visibility/subproject/vitest-test.mjs')
             // it's not considered new
-            assert.ok(!('TEST_IS_NEW' in tests[0].meta))
+            assert.ok(!(TEST_IS_NEW in tests[0].meta))
           })
 
         childProcess = exec(
@@ -936,9 +960,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init', // ESM requires more flags
-              TEST_DIR: './vitest-test.mjs'
+              TEST_DIR: './vitest-test.mjs',
             },
-            stdio: 'inherit'
           }
         )
 
@@ -953,9 +976,9 @@ versions.forEach((version) => {
       it('works with repeats config when EFD is disabled', (done) => {
         receiver.setSettings({
           early_flake_detection: {
-            enabled: false
+            enabled: false,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
@@ -965,9 +988,9 @@ versions.forEach((version) => {
               // 'early flake detection can retry tests that always pass', // will be considered new
               // 'early flake detection can retry tests that eventually fail', // will be considered new
               // 'early flake detection does not retry if the test is skipped', // will be considered new
-              'early flake detection does not retry if it is not new'
-            ]
-          }
+              'early flake detection does not retry if it is not new',
+            ],
+          },
         })
 
         const eventsPromise = receiver
@@ -986,7 +1009,7 @@ versions.forEach((version) => {
               'early flake detection can retry tests that eventually pass', // repeated twice
               'early flake detection can retry tests that always pass', // repeated twice
               'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped'
+              'early flake detection does not retry if the test is skipped',
             ])
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             // all but one are considered new
@@ -1002,7 +1025,7 @@ versions.forEach((version) => {
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSessionEvent.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSessionEvent.meta))
           })
 
         childProcess = exec(
@@ -1013,9 +1036,8 @@ versions.forEach((version) => {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              SHOULD_REPEAT: '1'
+              SHOULD_REPEAT: '1',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1032,10 +1054,10 @@ versions.forEach((version) => {
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD
-            }
+              '5s': NUM_RETRIES_EFD,
+            },
           },
-          known_tests_enabled: false
+          known_tests_enabled: false,
         })
 
         receiver.setKnownTests({
@@ -1044,9 +1066,9 @@ versions.forEach((version) => {
               // 'early flake detection can retry tests that eventually pass', // will be considered new
               // 'early flake detection can retry tests that always pass', // will be considered new
               // 'early flake detection does not retry if the test is skipped', // will be considered new
-              'early flake detection does not retry if it is not new'
-            ]
-          }
+              'early flake detection does not retry if it is not new',
+            ],
+          },
         })
 
         const eventsPromise = receiver
@@ -1061,7 +1083,7 @@ versions.forEach((version) => {
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped'
+              'early flake detection does not retry if the test is skipped',
             ])
 
             // new tests are not detected and not retried
@@ -1084,9 +1106,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1101,13 +1122,13 @@ versions.forEach((version) => {
       it('does not detect new tests if the response is invalid', async () => {
         receiver.setSettings({
           early_flake_detection: {
-            enabled: true
+            enabled: true,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
-          'not-vitest': {}
+          'not-vitest': {},
         })
 
         const eventsPromise = receiver
@@ -1134,9 +1155,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             },
-            stdio: 'pipe'
           }
         )
         await Promise.all([
@@ -1152,7 +1172,7 @@ versions.forEach((version) => {
         it('does not activate it if DD_TEST_FAILED_TEST_REPLAY_ENABLED is set to false', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
-            di_enabled: true
+            di_enabled: true,
           })
 
           const eventsPromise = receiver
@@ -1188,9 +1208,8 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-                DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false'
+                DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1204,7 +1223,7 @@ versions.forEach((version) => {
         it('does not activate dynamic instrumentation if remote settings are disabled', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
-            di_enabled: false
+            di_enabled: false,
           })
 
           const eventsPromise = receiver
@@ -1238,9 +1257,8 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1254,7 +1272,7 @@ versions.forEach((version) => {
         it('runs retries with dynamic instrumentation', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
-            di_enabled: true
+            di_enabled: true,
           })
 
           let snapshotIdByTest, snapshotIdByLog
@@ -1293,7 +1311,7 @@ versions.forEach((version) => {
               const [{ logMessage: [diLog] }] = payloads
               assertObjectContains(diLog, {
                 ddsource: 'dd_debugger',
-                level: 'error'
+                level: 'error',
               })
               assert.match(diLog.ddtags, /git.repository_url:/)
               assert.match(diLog.ddtags, /git.commit.sha:/)
@@ -1301,16 +1319,16 @@ versions.forEach((version) => {
               assertObjectContains(diLog.debugger.snapshot.captures.lines['4'].locals, {
                 a: {
                   type: 'number',
-                  value: '11'
+                  value: '11',
                 },
                 b: {
                   type: 'number',
-                  value: '2'
+                  value: '2',
                 },
                 localVar: {
                   type: 'number',
-                  value: '10'
-                }
+                  value: '10',
+                },
               })
               spanIdByLog = diLog.dd.span_id
               traceIdByLog = diLog.dd.trace_id
@@ -1324,9 +1342,8 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1343,7 +1360,7 @@ versions.forEach((version) => {
         it('does not crash if the retry does not hit the breakpoint', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
-            di_enabled: true
+            di_enabled: true,
           })
 
           const eventsPromise = receiver
@@ -1378,9 +1395,8 @@ versions.forEach((version) => {
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/breakpoint-not-hit*',
-                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               },
-              stdio: 'pipe'
             }
           )
 
@@ -1397,9 +1413,9 @@ versions.forEach((version) => {
       it('detects new tests without retrying them', (done) => {
         receiver.setSettings({
           early_flake_detection: {
-            enabled: false
+            enabled: false,
           },
-          known_tests_enabled: true
+          known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
@@ -1408,9 +1424,9 @@ versions.forEach((version) => {
               // 'early flake detection can retry tests that eventually pass', // will be considered new
               // 'early flake detection can retry tests that always pass', // will be considered new
               // 'early flake detection does not retry if the test is skipped', // will be considered new
-              'early flake detection does not retry if it is not new'
-            ]
-          }
+              'early flake detection does not retry if it is not new',
+            ],
+          },
         })
 
         const eventsPromise = receiver
@@ -1425,7 +1441,7 @@ versions.forEach((version) => {
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
-              'early flake detection does not retry if the test is skipped'
+              'early flake detection does not retry if the test is skipped',
             ])
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             // all but one are considered new
@@ -1439,7 +1455,7 @@ versions.forEach((version) => {
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSessionEvent.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSessionEvent.meta))
           })
 
         childProcess = exec(
@@ -1449,9 +1465,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
-              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init'
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -1483,9 +1498,8 @@ versions.forEach((version) => {
             ...getCiVisAgentlessConfig(receiver.port),
             TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
             NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            DD_SERVICE: 'my-service'
+            DD_SERVICE: 'my-service',
           },
-          stdio: 'pipe'
         }
       )
 
@@ -1508,13 +1522,13 @@ versions.forEach((version) => {
                     tests: {
                       'attempt to fix tests can attempt to fix a test': {
                         properties: {
-                          attempt_to_fix: true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+                          attempt_to_fix: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             })
           })
 
@@ -1523,7 +1537,7 @@ versions.forEach((version) => {
             shouldAlwaysPass,
             shouldFailSometimes,
             isQuarantining,
-            isDisabling
+            isDisabling,
           }) =>
             receiver
               .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
@@ -1534,14 +1548,14 @@ versions.forEach((version) => {
                 if (isAttemptingToFix) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
 
                 assertObjectContains(resourceNames,
                   [
-                    'ci-visibility/vitest-tests/test-attempt-to-fix.mjs.attempt to fix tests can attempt to fix a test'
+                    'ci-visibility/vitest-tests/test-attempt-to-fix.mjs.attempt to fix tests can attempt to fix a test',
                   ]
                 )
 
@@ -1562,8 +1576,8 @@ versions.forEach((version) => {
                   if (isAttemptingToFix) {
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
                     if (isFirstAttempt) {
-                      assert.ok(!('TEST_IS_RETRY' in test.meta))
-                      assert.ok(!('TEST_RETRY_REASON' in test.meta))
+                      assert.ok(!(TEST_IS_RETRY in test.meta))
+                      assert.ok(!(TEST_RETRY_REASON in test.meta))
                       continue
                     }
                     assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
@@ -1573,27 +1587,38 @@ versions.forEach((version) => {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
                       } else if (shouldFailSometimes) {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                        assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
+                        assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                       } else {
                         assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                       }
                     }
                   } else {
-                    assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
-                    assert.ok(!('TEST_IS_RETRY' in test.meta))
-                    assert.ok(!('TEST_RETRY_REASON' in test.meta))
+                    assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
+                    assert.ok(!(TEST_IS_RETRY in test.meta))
+                    assert.ok(!(TEST_RETRY_REASON in test.meta))
                   }
                 }
               })
 
+          /**
+           * @param {() => void} done
+           * @param {{
+           *   isAttemptingToFix?: boolean,
+           *   shouldAlwaysPass?: boolean,
+           *   isQuarantining?: boolean,
+           *   shouldFailSometimes?: boolean,
+           *   isDisabling?: boolean,
+           *   extraEnvVars?: Record<string, string>
+           * }} [options]
+           */
           const runAttemptToFixTest = (done, {
             isAttemptingToFix,
             shouldAlwaysPass,
             isQuarantining,
             shouldFailSometimes,
             isDisabling,
-            extraEnvVars = {}
+            extraEnvVars = {},
           } = {}) => {
             let stdout = ''
             const testAssertionsPromise = getTestAssertions({
@@ -1601,7 +1626,7 @@ versions.forEach((version) => {
               shouldAlwaysPass,
               shouldFailSometimes,
               isQuarantining,
-              isDisabling
+              isDisabling,
             })
             childProcess = exec(
               './node_modules/.bin/vitest run',
@@ -1613,13 +1638,12 @@ versions.forEach((version) => {
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
                   ...extraEnvVars,
                   ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
-                  ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {})
+                  ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
                 },
-                stdio: 'inherit'
               }
             )
 
-            childProcess.stdout.on('data', (data) => {
+            childProcess.stdout?.on('data', (data) => {
               stdout += data
             })
 
@@ -1676,13 +1700,13 @@ versions.forEach((version) => {
                       'attempt to fix tests can attempt to fix a test': {
                         properties: {
                           attempt_to_fix: true,
-                          quarantined: true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+                          quarantined: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, isQuarantining: true })
@@ -1698,13 +1722,13 @@ versions.forEach((version) => {
                       'attempt to fix tests can attempt to fix a test': {
                         properties: {
                           attempt_to_fix: true,
-                          disabled: true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+                          disabled: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, isDisabling: true })
@@ -1720,13 +1744,13 @@ versions.forEach((version) => {
                     tests: {
                       'disable tests can disable a test': {
                         properties: {
-                          disabled: true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+                          disabled: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             })
           })
 
@@ -1742,14 +1766,14 @@ versions.forEach((version) => {
                 if (isDisabling) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
 
                 assertObjectContains(resourceNames,
                   [
-                    'ci-visibility/vitest-tests/test-disabled.mjs.disable tests can disable a test'
+                    'ci-visibility/vitest-tests/test-disabled.mjs.disable tests can disable a test',
                   ]
                 )
 
@@ -1762,7 +1786,7 @@ versions.forEach((version) => {
                   assert.strictEqual(skippedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
                 } else {
                   assert.strictEqual(skippedTest.meta[TEST_STATUS], 'fail')
-                  assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in skippedTest.meta))
+                  assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in skippedTest.meta))
                 }
               })
 
@@ -1778,13 +1802,12 @@ versions.forEach((version) => {
                   ...getCiVisAgentlessConfig(receiver.port),
                   TEST_DIR: 'ci-visibility/vitest-tests/test-disabled*',
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                  ...extraEnvVars
+                  ...extraEnvVars,
                 },
-                stdio: 'inherit'
               }
             )
 
-            childProcess.stdout.on('data', (data) => {
+            childProcess.stdout?.on('data', (data) => {
               stdout += data
             })
 
@@ -1830,13 +1853,13 @@ versions.forEach((version) => {
                     tests: {
                       'quarantine tests can quarantine a test': {
                         properties: {
-                          quarantined: true
-                        }
-                      }
-                    }
-                  }
-                }
-              }
+                          quarantined: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             })
           })
 
@@ -1852,7 +1875,7 @@ versions.forEach((version) => {
                 if (isQuarantining) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
@@ -1860,7 +1883,7 @@ versions.forEach((version) => {
                 assertObjectContains(resourceNames,
                   [
                     'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a test',
-                    'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally'
+                    'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally',
                   ]
                 )
 
@@ -1874,7 +1897,7 @@ versions.forEach((version) => {
                   assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 } else {
                   assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-                  assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in quarantinedTest.meta))
+                  assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTest.meta))
                 }
               })
 
@@ -1890,13 +1913,12 @@ versions.forEach((version) => {
                   ...getCiVisAgentlessConfig(receiver.port),
                   TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine*',
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                  ...extraEnvVars
+                  ...extraEnvVars,
                 },
-                stdio: 'inherit'
               }
             )
 
-            childProcess.stdout.on('data', (data) => {
+            childProcess.stdout?.on('data', (data) => {
               stdout += data
             })
 
@@ -1938,7 +1960,7 @@ versions.forEach((version) => {
           let testOutput = ''
           receiver.setSettings({
             test_management: { enabled: true },
-            flaky_test_retries_enabled: false
+            flaky_test_retries_enabled: false,
           })
           receiver.setTestManagementTestsResponseCode(500)
 
@@ -1946,7 +1968,7 @@ versions.forEach((version) => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               // it is not retried
               assert.strictEqual(tests.length, 1)
@@ -1960,16 +1982,15 @@ versions.forEach((version) => {
                 ...getCiVisAgentlessConfig(receiver.port),
                 TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                DD_TRACE_DEBUG: '1'
+                DD_TRACE_DEBUG: '1',
               },
-              stdio: 'inherit'
             }
           )
 
-          childProcess.stdout.on('data', (chunk) => {
+          childProcess.stdout?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
-          childProcess.stderr.on('data', (chunk) => {
+          childProcess.stderr?.on('data', (chunk) => {
             testOutput += chunk.toString()
           })
 
@@ -1977,7 +1998,7 @@ versions.forEach((version) => {
             once(childProcess, 'exit'),
             once(childProcess.stdout, 'end'),
             once(childProcess.stderr, 'end'),
-            eventsPromise
+            eventsPromise,
           ])
           assert.match(testOutput, /Test management tests could not be fetched/)
         })
@@ -1992,16 +2013,19 @@ versions.forEach((version) => {
 
             assert.ok(metadataDicts.length > 0)
             metadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
-              // capabilities logic does not overwrite test session name
-              assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+              assert.ok(!Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS))
+
+              assertObjectContains(metadata.test, {
+                [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+                [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+                [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
+                [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+                [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+                [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: '5',
+                [DD_CAPABILITIES_FAILED_TEST_REPLAY]: '1',
+                // capabilities logic does not overwrite test session name
+                [TEST_SESSION_NAME]: 'my-test-session-name',
+              })
             })
           })
 
@@ -2012,9 +2036,8 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              DD_TEST_SESSION_NAME: 'my-test-session-name'
+              DD_TEST_SESSION_NAME: 'my-test-session-name',
             },
-            stdio: 'pipe'
           }
         )
 
@@ -2031,9 +2054,9 @@ versions.forEach((version) => {
         receiver.setKnownTests({
           vitest: {
             'ci-visibility/vitest-tests/impacted-test.mjs': [
-              'impacted test can impacted test'
-            ]
-          }
+              'impacted test can impacted test',
+            ],
+          },
         })
       })
 
@@ -2058,6 +2081,13 @@ versions.forEach((version) => {
         execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
       })
 
+      /**
+       * @param {{
+       *   isModified?: boolean,
+       *   isEfd?: boolean,
+       *   isNew?: boolean,
+       * }} options
+       */
       const getTestAssertions = ({ isModified, isEfd, isNew }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2068,14 +2098,14 @@ versions.forEach((version) => {
             if (isEfd) {
               assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
             } else {
-              assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
 
             assertObjectContains(resourceNames,
               [
-                'ci-visibility/vitest-tests/impacted-test.mjs.impacted test can impacted test'
+                'ci-visibility/vitest-tests/impacted-test.mjs.impacted test can impacted test',
               ]
             )
 
@@ -2093,12 +2123,12 @@ versions.forEach((version) => {
               if (isModified) {
                 assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
               } else {
-                assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
+                assert.ok(!(TEST_IS_MODIFIED in impactedTest.meta))
               }
               if (isNew) {
                 assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
               } else {
-                assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
+                assert.ok(!(TEST_IS_NEW in impactedTest.meta))
               }
             }
 
@@ -2122,10 +2152,10 @@ versions.forEach((version) => {
 
       const runImpactedTest = (
         done,
-        { isModified, isEfd = false, isParallel = false, isNew = false },
+        { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isParallel, isNew })
+        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
 
         childProcess = exec(
           './node_modules/.bin/vitest run',
@@ -2136,9 +2166,8 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/impacted-test*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
               GITHUB_BASE_REF: '',
-              ...extraEnvVars
+              ...extraEnvVars,
             },
-            stdio: 'inherit'
           }
         )
 
@@ -2174,17 +2203,17 @@ versions.forEach((version) => {
       context('test is new', () => {
         it('should be retried and marked both as new and modified', (done) => {
           receiver.setKnownTests({
-            vitest: {}
+            vitest: {},
           })
           receiver.setSettings({
             impacted_tests_enabled: true,
             early_flake_detection: {
               enabled: true,
               slow_test_retries: {
-                '5s': NUM_RETRIES_EFD
-              }
+                '5s': NUM_RETRIES_EFD,
+              },
             },
-            known_tests_enabled: true
+            known_tests_enabled: true,
           })
           runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
@@ -2195,12 +2224,11 @@ versions.forEach((version) => {
       childProcess = exec('node ./ci-visibility/run-tinypool.mjs', {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'pipe'
       })
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         testOutput += chunk.toString()
       })
       childProcess.on('exit', (code) => {
@@ -2242,17 +2270,138 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              TEST_DIR: './test-programmatic-api*'
+              TEST_DIR: './test-programmatic-api*',
             },
-            stdio: 'pipe'
           }
         )
 
         await Promise.all([
           eventsPromise,
-          once(childProcess, 'exit')
+          once(childProcess, 'exit'),
         ])
       })
     })
+
+    // Coverage report upload only works for >=2.0.0 (when vitest has proper coverage support)
+    // v4 dropped support for Node 18
+    if (version === 'latest' && NODE_MAJOR >= 20) {
+      context('coverage report upload', () => {
+        const gitCommitSha = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        const gitRepositoryUrl = 'https://github.com/datadog/test-repo.git'
+
+        it('uploads coverage report when coverage_report_upload_enabled is true', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: true,
+          })
+
+          const coverageReportPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/cicovreprt', (payloads) => {
+              assert.strictEqual(payloads.length, 1)
+
+              const coverageReport = payloads[0]
+
+              assert.ok(coverageReport.headers['content-type'].includes('multipart/form-data'))
+
+              assert.strictEqual(coverageReport.coverageFile.name, 'coverage')
+              assert.ok(coverageReport.coverageFile.content.includes('SF:')) // LCOV format
+
+              assert.strictEqual(coverageReport.eventFile.name, 'event')
+              assert.strictEqual(coverageReport.eventFile.content.type, 'coverage_report')
+              assert.strictEqual(coverageReport.eventFile.content.format, 'lcov')
+              assert.strictEqual(coverageReport.eventFile.content[GIT_COMMIT_SHA], gitCommitSha)
+              assert.strictEqual(coverageReport.eventFile.content[GIT_REPOSITORY_URL], gitRepositoryUrl)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                COVERAGE_PROVIDER: 'v8',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+              },
+            }
+          )
+
+          await Promise.all([
+            coverageReportPromise,
+            once(childProcess, 'exit'),
+          ])
+        })
+
+        it('sends coverage_upload.request telemetry metric when coverage is uploaded', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: true,
+          })
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+          const telemetryPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+              const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+              const coverageUploadMetric = telemetryMetrics.find(
+                ({ metric }) => metric === TELEMETRY_COVERAGE_UPLOAD
+              )
+
+              assert.ok(coverageUploadMetric, 'coverage_upload.request telemetry metric should be sent')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+                COVERAGE_PROVIDER: 'v8',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            telemetryPromise,
+          ])
+        })
+
+        it('does not upload coverage report when coverage_report_upload_enabled is false', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: false,
+          })
+
+          let coverageReportUploaded = false
+          receiver.assertPayloadReceived(() => {
+            coverageReportUploaded = true
+          }, ({ url }) => url === '/api/v2/cicovreprt')
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                COVERAGE_PROVIDER: 'v8',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+              },
+            }
+          )
+
+          await once(childProcess, 'exit')
+
+          assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+        })
+      })
+    }
   })
 })

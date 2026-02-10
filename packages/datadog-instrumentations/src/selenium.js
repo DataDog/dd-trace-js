@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const { addHook, channel } = require('./helpers/instrument')
 
 const ciSeleniumDriverGetStartCh = channel('ci:selenium:driver:get')
@@ -17,13 +17,13 @@ if (window.DD_RUM && window.DD_RUM.stopSession) {
 const IS_RUM_ACTIVE_SCRIPT = 'return !!window.DD_RUM'
 
 const DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS =
-Number(getEnvironmentVariable('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
+Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
 const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
 // TODO: can we increase the supported version range?
 addHook({
   name: 'selenium-webdriver',
-  versions: ['>=4.11.0']
+  versions: ['>=4.11.0'],
 }, (seleniumPackage, seleniumVersion) => {
   // TODO: do not turn this into async. Use promises
   shimmer.wrap(seleniumPackage.WebDriver.prototype, 'get', get => async function () {
@@ -44,13 +44,13 @@ addHook({
       seleniumVersion,
       browserName: capabilities.getBrowserName(),
       browserVersion: capabilities.getBrowserVersion(),
-      isRumActive
+      isRumActive,
     })
 
     if (traceId && isRumActive) {
       await this.manage().addCookie({
         name: DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME,
-        value: traceId
+        value: traceId,
       })
     }
 

@@ -164,5 +164,5 @@ function clearAllRules () {
 module.exports = {
   loadRules,
   updateWafFromRC,
-  clearAllRules
+  clearAllRules,
 }

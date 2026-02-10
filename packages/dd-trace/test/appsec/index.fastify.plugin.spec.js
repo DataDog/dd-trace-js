@@ -53,8 +53,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'rules-example.json')
-        }
+          rules: path.join(__dirname, 'rules-example.json'),
+        },
       }))
     })
 
@@ -118,8 +118,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'body-parser-rules.json')
-        }
+          rules: path.join(__dirname, 'body-parser-rules.json'),
+        },
       }))
     })
 
@@ -161,7 +161,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         const complexPayload = {
           deepObject,
           longValue,
-          largeObject
+          largeObject,
         }
 
         await axios.post('/', { complexPayload })
@@ -176,8 +176,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           metrics: {
             '_dd.appsec.truncated.string_length': 5000,
             '_dd.appsec.truncated.container_size': 300,
-            '_dd.appsec.truncated.container_depth': 20
-          }
+            '_dd.appsec.truncated.container_depth': 20,
+          },
         })
       }
     })
@@ -201,10 +201,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             type: 'object',
             required: ['validField'],
             properties: {
-              validField: { type: 'string' }
-            }
-          }
-        }
+              validField: { type: 'string' },
+            },
+          },
+        },
       }, (request, reply) => {
         reply.send('DONE')
       })
@@ -226,8 +226,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'body-parser-rules.json')
-        }
+          rules: path.join(__dirname, 'body-parser-rules.json'),
+        },
       }))
     })
 
@@ -315,13 +315,16 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'rules-example.json')
-        }
+          rules: path.join(__dirname, 'rules-example.json'),
+        },
       }))
     })
 
     afterEach(() => {
       appsec.disable()
+      // TODO: Remove the workaround once https://github.com/sinonjs/sinon/issues/2671 is resolved
+      preHandlerHookSpy.resetHistory()
+      preValidationHookSpy.resetHistory()
       sinon.reset()
     })
 
@@ -440,7 +443,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         'onRequest',
         'preParsing',
         'preValidation',
-        'preHandler'
+        'preHandler',
       ]
 
       hookConfigurations.forEach((hook) => {
@@ -469,7 +472,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
             app.register(fastifyCookie, {
               secret: 'my-secret',
-              hook
+              hook,
             })
 
             // Dummy hook
@@ -494,8 +497,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
               getConfigFresh({
                 appsec: {
                   enabled: true,
-                  rules: path.join(__dirname, 'cookie-parser-rules.json')
-                }
+                  rules: path.join(__dirname, 'cookie-parser-rules.json'),
+                },
               })
             )
           })
@@ -520,8 +523,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             try {
               await axios.post('/', {}, {
                 headers: {
-                  Cookie: 'key=testattack'
-                }
+                  Cookie: 'key=testattack',
+                },
               })
 
               return Promise.reject(new Error('Request should not return 200'))
@@ -558,6 +561,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           this.skip()
         }
 
+        if (semver.intersects(multipartLoadedVersion, '>=9.4.0') && semver.intersects(fastifyLoadedVersion, '<4')) {
+          this.skip()
+        }
+
         return agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
       })
 
@@ -587,8 +594,8 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec.enable(getConfigFresh({
           appsec: {
             enabled: true,
-            rules: path.join(__dirname, 'body-parser-rules.json')
-          }
+            rules: path.join(__dirname, 'body-parser-rules.json'),
+          },
         }))
       })
 
@@ -688,9 +695,9 @@ describe('Api Security - Fastify', () => {
           rules: path.join(__dirname, 'api_security_rules.json'),
           apiSecurity: {
             enabled: true,
-            sampleDelay: 10
-          }
-        }
+            sampleDelay: 10,
+          },
+        },
       })
       appsec.enable(config)
     })
@@ -709,8 +716,8 @@ describe('Api Security - Fastify', () => {
 
       await agent.assertFirstTraceSpan({
         meta: {
-          '_dd.appsec.s.res.body': expectedResponseBodySchema
-        }
+          '_dd.appsec.s.res.body': expectedResponseBodySchema,
+        },
       })
 
       assert.strictEqual(res.status, 200)
@@ -723,8 +730,8 @@ describe('Api Security - Fastify', () => {
 
       await agent.assertFirstTraceSpan({
         meta: {
-          '_dd.appsec.s.res.body': expectedResponseBodySchema
-        }
+          '_dd.appsec.s.res.body': expectedResponseBodySchema,
+        },
       })
 
       assert.strictEqual(res.status, 200)

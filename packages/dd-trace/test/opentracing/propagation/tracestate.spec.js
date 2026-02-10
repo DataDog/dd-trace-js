@@ -26,7 +26,7 @@ describe('TraceState', () => {
     // However the spec requires that entries are ordered recently edited first.
     const ts = new TraceState([
       ['dd', 's:2;o:foo;t.dm:-4'],
-      ['other', 'bleh']
+      ['other', 'bleh'],
     ])
     assert.strictEqual(ts.toString(), 'other=bleh,dd=s:2;o:foo;t.dm:-4')
   })

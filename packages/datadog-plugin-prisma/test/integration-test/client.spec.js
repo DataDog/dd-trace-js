@@ -11,9 +11,9 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   assertObjectContains,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const { SCHEMA_FIXTURES, TEST_DATABASE_URL } = require('../prisma-fixtures')
@@ -22,14 +22,14 @@ const prismaClientConfigs = [{
   name: 'prisma-generator-js with no output',
   schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientJs}`,
   serverFile: 'server.mjs',
-  importPath: '@prisma/client'
+  importPath: '@prisma/client',
 },
 {
   name: 'prisma-generator-js with custom output',
   serverFile: 'server-output.mjs',
   importPath: './generated/prisma/index.js',
   schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.clientOutputJs}`,
-  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' }
+  env: { PRISMA_CLIENT_OUTPUT: './generated/prisma' },
 },
 {
   name: 'prisma-generator v6',
@@ -37,7 +37,7 @@ const prismaClientConfigs = [{
   importPath: './dist/client.js',
   schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV6}`,
   env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', DATABASE_URL: TEST_DATABASE_URL },
-  ts: true
+  ts: true,
 },
 {
   name: 'prisma-generator v7',
@@ -46,7 +46,7 @@ const prismaClientConfigs = [{
   schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7}`,
   configFile: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7Config}`,
   env: { PRISMA_CLIENT_OUTPUT: './generated/prisma', DATABASE_URL: TEST_DATABASE_URL },
-  ts: true
+  ts: true,
 }]
 
 describe('esm', () => {
@@ -74,7 +74,8 @@ describe('esm', () => {
         useSandbox(deps, false, paths)
 
         before(function () {
-          variants = varySandbox(config.serverFile, config.importPath, 'PrismaClient')
+          variants = varySandbox(config.serverFile, config.ts ? 'PrismaClient' : 'prismaLib',
+            config.ts ? 'PrismaClient' : undefined, config.importPath, config.ts)
         })
 
         beforeEach(async function () {
@@ -83,7 +84,7 @@ describe('esm', () => {
           const commands = [
             './node_modules/.bin/prisma migrate reset --force',
             './node_modules/.bin/prisma db push --accept-data-loss',
-            './node_modules/.bin/prisma generate'
+            './node_modules/.bin/prisma generate',
           ]
           const cwd = sandboxCwd()
 
@@ -104,8 +105,8 @@ describe('esm', () => {
             stdio: 'inherit',
             env: {
               ...process.env,
-              ...config.env
-            }
+              ...config.env,
+            },
           })
 
           // node v18 needs the package.json to have type module to treat .js files as esm
@@ -127,6 +128,7 @@ describe('esm', () => {
         })
 
         for (const variant of varySandbox.VARIANTS) {
+          if (config.ts && variant === 'default') { continue }
           it(`is instrumented with ${variant} import`, async function () {
             this.timeout(60000)
             const res = agent.assertMessageReceived(({ headers, payload }) => {
@@ -134,28 +136,30 @@ describe('esm', () => {
               assertObjectContains(payload, [[{
                 name: 'prisma.client',
                 resource: 'User.create',
-                service: 'node-prisma'
+                service: 'node-prisma',
               }], [{
                 name: config.configFile ? 'pg.query' : 'prisma.engine',
                 service: config.configFile ? 'node-postgres' : 'node-prisma',
                 meta: {
                   'db.user': 'postgres',
                   'db.name': 'postgres',
-                  'db.type': 'postgres'
-                }
+                  'db.type': 'postgres',
+                },
               }]])
             })
 
-            const procPromise = spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
-              DD_TRACE_FLUSH_INTERVAL: '2000',
-              ...config.env
-            })
+            const procPromise = spawnPluginIntegrationTestProcAndExpectExit(
+              sandboxCwd(),
+              variants[variant],
+              agent.port,
+              { DD_TRACE_FLUSH_INTERVAL: '2000', ...config.env }
+            )
 
             await Promise.all([
               procPromise.then((res) => {
                 proc = res
               }),
-              res
+              res,
             ])
           })
         }

@@ -14,12 +14,12 @@ const testFrameworks = [
   {
     testFramework: 'mocha',
     command: 'node ./ci-visibility/test-optimization-wrong-init/run-mocha.js',
-    expectedOutput: '1 passing'
+    expectedOutput: '1 passing',
   },
   {
     testFramework: 'jest',
     command: 'node ./ci-visibility/test-optimization-wrong-init/run-jest.js',
-    expectedOutput: 'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js'
+    expectedOutput: 'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js',
   },
   {
     testFramework: 'vitest',
@@ -27,17 +27,17 @@ const testFrameworks = [
     expectedOutput: '1 passed',
     extraTestContext: {
       TEST_DIR: 'ci-visibility/test-optimization-wrong-init/vitest-sum-wrong-init*',
-      NODE_OPTIONS: '--import dd-trace/register.js'
-    }
+      NODE_OPTIONS: '--import dd-trace/register.js',
+    },
   },
   {
     testFramework: 'cucumber',
     command: './node_modules/.bin/cucumber-js ci-visibility/test-optimization-wrong-init-cucumber/*.feature',
     expectedOutput: '1 passed',
     extraTestContext: {
-      NODE_OPTIONS: '-r dd-trace/init'
-    }
-  }
+      NODE_OPTIONS: '-r dd-trace/init',
+    },
+  },
 ]
 
 testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestContext }) => {
@@ -98,23 +98,22 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
             ...restEnvVars,
             DD_TRACE_DISABLED_INSTRUMENTATIONS: 'child_process',
             DD_TRACE_DEBUG: '1',
-            ...extraTestContext
+            ...extraTestContext,
           },
-          stdio: 'pipe'
         }
       )
 
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 
       await Promise.all([
         once(childProcess, 'exit'),
-        eventsPromise
+        eventsPromise,
       ])
 
       assert.ok(

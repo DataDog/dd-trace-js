@@ -34,16 +34,16 @@ const myTracer = {
       updateName () { return this },
       end () { return this },
       isRecording () { return false },
-      recordException () { return this }
+      recordException () { return this },
     }
 
     return fn(span)
-  }
+  },
 }
 
 describe('Plugin', () => {
   useEnv({
-    OPENAI_API_KEY: '<not-a-real-key>'
+    OPENAI_API_KEY: '<not-a-real-key>',
   })
 
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
@@ -60,7 +60,7 @@ describe('Plugin', () => {
       const OpenAI = require(`../../../versions/${getAiSdkOpenAiPackage(realVersion)}`).get()
       openai = OpenAI.createOpenAI({
         baseURL: 'http://127.0.0.1:9126/vcr/openai',
-        compatibility: 'strict'
+        compatibility: 'strict',
       })
     })
 
@@ -73,7 +73,7 @@ describe('Plugin', () => {
           prompt: 'Hello, OpenAI!',
           maxTokens: 100,
           temperature: 0.5,
-          experimental_telemetry: experimentalTelemetry
+          experimental_telemetry: experimentalTelemetry,
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
@@ -90,8 +90,8 @@ describe('Plugin', () => {
             resource: 'ai.generateText',
             meta: {
               'ai.request.model': 'gpt-4o-mini',
-              'ai.request.model_provider': 'openai'
-            }
+              'ai.request.model_provider': 'openai',
+            },
           })
 
           assertObjectContains(doGenerateSpan, {
@@ -99,8 +99,8 @@ describe('Plugin', () => {
             resource: 'ai.generateText.doGenerate',
             meta: {
               'ai.request.model': 'gpt-4o-mini',
-              'ai.request.model_provider': 'openai'
-            }
+              'ai.request.model_provider': 'openai',
+            },
           })
         })
 
@@ -112,7 +112,7 @@ describe('Plugin', () => {
           prompt: 'Hello, OpenAI!',
           maxTokens: 100,
           temperature: 0.5,
-          experimental_telemetry: experimentalTelemetry
+          experimental_telemetry: experimentalTelemetry,
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
@@ -131,8 +131,8 @@ describe('Plugin', () => {
             resource: 'ai.generateText',
             meta: {
               'ai.request.model': 'gpt-4o-mini',
-              'ai.request.model_provider': 'openai'
-            }
+              'ai.request.model_provider': 'openai',
+            },
           })
 
           assertObjectContains(doGenerateSpan, {
@@ -140,8 +140,8 @@ describe('Plugin', () => {
             resource: 'ai.generateText.doGenerate',
             meta: {
               'ai.request.model': 'gpt-4o-mini',
-              'ai.request.model_provider': 'openai'
-            }
+              'ai.request.model_provider': 'openai',
+            },
           })
         })
 
@@ -153,7 +153,7 @@ describe('Plugin', () => {
           prompt: 'Hello, OpenAI!',
           maxTokens: 100,
           temperature: 0.5,
-          experimental_telemetry: experimentalTelemetry
+          experimental_telemetry: experimentalTelemetry,
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
@@ -173,8 +173,8 @@ describe('Plugin', () => {
             resource: 'ai.generateText',
             meta: {
               'ai.request.model': 'gpt-4o-mini',
-              'ai.request.model_provider': 'openai'
-            }
+              'ai.request.model_provider': 'openai',
+            },
           })
 
           assertObjectContains(doGenerateSpan, {
@@ -182,8 +182,8 @@ describe('Plugin', () => {
             resource: 'ai.generateText.doGenerate',
             meta: {
               'ai.request.model': 'gpt-4o-mini',
-              'ai.request.model_provider': 'openai'
-            }
+              'ai.request.model_provider': 'openai',
+            },
           })
         })
 
@@ -195,7 +195,7 @@ describe('Plugin', () => {
           prompt: 'Hello, OpenAI!',
           maxTokens: 100,
           temperature: 0.5,
-          experimental_telemetry: experimentalTelemetry
+          experimental_telemetry: experimentalTelemetry,
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
@@ -215,8 +215,8 @@ describe('Plugin', () => {
           resource: 'ai.generateText',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assertObjectContains(doGenerateSpan, {
@@ -224,8 +224,8 @@ describe('Plugin', () => {
           resource: 'ai.generateText.doGenerate',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
       })
 
@@ -234,7 +234,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
-        temperature: 0.5
+        temperature: 0.5,
       })
 
       assert.ok(result.text, 'Expected result to be truthy')
@@ -252,8 +252,8 @@ describe('Plugin', () => {
           resource: 'ai.generateObject',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assertObjectContains(doGenerateSpan, {
@@ -261,8 +261,8 @@ describe('Plugin', () => {
           resource: 'ai.generateObject.doGenerate',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
       })
 
@@ -271,16 +271,16 @@ describe('Plugin', () => {
         properties: {
           name: { type: 'string' },
           age: { type: 'number' },
-          height: { type: 'string' }
+          height: { type: 'string' },
         },
         required: ['name', 'age', 'height'],
-        additionalProperties: false
+        additionalProperties: false,
       })
 
       const result = await ai.generateObject({
         model: openai('gpt-4o-mini'),
         schema,
-        prompt: 'Invent a character for a video game'
+        prompt: 'Invent a character for a video game',
       })
 
       assert.ok(result.object, 'Expected result to be truthy')
@@ -298,8 +298,8 @@ describe('Plugin', () => {
           resource: 'ai.embed',
           meta: {
             'ai.request.model': 'text-embedding-ada-002',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assertObjectContains(doEmbedSpan, {
@@ -307,14 +307,14 @@ describe('Plugin', () => {
           resource: 'ai.embed.doEmbed',
           meta: {
             'ai.request.model': 'text-embedding-ada-002',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
       })
 
       const result = await ai.embed({
         model: openai.embedding('text-embedding-ada-002'),
-        value: 'hello world'
+        value: 'hello world',
       })
 
       assert.ok(result.embedding, 'Expected result to be truthy')
@@ -332,8 +332,8 @@ describe('Plugin', () => {
           resource: 'ai.embedMany',
           meta: {
             'ai.request.model': 'text-embedding-ada-002',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assertObjectContains(doEmbedSpan, {
@@ -341,14 +341,14 @@ describe('Plugin', () => {
           resource: 'ai.embedMany.doEmbed',
           meta: {
             'ai.request.model': 'text-embedding-ada-002',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
       })
 
       const result = await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
-        values: ['hello world', 'goodbye world']
+        values: ['hello world', 'goodbye world'],
       })
 
       assert.ok(result.embeddings, 'Expected result to be truthy')
@@ -366,8 +366,8 @@ describe('Plugin', () => {
           resource: 'ai.streamText',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assertObjectContains(doStreamSpan, {
@@ -375,8 +375,8 @@ describe('Plugin', () => {
           resource: 'ai.streamText.doStream',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
       })
 
@@ -385,7 +385,7 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
-        temperature: 0.5
+        temperature: 0.5,
       })
 
       const textStream = result.textStream
@@ -409,8 +409,8 @@ describe('Plugin', () => {
           resource: 'ai.streamObject',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assertObjectContains(doStreamSpan, {
@@ -418,8 +418,8 @@ describe('Plugin', () => {
           resource: 'ai.streamObject.doStream',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
       })
 
@@ -428,16 +428,16 @@ describe('Plugin', () => {
         properties: {
           name: { type: 'string' },
           age: { type: 'number' },
-          height: { type: 'string' }
+          height: { type: 'string' },
         },
         required: ['name', 'age', 'height'],
-        additionalProperties: false
+        additionalProperties: false,
       })
 
       const result = await ai.streamObject({
         model: openai('gpt-4o-mini'),
         schema,
-        prompt: 'Invent a character for a video game'
+        prompt: 'Invent a character for a video game',
       })
 
       const partialObjectStream = result.partialObjectStream
@@ -463,8 +463,8 @@ describe('Plugin', () => {
           resource: 'ai.generateText',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assertObjectContains(doGenerateSpan, {
@@ -472,8 +472,8 @@ describe('Plugin', () => {
           resource: 'ai.generateText.doGenerate',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assert.strictEqual(toolCallSpan2.name, 'ai.toolCall')
@@ -484,8 +484,8 @@ describe('Plugin', () => {
           resource: 'ai.generateText.doGenerate',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
       })
 
@@ -494,9 +494,9 @@ describe('Plugin', () => {
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
-          location: { type: 'string', description: 'The location to get the weather for' }
+          location: { type: 'string', description: 'The location to get the weather for' },
         },
-        required: ['location']
+        required: ['location'],
       })
       if (semifies(realVersion, '>=5.0.0')) {
         tools = {
@@ -505,9 +505,9 @@ describe('Plugin', () => {
             inputSchema: toolSchema,
             execute: async ({ location }) => ({
               location,
-              temperature: 72
-            })
-          })
+              temperature: 72,
+            }),
+          }),
         }
 
         maxStepsArg = { stopWhen: ai.stepCountIs(5) }
@@ -518,8 +518,8 @@ describe('Plugin', () => {
           parameters: toolSchema,
           execute: async ({ location }) => ({
             location,
-            temperature: 72
-          })
+            temperature: 72,
+          }),
         })]
 
         maxStepsArg = { maxSteps: 5 }
@@ -532,10 +532,10 @@ describe('Plugin', () => {
         tools,
         providerOptions: {
           openai: {
-            store: false
-          }
+            store: false,
+          },
         },
-        ...maxStepsArg
+        ...maxStepsArg,
       })
 
       assert.ok(result.text, 'Expected result to be truthy')
@@ -553,8 +553,8 @@ describe('Plugin', () => {
           resource: 'test',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
 
         assertObjectContains(doGenerateSpan, {
@@ -562,8 +562,8 @@ describe('Plugin', () => {
           resource: 'test',
           meta: {
             'ai.request.model': 'gpt-4o-mini',
-            'ai.request.model_provider': 'openai'
-          }
+            'ai.request.model_provider': 'openai',
+          },
         })
       })
 
@@ -574,8 +574,8 @@ describe('Plugin', () => {
         maxTokens: 100,
         temperature: 0.5,
         experimental_telemetry: {
-          functionId: 'test'
-        }
+          functionId: 'test',
+        },
       })
 
       assert.ok(result.text, 'Expected result to be truthy')

@@ -12,7 +12,7 @@ function walk (tree, oldTree, path = []) {
   if (typeof tree === 'string') {
     return {
       prev: oldTree,
-      curr: tree
+      curr: tree,
     }
   }
 

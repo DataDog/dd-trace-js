@@ -52,8 +52,8 @@ describe('Plugin', () => {
             kafkaJS: {
               clientId: `kafkajs-test-${version}`,
               brokers: ['127.0.0.1:9092'],
-              logLevel: ConfluentKafka.logLevel.WARN
-            }
+              logLevel: ConfluentKafka.logLevel.WARN,
+            },
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
@@ -62,9 +62,13 @@ describe('Plugin', () => {
             topics: [{
               topic: testTopic,
               numPartitions: 1,
-              replicationFactor: 1
-            }]
+              replicationFactor: 1,
+            }],
           })
+
+          // `createTopics()` returns before leaders are guaranteed to be elected in this client.
+          // If we race ahead immediately, consumers/producers can stall on metadata/leader availability.
+          await waitForTopicReady(admin, testTopic)
         })
 
         afterEach(() => admin.disconnect())
@@ -79,13 +83,13 @@ describe('Plugin', () => {
                   'span.kind': 'producer',
                   component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': testTopic,
-                  'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
+                  'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
                 },
                 metrics: {
-                  'kafka.batch_size': messages.length
+                  'kafka.batch_size': messages.length,
                 },
                 resource: testTopic,
-                error: 0
+                error: 0,
               })
 
               await sendMessages(kafka, testTopic, messages)
@@ -103,14 +107,14 @@ describe('Plugin', () => {
                   name: expectedSchema.send.opName,
                   service: expectedSchema.send.serviceName,
                   resource: testTopic,
-                  error: 1
+                  error: 1,
                 })
 
                 assertObjectContains(span.meta, {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'confluentinc-kafka-javascript'
+                  component: 'confluentinc-kafka-javascript',
                 })
               }, { timeoutMs: 10000 })
 
@@ -129,7 +133,7 @@ describe('Plugin', () => {
             beforeEach(async () => {
               messages = [{ key: 'key1', value: 'test2' }]
               consumer = kafka.consumer({
-                kafkaJS: { groupId, fromBeginning: true, autoCommit: false }
+                kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
               })
               await consumer.connect()
               await consumer.subscribe({ topic: testTopic })
@@ -146,24 +150,26 @@ describe('Plugin', () => {
                 meta: {
                   'span.kind': 'consumer',
                   component: 'confluentinc-kafka-javascript',
-                  'messaging.destination.name': testTopic
+                  'messaging.destination.name': testTopic,
                 },
                 resource: testTopic,
                 error: 0,
-                type: 'worker'
+                type: 'worker',
               })
 
-              const consumerReceiveMessagePromise = new Promise(resolve => {
+              const consumerReceiveMessagePromise = /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 consumer.run({
                   eachMessage: () => {
                     resolve()
-                  }
+                  },
                 })
-              })
-              await sendMessages(kafka, testTopic, messages).then(
-                async () => await consumerReceiveMessagePromise
-              )
-              return expectedSpanPromise
+              }))
+
+              await Promise.all([
+                sendMessages(kafka, testTopic, messages),
+                consumerReceiveMessagePromise,
+                expectedSpanPromise,
+              ])
             })
 
             it('should run the consumer in the context of the consumer span', done => {
@@ -179,7 +185,7 @@ describe('Plugin', () => {
                 } catch (e) {
                   done(e)
                 } finally {
-                  eachMessage = () => {} // avoid being called for each message
+                  eachMessage = async () => {} // avoid being called for each message
                 }
               }
 
@@ -196,7 +202,7 @@ describe('Plugin', () => {
                 assertObjectContains(span, {
                   name: 'kafka.consume',
                   service: 'test-kafka',
-                  resource: testTopic
+                  resource: testTopic,
                 })
 
                 assert.ok(parseInt(span.parent_id.toString()) > 0)
@@ -206,7 +212,7 @@ describe('Plugin', () => {
               await consumer.run({
                 eachMessage: async () => {
                   consumerReceiveMessagePromise = Promise.resolve()
-                }
+                },
               })
               await sendMessages(kafka, testTopic, messages).then(
                 async () => await consumerReceiveMessagePromise
@@ -225,11 +231,11 @@ describe('Plugin', () => {
                   [ERROR_STACK]: fakeError.stack,
                   'span.kind': 'consumer',
                   component: 'confluentinc-kafka-javascript',
-                  'messaging.destination.name': testTopic
+                  'messaging.destination.name': testTopic,
                 },
                 resource: testTopic,
                 error: 1,
-                type: 'worker'
+                type: 'worker',
               })
 
               let consumerReceiveMessagePromise
@@ -268,28 +274,28 @@ describe('Plugin', () => {
 
             nativeProducer = new Producer({
               'bootstrap.servers': '127.0.0.1:9092',
-              dr_cb: true
+              dr_cb: true,
             })
 
-            await new Promise((resolve, reject) => {
+            await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
               nativeProducer.connect({}, (err) => {
                 if (err) {
                   return reject(err)
                 }
                 resolve()
               })
-            })
+            }))
           })
 
           afterEach(async () => {
-            await new Promise((resolve, reject) => {
+            await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
               nativeProducer.disconnect((err) => {
                 if (err) {
                   return reject(err)
                 }
                 resolve()
               })
-            })
+            }))
           })
 
           describe('producer', () => {
@@ -301,10 +307,10 @@ describe('Plugin', () => {
                   'span.kind': 'producer',
                   component: 'confluentinc-kafka-javascript',
                   'messaging.destination.name': testTopic,
-                  'messaging.kafka.bootstrap.servers': '127.0.0.1:9092'
+                  'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
                 },
                 resource: testTopic,
-                error: 0
+                error: 0,
               })
 
               const message = Buffer.from('test message')
@@ -322,11 +328,11 @@ describe('Plugin', () => {
                 assertObjectContains(span, {
                   name: expectedSchema.send.opName,
                   service: expectedSchema.send.serviceName,
-                  error: 1
+                  error: 1,
                 })
 
                 assertObjectContains(span.meta, {
-                  component: 'confluentinc-kafka-javascript'
+                  component: 'confluentinc-kafka-javascript',
                 })
 
                 assert.ok(span.meta[ERROR_TYPE])
@@ -351,33 +357,33 @@ describe('Plugin', () => {
                 'group.id': groupId,
                 'enable.auto.commit': false,
               }, {
-                'auto.offset.reset': 'earliest'
+                'auto.offset.reset': 'earliest',
               })
 
-              await new Promise((resolve, reject) => {
+              await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 nativeConsumer.connect({}, (err) => {
                   if (err) {
                     return reject(err)
                   }
                   resolve()
                 })
-              })
+              }))
             })
 
             afterEach(async () => {
               await nativeConsumer.unsubscribe()
-              await new Promise((resolve, reject) => {
+              await /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 nativeConsumer.disconnect((err) => {
                   if (err) {
                     return reject(err)
                   }
                   resolve()
                 })
-              })
+              }))
             })
 
             function consume (consumer, producer, topic, message, timeoutMs = 9500) {
-              return new Promise((resolve, reject) => {
+              return /** @type {Promise<void>} */(new Promise((resolve, reject) => {
                 const timeoutId = setTimeout(() => {
                   reject(new Error(`Timeout: Did not consume message on topic "${topic}" within ${timeoutMs}ms`))
                 }, timeoutMs)
@@ -408,7 +414,7 @@ describe('Plugin', () => {
                 }
                 doConsume()
                 producer.produce(topic, null, message, 'native-consumer-key')
-              })
+              }))
             }
 
             it('should be instrumented', async () => {
@@ -418,11 +424,11 @@ describe('Plugin', () => {
                 meta: {
                   'span.kind': 'consumer',
                   component: 'confluentinc-kafka-javascript',
-                  'messaging.destination.name': testTopic
+                  'messaging.destination.name': testTopic,
                 },
                 resource: testTopic,
                 error: 0,
-                type: 'worker'
+                type: 'worker',
               })
 
               nativeConsumer.setDefaultConsumeTimeout(10)
@@ -443,7 +449,7 @@ describe('Plugin', () => {
                 assertObjectContains(span, {
                   name: 'kafka.consume',
                   service: 'test-kafka',
-                  resource: testTopic
+                  resource: testTopic,
                 })
 
                 assert.ok(parseInt(span.parent_id.toString()) > 0)
@@ -458,33 +464,6 @@ describe('Plugin', () => {
 
               return expectedSpanPromise
             })
-
-            // TODO: Fix this test case, fails with 'done() called multiple times'
-            // it('should be instrumented with error', async () => {
-            //   const fakeError = new Error('Oh No!')
-
-            //   const expectedSpanPromise = agent.assertSomeTraces(traces => {
-            //     const errorSpans = traces[0].filter(span => span.error === 1)
-            //     expect(errorSpans.length).to.be.at.least(1)
-
-            //     const errorSpan = errorSpans[0]
-            //     expect(errorSpan).to.exist
-            //     expect(errorSpan.name).to.equal(expectedSchema.receive.opName)
-            //     expect(errorSpan.meta).to.include({
-            //       component: 'confluentinc-kafka-javascript'
-            //     })
-
-            //     expect(errorSpan.meta[ERROR_TYPE]).to.equal(fakeError.name)
-            //     expect(errorSpan.meta[ERROR_MESSAGE]).to.equal(fakeError.message)
-            //   })
-
-            //   nativeConsumer.consume(1, (err, messages) => {
-            //     // Ensure we resolve before throwing
-            //     throw fakeError
-            //   })
-
-            //   return expectedSpanPromise
-            // })
           })
         })
       })
@@ -497,7 +476,7 @@ function expectSpanWithDefaults (expected) {
   expected = withDefaults({
     name: expected.name,
     service,
-    meta: expected.meta
+    meta: expected.meta,
   }, expected)
   return expectSomeSpan(agent, expected, 10000)
 }
@@ -507,7 +486,32 @@ async function sendMessages (kafka, topic, messages) {
   await producer.connect()
   await producer.send({
     topic,
-    messages
+    messages,
   })
   await producer.disconnect()
+}
+
+async function waitForTopicReady (admin, topic, timeoutMs = 20000) {
+  if (typeof admin?.fetchTopicMetadata !== 'function') return
+
+  const start = Date.now()
+  while ((Date.now() - start) < timeoutMs) {
+    try {
+      const meta = await admin.fetchTopicMetadata({ topics: [topic], timeout: 1000 })
+      const topicMeta = Array.isArray(meta) ? meta[0] : meta?.topics?.[0]
+
+      const partitions = topicMeta?.partitions
+      if (Array.isArray(partitions) &&
+          partitions.length > 0 &&
+          partitions.every(p => typeof p.leader === 'number' && p.leader >= 0)) {
+        return
+      }
+    } catch {
+      // Topic creation is async; metadata/leader errors can be transient.
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+
+  throw new Error(`Timeout: Topic "${topic}" metadata was not ready within ${timeoutMs}ms`)
 }

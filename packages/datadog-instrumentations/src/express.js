@@ -10,7 +10,7 @@ const {
   wrapRouteMethodsAndPublish,
   extractMountPaths,
   hasRouterCycle,
-  collectRoutesFromRouter
+  collectRoutesFromRouter,
 } = require('./helpers/router-helper')
 
 const handleChannel = channel('apm:express:request:handle')
@@ -67,7 +67,7 @@ function wrapResponseRender (render) {
         req: this.req,
         view,
         options,
-        abortController
+        abortController,
       },
       this,
       ...arguments
@@ -189,7 +189,7 @@ function publishQueryParsedAndNext (req, res, next) {
 addHook({
   name: 'express',
   versions: ['4'],
-  file: 'lib/middleware/query.js'
+  file: 'lib/middleware/query.js',
 }, query => {
   return shimmer.wrapFunction(query, query => function () {
     const queryMiddleware = query.apply(this, arguments)
@@ -213,7 +213,7 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
           req,
           res: req?.res,
           abortController,
-          params: req?.params
+          params: req?.params,
         })
 
         if (abortController.signal.aborted) return

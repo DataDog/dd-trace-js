@@ -25,5 +25,5 @@ function getRootSpan (tracer) {
 }
 
 module.exports = {
-  getRootSpan
+  getRootSpan,
 }

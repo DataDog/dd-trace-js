@@ -8,7 +8,7 @@ describe('Dynamic Instrumentation', function () {
   const stderr = []
   const t = setup({
     env: {
-      DD_TRACE_DEBUG: 'true'
+      DD_TRACE_DEBUG: 'true',
     },
     silent: true,
     stdioHandler (data) {

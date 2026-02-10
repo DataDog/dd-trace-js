@@ -1,12 +1,11 @@
 'use strict'
 
-const { URL, format } = require('url')
 const zlib = require('zlib')
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
 const { MsgpackEncoder } = require('../msgpack')
-const defaults = require('../config_defaults')
+const { getAgentUrl } = require('../agent/url')
 
 const msgpack = new MsgpackEncoder()
 
@@ -18,9 +17,9 @@ function makeRequest (data, url, cb) {
       'Datadog-Meta-Lang': 'javascript',
       'Datadog-Meta-Tracer-Version': pkg.version,
       'Content-Type': 'application/msgpack',
-      'Content-Encoding': 'gzip'
+      'Content-Encoding': 'gzip',
     },
-    url
+    url,
   }
 
   log.debug('Request to the intake: %j', options)
@@ -32,12 +31,7 @@ function makeRequest (data, url, cb) {
 
 class DataStreamsWriter {
   constructor (config) {
-    const { hostname = defaults.hostname, port = defaults.port, url } = config
-    this._url = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port
-    }))
+    this._url = getAgentUrl(config)
   }
 
   flush (payload) {
@@ -72,5 +66,5 @@ class DataStreamsWriter {
 }
 
 module.exports = {
-  DataStreamsWriter
+  DataStreamsWriter,
 }

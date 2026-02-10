@@ -9,7 +9,7 @@ const {
   useSandbox,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
-  assertObjectContains
+  assertObjectContains,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
@@ -24,7 +24,7 @@ describe('test optimization automatic log submission', () => {
     '@cucumber/cucumber',
     'jest',
     'winston',
-    '@playwright/test'
+    '@playwright/test',
   ], true)
 
   before(done => {
@@ -34,7 +34,11 @@ describe('test optimization automatic log submission', () => {
     // *Be advised*: this means that we'll only be using chromium for this test suite
     execSync('npx playwright install --with-deps chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
     webAppServer.listen(0, () => {
-      webAppPort = webAppServer.address().port
+      const address = webAppServer.address()
+      if (!address || typeof address === 'string') {
+        return done(new Error('Failed to determine web app server port'))
+      }
+      webAppPort = address.port
       done()
     })
   })
@@ -56,15 +60,15 @@ describe('test optimization automatic log submission', () => {
   const testFrameworks = [
     {
       name: 'mocha',
-      command: 'mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js'
+      command: 'mocha ./ci-visibility/automatic-log-submission/automatic-log-submission-test.js',
     },
     {
       name: 'jest',
-      command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js'
+      command: 'node ./node_modules/jest/bin/jest --config ./ci-visibility/automatic-log-submission/config-jest.js',
     },
     {
       name: 'cucumber',
-      command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature'
+      command: './node_modules/.bin/cucumber-js ci-visibility/automatic-log-submission-cucumber/*.feature',
     },
     {
       name: 'playwright',
@@ -72,9 +76,9 @@ describe('test optimization automatic log submission', () => {
       getExtraEnvVars: () => ({
         PW_BASE_URL: `http://localhost:${webAppPort}`,
         TEST_DIR: 'ci-visibility/automatic-log-submission-playwright',
-        DD_TRACE_DEBUG: '1'
-      })
-    }
+        DD_TRACE_DEBUG: '1',
+      }),
+    },
   ]
 
   testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
@@ -82,7 +86,8 @@ describe('test optimization automatic log submission', () => {
 
     context(`with ${name}`, () => {
       it('can automatically submit logs', async () => {
-        let logIds, testIds
+        let logIds = {}
+        let testIds = {}
 
         const logsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.includes('/api/v2/logs'), payloads => {
@@ -103,12 +108,12 @@ describe('test optimization automatic log submission', () => {
 
             assertObjectContains(logMessages.map(({ message }) => message), [
               'Hello simple log!',
-              'sum function being called'
+              'sum function being called',
             ])
 
             logIds = {
               logSpanId: logMessages[0].dd.span_id,
-              logTraceId: logMessages[0].dd.trace_id
+              logTraceId: logMessages[0].dd.trace_id,
             }
           })
 
@@ -119,7 +124,7 @@ describe('test optimization automatic log submission', () => {
 
             testIds = {
               testSpanId: testEventContent.span_id.toString(),
-              testTraceId: testEventContent.trace_id.toString()
+              testTraceId: testEventContent.trace_id.toString(),
             }
           })
 
@@ -132,15 +137,14 @@ describe('test optimization automatic log submission', () => {
               DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_API_KEY: '1',
               DD_SERVICE: 'my-service',
-              ...getExtraEnvVars()
+              ...getExtraEnvVars(),
             },
-            stdio: 'pipe'
           }
         )
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -149,7 +153,7 @@ describe('test optimization automatic log submission', () => {
           once(childProcess.stdout, 'end'),
           once(childProcess.stderr, 'end'),
           logsPromise,
-          eventsPromise
+          eventsPromise,
         ])
 
         const { logSpanId, logTraceId } = logIds
@@ -174,15 +178,14 @@ describe('test optimization automatic log submission', () => {
               ...getCiVisAgentlessConfig(receiver.port),
               DD_AGENTLESS_LOG_SUBMISSION_URL: `http://localhost:${receiver.port}`,
               DD_SERVICE: 'my-service',
-              ...getExtraEnvVars()
+              ...getExtraEnvVars(),
             },
-            stdio: 'pipe'
           }
         )
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
@@ -216,16 +219,15 @@ describe('test optimization automatic log submission', () => {
               DD_TRACE_DEBUG: '1',
               DD_TRACE_LOG_LEVEL: 'warn',
               DD_API_KEY: '',
-              ...getExtraEnvVars()
+              ...getExtraEnvVars(),
             },
-            stdio: 'pipe'
           }
         )
 
-        childProcess.stdout.on('data', (chunk) => {
+        childProcess.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr.on('data', (chunk) => {
+        childProcess.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 

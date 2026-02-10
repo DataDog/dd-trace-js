@@ -13,7 +13,7 @@ const TRACED_FUNCTIONS = {
   streamObject: wrapWithTracer,
   embed: wrapWithTracer,
   embedMany: wrapWithTracer,
-  tool: wrapTool
+  tool: wrapTool,
 }
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
@@ -34,15 +34,21 @@ const noopTracer = {
       updateName () { return this },
       end () { return this },
       isRecording () { return false },
-      recordException () { return this }
+      recordException () { return this },
     }
 
     return fn(span)
-  }
+  },
 }
 
+const tracers = new WeakSet()
+
 function wrapTracer (tracer) {
-  if (Object.hasOwn(tracer, Symbol.for('_dd.wrapped'))) return
+  if (tracers.has(tracer)) {
+    return
+  }
+
+  tracers.add(tracer)
 
   shimmer.wrap(tracer, 'startActiveSpan', function (startActiveSpan) {
     return function () {
@@ -52,7 +58,7 @@ function wrapTracer (tracer) {
 
       const ctx = {
         name,
-        attributes: options.attributes ?? {}
+        attributes: options.attributes ?? {},
       }
 
       arguments[arguments.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
@@ -90,8 +96,6 @@ function wrapTracer (tracer) {
       })
     }
   })
-
-  Object.defineProperty(tracer, Symbol.for('_dd.wrapped'), { value: true })
 }
 
 function wrapWithTracer (fn) {
@@ -141,7 +145,7 @@ addHook({
 addHook({
   name: 'ai',
   versions: ['>=4.0.0'],
-  file: 'dist/index.mjs'
+  file: 'dist/index.mjs',
 }, exports => {
   for (const [fnName, patchingFn] of Object.entries(TRACED_FUNCTIONS)) {
     exports = shimmer.wrap(exports, fnName, patchingFn, { replaceGetter: true })

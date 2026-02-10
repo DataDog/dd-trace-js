@@ -7,7 +7,7 @@ class AzureEventHubsPlugin extends CompositePlugin {
   static get id () { return 'azure-event-hubs' }
   static get plugins () {
     return {
-      producer: ProducerPlugin
+      producer: ProducerPlugin,
     }
   }
 }

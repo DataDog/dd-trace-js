@@ -5,7 +5,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -40,8 +40,8 @@ describe('esm', () => {
       })
 
       // This test file will throw an error if tryAdd returns a Promise instead of a boolean
-      proc = await spawnPluginIntegrationTestProc(
-        sandboxCwd(), 'server.mjs', agent.port, undefined, spawnEnv
+      proc = await spawnPluginIntegrationTestProcAndExpectExit(
+        sandboxCwd(), 'server.mjs', agent.port, spawnEnv
       )
 
       await res

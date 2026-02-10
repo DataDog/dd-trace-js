@@ -11,7 +11,7 @@ await esbuild.build({
   outfile: undefined,
   format: undefined,
   outdir: './',
-  outExtension: { '.js': '.mjs' }
+  outExtension: { '.js': '.mjs' },
 })
 
 const { status, stdout, stderr } = spawnSync('node', ['basic-test.mjs'])

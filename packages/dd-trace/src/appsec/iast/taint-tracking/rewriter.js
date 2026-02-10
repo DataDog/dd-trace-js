@@ -12,7 +12,7 @@ const { getName } = require('../telemetry/verbosity')
 const telemetry = require('../telemetry')
 const log = require('../../../log')
 const orchestrionConfig = require('../../../../../datadog-instrumentations/src/orchestrion-config')
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getEnvironmentVariable } = require('../../../config/helper')
 const { LOG_MESSAGE, REWRITTEN_MESSAGE } = require('./constants')
 const { incrementTelemetryIfNeeded } = require('./rewriter-telemetry')
 const { csiMethods } = require('./csi-methods')
@@ -67,7 +67,7 @@ function getRewriter (telemetryVerbosity) {
         csiMethods,
         telemetryVerbosity: getName(telemetryVerbosity),
         chainSourceMap,
-        orchestrion: orchestrionConfig
+        orchestrion: orchestrionConfig,
       })
     } catch (e) {
       log.error('Unable to initialize Rewriter', e)
@@ -91,7 +91,7 @@ function getPrepareStackTraceAccessor () {
     set (value) {
       actual = getPrepareStackTrace(value)
       originalPrepareStackTrace = value
-    }
+    },
   }
 }
 
@@ -221,8 +221,8 @@ let enableEsmRewriter = function (telemetryVerbosity) {
           telemetryVerbosity,
           chainSourceMap: isFlagPresent('--enable-source-maps'),
           orchestrionConfig,
-          iastEnabled: config?.iast?.enabled
-        }
+          iastEnabled: config?.iast?.enabled,
+        },
       })
     } catch (e) {
       log.error('Error enabling ESM Rewriter', e)
@@ -262,5 +262,5 @@ function enable (configArg) {
 }
 
 module.exports = {
-  enable, disable, getOriginalPathAndLineFromSourceMap, getRewriter
+  enable, disable, getOriginalPathAndLineFromSourceMap, getRewriter,
 }

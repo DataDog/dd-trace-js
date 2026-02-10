@@ -49,11 +49,11 @@ class Http2ClientPlugin extends ClientPlugin {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'out.host': sessionDetails.host
+        'out.host': sessionDetails.host,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port)
-      }
+        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port),
+      },
     }, false)
 
     // TODO: Figure out a better way to do this for any span.
@@ -184,7 +184,7 @@ function normalizeConfig (config) {
     ...config,
     validateStatus,
     filter,
-    headers
+    headers,
   }
 }
 
@@ -197,13 +197,13 @@ function getFilter (config) {
 function addHeaderTags (span, headers, prefix, config) {
   if (!headers) return
 
-  config.headers.forEach(key => {
+  for (const key of config.headers) {
     const value = headers[key]
 
     if (value) {
       span.setTag(`${prefix}.${key}`, value)
     }
-  })
+  }
 }
 
 function getHeaders (config) {

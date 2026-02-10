@@ -7,12 +7,14 @@ const {
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 describe('esm', () => {
   let agent
   let proc
+  let variants
 
   withVersions('opensearch', '@opensearch-project/opensearch', version => {
     useSandbox([`'@opensearch-project/opensearch@${version}'`], false, [
@@ -22,21 +24,27 @@ describe('esm', () => {
       agent = await new FakeAgent().start()
     })
 
+    before(async function () {
+      variants = varySandbox('server.mjs', 'opensearch', 'Client', '@opensearch-project/opensearch')
+    })
+
     afterEach(async () => {
       proc && proc.kill()
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-        assert.ok(Array.isArray(payload))
-        assert.strictEqual(checkSpansForServiceName(payload, 'opensearch.query'), true)
-      })
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'opensearch.query'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'server.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })

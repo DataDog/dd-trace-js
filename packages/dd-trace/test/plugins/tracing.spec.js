@@ -17,8 +17,8 @@ describe('TracingPlugin', () => {
       const startSpanSpy = sinon.spy()
       const plugin = new TracingPlugin({
         _tracer: {
-          startSpan: startSpanSpy
-        }
+          startSpan: startSpanSpy,
+        },
       })
       plugin.configure({})
 
@@ -27,7 +27,7 @@ describe('TracingPlugin', () => {
       sinon.assert.calledWith(startSpanSpy,
         'Test span',
         sinon.match({
-          childOf: 'some parent span'
+          childOf: 'some parent span',
         })
       )
     })
@@ -44,7 +44,7 @@ describe('common Plugin behaviour', () => {
 
     start () {
       return this.startSpan('common.operation', {
-        service: this.config.service || this._tracerConfig.service
+        service: this.config.service || this._tracerConfig.service,
       }, true)
     }
   }
@@ -54,7 +54,7 @@ describe('common Plugin behaviour', () => {
     static operation = 'dothings'
     start () {
       return this.startSpan('common.operation', {
-        service: this.config.service || `${this.tracer._service}-suffix`
+        service: this.config.service || `${this.tracer._service}-suffix`,
       }, true)
     }
   }

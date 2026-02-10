@@ -12,7 +12,7 @@ const {
   EXECUTED_SINK,
   EXECUTED_SOURCE,
   INSTRUMENTED_SINK,
-  INSTRUMENTED_SOURCE
+  INSTRUMENTED_SOURCE,
 } = require('../../../../src/appsec/iast/telemetry/iast-metric')
 const { globalNamespace } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
@@ -27,13 +27,13 @@ describe('Metrics', () => {
     const metricMock = { inc }
 
     reqNamespace = {
-      count: sinon.stub(globalNamespace, 'count').returns(metricMock)
+      count: sinon.stub(globalNamespace, 'count').returns(metricMock),
     }
 
     const metric = proxyquire('../../../../src/appsec/iast/telemetry/iast-metric', {
       './namespaces': {
-        getNamespaceFromContext: () => globalNamespace
-      }
+        getNamespaceFromContext: () => globalNamespace,
+      },
     })
     IastMetric = metric.IastMetric
     NoTaggedIastMetric = metric.NoTaggedIastMetric

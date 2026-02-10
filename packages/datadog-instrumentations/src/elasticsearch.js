@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 addHook({ name: '@elastic/transport', file: 'lib/Transport.js', versions: ['>=8'] }, (exports) => {
@@ -99,7 +99,7 @@ function createWrapRequest (name) {
           }
           return promise
         } catch (err) {
-          err.stack // trigger getting the stack at the original throwing point
+          void err.stack // trigger getting the stack at the original throwing point
           errorCh.publish(err)
 
           throw err

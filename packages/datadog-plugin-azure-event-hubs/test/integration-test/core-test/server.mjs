@@ -8,23 +8,23 @@ const producer = new EventHubProducerClient(connectionString, eventHubName)
 
 const eventData = [
   { body: 'Hello Datadog!' },
-  { body: 'Hello Azure!' }
+  { body: 'Hello Azure!' },
 ]
 const amqpMessages = [
   {
     body: 'Hello from an amqp message',
     annotations: {
       'x-opt-custom-annotation-key': 'custom-value', // Custom annotation
-      'x-opt-partition-key': 'myPartitionKey' // Example of a common annotation
+      'x-opt-partition-key': 'myPartitionKey', // Example of a common annotation
     },
   },
   {
     body: 'Hello from an amqp message 2 ',
     annotations: {
       'x-opt-custom-annotation-key': 'custom-value-2', // Custom annotation
-      'x-opt-partition-key': 'myPartitionKey-2' // Example of a common annotation
-    }
-  }
+      'x-opt-partition-key': 'myPartitionKey-2', // Example of a common annotation
+    },
+  },
 ]
 
 // List of eventData

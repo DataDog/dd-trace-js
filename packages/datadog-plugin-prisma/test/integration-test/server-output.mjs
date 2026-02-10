@@ -1,16 +1,16 @@
 import 'dd-trace/init.js'
-import { PrismaClient } from './generated/prisma/index.js'
+import prismaLib from './generated/prisma/index.js'
 
-const prismaClient = new PrismaClient()
+const prismaClient = new prismaLib.PrismaClient()
 const user = await prismaClient.user.create({
   data: {
     name: 'John Doe',
-    email: 'john.doe@datadoghq.com'
-  }
+    email: 'john.doe@datadoghq.com',
+  },
 })
 
 await prismaClient.user.findUnique({
   where: {
-    id: user.id
-  }
+    id: user.id,
+  },
 })

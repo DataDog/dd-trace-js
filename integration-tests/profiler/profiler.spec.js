@@ -31,7 +31,7 @@ function checkProfiles (agent, proc, timeout,
 ) {
   return Promise.all([
     processExitPromise(proc, timeout, expectBadExit),
-    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, expectSeq)
+    expectProfileMessagePromise(agent, timeout, expectedProfileTypes, expectSeq),
   ])
 }
 
@@ -43,14 +43,14 @@ function expectProfileMessagePromise (agent, timeout,
     let event
     try {
       assertObjectContains(headers, {
-        host: `127.0.0.1:${agent.port}`
+        host: `127.0.0.1:${agent.port}`,
       })
       assertObjectContains(files[0], {
-        originalname: 'event.json'
+        originalname: 'event.json',
       })
       event = JSON.parse(files[0].buffer.toString())
       assertObjectContains(event, {
-        family: 'node'
+        family: 'node',
       })
       assert.strictEqual(typeof event.info.profiler.activation, 'string')
       assert.strictEqual(typeof event.info.profiler.ssi.mechanism, 'string')
@@ -60,7 +60,7 @@ function expectProfileMessagePromise (agent, timeout,
       assert.deepStrictEqual(attachments.slice().sort(), fileNames.sort())
       for (const [index, fileName] of attachments.entries()) {
         assertObjectContains(files[index + 1], {
-          originalname: fileName
+          originalname: fileName,
         })
       }
       if (expectSeq) {
@@ -234,8 +234,8 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
       DD_PROFILING_EXPORTERS: 'file',
       DD_PROFILING_ENABLED: '1',
       DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: '0', // capture all events
-      DD_TRACE_AGENT_PORT: agentPort
-    }
+      DD_TRACE_AGENT_PORT: agentPort,
+    },
   })
 
   await processExitPromise(proc, TIMEOUT)
@@ -355,7 +355,7 @@ describe('profiler', () => {
         DD_PROFILING_EXPORTERS: 'file',
         DD_PROFILING_ENABLED: '1',
         BUSY_CYCLE_TIME: (busyCycleTimeNs | 0).toString(),
-        DD_TRACE_AGENT_PORT: agent.port
+        DD_TRACE_AGENT_PORT: agent.port,
       }
       // With Node 22.9.0 or later, test the profiler with async context frame use.
       const execArgv = []
@@ -493,7 +493,7 @@ describe('profiler', () => {
         { fd, operation: 'close' },
         { file: path, operation: 'writeFile' },
         { operation: 'readFile', path },
-        { operation: 'unlink', path }
+        { operation: 'unlink', path },
       ])
     })
 
@@ -544,7 +544,7 @@ describe('profiler', () => {
           // servers.
           assertObjectContains(events, [
             { operation: 'connect', host: '127.0.0.1', port: port1 },
-            { operation: 'connect', host: '127.0.0.1', port: port2 }
+            { operation: 'connect', host: '127.0.0.1', port: port2 },
           ])
         } finally {
           server2.close()
@@ -561,7 +561,7 @@ describe('profiler', () => {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_PROFILING_ENABLED: '1',
         DD_TRACE_DEBUG: '1',
-        DD_TRACE_LOG_LEVEL: 'warn'
+        DD_TRACE_LOG_LEVEL: 'warn',
       }
     })
 
@@ -574,8 +574,8 @@ describe('profiler', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_PROFILING_ENABLED: '1'
-        }
+          DD_PROFILING_ENABLED: '1',
+        },
       })
       const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
@@ -594,7 +594,7 @@ describe('profiler', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
-          env: oomEnv
+          env: oomEnv,
         })
         return checkProfiles(agent, proc, timeout, ['space'], true, false)
       })
@@ -602,7 +602,7 @@ describe('profiler', () => {
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
         proc = fork(oomTestFile, [1, 50], {
           cwd,
-          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' }
+          env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })
         return checkProfiles(agent, proc, timeout, ['space'], false)
       })
@@ -617,8 +617,8 @@ describe('profiler', () => {
           env: {
             ...oomEnv,
             DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '15000000',
-            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '3'
-          }
+            DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '3',
+          },
         })
         return checkProfiles(agent, proc, timeout, ['space'], false, false)
       }).retries(3)
@@ -631,8 +631,8 @@ describe('profiler', () => {
             ...oomEnv,
             DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '10000000',
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '1',
-            DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async'
-          }
+            DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async',
+          },
         })
         return checkProfiles(agent, proc, timeout, ['space'], true)
       }).retries(3)
@@ -645,8 +645,8 @@ describe('profiler', () => {
             ...oomEnv,
             DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '10000000',
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '1',
-            DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process'
-          }
+            DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'async,process',
+          },
         })
         return checkProfiles(agent, proc, timeout, ['space'], true)
       }).retries(3)
@@ -694,8 +694,8 @@ describe('profiler', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_PROFILING_ENABLED: '1',
           DD_PROFILING_UPLOAD_PERIOD: '1',
-          TEST_DURATION_MS: 2500
-        }
+          TEST_DURATION_MS: 2500,
+        },
       })
 
       let requestCount = 0
@@ -758,8 +758,8 @@ describe('profiler', () => {
           DD_PROFILING_UPLOAD_PERIOD: '1',
           DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1', // every second
-          TEST_DURATION_MS: 1500
-        }
+          TEST_DURATION_MS: 1500,
+        },
       })
 
       const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
@@ -783,8 +783,8 @@ describe('profiler', () => {
       env: {
         DD_TRACE_AGENT_PORT: agent.port,
         DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD: '1300',
-        DD_PROFILING_ENABLED: 'auto'
-      }
+        DD_PROFILING_ENABLED: 'auto',
+      },
     })
   }
 
@@ -799,7 +799,7 @@ describe('profiler', () => {
   function heuristicsDoesNotTriggerFor (args, allowTraceMessage) {
     return Promise.all([
       processExitPromise(forkSsi(args), timeout, false),
-      expectTimeout(expectProfileMessagePromise(agent, 1500), allowTraceMessage)
+      expectTimeout(expectProfileMessagePromise(agent, 1500), allowTraceMessage),
     ])
   }
 })

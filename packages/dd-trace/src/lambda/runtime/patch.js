@@ -5,7 +5,7 @@ const path = require('path')
 const { datadog } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
 const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePaths } = require('./ritm')
 
 /**
@@ -59,7 +59,7 @@ function patchLambdaHandler (lambdaHandler) {
 }
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
-const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
+const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
 if (originalLambdaHandler === undefined) {
   // Instrumentation is done manually.

@@ -2,9 +2,8 @@
 
 const os = require('os')
 const { inspect } = require('util')
-
 const tracerVersion = require('../../../package.json').version
-const defaults = require('./config_defaults')
+const { getAgentUrl } = require('./agent/url')
 const { info, warn } = require('./log/writer')
 
 const errors = {}
@@ -15,22 +14,14 @@ let samplingRules = []
 let alreadyRan = false
 
 /**
- * @param {{ agentError: { code: string, message: string } }} [options]
+ * @param {{ status: number, message: string } } [agentError]
  */
-function startupLog ({ agentError } = {}) {
-  if (!config || !pluginManager) {
-    return
-  }
-
-  if (alreadyRan) {
+function startupLog (agentError) {
+  if (alreadyRan || !config || !config.startupLogs || !pluginManager) {
     return
   }
 
   alreadyRan = true
-
-  if (!config.startupLogs) {
-    return
-  }
 
   const out = tracerInfo()
 
@@ -42,8 +33,8 @@ function startupLog ({ agentError } = {}) {
   if (agentError) {
     warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
     errors.agentError = {
-      code: agentError.code ?? '',
-      message: `Agent Error:${agentError.message}`
+      code: agentError.status,
+      message: `Agent Error: ${agentError.message}`,
     }
   }
 }
@@ -52,7 +43,7 @@ function startupLog ({ agentError } = {}) {
  * @returns {Record<string, unknown>}
  */
 function tracerInfo () {
-  const url = config.url || `http://${config.hostname || defaults.hostname}:${config.port}`
+  const url = getAgentUrl(config)
 
   const out = {
     [inspect.custom] () {
@@ -84,6 +75,7 @@ function tracerInfo () {
     profiling_enabled: config.profiling?.enabled === 'true' || config.profiling?.enabled === 'auto',
     integrations_loaded: Object.keys(pluginManager._pluginsByName),
     appsec_enabled: !!config.appsec.enabled,
+    data_streams_enabled: !!config.dsmEnabled,
   }
 
   return out
@@ -116,5 +108,5 @@ module.exports = {
   setStartupLogPluginManager,
   setSamplingRules,
   tracerInfo,
-  errors
+  errors,
 }

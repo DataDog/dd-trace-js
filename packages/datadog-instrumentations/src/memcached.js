@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 addHook({ name: 'memcached', versions: ['>=2.2'] }, Memcached => {

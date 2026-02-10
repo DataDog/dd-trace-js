@@ -1,7 +1,7 @@
 'use strict'
 
 const { readFileSync } = require('fs')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config-helper')
+const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -30,7 +30,7 @@ const {
   CI_NODE_NAME,
   PR_NUMBER,
   CI_JOB_ID,
-  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
 
@@ -58,7 +58,7 @@ function removeEmptyValues (tags) {
     }
     return {
       ...filteredTags,
-      [tag]: tags[tag]
+      [tag]: tags[tag],
     }
   }, {})
 }
@@ -120,12 +120,12 @@ module.exports = {
         GIT_COMMIT: JENKINS_GIT_COMMIT,
         GIT_URL: JENKINS_GIT_REPOSITORY_URL,
         GIT_URL_1: JENKINS_GIT_REPOSITORY_URL_1,
-        DD_CUSTOM_TRACE_ID,
         NODE_NAME,
         NODE_LABELS,
         CHANGE_ID,
-        CHANGE_TARGET
+        CHANGE_TARGET,
       } = env
+      const DD_CUSTOM_TRACE_ID = getValueFromEnvSources('DD_CUSTOM_TRACE_ID')
 
       tags = {
         [CI_PIPELINE_ID]: BUILD_TAG,
@@ -138,7 +138,7 @@ module.exports = {
         [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }),
         [CI_NODE_NAME]: NODE_NAME,
         [PR_NUMBER]: CHANGE_ID,
-        [GIT_PULL_REQUEST_BASE_BRANCH]: CHANGE_TARGET
+        [GIT_PULL_REQUEST_BASE_BRANCH]: CHANGE_TARGET,
       }
 
       if (NODE_LABELS) {
@@ -191,7 +191,7 @@ module.exports = {
         CI_MERGE_REQUEST_TARGET_BRANCH_NAME,
         CI_MERGE_REQUEST_IID,
         CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
-        CI_MERGE_REQUEST_DIFF_BASE_SHA
+        CI_MERGE_REQUEST_DIFF_BASE_SHA,
       } = env
 
       const { name, email } = parseEmailAndName(CI_COMMIT_AUTHOR)
@@ -217,7 +217,7 @@ module.exports = {
         [CI_ENV_VARS]: JSON.stringify({
           CI_PROJECT_URL: GITLAB_PROJECT_URL,
           CI_PIPELINE_ID: GITLAB_PIPELINE_ID,
-          CI_JOB_ID: GITLAB_CI_JOB_ID
+          CI_JOB_ID: GITLAB_CI_JOB_ID,
         }),
         [CI_NODE_LABELS]: CI_RUNNER_TAGS,
         [CI_NODE_NAME]: CI_RUNNER_ID,
@@ -225,7 +225,7 @@ module.exports = {
         [PR_NUMBER]: CI_MERGE_REQUEST_IID,
         [CI_JOB_ID]: GITLAB_CI_JOB_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: CI_MERGE_REQUEST_DIFF_BASE_SHA,
-        [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: CI_MERGE_REQUEST_TARGET_BRANCH_SHA
+        [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: CI_MERGE_REQUEST_TARGET_BRANCH_SHA,
       }
     }
 
@@ -241,7 +241,7 @@ module.exports = {
         CIRCLE_REPOSITORY_URL,
         CIRCLE_JOB,
         CIRCLE_BUILD_NUM,
-        CIRCLE_PR_NUMBER
+        CIRCLE_PR_NUMBER,
       } = env
 
       const pipelineUrl = `https://app.circleci.com/pipelines/workflows/${CIRCLE_WORKFLOW_ID}`
@@ -263,7 +263,7 @@ module.exports = {
           CIRCLE_BUILD_NUM,
         }),
         [PR_NUMBER]: CIRCLE_PR_NUMBER,
-        [CI_JOB_ID]: CIRCLE_BUILD_NUM
+        [CI_JOB_ID]: CIRCLE_BUILD_NUM,
       }
     }
 
@@ -280,7 +280,7 @@ module.exports = {
         GITHUB_SERVER_URL,
         GITHUB_RUN_ATTEMPT,
         GITHUB_JOB,
-        GITHUB_BASE_REF
+        GITHUB_BASE_REF,
       } = env
 
       const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
@@ -313,9 +313,9 @@ module.exports = {
           GITHUB_SERVER_URL: filterSensitiveInfoFromRepository(GITHUB_SERVER_URL),
           GITHUB_REPOSITORY,
           GITHUB_RUN_ID,
-          GITHUB_RUN_ATTEMPT
+          GITHUB_RUN_ATTEMPT,
         }),
-        [CI_JOB_ID]: GITHUB_JOB
+        [CI_JOB_ID]: GITHUB_JOB,
       }
       if (GITHUB_BASE_REF) { // `pull_request` or `pull_request_target` event
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF
@@ -345,7 +345,7 @@ module.exports = {
         APPVEYOR_REPO_COMMIT_MESSAGE,
         APPVEYOR_REPO_COMMIT_MESSAGE_EXTENDED,
         APPVEYOR_PULL_REQUEST_HEAD_COMMIT,
-        APPVEYOR_PULL_REQUEST_NUMBER
+        APPVEYOR_PULL_REQUEST_NUMBER,
       } = env
 
       const pipelineUrl = `https://ci.appveyor.com/project/${APPVEYOR_REPO_NAME}/builds/${APPVEYOR_BUILD_ID}`
@@ -362,7 +362,7 @@ module.exports = {
         [GIT_COMMIT_AUTHOR_EMAIL]: APPVEYOR_REPO_COMMIT_AUTHOR_EMAIL,
         [GIT_COMMIT_MESSAGE]: APPVEYOR_REPO_COMMIT_MESSAGE + '\n' + APPVEYOR_REPO_COMMIT_MESSAGE_EXTENDED,
         [GIT_COMMIT_HEAD_SHA]: APPVEYOR_PULL_REQUEST_HEAD_COMMIT,
-        [PR_NUMBER]: APPVEYOR_PULL_REQUEST_NUMBER
+        [PR_NUMBER]: APPVEYOR_PULL_REQUEST_NUMBER,
       }
 
       if (APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH) {
@@ -375,7 +375,7 @@ module.exports = {
           [GIT_REPOSITORY_URL]: `https://github.com/${APPVEYOR_REPO_NAME}.git`,
           [GIT_COMMIT_SHA]: APPVEYOR_REPO_COMMIT,
           [GIT_TAG]: APPVEYOR_REPO_TAG_NAME,
-          [GIT_BRANCH]: APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH || APPVEYOR_REPO_BRANCH
+          [GIT_BRANCH]: APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH || APPVEYOR_REPO_BRANCH,
         }
       }
     }
@@ -402,7 +402,7 @@ module.exports = {
         SYSTEM_STAGEDISPLAYNAME,
         SYSTEM_JOBDISPLAYNAME,
         SYSTEM_PULLREQUEST_PULLREQUESTNUMBER,
-        SYSTEM_PULLREQUEST_TARGETBRANCH
+        SYSTEM_PULLREQUEST_TARGETBRANCH,
       } = env
 
       const ref = SYSTEM_PULLREQUEST_SOURCEBRANCH || BUILD_SOURCEBRANCH || BUILD_SOURCEBRANCHNAME
@@ -425,7 +425,7 @@ module.exports = {
         [CI_ENV_VARS]: JSON.stringify({ SYSTEM_TEAMPROJECTID, BUILD_BUILDID, SYSTEM_JOBID }),
         [PR_NUMBER]: SYSTEM_PULLREQUEST_PULLREQUESTNUMBER,
         [GIT_PULL_REQUEST_BASE_BRANCH]: SYSTEM_PULLREQUEST_TARGETBRANCH,
-        [CI_JOB_ID]: SYSTEM_JOBID
+        [CI_JOB_ID]: SYSTEM_JOBID,
       }
 
       if (SYSTEM_TEAMFOUNDATIONSERVERURI && SYSTEM_TEAMPROJECTID && BUILD_BUILDID) {
@@ -437,7 +437,7 @@ module.exports = {
         tags = {
           ...tags,
           [CI_PIPELINE_URL]: pipelineUrl,
-          [CI_JOB_URL]: jobUrl
+          [CI_JOB_URL]: jobUrl,
         }
       }
     }
@@ -454,7 +454,7 @@ module.exports = {
         BITBUCKET_PIPELINE_UUID,
         BITBUCKET_CLONE_DIR,
         BITBUCKET_PR_DESTINATION_BRANCH,
-        BITBUCKET_PR_ID
+        BITBUCKET_PR_ID,
       } = env
 
       const url =
@@ -473,7 +473,7 @@ module.exports = {
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
         [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/{|}/gm, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH,
-        [PR_NUMBER]: BITBUCKET_PR_ID
+        [PR_NUMBER]: BITBUCKET_PR_ID,
       }
     }
 
@@ -491,7 +491,7 @@ module.exports = {
         GIT_REPOSITORY_URL: BITRISE_GIT_REPOSITORY_URL,
         BITRISE_GIT_TAG,
         BITRISE_GIT_MESSAGE,
-        BITRISE_PULL_REQUEST
+        BITRISE_PULL_REQUEST,
       } = env
 
       tags = {
@@ -507,7 +507,7 @@ module.exports = {
         [GIT_BRANCH]: BITRISEIO_GIT_BRANCH_DEST || BITRISE_GIT_BRANCH,
         [GIT_COMMIT_MESSAGE]: BITRISE_GIT_MESSAGE,
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITRISEIO_GIT_BRANCH_DEST,
-        [PR_NUMBER]: BITRISE_PULL_REQUEST
+        [PR_NUMBER]: BITRISE_PULL_REQUEST,
       }
     }
 
@@ -528,7 +528,7 @@ module.exports = {
         BUILDKITE_MESSAGE,
         BUILDKITE_AGENT_ID,
         BUILDKITE_PULL_REQUEST,
-        BUILDKITE_PULL_REQUEST_BASE_BRANCH
+        BUILDKITE_PULL_REQUEST_BASE_BRANCH,
       } = env
 
       const extraTags = Object.keys(env).filter(envVar =>
@@ -555,12 +555,12 @@ module.exports = {
         [GIT_COMMIT_MESSAGE]: BUILDKITE_MESSAGE,
         [CI_ENV_VARS]: JSON.stringify({
           BUILDKITE_BUILD_ID,
-          BUILDKITE_JOB_ID
+          BUILDKITE_JOB_ID,
         }),
         [CI_NODE_NAME]: BUILDKITE_AGENT_ID,
         [CI_NODE_LABELS]: JSON.stringify(extraTags),
         [PR_NUMBER]: BUILDKITE_PULL_REQUEST,
-        [CI_JOB_ID]: BUILDKITE_JOB_ID
+        [CI_JOB_ID]: BUILDKITE_JOB_ID,
       }
 
       if (BUILDKITE_PULL_REQUEST) {
@@ -582,7 +582,7 @@ module.exports = {
         TRAVIS_BUILD_DIR,
         TRAVIS_COMMIT_MESSAGE,
         TRAVIS_PULL_REQUEST,
-        TRAVIS_PULL_REQUEST_SHA
+        TRAVIS_PULL_REQUEST_SHA,
       } = env
 
       tags = {
@@ -600,7 +600,7 @@ module.exports = {
         [GIT_COMMIT_MESSAGE]: TRAVIS_COMMIT_MESSAGE,
         [GIT_COMMIT_HEAD_SHA]: TRAVIS_PULL_REQUEST_SHA,
         [GIT_PULL_REQUEST_BASE_BRANCH]: TRAVIS_BRANCH,
-        [PR_NUMBER]: TRAVIS_PULL_REQUEST
+        [PR_NUMBER]: TRAVIS_PULL_REQUEST,
       }
     }
 
@@ -618,7 +618,7 @@ module.exports = {
         BUDDY_PIPELINE_NAME,
         BUDDY_SCM_URL,
         BUDDY_RUN_PR_BASE_BRANCH,
-        BUDDY_RUN_PR_NO
+        BUDDY_RUN_PR_NO,
       } = env
       tags = {
         [CI_PROVIDER_NAME]: 'buddy',
@@ -634,7 +634,7 @@ module.exports = {
         [GIT_COMMIT_COMMITTER_NAME]: BUDDY_EXECUTION_REVISION_COMMITTER_NAME,
         [GIT_COMMIT_COMMITTER_EMAIL]: BUDDY_EXECUTION_REVISION_COMMITTER_EMAIL,
         [GIT_PULL_REQUEST_BASE_BRANCH]: BUDDY_RUN_PR_BASE_BRANCH,
-        [PR_NUMBER]: BUDDY_RUN_PR_NO
+        [PR_NUMBER]: BUDDY_RUN_PR_NO,
       }
     }
 
@@ -644,17 +644,17 @@ module.exports = {
         TEAMCITY_BUILDCONF_NAME,
         DATADOG_BUILD_ID,
         TEAMCITY_PULLREQUEST_NUMBER,
-        TEAMCITY_PULLREQUEST_TARGET_BRANCH
+        TEAMCITY_PULLREQUEST_TARGET_BRANCH,
       } = env
       tags = {
         [CI_PROVIDER_NAME]: 'teamcity',
         [CI_JOB_URL]: BUILD_URL,
         [CI_JOB_NAME]: TEAMCITY_BUILDCONF_NAME,
         [CI_ENV_VARS]: JSON.stringify({
-          DATADOG_BUILD_ID
+          DATADOG_BUILD_ID,
         }),
         [PR_NUMBER]: TEAMCITY_PULLREQUEST_NUMBER,
-        [GIT_PULL_REQUEST_BASE_BRANCH]: TEAMCITY_PULLREQUEST_TARGET_BRANCH
+        [GIT_PULL_REQUEST_BASE_BRANCH]: TEAMCITY_PULLREQUEST_TARGET_BRANCH,
       }
     }
 
@@ -666,7 +666,7 @@ module.exports = {
         CF_STEP_NAME,
         CF_BRANCH,
         CF_PULL_REQUEST_NUMBER,
-        CF_PULL_REQUEST_TARGET
+        CF_PULL_REQUEST_TARGET,
       } = env
       tags = {
         [CI_PROVIDER_NAME]: 'codefresh',
@@ -675,10 +675,10 @@ module.exports = {
         [CI_PIPELINE_URL]: CF_BUILD_URL,
         [CI_JOB_NAME]: CF_STEP_NAME,
         [CI_ENV_VARS]: JSON.stringify({
-          CF_BUILD_ID
+          CF_BUILD_ID,
         }),
         [PR_NUMBER]: CF_PULL_REQUEST_NUMBER,
-        [GIT_PULL_REQUEST_BASE_BRANCH]: CF_PULL_REQUEST_TARGET
+        [GIT_PULL_REQUEST_BASE_BRANCH]: CF_PULL_REQUEST_TARGET,
       }
 
       const isTag = CF_BRANCH && CF_BRANCH.includes('tags/')
@@ -689,20 +689,17 @@ module.exports = {
     }
 
     if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {
-      const {
-        CODEBUILD_BUILD_ARN,
-        DD_ACTION_EXECUTION_ID,
-        DD_PIPELINE_EXECUTION_ID
-      } = env
+      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')
+      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')
       tags = {
         [CI_PROVIDER_NAME]: 'awscodepipeline',
         [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,
         [CI_ENV_VARS]: JSON.stringify({
-          CODEBUILD_BUILD_ARN,
+          CODEBUILD_BUILD_ARN: env.CODEBUILD_BUILD_ARN,
           DD_PIPELINE_EXECUTION_ID,
-          DD_ACTION_EXECUTION_ID
+          DD_ACTION_EXECUTION_ID,
         }),
-        [CI_JOB_ID]: DD_ACTION_EXECUTION_ID
+        [CI_JOB_ID]: DD_ACTION_EXECUTION_ID,
       }
     }
 
@@ -721,7 +718,7 @@ module.exports = {
         DRONE_COMMIT_AUTHOR_EMAIL,
         DRONE_COMMIT_MESSAGE,
         DRONE_PULL_REQUEST,
-        DRONE_TARGET_BRANCH
+        DRONE_TARGET_BRANCH,
       } = env
       tags = {
         [CI_PROVIDER_NAME]: 'drone',
@@ -738,7 +735,7 @@ module.exports = {
         [GIT_COMMIT_AUTHOR_EMAIL]: DRONE_COMMIT_AUTHOR_EMAIL,
         [GIT_COMMIT_MESSAGE]: DRONE_COMMIT_MESSAGE,
         [PR_NUMBER]: DRONE_PULL_REQUEST,
-        [GIT_PULL_REQUEST_BASE_BRANCH]: DRONE_TARGET_BRANCH
+        [GIT_PULL_REQUEST_BASE_BRANCH]: DRONE_TARGET_BRANCH,
       }
     }
 
@@ -750,5 +747,5 @@ module.exports = {
     normalizeTag(tags, PR_NUMBER, normalizeNumber)
 
     return removeEmptyValues(tags)
-  }
+  },
 }

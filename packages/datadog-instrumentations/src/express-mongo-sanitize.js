@@ -3,7 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
 
 const sanitizeMethodFinished = channel('datadog:express-mongo-sanitize:sanitize:finish')
@@ -33,7 +33,7 @@ addHook({ name: 'express-mongo-sanitize', versions: ['>=1.0.0'] }, expressMongoS
       const wrappedNext = shimmer.wrapFunction(next, next => function () {
         sanitizeMiddlewareFinished.publish({
           sanitizedProperties: propertiesToSanitize,
-          req
+          req,
         })
 
         return next.apply(this, arguments)

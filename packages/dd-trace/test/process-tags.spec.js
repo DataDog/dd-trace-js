@@ -21,7 +21,7 @@ describe('process-tags', () => {
         DYNAMIC_INSTRUMENTATION_FIELD_NAME: 'process_tags',
         TELEMETRY_FIELD_NAME: 'process_tags',
         REMOTE_CONFIG_FIELD_NAME: 'process_tags',
-        CRASH_TRACKING_FIELD_NAME: 'process_tags'
+        CRASH_TRACKING_FIELD_NAME: 'process_tags',
       })
     })
   })
@@ -59,7 +59,7 @@ describe('process-tags', () => {
           'entrypoint.name',
           'entrypoint.type',
           'entrypoint.workdir',
-          'package.json.name'
+          'package.json.name',
         ]
       )
     })
@@ -109,7 +109,7 @@ describe('process-tags', () => {
         ['entrypoint.name'],
         ['entrypoint.type'],
         ['entrypoint.workdir'],
-        ['package.json.name']
+        ['package.json.name'],
       ])
     })
 

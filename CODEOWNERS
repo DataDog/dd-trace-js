@@ -14,8 +14,8 @@
 /packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
 /packages/dd-trace/test/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
 
-/packages/dd-trace/src/lambda/ @DataDog/serverless-aws
-/packages/dd-trace/test/lambda/ @DataDog/serverless-aws
+/packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
+/packages/dd-trace/test/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 
 /packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-idm-js
 /packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-idm-js
@@ -86,8 +86,8 @@
 # API SDK
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/src/config.js @DataDog/apm-sdk-capabilities-js
-/packages/dd-trace/test/config.spec.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/config/ @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities-js

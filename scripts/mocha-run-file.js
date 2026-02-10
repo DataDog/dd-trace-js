@@ -4,10 +4,16 @@ const path = require('path')
 
 const Mocha = require('mocha')
 
+const mocharc = require('../.mocharc.js')
+
 function parseJson (value, fallback) {
   if (!value) return fallback
   try {
-    return JSON.parse(value)
+    const parsed = JSON.parse(value)
+    if (fallback.require && parsed.require) {
+      parsed.require.push(...fallback.require)
+    }
+    return { ...fallback, ...parsed }
   } catch {
     return fallback
   }
@@ -47,7 +53,7 @@ async function main () {
    *   require?: string[]
    * }}
    */
-  const config = parseJson(process.env.MOCHA_RUN_FILE_CONFIG, {})
+  const config = parseJson(process.env.MOCHA_RUN_FILE_CONFIG, mocharc)
 
   const mocha = new Mocha({
     ui: 'bdd',
@@ -55,9 +61,10 @@ async function main () {
     color: config.color ?? true,
     bail: config.bail ?? false,
     retries: config.retries,
+    require: config.require ?? [],
     fullTrace: config.fullTrace ?? false,
     reporter: config.reporter ?? 'spec',
-    reporterOptions: config.reporterOptions
+    reporterOptions: config.reporterOptions,
   })
 
   for (const req of config.require ?? []) {
@@ -89,7 +96,7 @@ async function main () {
       failures: stats.failures ?? failures ?? 0,
       pending: stats.pending ?? 0,
       tests: stats.tests ?? 0,
-      duration: stats.duration ?? 0
+      duration: stats.duration ?? 0,
     })
   }
 

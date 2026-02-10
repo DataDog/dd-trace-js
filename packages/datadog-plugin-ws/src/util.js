@@ -1,7 +1,45 @@
 'use strict'
 
+const DatadogSpanContext = require('../../dd-trace/src/opentracing/span_context')
+
+const TRACE_ID_UPPER_TAG = '_dd.p.tid'
+
 // WeakMap to store message counters per socket without mutating the socket object
 const socketCounters = new WeakMap()
+
+/**
+ * Creates a minimal span context for span links without retaining the full trace.
+ * @param {DatadogSpanContext} spanContext
+ * @returns {DatadogSpanContext | undefined}
+ */
+function createWebSocketSpanContext (spanContext) {
+  if (!spanContext) return
+
+  const traceIdUpper = spanContext._trace?.tags?.[TRACE_ID_UPPER_TAG]
+  const trace = traceIdUpper
+    ? { started: [], finished: [], tags: { [TRACE_ID_UPPER_TAG]: traceIdUpper } }
+    : undefined
+
+  return new DatadogSpanContext({
+    traceId: spanContext._traceId,
+    spanId: spanContext._spanId,
+    parentId: spanContext._parentId,
+    sampling: spanContext._sampling,
+    traceparent: spanContext._traceparent,
+    tracestate: spanContext._tracestate,
+    isRemote: spanContext._isRemote,
+    trace,
+  })
+}
+
+/**
+ * Returns whether distributed trace headers are present.
+ * @param {Record<string, string | string[] | undefined>} headers
+ * @returns {boolean}
+ */
+function hasTraceHeaders (headers) {
+  return !!(headers && (headers['x-datadog-trace-id'] || headers.traceparent))
+}
 
 /**
  * Initializes WebSocket message counters for a socket.
@@ -11,7 +49,7 @@ function initWebSocketMessageCounters (socket) {
   if (!socketCounters.has(socket)) {
     socketCounters.set(socket, {
       receiveCounter: 0,
-      sendCounter: 0
+      sendCounter: 0,
     })
   }
 }
@@ -69,14 +107,12 @@ function buildWebSocketSpanPointerHash (handshakeTraceId, handshakeSpanId, count
  * A span has distributed tracing context if it has a parent context that was
  * extracted from headers (remote parent).
  *
- * @param {object} span - The handshake span
- * @param {object} socket - The WebSocket socket object
+ * @param {DatadogSpanContext} spanContext - The handshake span context
+ * @param {{ hasTraceHeaders?: boolean } | undefined} socket - The WebSocket socket object
  * @returns {boolean} True if the span has distributed tracing context
  */
-function hasDistributedTracingContext (span, socket) {
-  if (!span) return false
-  const context = span.context()
-  if (!context) return false
+function hasDistributedTracingContext (spanContext, socket) {
+  if (!spanContext) return false
 
   // Check if this span has a parent. If the parent was extracted from remote headers,
   // then this span is part of a distributed trace.
@@ -86,22 +122,18 @@ function hasDistributedTracingContext (span, socket) {
   //
   // For testing purposes, we also check if Datadog trace headers are present in the socket's
   // upgrade request, which indicates distributed tracing context was sent by the client.
-  if (context._parentId !== null) {
+  if (spanContext._parentId !== null) {
     return true
   }
 
-  // Fallback check: look for distributed tracing headers in the stored request headers
-  if (socket && socket.requestHeaders) {
-    const headers = socket.requestHeaders
-    return !!(headers['x-datadog-trace-id'] || headers.traceparent)
-  }
-
-  return false
+  return !!socket?.hasTraceHeaders
 }
 
 module.exports = {
+  createWebSocketSpanContext,
+  hasTraceHeaders,
   initWebSocketMessageCounters,
   incrementWebSocketCounter,
   buildWebSocketSpanPointerHash,
-  hasDistributedTracingContext
+  hasDistributedTracingContext,
 }

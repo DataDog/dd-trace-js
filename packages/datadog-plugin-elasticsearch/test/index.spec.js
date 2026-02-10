@@ -9,6 +9,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let elasticsearch
@@ -37,8 +38,9 @@ describe('Plugin', () => {
         beforeEach(() => {
           elasticsearch = metaModule.get()
 
+          temporaryWarningExceptions.add('The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.')
           client = new elasticsearch.Client({
-            node: 'http://localhost:9200'
+            node: 'http://localhost:9200',
           })
         })
 
@@ -56,7 +58,7 @@ describe('Plugin', () => {
 
           client.search({
             index: 'logstash-2000.01.01',
-            body: {}
+            body: {},
           }, hasCallbackSupport ? () => {} : undefined)
         })
 
@@ -69,9 +71,9 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           // Ignore index_not_found_exception
           }, hasCallbackSupport ? () => done() : undefined)?.catch?.(() => {}),
           'localhost',
@@ -91,14 +93,14 @@ describe('Plugin', () => {
                   'span.kind': 'client',
                   'elasticsearch.method': 'POST',
                   'elasticsearch.url': '/docs/_search',
-                  'out.host': 'localhost'
-                }
+                  'out.host': 'localhost',
+                },
               })
 
               if (hasCallbackSupport) {
                 assertObjectContains(traces[0][0].meta, {
                   'elasticsearch.body': '{"query":{"match_all":{}}}',
-                  'elasticsearch.params': '{"sort":"name","size":100}'
+                  'elasticsearch.params': '{"sort":"name","size":100}',
                 })
               } else {
                 assert.ok('elasticsearch.body' in traces[0][0].meta)
@@ -117,9 +119,9 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           }, hasCallbackSupport ? () => {} : undefined)
         })
 
@@ -134,8 +136,8 @@ describe('Plugin', () => {
                   'db.type': 'elasticsearch',
                   'span.kind': 'client',
                   'elasticsearch.method': 'POST',
-                  'elasticsearch.url': '/_msearch'
-                }
+                  'elasticsearch.url': '/_msearch',
+                },
               })
               assert.ok('elasticsearch.body' in traces[0][0].meta)
               assert.strictEqual(
@@ -151,16 +153,16 @@ describe('Plugin', () => {
               { index: 'docs' },
               {
                 query: {
-                  match_all: {}
-                }
+                  match_all: {},
+                },
               },
               { index: 'docs2' },
               {
                 query: {
-                  match_all: {}
-                }
-              }
-            ]
+                  match_all: {},
+                },
+              },
+            ],
           }, hasCallbackSupport ? () => {} : undefined)
         })
 
@@ -227,7 +229,7 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'elasticsearch'
+                    component: 'elasticsearch',
                   })
                 })
                 .then(done)
@@ -289,8 +291,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'elasticsearch'
-                }
+                  component: 'elasticsearch',
+                },
               })
             })
               .then(done)
@@ -350,8 +352,8 @@ describe('Plugin', () => {
             hooks: {
               query: (span, params) => {
                 span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })
-              }
-            }
+              },
+            },
           })
         })
 
@@ -362,7 +364,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new elasticsearch.Client({
-            node: 'http://localhost:9200'
+            node: 'http://localhost:9200',
           })
         })
 
@@ -373,9 +375,9 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           }, hasCallbackSupport ? () => {} : undefined)
 
           agent.assertFirstTraceSpan({
@@ -384,8 +386,8 @@ describe('Plugin', () => {
             meta: {
               component: 'elasticsearch',
               'elasticsearch.params': 'foo',
-              'elasticsearch.method': 'POST'
-            }
+              'elasticsearch.method': 'POST',
+            },
           })
             .then(done)
             .catch(done)
@@ -407,12 +409,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'elasticsearch.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'elasticsearch.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })

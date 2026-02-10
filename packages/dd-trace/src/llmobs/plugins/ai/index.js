@@ -17,7 +17,7 @@ const {
   getGenerationMetadata,
   getToolNameFromTags,
   getToolCallResultContent,
-  getLlmObsSpanName
+  getLlmObsSpanName,
 } = require('./util')
 
 /**
@@ -67,7 +67,7 @@ const SPAN_NAME_TO_KIND_MAPPING = {
   doGenerate: 'llm',
   doStream: 'llm',
   // tools
-  toolCall: 'tool'
+  toolCall: 'tool',
 }
 
 class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
@@ -217,7 +217,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const usage = tags['ai.usage.tokens']
     this._tagger.tagMetrics(span, {
       inputTokens: usage,
-      totalTokens: usage
+      totalTokens: usage,
     })
   }
 
@@ -304,14 +304,14 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
         arguments: toolCallArgs,
         name,
         toolId: toolCall.toolCallId,
-        type: toolCall.toolCallType ?? 'function'
+        type: toolCall.toolCallType ?? 'function',
       })
     }
 
     return {
       role: 'assistant',
       content: outputMessageText,
-      toolCalls: formattedToolCalls
+      toolCalls: formattedToolCalls,
     }
   }
 
@@ -358,14 +358,14 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
             arguments: part.args ?? part.input,
             name,
             toolId: part.toolCallId,
-            type: 'function'
+            type: 'function',
           })
         }
       }
 
       const finalMessage = {
         role,
-        content: finalContent
+        content: finalContent,
       }
 
       if (toolCalls.length) {
@@ -382,7 +382,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
           finalMessages.push({
             role,
             content: safeResult,
-            toolId: part.toolCallId
+            toolId: part.toolCallId,
           })
         }
       }

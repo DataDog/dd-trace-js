@@ -8,7 +8,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+    - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
       with:
         node-version: ${{
           inputs.version == 'eol' && '16' ||
@@ -19,6 +19,44 @@ runs:
           inputs.version }}
         check-latest: true
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
-    - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+    # Avoid GitHub REST API tag lookups (api.github.com/.../git/refs/tags) which can hit installation rate limits
+    # in large orgs / high-parallelism workflows. Instead, use a direct release asset URL.
+    #
+    # Note: setup-bun's `bun-download-url` skips its own AVX2 detection, so we do a minimal check ourselves for
+    # Linux x64 (fallback to baseline build when AVX2 isn't present).
+    - id: bun-download-url
+      run: |
+        set -euo pipefail
+
+        BUN_VERSION="1.3.1"
+
+        case "${RUNNER_OS}:${RUNNER_ARCH}" in
+          Linux:X64)
+            ASSET="bun-linux-x64.zip"
+            if ! grep -qiE '(^|\\s)avx2(\\s|$)' /proc/cpuinfo; then
+              ASSET="bun-linux-x64-baseline.zip"
+            fi
+            ;;
+          Linux:ARM64)
+            ASSET="bun-linux-aarch64.zip"
+            ;;
+          macOS:X64)
+            ASSET="bun-darwin-x64.zip"
+            ;;
+          macOS:ARM64)
+            ASSET="bun-darwin-aarch64.zip"
+            ;;
+          Windows:X64)
+            ASSET="bun-windows-x64.zip"
+            ;;
+          *)
+            echo "Unsupported runner: ${RUNNER_OS}/${RUNNER_ARCH}" >&2
+            exit 1
+            ;;
+        esac
+
+        echo "url=https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/${ASSET}" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
       with:
-        bun-version: "1.3.1"
+        bun-download-url: ${{ steps.bun-download-url.outputs.url }}

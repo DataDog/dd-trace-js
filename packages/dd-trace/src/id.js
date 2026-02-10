@@ -204,7 +204,7 @@ function pseudoRandom () {
     data[offset + 4],
     data[offset + 5],
     data[offset + 6],
-    data[offset + 7]
+    data[offset + 7],
   ]
 }
 
@@ -243,5 +243,5 @@ function writeUInt32BE (buffer, value, offset) {
  * @returns {Identifier}
  */
 module.exports = function createIdentifier (value, radix) {
-  return new Identifier(value, radix)
+  return new Identifier(value ?? '', radix)
 }

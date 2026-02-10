@@ -10,6 +10,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const { withPeerService } = require('../../dd-trace/test/setup/mocha')
+
 describe('Plugin', () => {
   let net
   let tcp
@@ -18,7 +19,11 @@ describe('Plugin', () => {
   let tracer
   let parent
 
-  ['net', 'node:net'].forEach(pluginToBeLoaded => {
+  before(() => {
+    require('events').defaultMaxListeners = 5
+  })
+
+  ;['net', 'node:net'].forEach(pluginToBeLoaded => {
     describe(pluginToBeLoaded, () => {
       afterEach(() => {
         return agent.close()
@@ -68,9 +73,9 @@ describe('Plugin', () => {
           resource: '/tmp/dd-trace.sock',
           meta: {
             'span.kind': 'client',
-            'ipc.path': '/tmp/dd-trace.sock'
+            'ipc.path': '/tmp/dd-trace.sock',
           },
-          parent_id: BigInt(parent.context()._spanId.toString(10))
+          parent_id: BigInt(parent.context()._spanId.toString(10)),
         }).then(done).catch(done)
 
         tracer.scope().activate(parent, () => {
@@ -87,7 +92,7 @@ describe('Plugin', () => {
             expectSomeSpan(agent, {
               name: 'dns.lookup',
               service: 'test',
-              resource: 'localhost'
+              resource: 'localhost',
             }, 2000).then(done).catch(done)
           })
           assert.strictEqual(socket.listenerCount('error'), 0)
@@ -121,14 +126,14 @@ describe('Plugin', () => {
                 'tcp.family': 'IPv4',
                 'tcp.remote.host': 'localhost',
                 'tcp.local.address': socket.localAddress,
-                'out.host': 'localhost'
+                'out.host': 'localhost',
               },
               metrics: {
                 'network.destination.port': port,
                 'tcp.remote.port': port,
-                'tcp.local.port': socket.localPort
+                'tcp.local.port': socket.localPort,
               },
-              parent_id: BigInt(parent.context()._spanId.toString(10))
+              parent_id: BigInt(parent.context()._spanId.toString(10)),
             }, 2000).then(done).catch(done)
           })
           assert.strictEqual(socket.listenerCount('error'), 0)
@@ -140,7 +145,7 @@ describe('Plugin', () => {
         tracer.scope().activate(parent, () => {
           socket.connect({
             port,
-            host: 'localhost'
+            host: 'localhost',
           })
           socket.on('connect', () => {
             expectSomeSpan(agent, {
@@ -153,14 +158,14 @@ describe('Plugin', () => {
                 'tcp.family': 'IPv4',
                 'tcp.remote.host': 'localhost',
                 'tcp.local.address': socket.localAddress,
-                'out.host': 'localhost'
+                'out.host': 'localhost',
               },
               metrics: {
                 'network.destination.port': port,
                 'tcp.remote.port': port,
-                'tcp.local.port': socket.localPort
+                'tcp.local.port': socket.localPort,
               },
-              parent_id: BigInt(parent.context()._spanId.toString(10))
+              parent_id: BigInt(parent.context()._spanId.toString(10)),
             }).then(done).catch(done)
           })
         })
@@ -174,14 +179,14 @@ describe('Plugin', () => {
           meta: {
             component: 'net',
             'span.kind': 'client',
-            'ipc.path': '/tmp/dd-trace.sock'
+            'ipc.path': '/tmp/dd-trace.sock',
           },
-          parent_id: BigInt(parent.context()._spanId.toString(10))
+          parent_id: BigInt(parent.context()._spanId.toString(10)),
         }).then(done).catch(done)
 
         tracer.scope().activate(parent, () => {
           net.connect({
-            path: '/tmp/dd-trace.sock'
+            path: '/tmp/dd-trace.sock',
           })
         })
       })
@@ -196,7 +201,7 @@ describe('Plugin', () => {
             assertObjectContains(traces[0][0], {
               name: 'tcp.connect',
               service: 'test',
-              resource: `localhost:${port}`
+              resource: `localhost:${port}`,
             })
             assertObjectContains(traces[0][0].meta, {
               component: 'net',
@@ -206,11 +211,11 @@ describe('Plugin', () => {
               'out.host': 'localhost',
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message || error.code,
-              [ERROR_STACK]: error.stack
+              [ERROR_STACK]: error.stack,
             })
             assertObjectContains(traces[0][0].metrics, {
               'network.destination.port': port,
-              'tcp.remote.port': port
+              'tcp.remote.port': port,
             })
             assert.strictEqual(traces[0][0].parent_id.toString(), parent.context().toSpanId())
           })
@@ -294,7 +299,7 @@ describe('Plugin', () => {
               assert.strictEqual(tracer.scope().active().context()._name, 'tcp.connect')
               promises[4].resolve()
               dns.lookup(...args)
-            }
+            },
           })
 
           return Promise.all(promises)

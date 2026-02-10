@@ -25,7 +25,7 @@ function wrapAddQueue (addQueue) {
 addHook({
   name: 'mongoose',
   versions: ['>=4.6.4 <5', '5', '6', '>=7'],
-  file: 'lib/index.js'
+  file: 'lib/index.js',
 }, mongoose => {
   // As of Mongoose 7, custom promise libraries are no longer supported and mongoose.Promise may be undefined
   if (mongoose.Promise && mongoose.Promise !== global.Promise) {
@@ -47,23 +47,23 @@ const collectionMethodsWithFilter = [
   'findOneAndDelete',
   'findOneAndReplace',
   'replaceOne',
-  'remove'
+  'remove',
 ]
 
 const collectionMethodsWithTwoFilters = [
   'findOneAndUpdate',
   'updateMany',
-  'updateOne'
+  'updateOne',
 ]
 
 addHook({
   name: 'mongoose',
   versions: ['>=4.6.4 <5', '5', '6', '>=7'],
-  file: 'lib/model.js'
+  file: 'lib/model.js',
 }, Model => {
-  [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
+  for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
     const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
-    if (!(methodName in Model)) return
+    if (!(methodName in Model)) continue
 
     shimmer.wrap(Model, methodName, method => {
       return function wrappedModelMethod () {
@@ -97,7 +97,7 @@ addHook({
 
         const ctx = {
           filters,
-          methodName
+          methodName,
         }
 
         return startCh.runStores(ctx, () => {
@@ -153,7 +153,7 @@ addHook({
         })
       }
     })
-  })
+  }
 
   return Model
 })
@@ -163,14 +163,14 @@ const sanitizeFilterFinishCh = channel('datadog:mongoose:sanitize-filter:finish'
 addHook({
   name: 'mongoose',
   versions: ['6', '>=7'],
-  file: 'lib/helpers/query/sanitizeFilter.js'
+  file: 'lib/helpers/query/sanitizeFilter.js',
 }, sanitizeFilter => {
   return shimmer.wrapFunction(sanitizeFilter, sanitizeFilter => function wrappedSanitizeFilter () {
     const sanitizedObject = sanitizeFilter.apply(this, arguments)
 
     if (sanitizeFilterFinishCh.hasSubscribers) {
       sanitizeFilterFinishCh.publish({
-        sanitizedObject
+        sanitizedObject,
       })
     }
 

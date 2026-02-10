@@ -62,7 +62,7 @@ class Instrument {
       type,
       value,
       attributes: sanitizeAttributes(attributes),
-      timestamp: Number(process.hrtime.bigint())
+      timestamp: Number(process.hrtime.bigint()),
     }
   }
 }
@@ -165,7 +165,7 @@ class ObservableInstrument extends Instrument {
     const observableResult = {
       observe: (value, attributes = {}) => {
         observations.push(this.createMeasurement(this.#type, value, attributes))
-      }
+      },
     }
 
     for (const callback of this.#callbacks) {
@@ -221,5 +221,5 @@ module.exports = {
   Gauge,
   ObservableGauge,
   ObservableCounter,
-  ObservableUpDownCounter
+  ObservableUpDownCounter,
 }

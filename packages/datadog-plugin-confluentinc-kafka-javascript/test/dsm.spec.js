@@ -68,8 +68,8 @@ describe('Plugin', () => {
             kafkaJS: {
               clientId: `kafkajs-test-${version}`,
               brokers: ['127.0.0.1:9092'],
-              logLevel: ConfluentKafka.logLevel.WARN
-            }
+              logLevel: ConfluentKafka.logLevel.WARN,
+            },
           })
           testTopic = `test-topic-${randomUUID()}`
           admin = kafka.admin()
@@ -78,13 +78,13 @@ describe('Plugin', () => {
             topics: [{
               topic: testTopic,
               numPartitions: 1,
-              replicationFactor: 1
-            }]
+              replicationFactor: 1,
+            }],
           })
           await admin.disconnect()
 
           consumer = kafka.consumer({
-            kafkaJS: { groupId, fromBeginning: true }
+            kafkaJS: { groupId, fromBeginning: true },
           })
           await consumer.connect()
           await consumer.subscribe({ topic: testTopic })
@@ -123,7 +123,7 @@ describe('Plugin', () => {
               eachMessage: async () => {
                 runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
                 consumerReceiveMessagePromise = Promise.resolve()
-              }
+              },
             })
             await sendMessages(kafka, testTopic, messages).then(
               async () => await consumerReceiveMessagePromise
@@ -141,7 +141,7 @@ describe('Plugin', () => {
               eachBatch: async () => {
                 runArgs.push(setDataStreamsContextSpy.lastCall.args[0])
                 consumerReceiveMessagePromise = Promise.resolve()
-              }
+              },
             })
             await sendMessages(kafka, testTopic, messages).then(
               async () => await consumerReceiveMessagePromise
@@ -174,7 +174,7 @@ describe('Plugin', () => {
                 assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
                 recordCheckpointSpy.restore()
                 consumerReceiveMessagePromise = Promise.resolve()
-              }
+              },
             })
             await sendMessages(kafka, testTopic, messages).then(
               async () => await consumerReceiveMessagePromise
@@ -208,10 +208,10 @@ describe('Plugin', () => {
                 commitMeta = {
                   topic,
                   partition,
-                  offset: Number(message.offset)
+                  offset: Number(message.offset),
                 }
                 messageProcessedResolve()
-              }
+              },
             })
 
             await consumerRunPromise
@@ -226,14 +226,14 @@ describe('Plugin', () => {
             }
 
             const newConsumer = kafka.consumer({
-              kafkaJS: { groupId, fromBeginning: true, autoCommit: false }
+              kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
             })
             await newConsumer.connect()
             await sendMessages(kafka, testTopic, [{ key: 'key1', value: 'test2' }])
             await newConsumer.run({
               eachMessage: async () => {
                 await newConsumer.disconnect()
-              }
+              },
             })
             setOffsetSpy.resetHistory()
             await newConsumer.commitOffsets()
@@ -317,7 +317,7 @@ async function sendMessages (kafka, topic, messages) {
   await producer.connect()
   await producer.send({
     topic,
-    messages
+    messages,
   })
   await producer.disconnect()
 }

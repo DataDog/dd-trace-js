@@ -15,9 +15,9 @@ function getSizeOrZero (obj) {
   if (Array.isArray(obj) && obj.length > 0) {
     if (typeof obj[0] === 'number') return Buffer.from(obj).length
     let payloadSize = 0
-    obj.forEach(item => {
+    for (const item of obj) {
       payloadSize += getSizeOrZero(item)
-    })
+    }
     return payloadSize
   }
   if (obj !== null && typeof obj === 'object') {
@@ -49,5 +49,5 @@ module.exports = {
   getMessageSize,
   getHeadersSize,
   getSizeOrZero,
-  getAmqpMessageSize
+  getAmqpMessageSize,
 }

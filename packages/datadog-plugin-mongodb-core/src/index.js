@@ -2,7 +2,7 @@
 
 const { isTrue } = require('../../dd-trace/src/util')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 class MongodbCorePlugin extends DatabasePlugin {
   static id = 'mongodb-core'
@@ -20,7 +20,7 @@ class MongodbCorePlugin extends DatabasePlugin {
   configure (config) {
     super.configure(config)
 
-    const heartbeatFromEnv = getEnvironmentVariable('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
+    const heartbeatFromEnv = getValueFromEnvSources('DD_TRACE_MONGODB_HEARTBEAT_ENABLED')
 
     this.config.heartbeatEnabled = config.heartbeatEnabled ??
       (heartbeatFromEnv && isTrue(heartbeatFromEnv)) ??
@@ -46,8 +46,8 @@ class MongodbCorePlugin extends DatabasePlugin {
         'db.name': ns,
         'mongodb.query': query,
         'out.host': options.host,
-        'out.port': options.port
-      }
+        'out.port': options.port,
+      },
     }, ctx)
     const comment = this.injectDbmComment(span, ops.comment, service)
     if (comment) {
@@ -157,12 +157,12 @@ function limitDepth (input) {
   const queue = [{
     input,
     output,
-    depth: 0
+    depth: 0,
   }]
 
   while (queue.length) {
     const {
-      input, output, depth
+      input, output, depth,
     } = queue.pop()
     const nextDepth = depth + 1
     for (const key in input) {
@@ -182,7 +182,7 @@ function limitDepth (input) {
         queue.push({
           input: child,
           output: output[key] = {},
-          depth: nextDepth
+          depth: nextDepth,
         })
       }
     }

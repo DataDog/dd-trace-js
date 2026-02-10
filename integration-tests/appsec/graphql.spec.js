@@ -8,7 +8,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnProc
+  spawnProc,
 } = require('../helpers')
 
 describe('graphql', () => {
@@ -26,8 +26,8 @@ describe('graphql', () => {
     proc = await spawnProc(webFile, {
       cwd,
       env: {
-        AGENT_PORT: agent.port
-      }
+        AGENT_PORT: agent.port,
+      },
     })
   })
 
@@ -53,15 +53,15 @@ describe('graphql', () => {
       url: `${proc.url}/graphql`,
       method: 'post',
       headers: {
-        'Content-type': 'application/json'
+        'Content-type': 'application/json',
       },
       data: {
         query: 'query getSingleImage($imageId: Int!) { image(imageId: $imageId) { title owner category url }}',
         variables: {
-          imageId: 1
+          imageId: 1,
         },
-        operationName: 'getSingleImage'
-      }
+        operationName: 'getSingleImage',
+      },
     })
 
     return agentPromise
@@ -77,9 +77,9 @@ describe('graphql', () => {
             tags:
             {
               type: 'security_scanner',
-              category: 'attack_attempt'
+              category: 'attack_attempt',
             },
-            on_match: []
+            on_match: [],
           },
           rule_matches: [
             {
@@ -90,13 +90,13 @@ describe('graphql', () => {
                   address: 'graphql.server.resolver',
                   key_path: ['images', 'category'],
                   value: 'testattack',
-                  highlight: ['testattack']
-                }
-              ]
-            }
-          ]
-        }
-      ]
+                  highlight: ['testattack'],
+                },
+              ],
+            },
+          ],
+        },
+      ],
     }
 
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
@@ -116,15 +116,15 @@ describe('graphql', () => {
       url: `${proc.url}/graphql`,
       method: 'post',
       headers: {
-        'Content-type': 'application/json'
+        'Content-type': 'application/json',
       },
       data: {
         query: 'query getImagesByCategory($category: String) { images(category: $category) { title owner url }}',
         variables: {
-          category: 'testattack'
+          category: 'testattack',
         },
-        operationName: 'getImagesByCategory'
-      }
+        operationName: 'getImagesByCategory',
+      },
     })
 
     return agentPromise

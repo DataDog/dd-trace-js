@@ -4,15 +4,16 @@ const {
   CLIENT_PORT_KEY,
   PEER_SERVICE_KEY,
   PEER_SERVICE_SOURCE_KEY,
-  PEER_SERVICE_REMAP_KEY
+  PEER_SERVICE_REMAP_KEY,
 } = require('../constants')
 const { exitTags } = require('../../../datadog-code-origin')
 const { storage } = require('../../../datadog-core')
+const { IS_SERVERLESS } = require('../serverless')
 const TracingPlugin = require('./tracing')
 
 const COMMON_PEER_SVC_SOURCE_TAGS = [
   'net.peer.name',
-  'out.host'
+  'out.host',
 ]
 
 // TODO: Exit span on finish when AsyncResource instances are removed.
@@ -55,20 +56,20 @@ class OutboundPlugin extends TracingPlugin {
     if (tags[PEER_SERVICE_KEY] !== undefined) {
       return {
         [PEER_SERVICE_KEY]: tags[PEER_SERVICE_KEY],
-        [PEER_SERVICE_SOURCE_KEY]: PEER_SERVICE_KEY
+        [PEER_SERVICE_SOURCE_KEY]: PEER_SERVICE_KEY,
       }
     }
 
     const sourceTags = [
       ...this.constructor.peerServicePrecursors,
-      ...COMMON_PEER_SVC_SOURCE_TAGS
+      ...COMMON_PEER_SVC_SOURCE_TAGS,
     ]
 
     for (const sourceTag of sourceTags) {
       if (tags[sourceTag]) {
         return {
           [PEER_SERVICE_KEY]: tags[sourceTag],
-          [PEER_SERVICE_SOURCE_KEY]: sourceTag
+          [PEER_SERVICE_SOURCE_KEY]: sourceTag,
         }
       }
     }
@@ -85,7 +86,7 @@ class OutboundPlugin extends TracingPlugin {
       return {
         ...peerData,
         [PEER_SERVICE_KEY]: mappedService,
-        [PEER_SERVICE_REMAP_KEY]: peerService
+        [PEER_SERVICE_REMAP_KEY]: peerService,
       }
     }
     return peerData
@@ -95,7 +96,7 @@ class OutboundPlugin extends TracingPlugin {
     const span = ctx?.currentStore?.span || this.activeSpan
     this.tagPeerService(span)
 
-    if (this._tracerConfig?._isInServerlessEnvironment()) {
+    if (IS_SERVERLESS) {
       const peerHostname = storage('peerServerless').getStore()?.peerHostname
       if (peerHostname) span.setTag('peer.service', peerHostname)
     }
@@ -125,7 +126,7 @@ class OutboundPlugin extends TracingPlugin {
 
     span.addTags({
       'out.host': hostname,
-      [CLIENT_PORT_KEY]: port
+      [CLIENT_PORT_KEY]: port,
     })
   }
 }

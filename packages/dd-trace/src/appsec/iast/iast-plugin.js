@@ -38,12 +38,16 @@ class IastPluginSubscription {
     if (!this.moduleInstrumented) {
       this.moduleInstrumented = true
 
-      this.tags.forEach(tag => this.instrumentedMetric.inc(undefined, tag))
+      for (const tag of this.tags) {
+        this.instrumentedMetric.inc(undefined, tag)
+      }
     }
   }
 
   increaseExecuted (iastContext) {
-    this.tags.forEach(tag => this.executedMetric.inc(iastContext, tag))
+    for (const tag of this.tags) {
+      this.executedMetric.inc(iastContext, tag)
+    }
   }
 
   matchesModuleInstrumented (name) {
@@ -76,7 +80,9 @@ class IastPlugin extends Plugin {
       const result = handler()
       if (iastTelemetry.isEnabled()) {
         if (Array.isArray(tags)) {
-          tags.forEach(tag => metric.inc(iastContext, tag))
+          for (const tag of tags) {
+            metric.inc(iastContext, tag)
+          }
         } else {
           metric.inc(iastContext, tags)
         }
@@ -178,9 +184,11 @@ class IastPlugin extends Plugin {
   }
 
   _onInstrumentationLoaded (name) {
-    this.pluginSubs
-      .filter(sub => sub.matchesModuleInstrumented(name))
-      .forEach(sub => sub.increaseInstrumented())
+    for (const sub of this.pluginSubs) {
+      if (sub.matchesModuleInstrumented(name)) {
+        sub.increaseInstrumented()
+      }
+    }
   }
 }
 
@@ -193,14 +201,14 @@ class SourceIastPlugin extends IastPlugin {
     this._getAndRegisterSubscription({
       moduleName,
       tag,
-      tagKey: TagKey.SOURCE_TYPE
+      tagKey: TagKey.SOURCE_TYPE,
     })
   }
 
   execSource (sourceHandlerInfo) {
     this._execHandlerAndIncMetric({
       metric: EXECUTED_SOURCE,
-      ...sourceHandlerInfo
+      ...sourceHandlerInfo,
     })
   }
 }
@@ -218,5 +226,5 @@ class SinkIastPlugin extends IastPlugin {
 module.exports = {
   SourceIastPlugin,
   SinkIastPlugin,
-  IastPlugin
+  IastPlugin,
 }

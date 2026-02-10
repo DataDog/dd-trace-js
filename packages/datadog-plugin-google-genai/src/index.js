@@ -9,7 +9,7 @@ class GenAiPlugin extends CompositePlugin {
   static get plugins () {
     return {
       llmobs: GenAiLLMObsPlugin,
-      tracing: GenAiTracingPlugin
+      tracing: GenAiTracingPlugin,
     }
   }
 }

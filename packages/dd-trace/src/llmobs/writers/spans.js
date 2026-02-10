@@ -5,7 +5,7 @@ const {
   EVP_PAYLOAD_SIZE_LIMIT,
   SPANS_ENDPOINT,
   SPANS_EVENT_TYPE,
-  SPANS_INTAKE
+  SPANS_INTAKE,
 } = require('../constants/writers')
 const { DROPPED_VALUE_TEXT } = require('../constants/text')
 const { DROPPED_IO_COLLECTION_ERROR } = require('../constants/tags')
@@ -20,11 +20,11 @@ class LLMObsSpanWriter extends BaseWriter {
       config,
       eventType: SPANS_EVENT_TYPE,
       intake: SPANS_INTAKE,
-      endpoint: SPANS_ENDPOINT
+      endpoint: SPANS_ENDPOINT,
     })
   }
 
-  append (event) {
+  append (event, routing) {
     const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
     telemetry.recordLLMObsRawSpanSize(event, eventSizeBytes)
 
@@ -39,12 +39,13 @@ class LLMObsSpanWriter extends BaseWriter {
 
     telemetry.recordLLMObsSpanSize(event, processedEventSizeBytes, shouldTruncate)
 
-    if (this._bufferSize + eventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
+    const buffer = this._getBuffer(routing)
+    if (buffer.size + processedEventSizeBytes > EVP_PAYLOAD_SIZE_LIMIT) {
       logger.debug('Flushing queue because queuing next event will exceed EvP payload limit')
       this.flush()
     }
 
-    super.append(event, processedEventSizeBytes)
+    super.append(event, routing, processedEventSizeBytes)
   }
 
   makePayload (events) {
@@ -52,7 +53,7 @@ class LLMObsSpanWriter extends BaseWriter {
       '_dd.stage': 'raw',
       '_dd.tracer_version': tracerVersion,
       event_type: this._eventType,
-      spans: [event]
+      spans: [event],
     }))
   }
 

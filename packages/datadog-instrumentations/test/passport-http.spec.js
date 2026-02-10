@@ -17,7 +17,11 @@ withVersions('passport-http', 'passport-http', version => {
     let port, server, subscriberStub
 
     before(() => {
-      return agent.load(['http', 'express', 'passport', 'passport-http'], { client: false })
+      return agent.load(
+        ['http', 'express', 'passport', 'passport-http'],
+        { client: false },
+        { appsec: { enabled: true } }
+      )
     })
 
     before((done) => {
@@ -41,7 +45,7 @@ withVersions('passport-http', 'passport-http', version => {
           _id: 1,
           username: 'test',
           password: '1234',
-          email: 'testuser@ddog.com'
+          email: 'testuser@ddog.com',
         }]
 
         const user = users.find(user => (user.username === username) && (user.password === password))
@@ -56,13 +60,13 @@ withVersions('passport-http', 'passport-http', version => {
       passport.use('basic', new BasicStrategy({
         usernameField: 'username',
         passwordField: 'password',
-        passReqToCallback: false
+        passReqToCallback: false,
       }, validateUser))
 
       passport.use('basic-withreq', new BasicStrategy({
         usernameField: 'username',
         passwordField: 'password',
-        passReqToCallback: true
+        passReqToCallback: true,
       }, validateUser))
 
       app.use(passport.initialize())
@@ -72,7 +76,7 @@ withVersions('passport-http', 'passport-http', version => {
         passport.authenticate('basic', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          session: false
+          session: false,
         })
       )
 
@@ -80,7 +84,7 @@ withVersions('passport-http', 'passport-http', version => {
         passport.authenticate('basic-withreq', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          session: false
+          session: false,
         })
       )
 
@@ -113,8 +117,8 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // error:1234
-          Authorization: 'Basic ZXJyb3I6MTIzNA=='
-        }
+          Authorization: 'Basic ZXJyb3I6MTIzNA==',
+        },
       })
 
       assert.strictEqual(res.status, 500)
@@ -125,8 +129,8 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
-          Authorization: 'Basic dGVzdDoxMjM0'
-        }
+          Authorization: 'Basic dGVzdDoxMjM0',
+        },
       })
 
       assert.strictEqual(res.status, 200)
@@ -136,7 +140,7 @@ withVersions('passport-http', 'passport-http', version => {
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -144,8 +148,8 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/req`, {
         headers: {
           // test:1234
-          Authorization: 'Basic dGVzdDoxMjM0'
-        }
+          Authorization: 'Basic dGVzdDoxMjM0',
+        },
       })
 
       assert.strictEqual(res.status, 200)
@@ -155,7 +159,7 @@ withVersions('passport-http', 'passport-http', version => {
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -163,8 +167,8 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1
-          Authorization: 'Basic dGVzdDox'
-        }
+          Authorization: 'Basic dGVzdDox',
+        },
       })
 
       assert.strictEqual(res.status, 200)
@@ -174,7 +178,7 @@ withVersions('passport-http', 'passport-http', version => {
         login: 'test',
         user: false,
         success: false,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -187,8 +191,8 @@ withVersions('passport-http', 'passport-http', version => {
       const res = await axios.get(`http://localhost:${port}/`, {
         headers: {
           // test:1234
-          Authorization: 'Basic dGVzdDoxMjM0'
-        }
+          Authorization: 'Basic dGVzdDoxMjM0',
+        },
       })
 
       assert.strictEqual(res.status, 403)
@@ -198,7 +202,7 @@ withVersions('passport-http', 'passport-http', version => {
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
   })

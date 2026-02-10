@@ -43,7 +43,7 @@ describe('Plugin', () => {
             // we can't do that since the tracer cannot be re-configured after it's loaded. So we added it here as the
             // first test in this describe block.
             clientIpEnabled: true,
-            clientIpHeader: 'X-Custom-Client-Ip-Header' // config should be case-insensitive
+            clientIpHeader: 'X-Custom-Client-Ip-Header', // config should be case-insensitive
           })
         )
 
@@ -261,8 +261,8 @@ describe('Plugin', () => {
 
             axios.get(`http://localhost:${port}/user`, {
               headers: {
-                'x-custom-client-ip-header': '8.8.8.8'
-              }
+                'x-custom-client-ip-header': '8.8.8.8',
+              },
             }).catch(done)
           })
         })
@@ -287,8 +287,8 @@ describe('Plugin', () => {
 
             axios.get(`http://localhost:${port}/user`, {
               headers: {
-                'x-other-custom-client-ip-header': '8.8.8.8'
-              }
+                'x-other-custom-client-ip-header': '8.8.8.8',
+              },
             }).catch(done)
           })
         })
@@ -330,8 +330,14 @@ describe('Plugin', () => {
           })
         })
 
-        withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+        withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName, realVersion) => {
           let Router
+
+          if (moduleName === '@koa/router' &&
+            semver.satisfies(realVersion, '>=15.0.0') &&
+            !semver.satisfies(process.version.slice(1), '>=20.0.0')) {
+            return
+          }
 
           beforeEach(() => {
             Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
@@ -359,7 +365,7 @@ describe('Plugin', () => {
                   assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
 
                   assert.ok(Object.hasOwn(spans[1], 'resource'))
-                  assert.match(spans[1].resource, /^dispatch/)
+                  assert.match(spans[1].resource, /^(dispatch|bound)/)
 
                   assert.strictEqual(spans[2].resource, 'handle')
                 })
@@ -608,7 +614,7 @@ describe('Plugin', () => {
           it('should support a router prefix', done => {
             const app = new Koa()
             const router = new Router({
-              prefix: '/user'
+              prefix: '/user',
             })
 
             router.get('/:id', (ctx, next) => {
@@ -642,7 +648,7 @@ describe('Plugin', () => {
             const error = new Error('boom')
             const app = new Koa()
             const router = new Router({
-              prefix: '/user'
+              prefix: '/user',
             })
 
             router.get('/:id', (ctx, next) => {
@@ -666,10 +672,10 @@ describe('Plugin', () => {
                   assert.strictEqual(spans[0].error, 1)
 
                   assert.ok(Object.hasOwn(spans[1], 'resource'))
-                  assert.match(spans[1].resource, /^dispatch/)
+                  assert.match(spans[1].resource, /^(dispatch|bound)/)
                   assertObjectContains(spans[1].meta, {
                     [ERROR_TYPE]: error.name,
-                    component: 'koa'
+                    component: 'koa',
                   })
                   assert.strictEqual(spans[1].error, 1)
                 })
@@ -891,9 +897,13 @@ describe('Plugin', () => {
             })
           })
 
-          withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName) => {
+          withVersions('koa', ['koa-router', '@koa/router'], (routerVersion, moduleName, realVersion) => {
             let Router
-
+            if (moduleName === '@koa/router' &&
+              semver.satisfies(realVersion, '>=15.0.0') &&
+              !semver.satisfies(process.version.slice(1), '>=20.0.0')) {
+              return
+            }
             beforeEach(() => {
               Router = require(`../../../versions/${moduleName}@${routerVersion}`).get()
             })
@@ -902,7 +912,7 @@ describe('Plugin', () => {
               const error = new Error('boom')
               const app = new Koa()
               const router = new Router({
-                prefix: '/user'
+                prefix: '/user',
               })
 
               router.get('/:id', (ctx, next) => {

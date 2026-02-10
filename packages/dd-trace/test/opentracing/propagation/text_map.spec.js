@@ -39,8 +39,8 @@ describe('TextMapPropagator', () => {
       ...params,
       trace: {
         ...trace,
-        ...params.trace
-      }
+        ...params.trace,
+      },
     })
 
     return spanContext
@@ -48,20 +48,20 @@ describe('TextMapPropagator', () => {
 
   beforeEach(() => {
     log = {
-      debug: sinon.spy()
+      debug: sinon.spy(),
     }
     telemetryMetrics = {
       manager: {
         namespace: sinon.stub().returns({
           count: sinon.stub().returns({
-            inc: sinon.spy()
-          })
-        })
-      }
+            inc: sinon.spy(),
+          }),
+        }),
+      },
     }
     TextMapPropagator = proxyquire('../../../src/opentracing/propagation/text_map', {
       '../../log': log,
-      '../../telemetry/metrics': telemetryMetrics
+      '../../telemetry/metrics': telemetryMetrics,
     })
     config = getConfigFresh({ tagsHeaderMaxLength: 512 })
     propagator = new TextMapPropagator(config)
@@ -69,15 +69,17 @@ describe('TextMapPropagator', () => {
       'x-datadog-trace-id': '123',
       'x-datadog-parent-id': '456',
       'ot-baggage-foo': 'bar',
-      baggage: 'foo=bar'
+      baggage: 'foo=bar',
     }
     baggageItems = {}
   })
 
   describe('inject', () => {
     beforeEach(() => {
+      removeAllBaggageItems()
+
       baggageItems = {
-        foo: 'bar'
+        foo: 'bar',
       }
     })
 
@@ -113,7 +115,7 @@ describe('TextMapPropagator', () => {
         number: 1.23,
         bool: true,
         array: ['foo', 'bar'],
-        object: {}
+        object: {},
       }
       const spanContext = createContext({ baggageItems })
 
@@ -132,8 +134,8 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({
         baggageItems: {
           ok: 'yes',
-          'not ok': 'no'
-        }
+          'not ok': 'no',
+        },
       })
 
       propagator.inject(spanContext, carrier)
@@ -145,12 +147,39 @@ describe('TextMapPropagator', () => {
       sinon.assert.called(tracerMetrics.count().inc)
     })
 
+    it('should encode legacy baggage values that are not valid HTTP header content', () => {
+      const carrier = {}
+      const value = 'foo@2025.0122.110223\n'
+      const spanContext = createContext({
+        baggageItems: {
+          'sentry-release': value,
+        },
+      })
+
+      propagator.inject(spanContext, carrier)
+
+      assert.strictEqual(carrier['ot-baggage-sentry-release'], encodeURIComponent(value))
+      assert.ok(!carrier['ot-baggage-sentry-release'].includes('\n'))
+    })
+
     it('should handle special characters in baggage', () => {
       const carrier = {}
-      setBaggageItem('",;\\()/:<=>?@[]{}🐶é我', '",;\\🐶é我')
+      // W3C baggage keys must be RFC7230 tokens; keep special chars in the value.
+      setBaggageItem('special', '",;\\🐶é我')
       propagator.inject(undefined, carrier)
-      // eslint-disable-next-line @stylistic/max-len
-      assert.strictEqual(carrier.baggage, '%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D%F0%9F%90%B6%C3%A9%E6%88%91=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
+      assert.strictEqual(carrier.baggage, 'special=%22%2C%3B%5C%F0%9F%90%B6%C3%A9%E6%88%91')
+    })
+
+    it('should not accept special characters in baggage key', () => {
+      const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+
+      const carrier = {}
+      // W3C baggage keys must be RFC7230 tokens; keep special chars in the value.
+      setBaggageItem('",;\\()/:<=>?@[]{}🐶é我', 'test value')
+      propagator.inject(undefined, carrier)
+      assert.strictEqual(carrier.baggage, undefined)
+
+      sinon.assert.notCalled(tracerMetrics.count)
     })
 
     it('should drop excess baggage items when there are too many pairs', () => {
@@ -180,8 +209,8 @@ describe('TextMapPropagator', () => {
       const carrier = {}
       const spanContext = createContext({
         sampling: {
-          priority: 0
-        }
+          priority: 0,
+        },
       })
 
       propagator.inject(spanContext, carrier)
@@ -195,8 +224,8 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({
         trace: {
           origin: 'synthetics',
-          tags: {}
-        }
+          tags: {},
+        },
       })
 
       propagator.inject(spanContext, carrier)
@@ -212,9 +241,9 @@ describe('TextMapPropagator', () => {
           tags: {
             '_dd.p.foo': 'foo',
             bar: 'bar',
-            '_dd.p.baz': 'baz'
-          }
-        }
+            '_dd.p.baz': 'baz',
+          },
+        },
       })
 
       propagator.inject(spanContext, carrier)
@@ -228,9 +257,9 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({
         trace: {
           tags: {
-            '_dd.p.foo': 'a'.repeat(512)
-          }
-        }
+            '_dd.p.foo': 'a'.repeat(512),
+          },
+        },
       })
 
       propagator.inject(spanContext, carrier)
@@ -243,9 +272,9 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({
         trace: {
           tags: {
-            '_dd.p.foo': 'hélicoptère'
-          }
-        }
+            '_dd.p.foo': 'hélicoptère',
+          },
+        },
       })
 
       propagator.inject(spanContext, carrier)
@@ -258,9 +287,9 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({
         trace: {
           tags: {
-            _ddupefoo: 'value'
-          }
-        }
+            _ddupefoo: 'value',
+          },
+        },
       })
 
       propagator.inject(spanContext, carrier)
@@ -275,9 +304,9 @@ describe('TextMapPropagator', () => {
       const spanContext = createContext({
         trace: {
           tags: {
-            '_dd.p.foo': 'hélicoptère'
-          }
-        }
+            '_dd.p.foo': 'hélicoptère',
+          },
+        },
       })
 
       propagator.inject(spanContext, carrier)
@@ -292,8 +321,8 @@ describe('TextMapPropagator', () => {
         spanId: id('0000000000000456'),
         parentId: id('0000000000000789'),
         sampling: {
-          priority: USER_KEEP
-        }
+          priority: USER_KEEP,
+        },
       })
 
       config.tracePropagationStyle.inject = ['b3']
@@ -318,9 +347,9 @@ describe('TextMapPropagator', () => {
         traceId: id('0000000000000123'),
         trace: {
           tags: {
-            '_dd.p.tid': '0000000000000234'
-          }
-        }
+            '_dd.p.tid': '0000000000000234',
+          },
+        },
       })
 
       config.tracePropagationStyle.inject = ['b3']
@@ -337,9 +366,9 @@ describe('TextMapPropagator', () => {
         traceId: id('00000000000002340000000000000123'),
         trace: {
           tags: {
-            '_dd.p.tid': '0000000000000234'
-          }
-        }
+            '_dd.p.tid': '0000000000000234',
+          },
+        },
       })
 
       config.tracePropagationStyle.inject = ['b3']
@@ -357,10 +386,10 @@ describe('TextMapPropagator', () => {
         spanId: id('5555eeee6666ffff', 16),
         sampling: {
           priority: USER_KEEP,
-          mechanism: SAMPLING_MECHANISM_MANUAL
+          mechanism: SAMPLING_MECHANISM_MANUAL,
         },
         tracestate: TraceState.fromString('other=bleh,dd=s:2;o:foo_bar_;t.dm:-4'),
-        isRemote: false
+        isRemote: false,
       })
       // Include invalid characters to verify underscore conversion
       spanContext._trace.origin = 'foo,bar='
@@ -384,7 +413,7 @@ describe('TextMapPropagator', () => {
       const carrier = {}
       const spanContext = createContext({
         traceId: id('0000000000000123'),
-        spanId: id('0000000000000456')
+        spanId: id('0000000000000456'),
       })
 
       propagator.inject(spanContext, carrier)
@@ -396,7 +425,7 @@ describe('TextMapPropagator', () => {
       const carrier = {}
       const spanContext = createContext({
         traceId: id('0000000000000123'),
-        spanId: id('0000000000000456')
+        spanId: id('0000000000000456'),
       })
 
       config.tracePropagationStyle.inject = []
@@ -410,7 +439,7 @@ describe('TextMapPropagator', () => {
       const carrier = {}
       const spanContext = createContext({
         traceId: id('0000000000000123'),
-        spanId: id('0000000000000456')
+        spanId: id('0000000000000456'),
       })
 
       config.tracePropagationStyle.inject = []
@@ -428,7 +457,7 @@ describe('TextMapPropagator', () => {
       const carrier = {}
       const spanContext = createContext({
         traceId: id('0000000000000123'),
-        spanId: id('0000000000000456')
+        spanId: id('0000000000000456'),
       })
 
       const onSpanInject = sinon.stub()
@@ -524,8 +553,8 @@ describe('TextMapPropagator', () => {
       config = getConfigFresh({
         tracePropagationStyle: {
           extract: ['datadog', 'tracecontext'],
-          inject: ['datadog', 'tracecontext']
-        }
+          inject: ['datadog', 'tracecontext'],
+        },
       })
       propagator = new TextMapPropagator(config)
       const carrier = textMap
@@ -545,18 +574,18 @@ describe('TextMapPropagator', () => {
       const carrier = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: '%22%2C%3B%5C%28%29%2F%3A%3C%3D%3E%3F%40%5B%5D%7B%7D=%22%2C%3B%5C'
+        baggage: 'special=%22%2C%3B%5C',
       }
       const spanContext = propagator.extract(carrier)
       assert.deepStrictEqual(spanContext._baggageItems, {})
-      assert.deepStrictEqual(getAllBaggageItems(), { '",;\\()/:<=>?@[]{}': '",;\\' })
+      assert.deepStrictEqual(getAllBaggageItems(), { special: '",;\\' })
     })
 
     it('should not extract baggage when the header is malformed', () => {
       const carrierA = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: 'no-equal-sign,foo=gets-dropped-because-previous-pair-is-malformed'
+        baggage: 'no-equal-sign,foo=gets-dropped-because-previous-pair-is-malformed',
       }
       const spanContextA = propagator.extract(carrierA)
       assert.deepStrictEqual(spanContextA._baggageItems, {})
@@ -565,7 +594,7 @@ describe('TextMapPropagator', () => {
       const carrierB = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: 'foo=gets-dropped-because-subsequent-pair-is-malformed,='
+        baggage: 'foo=gets-dropped-because-subsequent-pair-is-malformed,=',
       }
       const spanContextB = propagator.extract(carrierB)
       assert.deepStrictEqual(spanContextB._baggageItems, {})
@@ -574,7 +603,7 @@ describe('TextMapPropagator', () => {
       const carrierC = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: '=no-key'
+        baggage: '=no-key',
       }
       const spanContextC = propagator.extract(carrierC)
       assert.deepStrictEqual(spanContextC._baggageItems, {})
@@ -583,11 +612,22 @@ describe('TextMapPropagator', () => {
       const carrierD = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: 'no-value='
+        baggage: 'no-value=',
       }
       const spanContextD = propagator.extract(carrierD)
       assert.deepStrictEqual(spanContextD._baggageItems, {})
       assert.deepStrictEqual(getAllBaggageItems(), {})
+    })
+
+    it('should not extract metadata properties from baggage', () => {
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'name=  test value;prop=1; prop2=2',
+      }
+      const spanContext = propagator.extract(carrier)
+      assert.deepStrictEqual(spanContext._baggageItems, {})
+      assert.deepStrictEqual(getAllBaggageItems(), { name: 'test value' })
     })
 
     it('should add baggage items to span tags', () => {
@@ -595,30 +635,30 @@ describe('TextMapPropagator', () => {
       let carrier = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: 'user.id=capybara,session.id=987,account.id=789,nonDefaultKey=shouldBeIgnored'
+        baggage: 'user.id=capybara,session.id=987,account.id=789,nonDefaultKey=shouldBeIgnored',
       }
       const spanContextA = propagator.extract(carrier)
       assert.deepStrictEqual(spanContextA._trace.tags, {
         'baggage.user.id': 'capybara',
         'baggage.session.id': '987',
-        'baggage.account.id': '789'
+        'baggage.account.id': '789',
       })
 
       // should add baggage with case sensitive keys
       carrier = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: 'user.id=capybara,sesSion.id=987,account.id=789'
+        baggage: 'user.id=capybara,sesSion.id=987,account.id=789',
       }
       const spanContextB = propagator.extract(carrier)
       assert.deepStrictEqual(spanContextB._trace.tags, {
         'baggage.user.id': 'capybara',
-        'baggage.account.id': '789'
+        'baggage.account.id': '789',
       })
 
       // should not add baggage when key list is empty
       config = getConfigFresh({
-        baggageTagKeys: ''
+        baggageTagKeys: '',
       })
       propagator = new TextMapPropagator(config)
       const spanContextC = propagator.extract(carrier)
@@ -626,33 +666,33 @@ describe('TextMapPropagator', () => {
 
       // should not add baggage when key list is empty
       config = getConfigFresh({
-        baggageTagKeys: 'customKey'
+        baggageTagKeys: 'customKey',
       })
       propagator = new TextMapPropagator(config)
       carrier = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: 'customKey=beluga,randomKey=shouldBeIgnored'
+        baggage: 'customKey=beluga,randomKey=shouldBeIgnored',
       }
       const spanContextD = propagator.extract(carrier)
       assert.deepStrictEqual(spanContextD._trace.tags, {
-        'baggage.customKey': 'beluga'
+        'baggage.customKey': 'beluga',
       })
 
       // should add all baggage to span tags
       config = getConfigFresh({
-        baggageTagKeys: '*'
+        baggageTagKeys: '*',
       })
       propagator = new TextMapPropagator(config)
       carrier = {
         'x-datadog-trace-id': '123',
         'x-datadog-parent-id': '456',
-        baggage: 'customKey=beluga,randomKey=nothingIsIgnored'
+        baggage: 'customKey=beluga,randomKey=nothingIsIgnored',
       }
       const spanContextE = propagator.extract(carrier)
       assert.deepStrictEqual(spanContextE._trace.tags, {
         'baggage.customKey': 'beluga',
-        'baggage.randomKey': 'nothingIsIgnored'
+        'baggage.randomKey': 'nothingIsIgnored',
       })
     })
 
@@ -661,7 +701,7 @@ describe('TextMapPropagator', () => {
       let carrier = {
         'x-datadog-trace-id': '1234567890123456789',
         'x-datadog-parent-id': '987654321',
-        'x-datadog-tags': '_dd.p.tid=1234567890abcdeX'
+        'x-datadog-tags': '_dd.p.tid=1234567890abcdeX',
       }
       let spanContext = propagator.extract(carrier)
       assert.strictEqual(spanContext.toTraceId(), carrier['x-datadog-trace-id'])
@@ -672,7 +712,7 @@ describe('TextMapPropagator', () => {
       carrier = {
         'x-datadog-trace-id': '234567890123456789',
         'x-datadog-parent-id': '987654321',
-        'x-datadog-tags': '_dd.p.tid=1234567890abcdef1'
+        'x-datadog-tags': '_dd.p.tid=1234567890abcdef1',
       }
       spanContext = propagator.extract(carrier)
       assert.strictEqual(spanContext.toTraceId(), carrier['x-datadog-trace-id'])
@@ -683,7 +723,7 @@ describe('TextMapPropagator', () => {
       carrier = {
         'x-datadog-trace-id': '1234567890123456789',
         'x-datadog-parent-id': '987654321',
-        'x-datadog-tags': '_dd.p.tid=1234567890abcde'
+        'x-datadog-tags': '_dd.p.tid=1234567890abcde',
       }
       spanContext = propagator.extract(carrier)
       assert.strictEqual(spanContext.toTraceId(), carrier['x-datadog-trace-id'])
@@ -695,12 +735,12 @@ describe('TextMapPropagator', () => {
       removeAllBaggageItems()
       config = getConfigFresh({
         tracePropagationStyle: {
-          extract: ['baggage']
-        }
+          extract: ['baggage'],
+        },
       })
       propagator = new TextMapPropagator(config)
       const carrier = {
-        baggage: 'foo=bar'
+        baggage: 'foo=bar',
       }
       const spanContext = propagator.extract(carrier)
       assert.strictEqual(spanContext, null)
@@ -751,7 +791,7 @@ describe('TextMapPropagator', () => {
 
       assertObjectContains(spanContext._trace.tags, {
         '_dd.p.foo': 'bar',
-        '_dd.p.baz': 'qux'
+        '_dd.p.baz': 'qux',
       })
     })
 
@@ -804,15 +844,15 @@ describe('TextMapPropagator', () => {
 
     it('should extract from an aws-sqsd header', () => {
       const carrier = {
-        'x-aws-sqsd-attr-_datadog': JSON.stringify(textMap)
+        'x-aws-sqsd-attr-_datadog': JSON.stringify(textMap),
       }
 
       const spanContext = propagator.extract(carrier)
 
       assert.deepStrictEqual(spanContext, createContext({
         baggageItems: {
-          foo: 'bar'
-        }
+          foo: 'bar',
+        },
       }))
     })
 
@@ -992,7 +1032,7 @@ describe('TextMapPropagator', () => {
         const carrier = {
           'x-datadog-trace-id': '123',
           'x-datadog-parent-id': '456',
-          baggage: 'test-key=test-value'
+          baggage: 'test-key=test-value',
         }
 
         propagator.extract(carrier)
@@ -1006,7 +1046,7 @@ describe('TextMapPropagator', () => {
         const carrier = {
           'x-datadog-trace-id': '123',
           'x-datadog-parent-id': '456',
-          baggage: '=value-without-key'
+          baggage: '=value-without-key',
         }
 
         propagator.extract(carrier)
@@ -1042,7 +1082,7 @@ describe('TextMapPropagator', () => {
       sinon.assert.called(log.debug)
       assert.strictEqual(log.debug.firstCall.args[0](), [
         'Extract from carrier (datadog, tracecontext, baggage):',
-        '{"x-datadog-trace-id":"123","x-datadog-parent-id":"456"}.'
+        '{"x-datadog-trace-id":"123","x-datadog-parent-id":"456"}.',
       ].join(' '))
     })
 
@@ -1066,8 +1106,8 @@ describe('TextMapPropagator', () => {
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
-            priority: AUTO_KEEP
-          }
+            priority: AUTO_KEEP,
+          },
         }))
       })
 
@@ -1137,7 +1177,7 @@ describe('TextMapPropagator', () => {
         sinon.assert.called(log.debug)
         assert.strictEqual(log.debug.firstCall.args[0](), [
           'Extract from carrier (b3multi):',
-          '{"x-b3-traceid":"0000000000000123","x-b3-spanid":"0000000000000456"}.'
+          '{"x-b3-traceid":"0000000000000123","x-b3-spanid":"0000000000000456"}.',
         ].join(' '))
       })
     })
@@ -1158,7 +1198,7 @@ describe('TextMapPropagator', () => {
 
         assert.deepStrictEqual(spanContext, createContext({
           traceId: id('123', 16),
-          spanId: id('456', 16)
+          spanId: id('456', 16),
         }))
       })
 
@@ -1172,8 +1212,8 @@ describe('TextMapPropagator', () => {
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
-            priority: AUTO_KEEP
-          }
+            priority: AUTO_KEEP,
+          },
         }))
       })
 
@@ -1187,8 +1227,8 @@ describe('TextMapPropagator', () => {
           traceId: id('123', 16),
           spanId: id('456', 16),
           sampling: {
-            priority: AUTO_KEEP
-          }
+            priority: AUTO_KEEP,
+          },
         }))
       })
 
@@ -1261,9 +1301,9 @@ describe('TextMapPropagator', () => {
           spanId: id('456', 16),
           trace: {
             tags: {
-              '_dd.p.tid': '0000000000000234'
-            }
-          }
+              '_dd.p.tid': '0000000000000234',
+            },
+          },
         }))
       })
 
@@ -1277,7 +1317,7 @@ describe('TextMapPropagator', () => {
 
         assert.deepStrictEqual(spanContext, createContext({
           traceId: id('00000000000000000000000000000123', 16),
-          spanId: id('456', 16)
+          spanId: id('456', 16),
         }))
       })
 
@@ -1431,7 +1471,7 @@ describe('TextMapPropagator', () => {
         sinon.assert.called(log.debug)
         assert.strictEqual(log.debug.firstCall.args[0](), [
           'Extract from carrier (tracecontext):',
-          `{"traceparent":"${traceparent}","tracestate":"${tracestate}"}.`
+          `{"traceparent":"${traceparent}","tracestate":"${tracestate}"}.`,
         ].join(' '))
       })
     })
@@ -1448,7 +1488,7 @@ describe('TextMapPropagator', () => {
           'x-datadog-parent-id': '456',
           'ot-baggage-foo': 'bar',
           traceparent: `00-${traceId}-${spanId}-01`,
-          baggage: 'foo=bar'
+          baggage: 'foo=bar',
         }
       })
 
@@ -1456,8 +1496,8 @@ describe('TextMapPropagator', () => {
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
         config = getConfigFresh({
           tracePropagationStyle: {
-            extract: ['tracecontext', 'datadog']
-          }
+            extract: ['tracecontext', 'datadog'],
+          },
         })
         propagator = new TextMapPropagator(config)
         const extractedContext = propagator.extract(textMap)
@@ -1470,8 +1510,8 @@ describe('TextMapPropagator', () => {
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'restart'
         config = getConfigFresh({
           tracePropagationStyle: {
-            extract: ['tracecontext', 'datadog']
-          }
+            extract: ['tracecontext', 'datadog'],
+          },
         })
         propagator = new TextMapPropagator(config)
         const extractedContext = propagator.extract(textMap)
@@ -1488,14 +1528,14 @@ describe('TextMapPropagator', () => {
         process.env.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT = 'ignore'
         config = getConfigFresh({
           tracePropagationStyle: {
-            extract: ['tracecontext', 'datadog', 'baggage']
-          }
+            extract: ['tracecontext', 'datadog', 'baggage'],
+          },
         })
         textMap = {
           'x-datadog-trace-id': '123',
           'x-datadog-parent-id': '456',
           traceparent: `00-${traceId}-${spanId}-01`,
-          baggage: 'foo=bar'
+          baggage: 'foo=bar',
         }
         propagator = new TextMapPropagator(config)
         propagator.extract(textMap)
