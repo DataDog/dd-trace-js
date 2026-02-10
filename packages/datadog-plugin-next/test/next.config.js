@@ -55,4 +55,9 @@ if (satisfies(VERSION, '>=13.3.0 <13.4.0')) {
   config.experimental.appDir = true
 }
 
+// Next.js 16 Turbopack has worker_threads bug - force webpack
+if (satisfies(VERSION, '>=16.0.0')) {
+  config.experimental.turbo = false
+}
+
 module.exports = config
