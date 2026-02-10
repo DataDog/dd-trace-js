@@ -114,12 +114,17 @@ describe('Plugin', function () {
         }
 
         // building in-process makes tests fail for an unknown reason
-        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
+        const buildEnv = {
+          ...process.env,
+          VERSION: realVersion,
+        }
+        // --openssl-legacy-provider is not allowed in Node 24+
+        if (NODE_MAJOR < 24) {
+          buildEnv.NODE_OPTIONS = '--openssl-legacy-provider'
+        }
+        execSync('yarn exec next build', {
           cwd,
-          env: {
-            ...process.env,
-            VERSION: realVersion,
-          },
+          env: buildEnv,
           stdio: ['pipe', 'ignore', 'pipe'],
         })
 

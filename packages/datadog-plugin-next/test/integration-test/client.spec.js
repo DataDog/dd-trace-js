@@ -32,12 +32,16 @@ describe('esm', () => {
     before(async function () {
       // next builds slower in the CI, match timeout with unit tests
       this.timeout(300 * 1000)
+      const buildEnv = {
+        ...process.env,
+      }
+      // --openssl-legacy-provider is not allowed in Node 24+
+      if (NODE_MAJOR < 24) {
+        buildEnv.NODE_OPTIONS = '--openssl-legacy-provider'
+      }
       execSync('yarn exec next build', {
         cwd: sandboxCwd(),
-        env: {
-          ...process.env,
-          NODE_OPTIONS: '--openssl-legacy-provider',
-        },
+        env: buildEnv,
       })
       variants = varySandbox('server.mjs', 'next')
     })
@@ -53,8 +57,12 @@ describe('esm', () => {
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
+        // --openssl-legacy-provider is not allowed in Node 24+
+        const nodeOptions = NODE_MAJOR < 24
+          ? `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`
+          : `--loader=${hookFile} --require dd-trace/init`
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port, {
-          NODE_OPTIONS: `--loader=${hookFile} --require dd-trace/init --openssl-legacy-provider`,
+          NODE_OPTIONS: nodeOptions,
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assertObjectContains(headers, { host: `127.0.0.1:${agent.port}` })
