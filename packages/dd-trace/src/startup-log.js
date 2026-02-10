@@ -4,38 +4,45 @@ const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
 const { getAgentUrl } = require('./agent/url')
-const { info, warn } = require('./log/writer')
+const { warn } = require('./log/writer')
 
 const errors = {}
 let config
 let pluginManager
 /** @type {import('./sampling_rule')[]} */
 let samplingRules = []
-let alreadyRan = false
+let startupLogRan = false
+let agentErrorLogged = false
 
 /**
- * @param {{ status: number, message: string } } [agentError]
+ * Logs the tracer configuration on startup
  */
-function startupLog (agentError) {
-  if (alreadyRan || !config || !config.startupLogs || !pluginManager) {
+function startupLog () {
+  if (startupLogRan || !config || !config.startupLogs || !pluginManager) {
     return
   }
 
-  alreadyRan = true
+  startupLogRan = true
 
   const out = tracerInfo()
+  warn('DATADOG TRACER CONFIGURATION - ' + out)
+}
 
-  if (agentError) {
-    out.agent_error = agentError.message
+/**
+ * Logs a diagnostic error when the agent connection fails
+ * @param {{ status: number, message: string }} agentError
+ */
+function logAgentError (agentError) {
+  if (agentErrorLogged || !config || !config.startupLogs) {
+    return
   }
 
-  info('DATADOG TRACER CONFIGURATION - ' + out)
-  if (agentError) {
-    warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
-    errors.agentError = {
-      code: agentError.status,
-      message: `Agent Error: ${agentError.message}`,
-    }
+  agentErrorLogged = true
+
+  warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
+  errors.agentError = {
+    code: agentError.status,
+    message: `Agent Error: ${agentError.message}`,
   }
 }
 
@@ -104,6 +111,7 @@ function setSamplingRules (theRules) {
 
 module.exports = {
   startupLog,
+  logAgentError,
   setStartupLogConfig,
   setStartupLogPluginManager,
   setSamplingRules,
