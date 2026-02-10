@@ -1,6 +1,6 @@
 'use strict'
 
-const { parse, query } = require('./compiler')
+const { parse, query, traverse } = require('./compiler')
 
 const tracingChannelPredicate = (node) => (
   node.specifiers?.[0]?.local?.name === 'tr_ch_apm_tracingChannel' ||
@@ -35,7 +35,9 @@ const transforms = module.exports = {
     node.body.splice(index + 1, 0, parse(code).body[0])
   },
 
+  traceAsyncGenerator: traceAny,
   traceCallback: traceAny,
+  traceGenerator: traceAny,
   tracePromise: traceAny,
   traceSync: traceAny,
 }
@@ -55,13 +57,19 @@ function traceFunction (state, node, program) {
 
   transforms.tracingChannelDeclaration(state, program)
 
+  // The original function cannot be a generator function because their bodies
+  // don't execute before the first call to `next()` and we want to publish
+  // before that. So instead we make it a normal function and will return the
+  // generator from the wrapped function.
+  node.generator = false
+
   node.body = wrap(state, {
-    type: 'ArrowFunctionExpression',
+    type: 'FunctionExpression',
     params: node.params,
     body: node.body,
     async: operator === 'tracePromise',
     expression: false,
-    generator: false,
+    generator: operator === 'traceGenerator',
   })
 }
 
@@ -108,7 +116,11 @@ function traceInstanceMethod (state, node, program) {
 function wrap (state, node) {
   const { channelName, operator } = state
 
+  wrapSuper(state, node)
+
+  if (operator === 'traceAsyncGenerator') return wrapGenerator(state, node)
   if (operator === 'traceCallback') return wrapCallback(state, node)
+  if (operator === 'traceGenerator') return wrapGenerator(state, node)
 
   const async = operator === 'tracePromise' ? 'async' : ''
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
@@ -131,6 +143,30 @@ function wrap (state, node) {
   query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
 
   return wrapper
+}
+
+function wrapSuper (state, node) {
+  traverse(
+    node.body,
+    '[object.type=Super]',
+    (node, parent) => {
+      const method = node.property.name
+      const { callee } = parent
+
+      if (callee) {
+        const expression = parse(`
+          Reflect.get(Object.getPrototypeOf(this.constructor.prototype), '${method}').call(this)
+        `).body[0].expression
+
+        parent.callee = expression.callee
+        parent.arguments.unshift(...expression.arguments)
+      } else {
+        parent.expression = parse(`
+          Reflect.get(Object.getPrototypeOf(this.constructor.prototype), '${method}')
+        `).body[0]
+      }
+    }
+  )
 }
 
 function wrapCallback (state, node) {
@@ -186,6 +222,45 @@ function wrapCallback (state, node) {
           ${channelVariable}.end.publish(__apm$ctx);
         }
       });
+    }
+  `).body[0].body // Extract only block statement of function body.
+
+  // Replace the right-hand side assignment of `const __apm$wrapped = () => {}`.
+  query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
+
+  return wrapper
+}
+
+function wrapGenerator (state, node) {
+  const { channelName, operator } = state
+  const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
+  const nextChannel = channelVariable + '_next'
+  const traceMethod = operator === 'traceAsyncGenerator' ? 'tracePromise' : 'traceSync'
+  const traceNext = `${nextChannel}.${traceMethod}`
+  const wrapper = parse(`
+    function wrapper () {
+      const __apm$traced = () => {
+        const __apm$wrapped = () => {};
+        return __apm$wrapped.apply(this, arguments);
+      };
+
+      if (!${channelVariable}.start.hasSubscribers) return __apm$traced();
+
+      {
+        const ctx = {
+          arguments,
+          self: this,
+          moduleVersion: "1.0.0"
+        };
+        const gen = ${channelVariable}.traceSync(__apm$traced, ctx);
+        const { next: genNext, return: genReturn, throw: genThrow } = gen;
+
+        gen.next = (...args) => ${traceNext}(genNext, ctx, gen, ...args);
+        gen.return = (...args) => ${traceNext}(genReturn, ctx, gen, ...args);
+        gen.throw = (...args) => ${traceNext}(genThrow, ctx, gen, ...args);
+
+        return gen;
+      };
     }
   `).body[0].body // Extract only block statement of function body.
 
