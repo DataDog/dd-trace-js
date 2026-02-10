@@ -20,5 +20,8 @@ exports.extractContext = function extractContext (args) {
       break
     }
   }
+  if (!context) {
+    log.debug('Unable to extract context object from Lambda handler arguments')
+  }
   return context
 }
