@@ -76,6 +76,11 @@ services:
     platform: linux/amd64
     command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
+       - "127.0.0.1:27017:27017"
+  mongo-prisma:
+    image: prismagraphql/mongo-single-replica:4.4.3-bionic
+    platform: linux/amd64
+    ports:
       - "127.0.0.1:27017:27017"
   oracledb:
     image: quillbuilduser/oracle-18-xe
@@ -207,4 +212,3 @@ services:
       # we can move this directory to a shared location here, and change the above
       # environment variable to point to that location
       - ./packages/dd-trace/test/llmobs/cassettes:/vcr-cassettes
-

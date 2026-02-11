@@ -1133,7 +1133,7 @@ jobs:
         ports:
           - 1433:1433
       mongodb:
-        image: circleci/mongo
+        image: prismagraphql/mongo-single-replica:4.4.3-bionic
         ports:
           - 27017:27017
       mysql:
@@ -1143,11 +1143,10 @@ jobs:
           MYSQL_DATABASE: 'db'
         ports:
           - 3306:3306
-
     env:
       PLUGINS: prisma
       TEST_MSSQL_DATABASE_URL: 'sqlserver://localhost:1433;database=master;user=sa;password=DD_HUNTER2;encrypt=true;trustServerCertificate=true'
-      SERVICES: postgres|mssql|mongo|mariadb
+      SERVICES: prisma
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

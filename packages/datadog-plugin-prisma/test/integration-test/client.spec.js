@@ -62,8 +62,8 @@ const prismaClientConfigs = [{
   importPath: '@prisma/client',
   variant: 'default',
   env: {
-    PRISMA_TEST_DATABASE_URL: TEST_DATABASE_URL
-  }
+    PRISMA_TEST_DATABASE_URL: TEST_DATABASE_URL,
+  },
 },
 {
   name: 'prisma-generator-js with custom output',
