@@ -55,12 +55,6 @@ function traceAny (state, node, _parent, ancestry) {
 function traceFunction (state, node, program) {
   transforms.tracingChannelDeclaration(state, program)
 
-  // The original function cannot be a generator function because their bodies
-  // don't execute before the first call to `next()` and we want to publish
-  // before that. So instead we make it a normal function and will return the
-  // generator from the wrapped function.
-  node.generator = false
-
   node.body = wrap(state, {
     type: 'FunctionExpression',
     params: node.params,
