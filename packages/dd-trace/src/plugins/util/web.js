@@ -118,7 +118,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, config, name, req, traceCtx)
+      span = web.startServiceEntrypointSpan(tracer, config, name, req, traceCtx)
     }
 
     context.tracer = tracer
@@ -274,7 +274,7 @@ const web = {
     return context.middleware.at(-1)
   },
 
-  startChildSpan (tracer, config, name, req, traceCtx) {
+  startServiceEntrypointSpan (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
     const { storage } = require('../../../../datadog-core')
