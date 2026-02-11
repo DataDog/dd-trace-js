@@ -96,6 +96,30 @@ describe('check-require-cache', () => {
         },
         {
           module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-iterator-async.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'AsyncIterator',
+          },
+          channelName: 'trace_iterator_async',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-iterator-async-super.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'AsyncIterator',
+          },
+          channelName: 'trace_iterator_async_super',
+        },
+        {
+          module: {
             name: 'test-trace-callback',
             versionRange: '>=0.1',
             filePath: 'index.js',
@@ -127,7 +151,7 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'Generator',
+            kind: 'Iterator',
           },
           channelName: 'trace_generator',
         },
@@ -139,7 +163,7 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'Generator',
+            kind: 'Iterator',
           },
           channelName: 'trace_generator_super',
         },
@@ -151,7 +175,7 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'Generator',
+            kind: 'AsyncIterator',
           },
           channelName: 'trace_generator_async',
         },
@@ -163,7 +187,7 @@ describe('check-require-cache', () => {
           },
           functionQuery: {
             functionName: 'test',
-            kind: 'Generator',
+            kind: 'AsyncIterator',
           },
           channelName: 'trace_generator_async_super',
         },
@@ -259,6 +283,44 @@ describe('check-require-cache', () => {
     ch.subscribe(subs)
 
     test(() => {})
+  })
+
+  it('should auto instrument iterator returning async functions', done => {
+    const { test } = compileFile('trace-iterator-async')
+
+    subs = {
+      start () {
+        done()
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_iterator_async')
+    ch.subscribe(subs)
+
+    test()
+  })
+
+  it('should preserve return value of iterator returning async functions', () => {
+    const { test } = compileFile('trace-iterator-async')
+
+    return test().then(result => {
+      assert.equal(result.next().value, 1)
+    })
+  })
+
+  it('should auto instrument iterator returning async functions using super', done => {
+    const { test } = compileFile('trace-iterator-async-super')
+
+    subs = {
+      start () {
+        done()
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_iterator_async_super')
+    ch.subscribe(subs)
+
+    test()
   })
 
   it('should auto instrument callback functions', done => {
