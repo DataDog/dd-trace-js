@@ -137,7 +137,7 @@ function extractRequestData (ctx) {
 
 /**
  * Checks if a response is a redirect
- * @param {import('http').IncomingMessage} req outgoing request.
+ * @param {import('http').IncomingMessage} req incoming server request.
  * @param {import('http').IncomingMessage} res downstream response object.
  * @returns {boolean} is redirect.
  */
@@ -148,9 +148,10 @@ function handleRedirectResponse (req, res) {
   if (isRedirect && redirectLocation) {
     // Store the body collection decision for the redirect target
     storeRedirectBodyCollectionDecision(req, redirectLocation)
+    return true
   }
 
-  return isRedirect
+  return false
 }
 
 /**

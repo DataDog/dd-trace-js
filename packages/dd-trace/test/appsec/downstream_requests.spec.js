@@ -150,7 +150,7 @@ describe('appsec downstream_requests', () => {
 
       const isRedirect = downstream.handleRedirectResponse(req, res, true)
 
-      assert.strictEqual(isRedirect, true)
+      assert.strictEqual(isRedirect, false)
     })
 
     it('stores body collection decision for redirect', () => {
@@ -361,46 +361,46 @@ describe('appsec downstream_requests', () => {
     beforeEach(() => {
       web = require('../../src/plugins/util/web')
       span = {
-        setTag: require('sinon').stub(),
+        setTag: sinon.stub(),
       }
     })
 
     afterEach(() => {
-      require('sinon').restore()
+      sinon.restore()
     })
 
     it('increments count and sets metric on span', () => {
-      const webRootStub = require('sinon').stub(web, 'root').returns(span)
+      const webRootStub = sinon.stub(web, 'root').returns(span)
 
       downstream.incrementDownstreamAnalysisCount(req)
 
-      require('sinon').assert.calledOnceWithExactly(span.setTag, '_dd.appsec.downstream_request', 1)
+      sinon.assert.calledOnceWithExactly(span.setTag, '_dd.appsec.downstream_request', 1)
       webRootStub.restore()
     })
 
     it('increments count on multiple calls', () => {
-      const webRootStub = require('sinon').stub(web, 'root').returns(span)
+      const webRootStub = sinon.stub(web, 'root').returns(span)
 
       downstream.incrementDownstreamAnalysisCount(req)
       downstream.incrementDownstreamAnalysisCount(req)
       downstream.incrementDownstreamAnalysisCount(req)
 
-      require('sinon').assert.calledThrice(span.setTag)
-      require('sinon').assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 1)
-      require('sinon').assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 2)
-      require('sinon').assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 3)
+      sinon.assert.calledThrice(span.setTag)
+      sinon.assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 1)
+      sinon.assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 2)
+      sinon.assert.calledWith(span.setTag, '_dd.appsec.downstream_request', 3)
       webRootStub.restore()
     })
 
     it('does not error when span is null', () => {
-      const webRootStub = require('sinon').stub(web, 'root').returns(null)
+      const webRootStub = sinon.stub(web, 'root').returns(null)
 
-      assert.doesNotThrow(() => downstream.incrementDownstreamAnalysisCount(req))
+      downstream.incrementDownstreamAnalysisCount(req)
       webRootStub.restore()
     })
 
     it('tracks count per request independently', () => {
-      const webRootStub = require('sinon').stub(web, 'root').returns(span)
+      const webRootStub = sinon.stub(web, 'root').returns(span)
       const req1 = {}
       const req2 = {}
 
