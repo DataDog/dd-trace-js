@@ -98,6 +98,16 @@ const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
 const atrSuppressedErrors = new Map()
 
+// Support for `@fast-check/jest`: this library modifies the test name to include the seed
+const SEED_SUFFIX_RE = /\s*\(with seed=-?\d+\)\s*$/i
+
+function stripSeedFromTestName (testName, shouldStripSeed) {
+  if (shouldStripSeed) {
+    return testName.replace(SEED_SUFFIX_RE, '')
+  }
+  return testName
+}
+
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
   let error
@@ -1042,12 +1052,15 @@ function getCliWrapper (isNewJestVersion) {
 
         for (const { testName, testSuiteAbsolutePath } of failedTests) {
           const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
+          // Strip seed suffix from test name if this suite uses @fast-check/jest
+          const shouldStripSeed = testSuiteAbsolutePathsWithFastCheck.has(testSuiteAbsolutePath)
+          const normalizedTestName = stripSeedFromTestName(testName, shouldStripSeed)
           const testManagementTest = testManagementTests
             ?.jest
             ?.suites
             ?.[testSuite]
             ?.tests
-            ?.[testName]
+            ?.[normalizedTestName]
             ?.properties
           // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
           if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {
