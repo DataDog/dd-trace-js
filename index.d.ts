@@ -769,6 +769,19 @@ declare namespace tracer {
     dsmEnabled?: boolean
 
     /**
+     * Configuration for Database Monitoring (DBM).
+     */
+    dbm?: {
+      /**
+       * Controls whether to inject the SQL base hash (propagation hash) in DBM SQL comments.
+       * This option requires DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true to take effect.
+       * The propagation hash enables correlation between traces and database operations.
+       * @default false
+       */
+      injectSqlBaseHash?: boolean
+    }
+
+    /**
      * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
      */
     appsec?: boolean | {
