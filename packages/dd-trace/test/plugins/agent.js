@@ -504,13 +504,14 @@ module.exports = {
       listener = server.listen(0, () => {
         const port = listener.address().port
 
-        tracer.init(Object.assign({}, {
+        tracer.init({
           service: 'test',
           env: 'tester',
           port,
           flushInterval: 0,
           plugins: false,
-        }, tracerConfig))
+          ...tracerConfig,
+        })
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
