@@ -4,6 +4,7 @@ const { URL } = require('url')
 const axios = require('axios')
 const { prepareTestServerForIastInFastify } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
+const { temporaryWarningExceptions, URL_PARSE_DEPRECATION } = require('../../../setup/core')
 
 function noop () {}
 
@@ -60,6 +61,7 @@ describe('Taint tracking plugin sources fastify tests', () => {
           testThatRequestHasVulnerability(
             {
               fn: (req) => {
+                temporaryWarningExceptions.add(URL_PARSE_DEPRECATION)
                 // eslint-disable-next-line n/no-deprecated-api
                 const { parse } = require('url')
                 const url = parse(req.body.url)
