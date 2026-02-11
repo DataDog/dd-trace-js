@@ -748,6 +748,37 @@ describe('TextMapPropagator', () => {
       assert.deepStrictEqual(getAllBaggageItems(), { foo: 'bar' })
     })
 
+    it('should clear pre-existing baggage items before extracting new ones', () => {
+      removeAllBaggageItems()
+      setBaggageItem('stale', 'leftover')
+      setBaggageItem('foo', 'old-value')
+      assert.deepStrictEqual(getAllBaggageItems(), { stale: 'leftover', foo: 'old-value' })
+
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'foo=new-value,fresh=added',
+      }
+      propagator.extract(carrier)
+
+      assert.deepStrictEqual(getAllBaggageItems(), { foo: 'new-value', fresh: 'added' })
+      assert.strictEqual(getBaggageItem('stale'), undefined)
+    })
+
+    it('should clear pre-existing baggage items when carrier has no baggage header', () => {
+      removeAllBaggageItems()
+      setBaggageItem('stale', 'leftover')
+      assert.deepStrictEqual(getAllBaggageItems(), { stale: 'leftover' })
+
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+      }
+      propagator.extract(carrier)
+
+      assert.deepStrictEqual(getAllBaggageItems(), {})
+    })
+
     it('should convert signed IDs to unsigned', () => {
       textMap['x-datadog-trace-id'] = '-123'
       textMap['x-datadog-parent-id'] = '-456'
