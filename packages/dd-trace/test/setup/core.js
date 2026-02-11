@@ -41,6 +41,8 @@ const warningExceptions = new Set([
   // Node.js core warnings. Ignore them.
   'OutgoingMessage.prototype._headers is deprecated',
   "Access to process.binding('http_parser') is deprecated.",
+  '`url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG ' +
+    'URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.',
   // TODO: We should not be throwing warnings in the first place. Fix the following warnings instead.
   "Mongoose: mpromise (mongoose's default promise library) is deprecated, plug in your own promise library instead: http://mongoosejs.com/docs/promises.html",
   'collection.count is deprecated, and will be removed in a future version. ' +
