@@ -126,7 +126,7 @@ describe('appsec downstream_requests', () => {
         headers: { location: 'http://example.com/redirect' },
       }
 
-      const isRedirect = downstream.handleRedirectResponse(req, res, true)
+      const isRedirect = downstream.handleRedirectResponse(req, res)
 
       assert.strictEqual(isRedirect, true)
     })
@@ -137,7 +137,7 @@ describe('appsec downstream_requests', () => {
         headers: {},
       }
 
-      const isRedirect = downstream.handleRedirectResponse(req, res, true)
+      const isRedirect = downstream.handleRedirectResponse(req, res)
 
       assert.strictEqual(isRedirect, false)
     })
@@ -148,7 +148,7 @@ describe('appsec downstream_requests', () => {
         headers: {},
       }
 
-      const isRedirect = downstream.handleRedirectResponse(req, res, true)
+      const isRedirect = downstream.handleRedirectResponse(req, res)
 
       assert.strictEqual(isRedirect, false)
     })

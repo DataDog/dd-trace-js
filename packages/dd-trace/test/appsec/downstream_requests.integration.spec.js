@@ -85,7 +85,7 @@ describe('RASP - downstream request integration', () => {
         assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
 
         const matchSeries = series.filter(s => s.metric === 'rasp.rule.match')
-        assert.ok(matchSeries, 'Rasp match eval series should exist')
+        assert.ok(matchSeries, 'Rasp rule match series should exist')
 
         const matchVariants = new Set()
         for (const s of matchSeries) {

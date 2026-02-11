@@ -64,7 +64,6 @@ describe('RASP - ssrf.js', () => {
       extractRequestData: sinon.stub().returns({}),
       extractResponseData: sinon.stub().returns({}),
       incrementDownstreamAnalysisCount: sinon.stub(),
-      handleResponseTracing: sinon.stub(),
       storeRedirectBodyCollectionDecision: sinon.stub(),
     }
 
