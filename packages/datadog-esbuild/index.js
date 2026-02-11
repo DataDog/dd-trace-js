@@ -123,39 +123,34 @@ ${build.initialOptions.banner.js}`
   } catch {
     build.initialOptions.external ??= []
     build.initialOptions.external.push('@openfeature/core')
-    externalModules.add('@openfeature/core')
   }
 
   try {
     require.resolve('@opentelemetry/api')
-  } catch (error) {
+  } catch {
     build.initialOptions.external ??= []
     build.initialOptions.external.push('@opentelemetry/api')
-    externalModules.add('@opentelemetry/api')
   }
 
   try {
     require.resolve('@opentelemetry/api-logs')
-  } catch (error) {
+  } catch {
     build.initialOptions.external ??= []
     build.initialOptions.external.push('@opentelemetry/api-logs')
-    externalModules.add('@opentelemetry/api-logs')
   }
 
   try {
     require.resolve('@opentelemetry/core')
-  } catch (error) {
+  } catch {
     build.initialOptions.external ??= []
     build.initialOptions.external.push('@opentelemetry/core')
-    externalModules.add('@opentelemetry/core')
   }
 
   try {
     require.resolve('@opentelemetry/resources')
-  } catch (error) {
+  } catch {
     build.initialOptions.external ??= []
     build.initialOptions.external.push('@opentelemetry/resources')
-    externalModules.add('@opentelemetry/resources')
   }
 
   const esmBuild = isESMBuild(build)

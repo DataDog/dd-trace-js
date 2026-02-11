@@ -8,7 +8,7 @@ const noopSpan = {
   updateName: () => {},
   setStatus: () => {},
   end: () => {},
-  isRecording: () => false
+  isRecording: () => false,
 }
 
 const noopTracer = {
@@ -20,7 +20,7 @@ const noopSpanProcessor = {
   onStart: () => {},
   onEnd: () => {},
   shutdown: () => Promise.resolve(),
-  forceFlush: () => Promise.resolve()
+  forceFlush: () => Promise.resolve(),
 }
 
 class NoopTracerProvider {

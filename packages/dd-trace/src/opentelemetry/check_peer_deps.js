@@ -4,7 +4,7 @@ const log = require('../log')
 
 /**
  * Checks if OpenTelemetry API peer dependency is available.
- * Note: @opentelemetry/core and @opentelemetry/resources are vendored (bundled),
+ * Note: \@opentelemetry/core and \@opentelemetry/resources are vendored (bundled),
  * so they are not checked as peer dependencies.
  * @returns {boolean} True if dependency is available, false otherwise
  */
@@ -35,5 +35,5 @@ function checkOpenTelemetryLogsApiDeps () {
 
 module.exports = {
   checkOpenTelemetryAPIDeps,
-  checkOpenTelemetryLogsApiDeps
+  checkOpenTelemetryLogsApiDeps,
 }
