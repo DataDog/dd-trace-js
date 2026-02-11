@@ -59,6 +59,7 @@ function setupResponseInstrumentation (ctx, res) {
   let finishCalled = false
   let originalRead = null
   let dataListenerAdded = false
+  let dataReadStarted = false
 
   const { shouldCollectBody } = ctx
   const bodyChunks = shouldCollectBody ? [] : null
@@ -82,17 +83,20 @@ function setupResponseInstrumentation (ctx, res) {
       bodyConsumed = true
 
       // For 'data' events, add our own listener to collect chunks
-      if (eventName === 'data' && !dataListenerAdded) {
+      if (eventName === 'data' && !dataListenerAdded && !dataReadStarted) {
         dataListenerAdded = true
         res.on('data', collectChunk)
       }
 
       // For 'readable' events, wrap the read() method
-      if (eventName === 'readable' && !originalRead && typeof res.read === 'function') {
+      if (eventName === 'readable' && !originalRead && !dataListenerAdded && typeof res.read === 'function') {
         originalRead = res.read
         res.read = function () {
           const chunk = originalRead.apply(this, arguments)
-          collectChunk(chunk)
+          if (!dataListenerAdded) {
+            dataReadStarted = true
+            collectChunk(chunk)
+          }
           return chunk
         }
       }

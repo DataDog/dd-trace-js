@@ -305,6 +305,70 @@ describe('client', () => {
           })
         })
 
+        it('should collect data correctly when read and data are both used', (done) => {
+          startChannelCb.callsFake(setCollectBody)
+
+          const chunks = []
+          http.get(url, (res) => {
+            res.setEncoding('utf8')
+            const consume = () => {
+              let chunk
+              while ((chunk = res.read()) !== null) {
+                chunks.push(chunk)
+              }
+            }
+            res.on('data', () => {})
+
+            res.on('readable', consume)
+            res.on('end', () => {
+              try {
+                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
+                assert(typeof payload.body === 'string')
+
+                const expectedBody = chunks.join('')
+                assert.strictEqual(payload.body, expectedBody)
+
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+          })
+        })
+
+        it('should collect data correctly when read and data are both used in different order', (done) => {
+          startChannelCb.callsFake(setCollectBody)
+
+          const chunks = []
+          http.get(url, (res) => {
+            let onDataAdded = false
+            res.setEncoding('utf8')
+            const consume = () => {
+              let chunk
+              while ((chunk = res.read(100)) !== null) {
+                if (!onDataAdded) {
+                  onDataAdded = true
+                  res.on('data', () => {})
+                }
+                chunks.push(chunk)
+              }
+            }
+            res.on('readable', consume)
+            res.on('end', () => {
+              try {
+                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
+                assert(typeof payload.body === 'string')
+                const expectedBody = chunks.join('')
+                assert.strictEqual(payload.body, expectedBody)
+
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+          })
+        })
+
         it('does not collect body when ctx.shouldCollectBody is false', (done) => {
           // Don't set shouldCollectBody flag
 
