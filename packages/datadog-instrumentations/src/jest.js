@@ -1080,7 +1080,7 @@ function getCliWrapper (isNewJestVersion) {
 
       // Combined check: if all failed tests are accounted for by EFD (flaky retries) and/or quarantine,
       // we should consider the suite passed even when neither check alone covers all failures.
-      if (!result.results.success) {
+      if (!result.results.success && (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)) {
         const totalIgnoredFailures =
           numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
         if (totalIgnoredFailures !== 0 && result.results.numFailedTests === totalIgnoredFailures) {
