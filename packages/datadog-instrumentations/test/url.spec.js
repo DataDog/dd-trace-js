@@ -5,7 +5,6 @@ const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { temporaryWarningExceptions, URL_PARSE_DEPRECATION } = require('../../dd-trace/test/setup/core')
 const { channel } = require('../src/helpers/instrument')
 const names = ['url', 'node:url']
 
@@ -38,7 +37,6 @@ names.forEach(name => {
 
     describe('url.parse', () => {
       it('should publish', () => {
-        temporaryWarningExceptions.add(URL_PARSE_DEPRECATION)
         const result = url.parse('https://www.datadoghq.com')
 
         sinon.assert.calledOnceWithExactly(parseFinishedChannelCb, {
