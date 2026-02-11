@@ -679,13 +679,13 @@ module.exports = class CiPlugin extends Plugin {
   getTestTelemetryTags (testSpan) {
     const activeSpanTags = testSpan.context()._tags
     return {
-      hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
-      isNew: activeSpanTags[TEST_IS_NEW] === 'true',
-      isRum: activeSpanTags[TEST_IS_RUM_ACTIVE] === 'true',
+      hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS] || undefined,
+      isNew: activeSpanTags[TEST_IS_NEW] === 'true' || undefined,
+      isRum: activeSpanTags[TEST_IS_RUM_ACTIVE] === 'true' || undefined,
       browserDriver: activeSpanTags[TEST_BROWSER_DRIVER],
-      isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
-      isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-      isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true',
+      isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
+      isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
+      isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true' || undefined,
     }
   }
 }

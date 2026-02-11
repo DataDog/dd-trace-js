@@ -3,6 +3,7 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 const {
   TEST_STATUS,
@@ -163,6 +164,7 @@ class JestPlugin extends CiPlugin {
         autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
 
+      appClosingTelemetry()
       this.tracer._exporter.flush(() => {
         if (onDone) {
           onDone()
@@ -424,6 +426,12 @@ class JestPlugin extends CiPlugin {
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
+
+      this.telemetry.ciVisEvent(
+        TELEMETRY_EVENT_FINISHED,
+        'test',
+        this.getTestTelemetryTags(span)
+      )
 
       span.finish()
     })
