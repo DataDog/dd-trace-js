@@ -1,7 +1,6 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const mongo = require('../../../../../versions/mongodb-core').get()
 const waitForMongoReplicaSet = require('./mongo-replica-set')
 
 const REPLICA_SET_PARAM = 'replicaSet'
@@ -29,6 +28,7 @@ function shouldInitiateReplicaSet () {
  */
 function connectMongoCore () {
   return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
+    const mongo = require('../../../../../versions/mongodb-core').get()
     const server = /** @type {MongoCoreServer} */ (/** @type {unknown} */ (new mongo.Server({
       host: '127.0.0.1',
       port: 27017,
