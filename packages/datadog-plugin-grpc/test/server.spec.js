@@ -25,12 +25,13 @@ describe('Plugin', () => {
       let call
 
       function buildClient (service) {
-        service = Object.assign({
+        service = {
           getBidi: () => {},
           getServerStream: () => {},
           getClientStream: () => {},
           getUnary: () => {},
-        }, service)
+          ...service,
+        }
 
         const loader = require('../../../versions/@grpc/proto-loader').get()
         const definition = loader.loadSync(path.join(__dirname, 'test.proto'))

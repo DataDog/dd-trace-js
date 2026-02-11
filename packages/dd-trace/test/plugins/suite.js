@@ -26,9 +26,7 @@ function exec (cmd, opts = {}) {
   ].join(':')
   console.log(time, '❯', cmd)
   return new Promise((resolve, reject) => {
-    const proc = childProcess.spawn(cmd, Object.assign({
-      shell: true,
-    }, opts))
+    const proc = childProcess.spawn(cmd, { shell: true, ...opts })
     proc.on('error', reject)
     const stdout = []
     const stderr = []
@@ -89,7 +87,7 @@ async function cleanup () {
 
 async function runOne (withTracer, testCmd) {
   const cwd = await getTmpDir()
-  const env = Object.assign({}, process.env)
+  const env = { ...process.env }
   if (withTracer) {
     testCmd = `NODE_OPTIONS='-r ${ddTraceInit}' ${testCmd}`
   }
