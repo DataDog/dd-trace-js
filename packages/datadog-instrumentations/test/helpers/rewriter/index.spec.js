@@ -400,6 +400,16 @@ describe('check-require-cache', () => {
     test()
   })
 
+  it('should preserve return value of async generator functions', () => {
+    const { test } = compileFile('trace-generator-async')
+
+    const it = test()
+
+    return it.next().then(result => {
+      assert.equal(result.value, 'foo')
+    })
+  })
+
   it('should auto instrument async generator functions using super', done => {
     const { test } = compileFile('trace-generator-async-super')
 

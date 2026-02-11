@@ -64,11 +64,12 @@ function traceFunction (state, node, program) {
     generator: node.generator,
   })
 
-  // The original function cannot be a generator function because their bodies
-  // don't execute before the first call to `next()` and we want to publish
-  // before that. So instead we make it a normal function and will return the
-  // generator from the wrapped function.
+  // The original function no longer contains any calls to `await` or `yield` as
+  // the function body is copied to the internal wrapped function, so we set
+  // these to false to avoid altering the return value of the wrapper. The old
+  // values are instead copied to the new AST node above.
   node.generator = false
+  node.async = false
 }
 
 function traceInstanceMethod (state, node, program) {
