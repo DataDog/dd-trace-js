@@ -70,7 +70,6 @@ describe('config', () => {
 
     assert.deepStrictEqual(config.tags, {
       service: 'node',
-      host: os.hostname(),
     })
 
     assert.ok(config.logger instanceof ConsoleLogger)
@@ -93,12 +92,13 @@ describe('config', () => {
       profilers: 'space,wall',
       url: 'http://localhost:1234/',
       codeHotspotsEnabled: false,
+      reportHostname: true,
     }
 
     const config = new Config(options)
 
     assert.strictEqual(config.service, options.service)
-    assert.strictEqual(typeof config.host, 'string')
+    assert.strictEqual(typeof config.tags.host, 'string')
     assert.strictEqual(config.version, options.version)
     assert.ok(typeof config.tags === 'object' && config.tags !== null)
     assert.strictEqual(typeof config.tags.host, 'string')
@@ -118,6 +118,28 @@ describe('config', () => {
     if (samplingContextsAvailable) {
       assert.ok(config.profilers[2] instanceof EventsProfiler)
     }
+  })
+
+  it('should not include host tag when reportHostname is false', () => {
+    const config = new Config({ reportHostname: false })
+
+    assert.strictEqual(config.tags.host, undefined)
+    assert.ok(!('host' in config.tags))
+  })
+
+  it('should not include host tag when reportHostname is not set', () => {
+    const config = new Config({})
+
+    assert.strictEqual(config.tags.host, undefined)
+    assert.ok(!('host' in config.tags))
+  })
+
+  it('should include host tag when reportHostname is true', () => {
+    const config = new Config({ reportHostname: true })
+
+    assert.strictEqual(typeof config.tags.host, 'string')
+    assert.ok(config.tags.host.length > 0)
+    assert.strictEqual(config.tags.host, os.hostname())
   })
 
   it('should filter out invalid profilers', () => {
@@ -443,7 +465,7 @@ describe('config', () => {
   })
 
   it('should enable OOM heap profiler by default and use process as default strategy', () => {
-    const config = new Config()
+    const config = new Config({ reportHostname: true })
 
     if (oomMonitoringSupported) {
       assert.deepStrictEqual(config.oomMonitoring, {
@@ -455,7 +477,7 @@ describe('config', () => {
           process.execPath,
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
           'http://127.0.0.1:8126/',
-          `host:${config.host},service:node,snapshot:on_oom`,
+          `host:${config.tags.host},service:node,snapshot:on_oom`,
           'space',
         ],
       })
@@ -512,7 +534,7 @@ describe('config', () => {
         DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'process,async,process',
       }
 
-      const config = new Config({})
+      const config = new Config({ reportHostname: true })
 
       assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
@@ -523,7 +545,7 @@ describe('config', () => {
           process.execPath,
           path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
           'http://127.0.0.1:8126/',
-          `host:${config.host},service:node,snapshot:on_oom`,
+          `host:${config.tags.host},service:node,snapshot:on_oom`,
           'space',
         ],
       })

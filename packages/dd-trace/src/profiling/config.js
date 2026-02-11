@@ -1,6 +1,5 @@
 'use strict'
 
-const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const satisfies = require('../../../../vendor/dist/semifies')
@@ -50,7 +49,6 @@ class Config {
       DD_TAGS,
     } = getProfilingEnvValues()
 
-    const host = os.hostname()
     // Must be longer than one minute so pad with five seconds
     const flushInterval = options.interval ?? (Number(DD_PROFILING_UPLOAD_PERIOD) * 1000 || 65 * 1000)
     const uploadTimeout = options.uploadTimeout ?? (Number(DD_PROFILING_UPLOAD_TIMEOUT) || 60 * 1000)
@@ -59,7 +57,6 @@ class Config {
     // TODO: Remove the fallback. Just use the value from the config.
     this.service = options.service || 'node'
     this.env = options.env
-    this.host = host
     this.functionname = AWS_LAMBDA_FUNCTION_NAME
 
     this.version = options.version
@@ -68,7 +65,7 @@ class Config {
       tagger.parse(options.tags),
       tagger.parse({
         env: options.env,
-        host,
+        host: options.reportHostname ? require('os').hostname() : undefined,
         service: this.service,
         version: this.version,
         functionname: AWS_LAMBDA_FUNCTION_NAME,
