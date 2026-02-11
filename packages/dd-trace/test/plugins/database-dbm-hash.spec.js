@@ -163,4 +163,59 @@ describe('DatabasePlugin DBM Hash', () => {
         'Span should have hash tag after query injection')
     })
   })
+
+  describe('control matrix for process tags and SQL base hash', () => {
+    it('should inject hash when both propagateProcessTags and injectSqlBaseHash are enabled', () => {
+      // DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true + DD_DBM_INJECT_SQL_BASEHASH=true
+      propagationHash.isEnabled = () => true
+      plugin.config['dbm.injectSqlBaseHash'] = true
+
+      const comment = plugin.createDbmComment(span, 'test-service')
+
+      assert.ok(comment.includes("ddsh='AQIDBAUG'"), 'Should inject hash')
+      assert.ok(comment.includes('dddbs='), 'Should inject service tags')
+      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], 'AQIDBAUG',
+        'Should set hash tag on span')
+    })
+
+    it('should inject process tags but not hash when only propagateProcessTags is enabled', () => {
+      // DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true + DD_DBM_INJECT_SQL_BASEHASH=false
+      propagationHash.isEnabled = () => true
+      plugin.config['dbm.injectSqlBaseHash'] = false
+
+      const comment = plugin.createDbmComment(span, 'test-service')
+
+      assert.ok(comment, 'Should still create comment')
+      assert.ok(comment.includes('dddbs='), 'Should inject service tags')
+      assert.ok(!comment.includes('ddsh='), 'Should NOT inject hash')
+      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+        'Should NOT set hash tag on span')
+    })
+
+    it('should not inject hash when both flags are disabled', () => {
+      // DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=false + DD_DBM_INJECT_SQL_BASEHASH=false
+      propagationHash.isEnabled = () => false
+      plugin.config['dbm.injectSqlBaseHash'] = false
+
+      const comment = plugin.createDbmComment(span, 'test-service')
+
+      assert.ok(comment, 'Should still create comment with basic service info')
+      assert.ok(!comment.includes('ddsh='), 'Should NOT inject hash')
+      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+        'Should NOT set hash tag on span')
+    })
+
+    it('should not inject hash when only injectSqlBaseHash is enabled without propagateProcessTags', () => {
+      // DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=false + DD_DBM_INJECT_SQL_BASEHASH=true
+      propagationHash.isEnabled = () => false
+      plugin.config['dbm.injectSqlBaseHash'] = true
+
+      const comment = plugin.createDbmComment(span, 'test-service')
+
+      assert.ok(comment, 'Should still create comment')
+      assert.ok(!comment.includes('ddsh='), 'Should NOT inject hash without process tags enabled')
+      assert.strictEqual(span._tags['_dd.dbm.propagation_hash'], undefined,
+        'Should NOT set hash tag on span')
+    })
+  })
 })
