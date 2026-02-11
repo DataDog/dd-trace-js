@@ -117,6 +117,25 @@ function getTestManagementTests ({
         incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)
 
+        // Temporary debug: log only quarantined tests as list of test names.
+        const quarantinedTests = []
+        for (const testModule of Object.values(testManagementTests || {})) {
+          const { suites } = testModule || {}
+          if (!suites) continue
+          for (const testSuite of Object.values(suites)) {
+            const { tests } = testSuite || {}
+            if (!tests) continue
+            for (const [testName, testConfig] of Object.entries(tests)) {
+              if (testConfig?.properties?.quarantined) {
+                quarantinedTests.push(testName)
+              }
+            }
+          }
+        }
+        if (quarantinedTests.length) {
+          log.warn('Test management quarantined tests: %j', quarantinedTests)
+        }
+
         return done(null, testManagementTests)
       } catch (parseErr) {
         log.error('Failed to parse test management tests response: %s', parseErr.message)
