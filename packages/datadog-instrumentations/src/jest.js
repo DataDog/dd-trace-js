@@ -16,6 +16,7 @@ const {
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
+  SEED_SUFFIX_RE,
   getFormattedJestTestParameters,
   getJestTestName,
   getJestSuitesToRun,
@@ -56,9 +57,6 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
 
-// @fast-check/jest appends a seed suffix to test names that must be stripped for consistent matching.
-// Matches the regex in packages/datadog-plugin-jest/src/util.js
-const SEED_SUFFIX_RE = /\s*\(with seed=-?\d+\)\s*$/i
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10_000
 

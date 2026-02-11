@@ -166,4 +166,10 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
   }
 }
 
-module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun, isMarkedAsUnskippable }
+module.exports = {
+  SEED_SUFFIX_RE,
+  getFormattedJestTestParameters,
+  getJestTestName,
+  getJestSuitesToRun,
+  isMarkedAsUnskippable,
+}
