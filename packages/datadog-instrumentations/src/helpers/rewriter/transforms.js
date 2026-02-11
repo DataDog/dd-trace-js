@@ -35,9 +35,9 @@ const transforms = module.exports = {
     node.body.splice(index + 1, 0, parse(code).body[0])
   },
 
-  traceAsyncGenerator: traceAny,
+  traceAsyncIterator: traceAny,
   traceCallback: traceAny,
-  traceGenerator: traceAny,
+  traceIterator: traceAny,
   tracePromise: traceAny,
   traceSync: traceAny,
 }
@@ -57,20 +57,20 @@ function traceFunction (state, node, program) {
 
   transforms.tracingChannelDeclaration(state, program)
 
-  // The original function cannot be a generator function because their bodies
-  // don't execute before the first call to `next()` and we want to publish
-  // before that. So instead we make it a normal function and will return the
-  // generator from the wrapped function.
-  node.generator = false
-
   node.body = wrap(state, {
     type: 'FunctionExpression',
     params: node.params,
     body: node.body,
     async: operator === 'tracePromise',
     expression: false,
-    generator: operator === 'traceGenerator',
+    generator: node.generator,
   })
+
+  // The original function cannot be a generator function because their bodies
+  // don't execute before the first call to `next()` and we want to publish
+  // before that. So instead we make it a normal function and will return the
+  // generator from the wrapped function.
+  node.generator = false
 }
 
 function traceInstanceMethod (state, node, program) {
@@ -118,9 +118,9 @@ function wrap (state, node) {
 
   wrapSuper(state, node)
 
-  if (operator === 'traceAsyncGenerator') return wrapGenerator(state, node)
+  if (operator === 'traceAsyncIterator') return wrapIterator(state, node)
   if (operator === 'traceCallback') return wrapCallback(state, node)
-  if (operator === 'traceGenerator') return wrapGenerator(state, node)
+  if (operator === 'traceIterator') return wrapIterator(state, node)
 
   const async = operator === 'tracePromise' ? 'async' : ''
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
@@ -236,11 +236,11 @@ function wrapCallback (state, node) {
   return wrapper
 }
 
-function wrapGenerator (state, node) {
+function wrapIterator (state, node) {
   const { channelName, operator } = state
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
   const nextChannel = channelVariable + '_next'
-  const traceMethod = operator === 'traceAsyncGenerator' ? 'tracePromise' : 'traceSync'
+  const traceMethod = operator === 'traceAsyncIterator' ? 'tracePromise' : 'traceSync'
   const traceNext = `${nextChannel}.${traceMethod}`
   const wrapper = parse(`
     function wrapper () {
@@ -252,19 +252,40 @@ function wrapGenerator (state, node) {
       if (!${channelVariable}.start.hasSubscribers) return __apm$traced();
 
       {
+        const wrap = it => {
+          const { next: itNext, return: itReturn, throw: itThrow } = it;
+
+          it.next = (...args) => ${traceNext}(itNext, ctx, it, ...args);
+          it.return = (...args) => ${traceNext}(itReturn, ctx, it, ...args);
+          it.throw = (...args) => ${traceNext}(itThrow, ctx, it, ...args);
+
+          return it;
+        };
         const ctx = {
           arguments,
           self: this,
           moduleVersion: "1.0.0"
         };
-        const gen = ${channelVariable}.traceSync(__apm$traced, ctx);
-        const { next: genNext, return: genReturn, throw: genThrow } = gen;
+        const it = ${channelVariable}.traceSync(__apm$traced, ctx);
 
-        gen.next = (...args) => ${traceNext}(genNext, ctx, gen, ...args);
-        gen.return = (...args) => ${traceNext}(genReturn, ctx, gen, ...args);
-        gen.throw = (...args) => ${traceNext}(genThrow, ctx, gen, ...args);
+        if (typeof it.then !== 'function') return wrap(it);
 
-        return gen;
+        return it.then(result => {
+          ctx.result = result;
+
+          asyncStart.publish(ctx);
+          asyncEnd.publish(ctx);
+
+          return wrap(result);
+        }, err => {
+          ctx.error = err;
+
+          error.publish(ctx);
+          asyncStart.publish(ctx);
+          asyncEnd.publish(ctx);
+
+          return Promise.reject(err);
+        });
       };
     }
   `).body[0].body // Extract only block statement of function body.

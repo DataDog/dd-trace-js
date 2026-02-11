@@ -11,9 +11,9 @@ function transform (state, ...args) {
 function getOperator ({ functionQuery: { kind } }) {
   switch (kind) {
     case 'Async': return 'tracePromise'
-    case 'AsyncGenerator': return 'traceAsyncGenerator'
+    case 'AsyncIterator': return 'traceAsyncIterator'
     case 'Callback': return 'traceCallback'
-    case 'Generator': return 'traceGenerator'
+    case 'Iterator': return 'traceIterator'
     case 'Sync': return 'traceSync'
   }
 }
