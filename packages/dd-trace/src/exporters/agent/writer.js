@@ -3,7 +3,7 @@
 const { inspect } = require('util')
 
 const request = require('../common/request')
-const { startupLog } = require('../../startup-log')
+const { logAgentError } = require('../../startup-log')
 const runtimeMetrics = require('../../runtime_metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
@@ -30,8 +30,10 @@ class AgentWriter extends BaseWriter {
 
     const { _headers, _lookup, _protocolVersion, _url } = this
     makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, (err, res, status) => {
-      // Note that logging will only happen once, regardless of how many times this is called.
-      startupLog(status !== 404 && status !== 200 ? { status, message: err?.message ?? inspect(err) } : undefined)
+      // Log agent connection diagnostic error (only once)
+      if (status && status !== 404 && status !== 200) {
+        logAgentError({ status, message: err?.message ?? inspect(err) })
+      }
 
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)

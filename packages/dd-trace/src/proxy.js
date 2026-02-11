@@ -6,7 +6,7 @@ const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
-const { setStartupLogPluginManager } = require('./startup-log')
+const { setStartupLogPluginManager, startupLog } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
@@ -290,6 +290,8 @@ class Tracer extends NoopProxy {
       this._pluginManager.configure(config)
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
+      // Emit startup log immediately after tracer is fully initialized
+      startupLog()
     }
   }
 
