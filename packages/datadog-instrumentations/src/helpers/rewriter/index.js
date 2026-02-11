@@ -29,7 +29,7 @@ Orchestrion-JS that will need to be backported:
   is not a function. We'll see over time if something like this is needed to be
   backported or if it can be replaced by simpler queries.
 - Supports replacing methods of child class instances in the base constructor.
-- Supports tracing generator functions (both sync and async).
+- Supports tracing iterator (sync/async) returning functions (sync/async).
 */
 
 const { readFileSync } = require('fs')
