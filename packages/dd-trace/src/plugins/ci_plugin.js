@@ -360,12 +360,49 @@ module.exports = class CiPlugin extends Plugin {
 
   get telemetry () {
     const testFramework = this.constructor.id
+    const exporter = this.tracer?._exporter
+    const isWorker = exporter && typeof exporter.exportTelemetry === 'function'
+    const ciProviderName = this.ciProviderName
+
+    if (isWorker) {
+      // In worker: send telemetry events to main process
+      return {
+        ciVisEvent: function (name, testLevel, tags = {}) {
+          exporter.exportTelemetry({
+            type: 'ciVisEvent',
+            name,
+            testLevel,
+            testFramework,
+            isUnsupportedCIProvider: !ciProviderName,
+            tags,
+          })
+        },
+        count: function (name, tags, value = 1) {
+          exporter.exportTelemetry({
+            type: 'count',
+            name,
+            tags,
+            value,
+          })
+        },
+        distribution: function (name, tags, measure) {
+          exporter.exportTelemetry({
+            type: 'distribution',
+            name,
+            tags,
+            measure,
+          })
+        },
+      }
+    }
+
+    // In main process: execute telemetry directly
     return {
       ciVisEvent: function (name, testLevel, tags = {}) {
         incrementCountMetric(name, {
           testLevel,
           testFramework,
-          isUnsupportedCIProvider: !this.ciProviderName,
+          isUnsupportedCIProvider: !ciProviderName,
           ...tags,
         })
       },

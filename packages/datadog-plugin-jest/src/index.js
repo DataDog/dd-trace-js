@@ -277,6 +277,23 @@ class JestPlugin extends CiPlugin {
       }
     })
 
+    this.addSub('ci:jest:worker-report:telemetry', data => {
+      const telemetryEvents = JSON.parse(data)
+      for (const event of telemetryEvents) {
+        if (event.type === 'ciVisEvent') {
+          this.telemetry.ciVisEvent(event.name, event.testLevel, {
+            ...event.tags,
+            testFramework: event.testFramework,
+            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
+          })
+        } else if (event.type === 'count') {
+          this.telemetry.count(event.name, event.tags, event.value)
+        } else if (event.type === 'distribution') {
+          this.telemetry.distribution(event.name, event.tags, event.measure)
+        }
+      }
+    })
+
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error, testSuiteAbsolutePath }) => {
       const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
       if (!testSuiteSpan) {

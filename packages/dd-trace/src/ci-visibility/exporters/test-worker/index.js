@@ -3,6 +3,7 @@
 const {
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
+  JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
@@ -56,6 +57,13 @@ function getInterprocessLogsCode () {
   return null
 }
 
+function getInterprocessTelemetryCode () {
+  if (getEnvironmentVariable('JEST_WORKER_ID')) {
+    return JEST_WORKER_TELEMETRY_PAYLOAD_CODE
+  }
+  return null
+}
+
 /**
  * Lightweight exporter whose writers only do simple JSON serialization
  * of trace, coverage and logs payloads, which they send to the test framework's main process.
@@ -66,10 +74,12 @@ class TestWorkerCiVisibilityExporter {
     const interprocessTraceCode = getInterprocessTraceCode()
     const interprocessCoverageCode = getInterprocessCoverageCode()
     const interprocessLogsCode = getInterprocessLogsCode()
+    const interprocessTelemetryCode = getInterprocessTelemetryCode()
 
     this._writer = new Writer(interprocessTraceCode)
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
+    this._telemetryWriter = new Writer(interprocessTelemetryCode)
   }
 
   export (payload) {
@@ -84,11 +94,16 @@ class TestWorkerCiVisibilityExporter {
     this._logsWriter.append({ testEnvironmentMetadata, logMessage })
   }
 
+  exportTelemetry (telemetryEvent) {
+    this._telemetryWriter.append(telemetryEvent)
+  }
+
   // TODO: add to other writers
   flush (onDone) {
     this._writer.flush(onDone)
     this._coverageWriter.flush()
     this._logsWriter.flush()
+    this._telemetryWriter.flush()
   }
 }
 
