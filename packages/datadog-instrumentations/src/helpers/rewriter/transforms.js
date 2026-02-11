@@ -53,15 +53,13 @@ function traceAny (state, node, _parent, ancestry) {
 }
 
 function traceFunction (state, node, program) {
-  const { operator } = state
-
   transforms.tracingChannelDeclaration(state, program)
 
   node.body = wrap(state, {
     type: 'FunctionExpression',
     params: node.params,
     body: node.body,
-    async: operator === 'tracePromise',
+    async: node.async,
     expression: false,
     generator: node.generator,
   })
