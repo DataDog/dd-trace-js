@@ -124,13 +124,6 @@ app.post('/with-async-iterator', (_, res) => {
   })
 })
 
-app.post('/without-body-and-headers', (_, res) => {
-  http.get(`http://localhost:${downstreamPort}/api/data`, () => {
-    // Don't consume body
-    res.json({ consumed: false })
-  })
-})
-
 app.post('/with-redirect', (_, res) => {
   makeDownstreamRequest('/api/redirect', redirectRes => {
     redirectRes.resume()

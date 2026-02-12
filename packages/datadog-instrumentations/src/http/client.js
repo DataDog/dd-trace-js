@@ -141,25 +141,9 @@ function setupResponseInstrumentation (ctx, res) {
       if (!bodyConsumed) {
         // Body not consumed, resume to complete the response
         notifyFinish()
-        resumeResponse(res)
       }
     },
   }
-}
-
-/**
- * Resumes the response stream to drain unconsumed data.
- *
- * @param {import('http').IncomingMessage} res
- */
-function resumeResponse (res) {
-  if (!res) return
-  if (typeof res.resume !== 'function') return
-  if (res.destroyed) return
-  if (res.readableFlowing) return
-  if (res.readable === false) return
-
-  res.resume()
 }
 
 function patch (http, methodName) {
