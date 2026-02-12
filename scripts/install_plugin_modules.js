@@ -8,9 +8,10 @@ const { join } = require('path')
 // eslint-disable-next-line n/no-restricted-require
 const semver = require('semver')
 
-const externals = require('../packages/dd-trace/test/plugins/externals.json')
+const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
 const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
+const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
@@ -186,10 +187,17 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
-    for (const { dep, name, node } of externalDeps.get(externalName)) {
-      if (node && !semver.satisfies(process.versions.node, node)) continue
-      const pkgJsonPath = require(folder).pkgJsonPath()
-      const pkgJson = require(pkgJsonPath)
+    let pkgJsonPath
+    let pkgJson
+
+    for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
+      if (node && !semver.satisfies(process.versions.node, node)) {
+        continue
+      }
+      if (!pkgJsonPath) {
+        pkgJsonPath = require(folder).pkgJsonPath()
+        pkgJson = require(pkgJsonPath)
+      }
 
       for (const section of ['devDependencies', 'peerDependencies']) {
         if (pkgJson[section]?.[name]) {
@@ -202,14 +210,17 @@ async function assertPeerDependencies (rootFolder, parent = '') {
               // Only one version available so use that.
               : pkgJson[section][name]
           }
-
-          // eslint-disable-next-line no-await-in-loop
-          await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
-
           break
         }
       }
+
+      if (!versionPkgJson.dependencies[name] && forced) {
+        versionPkgJson.dependencies[name] = latests[name]
+      }
     }
+
+    // eslint-disable-next-line no-await-in-loop
+    await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
   }
 }
 

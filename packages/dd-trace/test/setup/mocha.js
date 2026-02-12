@@ -11,7 +11,7 @@ const semver = require('semver')
 const sinon = require('sinon')
 require('./core')
 
-const externals = require('../plugins/externals.json')
+const externals = require('../plugins/externals')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
@@ -231,7 +231,7 @@ function withVersions (plugin, modules, range, cb) {
     for (const instrumentation of instrumentations) {
       if (instrumentation.name !== moduleName) continue
 
-      // Some entries coming from `externals.json` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+      // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
       // Treat those as "not a test target" instead of crashing.
       const versions = process.env.PACKAGE_VERSION_RANGE
         ? [process.env.PACKAGE_VERSION_RANGE]

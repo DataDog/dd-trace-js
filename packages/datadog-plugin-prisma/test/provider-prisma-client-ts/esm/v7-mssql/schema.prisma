@@ -1,12 +1,12 @@
 generator client {
   provider = "prisma-client"
   output = env("PRISMA_CLIENT_OUTPUT")
-  moduleFormat = "cjs"
+  moduleFormat = "esm"
   importFileExtension = "js"
 }
 
-datasource primary {
-  provider = "postgresql"
+datasource db {
+  provider = "sqlserver"
 }
 
 model User {
