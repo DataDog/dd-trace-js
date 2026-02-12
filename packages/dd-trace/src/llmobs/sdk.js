@@ -365,7 +365,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metric_label'
         throw new Error('label must be the specified name of the evaluation metric')
       }
-      if (!metricType || !['categorical', 'score', 'boolean'].includes(metricType)) {
+      if (!metricType || !['categorical', 'score', 'boolean', 'json'].includes(metricType)) {
         err = 'invalid_metric_type'
         throw new Error('metricType must be one of "categorical" or "score"')
       }
@@ -380,6 +380,10 @@ class LLMObs extends NoopLLMObs {
       if (metricType === 'boolean' && typeof value !== 'boolean') {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
+      }
+      if (metricType === 'json' && !(typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata))) {
+        err = 'invalid_metric_value'
+        throw new Error('value must be a JSON object for a json metric')
       }
       if (assessment !== undefined && assessment !== 'pass' && assessment !== 'fail') {
         err = 'invalid_assessment'

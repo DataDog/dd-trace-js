@@ -1268,6 +1268,40 @@ describe('sdk', () => {
       }), { message: 'value must be a boolean for a boolean metric' })
     })
 
+    it('submits a json evaluation metric', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'json',
+        value: { f1: 0.8, recall: 1, precision: 0.5 },
+        timestampMs: 1234,
+      })
+
+      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+
+      assert.deepStrictEqual(evalMetric, {
+        join_on: {
+          span: {
+            span_id: '5678',
+            trace_id: '1234',
+          },
+        },
+        label: 'has_toxicity',
+        metric_type: 'json',
+        ml_app: 'mlApp',
+        json_value: { f1: 0.8, recall: 1, precision: 0.5 },,
+        timestamp_ms: 1234,
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp'],
+      })
+    })
+
+    it('throws an error when submitting a non-JSON object json evaluation metric', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'json',
+        value: 'it is super toxic!',
+      }), { message: 'value must be a JSON object for a json metric' })
+    })
+
     it('submits an enriched evaluation metric', () => {
       llmobs.submitEvaluation(spanCtx, {
         mlApp: 'test',
