@@ -1259,6 +1259,36 @@ describe('sdk', () => {
         value: 'it is super toxic!',
       }), { message: 'value must be a boolean for a boolean metric' })
 
+    it('submits an enriched evaluation metric', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 'toxic',
+        metricType: 'score',
+        value: 0.6,
+        reasoning: 'this input is toxic',
+        assessment: 'fail',
+        metadata: {'some': 'details'},
+        tags: {
+          host: 'localhost',
+        },
+      })
+
+      assert.deepStrictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0], {
+        trace_id: spanCtx.traceId,
+        span_id: spanCtx.spanId,
+        ml_app: 'test',
+        timestamp_ms: 1234,
+        label: 'toxic',
+        metric_type: 'score',
+        score_value: 0.6,
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost'],
+        reasoning: 'this input is toxic',
+        assessment: 'fail',
+        metadata: {'some': 'details'},
+      })
+    })
+
     it('throws an error when submitting a non-string reasoning', () => {
       assert.throws(() => llmobs.submitEvaluation(spanCtx, {
         label: 'has_toxicity',
