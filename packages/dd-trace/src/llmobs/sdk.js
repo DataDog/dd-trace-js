@@ -412,8 +412,12 @@ class LLMObs extends NoopLLMObs {
       }
 
       const payload = {
-        span_id: spanId,
-        trace_id: traceId,
+        join_on: {
+          span: {
+            span_id: spanId,
+            trace_id: traceId,
+          },
+        },
         label,
         metric_type: metricType,
         ml_app: mlApp,
