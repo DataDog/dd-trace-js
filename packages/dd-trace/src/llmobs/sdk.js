@@ -384,6 +384,12 @@ class LLMObs extends NoopLLMObs {
       if (assessment !== null && assessment !== 'pass' && assessment !== 'fail') {
         throw new Error('assessment must be pass or fail')
       }
+      if (reasoning !== null && typeof reasoning !== 'string') {
+        throw new Error('reasoning must be a string')
+      }
+      if (metadata !== null && !(typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata)) {
+        throw new Error('metadata must be a JSON object')
+      }
 
       const evaluationTags = {
         'ddtrace.version': tracerVersion,
