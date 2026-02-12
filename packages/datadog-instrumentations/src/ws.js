@@ -13,6 +13,7 @@ const producerCh = tracingChannel('ws:send')
 const receiverCh = tracingChannel('ws:receive')
 const closeCh = tracingChannel('ws:close')
 const emitCh = channel('tracing:ws:server:connect:emit')
+const setSocketCh = channel('tracing:ws:server:connect:setSocket')
 // TODO: Add a error channel / handle error events properly.
 
 /**
@@ -181,12 +182,33 @@ addHook({
   return ws
 })
 
+/**
+ * Prevent internal event handlers (data, close, etc.) registered by the ws library to
+ * capture the connection span in their async context. Otherwise, the
+ * finished connection span is retained for the entire lifetime of the WebSocket
+ * (via ACF -> handle -> WeakMap).
+ *
+ * @param {Function} setSocket
+ * @returns {(...args: unknown[]) => unknown}
+ */
+function wrapSetSocket (setSocket) {
+  return function wrappedSetSocket (...args) {
+    if (!setSocketCh.hasSubscribers) {
+      return setSocket.apply(this, args)
+    }
+    return setSocketCh.runStores({}, () => {
+      return setSocket.apply(this, args)
+    })
+  }
+}
+
 addHook({
   name: 'ws',
   file: 'lib/websocket.js',
   versions: ['>=8.0.0'],
 }, moduleExports => {
   const ws = /** @type {WebSocketClass} */ (moduleExports)
+  shimmer.wrap(ws.prototype, 'setSocket', wrapSetSocket)
   shimmer.wrap(ws.prototype, 'send', wrapSend)
   shimmer.wrap(ws.prototype, 'close', wrapClose)
 
