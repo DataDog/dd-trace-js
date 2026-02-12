@@ -1286,8 +1286,8 @@ describe('sdk', () => {
       assert.deepStrictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0], {
         join_on: {
           span: {
-            span_id: spanId,
-            trace_id: traceId,
+            span_id: spanCtx.spanId,
+            trace_id: spanCtx.traceId,
           },
         },
         ml_app: 'test',
