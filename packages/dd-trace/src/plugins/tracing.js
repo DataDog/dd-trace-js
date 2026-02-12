@@ -16,11 +16,18 @@ class TracingPlugin extends Plugin {
   }
 
   get activeSpan () {
-    const store = storage('legacy').getStore()
+    const store = /** @type {{ span?: import('../../../..').Span }} */ (storage('legacy').getStore())
 
-    return store && store.span
+    return store?.span
   }
 
+  /**
+   * @param {object} opts
+   * @param {string} [opts.type]
+   * @param {string} [opts.id]
+   * @param {string} [opts.kind]
+   * @returns {string}
+   */
   serviceName (opts = {}) {
     const {
       type = this.constructor.type,
@@ -31,6 +38,13 @@ class TracingPlugin extends Plugin {
     return this._tracer._nomenclature.serviceName(type, kind, id, opts)
   }
 
+  /**
+   * @param {object} opts
+   * @param {string} [opts.type]
+   * @param {string} [opts.id]
+   * @param {string} [opts.kind]
+   * @returns {string}
+   */
   operationName (opts = {}) {
     const {
       type = this.constructor.type,
@@ -41,6 +55,10 @@ class TracingPlugin extends Plugin {
     return this._tracer._nomenclature.opName(type, kind, id, opts)
   }
 
+  /**
+   * @param {object} config
+   * @returns {object}
+   */
   configure (config) {
     return super.configure({
       ...config,
@@ -53,11 +71,17 @@ class TracingPlugin extends Plugin {
 
   start () {} // implemented by individual plugins
 
+  /**
+   * @param {{ currentStore?: { span: import('../../../..').Span } }} ctx
+   */
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
     span?.finish()
   }
 
+  /**
+   * @param {{ currentStore?: { span: import('../../../..').Span }, error?: unknown }} ctxOrError
+   */
   error (ctxOrError) {
     if (ctxOrError?.currentStore) {
       ctxOrError.currentStore?.span.setTag('error', ctxOrError?.error)
@@ -84,21 +108,32 @@ class TracingPlugin extends Plugin {
     }
   }
 
+  /**
+   * @param {string} eventName
+   * @param {Function} handler
+   */
   addTraceSub (eventName, handler) {
     const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`
     this.addSub(`${prefix}:${eventName}`, handler)
   }
 
+  /**
+   * @param {string} eventName
+   * @param {Function} transform
+   */
   addTraceBind (eventName, transform) {
     const prefix = this.constructor.prefix || `apm:${this.component}:${this.operation}`
     this.addBind(`${prefix}:${eventName}`, transform)
   }
 
+  /**
+   * @param {unknown} error
+   * @param {import('../../../..').Span} [span]
+   */
   addError (error, span = this.activeSpan) {
     if (span && !span._spanContext._tags.error) {
       // Errors may be wrapped in a context.
-      error = (error && error.error) || error
-      span.setTag('error', error || 1)
+      span.setTag('error', error?.error || error || 1)
     }
   }
 
