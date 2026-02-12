@@ -381,11 +381,11 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
       }
-      if (!['pass', 'fail'].includes(assessment)) {
+      if (assessment !== undefined && assessment !== 'pass' && assessment !== 'fail') {
         err = 'invalid_assessment'
         throw new Error('assessment must be pass or fail')
       }
-      if (typeof reasoning !== 'string') {
+      if (reasoning !== undefined && typeof reasoning !== 'string') {
         err = 'invalid_reasoning'
         throw new Error('reasoning must be a string')
       }
