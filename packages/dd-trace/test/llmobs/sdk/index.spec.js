@@ -1189,8 +1189,12 @@ describe('sdk', () => {
       })
 
       assert.deepStrictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0], {
-        trace_id: spanCtx.traceId,
-        span_id: spanCtx.spanId,
+        join_on: {
+          span: {
+            trace_id: spanCtx.traceId,
+            span_id: spanCtx.spanId,
+          },
+        },
         ml_app: 'test',
         timestamp_ms: 1234,
         label: 'test',
@@ -1241,8 +1245,12 @@ describe('sdk', () => {
       const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
 
       assert.deepStrictEqual(evalMetric, {
-        span_id: '5678',
-        trace_id: '1234',
+        join_on: {
+          span: {
+            span_id: '5678',
+            trace_id: '1234',
+          },
+        },
         label: 'has_toxicity',
         metric_type: 'boolean',
         ml_app: 'mlApp',
