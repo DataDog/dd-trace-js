@@ -169,7 +169,7 @@
     "eslint-plugin-unicorn": "^62.0.0",
     "express": "^5.1.0",
     "glob": "^10.4.5",
-    "globals": "^17.2.0",
+    "globals": "^17.3.0",
     "graphql": "*",
     "jszip": "^3.10.1",
     "mocha": "^11.6.0",
