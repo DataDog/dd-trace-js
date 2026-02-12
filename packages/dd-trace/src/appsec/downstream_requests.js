@@ -116,6 +116,15 @@ function incrementBodyAnalysisCount (req) {
 }
 
 /**
+ *
+ * @param {object} headers
+ * @returns {object} the headers with all keys converted to lowercase
+ */
+function lowercaseHeaderKeys (headers) {
+  return Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]))
+}
+
+/**
  * Extracts request data from the context for WAF analysis
  * @param {object} ctx context for the outgoing downstream request.
  * @returns {object} a map of addresses and request data.
@@ -129,7 +138,7 @@ function extractRequestData (ctx) {
 
   const headers = options?.headers
   if (headers && Object.keys(headers).length > 0) {
-    addresses[HTTP_OUTGOING_HEADERS] = headers
+    addresses[HTTP_OUTGOING_HEADERS] = lowercaseHeaderKeys(headers)
   }
 
   return addresses
