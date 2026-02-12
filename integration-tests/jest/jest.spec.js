@@ -5460,6 +5460,136 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           eventsPromise,
         ])
       })
+
+      it('quarantine prevents session failure when ATR is also enabled', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: true,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            // Session should pass because the only failing test is quarantined
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            // All executions of the quarantined test should be tagged as quarantined
+            const quarantinedTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+            )
+            assert.ok(quarantinedTests.length > 1, 'quarantined test should have been retried by ATR')
+            for (const test of quarantinedTests) {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+
+            // The last execution should have final_status = skip
+            const lastExecution = quarantinedTests[quarantinedTests.length - 1]
+            assert.strictEqual(lastExecution.meta[TEST_FINAL_STATUS], 'skip')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-quarantine-1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        // Exit code should be 0 because the failing test is quarantined
+        assert.strictEqual(exitCode, 0)
+      })
+
+      it('session passes when EFD flaky retries and quarantine failures are combined', async () => {
+        const NUM_RETRIES_EFD = 3
+
+        // The new flaky test is NOT in known tests so EFD will retry it
+        receiver.setKnownTests({ jest: {} })
+
+        receiver.setSettings({
+          test_management: { enabled: true },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': NUM_RETRIES_EFD },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        // Only quarantine the always-failing test
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-efd-and-quarantine.js': {
+                tests: {
+                  'efd and quarantine is a quarantined failing test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            // Session should pass:
+            // - The new flaky test has at least one passing EFD retry (so EFD can ignore its failures)
+            // - The quarantined test is quarantined (so quarantine can ignore its failure)
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+            // Verify the quarantined test is tagged
+            const quarantinedTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'efd and quarantine is a quarantined failing test'
+            )
+            assert.ok(quarantinedTests.length >= 1)
+            for (const test of quarantinedTests) {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+
+            // Verify the new flaky test has EFD retries (at least original + retries)
+            const flakyTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'efd and quarantine is a new flaky test'
+            )
+            assert.ok(flakyTests.length > 1, 'flaky test should have been retried by EFD')
+
+            // At least one EFD retry should have passed
+            const passingFlakyTests = flakyTests.filter(t => t.meta[TEST_STATUS] === 'pass')
+            assert.ok(passingFlakyTests.length > 0, 'at least one EFD retry should pass')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-efd-and-quarantine',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        // Exit code should be 0 because:
+        // - The flaky test has at least one passing retry (EFD considers it OK)
+        // - The always-failing test is quarantined
+        assert.strictEqual(exitCode, 0)
+      })
     })
 
     it('does not crash if the request to get test management tests fails', async () => {
