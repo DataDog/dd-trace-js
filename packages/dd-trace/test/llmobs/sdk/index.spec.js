@@ -1258,6 +1258,7 @@ describe('sdk', () => {
         metricType: 'boolean',
         value: 'it is super toxic!',
       }), { message: 'value must be a boolean for a boolean metric' })
+    })
 
     it('submits an enriched evaluation metric', () => {
       llmobs.submitEvaluation(spanCtx, {
@@ -1296,6 +1297,7 @@ describe('sdk', () => {
         value: true,
         reasoning: 1,
       }), { message: 'reasoning must be a string' })
+    })
 
     it('throws an error when submitting a non pass/fail assessment', () => {
       assert.throws(() => llmobs.submitEvaluation(spanCtx, {
@@ -1304,6 +1306,7 @@ describe('sdk', () => {
         value: true,
         assessment: 'correct',
       }), { message: 'assessment must be pass or fail' })
+    })
 
     it('throws an error when submitting an non JSON object metadata', () => {
       assert.throws(() => llmobs.submitEvaluation(spanCtx, {
