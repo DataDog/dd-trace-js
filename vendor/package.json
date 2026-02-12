@@ -36,7 +36,7 @@
     "ttl-set": "^1.0.0"
   },
   "devDependencies": {
-    "@rspack/core": "^1.6.4",
+    "@rspack/core": "^1.6.8",
     "license-webpack-plugin": "^4.0.2"
   }
 }
