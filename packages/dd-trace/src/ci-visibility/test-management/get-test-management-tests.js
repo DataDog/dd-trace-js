@@ -105,7 +105,7 @@ function getTestManagementTests ({
 
         const numTests = getNumFromTestManagementTests(testManagementTests)
 
-        incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
+        distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)
 
         log.debug('Test management tests received: %j', testManagementTests)

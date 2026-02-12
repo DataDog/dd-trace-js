@@ -7,6 +7,7 @@ const {
   getCoveredFilenamesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
+  JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   getTestLineStart,
   getTestSuitePath,
   getTestParametersString,
@@ -36,6 +37,7 @@ const testSuiteErrorCh = channel('ci:jest:test-suite:error')
 const workerReportTraceCh = channel('ci:jest:worker-report:trace')
 const workerReportCoverageCh = channel('ci:jest:worker-report:coverage')
 const workerReportLogsCh = channel('ci:jest:worker-report:logs')
+const workerReportTelemetryCh = channel('ci:jest:worker-report:telemetry')
 
 const testSuiteCodeCoverageCh = channel('ci:jest:test-suite:code-coverage')
 
@@ -1551,6 +1553,10 @@ function onMessageWrapper (onMessage) {
     }
     if (code === JEST_WORKER_LOGS_PAYLOAD_CODE) { // datadog logs payload
       workerReportLogsCh.publish(data)
+      return
+    }
+    if (code === JEST_WORKER_TELEMETRY_PAYLOAD_CODE) { // datadog telemetry payload
+      workerReportTelemetryCh.publish(data)
       return
     }
     return onMessage.apply(this, arguments)
