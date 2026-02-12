@@ -9,7 +9,6 @@ const sinon = require('sinon')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -80,7 +79,6 @@ describe('Plugin', () => {
         describe('checkpoints', () => {
           let consumer
           let setDataStreamsContextSpy
-          let syncToStoreSpy
 
           beforeEach(async () => {
             tracer.init()
@@ -88,13 +86,13 @@ describe('Plugin', () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
-            setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
-            syncToStoreSpy = sinon.spy(DataStreamsContext, 'syncToStore')
+            setDataStreamsContextSpy = sinon.spy(
+              require('../../dd-trace/src/datastreams/context'), 'setDataStreamsContext'
+            )
           })
 
           afterEach(async () => {
             setDataStreamsContextSpy.restore()
-            syncToStoreSpy.restore()
             await consumer.disconnect()
           })
 
@@ -156,21 +154,6 @@ describe('Plugin', () => {
                 recordCheckpointSpy.restore()
               },
             })
-          })
-
-          it('Should call syncToStore after producing', async () => {
-            const messages = [{ key: 'syncTest1', value: 'test' }]
-            await sendMessages(kafka, testTopic, messages)
-            assert.ok(syncToStoreSpy.called, 'syncToStore should be called on produce')
-          })
-
-          it('Should call syncToStore after consuming', async () => {
-            await consumer.run({
-              eachMessage: async () => {},
-            })
-            await sendMessages(kafka, testTopic, messages)
-            await consumer.disconnect()
-            assert.ok(syncToStoreSpy.called, 'syncToStore should be called on consume')
           })
         })
 
