@@ -27,7 +27,7 @@ include:
   - local: ".gitlab/benchmarks.yml"
   - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
     file: '.gitlab/ci-node-hapi-redis.yml'
-    ref: 'pabloerhard/fix-check-slo'
+    ref: 'main'
 
 workflow:
   auto_cancel:
@@ -43,7 +43,7 @@ variables:
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
-  APM_SDKS_BENCHMARKS_BRANCH: 'pabloerhard/fix-check-slo'
+  APM_SDKS_BENCHMARKS_BRANCH: 'main'
 
 configure_system_tests:
   variables:
