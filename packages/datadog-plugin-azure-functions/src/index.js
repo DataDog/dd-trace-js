@@ -44,7 +44,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
       webContext.config = this.config
       webContext.tracer = this.tracer
       // Creates a standard span and an inferred proxy span if headers are present
-      span = serverless.startServiceEntrypointSpan(
+      span = serverless.startServerlessSpanWithInferredProxy(
         this.tracer,
         this.config,
         this.operationName(),
