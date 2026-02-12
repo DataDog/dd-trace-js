@@ -432,7 +432,6 @@ class LLMObs extends NoopLLMObs {
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
-        reasoning: 
       }
       if (reasoning !== undefined) {
         payload.reasoning = reasoning
