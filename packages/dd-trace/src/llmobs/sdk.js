@@ -381,7 +381,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
       }
-      if (metricType === 'json' && !(typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata))) {
+      if (metricType === 'json' && !(typeof value === 'object' && value !== null && !Array.isArray(value))) {
         err = 'invalid_metric_value'
         throw new Error('value must be a JSON object for a json metric')
       }
