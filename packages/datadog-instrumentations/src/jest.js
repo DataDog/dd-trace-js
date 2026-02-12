@@ -16,6 +16,7 @@ const {
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
+  SEED_SUFFIX_RE,
   getFormattedJestTestParameters,
   getJestTestName,
   getJestSuitesToRun,
@@ -55,6 +56,7 @@ const itrSkippedSuitesCh = channel('ci:jest:itr:skipped-suites')
 // Message sent by jest's main process to workers to run a test suite (=test file)
 // https://github.com/jestjs/jest/blob/1d682f21c7a35da4d3ab3a1436a357b980ebd0fa/packages/jest-worker/src/types.ts#L37
 const CHILD_MESSAGE_CALL = 1
+
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10_000
 
@@ -955,7 +957,7 @@ function getCliWrapper (isNewJestVersion) {
             isTestManagementTestsEnabled = false
             testManagementTests = {}
           } else {
-            testManagementTests = receivedTestManagementTests
+            testManagementTests = receivedTestManagementTests || {}
           }
         } catch (err) {
           log.error('Jest test management tests error', err)
@@ -1013,32 +1015,38 @@ function getCliWrapper (isNewJestVersion) {
        * The rationale behind is the following: you may still be able to block your CI pipeline by gating
        * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
        */
+      let numEfdFailedTestsToIgnore = 0
       if (isEarlyFlakeDetectionEnabled) {
-        let numFailedTestsToIgnore = 0
         for (const testStatuses of newTestsTestStatuses.values()) {
           const { pass, fail } = getTestStats(testStatuses)
           if (pass > 0) { // as long as one passes, we'll consider the test passed
-            numFailedTestsToIgnore += fail
+            numEfdFailedTestsToIgnore += fail
           }
         }
         // If every test that failed was an EFD retry, we'll consider the suite passed
-        if (numFailedTestsToIgnore !== 0 && result.results.numFailedTests === numFailedTestsToIgnore) {
+        if (numEfdFailedTestsToIgnore !== 0 && result.results.numFailedTests === numEfdFailedTestsToIgnore) {
           result.results.success = true
         }
       }
 
+      let numFailedQuarantinedTests = 0
+      let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
       if (isTestManagementTestsEnabled) {
         const failedTests = result
           .results
           .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
             testResults.map(({ fullName: testName, status }) => (
-              { testName, testSuiteAbsolutePath, status }
+              {
+                // Strip @fast-check/jest seed suffix so the name matches what was reported via TEST_NAME
+                testName: testSuiteAbsolutePathsWithFastCheck.has(testSuiteAbsolutePath)
+                  ? testName.replace(SEED_SUFFIX_RE, '')
+                  : testName,
+                testSuiteAbsolutePath,
+                status,
+              }
             ))
           ))
           .filter(({ status }) => status === 'failed')
-
-        let numFailedQuarantinedTests = 0
-        let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
 
         for (const { testName, testSuiteAbsolutePath } of failedTests) {
           const testSuite = getTestSuitePath(testSuiteAbsolutePath, result.globalConfig.rootDir)
@@ -1066,6 +1074,16 @@ function getCliWrapper (isNewJestVersion) {
           result.results.numFailedTests ===
             numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
         ) {
+          result.results.success = true
+        }
+      }
+
+      // Combined check: if all failed tests are accounted for by EFD (flaky retries) and/or quarantine,
+      // we should consider the suite passed even when neither check alone covers all failures.
+      if (!result.results.success && (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)) {
+        const totalIgnoredFailures =
+          numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+        if (totalIgnoredFailures !== 0 && result.results.numFailedTests === totalIgnoredFailures) {
           result.results.success = true
         }
       }
