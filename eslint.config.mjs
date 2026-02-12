@@ -394,6 +394,7 @@ export default [
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-var': 'error',
+      'prefer-object-spread': 'error',
       'require-await': 'error',
       strict: 'error',
     },
@@ -458,7 +459,6 @@ export default [
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',
-      'prefer-object-spread': 'error',
 
       // Too strict for now. Slowly migrate to this rule by using rest parameters.
       // 'prefer-rest-params': 'error',
