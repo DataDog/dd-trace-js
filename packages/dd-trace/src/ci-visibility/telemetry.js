@@ -30,6 +30,7 @@ const formattedTags = {
   requireGit: 'require_git',
   isModified: 'is_modified',
   isRetry: 'is_retry',
+  retryReason: 'retry_reason',
 }
 
 // Transform tags dictionary to array of strings.

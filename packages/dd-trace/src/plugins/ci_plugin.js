@@ -71,6 +71,7 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_IS_MODIFIED,
   TEST_IS_RETRY,
+  TEST_RETRY_REASON,
 } = require('./util/test')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
@@ -725,6 +726,7 @@ module.exports = class CiPlugin extends Plugin {
       isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
       isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true' || undefined,
       isRetry: activeSpanTags[TEST_IS_RETRY] === 'true' || undefined,
+      retryReason: activeSpanTags[TEST_RETRY_REASON],
       isFailedTestReplayEnabled: activeSpanTags[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true' || undefined,
     }
   }
