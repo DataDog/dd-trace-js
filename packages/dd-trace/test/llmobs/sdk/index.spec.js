@@ -1288,7 +1288,7 @@ describe('sdk', () => {
         label: 'has_toxicity',
         metric_type: 'json',
         ml_app: 'mlApp',
-        json_value: { f1: 0.8, recall: 1, precision: 0.5 },,
+        json_value: { f1: 0.8, recall: 1, precision: 0.5 },
         timestamp_ms: 1234,
         tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp'],
       })
