@@ -389,7 +389,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_reasoning'
         throw new Error('reasoning must be a string')
       }
-      if (metadata == null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+      if (metadata !== undefined && !(typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata))) {
         err = 'invalid_metadata'
         throw new Error('metadata must be a JSON object')
       }
