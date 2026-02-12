@@ -2,7 +2,6 @@
 
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getMessageSize } = require('../../dd-trace/src/datastreams')
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 
 class BullmqConsumerPlugin extends ConsumerPlugin {
   static id = 'bullmq'
@@ -10,6 +9,12 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
 
   asyncEnd (ctx) {
     ctx.currentStore?.span?.finish()
+  }
+
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { span } = ctx.currentStore
+    this.setConsumerCheckpoint(span, ctx)
   }
 
   bindStart (ctx) {
@@ -22,7 +27,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
       childOf = this.tracer.extract('text_map', datadogContext)
     }
 
-    const span = this.startSpan({
+    this.startSpan({
       childOf,
       resource: queueName,
       meta: {
@@ -33,11 +38,6 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
         'messaging.operation': 'process',
       },
     }, ctx)
-
-    if (this.config.dsmEnabled) {
-      this.setConsumerCheckpoint(span, ctx)
-      DataStreamsContext.syncToStore(ctx)
-    }
 
     return ctx.currentStore
   }

@@ -3,12 +3,24 @@
 const { TEXT_MAP } = require('../../../ext/formats')
 const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
 const { getAmqpMessageSize } = require('../../dd-trace/src/datastreams')
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { getResourceName } = require('./util')
 
 class AmqplibConsumerPlugin extends ConsumerPlugin {
   static id = 'amqplib'
   static operation = 'consume'
+
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { fields = {}, message, queue } = ctx
+    if (!message?.properties?.headers) return
+
+    const { span } = ctx.currentStore
+    const queueName = queue || fields.queue || fields.routingKey
+    const payloadSize = getAmqpMessageSize({ headers: message.properties.headers, content: message.content })
+    this.tracer.decodeDataStreamsContext(message.properties.headers)
+    this.tracer
+      .setCheckpoint(['direction:in', `topic:${queueName}`, 'type:rabbitmq'], span, payloadSize)
+  }
 
   bindStart (ctx) {
     const { method, fields = {}, message, queue } = ctx
@@ -18,7 +30,7 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
     const childOf = extract(this.tracer, message)
 
     const queueName = queue || fields.queue || fields.routingKey
-    const span = this.startSpan({
+    this.startSpan({
       childOf,
       resource: getResourceName(method, fields),
       type: 'worker',
@@ -31,16 +43,6 @@ class AmqplibConsumerPlugin extends ConsumerPlugin {
         'amqp.destination': fields.destination,
       },
     }, ctx)
-
-    if (
-      this.config.dsmEnabled && message?.properties?.headers
-    ) {
-      const payloadSize = getAmqpMessageSize({ headers: message.properties.headers, content: message.content })
-      this.tracer.decodeDataStreamsContext(message.properties.headers)
-      this.tracer
-        .setCheckpoint(['direction:in', `topic:${queueName}`, 'type:rabbitmq'], span, payloadSize)
-      DataStreamsContext.syncToStore(ctx)
-    }
 
     return ctx.currentStore
   }
