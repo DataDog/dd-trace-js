@@ -1284,8 +1284,12 @@ describe('sdk', () => {
       })
 
       assert.deepStrictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0], {
-        trace_id: spanCtx.traceId,
-        span_id: spanCtx.spanId,
+        join_on: {
+          span: {
+            span_id: spanId,
+            trace_id: traceId,
+          },
+        },
         ml_app: 'test',
         timestamp_ms: 1234,
         label: 'toxic',
