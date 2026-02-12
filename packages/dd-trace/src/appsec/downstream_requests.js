@@ -27,12 +27,12 @@ function enable (_config) {
   downstreamAnalysisCount = new WeakMap()
   redirectBodyCollectionDecisions = new WeakMap()
 
-  const bodyAnalysisSampleRate = config.appsec.apiSecurity?.downstreamRequestBodyAnalysisSampleRate
+  const bodyAnalysisSampleRate = config.appsec.apiSecurity?.downstreamBodyAnalysisSampleRate
   samplingRate = Math.min(Math.max(bodyAnalysisSampleRate, 0), 1)
 
   if (samplingRate !== bodyAnalysisSampleRate) {
     log.warn(
-      'DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
+      'DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
       bodyAnalysisSampleRate)
   }
 }

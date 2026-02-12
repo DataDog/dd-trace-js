@@ -17,7 +17,7 @@ describe('appsec downstream_requests', () => {
       appsec: {
         apiSecurity: {
           enabled: true,
-          downstreamRequestBodyAnalysisSampleRate: 1,
+          downstreamBodyAnalysisSampleRate: 1,
           maxDownstreamRequestBodyAnalysis: 1,
         },
       },
@@ -47,7 +47,7 @@ describe('appsec downstream_requests', () => {
 
     it('returns false when sample rate is zero', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0
       downstream.enable(config)
 
       assert.strictEqual(downstream.shouldSampleBody(req, testUrl), false)
@@ -62,7 +62,7 @@ describe('appsec downstream_requests', () => {
 
     it('returns stored decision even when sample rate is zero', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 0
       downstream.enable(config)
 
@@ -84,33 +84,33 @@ describe('appsec downstream_requests', () => {
 
     it('logs warning and clamps value when sample rate is above 1', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 1.5
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 1.5
       downstream.enable(config)
 
       sinon.assert.calledOnce(logWarnStub)
       sinon.assert.calledWith(
         logWarnStub,
-        'DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
+        'DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
         1.5
       )
     })
 
     it('logs warning and clamps value when sample rate is below 0', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = -0.5
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = -0.5
       downstream.enable(config)
 
       sinon.assert.calledOnce(logWarnStub)
       sinon.assert.calledWith(
         logWarnStub,
-        'DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
+        'DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE value is %s and it\'s out of range',
         -0.5
       )
     })
 
     it('does not log warning when sample rate is within valid range', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0.5
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0.5
       downstream.enable(config)
 
       downstream.shouldSampleBody(req, testUrl)
@@ -418,7 +418,7 @@ describe('appsec downstream_requests', () => {
   describe('sampling behavior', () => {
     it('returns true for sample rate 1.0 (100%)', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 1.0
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 1.0
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 100
       downstream.enable(config)
 
@@ -429,7 +429,7 @@ describe('appsec downstream_requests', () => {
 
     it('returns false for sample rate 0.0 (0%)', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0.0
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0.0
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 100
       downstream.enable(config)
 
@@ -440,7 +440,7 @@ describe('appsec downstream_requests', () => {
 
     it('produces some true and some false with rate 0.5', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 0.5
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 0.5
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 1000
       downstream.enable(config)
 
@@ -458,7 +458,7 @@ describe('appsec downstream_requests', () => {
 
     it('tracks per-request body analysis count independently', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 1.0
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 1.0
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 2
       downstream.enable(config)
 
@@ -475,7 +475,7 @@ describe('appsec downstream_requests', () => {
 
     it('increments counter correctly', () => {
       downstream.disable()
-      config.appsec.apiSecurity.downstreamRequestBodyAnalysisSampleRate = 1.0
+      config.appsec.apiSecurity.downstreamBodyAnalysisSampleRate = 1.0
       config.appsec.apiSecurity.maxDownstreamRequestBodyAnalysis = 3
       downstream.enable(config)
 

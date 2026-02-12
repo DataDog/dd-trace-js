@@ -108,7 +108,7 @@ describe('RASP - downstream request integration', () => {
       beforeEach(async function () {
         this.timeout(60000)
         const setup = await setupTest({
-          DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE: '1.0',
+          DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: '1.0',
           DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '10',
         })
         agent = setup.agent
@@ -163,7 +163,7 @@ describe('RASP - downstream request integration', () => {
       beforeEach(async function () {
         this.timeout(60000)
         const setup = await setupTest({
-          DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE: '0.0',
+          DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: '0.0',
           DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '10',
         })
         agent = setup.agent
@@ -188,7 +188,7 @@ describe('RASP - downstream request integration', () => {
       beforeEach(async function () {
         this.timeout(60000)
         const setup = await setupTest({
-          DD_API_SECURITY_DOWNSTREAM_REQUEST_BODY_ANALYSIS_SAMPLE_RATE: '1.0',
+          DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: '1.0',
           DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: '0',
         })
         agent = setup.agent
