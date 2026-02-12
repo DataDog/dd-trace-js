@@ -70,6 +70,7 @@ const {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_IS_MODIFIED,
+  TEST_IS_RETRY,
 } = require('./util/test')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
@@ -723,6 +724,8 @@ module.exports = class CiPlugin extends Plugin {
       isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
       isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
       isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true' || undefined,
+      isRetry: activeSpanTags[TEST_IS_RETRY] === 'true' || undefined,
+      isFailedTestReplayEnabled: activeSpanTags[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true' || undefined,
     }
   }
 }

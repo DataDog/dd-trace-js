@@ -25,9 +25,11 @@ const formattedTags = {
   isFlakyTestRetriesEnabled: 'flaky_test_retries_enabled',
   isKnownTestsEnabled: 'known_tests_enabled',
   isImpactedTestsEnabled: 'impacted_tests_enabled',
-  isDiEnabled: 'failed_test_replay_enabled',
+  hasFailedTestReplay: 'has_failed_test_replay',
+  isFailedTestReplayEnabled: 'is_failed_test_replay_enabled',
   requireGit: 'require_git',
   isModified: 'is_modified',
+  isRetry: 'is_retry',
 }
 
 // Transform tags dictionary to array of strings.

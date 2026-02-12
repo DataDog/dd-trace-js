@@ -114,7 +114,7 @@ function getTestManagementTests ({
 
         const numTests = getNumFromTestManagementTests(testManagementTests)
 
-        incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
+        distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)
 
         // Temporary debug: log only quarantined tests as list of test names.
