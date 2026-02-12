@@ -3269,7 +3269,7 @@ declare namespace tracer {
       /**
        * Reasoning for the evaluation result.
        */
-      reasoning?: string,
+      reasoning?: 'pass' | 'fail',
 
       /**
        * Whether the evaluation passed or failed. Valid values are pass and fail.
