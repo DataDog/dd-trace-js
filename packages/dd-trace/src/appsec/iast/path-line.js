@@ -8,29 +8,29 @@ const { getOriginalPathAndLineFromSourceMap } = require('./taint-tracking/rewrit
 const pathLine = {
   getNodeModulesPaths,
   getRelativePath,
-  getNonDDCallSiteFrames,
+  getCallSiteFramesForLocation,
   ddBasePath, // Exported only for test purposes
 }
 
 const EXCLUDED_PATHS = [
   path.join(path.sep, 'node_modules', 'dc-polyfill'),
 ]
-const EXCLUDED_PATH_PREFIXES = [
-  'node:diagnostics_channel',
-  'diagnostics_channel',
-  'node:child_process',
-  'child_process',
-  'node:async_hooks',
-  'async_hooks',
-  'node:internal/async_local_storage',
-]
 
-function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
+/**
+ * Processes and filters call site frames to find the best location for a vulnerability.
+ * Returns client frames if available, otherwise falls back to all processed frames.
+ * Excludes dd-trace frames and all Node.js built-in/internal modules (node:*).
+ * @param {Array} callSiteFrames
+ * @param {Array} externallyExcludedPaths
+ * @returns {Array} Client frames if available, otherwise all processed frames
+ */
+function getCallSiteFramesForLocation (callSiteFrames, externallyExcludedPaths) {
   if (!callSiteFrames) {
     return []
   }
 
-  const result = []
+  const allFrames = []
+  const clientFrames = []
 
   for (const callsite of callSiteFrames) {
     let filepath = callsite.file?.startsWith('file://') ? fileURLToPath(callsite.file) : callsite.file
@@ -47,18 +47,22 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
       callsite.column = column
     }
 
-    if (
-      !isExcluded(callsite, externallyExcludedPaths) &&
-      (!filepath.includes(pathLine.ddBasePath) || globalThis.__DD_ESBUILD_IAST_WITH_NO_SM)
-    ) {
+    if (filepath) {
       callsite.path = getRelativePath(filepath)
       callsite.isInternal = !path.isAbsolute(filepath)
 
-      result.push(callsite)
+      allFrames.push(callsite)
+
+      if (
+        !isExcluded(callsite, externallyExcludedPaths) &&
+        (!filepath.includes(pathLine.ddBasePath) || globalThis.__DD_ESBUILD_IAST_WITH_NO_SM)
+      ) {
+        clientFrames.push(callsite)
+      }
     }
   }
 
-  return result
+  return clientFrames.length > 0 ? clientFrames : allFrames
 }
 
 function getRelativePath (filepath) {
@@ -76,14 +80,12 @@ function isExcluded (callsite, externallyExcludedPaths) {
     excludedPaths = [...excludedPaths, ...externallyExcludedPaths]
   }
 
-  for (const excludedPath of excludedPaths) {
-    if (filename.includes(excludedPath)) {
-      return true
-    }
+  if (filename.startsWith('node:')) {
+    return true
   }
 
-  for (const EXCLUDED_PATH_PREFIX of EXCLUDED_PATH_PREFIXES) {
-    if (filename.indexOf(EXCLUDED_PATH_PREFIX) === 0) {
+  for (const excludedPath of excludedPaths) {
+    if (filename.includes(excludedPath)) {
       return true
     }
   }
