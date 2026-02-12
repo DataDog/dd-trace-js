@@ -79,7 +79,13 @@ class TestWorkerCiVisibilityExporter {
     this._writer = new Writer(interprocessTraceCode)
     this._coverageWriter = new Writer(interprocessCoverageCode)
     this._logsWriter = new Writer(interprocessLogsCode)
-    this._telemetryWriter = new Writer(interprocessTelemetryCode)
+    // TODO: add support for test workers other than Jest
+    if (interprocessTelemetryCode) {
+      this._telemetryWriter = new Writer(interprocessTelemetryCode)
+      this.exportTelemetry = function (telemetryEvent) {
+        this._telemetryWriter.append(telemetryEvent)
+      }
+    }
   }
 
   export (payload) {
@@ -94,16 +100,14 @@ class TestWorkerCiVisibilityExporter {
     this._logsWriter.append({ testEnvironmentMetadata, logMessage })
   }
 
-  exportTelemetry (telemetryEvent) {
-    this._telemetryWriter.append(telemetryEvent)
-  }
-
   // TODO: add to other writers
   flush (onDone) {
     this._writer.flush(onDone)
     this._coverageWriter.flush()
     this._logsWriter.flush()
-    this._telemetryWriter.flush()
+    if (this._telemetryWriter) {
+      this._telemetryWriter.flush()
+    }
   }
 }
 

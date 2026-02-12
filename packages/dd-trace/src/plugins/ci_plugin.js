@@ -363,11 +363,12 @@ module.exports = class CiPlugin extends Plugin {
   get telemetry () {
     const testFramework = this.constructor.id
     const exporter = this.tracer?._exporter
-    const isWorker = exporter && typeof exporter.exportTelemetry === 'function'
+    // TODO: only jest worker supported yet
+    const isSupportedWorker = exporter && typeof exporter.exportTelemetry === 'function'
     const ciProviderName = this.ciProviderName
 
-    if (isWorker) {
-      // In worker: send telemetry events to main process
+    if (isSupportedWorker) {
+      // In supported worker: send telemetry events to main process
       return {
         ciVisEvent: function (name, testLevel, tags = {}) {
           exporter.exportTelemetry({
@@ -398,7 +399,7 @@ module.exports = class CiPlugin extends Plugin {
       }
     }
 
-    // In main process: execute telemetry directly
+    // In main process or unsupported worker: execute telemetry directly
     return {
       ciVisEvent: function (name, testLevel, tags = {}) {
         incrementCountMetric(name, {
