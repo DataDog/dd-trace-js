@@ -3265,6 +3265,21 @@ declare namespace tracer {
        * The timestamp in milliseconds when the evaluation metric result was generated.
        */
       timestampMs?: number
+
+      /**
+       * Reasoning for the evaluation result.
+       */
+      reasoning?: string,
+
+      /**
+       * Whether the evaluation passed or failed. Valid values are pass and fail.
+       */
+      assessment?: string,
+
+      /**
+       * Arbitrary JSON data associated with the evaluation.
+       */
+      metadata?: { [key: string]: any }
     }
 
     interface Document {
