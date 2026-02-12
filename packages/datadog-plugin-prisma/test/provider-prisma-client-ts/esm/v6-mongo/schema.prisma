@@ -1,16 +1,17 @@
 generator client {
   provider = "prisma-client"
   output = env("PRISMA_CLIENT_OUTPUT")
-  moduleFormat = "cjs"
+  moduleFormat = "esm"
   importFileExtension = "js"
 }
 
-datasource primary {
-  provider = "postgresql"
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
+  id    String  @id @default(auto()) @map("_id") @db.ObjectId
   email String  @unique
   name  String?
 }

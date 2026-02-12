@@ -15,8 +15,10 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema } = require('./naming')
 
 const {
+  FALLBACK_DATABASE_URL,
   PRISMA_CLIENT_OUTPUT_RELATIVE,
   SCHEMA_FIXTURES,
+  TEST_DATABASE_ENV_NAME,
   TEST_DATABASE_URL,
 } = require('./prisma-fixtures')
 
@@ -58,11 +60,16 @@ function loadPrismaModule (config, range) {
 function clearPrismaEnv () {
   delete process.env.PRISMA_CLIENT_OUTPUT
   delete process.env.DATABASE_URL
+  delete process.env[TEST_DATABASE_ENV_NAME]
 }
 
-function setGeneratedClientEnv () {
-  process.env.PRISMA_CLIENT_OUTPUT = PRISMA_CLIENT_OUTPUT_RELATIVE
-  process.env.DATABASE_URL = TEST_DATABASE_URL
+function setPrismaEnv (config) {
+  process.env[TEST_DATABASE_ENV_NAME] = TEST_DATABASE_URL
+  process.env.DATABASE_URL = FALLBACK_DATABASE_URL
+  process.env.PRISMA_TEST_DATABASE_URL = TEST_DATABASE_URL
+  if (config.usesGeneratedClientOutput) {
+    process.env.PRISMA_CLIENT_OUTPUT = PRISMA_CLIENT_OUTPUT_RELATIVE
+  }
 }
 
 async function copySchemaToVersionDir (schemaPath, range) {
@@ -78,11 +85,11 @@ function createPrismaClient (prisma, config) {
   // With the introduction of v7 prisma now enforces the use of adpaters
   if (config.v7) {
     const { PrismaPg } = require('@prisma/adapter-pg')
-    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+    const adapter = new PrismaPg({ connectionString: process.env[TEST_DATABASE_ENV_NAME] })
     return new prisma.PrismaClient({ adapter })
   }
   if (config.usesGeneratedClientOutput) {
-    return new prisma.PrismaClient({ datasourceUrl: process.env.DATABASE_URL })
+    return new prisma.PrismaClient({ datasourceUrl: process.env[TEST_DATABASE_ENV_NAME] })
   }
   return new prisma.PrismaClient()
 }
@@ -101,6 +108,7 @@ describe('Plugin', () => {
       const channel = {
         tracePromise: spies.tracePromise || ((fn) => fn()),
         traceSync: spies.traceSync || ((fn) => fn()),
+        start: { hasSubscribers: spies.hasSubscribers !== false },
       }
 
       return proxyquire.noPreserveCache()('../src/datadog-tracing-helper', {
@@ -184,6 +192,21 @@ describe('Plugin', () => {
       assert.strictEqual(started[0].dbConfig.database, 'db')
     })
 
+    it('dispatchEngineSpans should ignore empty span arrays', () => {
+      const DatadogTracingHelper = getHelperClass()
+      /** @type {Array<unknown>} */
+      const started = []
+
+      const prismaClient = {
+        startEngineSpan: (ctx) => started.push(ctx),
+      }
+      const helper = new DatadogTracingHelper({ database: 'db' }, prismaClient)
+
+      helper.dispatchEngineSpans([])
+
+      assert.strictEqual(started.length, 0)
+    })
+
     it('runInChildSpan should use tracePromise for allowed non-serialize operations', () => {
       /** @type {Array<{ type: string, ctx?: { resourceName?: string, attributes?: Record<string, unknown> } }>} */
       const calls = []
@@ -235,6 +258,22 @@ describe('Plugin', () => {
       assert.strictEqual(calls.length, 1)
       assert.strictEqual(calls[0].type, 'sync')
       assert.strictEqual(calls[0].ctx.resourceName, 'serialize')
+    })
+
+    it('runInChildSpan should bypass tracing when there are no subscribers', () => {
+      /** @type {Array<{ type: string }>} */
+      const calls = []
+      const DatadogTracingHelper = getHelperClass({
+        hasSubscribers: false,
+        tracePromise: () => { calls.push({ type: 'promise' }) },
+        traceSync: () => { calls.push({ type: 'sync' }) },
+      })
+
+      const helper = new DatadogTracingHelper(undefined, {})
+      const result = helper.runInChildSpan({ name: 'operation' }, () => 'ok')
+
+      assert.strictEqual(result, 'ok')
+      assert.strictEqual(calls.length, 0)
     })
 
     it('runInChildSpan should bypass tracing when operation is not in the allowlist', () => {
@@ -291,7 +330,7 @@ describe('Plugin', () => {
           before(async function () {
             this.timeout(10000)
             clearPrismaEnv()
-            if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
+            setPrismaEnv(config)
 
             const cwd = await copySchemaToVersionDir(config.schema, range)
 
@@ -474,7 +513,7 @@ describe('Plugin', () => {
             before(async function () {
               this.timeout(10000)
               clearPrismaEnv()
-              if (config.usesGeneratedClientOutput) setGeneratedClientEnv()
+              setPrismaEnv(config)
 
               const cwd = await copySchemaToVersionDir(config.schema, range)
 
