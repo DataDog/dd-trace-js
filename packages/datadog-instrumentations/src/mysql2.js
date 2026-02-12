@@ -6,6 +6,22 @@ const shimmer = require('../../datadog-shimmer')
 const satisfies = require('../../../vendor/dist/semifies')
 const { channel, addHook } = require('./helpers/instrument')
 
+/** @type {WeakMap<object, Function>} */
+const wrappedOnResult = new WeakMap()
+
+/**
+ * @param {unknown} sql
+ * @returns {string|undefined}
+ */
+function resolveSqlString (sql) {
+  return typeof sql === 'string' ? sql : /** @type {{ sql?: string }} */ (sql)?.sql
+}
+
+/**
+ * @param {Function} Connection
+ * @param {string} version
+ * @returns {Function}
+ */
 function wrapConnection (Connection, version) {
   const startCh = channel('apm:mysql2:query:start')
   const finishCh = channel('apm:mysql2:query:finish')
@@ -19,15 +35,27 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'addCommand', addCommand => function (cmd) {
     if (!startCh.hasSubscribers) return addCommand.apply(this, arguments)
 
-    const name = cmd && cmd.constructor && cmd.constructor.name
-    const isCommand = typeof cmd.execute === 'function'
-    const isQuery = isCommand && (name === 'Execute' || name === 'Query')
+    const command = /** @type {{ execute?: Function, constructor?: { name?: string } }} */ (cmd)
+    if (typeof command.execute !== 'function') return addCommand.apply(this, arguments)
+
+    const name = command.constructor?.name
+    const isQuery = name === 'Execute' || name === 'Query'
     const ctx = {}
 
-    // TODO: consider supporting all commands and not just queries
-    cmd.execute = isQuery
-      ? wrapExecute(cmd, cmd.execute, ctx, this.config)
-      : bindExecute(cmd.execute, ctx)
+    if (isQuery) {
+      command.execute = wrapExecute(command, command.execute, ctx, this.config)
+
+      return commandAddCh.runStores(ctx, addCommand, this, ...arguments)
+    }
+
+    wrapCommandOnResult(command, ctx)
+
+    command.execute = shimmer.wrapFunction(
+      command.execute,
+      execute => function executeWithTrace (_packet_, _connection_) {
+        return commandStartCh.runStores(ctx, execute, this, ...arguments)
+      }
+    )
 
     return commandAddCh.runStores(ctx, addCommand, this, ...arguments)
   })
@@ -35,12 +63,11 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    if (sql !== null && typeof sql === 'object') sql = sql.sql
-
-    if (!sql) return query.apply(this, arguments)
+    const resolvedSql = resolveSqlString(sql)
+    if (resolvedSql === undefined) return query.apply(this, arguments)
 
     const abortController = new AbortController()
-    startOuterQueryCh.publish({ sql, abortController })
+    startOuterQueryCh.publish({ sql: resolvedSql, abortController })
 
     if (abortController.signal.aborted) {
       const addCommand = this.addCommand
@@ -56,7 +83,7 @@ function wrapConnection (Connection, version) {
       cb = queryCommand.onResult
 
       process.nextTick(() => {
-        if (cb) {
+        if (typeof cb === 'function') {
           cb(abortController.signal.reason)
         } else {
           queryCommand.emit('error', abortController.signal.reason)
@@ -76,12 +103,11 @@ function wrapConnection (Connection, version) {
   shimmer.wrap(Connection.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    if (sql !== null && typeof sql === 'object') sql = sql.sql
-
-    if (!sql) return execute.apply(this, arguments)
+    const resolvedSql = resolveSqlString(sql)
+    if (resolvedSql === undefined) return execute.apply(this, arguments)
 
     const abortController = new AbortController()
-    startOuterQueryCh.publish({ sql, abortController })
+    startOuterQueryCh.publish({ sql: resolvedSql, abortController })
 
     if (abortController.signal.aborted) {
       const addCommand = this.addCommand
@@ -94,7 +120,9 @@ function wrapConnection (Connection, version) {
         this.addCommand = addCommand
       }
 
-      result?.onResult(abortController.signal.reason)
+      if (typeof result?.onResult === 'function') {
+        result.onResult(abortController.signal.reason)
+      }
 
       return result
     }
@@ -104,33 +132,48 @@ function wrapConnection (Connection, version) {
 
   return Connection
 
-  function bindExecute (execute, ctx) {
-    return shimmer.wrapFunction(execute, execute => function executeWithTrace (packet, connection) {
-      const onResult = this.onResult
+  /**
+   * @param {object} cmd
+   * @param {object} ctx
+   * @returns {void}
+   */
+  function wrapCommandOnResult (cmd, ctx) {
+    const onResult = cmd?.onResult
+    if (typeof onResult !== 'function') return
 
-      if (onResult) {
-        this.onResult = function () {
-          return commandFinishCh.runStores(ctx, onResult, this, ...arguments)
-        }
-      }
+    const cached = wrappedOnResult.get(cmd)
 
-      return commandStartCh.runStores(ctx, execute, this, ...arguments)
-    })
+    if (cached === onResult) return
+
+    const wrapped = function () {
+      return commandFinishCh.runStores(ctx, onResult, this, ...arguments)
+    }
+
+    wrappedOnResult.set(cmd, wrapped)
+    cmd.onResult = wrapped
   }
 
+  /**
+   * @param {object} cmd
+   * @param {Function} execute
+   * @param {object} ctx
+   * @param {object} config
+   * @returns {Function}
+   */
   function wrapExecute (cmd, execute, ctx, config) {
     return shimmer.wrapFunction(execute, execute => function executeWithTrace (packet, connection) {
-      ctx.sql = cmd.statement ? cmd.statement.query : cmd.sql
+      const command = /** @type {{ statement?: { query?: unknown }, sql?: unknown }} */ (cmd)
+      ctx.sql = command.statement ? command.statement.query : command.sql
       ctx.conf = config
 
       return startCh.runStores(ctx, () => {
-        if (cmd.statement) {
-          cmd.statement.query = ctx.sql
+        if (command.statement) {
+          command.statement.query = ctx.sql
         } else {
-          cmd.sql = ctx.sql
+          command.sql = ctx.sql
         }
 
-        if (this.onResult) {
+        if (typeof this.onResult === 'function') {
           const onResult = this.onResult
 
           this.onResult = shimmer.wrapFunction(onResult, onResult => function (error) {
@@ -141,11 +184,14 @@ function wrapConnection (Connection, version) {
             finishCh.runStores(ctx, onResult, this, ...arguments)
           })
         } else {
-          this.once(errorMonitor, error => {
-            ctx.error = error
-            errorCh.publish(ctx)
-          })
-          this.once('end', () => finishCh.publish(ctx))
+          const command = /** @type {{ once?: Function }} */ (this)
+          if (typeof command.once === 'function') {
+            command.once(errorMonitor, error => {
+              ctx.error = error
+              errorCh.publish(ctx)
+            })
+            command.once('end', () => finishCh.publish(ctx))
+          }
         }
 
         this.execute = execute
@@ -157,9 +203,14 @@ function wrapConnection (Connection, version) {
           errorCh.publish(ctx)
         }
       })
-    }, cmd)
+    })
   }
 }
+/**
+ * @param {Function} Pool
+ * @param {string} version
+ * @returns {Function}
+ */
 function wrapPool (Pool, version) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
   const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
@@ -167,12 +218,11 @@ function wrapPool (Pool, version) {
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
 
-    if (sql !== null && typeof sql === 'object') sql = sql.sql
-
-    if (!sql) return query.apply(this, arguments)
+    const resolvedSql = resolveSqlString(sql)
+    if (resolvedSql === undefined) return query.apply(this, arguments)
 
     const abortController = new AbortController()
-    startOuterQueryCh.publish({ sql, abortController })
+    startOuterQueryCh.publish({ sql: resolvedSql, abortController })
 
     if (abortController.signal.aborted) {
       const getConnection = this.getConnection
@@ -206,21 +256,22 @@ function wrapPool (Pool, version) {
   shimmer.wrap(Pool.prototype, 'execute', execute => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return execute.apply(this, arguments)
 
-    if (sql !== null && typeof sql === 'object') sql = sql.sql
-
-    if (!sql) return execute.apply(this, arguments)
+    const resolvedSql = resolveSqlString(sql)
+    if (resolvedSql === undefined) return execute.apply(this, arguments)
 
     const abortController = new AbortController()
-    startOuterQueryCh.publish({ sql, abortController })
+    startOuterQueryCh.publish({ sql: resolvedSql, abortController })
 
     if (abortController.signal.aborted) {
       if (typeof values === 'function') {
         cb = values
       }
 
-      process.nextTick(() => {
-        cb(abortController.signal.reason)
-      })
+      if (typeof cb === 'function') {
+        process.nextTick(() => {
+          /** @type {Function} */ (cb)(abortController.signal.reason)
+        })
+      }
       return
     }
 
@@ -230,6 +281,10 @@ function wrapPool (Pool, version) {
   return Pool
 }
 
+/**
+ * @param {Function} PoolCluster
+ * @returns {Function}
+ */
 function wrapPoolCluster (PoolCluster) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
   const wrappedPoolNamespaces = new WeakSet()
@@ -239,12 +294,11 @@ function wrapPoolCluster (PoolCluster) {
 
     if (startOuterQueryCh.hasSubscribers && !wrappedPoolNamespaces.has(poolNamespace)) {
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {
-        if (sql !== null && typeof sql === 'object') sql = sql.sql
-
-        if (!sql) return query.apply(this, arguments)
+        const resolvedSql = resolveSqlString(sql)
+        if (resolvedSql === undefined) return query.apply(this, arguments)
 
         const abortController = new AbortController()
-        startOuterQueryCh.publish({ sql, abortController })
+        startOuterQueryCh.publish({ sql: resolvedSql, abortController })
 
         if (abortController.signal.aborted) {
           const getConnection = this.getConnection
@@ -274,21 +328,22 @@ function wrapPoolCluster (PoolCluster) {
       })
 
       shimmer.wrap(poolNamespace, 'execute', execute => function (sql, values, cb) {
-        if (sql !== null && typeof sql === 'object') sql = sql.sql
-
-        if (!sql) return execute.apply(this, arguments)
+        const resolvedSql = resolveSqlString(sql)
+        if (resolvedSql === undefined) return execute.apply(this, arguments)
 
         const abortController = new AbortController()
-        startOuterQueryCh.publish({ sql, abortController })
+        startOuterQueryCh.publish({ sql: resolvedSql, abortController })
 
         if (abortController.signal.aborted) {
           if (typeof values === 'function') {
             cb = values
           }
 
-          process.nextTick(() => {
-            cb(abortController.signal.reason)
-          })
+          if (typeof cb === 'function') {
+            process.nextTick(() => {
+              /** @type {Function} */ (cb)(abortController.signal.reason)
+            })
+          }
 
           return
         }
@@ -305,9 +360,21 @@ function wrapPoolCluster (PoolCluster) {
   return PoolCluster
 }
 
-addHook({ name: 'mysql2', file: 'lib/base/connection.js', versions: ['>=3.11.5'] }, wrapConnection)
-addHook({ name: 'mysql2', file: 'lib/connection.js', versions: ['1 - 3.11.4'] }, wrapConnection)
-addHook({ name: 'mysql2', file: 'lib/pool.js', versions: ['1 - 3.11.4'] }, wrapPool)
+addHook(
+  { name: 'mysql2', file: 'lib/base/connection.js', versions: ['>=3.11.5'] },
+  /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapConnection)
+)
+addHook(
+  { name: 'mysql2', file: 'lib/connection.js', versions: ['1 - 3.11.4'] },
+  /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapConnection)
+)
+addHook(
+  { name: 'mysql2', file: 'lib/pool.js', versions: ['1 - 3.11.4'] },
+  /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapPool)
+)
 
 // PoolNamespace.prototype.query does not exist in mysql2<2.3.0
-addHook({ name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['2.3.0 - 3.11.4'] }, wrapPoolCluster)
+addHook(
+  { name: 'mysql2', file: 'lib/pool_cluster.js', versions: ['2.3.0 - 3.11.4'] },
+  /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapPoolCluster)
+)

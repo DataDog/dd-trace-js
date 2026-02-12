@@ -70,6 +70,8 @@ const {
   TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_IS_MODIFIED,
+  TEST_IS_RETRY,
+  TEST_RETRY_REASON,
 } = require('./util/test')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
@@ -360,12 +362,50 @@ module.exports = class CiPlugin extends Plugin {
 
   get telemetry () {
     const testFramework = this.constructor.id
+    const exporter = this.tracer?._exporter
+    // TODO: only jest worker supported yet
+    const isSupportedWorker = exporter && typeof exporter.exportTelemetry === 'function'
+    const ciProviderName = this.ciProviderName
+
+    if (isSupportedWorker) {
+      // In supported worker: send telemetry events to main process
+      return {
+        ciVisEvent: function (name, testLevel, tags = {}) {
+          exporter.exportTelemetry({
+            type: 'ciVisEvent',
+            name,
+            testLevel,
+            testFramework,
+            isUnsupportedCIProvider: !ciProviderName,
+            tags,
+          })
+        },
+        count: function (name, tags, value = 1) {
+          exporter.exportTelemetry({
+            type: 'count',
+            name,
+            tags,
+            value,
+          })
+        },
+        distribution: function (name, tags, measure) {
+          exporter.exportTelemetry({
+            type: 'distribution',
+            name,
+            tags,
+            measure,
+          })
+        },
+      }
+    }
+
+    // In main process or unsupported worker: execute telemetry directly
     return {
       ciVisEvent: function (name, testLevel, tags = {}) {
         incrementCountMetric(name, {
           testLevel,
           testFramework,
-          isUnsupportedCIProvider: !this.ciProviderName,
+          isUnsupportedCIProvider: !ciProviderName,
           ...tags,
         })
       },
@@ -679,13 +719,16 @@ module.exports = class CiPlugin extends Plugin {
   getTestTelemetryTags (testSpan) {
     const activeSpanTags = testSpan.context()._tags
     return {
-      hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
-      isNew: activeSpanTags[TEST_IS_NEW] === 'true',
-      isRum: activeSpanTags[TEST_IS_RUM_ACTIVE] === 'true',
+      hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS] || undefined,
+      isNew: activeSpanTags[TEST_IS_NEW] === 'true' || undefined,
+      isRum: activeSpanTags[TEST_IS_RUM_ACTIVE] === 'true' || undefined,
       browserDriver: activeSpanTags[TEST_BROWSER_DRIVER],
-      isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
-      isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
-      isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true',
+      isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
+      isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
+      isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true' || undefined,
+      isRetry: activeSpanTags[TEST_IS_RETRY] === 'true' || undefined,
+      retryReason: activeSpanTags[TEST_RETRY_REASON],
+      isFailedTestReplayEnabled: activeSpanTags[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true' || undefined,
     }
   }
 }
