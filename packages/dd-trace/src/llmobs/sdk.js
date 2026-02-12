@@ -359,7 +359,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
       }
 
-      const { label, value, tags } = options
+      const { label, value, tags, reasoning, assessment, metadata } = options
       const metricType = options.metricType?.toLowerCase()
       if (!label) {
         err = 'invalid_metric_label'
@@ -380,6 +380,9 @@ class LLMObs extends NoopLLMObs {
       if (metricType === 'boolean' && typeof value !== 'boolean') {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
+      }
+      if (assessment !== null && assessment !== 'pass' && assessment !== 'fail') {
+        throw new Error('assessment must be pass or fail')
       }
 
       const evaluationTags = {
@@ -420,6 +423,16 @@ class LLMObs extends NoopLLMObs {
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
+        reasoning: 
+      }
+      if (reasoning !== undefined) {
+        payload.reasoning = reasoning
+      }
+      if (metadata !== undefined) {
+        payload.metadata = metadata
+      }
+      if (assessment !== undefined) {
+        payload.assessment = assessment
       }
       const currentStore = storage.getStore()
       const routing = currentStore?.routingContext
