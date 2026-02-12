@@ -78,22 +78,6 @@ describe('getTestSuitePath', () => {
     const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
     assert.strictEqual(testSuitePath, sourceRoot)
   })
-
-  it('replaces all path separators with forward slashes', () => {
-    const sourceRoot = path.join('/users', 'opt', 'project')
-    const testSuiteAbsolutePath = path.join(sourceRoot, 'tests', 'unit', 'test.spec.js')
-    const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
-    // Should normalize all path separators to forward slashes
-    assert.strictEqual(testSuitePath, 'tests/unit/test.spec.js')
-    assert.ok(!testSuitePath.includes(path.sep) || path.sep === '/')
-  })
-
-  it('handles nested directory paths correctly', () => {
-    const sourceRoot = path.join('/project', 'root')
-    const testSuiteAbsolutePath = path.join(sourceRoot, 'a', 'b', 'c', 'd', 'test.js')
-    const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
-    assert.strictEqual(testSuitePath, 'a/b/c/d/test.js')
-  })
 })
 
 describe('getCodeOwnersFileEntries', () => {

@@ -27,6 +27,8 @@ const formattedTags = {
   isImpactedTestsEnabled: 'impacted_tests_enabled',
   hasFailedTestReplay: 'has_failed_test_replay',
   isFailedTestReplayEnabled: 'is_failed_test_replay_enabled',
+  // isDiEnabled is specifically for the settings endpoint telemetry
+  isDiEnabled: 'failed_test_replay_enabled',
   requireGit: 'require_git',
   isModified: 'is_modified',
   isRetry: 'is_retry',

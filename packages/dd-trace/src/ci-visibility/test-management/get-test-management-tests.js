@@ -1,6 +1,6 @@
 'use strict'
 
-const request = require('../request')
+const request = require('../../exporters/common/request')
 const id = require('../../id')
 const { getValueFromEnvSources } = require('../../config/helper')
 const log = require('../../log')
@@ -57,7 +57,6 @@ function getTestManagementTests ({
     },
     timeout: 20_000,
     url,
-    requestType: 'test-management-tests',
   }
 
   if (isGzipCompatible) {
@@ -70,15 +69,13 @@ function getTestManagementTests ({
   } else {
     const apiKey = getValueFromEnvSources('DD_API_KEY')
     if (!apiKey) {
-      const error = new Error('Test management tests were not fetched because Datadog API key is not defined.')
-      log.error(error.message)
-      return done(error)
+      return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
     }
 
     options.headers['dd-api-key'] = apiKey
   }
 
-  const requestPayload = {
+  const data = JSON.stringify({
     data: {
       id: id().toString(10),
       type: 'ci_app_libraries_tests_request',
@@ -89,65 +86,35 @@ function getTestManagementTests ({
         branch,
       },
     },
-  }
+  })
 
-  const data = JSON.stringify(requestPayload)
+  log.debug('Requesting test management tests: %s', data)
 
   incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS)
 
   const startTime = Date.now()
 
   request(data, options, (err, res, statusCode) => {
-    const duration = Date.now() - startTime
-    distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_MS, {}, duration)
-
+    distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_MS, {}, Date.now() - startTime)
     if (err) {
-      log.error('Test management tests request failed: %s (status code: %s)', err.message, statusCode)
       incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS, { statusCode })
-      return done(err)
-    }
-
-    if (res) {
+      done(err)
+    } else {
       try {
-        const parsedResponse = JSON.parse(res)
-        const { data: { attributes: { modules: testManagementTests } } } = parsedResponse
+        const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
 
         const numTests = getNumFromTestManagementTests(testManagementTests)
 
         distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)
 
-        // Temporary debug: log only quarantined tests as list of test names.
-        const quarantinedTests = []
-        for (const testModule of Object.values(testManagementTests || {})) {
-          const { suites } = testModule || {}
-          if (!suites) continue
-          for (const testSuite of Object.values(suites)) {
-            const { tests } = testSuite || {}
-            if (!tests) continue
-            for (const [testName, testConfig] of Object.entries(tests)) {
-              if (testConfig?.properties?.quarantined) {
-                quarantinedTests.push(testName)
-              }
-            }
-          }
-        }
-        if (quarantinedTests.length) {
-          log.warn('Test management quarantined tests: %j', quarantinedTests)
-        }
+        log.debug('Test management tests received: %j', testManagementTests)
 
-        return done(null, testManagementTests)
-      } catch (parseErr) {
-        log.error('Failed to parse test management tests response: %s', parseErr.message)
-        incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS, { statusCode })
-        return done(parseErr)
+        done(null, testManagementTests)
+      } catch (err) {
+        done(err)
       }
     }
-
-    const error = new Error('Test management tests request returned empty response')
-    log.error(error.message)
-    incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS, { statusCode })
-    done(error)
   })
 }
 

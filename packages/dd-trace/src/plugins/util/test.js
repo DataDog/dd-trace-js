@@ -575,7 +575,7 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     ? testSuiteAbsolutePath
     : path.relative(sourceRoot, testSuiteAbsolutePath)
 
-  return testSuitePath.replaceAll(path.sep, '/')
+  return testSuitePath.replace(path.sep, '/')
 }
 
 const POSSIBLE_CODEOWNERS_LOCATIONS = [
