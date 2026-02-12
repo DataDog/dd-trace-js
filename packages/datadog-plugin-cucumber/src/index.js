@@ -106,7 +106,9 @@ class CucumberPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
