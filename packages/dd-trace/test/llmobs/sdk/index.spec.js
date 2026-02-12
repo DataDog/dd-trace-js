@@ -1258,6 +1258,30 @@ describe('sdk', () => {
         metricType: 'boolean',
         value: 'it is super toxic!',
       }), { message: 'value must be a boolean for a boolean metric' })
+
+    it('throws an error when submitting a non-string reasoning', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: true,
+        reasoning: 1,
+      }), { message: 'reasoning must be a string' })
+
+    it('throws an error when submitting a non pass/fail assessment', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: true,
+        assessment: 'correct',
+      }), { message: 'assessment must be pass or fail' })
+
+    it('throws an error when submitting an non JSON object metadata', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: true,
+        metadata: 'some metadata',
+      }), { message: 'metadata must be a JSON object' })
     })
 
     describe('with DD_TRACE_OTEL_ENABLED set', () => {
