@@ -1269,7 +1269,7 @@ describe('sdk', () => {
         value: 0.6,
         reasoning: 'this input is toxic',
         assessment: 'fail',
-        metadata: {'some': 'details'},
+        metadata: { some: 'details' },
         tags: {
           host: 'localhost',
         },
@@ -1286,7 +1286,7 @@ describe('sdk', () => {
         tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost'],
         reasoning: 'this input is toxic',
         assessment: 'fail',
-        metadata: {'some': 'details'},
+        metadata: { some: 'details' },
       })
     })
 
