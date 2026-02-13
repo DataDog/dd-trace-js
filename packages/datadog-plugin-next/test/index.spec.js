@@ -17,7 +17,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
 const { rawExpectedSchema } = require('./naming')
 
-const min = NODE_MAJOR >= 25 ? '>=13' : '>=11.1'
+const min = NODE_MAJOR >= 24 ? '>=13' : '>=11.1'
 
 describe('Plugin', function () {
   let server
@@ -28,7 +28,7 @@ describe('Plugin', function () {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
     // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', `${min} <15.4.1`, version => {
+    withVersions('next', 'next', `${min} <17`, version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
@@ -103,6 +103,15 @@ describe('Plugin', function () {
         // https://nextjs.org/blog/next-9-5#webpack-5-support-beta
         if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
 
+        // Next.js 11+ requires React as peer dependencies
+        if (satisfies(realVersion, '>=11 <13')) {
+          pkg.dependencies.react = '^17.0.2'
+          pkg.dependencies['react-dom'] = '^17.0.2'
+        } else if (satisfies(realVersion, '>=13')) {
+          pkg.dependencies.react = '^18.2.0'
+          pkg.dependencies['react-dom'] = '^18.2.0'
+        }
+
         writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
 
         // installing here for standalone purposes, copying `nodules` above was not generating the server file properly
@@ -114,12 +123,21 @@ describe('Plugin', function () {
         }
 
         // building in-process makes tests fail for an unknown reason
-        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
+        const buildEnv = {
+          ...process.env,
+          VERSION: realVersion,
+        }
+        // --openssl-legacy-provider is not allowed in Node 24+
+        if (NODE_MAJOR < 24) {
+          buildEnv.NODE_OPTIONS = '--openssl-legacy-provider'
+        }
+        // Next.js 16+ uses Turbopack by default, force webpack to avoid worker_threads bug
+        const buildCmd = satisfies(realVersion, '>=16.0.0')
+          ? 'yarn exec next build --webpack'
+          : 'yarn exec next build'
+        execSync(buildCmd, {
           cwd,
-          env: {
-            ...process.env,
-            VERSION: realVersion,
-          },
+          env: buildEnv,
           stdio: ['pipe', 'ignore', 'pipe'],
         })
 
