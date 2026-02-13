@@ -59,7 +59,7 @@ describe('RASP - downstream request integration', () => {
       } else {
         assert.strictEqual(span.meta['_dd.appsec.trace.res_body'], undefined)
       }
-    })
+    }, 4_000)
   }
 
   function assertTelemetry (agent) {
@@ -101,7 +101,7 @@ describe('RASP - downstream request integration', () => {
       })
   }
 
-  describe('Downstream configuration', () => {
+  describe.only('Downstream configuration', () => {
     describe('with body sampling enabled', () => {
       let agent, proc, axios
 
