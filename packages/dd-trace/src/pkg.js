@@ -23,7 +23,7 @@ function findPkg () {
   if (filePath === undefined) return {}
 
   try {
-    return require(filePath)
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'))
   } catch {
     return {}
   }
@@ -41,4 +41,4 @@ function findUp (name, root, directory) {
   }
 }
 
-module.exports = { ...findPkg(), findRoot, findUp }
+module.exports = Object.assign(findPkg(), { findRoot, findUp })
