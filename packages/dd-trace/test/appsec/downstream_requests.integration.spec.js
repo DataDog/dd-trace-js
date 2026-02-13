@@ -95,7 +95,7 @@ describe('RASP - downstream request integration', () => {
         assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
         assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
       }
-    }, 'generate-metrics', 30_000, 2).then(
+    }, 'generate-metrics', 4_000, 2).then(
       () => {
         assert.strictEqual(appsecTelemetryReceived, true)
       })
