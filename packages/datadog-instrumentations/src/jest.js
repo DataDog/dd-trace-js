@@ -997,10 +997,14 @@ function getCliWrapper (isNewJestVersion) {
           numRuntimeErrorTestSuites = 0,
           numTotalTests,
           numTotalTestSuites,
+          runExecError,
+          wasInterrupted,
         },
       } = result
 
       const hasSuiteLevelFailures = numRuntimeErrorTestSuites > 0
+      const hasRunLevelFailure = runExecError != null || wasInterrupted === true
+      const mustNotFlipSuccess = hasSuiteLevelFailures || hasRunLevelFailure
 
       let testCodeCoverageLinesTotal
 
@@ -1030,7 +1034,7 @@ function getCliWrapper (isNewJestVersion) {
         }
         // If every test that failed was an EFD retry, we'll consider the suite passed
         if (
-          !hasSuiteLevelFailures &&
+          !mustNotFlipSuccess &&
           numEfdFailedTestsToIgnore !== 0 &&
           result.results.numFailedTests === numEfdFailedTestsToIgnore
         ) {
@@ -1079,7 +1083,7 @@ function getCliWrapper (isNewJestVersion) {
         // it's considered quarantined both if it's disabled and if it's quarantined
         // (it'll run but its status is ignored)
         if (
-          !hasSuiteLevelFailures &&
+          !mustNotFlipSuccess &&
           (numFailedQuarantinedOrDisabledAttemptedToFixTests !== 0 || numFailedQuarantinedTests !== 0) &&
           result.results.numFailedTests ===
             numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
@@ -1092,7 +1096,7 @@ function getCliWrapper (isNewJestVersion) {
       // we should consider the suite passed even when neither check alone covers all failures.
       if (
         !result.results.success &&
-        !hasSuiteLevelFailures &&
+        !mustNotFlipSuccess &&
         (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)
       ) {
         const totalIgnoredFailures =
