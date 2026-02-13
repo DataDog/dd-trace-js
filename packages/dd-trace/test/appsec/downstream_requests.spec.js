@@ -188,8 +188,8 @@ describe('appsec downstream_requests', () => {
 
       assert.strictEqual(addressesMap[addresses.HTTP_OUTGOING_METHOD], 'POST')
       assert.deepStrictEqual(addressesMap[addresses.HTTP_OUTGOING_HEADERS], {
-        'Content-Type': 'application/json',
-        'X-Custom': ['a', 'b'],
+        'content-type': 'application/json',
+        'x-custom': ['a', 'b'],
       })
     })
 
