@@ -101,7 +101,7 @@ describe('RASP - downstream request integration', () => {
       })
   }
 
-  describe.only('Downstream configuration', () => {
+  describe('Downstream configuration', () => {
     describe('with body sampling enabled', () => {
       let agent, proc, axios
 
