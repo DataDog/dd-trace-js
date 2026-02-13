@@ -2911,6 +2911,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       assert.match(testOutput, /2 failed, 2 passed/)
       // Exit code is 0 because at least one retry of the new flaky test passes
       assert.strictEqual(exitCode, 0)
+
+      // Verify Datadog Test Optimization message is shown when exit code is flipped
+      assert.match(testOutput, /Datadog Test Optimization/)
+      assert.match(testOutput, /\d+ test failure\(s\) were ignored\. Exit code set to 0\./)
+      assert.match(testOutput, /Early Flake Detection/)
+      assert.match(testOutput, /occasionally-failing-test.*›.*fail occasionally fails/)
     })
 
     // resetting snapshot state logic only works in latest versions
@@ -5416,6 +5422,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         if (isQuarantining) {
           // even though a test fails, the exit code is 0 because the test is quarantined
           assert.strictEqual(exitCode, 0)
+          // Verify Datadog Test Optimization message is shown when exit code is flipped
+          assert.match(stdout, /Datadog Test Optimization/)
+          assert.match(stdout, /\d+ test failure\(s\) were ignored\. Exit code set to 0\./)
+          assert.match(stdout, /Quarantine/)
+          assert.match(stdout, /test-quarantine-1.*›.*quarantine tests can quarantine a test/)
         } else {
           assert.strictEqual(exitCode, 1)
         }
