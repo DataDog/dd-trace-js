@@ -24,7 +24,7 @@ addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (
 function entityWrapper (method) {
   return function (entityName, arg) {
     // because this method is overloaded, the second argument can either be an object
-    // with the handler or the handler itself. So first we figure which type it is
+    // with the handler or the handler itself, so first we figure which type it is
 
     if (typeof arg === 'function') {
       // if a function, this is the handler we want to wrap and trace

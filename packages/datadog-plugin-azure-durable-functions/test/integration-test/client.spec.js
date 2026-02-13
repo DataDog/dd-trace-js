@@ -50,34 +50,42 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
-      const name = 'jerome'
-      const increment = 2
-
-      return await curlAndAssertMessage(agent, `http://127.0.0.1:7071/api/httptest?name=${name}&increment=${increment}`, ({ headers, payload }) => {
-        // eslint-disable-next-line no-console
-        console.log('\x1b[36m%s\x1b[0m', 'response headers:', headers)
-        // eslint-disable-next-line no-console
-        console.log('\x1b[33m%s\x1b[0m', 'response payload:', payload)
-
+      return await curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload))
-        assert.strictEqual(payload.length, 1)
-        assert.ok(Array.isArray(payload[0]))
-        assert.ok()
 
-      // assert.strictEqual(payload[0].length, 1)
-      // assert.strictEqual(payload[0][0].name, 'azure.functions.invoke')
+        // should expect spans for http.request, activity.hola, entity.counter.add_n, entity.counter.get_count
+        assert.strictEqual(payload.length, 4)
+
+        for (const maybeArray of payload) {
+          assert.ok(Array.isArray(maybeArray))
+        }
+
+        const [maybeHttpSpan, maybeHolaActivity, maybeAddNEntity, maybeGetCountEntity] = payload
+
+        assert.strictEqual(maybeHttpSpan.length, 2)
+        assert.strictEqual(maybeHttpSpan[0].resource, 'GET /api/httptest')
+
+        assert.strictEqual(maybeHolaActivity.length, 1)
+        assert.strictEqual(maybeHolaActivity[0].resource, 'Activity hola')
+        assert.strictEqual(maybeHolaActivity[0].name, 'azure.durable-functions.invoke')
+
+        assert.strictEqual(maybeAddNEntity.length, 1)
+        assert.strictEqual(maybeAddNEntity[0].resource, 'Entity Counter add_n')
+        assert.strictEqual(maybeAddNEntity[0].name, 'azure.durable-functions.invoke')
+
+        assert.strictEqual(maybeGetCountEntity.length, 1)
+        assert.strictEqual(maybeGetCountEntity[0].resource, 'Entity Counter get_count')
+        assert.strictEqual(maybeGetCountEntity[0].name, 'azure.durable-functions.invoke')
       })
     }).timeout(60000)
   })
 })
 
 /**
- * spawns azurite and func start processes
- *
+ * spawns processes for azurite and func start commands
  * - azurite is spawned first and is used as a local storage for durable functions
- * - func start then connects to azurite and runs the durable function locally.
- *
+ * - func start then connects to azurite and runs the durable function locally
  */
 async function spawnPluginIntegrationTestProcs (agentPort) {
   const cwd = sandboxCwd()

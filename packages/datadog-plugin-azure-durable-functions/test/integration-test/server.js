@@ -5,7 +5,7 @@ const { app } = require('@azure/functions')
 
 const df = require('durable-functions')
 
-df.app.entity('counter', (context) => {
+df.app.entity('Counter', (context) => {
   const current = context.df.getState(() => 0)
 
   switch (context.df.operationName) {
@@ -41,7 +41,7 @@ df.app.orchestration('testOrchestrator', function * (context) {
   const greeting = yield context.df.callActivity('hola', input.name)
 
   // 2) Update state (entity)
-  const counterId = new df.EntityId('counter', 'global')
+  const counterId = new df.EntityId('Counter', 'global')
   const increment = input.increment
   yield context.df.callEntity(counterId, 'add_n', increment)
 
