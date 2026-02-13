@@ -1,5 +1,6 @@
 'use strict'
 
+const { http } = require('../../dd-trace/src/plugins')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
 
@@ -35,7 +36,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
       const path = (new URL(httpRequest.url)).pathname
       const req = {
         method: httpRequest.method,
-        headers: httpRequest.headers,
+        headers: Object.fromEntries(httpRequest.headers),
         url: path,
       }
       // Patch the request to create web context
