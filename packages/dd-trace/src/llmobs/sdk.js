@@ -367,7 +367,7 @@ class LLMObs extends NoopLLMObs {
       }
       if (!metricType || !['categorical', 'score', 'boolean', 'json'].includes(metricType)) {
         err = 'invalid_metric_type'
-        throw new Error('metricType must be one of "categorical" or "score"')
+        throw new Error('metricType must be one of "categorical", "score", "boolean" or "json"')
       }
       if (metricType === 'categorical' && typeof value !== 'string') {
         err = 'invalid_metric_value'
