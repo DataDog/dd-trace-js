@@ -1,4 +1,4 @@
-name: '[Release Proposal]'
+name: "[Release Proposal]"
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        release-line: ['5']
+        release-line: ["5"]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -30,7 +30,7 @@ jobs:
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node
         with:
-          version: ''
+          version: ""
       - uses: ./.github/actions/install/branch-diff
         with:
           token: ${{ steps.octo-sts.outputs.token }}
