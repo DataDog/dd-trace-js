@@ -17,7 +17,7 @@ syntax = "proto3";
 
 package opentelemetry.proto.collector.trace.v1;
 
-import "opentelemetry/proto/trace/v1/trace.proto";
+import "trace.proto";
 
 option csharp_namespace = "OpenTelemetry.Proto.Collector.Trace.V1";
 option java_multiple_files = true;

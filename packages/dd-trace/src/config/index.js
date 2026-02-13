@@ -318,6 +318,7 @@ class Config {
       DD_LOGS_INJECTION,
       DD_LOGS_OTEL_ENABLED,
       DD_METRICS_OTEL_ENABLED,
+      DD_TRACES_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -419,6 +420,10 @@ class Config {
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS,
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL,
+      OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
       OTEL_METRIC_EXPORT_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
@@ -493,6 +498,16 @@ class Config {
         setString(target, 'otelMetricsTemporalityPreference', temporalityPref)
       }
     }
+    setBoolean(target, 'otelTracesEnabled', DD_TRACES_OTEL_ENABLED)
+    // Set OpenTelemetry traces configuration with specific _TRACES_ vars
+    // taking precedence over generic _EXPORTERS_ vars
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+      setString(target, 'otelTracesUrl', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || target.otelUrl)
+    }
+    setString(target, 'otelTracesHeaders', OTEL_EXPORTER_OTLP_TRACES_HEADERS || target.otelHeaders)
+    setString(target, 'otelTracesProtocol', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || target.otelProtocol)
+    const otelTracesTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TRACES_TIMEOUT, 'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT')
+    target.otelTracesTimeout = otelTracesTimeout === undefined ? target.otelTimeout : otelTracesTimeout
     setBoolean(
       target,
       'apmTracingEnabled',
@@ -1122,6 +1137,7 @@ class Config {
     const agentHostname = this.#getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
+    calc.otelTracesUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
 
     setBoolean(calc, 'isGitUploadEnabled',
