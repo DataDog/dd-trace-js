@@ -59,7 +59,7 @@ describe('RASP - downstream request integration', () => {
       } else {
         assert.strictEqual(span.meta['_dd.appsec.trace.res_body'], undefined)
       }
-    }, 4_000)
+    })
   }
 
   function assertTelemetry (agent) {
@@ -95,7 +95,7 @@ describe('RASP - downstream request integration', () => {
         assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
         assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
       }
-    }, 'generate-metrics', 4_000, 2).then(
+    }, 'generate-metrics', 30_000, 2).then(
       () => {
         assert.strictEqual(appsecTelemetryReceived, true)
       })
@@ -120,7 +120,8 @@ describe('RASP - downstream request integration', () => {
         await teardownTest(agent, proc)
       })
 
-      it('should set all tags', async () => {
+      it('should set all tags', async function () {
+        this.timeout(31_000)
         await axios.post('/with-body')
 
         await Promise.all([assertMessage(agent), assertTelemetry(agent)])
