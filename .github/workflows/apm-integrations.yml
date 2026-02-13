@@ -554,7 +554,7 @@ jobs:
   http:
     strategy:
       matrix:
-        node-version: [oldest, maintenance, "latest"]
+        node-version: [oldest, maintenance, latest]
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -611,7 +611,7 @@ jobs:
   kafkajs:
     strategy:
       matrix:
-        node-version: ["oldest", "latest"]
+        node-version: [oldest, latest]
     runs-on: ubuntu-latest
     services:
       kafka:
