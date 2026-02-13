@@ -59,40 +59,10 @@ describe.only('RASP - downstream request integration', () => {
       } else {
         assert.strictEqual(span.meta['_dd.appsec.trace.res_body'], undefined)
       }
-    })
+    }, 4000)
   }
 
   async function assertTelemetry (agent) {
-    // let timeout
-    // const series = []
-    // await new Promise((resolve, reject) => {
-    //   const cb = ({ payload }) => {
-    //     if (payload.request_type !== 'generate-metrics') return
-    //     const namespace = payload.payload.namespace
-    //     series.push(payload?.payload?.series)
-    //     if (namespace === 'appsec') {
-    //       clearTimeout(timeout)
-    //       timeout = setTimeout(() => {
-    //         agent.off('telemetry', cb)
-    //         resolve()
-    //       }, 500)
-    //     }
-    //   }
-    //   agent.on('telemetry', cb)
-    //   setTimeout(() => {
-    //     if (!timeout) {
-    //       reject(new Error('Timeout'))
-    //     }
-    //   }, 5000)
-    // })
-    // try {
-    //   assert.strictEqual(series.length, 2)
-    //   console.log('series', series)
-    // } catch (e) {
-    //   console.log('series', series)
-    //   throw e
-    // }
-
     let appsecTelemetryReceived = false
     return agent.assertTelemetryReceived(({ payload }) => {
       const namespace = payload.payload.namespace
@@ -110,17 +80,10 @@ describe.only('RASP - downstream request integration', () => {
           if (hasTag(s, 'rule_variant:request')) evalVariants.add('request')
           if (hasTag(s, 'rule_variant:response')) evalVariants.add('response')
         }
-        try {
-          assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
-          assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
-        } catch (e) {
-          console.log('assertTelemetry 00 - e', e)
-          console.log('evalVariants', evalVariants)
-          console.log('evalSeries', evalSeries)
-          console.log('series', series)
-          console.log('payload', payload)
-          throw e
-        }
+
+        assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
+        assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
+
         const matchSeries = series.filter(s => s.metric === 'rasp.rule.match')
         assert.ok(matchSeries, 'Rasp rule match series should exist')
 
@@ -134,7 +97,7 @@ describe.only('RASP - downstream request integration', () => {
       } else {
         throw new Error('Telemetry namespace is not appsec')
       }
-    }, 'generate-metrics', 30_000, 3, true).then(
+    }, 'generate-metrics', 4_000, 3, true).then(
       () => {
         assert.strictEqual(appsecTelemetryReceived, true)
       })
@@ -159,43 +122,37 @@ describe.only('RASP - downstream request integration', () => {
         await teardownTest(agent, proc)
       })
 
-      it.only('should set all tags', async function () {
-        this.timeout(31_000)
+      it('should set all tags', async function () {
         await axios.post('/with-body')
 
         await Promise.all([assertMessage(agent), assertTelemetry(agent)])
       })
 
       it('collects response body when stream is consumed via readable', async function () {
-        this.timeout(31_000)
         await axios.post('/with-readable')
 
         await Promise.all([assertMessage(agent), assertTelemetry(agent)])
       })
 
       it('collects response body when stream is consumed via async iterator', async function () {
-        this.timeout(31_000)
         await axios.post('/with-async-iterator')
 
         await Promise.all([assertMessage(agent), assertTelemetry(agent)])
       })
 
       it('collects response body for form-urlencoded content-type', async function () {
-        this.timeout(31_000)
         await axios.post('/with-body-form')
 
         await Promise.all([assertMessage(agent), assertTelemetry(agent)])
       })
 
       it('does not collect response body for unsupported content-type', async function () {
-        this.timeout(31_000)
         await axios.post('/with-body-text')
 
         await Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
       })
 
       it('Handles redirection correctly', async function () {
-        this.timeout(31_000)
         await axios.post('/with-redirect')
 
         await Promise.all([assertMessage(agent, true, true, 2), assertTelemetry(agent)])
