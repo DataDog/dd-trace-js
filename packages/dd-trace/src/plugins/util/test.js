@@ -119,6 +119,7 @@ const TEST_BROWSER_VERSION = 'test.browser.version'
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 const JEST_WORKER_LOGS_PAYLOAD_CODE = 62
+const JEST_WORKER_TELEMETRY_PAYLOAD_CODE = 63
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
@@ -225,6 +226,7 @@ module.exports = {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
+  JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
@@ -573,7 +575,7 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     ? testSuiteAbsolutePath
     : path.relative(sourceRoot, testSuiteAbsolutePath)
 
-  return testSuitePath.replace(path.sep, '/')
+  return testSuitePath.replaceAll(path.sep, '/')
 }
 
 const POSSIBLE_CODEOWNERS_LOCATIONS = [

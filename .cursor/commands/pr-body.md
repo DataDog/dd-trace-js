@@ -1,11 +1,11 @@
-Write a PR body for the changes in the current branch.
+Write a narrative PR body for the changes in the current branch.
 
 Focus on the overall picture.
 Do not just blindly list every change.
 Only include specific changes if its relevant to understand the PR changes.
 
 Use the PR template in `.github/pull_request_template.md` as the schema:
-- Remove the first line starting with `<ins>`
+- Remove all comments
 - Add content to the relevant sections (remove any section that isn't relevant)
 - Use commit messages in the branch as a staring point
 - Use markdown
