@@ -201,9 +201,9 @@ class TaintTrackingPlugin extends SourceIastPlugin {
           if (isURL) {
             this._taintedURLs.set(parsed, ranges[0])
           } else {
-            urlResultTaintedProperties.forEach(param => {
+            for (const param of urlResultTaintedProperties) {
               this._taintTrackingHandler(ranges[0].iinfo.type, parsed, param, iastContext)
-            })
+            }
           }
         }
       }

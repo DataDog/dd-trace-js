@@ -63,22 +63,18 @@ function wrapClientConstructor (ServiceClient, methods, hasPeer = false) {
 
   if (typeof methods !== 'object' || 'format' in methods) return
 
-  Object.keys(methods)
-    .forEach(name => {
-      if (!methods[name]) return
+  for (const [name, method] of Object.entries(methods)) {
+    if (!method) continue
 
-      const originalName = methods[name].originalName
-      const path = methods[name].path
-      const type = getType(methods[name])
+    const { originalName, path } = method
+    const type = getType(method)
 
-      if (methods[name]) {
-        proto[name] = wrapMethod(proto[name], path, type, hasPeer)
-      }
+    proto[name] = wrapMethod(proto[name], path, type, hasPeer)
 
-      if (originalName) {
-        proto[originalName] = wrapMethod(proto[originalName], path, type, hasPeer)
-      }
-    })
+    if (originalName) {
+      proto[originalName] = wrapMethod(proto[originalName], path, type, hasPeer)
+    }
+  }
 }
 
 function wrapMethod (method, path, type, hasPeer) {

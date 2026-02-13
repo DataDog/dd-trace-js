@@ -3,6 +3,7 @@
 const TTLSet = require('../../../../../vendor/dist/ttl-set')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
+const { DEBUGGER_DIAGNOSTICS_V1 } = require('../constants')
 const config = require('./config')
 const JSONBuffer = require('./json-buffer')
 const log = require('./log')
@@ -95,7 +96,7 @@ function onFlush (payload) {
   const options = {
     method: 'POST',
     url: config.url,
-    path: '/debugger/v1/diagnostics',
+    path: DEBUGGER_DIAGNOSTICS_V1,
     headers: form.getHeaders(),
   }
 

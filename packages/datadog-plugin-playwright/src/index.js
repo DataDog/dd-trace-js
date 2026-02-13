@@ -246,9 +246,9 @@ class PlaywrightPlugin extends CiPlugin {
         formattedTraces.push(formattedTrace)
       }
 
-      formattedTraces.forEach(trace => {
+      for (const trace of formattedTraces) {
         this.tracer._exporter.export(trace)
-      })
+      }
     })
 
     this.addBind('ci:playwright:test:start', (ctx) => {
@@ -356,7 +356,7 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
-      steps.forEach(step => {
+      for (const step of steps) {
         const stepStartTime = step.startTime.getTime()
         const stepSpan = this.tracer.startSpan('playwright.step', {
           childOf: span,
@@ -375,7 +375,7 @@ class PlaywrightPlugin extends CiPlugin {
           stepDuration = 0
         }
         stepSpan.finish(stepStartTime + stepDuration)
-      })
+      }
       if (testStatus === 'fail') {
         this.numFailedTests++
       }
@@ -388,6 +388,9 @@ class PlaywrightPlugin extends CiPlugin {
           isNew,
           isRum: isRUMActive,
           browserDriver: 'playwright',
+          isQuarantined,
+          isDisabled,
+          isModified,
         }
       )
       span.finish()

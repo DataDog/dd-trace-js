@@ -128,50 +128,50 @@ function request (data, options, callback) {
 
     activeRequests++
 
-    const store = storage('legacy').getStore()
-    storage('legacy').enterWith({ noop: true })
+    storage('legacy').run({ noop: true }, () => {
+      let finished = false
+      const finalize = () => {
+        if (finished) return
+        finished = true
+        activeRequests--
+      }
 
-    let finished = false
-    const finalize = () => {
-      if (finished) return
-      finished = true
-      activeRequests--
-    }
+      const req = client.request(options, (res) => onResponse(res, finalize))
 
-    const req = client.request(options, (res) => onResponse(res, finalize))
+      req.once('close', finalize)
+      req.once('timeout', finalize)
 
-    req.once('close', finalize)
-    req.once('timeout', finalize)
+      req.once('error', err => {
+        finalize()
+        onError(err)
+      })
 
-    req.once('error', err => {
-      finalize()
-      onError(err)
-    })
-
-    req.setTimeout(timeout, () => {
-      try {
-        if (typeof req.abort === 'function') {
-          req.abort()
-        } else {
-          req.destroy()
+      req.setTimeout(timeout, () => {
+        try {
+          if (typeof req.abort === 'function') {
+            req.abort()
+          } else {
+            req.destroy()
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
+      })
+
+      if (isReadable) {
+        data.pipe(req) // TODO: Validate whether this is actually retriable.
+      } else {
+        for (const buffer of dataArray) req.write(buffer)
+        req.end()
       }
     })
-
-    if (isReadable) {
-      data.pipe(req) // TODO: Validate whether this is actually retriable.
-    } else {
-      dataArray.forEach(buffer => req.write(buffer))
-      req.end()
-    }
-
-    storage('legacy').enterWith(store)
   }
 
-  // TODO: Figure out why setTimeout is needed to avoid losing the async context
-  // in the retry request before socket.connect() is called.
+  // The setTimeout is needed to avoid losing the async context in the retry
+  // request before socket.connect() is called. This is a workaround for the
+  // issue that the AsyncLocalStorage.run() method does not call the
+  // AsyncLocalStorage.enterWith() method when not using AsyncContextFrame.
+  //
   // TODO: Test that this doesn't trace itself on retry when the diagnostics
   // channel events are available in the agent exporter.
   makeRequest(() => setTimeout(() => makeRequest(callback)))

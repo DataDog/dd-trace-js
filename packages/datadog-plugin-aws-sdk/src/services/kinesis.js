@@ -109,7 +109,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     // we only want to set the payloadSize on the span if we have one message, not repeatedly
     span = response.Records.length > 1 ? null : span
 
-    response.Records.forEach(record => {
+    for (const record of response.Records) {
       const parsedAttributes = JSON.parse(Buffer.from(record.Data).toString())
 
       const payloadSize = getSizeOrZero(record.Data)
@@ -121,7 +121,7 @@ class Kinesis extends BaseAwsSdkPlugin {
         : ['direction:in', 'type:kinesis']
       this.tracer
         .setCheckpoint(tags, span, payloadSize)
-    })
+    }
   }
 
   // AWS-SDK will b64 kinesis payloads

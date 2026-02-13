@@ -13,6 +13,7 @@ import globals from 'globals'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
+import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -23,6 +24,10 @@ const SRC_FILES = [
   'ext/**/*.mjs',
   'ci/**/*.js',
   'ci/**/*.mjs',
+  'scripts/**/*.js',
+  'scripts/**/*.mjs',
+  'packages/*/*.js',
+  'packages/*/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs',
 ]
@@ -64,14 +69,6 @@ export default [
   eslintPluginJs.configs.recommended,
   eslintPluginJSDoc.configs['flat/recommended'],
   {
-    // The following config and rules have been inlined from `eslint-config-standard` with the following modifications:
-    // - Rules that were overridden elsewhere in this file have been removed.
-    // - Deprecated rules have been replaced with their official replacements.
-    //
-    // We've inlined these to avoid having to depend on `eslint-config-standard` as:
-    // 1. It's no longer maintained.
-    // 2. It came with an older bundled version of `eslint-plugin-n` which conflicted with our version.
-    //
     // TODO: Move these rules to dd-trace/defaults or where they otherwise belong.
     name: 'standard',
     languageOptions: {
@@ -334,7 +331,7 @@ export default [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
       'packages/datadog-plugin-next/test/middleware.js',
-      '**/*.mjs', // TODO: This shoudln't be required, research why it is
+      '**/*.mjs', // TODO: This shouldn't be required, research why it is
     ],
   },
   {
@@ -397,6 +394,7 @@ export default [
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-var': 'error',
+      'prefer-object-spread': 'error',
       'require-await': 'error',
       strict: 'error',
     },
@@ -410,6 +408,7 @@ export default [
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
+          'eslint-log-printf-style': eslintLogPrintfStyle,
         },
       },
       n: eslintPluginN,
@@ -419,6 +418,7 @@ export default [
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-log-printf-style': 'error',
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
@@ -453,11 +453,12 @@ export default [
       'no-await-in-loop': 'error',
       'no-else-return': ['error', { allowElseIf: true }],
       'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
+      'no-unused-expressions': 'error',
       'no-useless-assignment': 'error',
+      'no-void': ['error', { allowAsStatement: true }],
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',
-      'prefer-object-spread': 'error',
 
       // Too strict for now. Slowly migrate to this rule by using rest parameters.
       // 'prefer-rest-params': 'error',
@@ -469,8 +470,8 @@ export default [
       'unicorn/expiring-todo-comments': 'off',
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/no-array-for-each': 'off', // 122 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
+      'unicorn/prefer-export-from': ['error', { ignoreUsedVariables: true }],
       'unicorn/prevent-abbreviations': 'off', // too strict
 
       // These rules require a newer Node.js version than we support
@@ -499,6 +500,18 @@ export default [
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/switch-case-braces': 'off', // Questionable benefit
+    },
+  },
+  {
+    name: 'dd-trace/scripts',
+    files: [
+      'scripts/**/*.js',
+      'scripts/**/*.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-process-env': 'off',
+      // Scripts are CLI/dev tooling where process.exit is acceptable.
+      'unicorn/no-process-exit': 'off',
     },
   },
   {

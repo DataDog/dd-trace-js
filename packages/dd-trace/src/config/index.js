@@ -722,9 +722,8 @@ class Config {
       } else if (DD_MAJOR < 6) {
         // Warn about v6 behavior change for Nx projects
         log.warn(
-          'NX_TASK_TARGET_PROJECT is set but no service name was configured. ' +
-          'In v6, NX_TASK_TARGET_PROJECT will be used as the default service name. ' +
-          'Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in to this behavior now, or set a service name explicitly.'
+          // eslint-disable-next-line @stylistic/max-len
+          'NX_TASK_TARGET_PROJECT is set but no service name was configured. In v6, NX_TASK_TARGET_PROJECT will be used as the default service name. Set DD_ENABLE_NX_SERVICE_NAME=true to opt-in to this behavior now, or set a service name explicitly.'
         )
       }
     }
@@ -1176,7 +1175,9 @@ class Config {
 
     const tags = {}
     tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) tags['runtime-id'] = RUNTIME_ID
+    if (Object.keys(tags).length) {
+      tags['runtime-id'] = RUNTIME_ID
+    }
     setTags(opts, 'tags', tags)
   }
 
@@ -1545,7 +1546,7 @@ function setIntegerRangeSet (obj, name, value) {
   value = value.split(',')
   const result = []
 
-  value.forEach(val => {
+  for (const val of value) {
     if (val.includes('-')) {
       const [start, end] = val.split('-').map(Number)
       for (let i = start; i <= end; i++) {
@@ -1554,7 +1555,7 @@ function setIntegerRangeSet (obj, name, value) {
     } else {
       result.push(Number(val))
     }
-  })
+  }
   obj[name] = result
 }
 
@@ -1620,7 +1621,7 @@ function nonNegInt (value, envVarName, allowZero = true) {
   if (value === undefined) return
   const parsed = Number.parseInt(value)
   if (Number.isNaN(parsed) || parsed < 0 || (parsed === 0 && !allowZero)) {
-    log.warn(`Invalid value ${parsed} for ${envVarName}. Using default value.`)
+    log.warn('Invalid value %d for %s. Using default value.', parsed, envVarName)
     return
   }
   return parsed

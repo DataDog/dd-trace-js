@@ -473,7 +473,7 @@ module.exports = {
     })
 
     // LLM Observability evaluation metrics endpoint
-    agent.post('/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric', (req, res) => {
+    agent.post('/evp_proxy/v2/api/intake/llm-obs/v2/eval-metric', (req, res) => {
       llmobsEvaluationMetricsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
@@ -482,7 +482,7 @@ module.exports = {
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
       dsmStats.push(req.body)
-      statsHandlers.forEach(({ handler, spanResourceMatch }) => {
+      statsHandlers.forEach(({ handler }) => {
         handler(dsmStats)
       })
       res.status(200).send()
@@ -504,13 +504,14 @@ module.exports = {
       listener = server.listen(0, () => {
         const port = listener.address().port
 
-        tracer.init(Object.assign({}, {
+        tracer.init({
           service: 'test',
           env: 'tester',
           port,
           flushInterval: 0,
           plugins: false,
-        }, tracerConfig))
+          ...tracerConfig,
+        })
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 

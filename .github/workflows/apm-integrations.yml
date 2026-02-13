@@ -15,7 +15,7 @@ on:
 
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -148,6 +148,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PLUGINS: axios
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  body-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: body-parser
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
@@ -672,9 +682,19 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ldapjs:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: ldapjs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  light-my-request:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: 'light-my-request'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
@@ -702,7 +722,7 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   lodash:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: lodash
     steps:
@@ -1057,6 +1077,16 @@ jobs:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
 
+  passport-http:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport-http
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   postgres:
     runs-on: ubuntu-latest
     services:
@@ -1094,8 +1124,28 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          SA_PASSWORD: DD_HUNTER2
+          MSSQL_PID: Express
+        ports:
+          - 1433:1433
+      mongodb:
+        image: prismagraphql/mongo-single-replica:4.4.3-bionic
+        ports:
+          - 27017:27017
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: 'db'
+        ports:
+          - 3306:3306
     env:
       PLUGINS: prisma
+      TEST_MSSQL_DATABASE_URL: 'sqlserver://localhost:1433;database=master;user=sa;password=DD_HUNTER2;encrypt=true;trustServerCertificate=true'
       SERVICES: prisma
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:

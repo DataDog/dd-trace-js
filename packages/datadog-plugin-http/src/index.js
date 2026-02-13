@@ -23,7 +23,7 @@ class HttpPlugin extends CompositePlugin {
         plugins['pubsub-push-subscription'] = PushSubscriptionPlugin
         log.debug('Loaded GCP Pub/Sub Push Subscription plugin for HTTP requests')
       } catch (e) {
-        log.debug(`Failed to load GCP Pub/Sub Push Subscription plugin: ${e.message}`)
+        log.debug('Failed to load GCP Pub/Sub Push Subscription plugin:', e)
       }
     }
 

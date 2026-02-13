@@ -3,9 +3,11 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   JEST_TEST_RUNNER,
   finishAllTraceSpans,
   getTestSuiteCommonTags,
@@ -24,8 +26,6 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
-  TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
   getFormattedError,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
@@ -156,7 +156,9 @@ class JestPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
 
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
@@ -164,6 +166,7 @@ class JestPlugin extends CiPlugin {
         autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
 
+      appClosingTelemetry()
       this.tracer._exporter.flush(() => {
         if (onDone) {
           onDone()
@@ -175,7 +178,7 @@ class JestPlugin extends CiPlugin {
     // This subscriber changes the configuration objects from jest to inject the trace id
     // of the test session to the processes that run the test suites, and other data.
     this.addSub('ci:jest:session:configuration', configs => {
-      configs.forEach(config => {
+      for (const config of configs) {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
@@ -190,7 +193,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
-      })
+      }
     })
 
     this.addSub('ci:jest:test-suite:start', ({
@@ -271,9 +274,26 @@ class JestPlugin extends CiPlugin {
         suiteId: id(coverage.suiteId),
         files: coverage.files,
       }))
-      formattedCoverages.forEach(formattedCoverage => {
+      for (const formattedCoverage of formattedCoverages) {
         this.tracer._exporter.exportCoverage(formattedCoverage)
-      })
+      }
+    })
+
+    this.addSub('ci:jest:worker-report:telemetry', data => {
+      const telemetryEvents = JSON.parse(data)
+      for (const event of telemetryEvents) {
+        if (event.type === 'ciVisEvent') {
+          this.telemetry.ciVisEvent(event.name, event.testLevel, {
+            ...event.tags,
+            testFramework: event.testFramework,
+            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
+          })
+        } else if (event.type === 'count') {
+          this.telemetry.count(event.name, event.tags, event.value)
+        } else if (event.type === 'distribution') {
+          this.telemetry.distribution(event.name, event.tags, event.measure)
+        }
+      }
     })
 
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error, testSuiteAbsolutePath }) => {
@@ -368,8 +388,12 @@ class JestPlugin extends CiPlugin {
       failedAllTests,
       attemptToFixFailed,
       isAtrRetry,
+      finalStatus,
     }) => {
       span.setTag(TEST_STATUS, status)
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
@@ -386,16 +410,10 @@ class JestPlugin extends CiPlugin {
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
       }
 
-      const spanTags = span.context()._tags
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        {
-          hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-          isNew: spanTags[TEST_IS_NEW] === 'true',
-          isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-          browserDriver: spanTags[TEST_BROWSER_DRIVER],
-        }
+        this.getTestTelemetryTags(span)
       )
 
       span.finish()
@@ -423,10 +441,16 @@ class JestPlugin extends CiPlugin {
     }) => {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
-
+      span.setTag(TEST_FINAL_STATUS, 'skip')
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
+
+      this.telemetry.ciVisEvent(
+        TELEMETRY_EVENT_FINISHED,
+        'test',
+        this.getTestTelemetryTags(span)
+      )
 
       span.finish()
     })

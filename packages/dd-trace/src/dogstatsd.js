@@ -9,6 +9,7 @@ const log = require('./log')
 const Histogram = require('./histogram')
 const defaults = require('./config/defaults')
 const { getAgentUrl } = require('./agent/url')
+const { entityId } = require('./exporters/common/docker')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -109,23 +110,27 @@ class DogStatsDClient {
   _sendUdpFromQueue (queue, address, family) {
     const socket = family === 6 ? this._udp6 : this._udp4
 
-    queue.forEach((buffer) => {
+    for (const buffer of queue) {
       log.debug('Sending to DogStatsD: %s', buffer)
       socket.send(buffer, 0, buffer.length, this._port, address)
-    })
+    }
   }
 
   _add (stat, value, type, tags) {
-    const message = `${this._prefix + stat}:${value}|${type}`
+    let message = `${this._prefix + stat}:${value}|${type}`
 
     // Don't manipulate this._tags as it is still used
     tags = tags ? [...this._tags, ...tags] : this._tags
 
     if (tags.length > 0) {
-      this._write(`${message}|#${tags.join(',')}\n`)
-    } else {
-      this._write(`${message}\n`)
+      message += `|#${tags.join(',')}`
     }
+
+    if (entityId) {
+      message += `|c:${entityId}`
+    }
+
+    this._write(`${message}\n`)
   }
 
   _write (message) {

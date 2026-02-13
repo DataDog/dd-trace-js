@@ -62,9 +62,9 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
         }
       } else if (Array.isArray(messages)) {
         span.setTag('messaging.batch.message_count', messages.length)
-        messages.forEach(event => {
+        for (const event of messages) {
           injectTraceContext(this.tracer, span, event)
-        })
+        }
       } else {
         injectTraceContext(this.tracer, span, messages)
       }

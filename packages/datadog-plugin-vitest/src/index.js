@@ -206,9 +206,7 @@ class VitestPlugin extends CiPlugin {
 
     this.addSub('ci:vitest:test:pass', ({ span, task }) => {
       if (span) {
-        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
-        })
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
@@ -236,9 +234,7 @@ class VitestPlugin extends CiPlugin {
           promises.setProbePromise = setProbePromise
         }
       }
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
-      })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
       span.setTag(TEST_STATUS, 'fail')
 
       if (error) {
@@ -272,9 +268,7 @@ class VitestPlugin extends CiPlugin {
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
         }
       )
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!testSpan.context()._tags[TEST_CODE_OWNERS],
-      })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
       testSpan.finish()
     })
 
@@ -401,7 +395,9 @@ class VitestPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,

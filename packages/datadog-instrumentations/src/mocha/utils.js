@@ -64,11 +64,11 @@ function retryTest (test, numRetries, tags) {
   for (let retryIndex = 0; retryIndex < numRetries; retryIndex++) {
     const clonedTest = test.clone()
     suite.addTest(clonedTest)
-    tags.forEach(tag => {
+    for (const tag of tags) {
       if (tag) {
         clonedTest[tag] = true
       }
-    })
+    }
   }
 }
 
@@ -82,6 +82,7 @@ function getSuitesByTestFile (root) {
         suitesByTestFile[suite.file] = [suite]
       }
     }
+    // eslint-disable-next-line unicorn/no-array-for-each
     suite.suites.forEach(suite => {
       getSuites(suite)
     })
@@ -420,6 +421,7 @@ function getOnPendingHandler () {
 function getRunTestsWrapper (runTests, config) {
   return function (suite) {
     if (config.isTestManagementTestsEnabled) {
+      // eslint-disable-next-line unicorn/no-array-for-each
       suite.tests.forEach((test) => {
         const { isAttemptToFix, isDisabled, isQuarantined } = getTestProperties(test, config.testManagementTests)
         if (isAttemptToFix && !test.isPending()) {
@@ -443,6 +445,7 @@ function getRunTestsWrapper (runTests, config) {
     }
 
     if (config.isImpactedTestsEnabled) {
+      // eslint-disable-next-line unicorn/no-array-for-each
       suite.tests.forEach((test) => {
         isModifiedCh.publish({
           modifiedFiles: config.modifiedFiles,
@@ -465,7 +468,8 @@ function getRunTestsWrapper (runTests, config) {
 
     if (config.isKnownTestsEnabled) {
       // by the time we reach `this.on('test')`, it is too late. We need to add retries here
-      suite.tests.forEach(test => {
+      // eslint-disable-next-line unicorn/no-array-for-each
+      suite.tests.forEach((test) => {
         if (!test.isPending() && isNewTest(test, config.knownTests)) {
           test._ddIsNew = true
           if (config.isEarlyFlakeDetectionEnabled && !test._ddIsAttemptToFix && !test._ddIsModified) {

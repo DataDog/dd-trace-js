@@ -68,7 +68,9 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       }
 
       if (api === 'acknowledge') {
-        ackIds.forEach(ackId => ackIdToMessage.delete(ackId))
+        for (const ackId of ackIds) {
+          ackIdToMessage.delete(ackId)
+        }
       }
     })
   }
@@ -125,9 +127,10 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
+      'pubsub.message_id': message.messageId,
       'span.kind': 'consumer',
+      'pubsub.subscription': subscription.name,
       'pubsub.subscription_type': 'pull',
-      'pubsub.span_type': 'message_processing',
       'messaging.operation': 'receive',
       base_service: baseService,
       service_override_type: 'custom',
@@ -169,9 +172,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       metrics,
     }, ctx)
 
-    if (message.id) {
-      span.setTag('pubsub.message_id', message.id)
-    }
     if (message.publishTime) {
       span.setTag('pubsub.publish_time', message.publishTime.toISOString())
     }

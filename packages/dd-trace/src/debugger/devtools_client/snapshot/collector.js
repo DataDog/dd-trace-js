@@ -12,6 +12,48 @@ module.exports = {
   collectObjectProperties,
 }
 
+/** @typedef {import('node:inspector').Runtime.PropertyDescriptor} PropertyDescriptor */
+/** @typedef {import('node:inspector').Runtime.InternalPropertyDescriptor} InternalPropertyDescriptor */
+
+// TODO: Once @types/node include privateProperties, we should clean this typedef up:
+/**
+ * Extended version of Runtime.GetPropertiesReturnType that includes privateProperties
+ * which is not in the base type but is returned by the CDP API.
+ *
+ * @typedef {import('node:inspector').Runtime.GetPropertiesReturnType & {
+ *   privateProperties?: PropertyDescriptor[]
+ * }} GetPropertiesResult
+ */
+
+/**
+ * Extended version of GetPropertiesResult where internalProperties is guaranteed to exist.
+ * Use this typedef when calling Runtime.getProperties on objects that always have internal properties
+ * (e.g., iterables, proxies, ArrayBuffers).
+ *
+ * @typedef {GetPropertiesResult & {
+ *   internalProperties: InternalPropertyDescriptor[]
+ * }} GetPropertiesResultWithInternals
+ */
+
+/**
+ * Extended version of InternalPropertyDescriptor where value is guaranteed to exist.
+ * Use this typedef for internal properties that always have values (e.g., [[Entries]] for iterables).
+ *
+ * @typedef {InternalPropertyDescriptor & {
+ *   value: NonNullable<InternalPropertyDescriptor['value']>
+ * }} InternalPropertyDescriptorWithValue
+ */
+
+/**
+ * Extended version of GetPropertiesResult where internalProperties exist and all properties have values.
+ * Use this typedef when all internal properties are guaranteed to have values in practice.
+ * Examples: [[Entries]] for iterables, [[Target]] for Proxies, [[Uint8Array]] for ArrayBuffers.
+ *
+ * @typedef {GetPropertiesResult & {
+ *   internalProperties: InternalPropertyDescriptorWithValue[]
+ * }} GetPropertiesResultWithInternalValues
+ */
+
 /**
  * @typedef {object} GetObjectOptions
  * @property {object} maxReferenceDepth - The maximum depth of the object to traverse
@@ -37,10 +79,12 @@ module.exports = {
  * @returns {Promise<object[]>} The properties of the object
  */
 async function collectObjectProperties (objectId, opts, depth = 0, collection = false) {
-  const { result, privateProperties } = await session.post('Runtime.getProperties', {
-    objectId,
-    ownProperties: true, // exclude inherited properties
-  })
+  const { result, privateProperties } = /** @type {GetPropertiesResult} */ (
+    await session.post('Runtime.getProperties', {
+      objectId,
+      ownProperties: true, // exclude inherited properties
+    })
+  )
 
   if (collection) {
     // Trim the collection if it's too large.
@@ -147,10 +191,10 @@ function collectPropertiesBySubtype (subtype, objectId, opts, depth) {
 // - Bound function: `[[TargetFunction]]`, `[[BoundThis]]` and `[[BoundArgs]]`
 // - Non-bound function: `[[FunctionLocation]]`, and `[[Scopes]]`
 async function getFunctionProperties (objectId, opts, depth) {
-  let { result } = await session.post('Runtime.getProperties', {
+  let { result } = /** @type {GetPropertiesResult} */ (await session.post('Runtime.getProperties', {
     objectId,
     ownProperties: true, // exclude inherited properties
-  })
+  }))
 
   // For legacy reasons (I assume) functions has a `prototype` property besides the internal `[[Prototype]]`
   result = result.filter(({ name }) => name !== 'prototype')
@@ -161,22 +205,25 @@ async function getFunctionProperties (objectId, opts, depth) {
 async function getIterable (objectId, opts, depth) {
   // TODO: If the iterable has any properties defined on the object directly, instead of in its collection, they will
   // exist in the return value below in the `result` property. We currently do not collect these.
-  const { internalProperties } = await session.post('Runtime.getProperties', {
-    objectId,
-    ownProperties: true, // exclude inherited properties
-  })
+  const { internalProperties } = /** @type {GetPropertiesResultWithInternalValues} */ (
+    await session.post('Runtime.getProperties', {
+      objectId,
+      ownProperties: true, // exclude inherited properties
+    })
+  )
 
   let entry = internalProperties[1]
   if (entry.name !== '[[Entries]]') {
     // Currently `[[Entries]]` is the last of 2 elements, but in case this ever changes, fall back to searching
+    // @ts-expect-error - findLast is available in Node.js 18+ but TypeScript doesn't know about it without ES2023 lib
     entry = internalProperties.findLast(({ name }) => name === '[[Entries]]')
   }
 
   // Skip the `[[Entries]]` level and go directly to the content of the iterable
-  const { result } = await session.post('Runtime.getProperties', {
+  const { result } = /** @type {GetPropertiesResult} */ (await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
     ownProperties: true, // exclude inherited properties
-  })
+  }))
 
   removeNonEnumerableProperties(result) // remove the `length` property
   const size = result.length
@@ -189,10 +236,12 @@ async function getIterable (objectId, opts, depth) {
 }
 
 async function getInternalProperties (objectId, opts, depth) {
-  const { internalProperties } = await session.post('Runtime.getProperties', {
-    objectId,
-    ownProperties: true, // exclude inherited properties
-  })
+  const { internalProperties } = /** @type {GetPropertiesResultWithInternals} */ (
+    await session.post('Runtime.getProperties', {
+      objectId,
+      ownProperties: true, // exclude inherited properties
+    })
+  )
 
   // We want all internal properties except the prototype
   const props = internalProperties.filter(({ name }) => name !== '[[Prototype]]')
@@ -201,23 +250,26 @@ async function getInternalProperties (objectId, opts, depth) {
 }
 
 async function getProxy (objectId, opts, depth) {
-  const { internalProperties } = await session.post('Runtime.getProperties', {
-    objectId,
-    ownProperties: true, // exclude inherited properties
-  })
+  const { internalProperties } = /** @type {GetPropertiesResultWithInternalValues} */ (
+    await session.post('Runtime.getProperties', {
+      objectId,
+      ownProperties: true, // exclude inherited properties
+    })
+  )
 
   // TODO: If we do not skip the proxy wrapper, we can add a `revoked` boolean
   let entry = internalProperties[1]
   if (entry.name !== '[[Target]]') {
     // Currently `[[Target]]` is the last of 2 elements, but in case this ever changes, fall back to searching
+    // @ts-expect-error - findLast is available in Node.js 18+ but TypeScript doesn't know about it without ES2023 lib
     entry = internalProperties.findLast(({ name }) => name === '[[Target]]')
   }
 
   // Skip the `[[Target]]` level and go directly to the target of the Proxy
-  const { result } = await session.post('Runtime.getProperties', {
+  const { result } = /** @type {GetPropertiesResult} */ (await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
     ownProperties: true, // exclude inherited properties
-  })
+  }))
 
   return traverseGetPropertiesResult(result, opts, depth)
 }
@@ -227,19 +279,24 @@ async function getProxy (objectId, opts, depth) {
 // UInt8Array(3), whereas ArrayBuffer(8) internally contains both Int8Array(8), Uint8Array(8), Int16Array(4), and
 // Int32Array(2) - all representing the same data in different ways.
 async function getArrayBuffer (objectId, opts, depth) {
-  const { internalProperties } = await session.post('Runtime.getProperties', {
-    objectId,
-    ownProperties: true, // exclude inherited properties
-  })
+  const { internalProperties } = /** @type {GetPropertiesResultWithInternalValues} */ (
+    await session.post('Runtime.getProperties', {
+      objectId,
+      ownProperties: true, // exclude inherited properties
+    })
+  )
 
   // Use Uint8 to make it easy to convert to a string later.
-  const entry = internalProperties.find(({ name }) => name === '[[Uint8Array]]')
+  // [[Uint8Array]] always exists for ArrayBuffers
+  const entry = /** @type {InternalPropertyDescriptorWithValue} */ (
+    internalProperties.find(({ name }) => name === '[[Uint8Array]]')
+  )
 
   // Skip the `[[Uint8Array]]` level and go directly to the content of the ArrayBuffer
-  const { result } = await session.post('Runtime.getProperties', {
+  const { result } = /** @type {GetPropertiesResult} */ (await session.post('Runtime.getProperties', {
     objectId: entry.value.objectId,
     ownProperties: true, // exclude inherited properties
-  })
+  }))
 
   return traverseGetPropertiesResult(result, opts, depth)
 }

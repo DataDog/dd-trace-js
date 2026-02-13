@@ -543,12 +543,14 @@ class CypressPlugin {
     }
 
     // `details.specs` are test files
-    details.specs?.forEach(({ absolute, relative }) => {
-      const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
-      if (isUnskippableSuite) {
-        this.unskippableSuites.push(relative)
+    if (details.specs) {
+      for (const { absolute, relative } of details.specs) {
+        const isUnskippableSuite = isMarkedAsUnskippable({ path: absolute })
+        if (isUnskippableSuite) {
+          this.unskippableSuites.push(relative)
+        }
       }
-    })
+    }
 
     const childOf = getTestParentSpan(this.tracer)
 
@@ -686,13 +688,14 @@ class CypressPlugin {
 
     // Get tests that didn't go through `dd:afterEach`
     // and create a skipped test span for each of them
-    cypressTests.filter(({ title }) => {
+    for (const { title } of cypressTests) {
       const cypressTestName = title.join(' ')
       const isTestFinished = finishedTests.find(({ testName }) => cypressTestName === testName)
 
-      return !isTestFinished
-    }).forEach(({ title }) => {
-      const cypressTestName = title.join(' ')
+      if (isTestFinished) {
+        continue
+      }
+
       const isSkippedByItr = this.testsToSkip.find(test =>
         cypressTestName === test.name && spec.relative === test.suite
       )
@@ -719,7 +722,7 @@ class CypressPlugin {
       }
 
       skippedTestSpan.finish()
-    })
+    }
 
     // Make sure that reported test statuses are the same as Cypress reports.
     // This is not always the case, such as when an `after` hook fails:
@@ -734,13 +737,13 @@ class CypressPlugin {
       return acc
     }, {})
 
-    Object.entries(finishedTestsByTestName).forEach(([testName, finishedTestAttempts]) => {
-      finishedTestAttempts.forEach((finishedTest, attemptIndex) => {
+    for (const [testName, finishedTestAttempts] of Object.entries(finishedTestsByTestName)) {
+      for (const [attemptIndex, finishedTest] of finishedTestAttempts.entries()) {
         // TODO: there could be multiple if there have been retries!
         // potentially we need to match the test status!
         const cypressTest = cypressTests.find(test => test.title.join(' ') === testName)
         if (!cypressTest) {
-          return
+          continue
         }
         // finishedTests can include multiple tests with the same name if they have been retried
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
@@ -766,8 +769,10 @@ class CypressPlugin {
         if (cypressTest.displayError) {
           latestError = new Error(cypressTest.displayError)
         }
-        // Update test status
-        if (cypressTestStatus !== finishedTest.testStatus) {
+        // Update test status - but NOT for quarantined tests where we intentionally
+        // report 'fail' to Datadog even though Cypress sees it as 'pass'
+        const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+        if (cypressTestStatus !== finishedTest.testStatus && !isQuarantinedTest) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
         }
@@ -787,8 +792,8 @@ class CypressPlugin {
         }
 
         finishedTest.testSpan.finish(finishedTest.finishTime)
-      })
-    })
+      }
+    }
 
     if (this.testSuiteSpan) {
       const status = getSuiteStatus(stats)
@@ -841,11 +846,12 @@ class CypressPlugin {
           return { shouldSkip: true }
         }
 
-        // TODO: I haven't found a way to trick cypress into ignoring a test
-        // The way we'll implement quarantine in cypress is by skipping the test altogether
-        if (!isAttemptToFix && (isDisabled || isQuarantined)) {
+        // For disabled tests (not attemptToFix), skip them
+        if (!isAttemptToFix && isDisabled) {
           return { shouldSkip: true }
         }
+        // Quarantined tests (not attemptToFix) run normally but their failures are caught
+        // by Cypress.on('fail') in support.js and suppressed, so Cypress sees them as passed
 
         if (!this.activeTestSpan) {
           this.activeTestSpan = this.getTestSpan({
@@ -877,6 +883,7 @@ class CypressPlugin {
           isEfdRetry,
           isAttemptToFix,
           isModified,
+          isQuarantined: isQuarantinedFromSupport,
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -949,6 +956,12 @@ class CypressPlugin {
           }
         }
 
+        // Ensure quarantined tests reported from support.js are tagged
+        // (This catches cases where the test ran but failed, but Cypress saw it as passed)
+        if (isQuarantinedFromSupport) {
+          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+        }
+
         const finishedTest = {
           testName,
           testStatus,
@@ -963,11 +976,15 @@ class CypressPlugin {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
         // test spans are finished at after:spec
+        const activeSpanTags = this.activeTestSpan.context()._tags
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeOwners: !!this.activeTestSpan.context()._tags[TEST_CODE_OWNERS],
+          hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
+          isQuarantined: isQuarantinedFromSupport,
+          isModified,
+          isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
         })
         this.activeTestSpan = null
 

@@ -3,11 +3,14 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { storage } = require('../../datadog-core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+
 describe('Plugin', () => {
   let WebSocket
   let wsServer
@@ -64,6 +67,29 @@ describe('Plugin', () => {
           agent.close({ ritmReset: false, wipe: true })
         })
 
+        it('should not retain the connection span during socket setup', async () => {
+          const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
+          let resolve
+          const promise = new Promise((_resolve) => {
+            resolve = _resolve
+          })
+
+          const handler = () => {
+            resolve(storage('legacy').getStore())
+            setSocketCh.unsubscribe(handler)
+          }
+          setSocketCh.subscribe(handler)
+
+          // Trigger setSocket
+          const newClient = new WebSocket(`ws://localhost:${clientPort}/test`)
+          newClient.on('open', () => newClient.close())
+
+          const store = await promise
+
+          assert.strictEqual(store?.span, undefined,
+            'connection span should not be in the store during setSocket')
+        })
+
         it('should do automatic instrumentation and remove broken handler', () => {
           wsServer.on('connection', (ws) => {
             connectionReceived = true
@@ -82,16 +108,50 @@ describe('Plugin', () => {
 
           client.off('message', brokenHandler)
 
-          return agent.assertFirstTraceSpan({
-            name: 'websocket.send',
-            type: 'websocket',
-            resource: `websocket /${route}`,
-            service: 'some',
-            parent_id: 0n,
-            error: 0,
-            meta: {
-              'span.kind': 'producer',
-            },
+          return agent.assertSomeTraces(traces => {
+            let sendSpan
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.send') {
+                  sendSpan = span
+                  break
+                }
+              }
+              if (sendSpan) break
+            }
+
+            assert.ok(sendSpan)
+            assertObjectContains(sendSpan, {
+              name: 'websocket.send',
+              type: 'websocket',
+              resource: `websocket /${route}`,
+              service: 'some',
+              parent_id: 0n,
+              error: 0,
+              meta: {
+                'span.kind': 'producer',
+              },
+            })
+          })
+        })
+
+        it('should handle removing a listener that was never added', (done) => {
+          wsServer.on('connection', (ws) => {
+            connectionReceived = true
+            ws.send('test message')
+          })
+
+          const neverAddedHandler = () => {
+            throw new Error('this should never be called')
+          }
+
+          client.on('message', (msg) => {
+            assert.strictEqual(msg.toString(), 'test message')
+            done()
+          })
+
+          assert.doesNotThrow(() => {
+            client.off('message', neverAddedHandler)
           })
         })
 
@@ -118,7 +178,7 @@ describe('Plugin', () => {
           client.on('error', done)
         })
 
-        it('should instrument message sending and not double wrap the same handler', done => {
+        it('should instrument message sending once per message', () => {
           wsServer.on('connection', ws => {
             connectionReceived = true
             ws.on('message', msg => {
@@ -127,33 +187,74 @@ describe('Plugin', () => {
             })
           })
 
+          /** @type {Promise<void>} */
+          const messageHandled = new Promise((resolve, reject) => {
+            let count = 0
+            const handler = (data) => {
+              assert.strictEqual(data.toString(), 'test message')
+              count++
+              if (count === 2) resolve()
+            }
+
+            client.on('message', handler)
+            client.on('message', handler)
+            client.on('error', reject)
+          })
+
           client.on('open', () => {
             client.send('test message')
           })
 
-          const brokenHandler = () => {
-            throw new Error('broken handler')
-          }
+          return messageHandled.then(() => agent.assertSomeTraces(traces => {
+            let receiveCount = 0
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.receive') {
+                  receiveCount++
+                }
+              }
+            }
 
-          client.on('message', brokenHandler)
+            assert.strictEqual(receiveCount, 1)
+          }))
+        })
 
-          const handler = (data) => {
-            assert.strictEqual(data.toString(), 'test message')
-            done()
-          }
+        it('should handle addEventListener/removeEventListener', () => {
+          wsServer.on('connection', ws => {
+            ws.send('test message')
+          })
 
-          client.addListener('message', handler)
-          client.on('message', handler)
+          let onMessage
+          let onError
+          /** @type {Promise<void>} */
+          const messageHandled = new Promise((resolve, reject) => {
+            onMessage = event => {
+              assert.strictEqual(event.data, 'test message')
+              resolve()
+            }
+            onError = event => {
+              reject(event?.error ?? event)
+            }
+            client.addEventListener('message', onMessage)
+            client.addEventListener('error', onError)
+          })
 
-          const handlers = client.listeners('message')
+          return messageHandled.then(() => {
+            client.removeEventListener('message', onMessage)
+            client.removeEventListener('error', onError)
 
-          assert.strictEqual(handlers[0].name, brokenHandler.name)
-          assert.strictEqual(handlers[1], handlers[2])
-
-          client.removeListener('message', brokenHandler)
-          client.removeListener('message', handler)
-
-          client.on('error', done)
+            return agent.assertSomeTraces(traces => {
+              let sendCount = 0
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === 'websocket.send') {
+                    sendCount++
+                  }
+                }
+              }
+              assert.ok(sendCount > 0)
+            })
+          })
         })
 
         it('should instrument message receiving', () => {
@@ -167,13 +268,133 @@ describe('Plugin', () => {
             client.send('test message from client')
           })
 
+          const errorPromise = once(client, 'error')
+            .then(([error]) => {
+              throw error
+            })
+
           return Promise.race([
-            once(client, 'error'),
-            agent.assertFirstTraceSpan({
-              name: 'websocket.receive',
-              resource: `websocket /${route}`,
+            errorPromise,
+            agent.assertSomeTraces(traces => {
+              let receiveSpan
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === 'websocket.receive') {
+                    receiveSpan = span
+                    break
+                  }
+                }
+                if (receiveSpan) break
+              }
+
+              assert.ok(receiveSpan)
+              assertObjectContains(receiveSpan, {
+                name: 'websocket.receive',
+                resource: `websocket /${route}`,
+              })
             }),
           ])
+        })
+
+        it('should trace a receive span for each message', () => {
+          let totalReceiveCount = 0
+          /** @type {Promise<void>} */
+          const messageHandled = new Promise((resolve, reject) => {
+            wsServer.on('connection', (ws) => {
+              let count = 0
+              ws.on('message', (data) => {
+                assert.strictEqual(data.toString(), 'test message')
+                count++
+                if (count === 2) resolve()
+              })
+              ws.on('error', reject)
+            })
+            client.on('error', reject)
+          })
+
+          client.on('open', () => {
+            client.send('test message')
+            client.send('test message')
+          })
+
+          return messageHandled.then(() => agent.assertSomeTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.receive') {
+                  totalReceiveCount++
+                }
+              }
+            }
+            assert.strictEqual(totalReceiveCount, 2)
+          }))
+        })
+
+        it('should trace binary message length and type', () => {
+          const payload = Buffer.from('binary payload')
+          /** @type {Promise<void>} */
+          const messageHandled = new Promise((resolve, reject) => {
+            wsServer.on('connection', (ws) => {
+              ws.on('message', (data) => {
+                assert.ok(Buffer.isBuffer(data))
+                assert.strictEqual(data.toString(), payload.toString())
+                resolve()
+              })
+              ws.on('error', reject)
+            })
+            client.on('error', reject)
+          })
+
+          client.on('open', () => {
+            client.send(payload)
+          })
+
+          return messageHandled.then(() => agent.assertSomeTraces(traces => {
+            let receiveSpan
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.receive') {
+                  receiveSpan = span
+                  break
+                }
+              }
+              if (receiveSpan) break
+            }
+
+            assert.ok(receiveSpan)
+            assert.strictEqual(receiveSpan.meta['websocket.message.type'], 'binary')
+            assert.strictEqual(receiveSpan.metrics['websocket.message.length'], payload.length)
+          }))
+        })
+
+        it('should not trace received messages without listeners', () => {
+          /** @type {Promise<void>} */
+          const sendComplete = new Promise((resolve, reject) => {
+            wsServer.on('connection', ws => {
+              ws.send('test message', err => {
+                if (err) return reject(err)
+                resolve()
+              })
+            })
+            client.on('error', reject)
+          })
+
+          return sendComplete.then(() => agent.assertSomeTraces(traces => {
+            let receiveCount = 0
+            let sendCount = 0
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.receive') {
+                  receiveCount++
+                }
+                if (span.name === 'websocket.send') {
+                  sendCount++
+                }
+              }
+            }
+
+            assert.strictEqual(receiveCount, 0)
+            assert.ok(sendCount > 0)
+          }))
         })
 
         it('should instrument connection close', () => {

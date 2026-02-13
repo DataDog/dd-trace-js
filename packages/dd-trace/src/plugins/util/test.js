@@ -65,6 +65,7 @@ const TEST_TYPE = 'test.type'
 const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
 const TEST_STATUS = 'test.status'
+const TEST_FINAL_STATUS = 'test.final_status'
 const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
@@ -118,6 +119,7 @@ const TEST_BROWSER_VERSION = 'test.browser.version'
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 const JEST_WORKER_LOGS_PAYLOAD_CODE = 62
+const JEST_WORKER_TELEMETRY_PAYLOAD_CODE = 63
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
@@ -214,6 +216,7 @@ module.exports = {
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
@@ -223,6 +226,7 @@ module.exports = {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
+  JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
@@ -531,11 +535,11 @@ function getTestTypeFromFramework (testFramework) {
 }
 
 function finishAllTraceSpans (span) {
-  span.context()._trace.started.forEach(traceSpan => {
+  for (const traceSpan of span.context()._trace.started) {
     if (traceSpan !== span) {
       traceSpan.finish()
     }
-  })
+  }
 }
 
 function getTestParentSpan (tracer) {
@@ -571,7 +575,7 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     ? testSuiteAbsolutePath
     : path.relative(sourceRoot, testSuiteAbsolutePath)
 
-  return testSuitePath.replace(path.sep, '/')
+  return testSuitePath.replaceAll(path.sep, '/')
 }
 
 const POSSIBLE_CODEOWNERS_LOCATIONS = [
@@ -755,6 +759,7 @@ function resetCoverage (coverage) {
 
   return coverageMap
     .files()
+    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       fileCoverage.resetHits()
@@ -765,6 +770,7 @@ function mergeCoverage (coverage, targetCoverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
   return coverageMap
     .files()
+    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
 
@@ -778,9 +784,9 @@ function mergeCoverage (coverage, targetCoverage) {
       const targetFileCoverage = targetCoverage.fileCoverageFor(filename)
 
       // branches (.b) are copied by reference, so `resetHits` affects the copy, so we need to copy it manually
-      Object.entries(targetFileCoverage.data.b).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(targetFileCoverage.data.b)) {
         targetFileCoverage.data.b[key] = [...value]
-      })
+      }
     })
 }
 
