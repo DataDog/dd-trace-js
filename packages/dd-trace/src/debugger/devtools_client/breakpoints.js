@@ -125,29 +125,30 @@ async function addBreakpoint (probe) {
   if (probe.captureExpressions?.length > 0) {
     probe.compiledCaptureExpressions = []
     for (const captureExpr of probe.captureExpressions) {
-      const limits = {
-        maxReferenceDepth: captureExpr.capture?.maxReferenceDepth ??
-          probe.capture?.maxReferenceDepth ?? DEFAULT_MAX_REFERENCE_DEPTH,
-        maxCollectionSize: captureExpr.capture?.maxCollectionSize ??
-          probe.capture?.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE,
-        maxFieldCount: captureExpr.capture?.maxFieldCount ??
-          probe.capture?.maxFieldCount ?? DEFAULT_MAX_FIELD_COUNT,
-        maxLength: captureExpr.capture?.maxLength ??
-          probe.capture?.maxLength ?? DEFAULT_MAX_LENGTH,
-      }
-
+      let expression
       try {
-        probe.compiledCaptureExpressions.push({
-          name: captureExpr.name,
-          expression: compile(captureExpr.expr.json),
-          limits,
-        })
+        expression = compile(captureExpr.expr.json)
       } catch (err) {
         throw new Error(
           `Cannot compile capture expression: ${captureExpr.name} (probe: ${probe.id}, version: ${probe.version})`,
           { cause: err }
         )
       }
+
+      probe.compiledCaptureExpressions.push({
+        name: captureExpr.name,
+        expression,
+        limits: {
+          maxReferenceDepth: captureExpr.capture?.maxReferenceDepth ??
+            probe.capture?.maxReferenceDepth ?? DEFAULT_MAX_REFERENCE_DEPTH,
+          maxCollectionSize: captureExpr.capture?.maxCollectionSize ??
+            probe.capture?.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE,
+          maxFieldCount: captureExpr.capture?.maxFieldCount ??
+            probe.capture?.maxFieldCount ?? DEFAULT_MAX_FIELD_COUNT,
+          maxLength: captureExpr.capture?.maxLength ??
+            probe.capture?.maxLength ?? DEFAULT_MAX_LENGTH,
+        },
+      })
     }
   }
 

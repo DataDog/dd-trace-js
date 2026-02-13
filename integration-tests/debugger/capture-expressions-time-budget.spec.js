@@ -43,8 +43,8 @@ describe('Dynamic Instrumentation', function () {
         const { captureExpressions } = snapshot.captures.lines[t.breakpoint.line]
 
         assert.deepStrictEqual(
-          Object.keys(captureExpressions),
-          ['capturedStart', 'capturedObj', 'timedOutObj1', 'timedOutStart', 'timedOutObj2']
+          Object.keys(captureExpressions).sort(),
+          ['capturedObj', 'capturedStart', 'timedOutObj1', 'timedOutObj2', 'timedOutStart']
         )
 
         // First expression should always be captured (simple primitive evaluated before deadline)

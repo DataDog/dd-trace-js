@@ -209,7 +209,7 @@ async function evaluateCaptureExpressions (callFrame, expressions, deadlineNs = 
 function extractErrorMessage (exceptionDetails) {
   const description = exceptionDetails.exception?.description
   if (!description) return 'Unknown evaluation error'
-  const newlineIndex = description.indexOf('\n')
-  if (newlineIndex === -1) return description
-  return description.slice(0, newlineIndex)
+  const startOfStackTraceIndex = description.indexOf('\n    at ')
+  if (startOfStackTraceIndex === -1) return description
+  return description.slice(0, startOfStackTraceIndex)
 }
