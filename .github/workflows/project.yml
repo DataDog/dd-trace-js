@@ -91,16 +91,16 @@ jobs:
     name: Datadog Static Analyzer
     if: github.actor != 'dependabot[bot]' && github.event_name != 'pull_request'
     steps:
-    - name: Checkout
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - name: Check code meets quality and security standards
-      id: datadog-static-analysis
-      uses: DataDog/datadog-static-analyzer-github-action@8340f18875fcefca86844b5f947ce2431387e552 # v3.0.0
-      with:
-        dd_api_key: ${{ secrets.DD_API_KEY }}
-        dd_app_key: ${{ secrets.DD_APP_KEY }}
-        dd_site: datadoghq.com
-        cpu_count: 2
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Check code meets quality and security standards
+        id: datadog-static-analysis
+        uses: DataDog/datadog-static-analyzer-github-action@8340f18875fcefca86844b5f947ce2431387e552 # v3.0.0
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_app_key: ${{ secrets.DD_APP_KEY }}
+          dd_site: datadoghq.com
+          cpu_count: 2
 
   typescript:
     runs-on: ubuntu-latest
