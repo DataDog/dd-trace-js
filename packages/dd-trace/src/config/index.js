@@ -316,6 +316,15 @@ class Config {
       DD_INSTRUMENTATION_TELEMETRY_ENABLED,
       DD_INSTRUMENTATION_CONFIG_ID,
       DD_LOGS_INJECTION,
+      DD_LOG_CAPTURE_ENABLED,
+      DD_LOG_CAPTURE_HOST,
+      DD_LOG_CAPTURE_PORT,
+      DD_LOG_CAPTURE_PROTOCOL,
+      DD_LOG_CAPTURE_PATH,
+      DD_LOG_CAPTURE_FLUSH_INTERVAL_MS,
+      DD_LOG_CAPTURE_MAX_BUFFER_SIZE,
+      DD_LOG_CAPTURE_TIMEOUT,
+      DD_LOG_CAPTURE_METHOD,
       DD_LOGS_OTEL_ENABLED,
       DD_METRICS_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
@@ -657,6 +666,19 @@ class Config {
     setBoolean(target, 'llmobs.enabled', DD_LLMOBS_ENABLED)
     setString(target, 'llmobs.mlApp', DD_LLMOBS_ML_APP)
     setBoolean(target, 'logInjection', DD_LOGS_INJECTION)
+    setBoolean(target, 'logCaptureEnabled', DD_LOG_CAPTURE_ENABLED)
+    setString(target, 'logCaptureHost', DD_LOG_CAPTURE_HOST)
+    target.logCapturePort = maybeInt(DD_LOG_CAPTURE_PORT)
+    unprocessedTarget.logCapturePort = DD_LOG_CAPTURE_PORT
+    setString(target, 'logCaptureProtocol', DD_LOG_CAPTURE_PROTOCOL)
+    setString(target, 'logCapturePath', DD_LOG_CAPTURE_PATH)
+    target.logCaptureFlushIntervalMs = maybeInt(DD_LOG_CAPTURE_FLUSH_INTERVAL_MS)
+    unprocessedTarget.logCaptureFlushIntervalMs = DD_LOG_CAPTURE_FLUSH_INTERVAL_MS
+    target.logCaptureMaxBufferSize = maybeInt(DD_LOG_CAPTURE_MAX_BUFFER_SIZE)
+    unprocessedTarget.logCaptureMaxBufferSize = DD_LOG_CAPTURE_MAX_BUFFER_SIZE
+    target.logCaptureTimeout = maybeInt(DD_LOG_CAPTURE_TIMEOUT)
+    unprocessedTarget.logCaptureTimeout = DD_LOG_CAPTURE_TIMEOUT
+    setString(target, 'logCaptureMethod', DD_LOG_CAPTURE_METHOD)
     // Requires an accompanying DD_APM_OBFUSCATION_MEMCACHED_KEEP_COMMAND=true in the agent
     setBoolean(target, 'memcachedCommandEnabled', DD_TRACE_MEMCACHED_COMMAND_ENABLED)
     setBoolean(target, 'middlewareTracingEnabled', DD_TRACE_MIDDLEWARE_TRACING_ENABLED)
