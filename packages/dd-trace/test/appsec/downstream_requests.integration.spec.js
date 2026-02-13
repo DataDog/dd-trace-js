@@ -27,7 +27,7 @@ describe('RASP - downstream request integration', () => {
         DD_APPSEC_ENABLED: 'true',
         DD_APPSEC_RASP_ENABLED: 'true',
         DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_downstream_request.json'),
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 0.1,
         ...envOverrides,
       },
     })
