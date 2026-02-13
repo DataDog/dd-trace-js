@@ -63,78 +63,81 @@ describe.only('RASP - downstream request integration', () => {
   }
 
   async function assertTelemetry (agent) {
-    let timeout
-    const series = []
-    await new Promise((resolve, reject) => {
-      const cb = ({ payload }) => {
-        if (payload.request_type !== 'generate-metrics') return
-        const namespace = payload.payload.namespace
-        series.push(payload?.payload?.series)
-        if (namespace === 'appsec') {
-          clearTimeout(timeout)
-          timeout = setTimeout(() => {
-            agent.off('telemetry', cb)
-            resolve()
-          }, 500)
-        }
-      }
-      agent.on('telemetry', cb)
-      setTimeout(() => {
-        if (!timeout) {
-          reject(new Error('Timeout'))
-        }
-      }, 5000)
-    })
-    try {
-      assert.strictEqual(series.length, 2)
-    } catch (e) {
-      console.log('series', series)
-      throw e
-    }
-
-    // let appsecTelemetryReceived = false
-    // return agent.assertTelemetryReceived(({ payload }) => {
-    //   const namespace = payload.payload.namespace
-
-    //   if (namespace === 'appsec') {
-    //     appsecTelemetryReceived = true
-    //     const series = payload.payload.series
-    //     const hasTag = (serie, tag) => Array.isArray(serie.tags) && serie.tags.includes(tag)
-
-    //     const evalSeries = series.filter(s => s.metric === 'rasp.rule.eval')
-    //     assert.ok(evalSeries, 'Rasp rule eval series should exist')
-
-    //     const evalVariants = new Set()
-    //     for (const s of evalSeries) {
-    //       if (hasTag(s, 'rule_variant:request')) evalVariants.add('request')
-    //       if (hasTag(s, 'rule_variant:response')) evalVariants.add('response')
+    // let timeout
+    // const series = []
+    // await new Promise((resolve, reject) => {
+    //   const cb = ({ payload }) => {
+    //     if (payload.request_type !== 'generate-metrics') return
+    //     const namespace = payload.payload.namespace
+    //     series.push(payload?.payload?.series)
+    //     if (namespace === 'appsec') {
+    //       clearTimeout(timeout)
+    //       timeout = setTimeout(() => {
+    //         agent.off('telemetry', cb)
+    //         resolve()
+    //       }, 500)
     //     }
-    //     try {
-    //       assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
-    //       assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
-    //     } catch (e) {
-    //       console.log('assertTelemetry 00 - e', e)
-    //       console.log('evalVariants', evalVariants)
-    //       console.log('evalSeries', evalSeries)
-    //       console.log('series', series)
-    //       console.log('payload', payload)
-    //       throw e
-    //     }
-    //     const matchSeries = series.filter(s => s.metric === 'rasp.rule.match')
-    //     assert.ok(matchSeries, 'Rasp rule match series should exist')
-
-    //     const matchVariants = new Set()
-    //     for (const s of matchSeries) {
-    //       if (hasTag(s, 'rule_variant:request')) matchVariants.add('request')
-    //       if (hasTag(s, 'rule_variant:response')) matchVariants.add('response')
-    //     }
-    //     assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
-    //     assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
     //   }
-    // }, 'generate-metrics', 30_000, 2).then(
-    //   () => {
-    //     assert.strictEqual(appsecTelemetryReceived, true)
-    //   })
+    //   agent.on('telemetry', cb)
+    //   setTimeout(() => {
+    //     if (!timeout) {
+    //       reject(new Error('Timeout'))
+    //     }
+    //   }, 5000)
+    // })
+    // try {
+    //   assert.strictEqual(series.length, 2)
+    //   console.log('series', series)
+    // } catch (e) {
+    //   console.log('series', series)
+    //   throw e
+    // }
+
+    let appsecTelemetryReceived = false
+    return agent.assertTelemetryReceived(({ payload }) => {
+      const namespace = payload.payload.namespace
+
+      if (namespace === 'appsec') {
+        appsecTelemetryReceived = true
+        const series = payload.payload.series
+        const hasTag = (serie, tag) => Array.isArray(serie.tags) && serie.tags.includes(tag)
+
+        const evalSeries = series.filter(s => s.metric === 'rasp.rule.eval')
+        assert.ok(evalSeries, 'Rasp rule eval series should exist')
+
+        const evalVariants = new Set()
+        for (const s of evalSeries) {
+          if (hasTag(s, 'rule_variant:request')) evalVariants.add('request')
+          if (hasTag(s, 'rule_variant:response')) evalVariants.add('response')
+        }
+        try {
+          assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
+          assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
+        } catch (e) {
+          console.log('assertTelemetry 00 - e', e)
+          console.log('evalVariants', evalVariants)
+          console.log('evalSeries', evalSeries)
+          console.log('series', series)
+          console.log('payload', payload)
+          throw e
+        }
+        const matchSeries = series.filter(s => s.metric === 'rasp.rule.match')
+        assert.ok(matchSeries, 'Rasp rule match series should exist')
+
+        const matchVariants = new Set()
+        for (const s of matchSeries) {
+          if (hasTag(s, 'rule_variant:request')) matchVariants.add('request')
+          if (hasTag(s, 'rule_variant:response')) matchVariants.add('response')
+        }
+        assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
+        assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
+      } else {
+        throw new Error('Telemetry namespace is not appsec')
+      }
+    }, 'generate-metrics', 30_000, 3, true).then(
+      () => {
+        assert.strictEqual(appsecTelemetryReceived, true)
+      })
   }
 
   describe('Downstream configuration', () => {
@@ -156,7 +159,7 @@ describe.only('RASP - downstream request integration', () => {
         await teardownTest(agent, proc)
       })
 
-      it('should set all tags', async function () {
+      it.only('should set all tags', async function () {
         this.timeout(31_000)
         await axios.post('/with-body')
 
