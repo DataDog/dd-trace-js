@@ -3,19 +3,9 @@
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('../baggage')
-const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 const tracer = require('../../')
 const SpanContext = require('./span_context')
-
-function mergeGlobalBaggageWith (baggages) {
-  const combinedBaggages = baggages ? rfdc(baggages) : {}
-  const globalActiveBaggages = getAllBaggageItems()
-  for (const [key, value] of Object.entries(globalActiveBaggages)) {
-    if (!combinedBaggages[key]) combinedBaggages[key] = value
-  }
-  return combinedBaggages
-}
 
 class ContextManager {
   constructor () {
@@ -30,42 +20,8 @@ class ContextManager {
 
     const storedSpan = store ? trace.getSpan(store) : null
 
-    // If stored span wraps the active DD span, prefer the stored context
-    if (storedSpan && storedSpan._ddSpan === activeSpan) {
-      const baggages = mergeGlobalBaggageWith(JSON.parse(activeSpan.getAllBaggageItems()))
-      if (Object.keys(baggages).length > 0) {
-        const entries = {}
-        for (const [key, value] of Object.entries(baggages)) {
-          entries[key] = { value }
-        }
-        const otelBaggages = propagation.createBaggage(entries)
-        return propagation.setBaggage(store, otelBaggages)
-      }
-      return store
-    }
-
-    if (!activeSpan) {
-      const storedBaggageItems = mergeGlobalBaggageWith(storedSpan?._spanContext?._ddContext?._baggageItems)
-      if (storedBaggageItems) {
-        const baggages = storedBaggageItems
-        const entries = {}
-        for (const [key, value] of Object.entries(baggages)) {
-          entries[key] = { value }
-        }
-        const otelBaggages = propagation.createBaggage(entries)
-        return propagation.setBaggage(baseContext, otelBaggages)
-      }
-      return baseContext
-    }
-
-    const ddContext = activeSpan.context()
-
-    if (!ddContext._otelSpanContext) {
-      ddContext._otelSpanContext = new SpanContext(ddContext)
-    }
-
     // Convert DD baggage to OTel format
-    const baggages = mergeGlobalBaggageWith(JSON.parse(activeSpan.getAllBaggageItems()))
+    const baggages = getAllBaggageItems()
     const hasBaggage = Object.keys(baggages).length > 0
     let otelBaggages
     if (hasBaggage) {
@@ -74,6 +30,23 @@ class ContextManager {
         entries[key] = { value }
       }
       otelBaggages = propagation.createBaggage(entries)
+    }
+
+    // If stored span wraps the active DD span, prefer the stored context
+    if (storedSpan && storedSpan._ddSpan === activeSpan) {
+      if (otelBaggages) return propagation.setBaggage(store, otelBaggages)
+      return store
+    }
+
+    if (!activeSpan) {
+      if (otelBaggages) return propagation.setBaggage(baseContext, otelBaggages)
+      return baseContext
+    }
+
+    const ddContext = activeSpan.context()
+
+    if (!ddContext._otelSpanContext) {
+      ddContext._otelSpanContext = new SpanContext(ddContext)
     }
 
     if (store && trace.getSpanContext(store) === ddContext._otelSpanContext) {
@@ -101,21 +74,7 @@ class ContextManager {
     for (const baggage of baggageItems) {
       setBaggageItem(baggage[0], baggage[1].value)
     }
-    if (span && span._ddSpan) {
-      span._ddSpan.removeAllBaggageItems()
-      for (const baggage of baggageItems) {
-        span._ddSpan.setBaggageItem(baggage[0], baggage[1].value)
-      }
-      return ddScope.activate(span._ddSpan, run)
-    }
-    // span instanceof NonRecordingSpan
-    const ddContext = span?._spanContext?._ddContext
-    if (ddContext && ddContext._baggageItems) {
-      ddContext._baggageItems = {}
-      for (const baggage of baggageItems) {
-        ddContext._baggageItems[baggage[0]] = baggage[1].value
-      }
-    }
+    if (span && span._ddSpan) return ddScope.activate(span._ddSpan, run)
     return run()
   }
 

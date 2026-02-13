@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
+const { getAllBaggageItems, setBaggageItem } = require('../../src/baggage')
 
 require('../setup/core')
 const ContextManager = require('../../src/opentelemetry/context_manager')
@@ -138,25 +139,16 @@ describe('OTel Context Manager', () => {
     }
     const baggage = propagation.createBaggage(entries)
     const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
-    const span = makeSpan('otel-to-dd')
-    const contextWithSpan = trace.setSpan(contextWithBaggage, span)
-    api.context.with(contextWithSpan, () => {
-      assert.strictEqual(tracer.scope().active().getBaggageItem('foo'), 'bar')
+    api.context.with(contextWithBaggage, () => {
+      assert.deepStrictEqual(getAllBaggageItems(), { foo: 'bar' })
     })
   })
 
   it('should propagate baggage from a datadog span to an otel span', () => {
-    const baggageKey = 'raccoon'
-    const baggageVal = 'chunky'
-    const ddSpan = tracer.startSpan('dd-to-otel')
-    ddSpan.setBaggageItem(baggageKey, baggageVal)
-    tracer.scope().activate(ddSpan, () => {
-      const baggages = propagation.getActiveBaggage().getAllEntries()
-      assert.strictEqual(baggages.length, 1)
-      const baggage = baggages[0]
-      assert.strictEqual(baggage[0], baggageKey)
-      assert.strictEqual(baggage[1].value, baggageVal)
-    })
+    setBaggageItem('raccoon', 'chunky')
+    assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(),
+      [['raccoon', { value: 'chunky' }]]
+    )
   })
 
   it('should handle dd-otel baggage conflict', () => {
