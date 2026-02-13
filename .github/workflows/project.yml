@@ -17,6 +17,7 @@ jobs:
         with:
           sparse-checkout: .github
       - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/rate-limit-status
       - name: actionlint
         id: actionlint
         uses: raven-actions/actionlint@e01d1ea33dd6a5ed517d95b4c0c357560ac6f518 # v2.1.1
@@ -24,6 +25,8 @@ jobs:
           matcher: true
           fail-on-error: true
           shellcheck: false # TODO should we enable this?
+      - uses: ./.github/actions/rate-limit-status
+        if: always()
       - name: actionlint Summary
         if: ${{ steps.actionlint.outputs.exit-code != 0 }}
         run: |
@@ -81,10 +84,13 @@ jobs:
       - run: tar -zxf /tmp/dd-trace.tgz -C $(pwd) --strip-components=1
       - run: yarn --prod --ignore-optional
       - run: ls -lisa
+      - uses: ./.github/actions/rate-limit-status
       - name: Compute module size tree and report
         uses: qard/heaviest-objects-in-the-universe@1e02edbdda803a45537a808ede97866db47756d3 # Unreleased
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/rate-limit-status
+        if: always()
 
   static-analysis:
     runs-on: ubuntu-latest
@@ -206,17 +212,24 @@ jobs:
     permissions:
       id-token: write
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/actions/rate-limit-status
+      - uses: ./.github/actions/rate-limit-status
       - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
           policy: yarn-dedupe
+      - uses: ./.github/actions/rate-limit-status
+        if: always()
 
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: yarn-lock
           path: ${{ runner.temp }}/yarn-lock-artifact
 
+      - uses: ./.github/actions/rate-limit-status
       - name: Update yarn.lock via GitHub API (server-created verified commit)
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
@@ -235,3 +248,5 @@ jobs:
             -f content="${content}" \
             -f sha="${sha}" \
             -f branch="${BRANCH}"
+      - uses: ./.github/actions/rate-limit-status
+        if: always()
