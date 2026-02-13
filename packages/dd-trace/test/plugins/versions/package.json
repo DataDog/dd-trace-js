@@ -21,6 +21,8 @@
     "@aws-sdk/smithy-client": "3.374.0",
     "@azure/event-hubs": "6.0.2",
     "@azure/functions": "4.11.0",
+    "durable-functions": "3.3.0",
+    "azurite": "3.35.0",
     "@azure/service-bus": "7.9.5",
     "@confluentinc/kafka-javascript": "1.8.0",
     "@cucumber/cucumber": "12.5.0",

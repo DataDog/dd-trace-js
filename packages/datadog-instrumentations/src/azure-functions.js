@@ -33,12 +33,8 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
 // The arguments are either an object with a handler property or the handler function itself
 function wrapHandler (method) {
   return function (name, arg) {
-    // check if this is either a handlerOptions or the handler itself
     if (arg !== null && typeof arg === 'object' && arg.hasOwnProperty('handler')) {
-      // if this is a handlerOptions: first, assign to a variable options
       const options = arg
-
-      // then, access the handler within that options. trace that handler using a
       shimmer.wrap(options, 'handler', handler => traceHandler(handler, name, method.name))
     } else if (typeof arg === 'function') {
       const handler = arg
