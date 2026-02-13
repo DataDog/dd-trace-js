@@ -71,17 +71,15 @@ function getRelativePath (filepath) {
 
 function isExcluded (callsite, externallyExcludedPaths) {
   if (callsite.isNative) return true
+
   const filename = globalThis.__DD_ESBUILD_IAST_WITH_SM ? callsite.path : callsite.file
-  if (!filename) {
+  if (!filename || filename.startsWith('node:')) {
     return true
   }
+
   let excludedPaths = EXCLUDED_PATHS
   if (externallyExcludedPaths) {
     excludedPaths = [...excludedPaths, ...externallyExcludedPaths]
-  }
-
-  if (filename.startsWith('node:')) {
-    return true
   }
 
   for (const excludedPath of excludedPaths) {
