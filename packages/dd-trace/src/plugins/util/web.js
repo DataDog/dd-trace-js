@@ -337,12 +337,12 @@ const web = {
     }
   },
 
-  finishSpan (context) {
+  finishSpan (context, spanType) {
     const { req, res } = context
 
     if (context.finished && !req.stream) return
 
-    addRequestTags(context, this.TYPE)
+    addRequestTags(context, spanType)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -352,14 +352,14 @@ const web = {
     context.finished = true
   },
 
-  finishAll (context) {
+  finishAll (context, spanType) {
     for (const beforeEnd of context.beforeEnd) {
       beforeEnd()
     }
 
     web.finishMiddleware(context)
 
-    web.finishSpan(context)
+    web.finishSpan(context, spanType)
 
     finishInferredProxySpan(context)
   },
@@ -456,12 +456,13 @@ function reactivate (req, fn) {
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
   const url = extractURL(req)
+  const type = spanType === null ? this.TYPE : spanType
 
   span.addTags({
     [HTTP_URL]: obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: spanType,
+    [SPAN_TYPE]: type,
     [HTTP_USERAGENT]: req.headers['user-agent'],
   })
 

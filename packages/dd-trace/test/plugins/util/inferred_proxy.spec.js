@@ -71,7 +71,6 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         options
       )
 
-      // we can't force re-init the tracer, so we have to set the config manually
       const tracer = require('../../../../dd-trace').init(options)
       tracer._tracer._config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
 
@@ -88,7 +87,6 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         }
       })
 
-      // Force close connections when server closes
       const connections = new Set()
       server.on('connection', (connection) => {
         connections.add(connection)
@@ -165,6 +163,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
               '_dd.inferred_span': 1,
             },
           })
+
           assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
 
           assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
@@ -172,7 +171,6 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           assertObjectContains(spans[1], {
             name: 'web.request',
             service: 'aws-server',
-            type: 'web',
             resource: 'GET',
             meta: {
               component: 'http',
@@ -219,7 +217,6 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           assertObjectContains(spans[1], {
             name: 'web.request',
             service: 'aws-server',
-            type: 'web',
             resource: 'GET',
             meta: {
               component: 'http',
@@ -248,7 +245,6 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           assertObjectContains(spans[0], {
             name: 'web.request',
             service: 'aws-server',
-            type: 'web',
             resource: 'GET',
             meta: {
               component: 'http',
@@ -280,7 +276,6 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           assertObjectContains(spans[0], {
             name: 'web.request',
             service: 'aws-server',
-            type: 'web',
             resource: 'GET',
             meta: {
               component: 'http',
@@ -312,7 +307,6 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           assertObjectContains(spans[0], {
             name: 'web.request',
             service: 'aws-server',
-            type: 'web',
             resource: 'GET',
             meta: {
               component: 'http',

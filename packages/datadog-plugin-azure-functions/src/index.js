@@ -1,7 +1,6 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const serverless = require('../../dd-trace/src/plugins/util/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 const triggerMap = {
@@ -44,7 +43,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
       webContext.config = this.config
       webContext.tracer = this.tracer
       // Creates a standard span and an inferred proxy span if headers are present
-      span = serverless.startServerlessSpanWithInferredProxy(
+      span = web.startServerlessSpanWithInferredProxy(
         this.tracer,
         this.config,
         this.operationName(),
@@ -85,7 +84,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
     if (triggerType === 'Http') {
       if (webContext) {
         webContext.res = { statusCode: result.status }
-        serverless.finishAll(webContext)
+        web.finishAll(webContext, 'serverless')
       }
     } else {
       super.finish()
@@ -101,6 +100,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
   let meta = {
     'aas.function.name': functionName,
     'aas.function.trigger': mapTriggerTag(methodName),
+    'span.type': 'serverless',
   }
 
   if (triggerMap[methodName] === 'ServiceBus') {
