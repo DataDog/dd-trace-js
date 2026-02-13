@@ -994,10 +994,13 @@ function getCliWrapper (isNewJestVersion) {
           coverageMap,
           numFailedTestSuites,
           numFailedTests,
+          numRuntimeErrorTestSuites = 0,
           numTotalTests,
           numTotalTestSuites,
         },
       } = result
+
+      const hasSuiteLevelFailures = numRuntimeErrorTestSuites > 0
 
       let testCodeCoverageLinesTotal
 
@@ -1026,7 +1029,11 @@ function getCliWrapper (isNewJestVersion) {
           }
         }
         // If every test that failed was an EFD retry, we'll consider the suite passed
-        if (numEfdFailedTestsToIgnore !== 0 && result.results.numFailedTests === numEfdFailedTestsToIgnore) {
+        if (
+          !hasSuiteLevelFailures &&
+          numEfdFailedTestsToIgnore !== 0 &&
+          result.results.numFailedTests === numEfdFailedTestsToIgnore
+        ) {
           result.results.success = true
         }
       }
@@ -1072,6 +1079,7 @@ function getCliWrapper (isNewJestVersion) {
         // it's considered quarantined both if it's disabled and if it's quarantined
         // (it'll run but its status is ignored)
         if (
+          !hasSuiteLevelFailures &&
           (numFailedQuarantinedOrDisabledAttemptedToFixTests !== 0 || numFailedQuarantinedTests !== 0) &&
           result.results.numFailedTests ===
             numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
@@ -1082,10 +1090,17 @@ function getCliWrapper (isNewJestVersion) {
 
       // Combined check: if all failed tests are accounted for by EFD (flaky retries) and/or quarantine,
       // we should consider the suite passed even when neither check alone covers all failures.
-      if (!result.results.success && (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)) {
+      if (
+        !result.results.success &&
+        !hasSuiteLevelFailures &&
+        (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)
+      ) {
         const totalIgnoredFailures =
           numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
-        if (totalIgnoredFailures !== 0 && result.results.numFailedTests === totalIgnoredFailures) {
+        if (
+          totalIgnoredFailures !== 0 &&
+          result.results.numFailedTests === totalIgnoredFailures
+        ) {
           result.results.success = true
         }
       }
