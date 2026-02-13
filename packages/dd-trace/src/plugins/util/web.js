@@ -456,7 +456,7 @@ function reactivate (req, fn) {
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
   const url = extractURL(req)
-  const type = spanType === null ? this.TYPE : spanType
+  const type = spanType ?? WEB
 
   span.addTags({
     [HTTP_URL]: obfuscateQs(config, url),
