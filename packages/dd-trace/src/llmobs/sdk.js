@@ -381,19 +381,19 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
       }
-      if (metricType === 'json' && !(typeof value === 'object' && value !== null && !Array.isArray(value))) {
+      if (metricType === 'json' && !(typeof value === 'object' && value != null && !Array.isArray(value))) {
         err = 'invalid_metric_value'
         throw new Error('value must be a JSON object for a json metric')
       }
-      if (assessment !== undefined && assessment !== 'pass' && assessment !== 'fail') {
+      if (assessment != null && assessment !== 'pass' && assessment !== 'fail') {
         err = 'invalid_assessment'
         throw new Error('assessment must be pass or fail')
       }
-      if (reasoning !== undefined && typeof reasoning !== 'string') {
+      if (reasoning != null && typeof reasoning !== 'string') {
         err = 'invalid_reasoning'
         throw new Error('reasoning must be a string')
       }
-      if (metadata !== undefined && !(typeof metadata === 'object' && metadata !== null && !Array.isArray(metadata))) {
+      if (metadata != null && (typeof metadata !== 'object' || Array.isArray(metadata))) {
         err = 'invalid_metadata'
         throw new Error('metadata must be a JSON object')
       }
@@ -441,13 +441,13 @@ class LLMObs extends NoopLLMObs {
         timestamp_ms: timestampMs,
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
       }
-      if (reasoning !== undefined) {
+      if (reasoning != null) {
         payload.reasoning = reasoning
       }
-      if (metadata !== undefined) {
+      if (metadata != null) {
         payload.metadata = metadata
       }
-      if (assessment !== undefined) {
+      if (assessment != null) {
         payload.assessment = assessment
       }
       const currentStore = storage.getStore()

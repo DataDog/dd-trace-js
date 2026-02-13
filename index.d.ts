@@ -3249,7 +3249,7 @@ declare namespace tracer {
        * The value of the evaluation metric.
        * Must be string for 'categorical' metrics, number for 'score' metrics, boolean for 'boolean' metrics and a JSON object for 'json' metrics.
        */
-      value: string | number | boolean | object,
+      value: string | number | boolean | { [key: string]: any },
 
       /**
        * An object of string key-value pairs to tag the evaluation metric with.
