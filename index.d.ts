@@ -3243,13 +3243,13 @@ declare namespace tracer {
       /**
        * The type of evaluation metric, one of 'categorical', 'score', or 'boolean'
        */
-      metricType: 'categorical' | 'score' | 'boolean',
+      metricType: 'categorical' | 'score' | 'boolean' | 'json',
 
       /**
        * The value of the evaluation metric.
-       * Must be string for 'categorical' metrics, number for 'score' metrics, and boolean for 'boolean' metrics.
+       * Must be string for 'categorical' metrics, number for 'score' metrics, boolean for 'boolean' metrics and a JSON object for 'json' metrics.
        */
-      value: string | number | boolean,
+      value: string | number | boolean | object,
 
       /**
        * An object of string key-value pairs to tag the evaluation metric with.
