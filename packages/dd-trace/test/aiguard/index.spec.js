@@ -343,7 +343,7 @@ describe('AIGuard SDK', () => {
   ]
   for (const { site, endpoint } of sites) {
     it(`test endpoint discovery: ${site}`, async () => {
-      const newConfig = Object.assign({ site }, config)
+      const newConfig = { site, ...config }
       delete newConfig.experimental.aiguard.endpoint
       const client = new AIGuard(tracer, newConfig)
       mockFetch({

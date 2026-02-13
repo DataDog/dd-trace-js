@@ -31,12 +31,13 @@ describe('Plugin', () => {
       }
 
       function buildGenericService (grpc, service, TestService, ClientService, currentVersion) {
-        service = Object.assign({
+        service = {
           getBidi: () => {},
           getServerStream: () => {},
           getClientStream: () => {},
           getUnary: () => {},
-        }, service)
+          ...service,
+        }
 
         server = new grpc.Server()
 
