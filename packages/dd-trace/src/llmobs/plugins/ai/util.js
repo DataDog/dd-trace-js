@@ -223,7 +223,7 @@ function getTelemetryMetadata (tags) {
     }
   }
 
-  return Object.keys(metadata).length ? metadata : null
+  return metadata
 }
 
 module.exports = {
