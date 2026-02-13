@@ -397,6 +397,39 @@ describe('Plugin', () => {
           })
         }
       })
+
+      if (semver.intersects(version, '>=3')) {
+        describe('add-transport channel', () => {
+          const { channel } = require('dc-polyfill')
+          const addTransportCh = channel('ci:log-submission:winston:add-transport')
+
+          beforeEach(() => {
+            return agent.load('winston')
+          })
+
+          beforeEach(() => {
+            return setupTest(version)
+          })
+
+          afterEach(() => logServer.close())
+
+          it('publishes to add-transport exactly once per createLogger() call', done => {
+            const publishedLoggers = []
+            const handler = logger => publishedLoggers.push(logger)
+            addTransportCh.subscribe(handler)
+
+            const logger = winston.createLogger({ transports: [transport] })
+
+            // Use setImmediate as a flush barrier for any deferred (setImmediate-based) publishes
+            setImmediate(() => {
+              addTransportCh.unsubscribe(handler)
+              assert.strictEqual(publishedLoggers.length, 1, 'add-transport should fire exactly once per createLogger()')
+              assert.strictEqual(publishedLoggers[0], logger)
+              done()
+            })
+          })
+        })
+      }
     })
   })
 })

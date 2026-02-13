@@ -3853,4 +3853,18 @@ rules:
       assert.notStrictEqual(config.sampler.rateLimit, -1)
     })
   })
+
+  describe('DD_LOG_CAPTURE_PROTOCOL normalization', () => {
+    it('should append a colon when missing', () => {
+      process.env.DD_LOG_CAPTURE_PROTOCOL = 'https'
+      reloadLoggerAndConfig()
+      assert.strictEqual(getConfig().logCaptureProtocol, 'https:')
+    })
+
+    it('should warn and ignore invalid values, falling back to the default', () => {
+      process.env.DD_LOG_CAPTURE_PROTOCOL = 'ftp'
+      reloadLoggerAndConfig()
+      assert.strictEqual(getConfig().logCaptureProtocol, 'http:')
+    })
+  })
 })

@@ -38,6 +38,8 @@ function getWinstonLogSubmissionParameters (config) {
 class LogSubmissionPlugin extends Plugin {
   static id = 'log-submission'
 
+  #injectedLoggers = new WeakSet()
+
   constructor (...args) {
     super(...args)
 
@@ -46,6 +48,8 @@ class LogSubmissionPlugin extends Plugin {
     })
 
     this.addSub('ci:log-submission:winston:add-transport', (logger) => {
+      if (this.#injectedLoggers.has(logger)) return
+      this.#injectedLoggers.add(logger)
       logger.add(new this.HttpClass(getWinstonLogSubmissionParameters(this.config)))
     })
   }

@@ -485,6 +485,69 @@ declare namespace tracer {
     logInjection?: boolean,
 
     /**
+     * Whether to enable native transport injection for log capture.
+     * When enabled with `logCaptureMethod: 'transport'`, automatically injects
+     * HTTP transports into Winston, Bunyan, and Pino loggers.
+     * @default false
+     * @env DD_LOG_CAPTURE_ENABLED
+     */
+    logCaptureEnabled?: boolean,
+
+    /**
+     * The hostname of the log intake endpoint.
+     * @env DD_LOG_CAPTURE_HOST
+     */
+    logCaptureHost?: string,
+
+    /**
+     * The port of the log intake endpoint.
+     * @env DD_LOG_CAPTURE_PORT
+     */
+    logCapturePort?: number,
+
+    /**
+     * The protocol for the log intake endpoint. Accepts `'http:'` or `'https:'`.
+     * @default 'http:'
+     * @env DD_LOG_CAPTURE_PROTOCOL
+     */
+    logCaptureProtocol?: string,
+
+    /**
+     * The HTTP path for the log intake endpoint.
+     * @default '/logs'
+     * @env DD_LOG_CAPTURE_PATH
+     */
+    logCapturePath?: string,
+
+    /**
+     * How often (in milliseconds) to flush buffered logs to the intake endpoint.
+     * @default 5000
+     * @env DD_LOG_CAPTURE_FLUSH_INTERVAL_MS
+     */
+    logCaptureFlushIntervalMs?: number,
+
+    /**
+     * Maximum number of log records to buffer before a forced flush.
+     * @default 1000
+     * @env DD_LOG_CAPTURE_MAX_BUFFER_SIZE
+     */
+    logCaptureMaxBufferSize?: number,
+
+    /**
+     * Timeout in milliseconds for each HTTP request to the log intake endpoint.
+     * @default 5000
+     * @env DD_LOG_CAPTURE_TIMEOUT_MS
+     */
+    logCaptureTimeoutMs?: number,
+
+    /**
+     * The log capture method. Set to `'transport'` to enable native transport injection.
+     * @default 'wrapper'
+     * @env DD_LOG_CAPTURE_METHOD
+     */
+    logCaptureMethod?: string,
+
+    /**
      * Whether to enable startup logs.
      * @default false
      * @env DD_TRACE_STARTUP_LOGS

@@ -11,6 +11,8 @@ const patched = new WeakSet()
 // Test Visibility log submission channels
 const configureCh = channel('ci:log-submission:winston:configure')
 const addTransport = channel('ci:log-submission:winston:add-transport')
+// General APM log capture channel (separate from CI visibility)
+const addLogCaptureTransport = channel('apm:winston:log-capture-add-transport')
 
 addHook({ name: 'winston', file: 'lib/winston/transports/index.js', versions: ['>=3'] }, transportsPackage => {
   if (configureCh.hasSubscribers) {
@@ -35,9 +37,13 @@ addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['>=3'] }, L
 
   shimmer.wrap(Logger.prototype, 'configure', configure => function () {
     const configureResponse = configure.apply(this, arguments)
-    // After the original `configure`, because it resets transports
+    // After the original `configure`, because it resets transports.
+    // NOTE: The Logger constructor calls configure(), so this also fires during createLogger().
     if (addTransport.hasSubscribers) {
       addTransport.publish(this)
+    }
+    if (addLogCaptureTransport.hasSubscribers) {
+      addLogCaptureTransport.publish(this)
     }
     return configureResponse
   })

@@ -492,6 +492,38 @@ The Datadog SDK supports many of the configurations supported by the OpenTelemet
 
 For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
+<h3 id="log-capture">Log Capture</h3>
+
+dd-trace-js includes experimental support for automatic log capture via native transport injection. When enabled, the tracer automatically attaches an HTTP transport to Winston, Bunyan, and Pino loggers at creation time, forwarding log records to a configurable HTTP intake endpoint without any changes to application code.
+
+Enable by setting `DD_LOG_CAPTURE_ENABLED=true` and `DD_LOG_CAPTURE_METHOD=transport` along with a target host and port:
+
+```javascript
+const tracer = require('dd-trace').init({
+  logCaptureEnabled: true,
+  logCaptureMethod: 'transport',
+  logCaptureHost: 'localhost',
+  logCapturePort: 8080,
+})
+
+// Existing loggers are automatically instrumented — no changes needed
+const winston = require('winston')
+const logger = winston.createLogger({ level: 'debug' })
+logger.info('This log is forwarded to the intake endpoint automatically')
+```
+
+#### Supported Configuration
+
+- `DD_LOG_CAPTURE_ENABLED` - Enable log capture (default: `false`)
+- `DD_LOG_CAPTURE_METHOD` - Log capture method. Set to `transport` to enable native transport injection (default: `wrapper`)
+- `DD_LOG_CAPTURE_HOST` - Hostname of the log intake endpoint (required when transport injection is enabled)
+- `DD_LOG_CAPTURE_PORT` - Port of the log intake endpoint (required when transport injection is enabled)
+- `DD_LOG_CAPTURE_PROTOCOL` - Protocol for the log intake endpoint. Options: `http:`, `https:` (default: `http:`)
+- `DD_LOG_CAPTURE_PATH` - HTTP path for the log intake endpoint (default: `/logs`)
+- `DD_LOG_CAPTURE_FLUSH_INTERVAL_MS` - How often in milliseconds to flush buffered logs (default: `5000`)
+- `DD_LOG_CAPTURE_MAX_BUFFER_SIZE` - Maximum number of log records to buffer before a forced flush (default: `1000`)
+- `DD_LOG_CAPTURE_TIMEOUT_MS` - Timeout in milliseconds for each HTTP request to the intake endpoint (default: `5000`)
+
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 
 <h3 id="tracer-settings">Tracer settings</h3>

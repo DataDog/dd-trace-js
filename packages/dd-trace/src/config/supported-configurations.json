@@ -1220,6 +1220,96 @@
         "default": "true"
       }
     ],
+    "DD_LOG_CAPTURE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "logCaptureEnabled"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_LOG_CAPTURE_HOST": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "logCaptureHost"
+        ],
+        "default": null
+      }
+    ],
+    "DD_LOG_CAPTURE_PORT": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "logCapturePort"
+        ],
+        "default": "0"
+      }
+    ],
+    "DD_LOG_CAPTURE_PROTOCOL": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "logCaptureProtocol"
+        ],
+        "default": "http:"
+      }
+    ],
+    "DD_LOG_CAPTURE_PATH": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "logCapturePath"
+        ],
+        "default": "/logs"
+      }
+    ],
+    "DD_LOG_CAPTURE_FLUSH_INTERVAL_MS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "logCaptureFlushIntervalMs"
+        ],
+        "default": "5000"
+      }
+    ],
+    "DD_LOG_CAPTURE_MAX_BUFFER_SIZE": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "logCaptureMaxBufferSize"
+        ],
+        "default": "1000"
+      }
+    ],
+    "DD_LOG_CAPTURE_TIMEOUT_MS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "logCaptureTimeoutMs"
+        ],
+        "default": "5000"
+      }
+    ],
+    "DD_LOG_CAPTURE_METHOD": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "logCaptureMethod"
+        ],
+        "default": "wrapper"
+      }
+    ],
     "DD_LOGS_OTEL_ENABLED": [
       {
         "implementation": "A",
