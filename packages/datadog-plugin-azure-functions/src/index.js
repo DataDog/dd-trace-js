@@ -1,6 +1,5 @@
 'use strict'
 
-const { http } = require('../../dd-trace/src/plugins')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
 
