@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const id = require('../../dd-trace/src/id')
@@ -145,6 +146,30 @@ describe('Plugin', () => {
 
             await consume(async () => {
               assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            })
+          })
+        })
+
+        describe('syncToStore', () => {
+          let syncToStoreSpy
+
+          beforeEach(() => {
+            syncToStoreSpy = sinon.spy(DataStreamsContext, 'syncToStore')
+          })
+
+          afterEach(() => {
+            syncToStoreSpy.restore()
+          })
+
+          it('should call syncToStore after producing', async () => {
+            await publish(dsmTopic, { data: Buffer.from('syncToStore produce test') })
+            assert.ok(syncToStoreSpy.called, 'syncToStore should be called on produce')
+          })
+
+          it('should call syncToStore after consuming', async () => {
+            await publish(dsmTopic, { data: Buffer.from('syncToStore consume test') })
+            await consume(async () => {
+              assert.ok(syncToStoreSpy.called, 'syncToStore should be called on consume')
             })
           })
         })

@@ -9,7 +9,6 @@ const sinon = require('sinon')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -87,7 +86,9 @@ describe('Plugin', () => {
             consumer = kafka.consumer({ groupId: 'test-group' })
             await consumer.connect()
             await consumer.subscribe({ topic: testTopic })
-            setDataStreamsContextSpy = sinon.spy(DataStreamsContext, 'setDataStreamsContext')
+            setDataStreamsContextSpy = sinon.spy(
+              require('../../dd-trace/src/datastreams/context'), 'setDataStreamsContext'
+            )
           })
 
           afterEach(async () => {
