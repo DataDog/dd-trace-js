@@ -45,6 +45,26 @@ addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['>=3'] }, L
   return Logger
 })
 
+// Hook winston.createLogger to publish logger instances for transport injection
+addHook({ name: 'winston', versions: ['>=3'], patchDefault: true }, winston => {
+  if (typeof winston.createLogger === 'function') {
+    shimmer.wrap(winston, 'createLogger', originalCreateLogger => {
+      return function wrappedCreateLogger (...args) {
+        const logger = originalCreateLogger.apply(this, args)
+        // Publish logger instance for transport injection
+        // Use setImmediate to allow logger to fully initialize
+        if (addTransport.hasSubscribers) {
+          setImmediate(() => {
+            addTransport.publish(logger)
+          })
+        }
+        return logger
+      }
+    })
+  }
+  return winston
+})
+
 addHook({ name: 'winston', file: 'lib/winston/logger.js', versions: ['1', '2'] }, logger => {
   const logCh = channel('apm:winston:log')
   if (logger.Logger.prototype.configure) {

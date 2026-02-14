@@ -6,16 +6,73 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+// Channel for transport injection (similar to Winston/Bunyan)
+const transportConfigCh = channel('ci:log-submission:pino:get-transport-config')
+
 function wrapPino (symbol, wrapper, pino) {
   return function pinoWithTrace () {
+    // Get HTTP transport from plugin if available
+    let httpTransport = null
+    if (transportConfigCh.hasSubscribers) {
+      const configPayload = {}
+      transportConfigCh.publish(configPayload)
+      httpTransport = configPayload.transport
+    }
+
+    // STEP 1: Create logger with user's original config (unchanged)
     const instance = pino.apply(this, arguments)
 
+    // Apply trace injection wrapper
     Object.defineProperty(instance, symbol, {
       configurable: true,
       enumerable: true,
       writable: true,
-      value: wrapper(instance[symbol]),
+      value: wrapper(instance[symbol])
     })
+
+    // STEP 2: If HTTP transport available, combine with user's destination
+    if (httpTransport) {
+      try {
+        // Get Pino's internal stream symbol
+        const streamSym = pino.symbols && pino.symbols.streamSym
+        if (!streamSym) {
+          // Symbol not available, skip multistream
+          return instance
+        }
+
+        // Get the destination stream that Pino created
+        const originalDestination = instance[streamSym]
+
+        if (originalDestination) {
+          // STEP 3: Create multistream combining both destinations
+          const multistream = pino.multistream || require('pino').multistream
+          const combinedDestination = multistream([
+            { stream: originalDestination },
+            { stream: httpTransport }
+          ])
+
+          // STEP 4: Replace the stream in the logger
+          instance[streamSym] = combinedDestination
+
+          // Mark logger as having HTTP transport injected
+          Object.defineProperty(instance, Symbol.for('dd-trace-pino-transport-injected'), {
+            value: true,
+            configurable: true
+          })
+        } else {
+          // No original destination, just use HTTP transport
+          instance[streamSym] = httpTransport
+
+          Object.defineProperty(instance, Symbol.for('dd-trace-pino-transport-injected'), {
+            value: true,
+            configurable: true
+          })
+        }
+      } catch (err) {
+        // Silently fail - don't crash user's application
+        // Logger will work normally without HTTP transport
+      }
+    }
 
     return instance
   }
