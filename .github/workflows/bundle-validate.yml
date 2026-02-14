@@ -3,11 +3,11 @@ name: Validate vendored bundle
 on:
   pull_request:
     paths:
-      - 'vendor/**'
+      - "vendor/**"
   push:
     branches: [master]
     paths:
-      - 'vendor/**'
+      - "vendor/**"
   workflow_dispatch:
 
 jobs:

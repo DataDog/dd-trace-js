@@ -473,7 +473,7 @@ module.exports = {
     })
 
     // LLM Observability evaluation metrics endpoint
-    agent.post('/evp_proxy/v2/api/intake/llm-obs/v1/eval-metric', (req, res) => {
+    agent.post('/evp_proxy/v2/api/intake/llm-obs/v2/eval-metric', (req, res) => {
       llmobsEvaluationMetricsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })

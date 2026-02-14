@@ -1,4 +1,4 @@
-name: 'Dependabot Automation'
+name: "Dependabot Automation"
 
 on:
   pull_request:

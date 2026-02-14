@@ -56,13 +56,13 @@ module.exports = {
 
 /**
  * @typedef {object} GetObjectOptions
- * @property {object} maxReferenceDepth - The maximum depth of the object to traverse
+ * @property {number} maxReferenceDepth - The maximum depth of the object to traverse
  * @property {number} maxCollectionSize - The maximum size of a collection to include in the snapshot
  * @property {number} maxFieldCount - The maximum number of properties on an object to include in the snapshot
  * @property {bigint} deadlineNs - The deadline in nanoseconds compared to `process.hrtime.bigint()`
  * @property {object} ctx - A context object to track the state/progress of the snapshot collection.
  * @property {boolean} ctx.deadlineReached - Will be set to `true` if the deadline has been reached.
- * @property {Error[]} ctx.captureErrors - An array on which errors can be pushed if an issue is detected while
+ * @property {Error[]} ctx.fatalErrors - An array on which errors can be pushed if an issue is detected while
  *   collecting the snapshot.
  */
 
@@ -99,7 +99,7 @@ async function collectObjectProperties (objectId, opts, depth = 0, collection = 
     // Trim the number of properties on the object if there's too many.
     const size = result.length
     if (size > LARGE_OBJECT_SKIP_THRESHOLD) {
-      opts.ctx.captureErrors.push(new Error(
+      opts.ctx.fatalErrors.push(new Error(
         `An object with ${size} properties was detected while collecting a snapshot. ` +
         `This exceeds the maximum number of allowed properties of ${LARGE_OBJECT_SKIP_THRESHOLD}. ` +
         'Future snapshots for existing probes in this location will be skipped until the Node.js process is restarted'

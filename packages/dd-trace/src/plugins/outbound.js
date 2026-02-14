@@ -18,6 +18,10 @@ const COMMON_PEER_SVC_SOURCE_TAGS = [
 
 // TODO: Exit span on finish when AsyncResource instances are removed.
 class OutboundPlugin extends TracingPlugin {
+  /**
+   *
+   * @type {string[]}
+   */
   static peerServicePrecursors = []
 
   constructor (...args) {
@@ -28,12 +32,15 @@ class OutboundPlugin extends TracingPlugin {
     })
   }
 
+  /**
+   * @param {{ parentStore?: { span: import('../../../..').Span } }} ctx
+   */
   bindFinish (ctx) {
     return ctx.parentStore
   }
 
-  startSpan (...args) {
-    const span = super.startSpan(...args)
+  startSpan (name, options, enterOrCtx) {
+    const span = super.startSpan(name, options, enterOrCtx)
     if (
       this._tracerConfig.codeOriginForSpans.enabled &&
       this._tracerConfig.codeOriginForSpans.experimental.exit_spans.enabled
@@ -43,6 +50,9 @@ class OutboundPlugin extends TracingPlugin {
     return span
   }
 
+  /**
+   * @param {Record<string, string>} tags
+   */
   getPeerService (tags) {
     /**
      * Compute `peer.service` and associated metadata from available tags, based
@@ -75,6 +85,9 @@ class OutboundPlugin extends TracingPlugin {
     }
   }
 
+  /**
+   * @param {Record<string, string>} peerData
+   */
   getPeerServiceRemap (peerData) {
     /**
      * If DD_TRACE_PEER_SERVICE_MAPPING is matched, we need to override the existing
@@ -92,6 +105,9 @@ class OutboundPlugin extends TracingPlugin {
     return peerData
   }
 
+  /**
+   * @param {{ currentStore?: { span: import('../../../..').Span } }} ctx
+   */
   finish (ctx) {
     const span = ctx?.currentStore?.span || this.activeSpan
     this.tagPeerService(span)
@@ -104,6 +120,9 @@ class OutboundPlugin extends TracingPlugin {
     super.finish(...arguments)
   }
 
+  /**
+   * @param {import('../../../..').Span} span
+   */
   tagPeerService (span) {
     if (this._tracerConfig.spanComputePeerService) {
       const peerData = this.getPeerService(span.context()._tags)
@@ -113,10 +132,16 @@ class OutboundPlugin extends TracingPlugin {
     }
   }
 
+  /**
+   * @param {object} ctx
+   */
   connect (ctx) {
     this.addHost(ctx)
   }
 
+  /**
+   * @param {{ hostname: string, port: number, currentStore?: { span: import('../../../..').Span } }} ctx
+   */
   addHost (ctx) {
     const { hostname, port } = ctx
 
