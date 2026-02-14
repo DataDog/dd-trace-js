@@ -13,7 +13,7 @@ const { executeRequest } = require('./util')
 describe('AIGuard SDK integration tests', () => {
   let cwd, appFile, agent, proc, api, url
 
-  useSandbox(['express'])
+  useSandbox(['express', 'ai'])
 
   before(async function () {
     cwd = sandboxCwd()
@@ -75,4 +75,54 @@ describe('AIGuard SDK integration tests', () => {
       })
     })
   }
+})
+
+describe('AIGuardMiddleware integration tests', () => {
+  let cwd, appFile, agent, proc, api, url
+
+  useSandbox(['express', 'ai'])
+
+  before(async function () {
+    cwd = sandboxCwd()
+    appFile = path.join(cwd, 'aiguard/server.js')
+    api = await startApiMock()
+  })
+
+  after(async () => {
+    await api.close()
+  })
+
+  beforeEach(async () => {
+    agent = await new FakeAgent().start()
+    proc = await spawnProc(appFile, {
+      cwd,
+      env: {
+        DD_SERVICE: 'aiguard_middleware_test',
+        DD_ENV: 'test',
+        DD_TRACING_ENABLED: 'true',
+        DD_TRACE_AGENT_PORT: agent.port,
+        DD_AI_GUARD_ENABLED: 'true',
+        DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
+        DD_API_KEY: 'DD_API_KEY',
+        DD_APP_KEY: 'DD_APP_KEY'
+      }
+    })
+    url = `${proc.url}`
+  })
+
+  afterEach(async () => {
+    proc.kill()
+    await agent.stop()
+  })
+
+  it('should allow prompt through generateText with AIGuardMiddleware', async () => {
+    const response = await executeRequest(`${url}/middleware/prompt/allow`, 'GET')
+    assert.strictEqual(response.status, 200)
+    assert.ok(response.body.text.includes('Mock response'))
+  })
+
+  it('should terminate stream when tool-call is blocked', async () => {
+    const response = await executeRequest(`${url}/middleware/stream/tool-deny`, 'GET')
+    assert.strictEqual(response.status, 403)
+  })
 })
