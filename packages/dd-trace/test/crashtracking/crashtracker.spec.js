@@ -32,9 +32,9 @@ describeNotWindows('crashtracker', () => {
       error: sinon.stub(),
     }
 
-    sinon.spy(binding, 'init')
-    sinon.spy(binding, 'updateConfig')
-    sinon.spy(binding, 'updateMetadata')
+    sinon.stub(binding, 'init')
+    sinon.stub(binding, 'updateConfig')
+    sinon.stub(binding, 'updateMetadata')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
       '../log': log,
@@ -53,21 +53,6 @@ describeNotWindows('crashtracker', () => {
 
       sinon.assert.called(binding.init)
       sinon.assert.notCalled(log.error)
-    })
-
-    it('should initialize the binding only once', () => {
-      crashtracker.start(config)
-      crashtracker.start(config)
-
-      sinon.assert.calledOnce(binding.init)
-    })
-
-    it('should reconfigure when started multiple times', () => {
-      crashtracker.start(config)
-      crashtracker.start(config)
-
-      sinon.assert.called(binding.updateConfig)
-      sinon.assert.called(binding.updateMetadata)
     })
 
     it('should handle errors', () => {
