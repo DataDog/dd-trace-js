@@ -2,7 +2,8 @@ variables:
   MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
   SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
 
-  # Benchmark's env variables. Modify to tweak benchmark parameters.
+  # Benchmarking Platform's env variables. Modify to tweak benchmark parameters.
+  # Commit to trigger pipeline
   UNCONFIDENCE_THRESHOLD: "5.0"
   MD_REPORT_ONLY_CHANGES: "1"
 
