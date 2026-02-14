@@ -43,7 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/active-lts
-      - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
+      - uses: ./.github/actions/install
+      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
       - run: mkdir -p /tmp/app
       - run: npm i -g pnpm
         if: matrix.manager.name == 'pnpm'
@@ -58,7 +59,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: mkdir npm bun
-      - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C npm
+      - run: FILENAME=$(npm pack --silent) && tar -zxf $FILENAME -C npm
       - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
 
@@ -446,12 +447,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node
-        with:
-          version: ${{ matrix.version }}
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
       - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'

@@ -26,9 +26,10 @@ const exclude = new Set([
   'mutexify' // we only ever use `mutexify/promise`
 ])
 
+const difference = new Set([...include].filter(x => !exclude.has(x)))
+
 module.exports = {
-  // @ts-expect-error Array#difference exists in the Node.js version being used here.
-  entry: Object.fromEntries(include.difference(exclude).entries()),
+  entry: Object.fromEntries(difference.entries()),
   target: 'node',
   mode: 'production',
   // Using `hidden` removes the URL comment from source files since we don't
