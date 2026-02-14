@@ -2,9 +2,20 @@
 
 const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
+const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('../baggage')
+const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 const tracer = require('../../')
 const SpanContext = require('./span_context')
+
+function mergeGlobalBaggageWith (baggages) {
+  const combinedBaggages = baggages ? rfdc(baggages) : {}
+  const globalActiveBaggages = getAllBaggageItems()
+  for (const [key, value] of Object.entries(globalActiveBaggages)) {
+    if (!combinedBaggages[key]) combinedBaggages[key] = value
+  }
+  return combinedBaggages
+}
 
 class ContextManager {
   constructor () {
@@ -21,7 +32,7 @@ class ContextManager {
 
     // If stored span wraps the active DD span, prefer the stored context
     if (storedSpan && storedSpan._ddSpan === activeSpan) {
-      const baggages = JSON.parse(activeSpan.getAllBaggageItems())
+      const baggages = mergeGlobalBaggageWith(JSON.parse(activeSpan.getAllBaggageItems()))
       if (Object.keys(baggages).length > 0) {
         const entries = {}
         for (const [key, value] of Object.entries(baggages)) {
@@ -34,7 +45,7 @@ class ContextManager {
     }
 
     if (!activeSpan) {
-      const storedBaggageItems = storedSpan?._spanContext?._ddContext?._baggageItems
+      const storedBaggageItems = mergeGlobalBaggageWith(storedSpan?._spanContext?._ddContext?._baggageItems)
       if (storedBaggageItems) {
         const baggages = storedBaggageItems
         const entries = {}
@@ -54,7 +65,7 @@ class ContextManager {
     }
 
     // Convert DD baggage to OTel format
-    const baggages = JSON.parse(activeSpan.getAllBaggageItems())
+    const baggages = mergeGlobalBaggageWith(JSON.parse(activeSpan.getAllBaggageItems()))
     const hasBaggage = Object.keys(baggages).length > 0
     let otelBaggages
     if (hasBaggage) {
@@ -86,8 +97,11 @@ class ContextManager {
     if (baggages) {
       baggageItems = baggages.getAllEntries()
     }
+    removeAllBaggageItems()
+    for (const baggage of baggageItems) {
+      setBaggageItem(baggage[0], baggage[1].value)
+    }
     if (span && span._ddSpan) {
-      // does otel always override datadog?
       span._ddSpan.removeAllBaggageItems()
       for (const baggage of baggageItems) {
         span._ddSpan.setBaggageItem(baggage[0], baggage[1].value)
