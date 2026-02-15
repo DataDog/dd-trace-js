@@ -252,6 +252,104 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
           })
+
+          describe('consumer (eachBatch)', () => {
+            let consumer
+            const batchMessages = [{ key: 'key1', value: 'test2' }, { key: 'key2', value: 'test3' }]
+
+            beforeEach(async () => {
+              consumer = kafka.consumer({
+                kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
+              })
+              await consumer.connect()
+              await consumer.subscribe({ topic: testTopic })
+            })
+
+            afterEach(async () => {
+              await consumer.disconnect()
+            })
+
+            it('should be instrumented', async () => {
+              const expectedSpanPromise = expectSpanWithDefaults({
+                name: expectedSchema.receive.opName,
+                service: expectedSchema.receive.serviceName,
+                meta: {
+                  'span.kind': 'consumer',
+                  component: 'confluentinc-kafka-javascript',
+                  'kafka.topic': testTopic,
+                  'messaging.destination.name': testTopic,
+                  'messaging.system': 'kafka',
+                },
+                metrics: {
+                  'messaging.batch.message_count': batchMessages.length,
+                },
+                resource: testTopic,
+                error: 0,
+                type: 'worker',
+              })
+
+              const consumerReceiveMessagePromise = /** @type {Promise<void>} */(new Promise((resolve) => {
+                consumer.run({
+                  eachBatch: () => {
+                    resolve()
+                  },
+                })
+              }))
+
+              await Promise.all([
+                sendMessages(kafka, testTopic, batchMessages),
+                consumerReceiveMessagePromise,
+                expectedSpanPromise,
+              ])
+            })
+
+            it('should run the consumer in the context of the consumer span', done => {
+              const firstSpan = tracer.scope().active()
+              let eachBatch = async ({ batch }) => {
+                const currentSpan = tracer.scope().active()
+
+                try {
+                  assert.notEqual(currentSpan, firstSpan)
+                  assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                  done()
+                } catch (e) {
+                  done(e)
+                } finally {
+                  eachBatch = () => {} // avoid being called for each message
+                }
+              }
+
+              consumer.run({ eachBatch: (...args) => eachBatch(...args) })
+                .then(() => sendMessages(kafka, testTopic, batchMessages))
+                .catch(done)
+            })
+
+            it('should propagate context via span links', async () => {
+              const expectedSpanPromise = agent.use(traces => {
+                const span = traces[0][0]
+                const links = span.meta['_dd.span_links'] ? JSON.parse(span.meta['_dd.span_links']) : []
+
+                assertObjectContains(span, {
+                  name: expectedSchema.receive.opName,
+                  service: expectedSchema.receive.serviceName,
+                  resource: testTopic,
+                })
+
+                assert.strictEqual(links.length, batchMessages.length)
+              })
+
+              let consumerReceiveMessagePromise
+              await consumer.run({
+                eachBatch: async () => {
+                  consumerReceiveMessagePromise = Promise.resolve()
+                },
+              })
+              await sendMessages(kafka, testTopic, batchMessages).then(
+                async () => await consumerReceiveMessagePromise
+              )
+              await expectedSpanPromise
+            })
+          })
         })
 
         // Adding tests for the native API
