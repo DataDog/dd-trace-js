@@ -3,6 +3,7 @@
 const { readFileSync } = require('node:fs')
 const { resolve, join } = require('node:path')
 const Module = require('node:module')
+const assert = require('node:assert')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const { tracingChannel } = require('dc-polyfill')
@@ -15,8 +16,21 @@ describe('check-require-cache', () => {
   let subs
 
   function compile (name, format = 'commonjs') {
-    const folder = resolve(__dirname, 'node_modules', name)
-    const filename = join(folder, 'index.js')
+    const folder = resolve(__dirname, 'node_modules', ...name.split('/'))
+    const filename = name.includes('/') ? folder : join(folder, 'index.js')
+    const mod = new Module(filename, module.parent)
+
+    content = readFileSync(filename, 'utf8')
+    content = rewriter.rewrite(content, filename, format)
+
+    mod._compile(content, filename, format)
+
+    return mod.exports
+  }
+
+  // TODO: Move all test files to same folder and replace `compile` with this.
+  function compileFile (name, format = 'commonjs') {
+    const filename = resolve(__dirname, 'node_modules', 'test', `${name}.js`)
     const mod = new Module(filename, module.parent)
 
     content = readFileSync(filename, 'utf8')
@@ -82,6 +96,30 @@ describe('check-require-cache', () => {
         },
         {
           module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-iterator-async.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'AsyncIterator',
+          },
+          channelName: 'trace_iterator_async',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-iterator-async-super.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'AsyncIterator',
+          },
+          channelName: 'trace_iterator_async_super',
+        },
+        {
+          module: {
             name: 'test-trace-callback',
             versionRange: '>=0.1',
             filePath: 'index.js',
@@ -104,6 +142,54 @@ describe('check-require-cache', () => {
             className: 'B',
           },
           channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-generator.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'Iterator',
+          },
+          channelName: 'trace_generator',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-generator-super.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'Iterator',
+          },
+          channelName: 'trace_generator_super',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-generator-async.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'AsyncIterator',
+          },
+          channelName: 'trace_generator_async',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-generator-async-super.js',
+          },
+          functionQuery: {
+            functionName: 'test',
+            kind: 'AsyncIterator',
+          },
+          channelName: 'trace_generator_async_super',
         },
         {
           module: {
@@ -199,6 +285,44 @@ describe('check-require-cache', () => {
     test(() => {})
   })
 
+  it('should auto instrument iterator returning async functions', done => {
+    const { test } = compileFile('trace-iterator-async')
+
+    subs = {
+      start () {
+        done()
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_iterator_async')
+    ch.subscribe(subs)
+
+    test()
+  })
+
+  it('should preserve return value of iterator returning async functions', () => {
+    const { test } = compileFile('trace-iterator-async')
+
+    return test().then(result => {
+      assert.equal(result.next().value, 1)
+    })
+  })
+
+  it('should auto instrument iterator returning async functions using super', done => {
+    const { test } = compileFile('trace-iterator-async-super')
+
+    subs = {
+      start () {
+        done()
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_iterator_async_super')
+    ch.subscribe(subs)
+
+    test()
+  })
+
   it('should auto instrument callback functions', done => {
     const { test } = compile('test-trace-callback')
 
@@ -227,6 +351,78 @@ describe('check-require-cache', () => {
     ch.subscribe(subs)
 
     test(() => {})
+  })
+
+  it('should auto instrument generator functions', done => {
+    const { test } = compileFile('trace-generator')
+
+    subs = {
+      start () {
+        done()
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_generator')
+    ch.subscribe(subs)
+
+    const gen = test()
+
+    assert.equal(gen.next().value, 'foo')
+  })
+
+  it('should auto instrument generator functions using super', done => {
+    const { test } = compileFile('trace-generator-super')
+
+    subs = {
+      start () {
+        done()
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_generator_super')
+    ch.subscribe(subs)
+
+    test()
+  })
+
+  it('should auto instrument async generator functions', done => {
+    const { test } = compileFile('trace-generator-async')
+
+    subs = {
+      start () {
+        done()
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_generator_async')
+    ch.subscribe(subs)
+
+    test()
+  })
+
+  it('should preserve return value of async generator functions', () => {
+    const { test } = compileFile('trace-generator-async')
+
+    const it = test()
+
+    return it.next().then(result => {
+      assert.equal(result.value, 'foo')
+    })
+  })
+
+  it('should auto instrument async generator functions using super', done => {
+    const { test } = compileFile('trace-generator-async-super')
+
+    subs = {
+      start () {
+        done()
+      },
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_generator_async_super')
+    ch.subscribe(subs)
+
+    test()
   })
 
   it('should auto instrument class instance methods', done => {
