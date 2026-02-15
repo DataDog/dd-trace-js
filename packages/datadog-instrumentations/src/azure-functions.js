@@ -6,10 +6,15 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+let alreadyPatched = false
+
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 
 addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (azureFunction) => {
   const { app } = azureFunction
+
+  if (alreadyPatched) return azureFunction
+  alreadyPatched = true
 
   // Http triggers
   shimmer.wrap(app, 'deleteRequest', wrapHandler)
