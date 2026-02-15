@@ -2,7 +2,7 @@
   "name": "azure-durable-functions-tests",
   "version": "1.0.0",
   "description": "",
-  "main": "./server.js",
+  "main": "./server.mjs",
   "scripts": {
     "start": "func start"
   }

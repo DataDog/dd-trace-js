@@ -1,9 +1,7 @@
-'use strict'
+import 'dd-trace/init.js'
+import { app } from '@azure/functions'
 
-require('dd-trace/init.js')
-const { app } = require('@azure/functions')
-
-const df = require('durable-functions')
+import df from 'durable-functions'
 
 df.app.entity('Counter', (context) => {
   const current = context.df.getState(() => 0)

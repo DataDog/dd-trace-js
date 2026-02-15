@@ -37,7 +37,6 @@ describe('esm', () => {
 
     afterEach(async () => {
       // after each test, kill both processes and wait for them to exit before continuing
-
       if (funcproc) {
         funcproc.kill('SIGINT')
         await new Promise(resolve => funcproc.on('exit', resolve))
