@@ -59,7 +59,7 @@ async function checkStatus () {
   const commitState = statusCheckRollup?.state
   const state = commitState || prState
 
-  console.log(prState, commitState)
+  console.log(associatedPullRequests)
 
   if (state === 'PENDING') {
     console.log(`State is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
