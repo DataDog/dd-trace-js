@@ -70,11 +70,17 @@ describe('sequelize', () => {
 
           const app = express()
           app.get('/users', async (req, res) => {
-            console.log('Users controller - begin')
-            const users = await User.findAll()
-            console.log('Users controller - after findAll')
-            res.json(users)
-            console.log('Users controller - after res.json')
+            try {
+              console.log('Users controller - begin')
+              const users = await User.findAll()
+              console.log('Users controller - after findAll', users)
+              const jsonUser = JSON.stringify(users)
+              res.json(users)
+              console.log('Users controller - after res.json')
+            } catch (e) {
+              console.log(e)
+              res.status(500).json({})
+            }
           })
 
           server = app.listen(0, () => {
