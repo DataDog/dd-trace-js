@@ -33,7 +33,7 @@ jobs:
           DELAY: 5
           GITHUB_TOKEN: ${{ github.token }}
           POLLING_INTERVAL: 1
-          RETRIES: 30
+          RETRIES: 15
       - name: Require vendor validation when vendor/ changes
         if: github.event_name == 'pull_request'
         env:
