@@ -50,7 +50,14 @@ describe('esm', () => {
         assert.strictEqual(payload.length, 1)
         assert.ok(Array.isArray(payload[0]))
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0].name, 'azure.functions.invoke')
+
+        const span = payload[0][0]
+
+        assert.strictEqual(span.name, 'azure.functions.invoke')
+        assert.strictEqual(span.meta['_dd.integration'], 'azure-functions')
+        assert.strictEqual(span.meta.component, 'azure-functions')
+        assert.strictEqual(span.meta['http.route'], '/api/httptest')
+        assert.strictEqual(span.resource, 'GET /api/httptest')
       })
     }).timeout(60_000)
 
