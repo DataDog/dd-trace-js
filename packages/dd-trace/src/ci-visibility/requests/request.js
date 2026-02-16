@@ -6,29 +6,12 @@ const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
+const { httpAgent, httpsAgent } = require('../../exporters/common/agents')
 const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
 
 const RATE_LIMIT_MAX_WAIT_MS = 30_000
 const RETRY_BASE_MS = 5000
 const RETRY_JITTER_MS = 2500
-
-// Dedicated HTTP agents for CI visibility requests, isolated from global agent pool.
-// Connection pooling helps when a process makes multiple CI visibility requests
-// (e.g. library config + skippable suites + known tests in the same Jest session).
-const ciVisibilityAgent = {
-  http: new http.Agent({
-    keepAlive: true,
-    keepAliveMsecs: 1000,
-    maxSockets: 2,
-    maxFreeSockets: 1,
-  }),
-  https: new https.Agent({
-    keepAlive: true,
-    keepAliveMsecs: 1000,
-    maxSockets: 2,
-    maxFreeSockets: 1,
-  }),
-}
 
 /**
  * Calculates retry delay with jitter to prevent thundering herd.
@@ -71,8 +54,8 @@ function parseUrl (urlObjOrString) {
 }
 
 /**
- * Simplified HTTP request for test optimization (library config). Uses dedicated agent
- * with connection pooling. Retries: 429 (with X-ratelimit-reset, max 30s wait),
+ * Simplified HTTP request for test optimization (library config). Uses common HTTP agents.
+ * Retries: 429 (with X-ratelimit-reset, max 30s wait),
  * >=500 and transient network errors (5–7.5s delay with jitter). Max one retry.
  * Destroys connections on errors to prevent reuse of bad connections. Preserves
  * original status code across retries for telemetry.
@@ -104,7 +87,7 @@ function request (data, options, callback) {
   const client = isSecure ? https : http
 
   if (!opts.socketPath) {
-    opts.agent = isSecure ? ciVisibilityAgent.https : ciVisibilityAgent.http
+    opts.agent = isSecure ? httpsAgent : httpAgent
   }
 
   let hasRetried = false
