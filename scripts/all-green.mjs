@@ -59,9 +59,8 @@ async function checkStatus () {
   }
 
   const status = await getStatus()
-  const state = status.repository.object.statusCheckRollup.state
-
   console.log(status)
+  const state = status.repository.object.statusCheckRollup.state
 
   if (state === 'PENDING') {
     console.log(`State is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
@@ -80,7 +79,7 @@ async function checkStatus () {
 
 if (DELAY) {
   console.log(`Waiting for ${DELAY} minutes before starting.`)
-  await setTimeout(DELAY * 60_000)
+  // await setTimeout(DELAY * 60_000)
 }
 
 await checkStatus()
