@@ -32,15 +32,15 @@ runs:
     - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       id: node-version-cache
       with:
-        path: /tmp/.node-resolved-version
+        path: /tmp/.node-resolved-version-${{ steps.node-version.outputs.version }}
         key: node-resolved-${{ runner.os }}-${{ runner.arch }}-v${{ steps.node-version.outputs.version }}-${{ steps.cache-key.outputs.block }}
         restore-keys: node-resolved-${{ runner.os }}-${{ runner.arch }}-v${{ steps.node-version.outputs.version }}-
     - name: Read cached version
       id: cached
       shell: bash
       run: |
-        if [ -f /tmp/.node-resolved-version ]; then
-          echo "version=$(cat /tmp/.node-resolved-version)" >> "$GITHUB_OUTPUT"
+        if [ -f /tmp/.node-resolved-version-${{ steps.node-version.outputs.version }} ]; then
+          echo "version=$(cat /tmp/.node-resolved-version-${{ steps.node-version.outputs.version }})" >> "$GITHUB_OUTPUT"
         fi
 
     - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
@@ -55,7 +55,7 @@ runs:
     - name: Save resolved version
       if: steps.node-version-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: node -v | tr -d 'v' > /tmp/.node-resolved-version
+      run: node -v | tr -d 'v' > /tmp/.node-resolved-version-${{ steps.node-version.outputs.version }}
     # Avoid GitHub REST API tag lookups (api.github.com/.../git/refs/tags) which can hit installation rate limits
     # in large orgs / high-parallelism workflows. Instead, use a direct release asset URL.
     #
