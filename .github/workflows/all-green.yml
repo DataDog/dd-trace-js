@@ -27,7 +27,7 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: active
-      - run: yarn add octokit
+      - run: yarn add @actions/github octokit
       - run: node scripts/all-green.mjs
         env:
           DELAY: 5

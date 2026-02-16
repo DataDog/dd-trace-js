@@ -1,11 +1,11 @@
 import { setTimeout } from 'timers/promises'
 import { Octokit } from 'octokit'
+import { context } from '@actions/github'
 
 /* eslint-disable no-console */
 
 const {
   DELAY,
-  GITHUB_PR_NUMBER,
   GITHUB_SHA,
   GITHUB_TOKEN,
   POLLING_INTERVAL,
@@ -13,56 +13,45 @@ const {
 } = process.env
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN })
+const owner = 'DataDog'
+const repo = 'dd-trace-js'
+const ref = context.payload.pull_request?.head.sha || GITHUB_SHA
+const params = { owner, repo, ref }
 
 let retries = 0
 
-async function getStatus () {
-  const owner = 'DataDog'
-  const name = 'dd-trace-js'
+async function getAllGreen () {
+  const { data: inProgressRuns } = await octokit.rest.checks.listForRef({
+    ...params,
+    per_page: 1, // Minimum is 1 but we don't need any pages.
+    status: 'in_progress',
+  })
 
-  if (GITHUB_PR_NUMBER) { // For `pull_request` trigger.
-    const response = await octokit.graphql(`
-      query ($owner: String!, $name: String!, $number: Int!) {
-        repository(owner: $owner, name: $name) {
-          pullRequest(number: $number) {
-            commits(last: 1) {
-              nodes {
-                commit {
-                  statusCheckRollup { state }
-                }
-              }
-            }
-          }
-        }
-      }
-    `, {
-      owner,
-      name,
-      number: Number(GITHUB_PR_NUMBER),
-    })
+  // If there are any in progress runs it means we're not ready to check
+  // statuses. We will always have minimum 1 for the All Green job.
+  if (inProgressRuns.total_count > 1) return
 
-    return response.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.state
-  } else if (GITHUB_SHA) { // For `push` and `schedule` triggers.
-    const response = await octokit.graphql(`
-      query ($owner: String!, $name: String!, $oid: GitObjectID!) {
-        repository(owner: $owner, name: $name) {
-          object(oid: $oid) {
-            ... on Commit {
-              statusCheckRollup { state }
-            }
-          }
-        }
-      }
-    `, {
-      owner,
-      name,
-      oid: GITHUB_SHA,
-    })
+  const { data: queuedRuns } = await octokit.rest.checks.listForRef({
+    ...params,
+    per_page: 1, // Minimum is 1 but we don't need any pages.
+    status: 'queued',
+  })
 
-    return response.repository.object.statusCheckRollup.state
-  }
+  // Same as above, but jobs that are queued are not even in progress yet.
+  if (queuedRuns.total_count > 1) return
 
-  throw new Error('Please provide at least one of GITHUB_PR_NUMBER or GITHUB_SHA.')
+  const completedRuns = await octokit.paginate(
+    'GET /repos/:owner/:repo/commits/:ref/check-runs',
+    {
+      ...params,
+      per_page: 100,
+      status: 'completed',
+    }
+  )
+
+  return completedRuns.some(run => (
+    run.conclusion === 'failure' || run.conclusion === 'timed_out'
+  ))
 }
 
 async function checkStatus () {
@@ -70,9 +59,9 @@ async function checkStatus () {
     throw new Error(`State is still pending after ${RETRIES} retries.`)
   }
 
-  const status = await getStatus()
+  const allGreen = await getAllGreen()
 
-  if (status === 'PENDING') {
+  if (allGreen === undefined) {
     console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
     await setTimeout(POLLING_INTERVAL * 60_000)
     console.log('Retrying.')
@@ -80,12 +69,10 @@ async function checkStatus () {
     return checkStatus()
   }
 
-  // Since `statusCheckRollup` is used in both queries, this will happen as soon
-  // as any job fails. This is intended as it will prevent further API calls.
-  if (status === 'FAILURE' || status === 'ERROR') {
-    console.log('One or more jobs failed.')
-  } else {
+  if (allGreen) {
     console.log('All jobs were succesful.')
+  } else {
+    throw new Error('One or more jobs failed.')
   }
 }
 
