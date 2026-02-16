@@ -26,9 +26,9 @@ async function getStatus () {
             # 2. PR-specific Rollup (Pull Request)
             associatedPullRequests(first: 1) {
               nodes {
-                commits(last: 1) {
-                  nodes {
-                    commit {
+                headRef {
+                  target {
+                    ... on Commit {
                       statusCheckRollup { state }
                     }
                   }
@@ -55,7 +55,7 @@ async function checkStatus () {
 
   const status = await getStatus()
   const { associatedPullRequests, statusCheckRollup } = status.repository.object
-  const prState = associatedPullRequests?.nodes[0]?.commits.nodes[0]?.commit.statusCheckRollup?.state
+  const prState = associatedPullRequests?.nodes[0]?.headRef?.target?.statusCheckRollup?.state
   const commitState = statusCheckRollup?.state
   const state = commitState || prState
 
