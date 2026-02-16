@@ -5,6 +5,7 @@ import { Octokit } from 'octokit'
 
 const {
   DELAY,
+  GITHUB_PR_NUMBER,
   GITHUB_SHA,
   GITHUB_TOKEN,
   POLLING_INTERVAL,
@@ -16,36 +17,52 @@ const octokit = new Octokit({ auth: GITHUB_TOKEN })
 let retries = 0
 
 async function getStatus () {
-  const response = await octokit.graphql(`
-    query ($owner: String!, $name: String!, $oid: GitObjectID!) {
-      repository(owner: $owner, name: $name) {
-        object(oid: $oid) {
-          ... on Commit {
-            # 1. Direct Commit Rollup (Push/Schedule)
-            statusCheckRollup { state }
-            # 2. PR-specific Rollup (Pull Request)
-            associatedPullRequests(first: 1) {
+  const owner = 'DataDog'
+  const name = 'dd-trace-js'
+
+  if (GITHUB_PR_NUMBER) { // For `pull_request` trigger.
+    const response = await octokit.graphql(`
+      query ($owner: String!, $name: String!, $number: Int!) {
+        repository(owner: $owner, name: $name) {
+          pullRequest(number: $number) {
+            commits(last: 1) {
               nodes {
-                headRef {
-                  target {
-                    ... on Commit {
-                      statusCheckRollup { state }
-                    }
-                  }
+                commit {
+                  statusCheckRollup { state }
                 }
               }
             }
           }
         }
       }
-    }
-  `, {
-    owner: 'DataDog',
-    name: 'dd-trace-js',
-    oid: GITHUB_SHA,
-  })
+    `, {
+      owner,
+      name,
+      number: Number(GITHUB_PR_NUMBER),
+    })
 
-  return response
+    return response.repository.pullRequest.commits.nodes[0].commit.statusCheckRollup.state
+  } else if (GITHUB_SHA) { // For `push` and `schedule` triggers.
+    const response = await octokit.graphql(`
+      query ($owner: String!, $name: String!, $oid: GitObjectID!) {
+        repository(owner: $owner, name: $name) {
+          object(oid: $oid) {
+            ... on Commit {
+              statusCheckRollup { state }
+            }
+          }
+        }
+      }
+    `, {
+      owner,
+      name,
+      oid: GITHUB_SHA,
+    })
+
+    return response.repository.object.statusCheckRollup.state
+  }
+
+  throw new Error('Please provide at least one of GITHUB_PR_NUMBER or GITHUB_SHA.')
 }
 
 async function checkStatus () {
@@ -54,23 +71,18 @@ async function checkStatus () {
   }
 
   const status = await getStatus()
-  const { associatedPullRequests, statusCheckRollup } = status.repository.object
-  const prState = associatedPullRequests?.nodes[0]?.headRef?.target?.statusCheckRollup?.state
-  const commitState = statusCheckRollup?.state
-  const state = commitState || prState
 
-  console.log(GITHUB_SHA)
-  console.log(associatedPullRequests)
-
-  if (state === 'PENDING') {
-    console.log(`State is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
+  if (status === 'PENDING') {
+    console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
     await setTimeout(POLLING_INTERVAL * 60_000)
     console.log('Retrying.')
     retries++
     return checkStatus()
   }
 
-  if (state === 'FAILURE' || state === 'ERROR') {
+  // Since `statusCheckRollup` is used in both queries, this will happen as soon
+  // as any job fails. This is intended as it will prevent further API calls.
+  if (status === 'FAILURE' || status === 'ERROR') {
     console.log('One or more jobs failed.')
   } else {
     console.log('All jobs were succesful.')
@@ -79,7 +91,7 @@ async function checkStatus () {
 
 if (DELAY) {
   console.log(`Waiting for ${DELAY} minutes before starting.`)
-  // await setTimeout(DELAY * 60_000)
+  await setTimeout(DELAY * 60_000)
 }
 
 await checkStatus()

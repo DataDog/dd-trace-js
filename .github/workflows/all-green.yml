@@ -31,6 +31,7 @@ jobs:
       - run: node scripts/all-green.mjs
         env:
           DELAY: 5
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ github.token }}
           POLLING_INTERVAL: 1
           RETRIES: 15
