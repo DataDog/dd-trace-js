@@ -49,12 +49,12 @@ async function getAllGreen () {
     }
   )
 
-  return completedRuns.some(run => (
+  return !completedRuns.some(run => (
     run.conclusion === 'failure' || run.conclusion === 'timed_out'
   ))
 }
 
-async function checkStatus () {
+async function checkAllGreen () {
   if (RETRIES && retries > RETRIES) {
     throw new Error(`State is still pending after ${RETRIES} retries.`)
   }
@@ -66,7 +66,7 @@ async function checkStatus () {
     await setTimeout(POLLING_INTERVAL * 60_000)
     console.log('Retrying.')
     retries++
-    return checkStatus()
+    return checkAllGreen()
   }
 
   if (allGreen) {
@@ -81,4 +81,4 @@ if (DELAY) {
   await setTimeout(DELAY * 60_000)
 }
 
-await checkStatus()
+await checkAllGreen()
