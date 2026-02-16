@@ -9,53 +9,49 @@ const log = require('../../log')
 const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
 
 const RATE_LIMIT_MAX_WAIT_MS = 30_000
-const SERVER_ERROR_RETRY_BASE_MS = 5000
-const SERVER_ERROR_RETRY_JITTER_MS = 2500
+const RETRY_BASE_MS = 5000
+const RETRY_JITTER_MS = 2500
 
 // Dedicated HTTP agents for CI visibility requests, isolated from global agent pool.
-// Using keep-alive with short timeouts to detect stale connections quickly.
-// This prevents connection state pollution when workers are reused across multiple packages.
+// Connection pooling helps when a process makes multiple CI visibility requests
+// (e.g. library config + skippable suites + known tests in the same Jest session).
 const ciVisibilityAgent = {
   http: new http.Agent({
     keepAlive: true,
     keepAliveMsecs: 1000,
     maxSockets: 2,
     maxFreeSockets: 1,
-    timeout: 5000,
   }),
   https: new https.Agent({
     keepAlive: true,
     keepAliveMsecs: 1000,
     maxSockets: 2,
     maxFreeSockets: 1,
-    timeout: 5000,
   }),
 }
 
 /**
- * Calculates retry delay with jitter to prevent thundering herd
- * Uses equal jitter: baseDelay/2 + random(0, baseDelay/2)
+ * Calculates retry delay with jitter to prevent thundering herd.
+ * Delay is RETRY_BASE_MS + random(0, RETRY_JITTER_MS) (e.g. 5–7.5 seconds).
+ *
  * @returns {number} Delay in milliseconds
  */
 function getRetryDelay () {
-  const base = SERVER_ERROR_RETRY_BASE_MS - SERVER_ERROR_RETRY_JITTER_MS
-  const jitter = Math.random() * SERVER_ERROR_RETRY_JITTER_MS
-  return base + jitter
+  return RETRY_BASE_MS + (Math.random() * RETRY_JITTER_MS)
 }
 
 /**
- * Determines if a network error is retriable
+ * Determines if a network error is retriable (transient failures only).
+ * ENOTFOUND and ECONNREFUSED are excluded as they are usually not transient.
+ *
  * @param {Error} err - The error to check
  * @returns {boolean}
  */
 function isRetriableNetworkError (err) {
   if (!err.code) return false
-  // Retry on temporary network failures
   return err.code === 'ECONNRESET' ||
     err.code === 'ETIMEDOUT' ||
-    err.code === 'ECONNREFUSED' ||
-    err.code === 'EPIPE' ||
-    err.code === 'ENOTFOUND'
+    err.code === 'EPIPE'
 }
 
 function parseUrl (urlObjOrString) {
@@ -77,48 +73,46 @@ function parseUrl (urlObjOrString) {
 /**
  * Simplified HTTP request for test optimization (library config). Uses dedicated agent
  * with connection pooling. Retries: 429 (with X-ratelimit-reset, max 30s wait),
- * >=500 and network errors (2.5-5s delay with jitter). Max one retry. Destroys
- * connections on errors to prevent reuse of bad connections. Preserves original
- * status code across retries for telemetry.
+ * >=500 and transient network errors (5–7.5s delay with jitter). Max one retry.
+ * Destroys connections on errors to prevent reuse of bad connections. Preserves
+ * original status code across retries for telemetry.
  *
  * @param {string} data - Request body (e.g. JSON string)
- * @param {object} options - { url, path?, method?, headers?, timeout? }
+ * @param {object} options - { url, path?, method?, headers?, timeout? } (may be mutated)
  * @param {Function} callback - (err, res, statusCode) => void
  */
 function request (data, options, callback) {
-  if (!options.headers) {
-    options.headers = {}
-  }
+  const headers = options.headers ? { ...options.headers } : {}
+  headers['Content-Length'] = Buffer.byteLength(data, 'utf8')
 
-  if (options.url) {
-    const url = parseUrl(options.url)
+  const opts = { ...options, method: 'POST', headers }
+
+  if (opts.url) {
+    const url = parseUrl(opts.url)
     if (url.protocol === 'unix:') {
-      options.socketPath = url.pathname
+      opts.socketPath = url.pathname
     } else {
-      if (!options.path) options.path = url.path
-      options.protocol = url.protocol
-      options.hostname = url.hostname
-      options.port = url.port
+      opts.path = opts.path ?? url.path
+      opts.protocol = url.protocol
+      opts.hostname = url.hostname
+      opts.port = url.port
     }
   }
 
-  const timeout = options.timeout || 2000
-  const isSecure = options.protocol === 'https:'
+  const timeout = opts.timeout || 2000
+  const isSecure = opts.protocol === 'https:'
   const client = isSecure ? https : http
 
-  // Use dedicated agent for CI visibility requests to isolate from other requests
-  if (!options.socketPath) {
-    options.agent = isSecure ? ciVisibilityAgent.https : ciVisibilityAgent.http
+  if (!opts.socketPath) {
+    opts.agent = isSecure ? ciVisibilityAgent.https : ciVisibilityAgent.http
   }
-
-  options.headers['Content-Length'] = Buffer.byteLength(data, 'utf8')
 
   let hasRetried = false
   let firstStatusCode = null
 
   const makeRequest = () => {
     storage('legacy').run({ noop: true }, () => {
-      const req = client.request(options, (res) => {
+      const req = client.request(opts, (res) => {
         const chunks = []
 
         res.setTimeout(timeout)
@@ -169,25 +163,27 @@ function request (data, options, callback) {
             if (firstStatusCode === null) {
               firstStatusCode = res.statusCode
             }
-            // Destroy connection to prevent reuse of potentially bad connection
-            if (req.socket) {
-              req.socket.destroy()
+            try {
+              if (req.socket) req.socket.destroy()
+            } catch {
+              // ignore
             }
             hasRetried = true
             setTimeout(makeRequest, getRetryDelay())
             return
           }
 
-          const error = buildError(res, buffer, options)
+          const error = buildError(res, buffer, opts)
           // Use original status code if this is a failed retry
           callback(error, null, firstStatusCode === null ? res.statusCode : firstStatusCode)
         })
       })
 
       req.once('error', err => {
-        // Destroy connection to prevent reuse of bad connection
-        if (req.socket) {
-          req.socket.destroy()
+        try {
+          if (req.socket) req.socket.destroy()
+        } catch {
+          // ignore
         }
 
         // Retry on retriable network errors
