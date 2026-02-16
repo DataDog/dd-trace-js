@@ -38,7 +38,7 @@ async function getAllGreen () {
   })
 
   // Same as above, but jobs that are queued are not even in progress yet.
-  if (queuedRuns.total_count > 1) return
+  if (queuedRuns.total_count > 0) return
 
   const completedRuns = await octokit.paginate(
     'GET /repos/:owner/:repo/commits/:ref/check-runs',
