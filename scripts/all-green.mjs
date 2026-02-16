@@ -59,6 +59,7 @@ async function checkStatus () {
   const commitState = statusCheckRollup?.state
   const state = commitState || prState
 
+  console.log(GITHUB_SHA)
   console.log(associatedPullRequests)
 
   if (state === 'PENDING') {
