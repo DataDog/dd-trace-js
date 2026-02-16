@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "6.0.0-pre-retry-fix-2",
+  "version": "6.0.0-pre-retry-fix-3",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
