@@ -21,21 +21,16 @@ async function getStatus () {
       repository(owner: $owner, name: $name) {
         object(oid: $oid) {
           ... on Commit {
-            statusCheckRollup {
-              # Overall state: SUCCESS, FAILURE, PENDING, or ERROR
-              state
-              contexts(first: 100) {
-                nodes {
-                  ... on CheckRun {
-                    name
-                    status
-                    conclusion
-                    url
-                  }
-                  ... on StatusContext {
-                    context
-                    state
-                    targetUrl
+            # 1. Direct Commit Rollup (Push/Schedule)
+            statusCheckRollup { state }
+            # 2. PR-specific Rollup (Pull Request)
+            associatedPullRequests(first: 1) {
+              nodes {
+                commits(last: 1) {
+                  nodes {
+                    commit {
+                      statusCheckRollup { state }
+                    }
                   }
                 }
               }
@@ -59,8 +54,10 @@ async function checkStatus () {
   }
 
   const status = await getStatus()
-  console.log(status)
-  const state = status.repository.object.statusCheckRollup.state
+  const { associatedPullRequests, statusCheckRollup } = status.repository.object
+  const prState = associatedPullRequests?.nodes[0]?.commits.nodes[0]?.commit.statusCheckRollup?.state
+  const commitState = statusCheckRollup?.state
+  const state = commitState || prState
 
   if (state === 'PENDING') {
     console.log(`State is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
