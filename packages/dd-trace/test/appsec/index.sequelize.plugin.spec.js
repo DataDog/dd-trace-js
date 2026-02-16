@@ -66,14 +66,19 @@ describe('sequelize', () => {
         // init express
         before((done) => {
           const express = require(`../../../../versions/express@${expressVersion}`).get()
+          console.log('Express version', expressVersion, require(`../../../../versions/express@${expressVersion}`).version())
 
           const app = express()
           app.get('/users', async (req, res) => {
+            console.log('Users controller - begin')
             const users = await User.findAll()
+            console.log('Users controller - after findAll')
             res.json(users)
+            console.log('Users controller - after res.json')
           })
 
           server = app.listen(0, () => {
+            console.log('App listening')
             port = (/** @type {import('net').AddressInfo} */ (server.address())).port
             done()
           })
@@ -86,8 +91,9 @@ describe('sequelize', () => {
 
         it('Should complete the request on time', (done) => {
           axios.get(`http://localhost:${port}/users`)
-            .then(() => done())
+            .then(() => {console.log('Response received'); done()})
             .catch(done)
+          console.log('Request done')
         })
       })
     })
