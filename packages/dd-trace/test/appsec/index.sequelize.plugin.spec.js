@@ -73,8 +73,10 @@ describe('sequelize', () => {
             try {
               console.log('Users controller - begin')
               const users = await User.findAll()
-              console.log('Users controller - after findAll', users)
-              const jsonUser = JSON.stringify(users)
+              //console.log('Users controller - after findAll', users)
+              console.log('typeof res.getHeaders =', typeof res.getHeaders)
+              console.log('res.getHeaders && res.getHeaders() =', res.getHeaders && res.getHeaders())
+              console.log('res._headers =', res._headers)
               res.json(users)
               console.log('Users controller - after res.json')
             } catch (e) {
