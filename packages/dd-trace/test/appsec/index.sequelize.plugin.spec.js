@@ -9,7 +9,9 @@ const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
 
-describe('sequelize', () => {
+describe('sequelize', function () {
+  this.timeout(15000) // Normal: <5s. If we're unlucky and get a slow GitHub Actions runner, they can take longer.
+
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
     let sequelize, User
 
