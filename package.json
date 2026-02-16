@@ -146,6 +146,7 @@
     "@opentelemetry/api-logs": "<1.0.0"
   },
   "devDependencies": {
+    "@actions/github": "^9.0.0",
     "@babel/helpers": "^7.28.6",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.39.2",
