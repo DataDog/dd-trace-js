@@ -14,6 +14,7 @@ import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -410,6 +411,7 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-require-export-exists': eslintRequireExportExists,
         },
       },
       n: eslintPluginN,
@@ -420,6 +422,7 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-safe-typeof-object': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
+      'eslint-rules/eslint-require-export-exists': 'error',
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
