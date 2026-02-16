@@ -9,7 +9,54 @@ const log = require('../../log')
 const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
 
 const RATE_LIMIT_MAX_WAIT_MS = 30_000
-const SERVER_ERROR_RETRY_DELAY_MS = 5000
+const SERVER_ERROR_RETRY_BASE_MS = 5000
+const SERVER_ERROR_RETRY_JITTER_MS = 2500
+
+// Dedicated HTTP agents for CI visibility requests, isolated from global agent pool.
+// Using keep-alive with short timeouts to detect stale connections quickly.
+// This prevents connection state pollution when workers are reused across multiple packages.
+const ciVisibilityAgent = {
+  http: new http.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 1000,
+    maxSockets: 2,
+    maxFreeSockets: 1,
+    timeout: 5000,
+  }),
+  https: new https.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 1000,
+    maxSockets: 2,
+    maxFreeSockets: 1,
+    timeout: 5000,
+  }),
+}
+
+/**
+ * Calculates retry delay with jitter to prevent thundering herd
+ * Uses equal jitter: baseDelay/2 + random(0, baseDelay/2)
+ * @returns {number} Delay in milliseconds
+ */
+function getRetryDelay () {
+  const base = SERVER_ERROR_RETRY_BASE_MS - SERVER_ERROR_RETRY_JITTER_MS
+  const jitter = Math.random() * SERVER_ERROR_RETRY_JITTER_MS
+  return base + jitter
+}
+
+/**
+ * Determines if a network error is retriable
+ * @param {Error} err - The error to check
+ * @returns {boolean}
+ */
+function isRetriableNetworkError (err) {
+  if (!err.code) return false
+  // Retry on temporary network failures
+  return err.code === 'ECONNRESET' ||
+    err.code === 'ETIMEDOUT' ||
+    err.code === 'ECONNREFUSED' ||
+    err.code === 'EPIPE' ||
+    err.code === 'ENOTFOUND'
+}
 
 function parseUrl (urlObjOrString) {
   if (urlObjOrString !== null && typeof urlObjOrString === 'object') {
@@ -28,9 +75,11 @@ function parseUrl (urlObjOrString) {
 }
 
 /**
- * Simplified HTTP request for test optimization (library config). No custom agent,
- * no form support, no docker info. Retries: 429 (with X-ratelimit-reset, max 30s wait),
- * >=500 (5s delay). Max one retry.
+ * Simplified HTTP request for test optimization (library config). Uses dedicated agent
+ * with connection pooling. Retries: 429 (with X-ratelimit-reset, max 30s wait),
+ * >=500 and network errors (2.5-5s delay with jitter). Max one retry. Destroys
+ * connections on errors to prevent reuse of bad connections. Preserves original
+ * status code across retries for telemetry.
  *
  * @param {string} data - Request body (e.g. JSON string)
  * @param {object} options - { url, path?, method?, headers?, timeout? }
@@ -57,9 +106,15 @@ function request (data, options, callback) {
   const isSecure = options.protocol === 'https:'
   const client = isSecure ? https : http
 
+  // Use dedicated agent for CI visibility requests to isolate from other requests
+  if (!options.socketPath) {
+    options.agent = isSecure ? ciVisibilityAgent.https : ciVisibilityAgent.http
+  }
+
   options.headers['Content-Length'] = Buffer.byteLength(data, 'utf8')
 
   let hasRetried = false
+  let firstStatusCode = null
 
   const makeRequest = () => {
     storage('legacy').run({ noop: true }, () => {
@@ -110,18 +165,40 @@ function request (data, options, callback) {
                 Number.isFinite(waitMs) ? waitMs : 'N/A', RATE_LIMIT_MAX_WAIT_MS)
             }
           } else if (res.statusCode >= 500 && !hasRetried) {
+            // Track original status code for telemetry
+            if (firstStatusCode === null) {
+              firstStatusCode = res.statusCode
+            }
+            // Destroy connection to prevent reuse of potentially bad connection
+            if (req.socket) {
+              req.socket.destroy()
+            }
             hasRetried = true
-            setTimeout(makeRequest, SERVER_ERROR_RETRY_DELAY_MS)
+            setTimeout(makeRequest, getRetryDelay())
             return
           }
 
           const error = buildError(res, buffer, options)
-          callback(error, null, res.statusCode)
+          // Use original status code if this is a failed retry
+          callback(error, null, firstStatusCode === null ? res.statusCode : firstStatusCode)
         })
       })
 
       req.once('error', err => {
-        callback(err, null)
+        // Destroy connection to prevent reuse of bad connection
+        if (req.socket) {
+          req.socket.destroy()
+        }
+
+        // Retry on retriable network errors
+        if (!hasRetried && isRetriableNetworkError(err)) {
+          hasRetried = true
+          setTimeout(makeRequest, getRetryDelay())
+          return
+        }
+
+        // Pass original status code (if any) for accurate telemetry
+        callback(err, null, firstStatusCode)
       })
 
       req.setTimeout(timeout, () => {
