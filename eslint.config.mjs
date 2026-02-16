@@ -340,6 +340,15 @@ export default [
     name: 'dd-trace/defaults',
     plugins: {
       '@stylistic': eslintPluginStylistic,
+      'eslint-rules': {
+        rules: {
+          'eslint-process-env': eslintProcessEnv,
+          'eslint-env-aliases': eslintEnvAliases,
+          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
+          'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-require-export-exists': eslintRequireExportExists,
+        },
+      },
       import: eslintPluginImport,
       n: eslintPluginN,
     },
@@ -372,6 +381,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
+      'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
@@ -405,16 +415,6 @@ export default [
     name: 'dd-trace/src/all',
     files: SRC_FILES,
     plugins: {
-      'eslint-rules': {
-        rules: {
-          'eslint-process-env': eslintProcessEnv,
-          'eslint-env-aliases': eslintEnvAliases,
-          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
-          'eslint-log-printf-style': eslintLogPrintfStyle,
-          'eslint-require-export-exists': eslintRequireExportExists,
-        },
-      },
-      n: eslintPluginN,
       unicorn: eslintPluginUnicorn,
     },
     rules: {
@@ -422,7 +422,6 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-safe-typeof-object': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
-      'eslint-rules/eslint-require-export-exists': 'error',
       'n/no-restricted-require': ['error', [
         {
           name: 'diagnostics_channel',
