@@ -72,7 +72,7 @@ describe('IAST Taint tracking plugin', () => {
     assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:path-params:finish')
     assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:graphql:resolve:start')
     assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:url:parse:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:url:getter:finish')
+    assert.strictEqual(taintTrackingPlugin._subscriptions[i]._channel.name, 'datadog:url:getter:finish')
   })
 
   describe('taint sources', () => {
