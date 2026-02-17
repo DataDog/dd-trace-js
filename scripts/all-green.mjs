@@ -81,4 +81,6 @@ if (DELAY) {
   await setTimeout(DELAY * 60_000)
 }
 
+console.log(`Polling status for ref: ${ref}.`)
+
 await checkAllGreen()
