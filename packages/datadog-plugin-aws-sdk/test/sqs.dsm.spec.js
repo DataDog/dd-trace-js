@@ -7,7 +7,6 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -301,36 +300,6 @@ describe('Plugin', () => {
             }, () => {
               nowStub.restore()
             })
-        })
-
-        describe('syncToStore', () => {
-          let syncToStoreSpy
-
-          beforeEach(() => {
-            syncToStoreSpy = sinon.spy(DataStreamsContext, 'syncToStore')
-          })
-
-          afterEach(() => {
-            syncToStoreSpy.restore()
-          })
-
-          it('Should call syncToStore after receiving a message', done => {
-            sqs.sendMessage({
-              MessageBody: 'syncToStore test',
-              QueueUrl: QueueUrlDsm,
-            }, (err) => {
-              if (err) return done(err)
-
-              sqs.receiveMessage({
-                QueueUrl: QueueUrlDsm,
-                MessageAttributeNames: ['.*'],
-              }, (err) => {
-                if (err) return done(err)
-                assert.ok(syncToStoreSpy.called, 'syncToStore should be called on receive')
-                done()
-              })
-            })
-          })
         })
       })
     })

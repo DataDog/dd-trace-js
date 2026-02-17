@@ -14,16 +14,7 @@ function setDataStreamsContext (dataStreamsContext) {
   if (dataStreamsContext) storage('legacy').enterWith({ ...(storage('legacy').getStore()), dataStreamsContext })
 }
 
-function syncToStore (ctx) {
-  const dsmContext = getDataStreamsContext()
-  if (dsmContext && ctx?.currentStore) {
-    ctx.currentStore = { ...ctx.currentStore, dataStreamsContext: dsmContext }
-  }
-  return ctx?.currentStore
-}
-
 module.exports = {
   getDataStreamsContext,
   setDataStreamsContext,
-  syncToStore,
 }
