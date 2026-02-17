@@ -350,7 +350,7 @@ describe('Plugin', () => {
 
     it('creates a span for a tool call', async () => {
       let tools
-      let additionalOptions = {}
+      let additionalOptions
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
@@ -495,7 +495,7 @@ describe('Plugin', () => {
 
     it('created a span for a tool call from a stream', async () => {
       let tools
-      let additionalOptions = {}
+      let additionalOptions
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {

@@ -14,6 +14,7 @@ describe('Dynamic Instrumentation', function () {
         // Force a very small time budget in ms to trigger partial snapshots
         const budget = 1
         const t = setup({
+          testApp: 'target-app/time-budget.js',
           dependencies: ['fastify'],
           env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
         })
@@ -35,7 +36,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       context('default time budget', function () {
-        const t = setup({ dependencies: ['fastify'] })
+        const t = setup({ testApp: 'target-app/time-budget.js', dependencies: ['fastify'] })
 
         it(
           'should timeout first, then disable subsequent snapshots and emit error diagnostics',
@@ -105,6 +106,7 @@ describe('Dynamic Instrumentation', function () {
         // that the tests should not be flaky, but still fail if the thresholds are not applied.
         const budget = 100
         const t = setup({
+          testApp: 'target-app/time-budget.js',
           dependencies: ['fastify'],
           env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
         })
@@ -157,6 +159,7 @@ describe('Dynamic Instrumentation', function () {
             this.timeout(2000)
 
             const t = setup({
+              testApp: 'target-app/time-budget.js',
               dependencies: ['fastify'],
               env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
             })

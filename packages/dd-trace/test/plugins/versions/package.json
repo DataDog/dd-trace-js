@@ -5,7 +5,7 @@
   "private": true,
   "dependencies": {
     "@ai-sdk/openai": "3.0.12",
-    "@anthropic-ai/sdk": "0.71.2",
+    "@anthropic-ai/sdk": "0.73.0",
     "@apollo/gateway": "2.12.2",
     "@apollo/server": "5.2.0",
     "@apollo/subgraph": "2.12.2",
@@ -54,7 +54,7 @@
     "@langchain/openai": "1.2.2",
     "@node-redis/client": "1.0.6",
     "@openai/agents": "0.3.9",
-    "@openai/agents-core": "0.3.9",
+    "@openai/agents-core": "0.4.5",
     "@openfeature/core": "^1.9.0",
     "@openfeature/server-sdk": "~1.20.0",
     "@opensearch-project/opensearch": "3.5.1",
@@ -115,7 +115,7 @@
     "graphql-yoga": "5.18.0",
     "handlebars": "4.7.8",
     "hapi": "18.1.0",
-    "hono": "4.11.4",
+    "hono": "4.11.7",
     "ioredis": "5.9.2",
     "iovalkey": "0.3.3",
     "jest": "30.2.0",
@@ -160,7 +160,7 @@
     "npm": "11.7.0",
     "nyc": "17.1.0",
     "office-addin-mock": "3.0.6",
-    "openai": "6.16.0",
+    "openai": "6.18.0",
     "oracledb": "6.10.0",
     "passport": "0.7.0",
     "passport-http": "0.3.0",
@@ -192,6 +192,7 @@
     "sharedb": "5.2.2",
     "sinon": "21.0.1",
     "sqlite3": "5.1.7",
+    "stripe": "20.1.0",
     "tedious": "19.2.0",
     "tinypool": "2.1.0",
     "typescript": "5.9.3",
@@ -202,6 +203,6 @@
     "workerpool": "10.0.1",
     "ws": "8.19.0",
     "yarn": "1.22.22",
-    "zod": "4.3.5"
+    "zod": "4.3.6"
   }
 }
