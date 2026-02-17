@@ -375,7 +375,7 @@ describe('AppSec Index', function () {
         }
 
         const inferredProxySpan = {
-          addTags: sinon.stub(),
+          setTag: sinon.stub(),
         }
 
         web.root.returns(rootSpan)
@@ -397,9 +397,7 @@ describe('AppSec Index', function () {
 
         AppSec.incomingHttpStartTranslator({ req, res })
 
-        sinon.assert.calledOnceWithExactly(inferredProxySpan.addTags, {
-          '_dd.appsec.enabled': 1,
-        })
+        sinon.assert.calledOnceWithExactly(inferredProxySpan.setTag, '_dd.appsec.enabled', 1)
       })
 
       it('should not fail when inferred proxy span is not present', () => {
@@ -439,7 +437,7 @@ describe('AppSec Index', function () {
         }
 
         const inferredProxySpan = {
-          addTags: sinon.stub(),
+          setTag: sinon.stub(),
         }
 
         web.root.returns(rootSpan)
@@ -461,7 +459,7 @@ describe('AppSec Index', function () {
 
         AppSec.incomingHttpStartTranslator({ req, res })
 
-        sinon.assert.notCalled(inferredProxySpan.addTags)
+        sinon.assert.notCalled(inferredProxySpan.setTag)
       })
     })
   })

@@ -177,9 +177,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   if (config.inferredProxyServicesEnabled) {
     const context = web.getContext(req)
     if (context?.inferredProxySpan) {
-      context.inferredProxySpan.addTags({
-        '_dd.appsec.enabled': 1,
-      })
+      context.inferredProxySpan.setTag('_dd.appsec.enabled', 1)
     }
   }
 

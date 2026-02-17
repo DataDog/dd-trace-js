@@ -492,7 +492,7 @@ describe('reporter', () => {
         Reporter.init(getAppSecConfig(defaultReporterConfig), true)
 
         const inferredProxySpan = {
-          addTags: sinon.stub(),
+          setTag: sinon.stub(),
         }
         web.getContext.returns({ inferredProxySpan })
 
@@ -505,9 +505,11 @@ describe('reporter', () => {
           ],
         })
 
-        sinon.assert.calledOnceWithExactly(inferredProxySpan.addTags, {
-          '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
-        })
+        sinon.assert.calledOnceWithExactly(
+          inferredProxySpan.setTag,
+          '_dd.appsec.json',
+          '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
+        )
       })
 
       it('should not fail when inferred proxy span is not present', () => {
@@ -535,7 +537,7 @@ describe('reporter', () => {
         Reporter.init(getAppSecConfig(defaultReporterConfig), false)
 
         const inferredProxySpan = {
-          addTags: sinon.stub(),
+          setTag: sinon.stub(),
         }
         web.getContext.returns({ inferredProxySpan })
 
@@ -548,7 +550,7 @@ describe('reporter', () => {
           ],
         })
 
-        sinon.assert.notCalled(inferredProxySpan.addTags)
+        sinon.assert.notCalled(inferredProxySpan.setTag)
       })
     })
 
