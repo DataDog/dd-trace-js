@@ -176,9 +176,4 @@ function getParentField (parentCtx, pathToString) {
   return null
 }
 
-function getField(parentCtx, path) {
-  process._rawDebug('This is path 2', path)
-  return parentCtx.fields[path.join('.')]
-}
-
 module.exports = GraphQLResolvePlugin
