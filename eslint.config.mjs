@@ -14,6 +14,7 @@ import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -339,6 +340,15 @@ export default [
     name: 'dd-trace/defaults',
     plugins: {
       '@stylistic': eslintPluginStylistic,
+      'eslint-rules': {
+        rules: {
+          'eslint-process-env': eslintProcessEnv,
+          'eslint-env-aliases': eslintEnvAliases,
+          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
+          'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-require-export-exists': eslintRequireExportExists,
+        },
+      },
       import: eslintPluginImport,
       n: eslintPluginN,
     },
@@ -371,6 +381,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
+      'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
@@ -404,15 +415,6 @@ export default [
     name: 'dd-trace/src/all',
     files: SRC_FILES,
     plugins: {
-      'eslint-rules': {
-        rules: {
-          'eslint-process-env': eslintProcessEnv,
-          'eslint-env-aliases': eslintEnvAliases,
-          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
-          'eslint-log-printf-style': eslintLogPrintfStyle,
-        },
-      },
-      n: eslintPluginN,
       unicorn: eslintPluginUnicorn,
     },
     rules: {

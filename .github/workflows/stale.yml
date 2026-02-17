@@ -1,7 +1,7 @@
-name: 'Stale PR Bot'
+name: "Stale PR Bot"
 on:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: "0 4 * * *"
 
 permissions:
   pull-requests: write
