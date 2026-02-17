@@ -126,7 +126,7 @@ withVersions('stripe', 'stripe', version => {
 
         res.json({
           id: 'pi_FAKE',
-          amount: +amount,
+          amount: Number(amount),
           currency,
           livemode: true,
           payment_method,
