@@ -396,6 +396,14 @@ function testEndHandler ({
     }
   }
 
+  // Check if all EFD retries failed
+  if (testStatuses.length === earlyFlakeDetectionNumRetries + 1 &&
+    (test._ddIsNew || test._ddIsModified) &&
+    test._ddIsEfdRetry &&
+    testStatuses.every(status => status === 'fail')) {
+    test._ddHasFailedAllRetries = true
+  }
+
   // this handles tests that do not go through the worker process (because they're skipped)
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
