@@ -145,7 +145,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
       if (batchTraceIdUpper) {
         msg.attributes['_dd.pubsub_request.p.tid'] = batchTraceIdUpper
       }
-
     }
 
     ctx.batchSpan = batchSpan
