@@ -262,7 +262,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const generationMetadata = getGenerationMetadata(tags)
     const telemetryMetadata = getTelemetryMetadata(tags)
     const metadata = { ...generationMetadata, ...telemetryMetadata }
-    this._tagger.tagMetadata(span, Object.keys(metadata).length ? metadata : null)
+    this._tagger.tagMetadata(span, metadata)
   }
 
   /**
