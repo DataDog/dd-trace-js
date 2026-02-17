@@ -63,10 +63,7 @@ describe('Inferred Proxy Spans with AppSec', () => {
   })
 
   it('should add _dd.appsec.json to inferred proxy span when attack is detected', async () => {
-    await axios.get('/testattack', {
-      headers: inferredHeaders,
-      validateStatus: () => true,
-    })
+    await axios.get('/testattack', { headers: inferredHeaders })
 
     await agent.assertMessageReceived(({ payload }) => {
       const spans = payload[0]
