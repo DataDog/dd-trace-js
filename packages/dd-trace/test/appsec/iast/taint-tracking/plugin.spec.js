@@ -54,25 +54,29 @@ describe('IAST Taint tracking plugin', () => {
   })
 
   it('Should subscribe to body parser, qs, cookie and process_params channel', () => {
-    assert.strictEqual(taintTrackingPlugin._subscriptions.length, 17)
-    let i = 0
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:body-parser:read:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:multer:read:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:body-parser:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:express:middleware:next')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:query:read:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:query-params:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:express:query:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:cookie:parse:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify-cookie:read:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:sequelize:query:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:pg:query:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:express:process_params:start')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:router:param:start')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:fastify:path-params:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'apm:graphql:resolve:start')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i++]._channel.name, 'datadog:url:parse:finish')
-    assert.strictEqual(taintTrackingPlugin._subscriptions[i]._channel.name, 'datadog:url:getter:finish')
+    const expectedChannels = [
+      'datadog:body-parser:read:finish',
+      'datadog:multer:read:finish',
+      'datadog:fastify:body-parser:finish',
+      'apm:express:middleware:next',
+      'datadog:query:read:finish',
+      'datadog:fastify:query-params:finish',
+      'datadog:express:query:finish',
+      'datadog:cookie:parse:finish',
+      'datadog:fastify-cookie:read:finish',
+      'datadog:sequelize:query:finish',
+      'apm:pg:query:finish',
+      'datadog:express:process_params:start',
+      'datadog:router:param:start',
+      'datadog:fastify:path-params:finish',
+      'apm:graphql:resolve:start',
+      'datadog:url:parse:finish',
+      'datadog:url:getter:finish',
+    ]
+    assert.strictEqual(taintTrackingPlugin._subscriptions.length, expectedChannels.length)
+    for (let i = 0; i < expectedChannels.length; i++) {
+      assert.strictEqual(taintTrackingPlugin._subscriptions[i]._channel.name, expectedChannels[i])
+    }
   })
 
   describe('taint sources', () => {
