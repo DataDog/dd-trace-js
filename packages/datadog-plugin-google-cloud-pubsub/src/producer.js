@@ -2,7 +2,6 @@
 
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
 const { DsmPathwayCodec, getHeadersSize } = require('../../dd-trace/src/datastreams')
-const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const id = require('../../dd-trace/src/id')
 
 class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
@@ -35,6 +34,23 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
     if (pubsub) attributes['gcloud.project_id'] = pubsub.projectId
     if (topicName) attributes['pubsub.topic'] = topicName
+  }
+
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { request } = ctx
+    const messages = request.messages || []
+    const topic = request.topic
+    const { span } = ctx.currentStore
+
+    for (const msg of messages) {
+      const dataStreamsContext = this.tracer.setCheckpoint(
+        ['direction:out', `topic:${topic}`, 'type:google-pubsub'],
+        span,
+        getHeadersSize(msg)
+      )
+      DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
+    }
   }
 
   bindStart (ctx) {
@@ -130,18 +146,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
         msg.attributes['_dd.pubsub_request.p.tid'] = batchTraceIdUpper
       }
 
-      if (this.config.dsmEnabled) {
-        const dataStreamsContext = this.tracer.setCheckpoint(
-          ['direction:out', `topic:${topic}`, 'type:google-pubsub'],
-          batchSpan,
-          getHeadersSize(msg)
-        )
-        DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
-      }
-    }
-
-    if (this.config.dsmEnabled) {
-      DataStreamsContext.syncToStore(ctx)
     }
 
     ctx.batchSpan = batchSpan
