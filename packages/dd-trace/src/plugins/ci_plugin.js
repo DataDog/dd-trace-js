@@ -80,6 +80,7 @@ const FRAMEWORK_TO_TRIMMED_COMMAND = {
   cucumber: 'cucumber-js',
   playwright: 'playwright test',
   jest: 'jest',
+  'node-test': 'node --test',
 }
 
 const WORKER_EXPORTER_TO_TEST_FRAMEWORK = {
