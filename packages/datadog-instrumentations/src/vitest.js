@@ -1034,6 +1034,10 @@ addHook({
             if (statuses.every(status => status === 'fail')) {
               hasFailedAllRetries = true
             }
+          } else if (taskToStatuses.has(task) &&
+            !attemptToFixTasks.has(task) &&
+            (newTasks.has(task) || modifiedTasks.has(task))) {
+            hasFailedAllRetries = true
           }
 
           if (testCtx) {

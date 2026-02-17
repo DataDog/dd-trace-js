@@ -955,6 +955,10 @@ class CypressPlugin {
             }
           }
         }
+        const isLastEfdAttempt = isEfdRetry && testStatuses.length >= this.earlyFlakeDetectionNumRetries + 1
+        if (isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
+          this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+        }
 
         // Ensure quarantined tests reported from support.js are tagged
         // (This catches cases where the test ran but failed, but Cypress saw it as passed)

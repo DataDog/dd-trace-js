@@ -1751,6 +1751,10 @@ moduleTypes.forEach(({
               { name: 'other context fails', isRetry: true, isNew: true },
               { name: 'other context fails', isRetry: true, isNew: true },
             ])
+            const alwaysFailingEfdTests = tests.filter(test => test.meta[TEST_NAME] === 'other context fails')
+            const failedAllRetriesTests = alwaysFailingEfdTests
+              .filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+            assert.strictEqual(failedAllRetriesTests.length, 1)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
             assertObjectContains(testSession.meta, {

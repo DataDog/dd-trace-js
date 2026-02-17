@@ -90,7 +90,8 @@ const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
 const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
-const newTestsTestStatuses = new Map()
+const efdRetriedTestsStatuses = new Map()
+const efdRetriedTests = new Set()
 const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkers = new WeakSet()
 const testSuiteMockedFiles = new Map()
@@ -523,6 +524,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           )
           if (isModified && !retriedTestsToNumAttempts.has(testFullName) && this.isEarlyFlakeDetectionEnabled) {
             retriedTestsToNumAttempts.set(testFullName, 0)
+            efdRetriedTests.add(testFullName)
             testsToBeRetried.add(testFullName)
             this.retryTest({
               jestEvent: event,
@@ -536,6 +538,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
             retriedTestsToNumAttempts.set(testFullName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
+              efdRetriedTests.add(testFullName)
               testsToBeRetried.add(testFullName)
               this.retryTest({
                 jestEvent: event,
@@ -595,15 +598,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isEfdRetry = false
         // We'll store the test statuses of the retries
         const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
-        if (this.isKnownTestsEnabled) {
-          const isNewTest = retriedTestsToNumAttempts.has(testName)
-          if (isNewTest) {
-            if (newTestsTestStatuses.has(testName)) {
-              newTestsTestStatuses.get(testName).push(status)
-              isEfdRetry = true
-            } else {
-              newTestsTestStatuses.set(testName, [status])
-            }
+        if (efdRetriedTests.has(testName)) {
+          if (efdRetriedTestsStatuses.has(testName)) {
+            efdRetriedTestsStatuses.get(testName).push(status)
+          } else {
+            efdRetriedTestsStatuses.set(testName, [status])
+          }
+          isEfdRetry = efdRetriedTestsStatuses.get(testName).length > 1
+          const testStatuses = efdRetriedTestsStatuses.get(testName)
+          if (testStatuses.length === earlyFlakeDetectionNumRetries + 1 &&
+            testStatuses.every(status => status === 'fail')) {
+            failedAllTests = true
           }
         }
 
@@ -695,7 +700,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       let finalStatus
       if (isEfdActive && isFinalEfdTestExecution) {
         // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
-        const testStatuses = newTestsTestStatuses.get(testName)
+        const testStatuses = efdRetriedTestsStatuses.get(testName)
         finalStatus = testStatuses && testStatuses.includes('pass') ? 'pass' : 'fail'
       }
 
@@ -1071,7 +1076,7 @@ function getCliWrapper (isNewJestVersion) {
       /** @type {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} */
       let ignoredFailuresSummary
       if (isEarlyFlakeDetectionEnabled) {
-        for (const [testName, testStatuses] of newTestsTestStatuses) {
+        for (const [testName, testStatuses] of efdRetriedTestsStatuses) {
           const { pass, fail } = getTestStats(testStatuses)
           if (pass > 0) { // as long as one passes, we'll consider the test passed
             numEfdFailedTestsToIgnore += fail

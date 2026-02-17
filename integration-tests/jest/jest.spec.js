@@ -2114,6 +2114,46 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('early flake detection', () => {
+    it('marks EFD tests that fail all attempts as failed all retries', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      const NUM_RETRIES_EFD = 2
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+        flaky_test_retries_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 3)
+          const efdFailedAllRetries = tests.filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+          assert.strictEqual(efdFailedAllRetries.length, 1)
+          assert.strictEqual(efdFailedAllRetries[0].meta[TEST_FINAL_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: { ...getCiVisAgentlessConfig(receiver.port), TESTS_TO_RUN: 'jest-flaky/flaky-fails.js' },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+    })
+
     it('takes precedence over flaky test retries for new tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // All tests are considered new
@@ -2140,6 +2180,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const atrRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
           assert.strictEqual(efdRetries.length, NUM_RETRIES_EFD)
           assert.strictEqual(atrRetries.length, 0)
+          const testsThatFailedAllRetries = tests
+            .filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+          assert.strictEqual(testsThatFailedAllRetries.length, 1)
+          assert.strictEqual(testsThatFailedAllRetries[0].meta[TEST_FINAL_STATUS], 'fail')
         })
 
       childProcess = exec(

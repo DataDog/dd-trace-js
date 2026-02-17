@@ -2303,6 +2303,56 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    it('marks EFD tests that fail all attempts as failed all retries', (done) => {
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const alwaysFailingTests = tests.filter(test => test.meta[TEST_NAME] === 'fail always fails')
+          assert.strictEqual(alwaysFailingTests.length, NUM_RETRIES_EFD + 1)
+
+          const failedAllRetriesTests = alwaysFailingTests
+            .filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+          assert.strictEqual(failedAllRetriesTests.length, 1)
+          assert.strictEqual(failedAllRetriesTests[0].meta[TEST_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test-early-flake-detection/always-failing-test.js',
+            ]),
+          },
+        }
+      )
+
+      childProcess.on('exit', (exitCode) => {
+        eventsPromise.then(() => {
+          assert.strictEqual(exitCode, 0)
+          done()
+        }).catch(done)
+      })
+    })
+
     it('does not retry new tests that are skipped', (done) => {
       // Tests from ci-visibility/test/skipped-and-todo-test will be considered new
       receiver.setKnownTests({

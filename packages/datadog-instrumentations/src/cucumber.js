@@ -351,6 +351,12 @@ function wrapRun (pl, isLatestVersion, version) {
 
         if (isNew || isModified) {
           isEfdRetry = numRetries > 0
+          const statuses = lastStatusByPickleId.get(this.pickle.id)
+          if (isEfdRetry &&
+            statuses.length >= earlyFlakeDetectionNumRetries + 1 &&
+            statuses.every(status => status === 'fail')) {
+            hasFailedAllRetries = true
+          }
         }
 
         const attemptCtx = numAttemptToCtx.get(numAttempt)

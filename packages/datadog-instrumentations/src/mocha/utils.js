@@ -106,7 +106,8 @@ function getIsLastRetry (test) {
 }
 
 function getTestFullName (test) {
-  return `mocha.${getTestSuitePath(test.file, process.cwd())}.${test.fullTitle()}`
+  const testFile = test.file || test.parent?.file
+  return `mocha.${getTestSuitePath(testFile, process.cwd())}.${test.fullTitle()}`
 }
 
 function getTestStatus (test) {
@@ -281,6 +282,16 @@ function getOnTestEndHandler (config) {
       } else if (testStatuses.every(status => status === 'pass')) {
         attemptToFixPassed = true
       }
+    }
+    const isEfdManagedTest = !test._ddIsAttemptToFix && (test._ddIsEfdRetry || test._ddIsNew || test._ddIsModified)
+    const efdRetryTestsWithSameName = test.parent?.tests?.filter(currentTest =>
+      currentTest._ddIsEfdRetry && currentTest.fullTitle() === test.fullTitle()
+    ) || []
+    const isLastEfdAttempt =
+      efdRetryTestsWithSameName.length > 0 &&
+      efdRetryTestsWithSameName[efdRetryTestsWithSameName.length - 1] === test
+    if (isEfdManagedTest && isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
+      hasFailedAllRetries = true
     }
 
     const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1

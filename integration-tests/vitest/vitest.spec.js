@@ -710,6 +710,13 @@ versions.forEach((version) => {
             // so the test session should be reported as failed
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
             assert.strictEqual(failedTests.length, 6)
+            const failedAllRetriesTests = tests
+              .filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+            assert.strictEqual(failedAllRetriesTests.length, 1)
+            assert.strictEqual(
+              failedAllRetriesTests[0].meta[TEST_NAME],
+              'early flake detection can retry tests that always pass'
+            )
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.meta[TEST_EARLY_FLAKE_ENABLED], 'true')

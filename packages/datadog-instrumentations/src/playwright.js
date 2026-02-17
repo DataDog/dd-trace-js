@@ -395,6 +395,11 @@ function testEndHandler ({
       test._ddHasPassedAttemptToFixRetries = true
     }
   }
+  if (test._ddIsEfdRetry &&
+    testStatuses.length >= earlyFlakeDetectionNumRetries + 1 &&
+    testStatuses.every(status => status === 'fail')) {
+    test._ddHasFailedAllRetries = true
+  }
 
   // this handles tests that do not go through the worker process (because they're skipped)
   if (shouldCreateTestSpan) {

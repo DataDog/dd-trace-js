@@ -1239,6 +1239,58 @@ describe(`cucumber@${version} commonJS`, () => {
           })
         })
 
+        it('marks EFD tests that fail all attempts as failed all retries', (done) => {
+          const NUM_RETRIES_EFD = 3
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD,
+              },
+            },
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({
+            cucumber: {
+              'ci-visibility/features/farewell.feature': ['Say farewell', 'Say whatever'],
+              'ci-visibility/features/greetings.feature': ['Say greetings', 'Say yo', 'Say skip'],
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const alwaysFailingEfdTests = tests.filter(test => test.meta[TEST_NAME] === 'Say yeah')
+              assert.strictEqual(alwaysFailingEfdTests.length, NUM_RETRIES_EFD + 1)
+              const retriedTests = alwaysFailingEfdTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+              retriedTests.forEach(test => {
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              })
+
+              const failedAllRetriesTests = alwaysFailingEfdTests
+                .filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+              assert.strictEqual(failedAllRetriesTests.length, 1)
+              assert.strictEqual(failedAllRetriesTests[0].meta[TEST_STATUS], 'fail')
+            })
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: envVars,
+            }
+          )
+          childProcess.on('exit', (exitCode) => {
+            assert.strictEqual(exitCode, 1)
+            eventsPromise.then(() => {
+              done()
+            }).catch(done)
+          })
+        })
+
         it('does not retry tests that are skipped', (done) => {
           const NUM_RETRIES_EFD = 3
           receiver.setSettings({

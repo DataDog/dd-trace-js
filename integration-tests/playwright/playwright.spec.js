@@ -879,6 +879,9 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
+              const failedAllRetriesTests = newTests
+                .filter(test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true')
+              assert.strictEqual(failedAllRetriesTests.length, 1)
               // --retries works normally for old flaky tests
               const oldFlakyTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
