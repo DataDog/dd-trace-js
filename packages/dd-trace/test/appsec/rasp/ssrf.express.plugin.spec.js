@@ -20,6 +20,7 @@ describe('RASP - ssrf', () => {
     let app, server, axios
 
     before(() => {
+      require('events').defaultMaxListeners = 7
       return agent.load(['express', 'http'], { client: false })
     })
 
