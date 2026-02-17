@@ -25,10 +25,10 @@ class AmqplibProducerPlugin extends ProducerPlugin {
       ? `topic:${fields.routingKey}`
       : `exchange:${fields.exchange}`
 
-    const dataStreamsContext = this.tracer
-      .setCheckpoint(
-        ['direction:out', exchangeOrTopicTag, `has_routing_key:${hasRoutingKey}`, 'type:rabbitmq']
-        , span, payloadSize)
+    const dataStreamsContext = this.tracer.setCheckpoint(
+      ['direction:out', exchangeOrTopicTag, `has_routing_key:${hasRoutingKey}`, 'type:rabbitmq'],
+      span, payloadSize
+    )
     DsmPathwayCodec.encode(dataStreamsContext, fields.headers)
   }
 
