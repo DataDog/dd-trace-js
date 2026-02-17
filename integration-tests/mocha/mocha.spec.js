@@ -3874,8 +3874,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              // Session should pass because the only failing test is quarantined
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
             } else {
               assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
             }
 
             const resourceNames = tests.map(span => span.resource)

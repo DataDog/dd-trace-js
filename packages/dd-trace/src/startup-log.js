@@ -4,7 +4,7 @@ const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
 const { getAgentUrl } = require('./agent/url')
-const { info, warn } = require('./log/writer')
+const { warn } = require('./log/writer')
 
 const errors = {}
 let config
@@ -29,7 +29,7 @@ function startupLog (agentError) {
     out.agent_error = agentError.message
   }
 
-  info('DATADOG TRACER CONFIGURATION - ' + out)
+  warn('DATADOG TRACER CONFIGURATION - ' + out)
   if (agentError) {
     warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
     errors.agentError = {
@@ -75,6 +75,7 @@ function tracerInfo () {
     profiling_enabled: config.profiling?.enabled === 'true' || config.profiling?.enabled === 'auto',
     integrations_loaded: Object.keys(pluginManager._pluginsByName),
     appsec_enabled: !!config.appsec.enabled,
+    data_streams_enabled: !!config.dsmEnabled,
   }
 
   return out

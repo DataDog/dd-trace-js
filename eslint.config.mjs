@@ -14,6 +14,7 @@ import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -54,6 +55,7 @@ export default [
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
       '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
+      'integration-tests/ci-visibility/test-management/test-suite-failed-to-run-parse.js', // Intentional syntax error
       'integration-tests/code-origin/typescript.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/bundle.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
@@ -338,6 +340,15 @@ export default [
     name: 'dd-trace/defaults',
     plugins: {
       '@stylistic': eslintPluginStylistic,
+      'eslint-rules': {
+        rules: {
+          'eslint-process-env': eslintProcessEnv,
+          'eslint-env-aliases': eslintEnvAliases,
+          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
+          'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-require-export-exists': eslintRequireExportExists,
+        },
+      },
       import: eslintPluginImport,
       n: eslintPluginN,
     },
@@ -370,6 +381,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
+      'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
@@ -394,6 +406,7 @@ export default [
       'no-console': 'error',
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
       'no-var': 'error',
+      'prefer-object-spread': 'error',
       'require-await': 'error',
       strict: 'error',
     },
@@ -402,15 +415,6 @@ export default [
     name: 'dd-trace/src/all',
     files: SRC_FILES,
     plugins: {
-      'eslint-rules': {
-        rules: {
-          'eslint-process-env': eslintProcessEnv,
-          'eslint-env-aliases': eslintEnvAliases,
-          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
-          'eslint-log-printf-style': eslintLogPrintfStyle,
-        },
-      },
-      n: eslintPluginN,
       unicorn: eslintPluginUnicorn,
     },
     rules: {
@@ -458,7 +462,6 @@ export default [
       'operator-assignment': 'error',
       'prefer-exponentiation-operator': 'error',
       'prefer-object-has-own': 'error',
-      'prefer-object-spread': 'error',
 
       // Too strict for now. Slowly migrate to this rule by using rest parameters.
       // 'prefer-rest-params': 'error',

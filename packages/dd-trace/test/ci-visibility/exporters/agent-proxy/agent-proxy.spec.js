@@ -18,8 +18,9 @@ const { clearCache } = require('../../../../src/agent/info')
 
 describe('AgentProxyCiVisibilityExporter', () => {
   beforeEach(() => {
-    clearCache()
+    nock.abortPendingRequests()
     nock.cleanAll()
+    clearCache()
   })
 
   const flushInterval = 50
@@ -300,7 +301,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
   })
 
   describe('setUrl', () => {
-    it('should set the URL on self and writers', () => {
+    it('should set the URL on self and writers', async () => {
       const mockWriter = {
         setUrl: sinon.spy(),
       }
@@ -313,6 +314,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
           endpoints: ['/evp_proxy/v2/'],
         }))
       const agentProxyCiVisibilityExporter = new AgentProxyCiVisibilityExporter({ port, tags })
+      await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._writer = mockWriter
       agentProxyCiVisibilityExporter._coverageWriter = mockCoverageWriter
 

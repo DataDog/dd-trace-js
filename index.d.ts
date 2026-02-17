@@ -295,7 +295,18 @@ interface Plugins {
 }
 
 declare namespace tracer {
-  export type SpanOptions = opentracing.SpanOptions;
+  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
+  /**
+   * Set childOf to 'null' to create a root span without a parent, even when a parent span
+   * exists in the current async context. If 'undefined' the parent will be inferred from the
+   * existing async context.
+   */
+    childOf?: opentracing.Span | opentracing.SpanContext | null;
+    /**
+     * Optional name of the integration that crated this span.
+     */
+    integrationName?: string;
+  };
   export { Tracer };
 
   export interface TraceOptions extends Analyzable {
@@ -748,6 +759,14 @@ declare namespace tracer {
      * @default 'disabled'
      */
     dbmPropagationMode?: 'disabled' | 'service' | 'full'
+
+    /**
+     * Whether to enable Data Streams Monitoring.
+     * Can also be enabled via the DD_DATA_STREAMS_ENABLED environment variable.
+     * When not provided, the value of DD_DATA_STREAMS_ENABLED is used.
+     * @default false
+     */
+    dsmEnabled?: boolean
 
     /**
      * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
@@ -3224,13 +3243,13 @@ declare namespace tracer {
       /**
        * The type of evaluation metric, one of 'categorical', 'score', or 'boolean'
        */
-      metricType: 'categorical' | 'score' | 'boolean',
+      metricType: 'categorical' | 'score' | 'boolean' | 'json',
 
       /**
        * The value of the evaluation metric.
-       * Must be string for 'categorical' metrics, number for 'score' metrics, and boolean for 'boolean' metrics.
+       * Must be string for 'categorical' metrics, number for 'score' metrics, boolean for 'boolean' metrics and a JSON object for 'json' metrics.
        */
-      value: string | number | boolean,
+      value: string | number | boolean | { [key: string]: any },
 
       /**
        * An object of string key-value pairs to tag the evaluation metric with.
@@ -3246,6 +3265,21 @@ declare namespace tracer {
        * The timestamp in milliseconds when the evaluation metric result was generated.
        */
       timestampMs?: number
+
+      /**
+       * Reasoning for the evaluation result.
+       */
+      reasoning?: string,
+
+      /**
+       * Whether the evaluation passed or failed. Valid values are pass and fail.
+       */
+      assessment?: 'pass' | 'fail',
+
+      /**
+       * Arbitrary JSON data associated with the evaluation.
+       */
+      metadata?: { [key: string]: any }
     }
 
     interface Document {

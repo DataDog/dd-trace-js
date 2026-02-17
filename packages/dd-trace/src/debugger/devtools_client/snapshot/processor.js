@@ -6,6 +6,24 @@ const { normalizeName, REDACTED_IDENTIFIERS } = require('./redaction')
 
 module.exports = {
   processRawState: processProperties,
+  processRemoteObject,
+}
+
+/**
+ * A RemoteObject with collected properties attached.
+ *
+ * @typedef {import('inspector').Runtime.RemoteObject & { properties?: object[] }} RemoteObjectWithProperties
+ */
+
+/**
+ * Process a RemoteObject into the snapshot format.
+ *
+ * @param {RemoteObjectWithProperties} remoteObject
+ * @param {number} maxLength - Maximum string length
+ * @returns {object} The processed value in snapshot format
+ */
+function processRemoteObject (remoteObject, maxLength) {
+  return getPropertyValueRaw({ value: remoteObject }, maxLength)
 }
 
 // Matches classes in source code, no matter how it's written:

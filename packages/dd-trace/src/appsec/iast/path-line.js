@@ -22,6 +22,7 @@ const EXCLUDED_PATH_PREFIXES = [
   'child_process',
   'node:async_hooks',
   'async_hooks',
+  'node:internal/async_local_storage',
 ]
 
 function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
