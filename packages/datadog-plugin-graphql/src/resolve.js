@@ -10,13 +10,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static operation = 'resolve'
 
   start (fieldCtx) {
-    const { info, rootCtx, args } = fieldCtx
+    const { info, rootCtx, args, path: pathAsArray, pathString } = fieldCtx
 
-    const path = getPath(info, this.config)
+    const path = getPath(info, this.config, pathAsArray)
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
-    const parentField = getParentField(rootCtx, pathToArray(info && info.path))
+    const parentField = getParentField(rootCtx, pathString)
     const childOf = parentField?.ctx?.currentStore?.span
 
     fieldCtx.parent = parentField
@@ -76,9 +76,9 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super(...args)
 
     this.addTraceSub('updateField', (ctx) => {
-      const { field, info, error } = ctx
+      const { field, info, error, path: pathAsArray } = ctx
 
-      const path = getPath(info, this.config)
+      const path = getPath(info, this.config, pathAsArray)
 
       if (!shouldInstrument(this.config, path)) return
 
@@ -118,28 +118,15 @@ function shouldInstrument (config, path) {
   return config.depth < 0 || config.depth >= depth
 }
 
-function getPath (info, config) {
+function getPath (info, config, pathAsArray) {
   const responsePathAsArray = config.collapse
-    ? withCollapse(pathToArray)
-    : pathToArray
-  return responsePathAsArray(info && info.path)
+    ? withCollapse(pathAsArray)
+    : pathAsArray
+  return typeof responsePathAsArray === 'function' ? responsePathAsArray(info && info.path) : responsePathAsArray
 }
 
-function pathToArray (path) {
-  const flattened = []
-  let curr = path
-  while (curr) {
-    flattened.push(curr.key)
-    curr = curr.prev
-  }
-  return flattened.reverse()
-}
-
-function withCollapse (responsePathAsArray) {
-  return function () {
-    return responsePathAsArray.apply(this, arguments)
-      .map(segment => typeof segment === 'number' ? '*' : segment)
-  }
+function withCollapse (pathAsArray) {
+  return pathAsArray.map(segment => typeof segment === 'number' ? '*' : segment)
 }
 
 function getResolverInfo (info, args) {
@@ -173,18 +160,24 @@ function getResolverInfo (info, args) {
   return resolverInfo
 }
 
-function getParentField (parentCtx, path) {
-  for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(parentCtx, path.slice(0, i))
-    if (field) {
-      return field
-    }
+function getParentField (parentCtx, pathToString) {
+  let current = pathToString
+
+  while (current) {
+    const lastJoin = current.lastIndexOf('.')
+    if (lastJoin === -1) break
+
+    current = current.slice(0, lastJoin)
+    const field = parentCtx.fields[current]
+
+    if (field) return field
   }
 
   return null
 }
 
-function getField (parentCtx, path) {
+function getField(parentCtx, path) {
+  process._rawDebug('This is path 2', path)
   return parentCtx.fields[path.join('.')]
 }
 

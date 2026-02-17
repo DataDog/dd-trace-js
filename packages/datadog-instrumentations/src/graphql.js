@@ -277,7 +277,7 @@ function assertField (rootCtx, info, args) {
   let field = fields[pathString]
 
   if (!field) {
-    const fieldCtx = { info, rootCtx, args }
+    const fieldCtx = { info, rootCtx, args, path, pathString}
     startResolveCh.publish(fieldCtx)
     field = fields[pathString] = {
       error: null,
