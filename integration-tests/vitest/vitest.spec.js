@@ -713,6 +713,28 @@ versions.forEach((version) => {
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+
+            // Check that TEST_HAS_FAILED_ALL_RETRIES is set for tests that fail all EFD attempts
+            const alwaysFailTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'early flake detection can retry tests that always pass'
+            )
+            assert.strictEqual(alwaysFailTests.length, 4) // 1 initial + 3 retries
+            // The last execution should have TEST_HAS_FAILED_ALL_RETRIES set
+            const testsWithFlag = alwaysFailTests.filter(test =>
+              test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+            )
+            assert.strictEqual(
+              testsWithFlag.length,
+              1,
+              'Exactly one test should have TEST_HAS_FAILED_ALL_RETRIES set'
+            )
+            // It should be the last one
+            const lastAttempt = alwaysFailTests[alwaysFailTests.length - 1]
+            assert.strictEqual(
+              lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES],
+              'true',
+              'Last attempt should have the flag'
+            )
           })
 
         childProcess = exec(

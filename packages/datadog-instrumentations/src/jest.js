@@ -604,6 +604,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             } else {
               newTestsTestStatuses.set(testName, [status])
             }
+            const testStatuses = newTestsTestStatuses.get(testName)
+            // Check if this is the last EFD retry.
+            // If it is, we'll set the failedAllTests flag to true if all the tests failed
+            if (testStatuses.length === earlyFlakeDetectionNumRetries + 1 &&
+              testStatuses.every(status => status === 'fail')) {
+              failedAllTests = true
+            }
           }
         }
 
