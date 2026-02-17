@@ -5,7 +5,7 @@ generator client {
   importFileExtension = "js"
 }
 
-datasource db {
+datasource primary {
   provider = "postgresql"
 }
 

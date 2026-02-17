@@ -1,6 +1,10 @@
 {
   // Use the workspace version of TypeScript instead of VSCode's bundled version
   "typescript.tsdk": "node_modules/typescript/lib",
+  "files.insertFinalNewline": true,
+  "yaml.schemas": {
+    "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yml"
+  },
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "cSpell.words": [
     "aerospike",
@@ -29,5 +33,8 @@
     "editor.codeActionsOnSave": {
       "source.fixAll.eslint": "explicit"
     }
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
   }
 }

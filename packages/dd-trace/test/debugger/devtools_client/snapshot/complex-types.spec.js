@@ -14,6 +14,7 @@ const {
   teardown,
   setAndTriggerBreakpoint,
   getLocalStateForCallFrame,
+  DEFAULT_CAPTURE_LIMITS,
 } = require('./utils')
 
 const target = getTargetCodePath(__filename)
@@ -35,7 +36,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
 
         resolve((await getLocalStateForCallFrame(
           params.callFrames[0],
-          { maxFieldCount: Number.MAX_SAFE_INTEGER })
+          { ...DEFAULT_CAPTURE_LIMITS, maxFieldCount: Number.MAX_SAFE_INTEGER })
         ).processLocalState())
       })
 

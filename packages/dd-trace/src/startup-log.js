@@ -11,38 +11,31 @@ let config
 let pluginManager
 /** @type {import('./sampling_rule')[]} */
 let samplingRules = []
-let startupLogRan = false
-let agentErrorLogged = false
+let alreadyRan = false
 
 /**
- * Logs the tracer configuration on startup
+ * @param {{ status: number, message: string } } [agentError]
  */
-function startupLog () {
-  if (startupLogRan || !config || !config.startupLogs || !pluginManager) {
+function startupLog (agentError) {
+  if (alreadyRan || !config || !config.startupLogs || !pluginManager) {
     return
   }
 
-  startupLogRan = true
+  alreadyRan = true
 
   const out = tracerInfo()
-  warn('DATADOG TRACER CONFIGURATION - ' + out)
-}
 
-/**
- * Logs a diagnostic error when the agent connection fails
- * @param {{ status: number, message: string }} agentError
- */
-function logAgentError (agentError) {
-  if (agentErrorLogged || !config || !config.startupLogs) {
-    return
+  if (agentError) {
+    out.agent_error = agentError.message
   }
 
-  agentErrorLogged = true
-
-  warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
-  errors.agentError = {
-    code: agentError.status,
-    message: `Agent Error: ${agentError.message}`,
+  warn('DATADOG TRACER CONFIGURATION - ' + out)
+  if (agentError) {
+    warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
+    errors.agentError = {
+      code: agentError.status,
+      message: `Agent Error: ${agentError.message}`,
+    }
   }
 }
 
@@ -111,7 +104,6 @@ function setSamplingRules (theRules) {
 
 module.exports = {
   startupLog,
-  logAgentError,
   setStartupLogConfig,
   setStartupLogPluginManager,
   setSamplingRules,

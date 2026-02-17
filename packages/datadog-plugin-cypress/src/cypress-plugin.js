@@ -937,6 +937,13 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
           }
         }
+        // Check if all EFD retries failed
+        if ((isNew || isModified) && this.earlyFlakeDetectionNumRetries > 0) {
+          const isLastEfdAttempt = testStatuses.length === this.earlyFlakeDetectionNumRetries + 1
+          if (isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
+            this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+          }
+        }
         if (isAttemptToFix) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
           if (testStatuses.length > 1) {

@@ -1,10 +1,9 @@
 'use strict'
 
-const http = require('http')
-const net = require('net')
-const tls = require('tls')
-const url = require('url')
-const util = require('util')
+const http = require('node:http')
+const net = require('node:net')
+const tls = require('node:tls')
+const { URL } = require('node:url')
 
 const axios = require('axios')
 
@@ -38,8 +37,7 @@ module.exports = http.createServer((req, res) => {
     cltSocket.pipe(targetConnection)
   }
 
-  // eslint-disable-next-line n/no-deprecated-api
-  const targetUrl = url.parse(util.format('%s://%s', proto, req.url))
+  const targetUrl = new URL(`${proto}://${req.url}`)
 
   let targetConnection
 

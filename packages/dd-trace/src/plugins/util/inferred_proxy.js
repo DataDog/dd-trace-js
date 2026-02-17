@@ -14,11 +14,16 @@ const PROXY_HEADER_PATH = 'x-dd-proxy-path'
 const PROXY_HEADER_HTTPMETHOD = 'x-dd-proxy-httpmethod'
 const PROXY_HEADER_DOMAIN = 'x-dd-proxy-domain-name'
 const PROXY_HEADER_STAGE = 'x-dd-proxy-stage'
+const PROXY_HEADER_REGION = 'x-dd-proxy-region'
 
 const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
     component: 'aws-apigateway',
+  },
+  'azure-apim': {
+    spanName: 'azure.apim',
+    component: 'azure-apim',
   },
 }
 
@@ -53,6 +58,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       [HTTP_METHOD]: proxyContext.method,
       [HTTP_URL]: proxyContext.domainName + proxyContext.path,
       stage: proxyContext.stage,
+      region: proxyContext.region,
     },
   }, traceCtx, config)
 
@@ -91,6 +97,7 @@ function extractInferredProxyContext (headers) {
     stage: headers[PROXY_HEADER_STAGE],
     domainName: headers[PROXY_HEADER_DOMAIN],
     proxySystemName: headers[PROXY_HEADER_SYSTEM],
+    region: headers[PROXY_HEADER_REGION],
   }
 }
 

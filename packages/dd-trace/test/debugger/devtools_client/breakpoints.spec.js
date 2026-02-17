@@ -5,6 +5,8 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
+
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/mocha')
 
 describe('breakpoints', function () {
@@ -34,17 +36,22 @@ describe('breakpoints', function () {
    *     when: { json: { eq: [{ ref: string; value: unknown }]; dsl: string }; dsl: string };
    *     sampling?: { snapshotsPerSecond: number };
    *     captureSnapshot: boolean;
+   *     capture?: import('../../../src/debugger/devtools_client/snapshot').CaptureLimits;
    *     location: { file: string; lines: string[] };
    *     templateRequiresEvaluation: boolean;
    *     template: string;
    *     lastCaptureNs: bigint;
    *     nsBetweenSampling: bigint;
+   *     compiledCaptureExpressions?:
+   *       import('../../../src/debugger/devtools_client/snapshot').CompiledCaptureExpression[];
    *   }>>;
    *   probeToLocation: Map<string, string>;
    *   '@noCallThru': boolean;
    * }}
    */
   let stateMock
+
+  const breakpointId = 'bp-script-1:9:0'
 
   beforeEach(function () {
     sessionMock = {
@@ -131,7 +138,6 @@ describe('breakpoints', function () {
       await addProbe({ sampling: { snapshotsPerSecond: 0.5 } })
 
       // Verify the probe was stored in the breakpointToProbes map
-      const breakpointId = 'bp-script-1:9:0'
       const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
       assert(probesAtLocation, 'Probes should be stored at breakpoint location')
 
@@ -148,6 +154,137 @@ describe('breakpoints', function () {
         2000000000n,
         'nsBetweenSampling should be 2 seconds for 0.5 samples/second'
       )
+    })
+
+    describe('capture limits', function () {
+      it('should set default capture limits when captureSnapshot is true', async function () {
+        await addProbe({ captureSnapshot: true })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+        const probe = probesAtLocation.get('probe-1')
+        assert(probe, 'Probe should be stored in map')
+
+        assert.deepStrictEqual(probe.capture, {
+          maxReferenceDepth: 3,
+          maxCollectionSize: 100,
+          maxFieldCount: 20,
+          maxLength: 255,
+        })
+      })
+
+      it('should preserve custom maxReferenceDepth and use defaults for others', async function () {
+        await addProbe({
+          captureSnapshot: true,
+          capture: {
+            maxReferenceDepth: 5,
+          },
+        })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+        const probe = probesAtLocation.get('probe-1')
+        assert(probe, 'Probe should be stored in map')
+
+        assert.deepStrictEqual(probe.capture, {
+          maxReferenceDepth: 5,
+          maxCollectionSize: 100,
+          maxFieldCount: 20,
+          maxLength: 255,
+        })
+      })
+
+      it('should preserve custom maxCollectionSize and use defaults for others', async function () {
+        await addProbe({
+          captureSnapshot: true,
+          capture: {
+            maxCollectionSize: 50,
+          },
+        })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+        const probe = probesAtLocation.get('probe-1')
+        assert(probe, 'Probe should be stored in map')
+
+        assert.deepStrictEqual(probe.capture, {
+          maxReferenceDepth: 3,
+          maxCollectionSize: 50,
+          maxFieldCount: 20,
+          maxLength: 255,
+        })
+      })
+
+      it('should preserve custom maxFieldCount and use defaults for others', async function () {
+        await addProbe({
+          captureSnapshot: true,
+          capture: {
+            maxFieldCount: 10,
+          },
+        })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+        const probe = probesAtLocation.get('probe-1')
+        assert(probe, 'Probe should be stored in map')
+
+        assert.deepStrictEqual(probe.capture, {
+          maxReferenceDepth: 3,
+          maxCollectionSize: 100,
+          maxFieldCount: 10,
+          maxLength: 255,
+        })
+      })
+
+      it('should preserve custom maxLength and use defaults for others', async function () {
+        await addProbe({
+          captureSnapshot: true,
+          capture: {
+            maxLength: 128,
+          },
+        })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+        const probe = probesAtLocation.get('probe-1')
+        assert(probe, 'Probe should be stored in map')
+
+        assert.deepStrictEqual(probe.capture, {
+          maxReferenceDepth: 3,
+          maxCollectionSize: 100,
+          maxFieldCount: 20,
+          maxLength: 128,
+        })
+      })
+
+      it('should not set capture limits when captureSnapshot is false', async function () {
+        await addProbe({ captureSnapshot: false })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+        const probe = probesAtLocation.get('probe-1')
+        assert(probe, 'Probe should be stored in map')
+
+        assert.strictEqual(probe.capture, undefined)
+      })
+
+      it('should not set capture limits when captureSnapshot is undefined', async function () {
+        await addProbe()
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        assert(probesAtLocation, 'Probes should be stored at breakpoint location')
+
+        const probe = probesAtLocation.get('probe-1')
+        assert(probe, 'Probe should be stored in map')
+
+        assert.strictEqual(probe.capture, undefined)
+      })
     })
 
     describe('add multiple probes to the same location', function () {
@@ -175,9 +312,7 @@ describe('breakpoints', function () {
         await addProbe({ id: 'probe-2' })
 
         // Should remove previous breakpoint and create a new one with both conditions
-        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-          breakpointId: 'bp-script-1:9:0',
-        })
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
@@ -224,9 +359,7 @@ describe('breakpoints', function () {
         })
 
         // Should remove previous breakpoint and create a new one with both conditions
-        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-          breakpointId: 'bp-script-1:9:0',
-        })
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
@@ -284,6 +417,109 @@ describe('breakpoints', function () {
           )
         })
     })
+
+    describe('captureExpressions', function () {
+      it('should compile capture expressions', async function () {
+        await addProbe({
+          captureExpressions: [
+            { name: 'myVar', expr: { dsl: 'myVar', json: { ref: 'myVar' } } },
+            { name: 'obj.foo', expr: { dsl: 'myObj.myProp', json: { getmember: [{ ref: 'myObj' }, 'myProp'] } } },
+          ],
+        })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+
+        assert.ok(probesAtLocation, 'could not find probes at location')
+
+        const probe = probesAtLocation.get('probe-1')
+
+        assert.ok(probe, 'could not find probe')
+        assert.ok(probe.compiledCaptureExpressions, 'compiledCaptureExpressions should be present')
+
+        assert.strictEqual(probe.compiledCaptureExpressions.length, 2)
+        assertObjectContains(probe.compiledCaptureExpressions, [
+          { name: 'myVar', expression: 'myVar' },
+          { name: 'obj.foo' },
+        ])
+        assert.ok(probe.compiledCaptureExpressions[1].expression.includes('myObj'))
+        assert.ok(probe.compiledCaptureExpressions[1].expression.includes('myProp'))
+      })
+
+      it('should store per-expression capture limits', async function () {
+        await addProbe({
+          captureExpressions: [
+            { name: 'a', expr: { dsl: 'a', json: { ref: 'a' } } },
+            { name: 'b', expr: { dsl: 'b', json: { ref: 'b' } }, capture: {} },
+            { name: 'c', expr: { dsl: 'c', json: { ref: 'c' } }, capture: { maxReferenceDepth: 1 } },
+            {
+              name: 'd',
+              expr: { dsl: 'd', json: { ref: 'd' } },
+              capture: { maxReferenceDepth: 1, maxCollectionSize: 2, maxFieldCount: 3, maxLength: 4 },
+            },
+          ],
+        })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+
+        assert.ok(probesAtLocation, 'could not find probes at location')
+
+        const probe = probesAtLocation.get('probe-1')
+
+        assert.ok(probe, 'could not find probe')
+        assert.deepStrictEqual(probe.compiledCaptureExpressions, [
+          {
+            name: 'a',
+            expression: 'a',
+            limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+          },
+          {
+            name: 'b',
+            expression: 'b',
+            limits: { maxReferenceDepth: 3, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+          },
+          {
+            name: 'c',
+            expression: 'c',
+            limits: { maxReferenceDepth: 1, maxCollectionSize: 100, maxFieldCount: 20, maxLength: 255 },
+          },
+          {
+            name: 'd',
+            expression: 'd',
+            limits: { maxReferenceDepth: 1, maxCollectionSize: 2, maxFieldCount: 3, maxLength: 4 },
+          },
+        ])
+      })
+
+      it('should handle capture expression compilation errors', async function () {
+        await assert.rejects(
+          addProbe({
+            captureExpressions: [
+              {
+                name: 'invalid expr',
+                expr: { dsl: 'not a valid identifier!', json: { ref: 'not a valid identifier!' } },
+              },
+            ],
+          }),
+          {
+            message: 'Cannot compile capture expression: invalid expr (probe: probe-1, version: 1)',
+          }
+        )
+      })
+
+      it('should not set compiledCaptureExpressions if captureExpressions is empty', async function () {
+        await addProbe({
+          captureExpressions: [],
+        })
+
+        const probesAtLocation = stateMock.breakpointToProbes.get(breakpointId)
+        assert.ok(probesAtLocation, 'could not find probes at location')
+
+        const probe = probesAtLocation.get('probe-1')
+        assert.ok(probe, 'could not find probe')
+
+        assert.strictEqual(probe.compiledCaptureExpressions, undefined)
+      })
+    })
   })
 
   describe('removeBreakpoint', function () {
@@ -306,7 +542,7 @@ describe('breakpoints', function () {
 
       sinon.assert.calledOnceWithExactly(sessionMock.post,
         'Debugger.removeBreakpoint',
-        { breakpointId: 'bp-script-1:9:0' }
+        { breakpointId }
       )
       sinon.assert.notCalled(stateMock.clearState)
     })
@@ -365,9 +601,7 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-          breakpointId: 'bp-script-1:9:0',
-        })
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
@@ -412,9 +646,7 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-          breakpointId: 'bp-script-1:9:0',
-        })
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
@@ -494,9 +726,7 @@ describe('breakpoints', function () {
       })
       await breakpoints.modifyBreakpoint(probe)
 
-      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', {
-        breakpointId: 'bp-script-1:9:0',
-      })
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
       sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',

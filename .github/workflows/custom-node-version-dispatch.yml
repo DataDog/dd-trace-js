@@ -4,41 +4,41 @@ on:
   workflow_dispatch:
     inputs:
       node-version:
-        description: 'Node Version To Use'
+        description: "Node Version To Use"
         required: true
         type: number
       apm-integrations:
-        description: 'APM Integration Tests'
+        description: "APM Integration Tests"
         required: false
         default: true
         type: boolean
       apm-capabilities:
-        description: 'APM Capabilities Tests'
+        description: "APM Capabilities Tests"
         required: false
         default: true
         type: boolean
       llmobs:
-        description: 'LLM-OBS Tests'
+        description: "LLM-OBS Tests"
         required: false
         default: true
         type: boolean
       platform:
-        description: 'Platform Tests'
+        description: "Platform Tests"
         required: false
         default: true
         type: boolean
       serverless:
-        description: 'Serverless Tests'
+        description: "Serverless Tests"
         required: false
         default: true
         type: boolean
       profiling:
-        description: 'Profiling Tests'
+        description: "Profiling Tests"
         required: false
         default: true
         type: boolean
       appsec:
-        description: 'AppSec Tests'
+        description: "AppSec Tests"
         required: false
         default: true
         type: boolean
