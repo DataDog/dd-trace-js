@@ -12,7 +12,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
   start (fieldCtx) {
     const { info, rootCtx, args, path: pathAsArray, pathString } = fieldCtx
 
-    const path = getPath(info, this.config, pathAsArray)
+    const path = getPath(this.config, pathAsArray)
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
@@ -76,9 +76,9 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super(...args)
 
     this.addTraceSub('updateField', (ctx) => {
-      const { field, info, error, path: pathAsArray } = ctx
+      const { field, error, path: pathAsArray } = ctx
 
-      const path = getPath(info, this.config, pathAsArray)
+      const path = getPath(this.config, pathAsArray)
 
       if (!shouldInstrument(this.config, path)) return
 
@@ -118,11 +118,10 @@ function shouldInstrument (config, path) {
   return config.depth < 0 || config.depth >= depth
 }
 
-function getPath (info, config, pathAsArray) {
-  const responsePathAsArray = config.collapse
+function getPath (config, pathAsArray) {
+  return config.collapse
     ? withCollapse(pathAsArray)
     : pathAsArray
-  return typeof responsePathAsArray === 'function' ? responsePathAsArray(info && info.path) : responsePathAsArray
 }
 
 function withCollapse (pathAsArray) {
