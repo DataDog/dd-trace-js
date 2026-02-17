@@ -20,7 +20,6 @@ const PROXY_HEADER_REGION = 'x-dd-proxy-region'
 const PROXY_HEADER_RESOURCE_PATH = 'x-dd-proxy-resource-path'
 const PROXY_HEADER_ACCOUNT_ID = 'x-dd-proxy-account-id'
 const PROXY_HEADER_API_ID = 'x-dd-proxy-api-id'
-const PROXY_HEADER_REGION = 'x-dd-proxy-region'
 const PROXY_HEADER_AWS_USER = 'x-dd-proxy-user'
 
 const supportedProxies = {
@@ -132,7 +131,6 @@ function extractInferredProxyContext (headers) {
     resourcePath: headers[PROXY_HEADER_RESOURCE_PATH],
     accountId: headers[PROXY_HEADER_ACCOUNT_ID],
     apiId: headers[PROXY_HEADER_API_ID],
-    region: headers[PROXY_HEADER_REGION],
     awsUser: headers[PROXY_HEADER_AWS_USER],
   }
 }
