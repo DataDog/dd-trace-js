@@ -12,13 +12,6 @@ const ContextManager = require('../../src/opentelemetry/context_manager')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 require('../../').init()
 
-function makeSpan (...args) {
-  const tracerProvider = new TracerProvider()
-  tracerProvider.register()
-  const tracer = tracerProvider.getTracer()
-  return tracer.startSpan(...args)
-}
-
 function getTracer () {
   const tracerProvider = new TracerProvider()
   tracerProvider.register()
