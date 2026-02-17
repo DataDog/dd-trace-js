@@ -879,6 +879,16 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
+
+              // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
+              const lastRetry = newTests[newTests.length - 1]
+              assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+              // Earlier attempts should not have the flag
+              for (let i = 0; i < newTests.length - 1; i++) {
+                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
+              }
+
               // --retries works normally for old flaky tests
               const oldFlakyTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
@@ -951,6 +961,16 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
+
+              // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
+              const lastRetry = newTests[newTests.length - 1]
+              assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+              // Earlier attempts should not have the flag
+              for (let i = 0; i < newTests.length - 1; i++) {
+                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
+              }
+
               // ATR works normally for old flaky tests
               const oldFlakyTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
