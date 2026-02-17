@@ -41,6 +41,33 @@ const TEST_FILES = [
   '**/*.spec.js',
 ]
 
+const GLOBAL_RESTRICTED_REQUIRES = [
+  {
+    name: 'diagnostics_channel',
+    message: 'Please use `dc-polyfill` instead.',
+  },
+  {
+    name: 'get-port',
+    message: 'Please listen on port 0 instead.',
+  },
+  {
+    name: 'rimraf',
+    message: 'Please use `fs.rm(path, { recursive: true, force: true })` instead.',
+  },
+  {
+    name: 'koalas',
+    message: 'Please use nullish coalescing operator (??) instead.',
+  },
+  {
+    name: 'chai',
+    message: 'Please use `node:assert/strict` instead.',
+  },
+  {
+    name: 'tap',
+    message: 'Please use `mocha` instead.',
+  },
+]
+
 export default [
   {
     name: 'dd-trace/global-ignore',
@@ -381,17 +408,18 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
+      'eslint-rules/eslint-safe-typeof-object': 'error',
       'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
+      'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
+      'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/no-restricted-require': ['error', GLOBAL_RESTRICTED_REQUIRES],
       'n/no-unpublished-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
-      'n/no-restricted-require': ['error', ['diagnostics_channel']],
-      'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
-      'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-unsupported-features/node-builtins': ['error', {
         ignores: [
           'Request',
@@ -404,8 +432,14 @@ export default [
         ],
       }],
       'no-console': 'error',
+      'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
+      'no-useless-assignment': 'error',
       'no-var': 'error',
+      'no-void': ['error', { allowAsStatement: true }],
+      'operator-assignment': 'error',
+      'prefer-exponentiation-operator': 'error',
+      'prefer-object-has-own': 'error',
       'prefer-object-spread': 'error',
       'require-await': 'error',
       strict: 'error',
@@ -420,48 +454,19 @@ export default [
     rules: {
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
-      'eslint-rules/eslint-safe-typeof-object': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
+
       'n/no-restricted-require': ['error', [
-        {
-          name: 'diagnostics_channel',
-          message: 'Please use `dc-polyfill` instead.',
-        },
+        ...GLOBAL_RESTRICTED_REQUIRES,
         {
           name: 'semver',
           message: 'Please use `semifies` instead.',
-        },
-        {
-          name: 'get-port',
-          message: 'Please listen on port 0 instead.',
-        },
-        {
-          name: 'rimraf',
-          message: 'Please use `fs.rm(path, { recursive: true, force: true })` instead.',
-        },
-        {
-          name: 'koalas',
-          message: 'Please use nullish coalescing operator (??) instead.',
-        },
-        {
-          name: 'chai',
-          message: 'Please use `node:assert/strict` instead.',
-        },
-        {
-          name: 'tap',
-          message: 'Please use `mocha` instead.',
         },
       ]],
 
       'no-await-in-loop': 'error',
       'no-else-return': ['error', { allowElseIf: true }],
-      'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
       'no-unused-expressions': 'error',
-      'no-useless-assignment': 'error',
-      'no-void': ['error', { allowAsStatement: true }],
-      'operator-assignment': 'error',
-      'prefer-exponentiation-operator': 'error',
-      'prefer-object-has-own': 'error',
 
       // Too strict for now. Slowly migrate to this rule by using rest parameters.
       // 'prefer-rest-params': 'error',
