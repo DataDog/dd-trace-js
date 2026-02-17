@@ -325,7 +325,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate context via span links', async () => {
-              const expectedSpanPromise = agent.use(traces => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
                 const links = span.meta['_dd.span_links'] ? JSON.parse(span.meta['_dd.span_links']) : []
 
