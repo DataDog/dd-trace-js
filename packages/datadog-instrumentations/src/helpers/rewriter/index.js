@@ -42,6 +42,7 @@ const instrumentations = require('./instrumentations')
 
 const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 
+/** @type {Record<string, Map<object, boolean>>} */
 const supported = {}
 const disabled = new Set()
 
@@ -68,7 +69,7 @@ function rewrite (content, filename, format) {
       if (disabled.has(name)) continue
       if (!filename.endsWith(`${name}/${filePath}`)) continue
       if (!transform) continue
-      if (!satisfies(filename, filePath, versionRange)) continue
+      if (!satisfies(filename, filePath, versionRange, functionQuery)) continue
 
       ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
 
@@ -101,22 +102,24 @@ function disable (instrumentation) {
   disabled.add(instrumentation)
 }
 
-function satisfies (filename, filePath, versions) {
+function satisfies (filename, filePath, versions, functionQuery) {
   const [basename] = filename.split(filePath)
 
-  if (supported[basename] === undefined) {
+  supported[basename] ??= new Map()
+
+  if (supported[basename].get(functionQuery) === undefined) {
     try {
       const pkg = JSON.parse(readFileSync(
         join(basename, 'package.json'), 'utf8'
       ))
 
-      supported[basename] = semifies(pkg.version, versions)
+      supported[basename].set(functionQuery, semifies(pkg.version, versions))
     } catch {
-      supported[basename] = false
+      supported[basename].set(functionQuery, false)
     }
   }
 
-  return supported[basename]
+  return supported[basename].get(functionQuery)
 }
 
 // TODO: Support index

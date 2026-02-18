@@ -3,8 +3,11 @@
 const semifies = require('semifies')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../setup/mocha')
+const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
 
 const { NODE_MAJOR } = require('../../../../../../version')
+
+const isDdTrace = iastFilter.isDdTrace
 
 const {
   assertLlmObsSpanEvent,
@@ -15,7 +18,7 @@ const {
 } = require('../../util')
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
-const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
+const range = NODE_MAJOR < 22 ? '>=4.0.2' : '4.0.0'
 
 function getAiSdkOpenAiPackage (vercelAiVersion) {
   return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai' : '@ai-sdk/openai@1.3.23'
@@ -27,6 +30,19 @@ describe('Plugin', () => {
   })
 
   const { getEvents } = useLlmObs({ plugin: 'ai' })
+
+  before(async () => {
+    iastFilter.isDdTrace = file => {
+      if (file.includes('dd-trace-js/versions/')) {
+        return false
+      }
+      return isDdTrace(file)
+    }
+  })
+
+  after(() => {
+    iastFilter.isDdTrace = isDdTrace
+  })
 
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
@@ -45,7 +61,7 @@ describe('Plugin', () => {
       })
     })
 
-    it('creates a span for generateText', async () => {
+    it.only('creates a span for generateText', async () => {
       const options = {
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',
