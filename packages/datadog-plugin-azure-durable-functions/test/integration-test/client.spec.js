@@ -15,15 +15,13 @@ const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
   let agent
-  let azuriteproc
-  let funcproc
+  let proc
 
   withVersions('azure-durable-functions', 'durable-functions', version => {
     useSandbox([
       `durable-functions@${version}`,
       '@azure/functions',
       'azure-functions-core-tools@4',
-      'azurite@3',
     ],
     false,
     ['./packages/datadog-plugin-azure-durable-functions/test/integration-test/*',
@@ -31,24 +29,20 @@ describe('esm', () => {
     ])
 
     beforeEach(async () => {
-      agent = await new FakeAgent().start();
-      [azuriteproc, funcproc] = await spawnPluginIntegrationTestProcs(agent.port)
+      agent = await new FakeAgent().start()
     })
 
     afterEach(async () => {
-      // after each test, kill both processes and wait for them to exit before continuing
-      if (funcproc) {
-        funcproc.kill('SIGINT')
-        await new Promise(resolve => funcproc.on('exit', resolve))
-      }
-      if (azuriteproc) {
-        azuriteproc.kill('SIGINT')
-        await new Promise(resolve => azuriteproc.on('exit', resolve))
+      // after each test, kill process and wait for exit before continuing
+      if (proc) {
+        proc.kill('SIGINT')
+        await new Promise(resolve => proc.on('exit', resolve))
       }
       await agent.stop()
     })
 
     it('is instrumented', async () => {
+      proc = await spawnPluginIntegrationTestProc(agent.port)
       return await curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload))
@@ -77,43 +71,31 @@ describe('esm', () => {
         assert.strictEqual(maybeGetCountEntity[0].resource, 'Entity Counter get_count')
         assert.strictEqual(maybeGetCountEntity[0].name, 'azure.durable-functions.invoke')
       })
-    }).timeout(60000)
+    }).timeout(60_000)
   })
 })
 
 /**
- * spawns processes for azurite and func start commands
- * - azurite is spawned first and is used as a local storage for durable functions
- * - func start then connects to azurite and runs the durable function locally
+ * - spawns process for azure func start commands
+ * - connects to azurite (running in container)
+ *    then runs the durable function locally
  */
-async function spawnPluginIntegrationTestProcs (agentPort) {
+async function spawnPluginIntegrationTestProc (agentPort) {
   const cwd = sandboxCwd()
   const env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
     DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
-    PATH: `${cwd}/node_modules/azure-functions-core-tools/bin:` +
-    `${cwd}/node_modules/.bin:${process.env.PATH}`,
-  }
-
-  // callbacks to check logs if azurite and func-start proccesess are ready
-  const azuriteReadyCondition = (dataString) => {
-    return dataString.includes('Azurite Table service is successfully listening')
-  }
-
-  const funcReadyCondition = (dataString) => {
-    return dataString.toString().includes('Host lock lease acquired by instance')
+    PATH: `${cwd}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
   }
 
   const options = { cwd, env }
 
-  const azuriteProc = await spawnProc('azurite', ['-s'], options, azuriteReadyCondition)
-
-  const funcProc = await spawnProc('func', ['start'], options, funcReadyCondition)
-  return [azuriteProc, funcProc]
+  const proc = await spawnProc('func', ['start'], options)
+  return proc
 }
 
-function spawnProc (command, args, options = {}, readyCondition) {
+function spawnProc (command, args, options = {}) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
@@ -129,7 +111,7 @@ function spawnProc (command, args, options = {}, readyCondition) {
       // eslint-disable-next-line no-console
       if (!options.silent) console.log(data.toString())
 
-      if (readyCondition(data.toString())) {
+      if (data.toString().includes('Host lock lease acquired by instance')) {
         resolve(proc)
       }
     })
