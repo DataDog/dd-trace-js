@@ -4,9 +4,6 @@ const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
 
-const loadChannel = channel('dd-trace:instrumentation:load')
-loadChannel.publish({ name: 'ai' }) // we do not add hooks for direct imports, we need this publish explicitly
-
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
 
