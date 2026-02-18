@@ -139,10 +139,7 @@ __queuestorage__/AzuriteConfig
 
 # ignore apm-instrumentation-toolkit analysis results dirs
 .analysis/
-
-# ignore claude settings
-.claude/*
-!.claude/skills/
+.claude/settings.local.json
 
 # Husky generates a helper dir under .husky/_ (including husky.sh). Don't commit it.
-.husky/_/
+.husky/_/also 
