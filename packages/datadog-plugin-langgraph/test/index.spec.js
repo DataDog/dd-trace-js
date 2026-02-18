@@ -1,5 +1,6 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
 const TestSetup = require('./test-setup')
@@ -19,6 +20,14 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
     await testSetup.teardown()
   })
 
+  beforeEach(async () => {
+    await agent.load('langgraph')
+  })
+
+  afterEach(async () => {
+    await agent.close({ ritmReset: false })
+  })
+
   describe('Pregel.invoke() - invoke', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
@@ -29,13 +38,9 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
           throw new Error('langgraph.invoke span not found')
         }
 
-        assertObjectContains(invokeSpan, {
-          name: 'langgraph.invoke',
-          meta: {
-            'span.kind': 'internal',
-            component: 'langgraph',
-          },
-        })
+        assert.equal(invokeSpan.name, 'langgraph.invoke')
+        assert.equal(invokeSpan.meta['span.kind'], 'internal')
+        assert.equal(invokeSpan.meta.component, 'langgraph')
       })
 
       await testSetup.pregelInvoke()
@@ -51,18 +56,13 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
         if (!invokeSpan) {
           throw new Error('langgraph.invoke error span not found')
         }
-
-        assertObjectContains(invokeSpan, {
-          name: 'langgraph.invoke',
-          error: 1,
-          meta: {
-            'span.kind': 'internal',
-            component: 'langgraph',
-            'error.type': ANY_STRING,
-            'error.message': ANY_STRING,
-            'error.stack': ANY_STRING,
-          },
-        })
+        assert.equal(invokeSpan.name, 'langgraph.invoke')
+        assert.equal(invokeSpan.error, 1)
+        assert.equal(invokeSpan.meta['span.kind'], 'internal')
+        assert.equal(invokeSpan.meta.component, 'langgraph')
+        assert.ok(Object.hasOwn(invokeSpan.meta, 'error.type'))
+        assert.ok(Object.hasOwn(invokeSpan.meta, 'error.message'))
+        assert.ok(Object.hasOwn(invokeSpan.meta, 'error.stack'))
       })
 
       await testSetup.pregelInvokeError().catch(() => {})
@@ -81,13 +81,9 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
           throw new Error('langgraph.stream span not found')
         }
 
-        assertObjectContains(streamSpan, {
-          name: 'langgraph.stream',
-          meta: {
-            'span.kind': 'internal',
-            component: 'langgraph',
-          },
-        })
+        assert.equal(streamSpan.name, 'langgraph.stream')
+        assert.equal(streamSpan.meta['span.kind'], 'internal')
+        assert.equal(streamSpan.meta.component, 'langgraph')
       })
 
       await testSetup.pregelStream()
@@ -104,17 +100,13 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
           throw new Error('langgraph.stream error span not found')
         }
 
-        assertObjectContains(streamSpan, {
-          name: 'langgraph.stream',
-          error: 1,
-          meta: {
-            'span.kind': 'internal',
-            component: 'langgraph',
-            'error.type': ANY_STRING,
-            'error.message': ANY_STRING,
-            'error.stack': ANY_STRING,
-          },
-        })
+        assert.equal(streamSpan.name, 'langgraph.stream')
+        assert.equal(streamSpan.error, 1)
+        assert.equal(streamSpan.meta['span.kind'], 'internal')
+        assert.equal(streamSpan.meta.component, 'langgraph')
+        assert.ok(Object.hasOwn(streamSpan.meta, 'error.type'))
+        assert.ok(Object.hasOwn(streamSpan.meta, 'error.message'))
+        assert.ok(Object.hasOwn(streamSpan.meta, 'error.stack'))
       })
 
       await testSetup.pregelStreamError().catch(() => {})
