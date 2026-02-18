@@ -219,6 +219,8 @@ Check `.github/workflows/apm-integrations.yml` for the exact current step format
 
 ## Step 8: Write Tests
 
+### Unit Tests
+
 Create `packages/datadog-plugin-<name>/test/index.spec.js`:
 
 ```javascript
@@ -266,14 +268,95 @@ describe('Plugin', () => {
 - `withNamingSchema(agent, ...)` — tests naming schema conventions
 - `withPeerService(agent, ...)` — tests peer service tag
 
+### ESM Integration Tests
+
+ESM tests verify the plugin works with native ES module imports. They live in `packages/datadog-plugin-<name>/test/integration-test/` and use a `FakeAgent` to assert on captured spans.
+
+Create `packages/datadog-plugin-<name>/test/integration-test/server.mjs` — a minimal ESM script that initialises the tracer and triggers the instrumented operation:
+
+```javascript
+import 'dd-trace/init.js'
+import myLib from '<module-name>'
+
+// trigger the instrumented operation
+await myLib.someOperation()
+```
+
+Create `packages/datadog-plugin-<name>/test/integration-test/client.spec.js` — the test that spawns the ESM server and asserts spans arrive:
+
+```javascript
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const {
+  FakeAgent,
+  sandboxCwd,
+  useSandbox,
+  checkSpansForServiceName,
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox,
+} = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
+describe('esm', () => {
+  let agent
+  let proc
+  let variants
+
+  withVersions('<name>', '<module-name>', version => {
+    useSandbox([`'<module-name>@${version}'`], false, [
+      './packages/datadog-plugin-<name>/test/integration-test/*'])
+
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
+
+    before(async function () {
+      variants = varySandbox('server.mjs', '<module-name>', '<namedExport>')
+    })
+
+    afterEach(async () => {
+      proc && proc.kill()
+      await agent.stop()
+    })
+
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, '<name>.<operation>'), true)
+        })
+
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+
+        await res
+      }).timeout(20000)
+    }
+  })
+})
+```
+
+**Key points for ESM tests:**
+- `varySandbox('server.mjs', bindingName, namedExport)` generates three import-style variants (`default`, `star`, `destructure`) from `server.mjs` so the instrumentation is verified under all ESM import patterns.
+- `varySandbox.VARIANTS` is `['default', 'star', 'destructure']`.
+- Pass `byPassDefault: true` as the fifth argument to `varySandbox` when the module has no default export (named-only packages).
+- `useSandbox` installs the package versions into a temp sandbox dir; the second argument controls whether it runs `yarn install` inside the sandbox.
+- `spawnPluginIntegrationTestProcAndExpectExit` spawns `node <script>` with `DD_TRACE_AGENT_PORT` set to the `FakeAgent` port.
+- Each `it` must have a generous timeout (e.g. `20000`) because sandbox setup and process spawning take time.
+
 ## Running Tests
 
 ```bash
-# Run the plugin test
+# Run the unit plugin test
 ./node_modules/.bin/mocha packages/datadog-plugin-<name>/test/index.spec.js
 
-# Or via the test:plugins script
+# Or via the test:plugins script (unit tests only)
 PLUGINS="<name>" npm run test:plugins
+
+# Run the ESM integration tests
+PLUGINS="<name>" npm run test:integration:plugins
 ```
 
 ## Reference Files
