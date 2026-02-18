@@ -21,7 +21,13 @@ const {
 const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
 
 function getAiSdkOpenAiPackage (vercelAiVersion) {
-  return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai' : '@ai-sdk/openai@1.3.23'
+  if (semifies(vercelAiVersion, '>=6.0.0')) {
+    return '@ai-sdk/openai'
+  } else if (semifies(vercelAiVersion, '>=5.0.0')) {
+    return '@ai-sdk/openai@2.0.0'
+  } else {
+    return '@ai-sdk/openai@1.3.23'
+  }
 }
 
 describe('Plugin', () => {
