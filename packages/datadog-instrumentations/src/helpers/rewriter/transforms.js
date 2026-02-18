@@ -62,7 +62,7 @@ function traceFunction (state, node, program) {
     async: node.async,
     expression: false,
     generator: node.generator,
-  })
+  }, program)
 
   // The original function no longer contains any calls to `await` or `yield` as
   // the function body is copied to the internal wrapped function, so we set
@@ -70,6 +70,8 @@ function traceFunction (state, node, program) {
   // values are instead copied to the new AST node above.
   node.generator = false
   node.async = false
+
+  wrapSuper(state, node)
 }
 
 function traceInstanceMethod (state, node, program) {
@@ -107,19 +109,19 @@ function traceInstanceMethod (state, node, program) {
   const fn = ctorBody[1].expression.right
 
   fn.async = operator === 'tracePromise'
-  fn.body = wrap(state, { type: 'Identifier', name: `__apm$${methodName}` })
+  fn.body = wrap(state, { type: 'Identifier', name: `__apm$${methodName}` }, program)
+
+  wrapSuper(state, fn)
 
   ctor.value.body.body.push(...ctorBody)
 }
 
-function wrap (state, node) {
+function wrap (state, node, program) {
   const { channelName, operator } = state
 
-  wrapSuper(state, node)
-
-  if (operator === 'traceAsyncIterator') return wrapIterator(state, node)
+  if (operator === 'traceAsyncIterator') return wrapIterator(state, node, program)
   if (operator === 'traceCallback') return wrapCallback(state, node)
-  if (operator === 'traceIterator') return wrapIterator(state, node)
+  if (operator === 'traceIterator') return wrapIterator(state, node, program)
 
   const async = operator === 'tracePromise' ? 'async' : ''
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
@@ -144,12 +146,16 @@ function wrap (state, node) {
   return wrapper
 }
 
-function wrapSuper (state, node) {
+function wrapSuper (_state, node) {
+  const members = new Set()
+
   traverse(
     node.body,
     '[object.type=Super]',
     (node, parent) => {
       const { name } = node.property
+
+      let child
 
       if (parent.callee) {
         // This is needed because for generator functions we have to move the
@@ -157,19 +163,36 @@ function wrapSuper (state, node) {
         // arrow function because arrow function cannot be generator functions,
         // and `super` cannot be called from a nested function, so we have to
         // rewrite any `super` call to not use the keyword.
-        const expression = parse(`
-          Reflect.getPrototypeOf(this.constructor.prototype)['${name}'].call(this)
-        `).body[0].expression
+        const { expression } = parse(`__apm$super['${name}'].call(this)`).body[0]
 
-        parent.callee = expression.callee
+        parent.callee = child = expression.callee
         parent.arguments.unshift(...expression.arguments)
       } else {
-        parent.expression = parse(`
-          Reflect.getPrototypeOf(this.constructor.prototype)['${name}']
-        `).body[0]
+        parent.expression = child = parse(`__apm$super['${name}']`).body[0]
       }
+
+      child.computed = parent.callee.computed
+      child.optional = parent.callee.optional
+
+      members.add(name)
     }
   )
+
+  for (const name of members) {
+    const member = parse(`
+      class Wrapper {
+        wrapper () {
+          __apm$super['${name}'] = super['${name}']
+        }
+      }
+    `).body[0].body.body[0].value.body.body[0]
+
+    node.body.body.unshift(member)
+  }
+
+  if (members.size > 0) {
+    node.body.body.unshift(parse('const __apm$super = {}').body[0])
+  }
 }
 
 function wrapCallback (state, node) {
@@ -234,12 +257,16 @@ function wrapCallback (state, node) {
   return wrapper
 }
 
-function wrapIterator (state, node) {
+function wrapIterator (state, node, program) {
   const { channelName, operator } = state
-  const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
-  const nextChannel = channelVariable + '_next'
+  const baseChannel = channelName.replaceAll(':', '_')
+  const channelVariable = 'tr_ch_apm$' + baseChannel
+  const nextChannel = baseChannel + '_next'
   const traceMethod = operator === 'traceAsyncIterator' ? 'tracePromise' : 'traceSync'
-  const traceNext = `${nextChannel}.${traceMethod}`
+  const traceNext = `tr_ch_apm$${nextChannel}.${traceMethod}`
+
+  transforms.tracingChannelDeclaration({ ...state, channelName: nextChannel }, program)
+
   const wrapper = parse(`
     function wrapper () {
       const __apm$traced = () => {
