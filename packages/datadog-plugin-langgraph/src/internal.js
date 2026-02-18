@@ -35,8 +35,8 @@ class PregelStreamPlugin extends TracingPlugin {
   bindStart (ctx) {
     this.startSpan('langgraph.stream', {
       service: this.config.service,
+      kind: 'internal',
       component: 'langgraph',
-      'span.kind': 'internal',
     }, ctx)
 
     return ctx.currentStore
