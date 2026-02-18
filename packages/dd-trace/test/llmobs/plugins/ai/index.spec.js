@@ -18,7 +18,7 @@ const {
 } = require('../../util')
 
 // ai<4.0.2 is not supported in CommonJS with Node.js < 22
-const range = NODE_MAJOR < 22 ? '>=4.0.2' : '4.0.0'
+const range = NODE_MAJOR < 22 ? '>=4.0.2' : '>=4.0.0'
 
 function getAiSdkOpenAiPackage (vercelAiVersion) {
   return semifies(vercelAiVersion, '>=5.0.0') ? '@ai-sdk/openai' : '@ai-sdk/openai@1.3.23'
@@ -61,7 +61,7 @@ describe('Plugin', () => {
       })
     })
 
-    it.only('creates a span for generateText', async () => {
+    it('creates a span for generateText', async () => {
       const options = {
         model: openai('gpt-4o-mini'),
         system: 'You are a helpful assistant',

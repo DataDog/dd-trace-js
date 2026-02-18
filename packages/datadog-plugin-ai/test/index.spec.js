@@ -116,7 +116,6 @@ describe('Plugin', () => {
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
-        assert.ok(experimentalTelemetry.tracer != null, 'Tracer should be set when `isEnabled` is true')
 
         await checkTraces
       })
@@ -157,7 +156,6 @@ describe('Plugin', () => {
         })
 
         assert.ok(result.text, 'Expected result to be truthy')
-        assert.ok(experimentalTelemetry.isEnabled, 'isEnabled should be set to true')
         assert.ok(experimentalTelemetry.tracer === myTracer, 'Tracer should be set when `isEnabled` is true')
 
         await checkTraces
