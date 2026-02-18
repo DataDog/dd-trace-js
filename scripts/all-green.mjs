@@ -76,11 +76,11 @@ async function checkAllGreen () {
   }
 }
 
+console.log(`Polling status for ref: ${ref}.`)
+
 if (DELAY) {
   console.log(`Waiting for ${DELAY} minutes before starting.`)
   await setTimeout(DELAY * 60_000)
 }
-
-console.log(`Polling status for ref: ${ref}.`)
 
 await checkAllGreen()
