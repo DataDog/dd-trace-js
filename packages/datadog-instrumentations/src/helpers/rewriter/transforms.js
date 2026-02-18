@@ -277,25 +277,25 @@ function wrapIterator (state, node, program) {
       if (!${channelVariable}.start.hasSubscribers) return __apm$traced();
 
       {
-        const wrap = it => {
-          const { next: itNext, return: itReturn, throw: itThrow } = it;
+        const wrap = iter => {
+          const { next: iterNext, return: iterReturn, throw: iterThrow } = iter;
 
-          it.next = (...args) => ${traceNext}(itNext, ctx, it, ...args);
-          it.return = (...args) => ${traceNext}(itReturn, ctx, it, ...args);
-          it.throw = (...args) => ${traceNext}(itThrow, ctx, it, ...args);
+          iter.next = (...args) => ${traceNext}(iterNext, ctx, iter, ...args);
+          iter.return = (...args) => ${traceNext}(iterReturn, ctx, iter, ...args);
+          iter.throw = (...args) => ${traceNext}(iterThrow, ctx, iter, ...args);
 
-          return it;
+          return iter;
         };
         const ctx = {
           arguments,
           self: this,
           moduleVersion: "1.0.0"
         };
-        const it = ${channelVariable}.traceSync(__apm$traced, ctx);
+        const iter = ${channelVariable}.traceSync(__apm$traced, ctx);
 
-        if (typeof it.then !== 'function') return wrap(it);
+        if (typeof iter.then !== 'function') return wrap(iter);
 
-        return it.then(result => {
+        return iter.then(result => {
           ctx.result = result;
 
           asyncStart.publish(ctx);
