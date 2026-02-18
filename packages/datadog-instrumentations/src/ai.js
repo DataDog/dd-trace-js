@@ -72,8 +72,11 @@ function wrapTracer (tracer) {
 
 for (const hook of getHooks('ai')) {
   if (hook.file === 'dist/index.js') {
-    delete hook.file
+    // if not removed, the below hook will never match correctly
+    // however, it is still needed in the orchestrion definition
+    hook.file = null
   }
+
   addHook(hook, exports => {
     const getTracerChannel = tracingChannel('orchestrion:ai:getTracer')
     getTracerChannel.subscribe({
