@@ -602,7 +602,7 @@ describe('Plugin', () => {
           prefixedResource = resource
         }
 
-        let defaultOpName = 'pubsub.receive'
+        let defaultOpName
         if (spanKind === 'consumer') {
           defaultOpName = expectedSchema.receive.opName
         } else if (spanKind === 'producer') {
