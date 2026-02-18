@@ -37,16 +37,20 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    * @param {ProducerResponseItem} response
    * @returns {ProducerBacklog}
    */
-  transformProduceResponse (response) {
+  transformProduceResponse (response, clusterId) {
     // In produce protocol >=v3, the offset key changes from `offset` to `baseOffset`
     const { topicName: topic, partition, offset, baseOffset } = response
     const offsetAsLong = offset || baseOffset
-    return {
+    const backlog = {
       type: 'kafka_produce',
       partition,
       offset: offsetAsLong ? Number(offsetAsLong) : undefined,
       topic,
     }
+    if (clusterId) {
+      backlog.kafka_cluster_id = clusterId
+    }
+    return backlog
   }
 
   /**
@@ -56,6 +60,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    */
   commit (ctx) {
     const commitList = ctx.result
+    const clusterId = ctx.clusterId
 
     if (!this.config.dsmEnabled) return
     if (!commitList || !Array.isArray(commitList)) return
@@ -65,7 +70,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       'offset',
       'topic',
     ]
-    for (const commit of commitList.map(this.transformProduceResponse)) {
+    for (const commit of commitList.map(r => this.transformProduceResponse(r, clusterId))) {
       if (keys.some(key => !commit.hasOwnProperty(key))) continue
       this.tracer.setOffset(commit)
     }

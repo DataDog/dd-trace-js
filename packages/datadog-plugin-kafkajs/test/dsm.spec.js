@@ -219,18 +219,25 @@ describe('Plugin', () => {
               assert.strictEqual(runArg?.offset, commitMeta.offset)
               assert.strictEqual(runArg?.partition, commitMeta.partition)
               assert.strictEqual(runArg?.topic, commitMeta.topic)
-              assertObjectContains(runArg, {
+              const expectedBacklog = {
                 type: 'kafka_commit',
                 consumer_group: 'test-group',
-              })
+              }
+              if (clusterIdAvailable) {
+                expectedBacklog.kafka_cluster_id = testKafkaClusterId
+              }
+              assertObjectContains(runArg, expectedBacklog)
             })
           }
 
           it('Should add backlog on producer response', async () => {
             await sendMessages(kafka, testTopic, messages)
             sinon.assert.calledOnce(setOffsetSpy)
-            const { topic } = setOffsetSpy.lastCall.args[0]
-            assert.strictEqual(topic, testTopic)
+            const runArg = setOffsetSpy.lastCall.args[0]
+            assert.strictEqual(runArg.topic, testTopic)
+            if (clusterIdAvailable) {
+              assert.strictEqual(runArg.kafka_cluster_id, testKafkaClusterId)
+            }
           })
         })
       })

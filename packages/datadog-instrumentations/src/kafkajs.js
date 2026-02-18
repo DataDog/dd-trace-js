@@ -24,22 +24,6 @@ const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
 
 const disabledHeaderWeakSet = new WeakSet()
 
-function commitsFromEvent (event) {
-  const { payload: { groupId, topics } } = event
-  const commitList = []
-  for (const { topic, partitions } of topics) {
-    for (const { partition, offset } of partitions) {
-      commitList.push({
-        groupId,
-        partition,
-        offset,
-        topic,
-      })
-    }
-  }
-  consumerCommitCh.publish(commitList)
-}
-
 addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
   class Kafka extends BaseKafka {
     constructor (options) {
@@ -132,6 +116,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     }
 
     const kafkaClusterIdPromise = getKafkaClusterId(this)
+    let resolvedClusterId = null
 
     const eachMessageExtractor = (args, clusterId) => {
       const { topic, partition, message } = args[0]
@@ -146,13 +131,29 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     const consumer = createConsumer.apply(this, arguments)
 
-    consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
+    consumer.on(consumer.events.COMMIT_OFFSETS, (event) => {
+      const { payload: { groupId: commitGroupId, topics } } = event
+      const commitList = []
+      for (const { topic, partitions } of topics) {
+        for (const { partition, offset } of partitions) {
+          commitList.push({
+            groupId: commitGroupId,
+            partition,
+            offset,
+            topic,
+            clusterId: resolvedClusterId,
+          })
+        }
+      }
+      consumerCommitCh.publish(commitList)
+    })
 
     const run = consumer.run
     const groupId = arguments[0].groupId
 
     consumer.run = function ({ eachMessage, eachBatch, ...runArgs }) {
       const wrapConsume = (clusterId) => {
+        resolvedClusterId = clusterId
         return run({
           eachMessage: wrappedCallback(
             eachMessage,
