@@ -171,6 +171,19 @@ describe('check-require-cache', () => {
           module: {
             name: 'test',
             versionRange: '>=0.1',
+            filePath: 'trace-generator-super-bound.js',
+          },
+          functionQuery: {
+            methodName: 'test',
+            kind: 'Iterator',
+            className: 'B',
+          },
+          channelName: 'trace_generator_super_bound',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
             filePath: 'trace-generator-async.js',
           },
           functionQuery: {
@@ -229,9 +242,7 @@ describe('check-require-cache', () => {
     const { test } = compile('test-trace-sync')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test-trace-sync:test_invoke')
@@ -244,9 +255,7 @@ describe('check-require-cache', () => {
     const { test } = compile('test-trace-sync-super')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test-trace-sync-super:test_invoke')
@@ -259,9 +268,7 @@ describe('check-require-cache', () => {
     const { test } = compile('test-trace-async')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test-trace-async:test_invoke')
@@ -274,9 +281,7 @@ describe('check-require-cache', () => {
     const { test } = compile('test-trace-async-super')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test-trace-async-super:test_invoke')
@@ -289,9 +294,7 @@ describe('check-require-cache', () => {
     const { test } = compileFile('trace-iterator-async')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test:trace_iterator_async')
@@ -312,9 +315,7 @@ describe('check-require-cache', () => {
     const { test } = compileFile('trace-iterator-async-super')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test:trace_iterator_async_super')
@@ -327,9 +328,7 @@ describe('check-require-cache', () => {
     const { test } = compile('test-trace-callback')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test-trace-callback:test_invoke')
@@ -342,9 +341,7 @@ describe('check-require-cache', () => {
     const { test } = compile('test-trace-callback-super')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test-trace-callback-super:test_invoke')
@@ -357,9 +354,7 @@ describe('check-require-cache', () => {
     const { test } = compileFile('trace-generator')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test:trace_generator')
@@ -374,9 +369,7 @@ describe('check-require-cache', () => {
     const { test } = compileFile('trace-generator-super')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test:trace_generator_super')
@@ -385,13 +378,24 @@ describe('check-require-cache', () => {
     test()
   })
 
+  it('should auto instrument generator functions using super in bound method call', done => {
+    const { test } = compileFile('trace-generator-super-bound')
+
+    subs = {
+      start: () => setImmediate(done),
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_generator_super_bound')
+    ch.subscribe(subs)
+
+    test().next()
+  })
+
   it('should auto instrument async generator functions', done => {
     const { test } = compileFile('trace-generator-async')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test:trace_generator_async')
@@ -414,9 +418,7 @@ describe('check-require-cache', () => {
     const { test } = compileFile('trace-generator-async-super')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test:trace_generator_async_super')
@@ -429,9 +431,7 @@ describe('check-require-cache', () => {
     const test = compile('test-trace-class-instance-method')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test-trace-class-instance-method:test_invoke')
@@ -444,9 +444,7 @@ describe('check-require-cache', () => {
     const test = compile('test-trace-var-class-instance-method')
 
     subs = {
-      start () {
-        done()
-      },
+      start: () => setImmediate(done),
     }
 
     ch = tracingChannel('orchestrion:test-trace-var-class-instance-method:test_invoke')
