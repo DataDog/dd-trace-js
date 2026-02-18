@@ -733,5 +733,252 @@ describe('Plugin', () => {
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
+
+    describe('ToolLoopAgent', function () {
+      beforeEach(function () {
+        if (semifies(realVersion, '<6.0.0')) {
+          this.skip()
+        }
+      })
+
+      it('creates a text generation root span for ToolLoopAgent.generate', async () => {
+        const agent = new ai.ToolLoopAgent({
+          model: openai('gpt-4o-mini'),
+          instructions: 'You are a helpful assistant',
+          providerOptions: {
+            openai: {
+              store: false,
+            },
+          },
+          tools: {
+            weather: ai.tool({
+              description: 'Get the weather in a given location',
+              inputSchema: ai.jsonSchema({
+                type: 'object',
+                properties: {
+                  location: { type: 'string', description: 'The location to get the weather for' },
+                },
+              }),
+              execute: async ({ location }) => ({
+                location,
+                temperature: 72,
+              }),
+            }),
+          },
+        })
+
+        const result = await agent.generate({
+          prompt: 'What is the weather in Tokyo?',
+        })
+
+        const toolCallId = result.steps[0].toolCalls[0].toolCallId
+
+        const { apmSpans, llmobsSpans } = await getEvents(4)
+
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          name: 'generateText',
+          spanKind: 'workflow',
+          inputValue: 'What is the weather in Tokyo?',
+          outputValue: MOCK_STRING,
+          metadata: {
+            maxRetries: MOCK_NUMBER,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[1], {
+          span: apmSpans[1],
+          parentId: llmobsSpans[0].span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doGenerate',
+          inputMessages: [
+            { content: 'You are a helpful assistant', role: 'system' },
+            { content: 'What is the weather in Tokyo?', role: 'user' },
+          ],
+          outputMessages: [{
+            role: 'assistant',
+            tool_calls: [{
+              tool_id: toolCallId,
+              name: 'weather',
+              arguments: {
+                location: 'Tokyo',
+              },
+              type: 'function',
+            }],
+          }],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[2], {
+          span: apmSpans[2],
+          parentId: llmobsSpans[0].span_id,
+          name: 'weather',
+          spanKind: 'tool',
+          inputValue: JSON.stringify({ location: 'Tokyo' }),
+          outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[3], {
+          span: apmSpans[3],
+          parentId: llmobsSpans[0].span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doGenerate',
+          inputMessages: [
+            { content: 'You are a helpful assistant', role: 'system' },
+            { content: 'What is the weather in Tokyo?', role: 'user' },
+            {
+              content: '',
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: toolCallId,
+                name: 'weather',
+                arguments: {
+                  location: 'Tokyo',
+                },
+                type: 'function',
+              }],
+            },
+            {
+              content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+              role: 'tool',
+              tool_id: toolCallId,
+            },
+          ],
+          outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      })
+
+      it('creates a text generation root span for ToolLoopAgent.stream', async () => {
+        const agent = new ai.ToolLoopAgent({
+          model: openai('gpt-4o-mini'),
+          instructions: 'You are a helpful assistant',
+          providerOptions: {
+            openai: {
+              store: false,
+            },
+          },
+          tools: {
+            weather: ai.tool({
+              description: 'Get the weather in a given location',
+              inputSchema: ai.jsonSchema({
+                type: 'object',
+                properties: {
+                  location: { type: 'string', description: 'The location to get the weather for' },
+                },
+              }),
+              execute: async ({ location }) => ({
+                location,
+                temperature: 72,
+              }),
+            }),
+          },
+        })
+
+        const result = await agent.stream({
+          prompt: 'What is the weather in Tokyo?',
+        })
+
+        const textStream = result.textStream
+
+        for await (const part of textStream) {} // eslint-disable-line
+
+        const stepsPromise = result._steps ?? result.stepsPromise
+        const steps = stepsPromise.status.value
+        const toolCallId = steps[0].toolCalls[0].toolCallId
+
+        const { apmSpans, llmobsSpans } = await getEvents(4)
+
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          name: 'streamText',
+          spanKind: 'workflow',
+          inputValue: 'What is the weather in Tokyo?',
+          outputValue: MOCK_STRING,
+          metadata: {
+            maxRetries: MOCK_NUMBER,
+          },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[1], {
+          span: apmSpans[1],
+          parentId: llmobsSpans[0].span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doStream',
+          inputMessages: [
+            { content: 'You are a helpful assistant', role: 'system' },
+            { content: 'What is the weather in Tokyo?', role: 'user' },
+          ],
+          outputMessages: [{
+            role: 'assistant',
+            content: MOCK_STRING,
+            tool_calls: [{
+              tool_id: toolCallId,
+              name: 'weather',
+              arguments: {
+                location: 'Tokyo',
+              },
+              type: 'function',
+            }],
+          }],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[2], {
+          span: apmSpans[2],
+          parentId: llmobsSpans[0].span_id,
+          name: 'weather',
+          spanKind: 'tool',
+          inputValue: JSON.stringify({ location: 'Tokyo' }),
+          outputValue: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+
+        assertLlmObsSpanEvent(llmobsSpans[3], {
+          span: apmSpans[3],
+          parentId: llmobsSpans[0].span_id,
+          spanKind: 'llm',
+          modelName: 'gpt-4o-mini',
+          modelProvider: 'openai',
+          name: 'doStream',
+          inputMessages: [
+            { content: 'You are a helpful assistant', role: 'system' },
+            { content: 'What is the weather in Tokyo?', role: 'user' },
+            {
+              content: '',
+              role: 'assistant',
+              tool_calls: [{
+                tool_id: toolCallId,
+                name: 'weather',
+                arguments: {
+                  location: 'Tokyo',
+                },
+                type: 'function',
+              }],
+            },
+            {
+              content: JSON.stringify({ location: 'Tokyo', temperature: 72 }),
+              role: 'tool',
+              tool_id: toolCallId,
+            },
+          ],
+          outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
+          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+          tags: { ml_app: 'test', integration: 'ai' },
+        })
+      })
+    })
   })
 })
