@@ -1,6 +1,8 @@
 name: All Green
 on:
   pull_request:
+    branches-ignore:
+      - 'mq-working-branch-**'
   push:
     branches:
       - master
