@@ -13,6 +13,7 @@
 class LanggraphTestSetup {
   async setup (module) {
     this.app = null
+    this.module = module
     // Destructure required symbols from the langgraph module
     const { Annotation, StateGraph, START, END } = module
     // Define state annotation with messages array
@@ -75,11 +76,24 @@ class LanggraphTestSetup {
   }
 
   async pregelInvokeError () {
-    // Try to invoke with invalid recursion limit to trigger error
-    await this.app.invoke(
-      { messages: ['test'] },
-      { recursionLimit: -1 } // Invalid negative limit
-    )
+    // Create a separate error graph that throws
+    const { Annotation, StateGraph, START, END } = this.module
+    const StateAnnotation = Annotation.Root({
+      messages: Annotation({
+        default: () => [],
+        reducer: (prev, next) => [...prev, ...next],
+      }),
+    })
+
+    const errorGraph = new StateGraph(StateAnnotation)
+    errorGraph.addNode('error', (state) => {
+      throw new Error('Intentional test error')
+    })
+    errorGraph.addEdge(START, 'error')
+    errorGraph.addEdge('error', END)
+
+    const errorApp = errorGraph.compile()
+    await errorApp.invoke({ messages: ['test'] })
   }
 
   async pregelStream () {
@@ -95,16 +109,22 @@ class LanggraphTestSetup {
   }
 
   async pregelStreamError () {
-    // Try to stream with invalid recursion limit to trigger error
-    const stream = await this.app.stream(
-      { messages: ['test'] },
-      { recursionLimit: -1 } // Invalid negative limit
-    )
+    // Use the happy path graph but manually trigger error via iterator.throw()
+    const input = { messages: ['streaming test'] }
+    const stream = await this.app.stream(input)
 
-    // Consume stream to trigger any deferred errors
-    // eslint-disable-next-line no-unused-vars
-    for await (const _ of stream) {
-      /* pass */
+    // Get the iterator and manually throw an error
+    const iterator = stream[Symbol.asyncIterator]()
+
+    // Consume one chunk first to start the stream
+    await iterator.next()
+
+    // Now manually throw an error using the iterator's throw method
+    // This will trigger the instrumentation's error handling (line 82-91 in internal.js)
+    if (iterator.throw) {
+      await iterator.throw(new Error('Intentional test error')).catch(() => {})
+    } else {
+      throw new Error('Intentional test error')
     }
   }
 }
