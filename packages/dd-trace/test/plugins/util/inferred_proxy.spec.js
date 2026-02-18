@@ -30,7 +30,7 @@ const proxyConfigs = {
     expectedSpanName: 'aws.apigateway',
     expectedService: 'example.com',
     expectedComponent: 'aws-apigateway',
-    expectedUrl: 'example.com/test',
+    expectedUrl: 'https://example.com/test',
     expectedStartTime: '1729780025472999936',
   },
   'azure-apim': {
@@ -45,7 +45,7 @@ const proxyConfigs = {
     expectedSpanName: 'azure.apim',
     expectedService: 'azure-example.com',
     expectedComponent: 'azure-apim',
-    expectedUrl: 'azure-example.com/test',
+    expectedUrl: 'https://azure-example.com/test',
     expectedStartTime: '1729780025472999936',
   },
 }
@@ -130,53 +130,69 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
       await agent.close()
     }
 
-  // API Gateway v1 headers
-  const inferredHeaders = {
-    'x-dd-proxy': 'aws-apigateway',
-    'x-dd-proxy-request-time-ms': '1729780025473',
-    'x-dd-proxy-path': '/test',
-    'x-dd-proxy-httpmethod': 'GET',
-    'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'dev',
-  }
+    // Additional test cases for specific scenarios
+    const additionalTestCases = {
+      'aws-httpapi': {
+        headers: {
+          'x-dd-proxy': 'aws-httpapi',
+          'x-dd-proxy-request-time-ms': '1729780025473',
+          'x-dd-proxy-path': '/test',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'dev',
+        },
+        expectedSpanName: 'aws.httpapi',
+        expectedService: 'example.com',
+        expectedResource: 'GET /test',
+        expectedUrl: 'https://example.com/test',
+        expectedComponent: 'aws-httpapi',
+        expectedStartTime: '1729780025472999936',
+      },
+      'with-route': {
+        headers: {
+          'x-dd-proxy': 'aws-apigateway',
+          'x-dd-proxy-request-time-ms': '1729780025473',
+          'x-dd-proxy-path': '/users/123',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'dev',
+          'x-dd-proxy-resource-path': '/users/{id}',
+        },
+        expectedSpanName: 'aws.apigateway',
+        expectedService: 'example.com',
+        expectedResource: 'GET /users/{id}',
+        expectedUrl: 'https://example.com/users/123',
+        expectedComponent: 'aws-apigateway',
+        expectedRoute: '/users/{id}',
+      },
+      'with-optional-tags': {
+        headers: {
+          'x-dd-proxy': 'aws-apigateway',
+          'x-dd-proxy-request-time-ms': '1729780025473',
+          'x-dd-proxy-path': '/users/123',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'prod',
+          'x-dd-proxy-resource-path': '/users/{id}',
+          'x-dd-proxy-account-id': '123456789012',
+          'x-dd-proxy-api-id': 'abc123def4',
+          'x-dd-proxy-region': 'us-east-1',
+          'x-dd-proxy-user': 'arn:aws:iam::123456789012:user/testuser',
+        },
+        expectedSpanName: 'aws.apigateway',
+        expectedOptionalTags: {
+          account_id: '123456789012',
+          apiid: 'abc123def4',
+          region: 'us-east-1',
+          aws_user: 'arn:aws:iam::123456789012:user/testuser',
+          dd_resource_key: 'arn:aws:apigateway:us-east-1::/restapis/abc123def4',
+        },
+      },
+    }
 
-  // API Gateway v2 headers
-  const inferredHeadersV2 = {
-    'x-dd-proxy': 'aws-httpapi',
-    'x-dd-proxy-request-time-ms': '1729780025473',
-    'x-dd-proxy-path': '/test',
-    'x-dd-proxy-httpmethod': 'GET',
-    'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'dev',
-  }
-
-  const inferredHeadersWithRoute = {
-    'x-dd-proxy': 'aws-apigateway',
-    'x-dd-proxy-request-time-ms': '1729780025473',
-    'x-dd-proxy-path': '/users/123',
-    'x-dd-proxy-httpmethod': 'GET',
-    'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'dev',
-    'x-dd-proxy-resource-path': '/users/{id}',
-  }
-
-  const inferredHeadersWithOptionalTags = {
-    'x-dd-proxy': 'aws-apigateway',
-    'x-dd-proxy-request-time-ms': '1729780025473',
-    'x-dd-proxy-path': '/users/123',
-    'x-dd-proxy-httpmethod': 'GET',
-    'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'prod',
-    'x-dd-proxy-resource-path': '/users/{id}',
-    'x-dd-proxy-account-id': '123456789012',
-    'x-dd-proxy-api-id': 'abc123def4',
-    'x-dd-proxy-region': 'us-east-1',
-    'x-dd-proxy-user': 'arn:aws:iam::123456789012:user/testuser',
-  }
-
-  afterEach(async () => {
-    await cleanupTest()
-  })
+    afterEach(async () => {
+      await cleanupTest()
+    })
 
     describe('without configuration', () => {
       it('should create a parent span and a child span for a 200', async () => {
@@ -228,114 +244,111 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         })
       })
 
-    it('should create a parent span with aws.httpapi for API Gateway v2', async () => {
-      await loadTest({})
+      it('should create a parent span with aws.httpapi for API Gateway v2', async () => {
+        const testCase = additionalTestCases['aws-httpapi']
+        await loadTest({})
 
-      await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeadersV2,
-      })
-
-      await agent.assertSomeTraces(traces => {
-        const spans = traces[0]
-
-        assert.strictEqual(spans.length, 2)
-
-        assert.strictEqual(spans[0].name, 'aws.httpapi')
-        assert.strictEqual(spans[0].service, 'example.com')
-        assert.strictEqual(spans[0].resource, 'GET /test')
-        assert.strictEqual(spans[0].type, 'web')
-        assertObjectContains(spans[0], {
-          meta: {
-            'span.kind': 'server',
-            'http.url': 'https://example.com/test',
-            'http.method': 'GET',
-            'http.status_code': '200',
-            component: 'aws-httpapi',
-            '_dd.integration': 'aws-httpapi',
-          },
-          metrics: {
-            '_dd.inferred_span': 1,
-          },
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
         })
-        assert.strictEqual(spans[0].start.toString(), '1729780025472999936')
 
-        assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
 
-        assertObjectContains(spans[1], {
-          name: 'web.request',
-          service: 'aws-server',
-          type: 'web',
-          resource: 'GET',
-          meta: {
-            component: 'http',
-            'span.kind': 'server',
-            'http.url': `http://127.0.0.1:${port}/`,
-            'http.method': 'GET',
-            'http.status_code': '200',
-          },
+          assert.strictEqual(spans.length, 2)
+
+          assert.strictEqual(spans[0].name, testCase.expectedSpanName)
+          assert.strictEqual(spans[0].service, testCase.expectedService)
+          assert.strictEqual(spans[0].resource, testCase.expectedResource)
+          assert.strictEqual(spans[0].type, 'web')
+          assertObjectContains(spans[0], {
+            meta: {
+              'span.kind': 'server',
+              'http.url': testCase.expectedUrl,
+              'http.method': 'GET',
+              'http.status_code': '200',
+              component: testCase.expectedComponent,
+              '_dd.integration': testCase.expectedComponent,
+            },
+            metrics: {
+              '_dd.inferred_span': 1,
+            },
+          })
+          assert.strictEqual(spans[0].start.toString(), testCase.expectedStartTime)
+
+          assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+
+          assertObjectContains(spans[1], {
+            name: 'web.request',
+            service: 'aws-server',
+            type: 'web',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
         })
       })
-    })
 
       it('should include http.route when x-dd-proxy-resource-path header is present', async () => {
-      await loadTest({})
+        const testCase = additionalTestCases['with-route']
+        await loadTest({})
 
-      await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeadersWithRoute,
-      })
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
 
-      await agent.assertSomeTraces(traces => {
-        const spans = traces[0]
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
 
-        assert.strictEqual(spans.length, 2)
+          assert.strictEqual(spans.length, 2)
 
-        assert.strictEqual(spans[0].name, 'aws.apigateway')
-        assert.strictEqual(spans[0].service, 'example.com')
-        assert.strictEqual(spans[0].resource, 'GET /users/{id}')
-        assert.strictEqual(spans[0].type, 'web')
-        assertObjectContains(spans[0], {
-          meta: {
-            'span.kind': 'server',
-            'http.url': 'https://example.com/users/123',
-            'http.method': 'GET',
-            'http.route': '/users/{id}',
-            'http.status_code': '200',
-            component: 'aws-apigateway',
-          },
-          metrics: {
-            '_dd.inferred_span': 1,
-          },
+          assert.strictEqual(spans[0].name, testCase.expectedSpanName)
+          assert.strictEqual(spans[0].service, testCase.expectedService)
+          assert.strictEqual(spans[0].resource, testCase.expectedResource)
+          assert.strictEqual(spans[0].type, 'web')
+          assertObjectContains(spans[0], {
+            meta: {
+              'span.kind': 'server',
+              'http.url': testCase.expectedUrl,
+              'http.method': 'GET',
+              'http.route': testCase.expectedRoute,
+              'http.status_code': '200',
+              component: testCase.expectedComponent,
+            },
+            metrics: {
+              '_dd.inferred_span': 1,
+            },
+          })
         })
       })
-    })
 
-    it('should include optional tags when corresponding headers are present', async () => {
-      await loadTest({})
+      it('should include optional tags when corresponding headers are present', async () => {
+        const testCase = additionalTestCases['with-optional-tags']
+        await loadTest({})
 
-      await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeadersWithOptionalTags,
-      })
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
 
-      await agent.assertSomeTraces(traces => {
-        const spans = traces[0]
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
 
-        assert.strictEqual(spans.length, 2)
-        assert.strictEqual(spans[0].name, 'aws.apigateway')
+          assert.strictEqual(spans.length, 2)
+          assert.strictEqual(spans[0].name, testCase.expectedSpanName)
 
-        assertObjectContains(spans[0], {
-          meta: {
-            account_id: '123456789012',
-            apiid: 'abc123def4',
-            region: 'us-east-1',
-            aws_user: 'arn:aws:iam::123456789012:user/testuser',
-            dd_resource_key: 'arn:aws:apigateway:us-east-1::/restapis/abc123def4',
-          },
+          assertObjectContains(spans[0], {
+            meta: testCase.expectedOptionalTags,
+          })
         })
       })
-    })
 
-    it('should create a parent span and a child span for an error', async () => {
-      await loadTest({})
+      it('should create a parent span and a child span for an error', async () => {
+        await loadTest({})
 
         await httpClient.get(`http://127.0.0.1:${port}/error`, {
           headers: config.headers,
