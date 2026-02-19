@@ -732,13 +732,13 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Configurations', () => {
-    it('uses default protobuf protocol', () => {
+    it('uses default http/json protocol', () => {
       delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
       delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
 
       const tracer = setupTracer()
       const config = tracer._tracer._config
-      assert.strictEqual(config.otelTracesProtocol, 'http/protobuf')
+      assert.strictEqual(config.otelTracesProtocol, 'http/json')
     })
 
     it('uses port 4317 when gRPC protocol is configured', () => {

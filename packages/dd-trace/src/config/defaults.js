@@ -152,7 +152,7 @@ module.exports = {
   otelTracesEnabled: false,
   otelTracesUrl: undefined, // Will be computed using agent host
   otelTracesHeaders: '',
-  otelTracesProtocol: 'http/protobuf',
+  otelTracesProtocol: 'http/json',
   otelTracesTimeout: 10_000,
   otelMetricsExportTimeout: 7500,
   otelMetricsExportInterval: 10_000,
