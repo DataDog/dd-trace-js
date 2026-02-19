@@ -37,15 +37,13 @@ describe('Plugin', () => {
             const addrAOut = 'amq.direct'
             const addrBOut = 'amq.match'
 
-            let senderAOut, senderBOut
+            let senderAOut
             let doneCount = 0
 
             const checkAssertions = () => {
               if (++doneCount < 2) return
 
               try {
-                // setCheckpoint(edgeTags, span, parentCtx, payloadSize) → returns new DSM context
-                // consumer uses topic:${address}, producer uses exchange:${address}
                 const calls = setCheckpointSpy.getCalls()
                 const checkpoint = (dir, tag) => calls.find(c =>
                   c.args[0].includes(`direction:${dir}`) && c.args[0].includes(tag)
@@ -87,7 +85,7 @@ describe('Plugin', () => {
             })
 
             senderAOut = connection.open_sender(addrAOut)
-            senderBOut = connection.open_sender(addrBOut)
+            const senderBOut = connection.open_sender(addrBOut)
             connection.open_receiver(addrAIn)
             connection.open_receiver(addrBIn)
 
