@@ -135,7 +135,7 @@
   },
   "optionalDependencies": {
     "@datadog/libdatadog": "0.7.0",
-    "@datadog/native-appsec": "10.3.0",
+    "@datadog/native-appsec": "11.0.1",
     "@datadog/native-iast-taint-tracking": "4.1.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/openfeature-node-server": "^0.3.3",
@@ -171,6 +171,7 @@
     "glob": "^10.4.5",
     "globals": "^17.2.0",
     "graphql": "*",
+    "husky": "^9.1.7",
     "jszip": "^3.10.1",
     "mocha": "^11.6.0",
     "mocha-junit-reporter": "^2.2.1",
@@ -190,7 +191,6 @@
     "typescript": "^5.9.2",
     "workerpool": "^10.0.0",
     "yaml": "^2.8.0",
-    "husky": "^9.1.7",
     "yarn-deduplicate": "^6.0.2"
   }
 }
