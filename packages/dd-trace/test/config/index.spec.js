@@ -297,6 +297,23 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, 0.1)
   })
 
+  it('should enable OTLP traces export when OTEL_TRACES_EXPORTER is set to otlp', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesEnabled, true)
+  })
+
+  it('should not enable OTLP traces export when OTEL_TRACES_EXPORTER is set to none', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'none'
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesEnabled, false)
+  })
+
+  it('should not enable OTLP traces export when OTEL_TRACES_EXPORTER is not set', () => {
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesEnabled, false)
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 

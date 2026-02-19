@@ -20,7 +20,11 @@ describe('OpenTelemetry Traces', () => {
   let originalEnv
 
   function setupTracer (enabled = true) {
-    process.env.DD_TRACES_OTEL_ENABLED = enabled ? 'true' : 'false'
+    if (enabled) {
+      process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    } else {
+      delete process.env.OTEL_TRACES_EXPORTER
+    }
 
     const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
       './config': getConfigFresh,
@@ -467,7 +471,7 @@ describe('OpenTelemetry Traces', () => {
 
       // The composite exporter wraps the original, so export should not throw
       const span = createMockSpan()
-      assert.doesNotThrow(() => exporter.export([span]))
+      exporter.export([span])
     })
   })
 
@@ -541,4 +545,3 @@ describe('OpenTelemetry Traces', () => {
     })
   })
 })
-

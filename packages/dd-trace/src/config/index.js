@@ -318,7 +318,6 @@ class Config {
       DD_LOGS_INJECTION,
       DD_LOGS_OTEL_ENABLED,
       DD_METRICS_OTEL_ENABLED,
-      DD_TRACES_OTEL_ENABLED,
       DD_LANGCHAIN_SPAN_CHAR_LIMIT,
       DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_LLMOBS_AGENTLESS_ENABLED,
@@ -424,6 +423,7 @@ class Config {
       OTEL_EXPORTER_OTLP_TRACES_HEADERS,
       OTEL_EXPORTER_OTLP_TRACES_PROTOCOL,
       OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
+      OTEL_TRACES_EXPORTER,
       OTEL_METRIC_EXPORT_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
@@ -498,7 +498,9 @@ class Config {
         setString(target, 'otelMetricsTemporalityPreference', temporalityPref)
       }
     }
-    setBoolean(target, 'otelTracesEnabled', DD_TRACES_OTEL_ENABLED)
+    if (OTEL_TRACES_EXPORTER) {
+      setBoolean(target, 'otelTracesEnabled', OTEL_TRACES_EXPORTER.toLowerCase() === 'otlp')
+    }
     // Set OpenTelemetry traces configuration with specific _TRACES_ vars
     // taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
@@ -1352,7 +1354,10 @@ function isInvalidOtelEnvironmentVariable (envVar, value) {
       return Number.isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false'
-    case 'OTEL_TRACES_EXPORTER':
+    case 'OTEL_TRACES_EXPORTER': {
+      const lower = value.toLowerCase()
+      return lower !== 'none' && lower !== 'otlp'
+    }
     case 'OTEL_METRICS_EXPORTER':
     case 'OTEL_LOGS_EXPORTER':
       return value.toLowerCase() !== 'none'
