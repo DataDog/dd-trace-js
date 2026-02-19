@@ -24,6 +24,7 @@ const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash
     edgeTags = ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
   }
 
+  // kafka_cluster_id is only available in kafkajs >=1.13
   if (clusterIdAvailable) {
     edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
   }
@@ -223,6 +224,7 @@ describe('Plugin', () => {
                 type: 'kafka_commit',
                 consumer_group: 'test-group',
               }
+              // kafka_cluster_id is only available in kafkajs >=1.13
               if (clusterIdAvailable) {
                 expectedBacklog.kafka_cluster_id = testKafkaClusterId
               }
@@ -235,6 +237,7 @@ describe('Plugin', () => {
             sinon.assert.calledOnce(setOffsetSpy)
             const runArg = setOffsetSpy.lastCall.args[0]
             assert.strictEqual(runArg.topic, testTopic)
+            // kafka_cluster_id is only available in kafkajs >=1.13
             if (clusterIdAvailable) {
               assert.strictEqual(runArg.kafka_cluster_id, testKafkaClusterId)
             }
