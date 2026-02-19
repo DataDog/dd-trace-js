@@ -1,6 +1,7 @@
 'use strict'
 
 module.exports = {
+  allowUncaught: true,
   color: true,
   exit: true,
   timeout: 5000,
