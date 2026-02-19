@@ -225,7 +225,7 @@ module.exports = class FakeAgent extends EventEmitter {
    *     the function `fn` has finished running. If `fn` throws an error, the promise will be rejected once `timeout`
    *     is reached.
    */
-  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1) {
+  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1, resolveAtFirstSuccess = false) {
     if (typeof fn !== 'function') {
       expectedMessageCount = timeout
       timeout = requestType
@@ -259,7 +259,7 @@ module.exports = class FakeAgent extends EventEmitter {
       msgCount += 1
       try {
         fn(msg)
-        if (msgCount === expectedMessageCount) {
+        if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
           resultResolve()
         }
       } catch (e) {

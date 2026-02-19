@@ -353,6 +353,20 @@ function wrapRun (pl, isLatestVersion, version) {
           isEfdRetry = numRetries > 0
         }
 
+        // Check if all EFD retries failed
+        if (isEfdRetry && (isNew || isModified)) {
+          const statuses = lastStatusByPickleId.get(this.pickle.id)
+          if (statuses.length === earlyFlakeDetectionNumRetries + 1) {
+            const { fail } = statuses.reduce((acc, status) => {
+              acc[status]++
+              return acc
+            }, { pass: 0, fail: 0 })
+            if (fail === earlyFlakeDetectionNumRetries + 1) {
+              hasFailedAllRetries = true
+            }
+          }
+        }
+
         const attemptCtx = numAttemptToCtx.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)

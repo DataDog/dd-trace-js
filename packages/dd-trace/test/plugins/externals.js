@@ -578,6 +578,16 @@ module.exports = {
       versions: ['^5.0.8'],
     },
   ],
+  stripe: [
+    {
+      name: 'express',
+      versions: ['^4'],
+    },
+    {
+      name: 'body-parser',
+      versions: ['1.20.1'],
+    },
+  ],
   ws: [
     {
       name: 'ws',

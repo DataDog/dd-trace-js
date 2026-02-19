@@ -16,6 +16,12 @@ const session = require('../../../debugger/devtools_client/session')
 const { getGeneratedPosition } = require('../../../debugger/devtools_client/source-maps')
 // TODO: move debugger/devtools_client/snapshot to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
+const {
+  DEFAULT_MAX_REFERENCE_DEPTH,
+  DEFAULT_MAX_COLLECTION_SIZE,
+  DEFAULT_MAX_FIELD_COUNT,
+  DEFAULT_MAX_LENGTH,
+} = require('../../../debugger/devtools_client/snapshot/constants')
 // TODO: move debugger/devtools_client/state to common place
 const {
   findScriptFromPartialPath,
@@ -29,6 +35,13 @@ let sessionStarted = false
 const breakpointIdToProbe = new Map()
 const probeIdToBreakpointId = new Map()
 
+const limits = {
+  maxReferenceDepth: DEFAULT_MAX_REFERENCE_DEPTH,
+  maxCollectionSize: DEFAULT_MAX_COLLECTION_SIZE,
+  maxFieldCount: DEFAULT_MAX_FIELD_COUNT,
+  maxLength: DEFAULT_MAX_LENGTH,
+}
+
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
   if (!probe) {
@@ -38,7 +51,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
 
   const stack = await getStackFromCallFrames(callFrames)
 
-  const { processLocalState } = await getLocalStateForCallFrame(callFrames[0])
+  const { processLocalState } = await getLocalStateForCallFrame(callFrames[0], limits)
 
   await session.post('Debugger.resume')
 
