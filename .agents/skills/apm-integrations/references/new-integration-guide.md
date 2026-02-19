@@ -50,7 +50,7 @@ for (const hook of getHooks('<npm-package>')) {
 
 **3. hooks.js entry** — (see Register in hooks.js below)
 
-See `orchestrion.md` for the full config schema, ESQuery support, and channel naming.
+See [Orchestrion Reference](orchestrion.md) for the full config schema, ESQuery support, and channel naming.
 
 ### Shimmer (Only When Orchestrion Cannot Work)
 
@@ -194,7 +194,7 @@ class MyPlugin extends DatabasePlugin {
 module.exports = MyPlugin
 ```
 
-For `CompositePlugin` (multiple operations like produce + consume), create separate sub-plugin files in `src/`. See `plugin-patterns.md` for the composite pattern and detailed base class examples.
+For `CompositePlugin` (multiple operations like produce + consume), create separate sub-plugin files in `src/`. See [Plugin Patterns](plugin-patterns.md) for the composite pattern and detailed base class examples.
 
 ## Step 3: Register the Plugin
 
@@ -272,7 +272,7 @@ Check the existing workflow for the current step format.
 
 ## Step 8: Write Tests
 
-See `testing.md` for complete templates.
+See [Testing](testing.md) for complete templates.
 
 **Unit tests** — `packages/datadog-plugin-<name>/test/index.spec.js`
 **ESM integration tests** — `packages/datadog-plugin-<name>/test/integration-test/`

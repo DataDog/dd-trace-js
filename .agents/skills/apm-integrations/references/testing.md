@@ -7,8 +7,10 @@ Create `packages/datadog-plugin-<name>/test/index.spec.js`:
 ```javascript
 'use strict'
 
+const assert = require('node:assert/strict')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { ANY_STRING } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   describe('<name>', () => {
@@ -73,7 +75,7 @@ describe('Plugin', () => {
             'db.type': '<name>',
             'error.message': '<some error message>',
             'error.type': 'TypeError',
-            'error.stackTrace': ANY_STRING // placeholder for asserting that the attribute exists, but may be assertable on value as value can change between test runs
+            'error.stack': ANY_STRING
           },
         })
 

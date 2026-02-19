@@ -193,7 +193,7 @@ For integrations wrapping multiple methods, create a separate plugin class per m
 
 ### Multiple Build Outputs
 **Symptom**: Works in one context, not another
-**Fix**: Check if the package has separate CJS/ESM builds with different file paths; orchestrion typically handles this automatically
+**Fix**: Check if the package has separate CJS/ESM builds with different file paths; each needs its own entry in the instrumentations array
 
 ## Reference Implementations
 

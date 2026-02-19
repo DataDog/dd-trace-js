@@ -41,7 +41,7 @@ Both layers are always needed for a new integration.
 
 **Orchestrion is the required default for all new instrumentations.** It is an AST rewriter that automatically wraps methods via JSON configuration, with correct CJS and ESM handling built in. Orchestrion handles ESM code far more reliably than traditional shimmer-based wrapping, which struggles with ESM's static module structure.
 
-Config lives in `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`. See `references/orchestrion.md` for the full config format and examples.
+Config lives in `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`. See [Orchestrion Reference](references/orchestrion.md) for the full config format and examples.
 
 ### When Shimmer Is Necessary Instead
 
@@ -114,7 +114,7 @@ Primary plugin methods. Base classes handle most lifecycle; often only `bindStar
 | Message queue | `datadog-plugin-kafkajs` | `src/kafkajs.js` | `Producer`/`ConsumerPlugin` |
 | Orchestrion | `datadog-plugin-langchain` | `rewriter/instrumentations/langchain.js` | `TracingPlugin` |
 
-For the complete list by base class, see `references/reference-plugins.md`.
+For the complete list by base class, see [Reference Plugins](references/reference-plugins.md).
 
 ## Debugging
 
@@ -126,8 +126,8 @@ For the complete list by base class, see `references/reference-plugins.md`.
 
 ## Reference Files
 
-- **`references/new-integration-guide.md`** — Step-by-step guide and checklist for creating a new integration end-to-end
-- **`references/orchestrion.md`** — JSON config format, channel naming, function kinds, plugin subscription
-- **`references/plugin-patterns.md`** — `startSpan()` API, `ctx` object details, `CompositePlugin`, channel subscriptions, code style
-- **`references/testing.md`** — Unit test and ESM integration test templates
-- **`references/reference-plugins.md`** — All plugins organized by base class
+- **[New Integration Guide](references/new-integration-guide.md)** — Step-by-step guide and checklist for creating a new integration end-to-end
+- **[Orchestrion Reference](references/orchestrion.md)** — JSON config format, channel naming, function kinds, plugin subscription
+- **[Plugin Patterns](references/plugin-patterns.md)** — `startSpan()` API, `ctx` object details, `CompositePlugin`, channel subscriptions, code style
+- **[Testing](references/testing.md)** — Unit test and ESM integration test templates
+- **[Reference Plugins](references/reference-plugins.md)** — All plugins organized by base class
