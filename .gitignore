@@ -139,6 +139,7 @@ __queuestorage__/AzuriteConfig
 
 # ignore apm-instrumentation-toolkit analysis results dirs
 .analysis/
+
 # ignore claude settings
 .claude/*
 !.claude/skills/
