@@ -195,7 +195,6 @@ describe('Plugin', () => {
             await producer.connect()
 
             // Synchronization: both consumers must enter eachMessage before either produces.
-            // This forces interleaving: A reads, B reads, then A produces, B produces.
             let resolveAEntered, resolveBEntered, resolveAllDone
             const aEntered = new Promise(resolve => { resolveAEntered = resolve })
             const bEntered = new Promise(resolve => { resolveBEntered = resolve })
@@ -226,13 +225,11 @@ describe('Plugin', () => {
               },
             })
 
-            // Seed messages to trigger both consume flows
             await sendMessages(kafka, topicAIn, [{ key: 'a', value: 'msg-a' }])
             await sendMessages(kafka, topicBIn, [{ key: 'b', value: 'msg-b' }])
 
             await allDone
 
-            // setCheckpoint(edgeTags, span, parentCtx, payloadSize) → returns new DSM context
             const calls = setCheckpointSpy.getCalls()
             const checkpoint = (dir, topic) => calls.find(c =>
               c.args[0].includes(`direction:${dir}`) && c.args[0].includes(`topic:${topic}`)
@@ -243,7 +240,6 @@ describe('Plugin', () => {
             const produceA = checkpoint('out', topicAOut)
             const produceB = checkpoint('out', topicBOut)
 
-            // Each produce's parent context (args[2]) must chain from its own consume
             assert.ok(produceA?.args[2], 'Process A produce should have a parent DSM context')
             assert.ok(produceB?.args[2], 'Process B produce should have a parent DSM context')
             assert.deepStrictEqual(produceA.args[2].hash, consumeA.returnValue.hash)
