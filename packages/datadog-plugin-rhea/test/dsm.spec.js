@@ -37,7 +37,6 @@ describe('Plugin', () => {
             const addrAOut = 'amq.direct'
             const addrBOut = 'amq.match'
 
-            let senderAOut
             let doneCount = 0
 
             const checkAssertions = () => {
@@ -84,7 +83,7 @@ describe('Plugin', () => {
               port: 5673,
             })
 
-            senderAOut = connection.open_sender(addrAOut)
+            const senderAOut = connection.open_sender(addrAOut)
             const senderBOut = connection.open_sender(addrBOut)
             connection.open_receiver(addrAIn)
             connection.open_receiver(addrBIn)
