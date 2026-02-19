@@ -9,13 +9,12 @@ on:
   workflow_dispatch:
     inputs:
       latest-version:
-        description: 'Node version to run'
+        description: "Node version to run"
         required: false
         type: string
 
-
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -29,27 +28,27 @@ jobs:
     strategy:
       matrix:
         node-version: [eol]
-        range: ['>=4.0.0 <5.2.0']
+        range: [">=4.0.0 <5.2.0"]
         aerospike-image: [ce-5.7.0.15]
         test-image: [ubuntu-22.04]
         include:
           - node-version: 18
-            range: '>=5.2.0 <6.3.0'
+            range: ">=5.2.0 <6.3.0"
             range_clean: gte.5.2.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 20
-            range: '>=5.5.0'
+            range: ">=5.5.0"
             range_clean: gte.5.5.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 22
-            range: '>=5.12.1'
+            range: ">=5.12.1"
             range_clean: gte.5.12.1
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
           - node-version: 22
-            range: '>=6.0.0'
+            range: ">=6.0.0"
             range_clean: gte.6.0.0
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
@@ -58,7 +57,7 @@ jobs:
       aerospike:
         image: aerospike:${{ matrix.aerospike-image }}
         ports:
-          - '127.0.0.1:3000-3002:3000-3002'
+          - "127.0.0.1:3000-3002:3000-3002"
     env:
       PLUGINS: aerospike
       SERVICES: aerospike
@@ -81,7 +80,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -154,6 +153,16 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  body-parser:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: body-parser
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/upstream
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
   bullmq:
     runs-on: ubuntu-latest
     services:
@@ -214,7 +223,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-child-process
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -235,10 +244,10 @@ jobs:
       matrix:
         # using node versions matrix since this plugin testing fails due to install differences between node versions
         node-version: [18, 20, 22]
-        range: ['>=1.0.0']
+        range: [">=1.0.0"]
         include:
           - node-version: 24
-            range: '>=1.4.0'
+            range: ">=1.4.0"
             range_clean: gte.1.4.0
     runs-on: ubuntu-latest
     services:
@@ -246,7 +255,7 @@ jobs:
         image: apache/kafka-native:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
-          KAFKA_NODE_ID: '1'
+          KAFKA_NODE_ID: "1"
           KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
           KAFKA_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
           KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -254,8 +263,8 @@ jobs:
           KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
           KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
           KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
-          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
         ports:
           - 9092:9092
           - 9093:9093
@@ -283,7 +292,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -316,11 +325,11 @@ jobs:
         range:
           # - '^2.6.12' skipping due to bug with couchbase integration that is blocking CI.
           # TODO: diagnose and fix failures. Link to bug issue: https://github.com/DataDog/dd-trace-js/issues/6400
-          - '^3.0.7'
-          - '>=4.0.0 <4.2.0'
+          - "^3.0.7"
+          - ">=4.0.0 <4.2.0"
         include:
           - node-version: 18
-            range: '>=4.2.0'
+            range: ">=4.2.0"
     runs-on: ubuntu-latest
     services:
       couchbase:
@@ -332,7 +341,7 @@ jobs:
       PLUGINS: couchbase
       SERVICES: couchbase
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
-      DD_INJECT_FORCE: 'true'
+      DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
@@ -345,7 +354,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-couchbase-${{ matrix.node-version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -384,7 +393,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-dns
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -415,7 +424,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-elasticsearch
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -545,7 +554,7 @@ jobs:
   http:
     strategy:
       matrix:
-        node-version: [oldest, maintenance, 'latest']
+        node-version: [oldest, maintenance, latest]
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
@@ -564,7 +573,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http-${{ matrix.node-version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -593,7 +602,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http2
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -602,14 +611,14 @@ jobs:
   kafkajs:
     strategy:
       matrix:
-        node-version: ['oldest', 'latest']
+        node-version: [oldest, latest]
     runs-on: ubuntu-latest
     services:
       kafka:
         image: apache/kafka-native:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
-          KAFKA_NODE_ID: '1'
+          KAFKA_NODE_ID: "1"
           KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
           KAFKA_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
           KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
@@ -617,8 +626,8 @@ jobs:
           KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
           KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
           KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: '1'
-          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0'
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+          KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
         ports:
           - 9092:9092
           - 9093:9093
@@ -645,7 +654,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-kafkajs-${{ matrix.node-version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -672,9 +681,19 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ldapjs:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: ldapjs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  light-my-request:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: "light-my-request"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
@@ -687,9 +706,9 @@ jobs:
       limitd:
         image: rochdev/limitd
         env:
-          BUCKET_1_NAME: 'user'
-          BUCKET_1_SIZE: '10'
-          BUCKET_1_PER_SECOND: '5'
+          BUCKET_1_NAME: "user"
+          BUCKET_1_SIZE: "10"
+          BUCKET_1_PER_SECOND: "5"
         ports:
           - 9231:9231
     env:
@@ -702,14 +721,14 @@ jobs:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
   lodash:
-    runs-on: 'ubuntu-latest'
+    runs-on: ubuntu-latest
     env:
       PLUGINS: lodash
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - uses: ./.github/actions/plugins/test
-      with:
-        dd_api_key: ${{ secrets.DD_API_KEY }}
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mariadb:
     runs-on: ubuntu-latest
@@ -717,8 +736,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: 'db'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
         ports:
           - 3306:3306
     env:
@@ -832,8 +851,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: 'db'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
         ports:
           - 3306:3306
     env:
@@ -851,8 +870,8 @@ jobs:
       mysql:
         image: mariadb:10.4
         env:
-          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
-          MYSQL_DATABASE: 'db'
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
         ports:
           - 3306:3306
     env:
@@ -887,7 +906,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-net
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -903,30 +922,30 @@ jobs:
           - 18
           - latest
         range:
-          - '>=10.2.0 <11'
-          - '>=11.0.0 <13'
-          - '11.1.4'
-          - '>=13.0.0 <14'
-          - '13.2.0'
-          - '>=14.0.0 <=14.2.6'
-          - '>=14.2.7 <15'
-          - '>=15.0.0 <15.4.1'
+          - ">=10.2.0 <11"
+          - ">=11.0.0 <13"
+          - "11.1.4"
+          - ">=13.0.0 <14"
+          - "13.2.0"
+          - ">=14.0.0 <=14.2.6"
+          - ">=14.2.7 <15"
+          - ">=15.0.0 <15.4.1"
         include:
-          - range: '>=10.2.0 <11'
+          - range: ">=10.2.0 <11"
             range_clean: gte.10.2.0.and.lt.11
-          - range: '>=11.0.0 <13'
+          - range: ">=11.0.0 <13"
             range_clean: gte.11.0.0.and.lt.13
-          - range: '11.1.4'
+          - range: "11.1.4"
             range_clean: 11.1.4
-          - range: '>=13.0.0 <14'
+          - range: ">=13.0.0 <14"
             range_clean: gte.13.0.0.and.lt.14
-          - range: '13.2.0'
+          - range: "13.2.0"
             range_clean: 13.2.0
-          - range: '>=14.0.0 <=14.2.6'
+          - range: ">=14.0.0 <=14.2.6"
             range_clean: gte.14.0.0.and.lte.14.2.6
-          - range: '>=14.2.7 <15'
+          - range: ">=14.2.7 <15"
             range_clean: gte.14.2.7.and.lt.15
-          - range: '>=15.0.0 <15.4.1'
+          - range: ">=15.0.0 <15.4.1"
             range_clean: gte.15.0.0
     runs-on: ubuntu-latest
     env:
@@ -945,7 +964,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-next-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -967,7 +986,7 @@ jobs:
       opensearch:
         image: opensearchproject/opensearch:2.8.0
         env:
-          plugins.security.disabled: 'true'
+          plugins.security.disabled: "true"
           discovery.type: single-node
         ports:
           - 9201:9200
@@ -1002,7 +1021,7 @@ jobs:
     env:
       PLUGINS: oracledb
       SERVICES: oracledb
-      DD_INJECT_FORCE: 'true'
+      DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
@@ -1024,7 +1043,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-oracledb
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -1051,11 +1070,21 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-pino
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
           service: dd-trace-js-tests
+
+  passport-http:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: passport-http
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   postgres:
     runs-on: ubuntu-latest
@@ -1067,7 +1096,7 @@ jobs:
         ports:
           - 5432:5432
     env:
-      PG_TEST_NATIVE: 'true'
+      PG_TEST_NATIVE: "true"
       PLUGINS: pg
       SERVICES: postgres
     steps:
@@ -1081,10 +1110,10 @@ jobs:
       matrix:
         include:
           - node-version: 18
-            range: '>=6.1.0 <7.0.0'
+            range: ">=6.1.0 <7.0.0"
             range_clean: gte.6.16.0.and.lt.7.0.0
-          - node-version: 'latest'
-            range: ''
+          - node-version: "latest"
+            range: ""
             range_clean: all
     runs-on: ubuntu-latest
     services:
@@ -1094,8 +1123,28 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        env:
+          ACCEPT_EULA: "Y"
+          SA_PASSWORD: DD_HUNTER2
+          MSSQL_PID: Express
+        ports:
+          - 1433:1433
+      mongodb:
+        image: prismagraphql/mongo-single-replica:4.4.3-bionic
+        ports:
+          - 27017:27017
+      mysql:
+        image: mariadb:10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
+        ports:
+          - 3306:3306
     env:
       PLUGINS: prisma
+      TEST_MSSQL_DATABASE_URL: "sqlserver://localhost:1433;database=master;user=sa;password=DD_HUNTER2;encrypt=true;trustServerCertificate=true"
       SERVICES: prisma
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
@@ -1114,7 +1163,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -1271,7 +1320,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-sharedb
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -1283,7 +1332,7 @@ jobs:
       mssql:
         image: mcr.microsoft.com/mssql/server:2019-latest
         env:
-          ACCEPT_EULA: 'Y'
+          ACCEPT_EULA: "Y"
           SA_PASSWORD: DD_HUNTER2
           MSSQL_PID: Express
         ports:
@@ -1305,7 +1354,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-tedious
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}

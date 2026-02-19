@@ -495,20 +495,9 @@ function wrapTinyPoolRun (TinyPool) {
 addHook({
   name: 'tinypool',
   // version from tinypool@0.8 was used in vitest@1.6.0
-  versions: ['>=0.8.0 <1.0.0'],
-  file: 'dist/esm/index.js',
+  versions: ['>=0.8.0'],
 }, (TinyPool) => {
   wrapTinyPoolRun(TinyPool)
-  return TinyPool
-})
-
-addHook({
-  name: 'tinypool',
-  versions: ['>=1.0.0'],
-  file: 'dist/index.js',
-}, (TinyPool) => {
-  wrapTinyPoolRun(TinyPool)
-
   return TinyPool
 })
 
@@ -987,7 +976,6 @@ addHook({
 addHook({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
-  file: 'dist/index.js',
 }, (vitestPackage, frameworkVersion) => {
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
@@ -1044,6 +1032,17 @@ addHook({
               attemptToFixFailed = true
             }
             if (statuses.every(status => status === 'fail')) {
+              hasFailedAllRetries = true
+            }
+          }
+
+          // Check if all EFD retries failed
+          const providedContext = getProvidedContext()
+          if (providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))) {
+            const statuses = taskToStatuses.get(task)
+            // statuses only includes repetitions (not the initial run), so we check against numRepeats (not +1)
+            if (statuses && statuses.length === providedContext.numRepeats &&
+              statuses.every(status => status === 'fail')) {
               hasFailedAllRetries = true
             }
           }

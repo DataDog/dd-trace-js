@@ -295,7 +295,18 @@ interface Plugins {
 }
 
 declare namespace tracer {
-  export type SpanOptions = opentracing.SpanOptions;
+  export type SpanOptions = Omit<opentracing.SpanOptions, 'childOf'> & {
+  /**
+   * Set childOf to 'null' to create a root span without a parent, even when a parent span
+   * exists in the current async context. If 'undefined' the parent will be inferred from the
+   * existing async context.
+   */
+    childOf?: opentracing.Span | opentracing.SpanContext | null;
+    /**
+     * Optional name of the integration that crated this span.
+     */
+    integrationName?: string;
+  };
   export { Tracer };
 
   export interface TraceOptions extends Analyzable {
@@ -748,6 +759,27 @@ declare namespace tracer {
      * @default 'disabled'
      */
     dbmPropagationMode?: 'disabled' | 'service' | 'full'
+
+    /**
+     * Whether to enable Data Streams Monitoring.
+     * Can also be enabled via the DD_DATA_STREAMS_ENABLED environment variable.
+     * When not provided, the value of DD_DATA_STREAMS_ENABLED is used.
+     * @default false
+     */
+    dsmEnabled?: boolean
+
+    /**
+     * Configuration for Database Monitoring (DBM).
+     */
+    dbm?: {
+      /**
+       * Controls whether to inject the SQL base hash (propagation hash) in DBM SQL comments.
+       * This option requires DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true to take effect.
+       * The propagation hash enables correlation between traces and database operations.
+       * @default false
+       */
+      injectSqlBaseHash?: boolean
+    }
 
     /**
      * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
@@ -1575,6 +1607,16 @@ declare namespace tracer {
       blacklist?: string | RegExp | ((urlOrPath: string) => boolean) | (string | RegExp | ((urlOrPath: string) => boolean))[];
 
       /**
+       * Custom filter function used to decide whether a URL/path is allowed.
+       * When provided, this takes precedence over allowlist/blocklist configuration.
+       * If not provided, allowlist/blocklist logic will be used instead.
+       *
+       * @param urlOrPath - The URL or path to filter
+       * @returns true to instrument the request, false to skip it
+       */
+      filter?: (urlOrPath: string) => boolean;
+
+      /**
        * An array of headers to include in the span metadata.
        *
        * @default []
@@ -1626,6 +1668,21 @@ declare namespace tracer {
        * @default true
        */
       middleware?: boolean;
+
+      /**
+       * Whether (or how) to obfuscate querystring values in `http.url`.
+       *
+       * - `true`: obfuscate all values
+       * - `false`: disable obfuscation
+       * - `string`: regex string used to obfuscate matching values (empty string disables)
+       * - `RegExp`: regex used to obfuscate matching values
+       */
+      queryStringObfuscation?: boolean | string | RegExp;
+
+      /**
+       * Whether to enable resource renaming when the framework route is unavailable.
+       */
+      resourceRenamingEnabled?: boolean;
     }
 
     /** @hidden */
@@ -1691,6 +1748,20 @@ declare namespace tracer {
        * @default code => code < 500
        */
       validateStatus?: (code: number) => boolean;
+      /**
+       * Whether (or how) to obfuscate querystring values in `http.url`.
+       *
+       * - `true`: obfuscate all values
+       * - `false`: disable obfuscation
+       * - `string`: regex string used to obfuscate matching values (empty string disables)
+       * - `RegExp`: regex used to obfuscate matching values
+       */
+      queryStringObfuscation?: boolean | string | RegExp;
+
+      /**
+       * Whether to enable resource renaming when the framework route is unavailable.
+       */
+      resourceRenamingEnabled?: boolean;
     }
 
     /** @hidden */
@@ -1827,7 +1898,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * @azure/functions module.
     */
-    interface azure_functions extends Instrumentation {}
+    interface azure_functions extends Instrumentation {
+      /**
+       * Whether to enable resource renaming when the framework route is unavailable.
+       */
+      resourceRenamingEnabled?: boolean;
+    }
 
     /**
      * This plugin automatically instruments the
@@ -2179,6 +2255,16 @@ declare namespace tracer {
       blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
 
       /**
+       * Custom filter function used to decide whether a Redis command should be instrumented.
+       * When provided, this takes precedence over allowlist/blocklist configuration.
+       * If not provided, allowlist/blocklist logic will be used instead.
+       *
+       * @param command - The Redis command name to filter
+       * @returns true to instrument the command, false to skip it
+       */
+      filter?: (command: string) => boolean;
+
+      /**
        * Whether to use a different service name for each Redis instance based
        * on the configured connection name of the client.
        *
@@ -2224,6 +2310,16 @@ declare namespace tracer {
        * @hidden
        */
       blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Custom filter function used to decide whether a Valkey command should be instrumented.
+       * When provided, this takes precedence over allowlist/blocklist configuration.
+       * If not provided, allowlist/blocklist logic will be used instead.
+       *
+       * @param command - The Valkey command name to filter
+       * @returns true to instrument the command, false to skip it
+       */
+      filter?: (command: string) => boolean;
 
       /**
        * Whether to use a different service name for each Redis instance based
@@ -2498,6 +2594,16 @@ declare namespace tracer {
        * @hidden
        */
       blacklist?: string | RegExp | ((command: string) => boolean) | (string | RegExp | ((command: string) => boolean))[];
+
+      /**
+       * Custom filter function used to decide whether a Redis command should be instrumented.
+       * When provided, this takes precedence over allowlist/blocklist configuration.
+       * If not provided, allowlist/blocklist logic will be used instead.
+       *
+       * @param command - The Redis command name to filter
+       * @returns true to instrument the command, false to skip it
+       */
+      filter?: (command: string) => boolean;
     }
 
     /**
@@ -2566,28 +2672,7 @@ declare namespace tracer {
     /**
      * This plugin implements shared web request instrumentation helpers.
      */
-    interface web extends HttpServer {
-      /**
-       * Custom filter function used to decide whether a URL/path should be instrumented.
-       * Takes precedence over allowlist/blocklist.
-       */
-      filter?: (urlOrPath: string) => boolean;
-
-      /**
-       * Whether (or how) to obfuscate querystring values in `http.url`.
-       *
-       * - `true`: obfuscate all values
-       * - `false`: disable obfuscation
-       * - `string`: regex string used to obfuscate matching values (empty string disables)
-       * - `RegExp`: regex used to obfuscate matching values
-       */
-      queryStringObfuscation?: boolean | string | RegExp;
-
-      /**
-       * Whether to enable resource renaming when the framework route is unavailable.
-       */
-      resourceRenamingEnabled?: boolean;
-    }
+    interface web extends HttpServer {}
 
     /**
      * This plugin patches the [winston](https://github.com/winstonjs/winston)
@@ -3171,13 +3256,13 @@ declare namespace tracer {
       /**
        * The type of evaluation metric, one of 'categorical', 'score', or 'boolean'
        */
-      metricType: 'categorical' | 'score' | 'boolean',
+      metricType: 'categorical' | 'score' | 'boolean' | 'json',
 
       /**
        * The value of the evaluation metric.
-       * Must be string for 'categorical' metrics, number for 'score' metrics, and boolean for 'boolean' metrics.
+       * Must be string for 'categorical' metrics, number for 'score' metrics, boolean for 'boolean' metrics and a JSON object for 'json' metrics.
        */
-      value: string | number | boolean,
+      value: string | number | boolean | { [key: string]: any },
 
       /**
        * An object of string key-value pairs to tag the evaluation metric with.
@@ -3193,6 +3278,21 @@ declare namespace tracer {
        * The timestamp in milliseconds when the evaluation metric result was generated.
        */
       timestampMs?: number
+
+      /**
+       * Reasoning for the evaluation result.
+       */
+      reasoning?: string,
+
+      /**
+       * Whether the evaluation passed or failed. Valid values are pass and fail.
+       */
+      assessment?: 'pass' | 'fail',
+
+      /**
+       * Arbitrary JSON data associated with the evaluation.
+       */
+      metadata?: { [key: string]: any }
     }
 
     interface Document {

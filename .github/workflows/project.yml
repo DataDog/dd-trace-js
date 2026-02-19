@@ -14,19 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github
       - uses: ./.github/actions/node/latest
-      # NOTE: Ok this next bit seems unnecessary, right? The problem is that
-      # this repo is currently incompatible with npm, at least with the
-      # devDependencies. While this is intended to be corrected, it hasn't yet,
-      # so the easiest thing to do here is just use a fresh package.json. This
-      # is needed because actionlint runs an `npm install` at the beginning.
-      - name: Clear package.json
-        run: |
-          rm package.json
-          npm init -y
       - name: actionlint
         id: actionlint
-        uses: raven-actions/actionlint@963d4779ef039e217e5d0e6fd73ce9ab7764e493 # v2.1.0
+        uses: raven-actions/actionlint@e01d1ea33dd6a5ed517d95b4c0c357560ac6f518 # v2.1.1
         with:
           matcher: true
           fail-on-error: true
@@ -64,9 +57,13 @@ jobs:
     name: Workflow job names (unique)
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: |
+            .github
+            scripts/verify-workflow-job-names.js
       - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: npm run verify:workflow-job-names
+      - run: npm install yaml
+      - run: node scripts/verify-workflow-job-names.js
 
   # The package size is especially useful in constrained environments, so the
   # computation is done only on the package that would be installed there.
@@ -94,16 +91,16 @@ jobs:
     name: Datadog Static Analyzer
     if: github.actor != 'dependabot[bot]' && github.event_name != 'pull_request'
     steps:
-    - name: Checkout
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-    - name: Check code meets quality and security standards
-      id: datadog-static-analysis
-      uses: DataDog/datadog-static-analyzer-github-action@2cc0e0621ea2863272b29d9aea230d9aad238086 # v2.0.0
-      with:
-        dd_api_key: ${{ secrets.DD_API_KEY }}
-        dd_app_key: ${{ secrets.DD_APP_KEY }}
-        dd_site: datadoghq.com
-        cpu_count: 2
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Check code meets quality and security standards
+        id: datadog-static-analysis
+        uses: DataDog/datadog-static-analyzer-github-action@8340f18875fcefca86844b5f947ce2431387e552 # v3.0.0
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_app_key: ${{ secrets.DD_APP_KEY }}
+          dd_site: datadoghq.com
+          cpu_count: 2
 
   typescript:
     runs-on: ubuntu-latest

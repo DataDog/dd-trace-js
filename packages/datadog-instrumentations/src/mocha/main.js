@@ -165,6 +165,15 @@ function getOnEndHandler (isParallel) {
       this.failures -= numFailedQuarantinedTests + numFailedRetriedQuarantinedOrDisabledTests
     }
 
+    // Recompute status after EFD and quarantine adjustments have reduced failure counts
+    if (status === 'fail') {
+      if (this.stats) {
+        status = this.stats.failures === 0 ? 'pass' : 'fail'
+      } else {
+        status = this.failures === 0 ? 'pass' : 'fail'
+      }
+    }
+
     if (status === 'fail') {
       error = new Error(`Failed tests: ${this.failures}.`)
     }

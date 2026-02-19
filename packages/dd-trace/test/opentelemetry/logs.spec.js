@@ -380,7 +380,7 @@ describe('OpenTelemetry Logs', () => {
 
         // Integer body (protobuf returns Long objects for int64)
         const intValue = logRecords[1].body.intValue
-        assert.strictEqual(typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
+        assert.strictEqual(intValue !== null && typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
 
         // Double/float body
         assert(logRecords[2].body.doubleValue !== undefined)
@@ -396,7 +396,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(logRecords[4].body.kvlistValue.values[0].value.stringValue, 'bar')
         assert.strictEqual(logRecords[4].body.kvlistValue.values[1].key, 'baz')
         const bazValue = logRecords[4].body.kvlistValue.values[1].value.intValue
-        assert.strictEqual(typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
+        assert.strictEqual(bazValue !== null && typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
 
         // Default case (symbol) - should convert to string
         assert.strictEqual(logRecords[5].body.stringValue, 'Symbol(test)')

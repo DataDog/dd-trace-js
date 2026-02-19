@@ -73,7 +73,7 @@ describe('Code injection vulnerability', () => {
 
           testThatRequestHasNoVulnerability({
             fn: (req, res) => {
-              res.send('' + require(evalFunctionsPath).runFakeEval(req.query.script))
+              res.send(`${require(evalFunctionsPath).runFakeEval(req.query.script)}`)
             },
             vulnerability: 'CODE_INJECTION',
             makeRequest: (done, config) => {
@@ -82,7 +82,7 @@ describe('Code injection vulnerability', () => {
           })
 
           testThatRequestHasNoVulnerability((req, res) => {
-            res.send('' + require(evalFunctionsPath).runEval('1 + 2'))
+            res.send(`${require(evalFunctionsPath).runEval('1 + 2')}`)
           }, 'CODE_INJECTION')
         })
     })

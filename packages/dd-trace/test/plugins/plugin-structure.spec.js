@@ -38,6 +38,7 @@ const missingPlugins = [
   'datadog-plugin-vm', // vm does not produce spans
   'datadog-plugin-sequelize', // sequelize does not produce spans
   'datadog-plugin-body-parser', // body-parser does not produce spans
+  'datadog-plugin-light-my-request', // light-my-request does not produce spans
 ]
 
 // instrumentations that do not have a hook, but are still instrumented
@@ -152,7 +153,7 @@ describe('Plugin Structure Validation', () => {
 
     for (const hook of Object.values(hooks)) {
       let hookFn = hook
-      if (typeof hook === 'object' && hook.fn) {
+      if (hook !== null && typeof hook === 'object' && hook.fn) {
         hookFn = hook.fn
       }
       const hookString = hookFn.toString()

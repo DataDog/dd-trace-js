@@ -38,32 +38,31 @@ function countStatusCode (statusCode) {
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
-  const store = storage('legacy').getStore()
-  storage('legacy').enterWith({ noop: true })
-  requestCounter.inc()
-  const start = perf.now()
-  const req = request(options, res => {
-    durationDistribution.track(perf.now() - start)
-    countStatusCode(res.statusCode)
-    if (res.statusCode >= 400) {
-      statusCodeErrorCounter.inc()
-      const error = new Error(`HTTP Error ${res.statusCode}`)
-      error.status = res.statusCode
-      callback(error)
-    } else {
-      callback(null, res)
+  storage('legacy').run({ noop: true }, () => {
+    requestCounter.inc()
+    const start = perf.now()
+    const req = request(options, res => {
+      durationDistribution.track(perf.now() - start)
+      countStatusCode(res.statusCode)
+      if (res.statusCode >= 400) {
+        statusCodeErrorCounter.inc()
+        const error = new Error(`HTTP Error ${res.statusCode}`)
+        error.status = res.statusCode
+        callback(error)
+      } else {
+        callback(null, res)
+      }
+    })
+
+    req.on('error', (err) => {
+      networkErrorCounter.inc()
+      callback(err)
+    })
+    if (form) {
+      sizeDistribution.track(form.size())
+      form.pipe(req)
     }
   })
-
-  req.on('error', (err) => {
-    networkErrorCounter.inc()
-    callback(err)
-  })
-  if (form) {
-    sizeDistribution.track(form.size())
-    form.pipe(req)
-  }
-  storage('legacy').enterWith(store)
 }
 
 function getBody (stream, callback) {

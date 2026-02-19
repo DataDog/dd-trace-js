@@ -11,15 +11,12 @@ const {
   curlAndAssertMessage,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
 
-  // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
-  // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
-  withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
+  withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
@@ -53,7 +50,14 @@ describe('esm', () => {
         assert.strictEqual(payload.length, 1)
         assert.ok(Array.isArray(payload[0]))
         assert.strictEqual(payload[0].length, 1)
-        assert.strictEqual(payload[0][0].name, 'azure.functions.invoke')
+
+        const span = payload[0][0]
+
+        assert.strictEqual(span.name, 'azure.functions.invoke')
+        assert.strictEqual(span.meta['_dd.integration'], 'azure-functions')
+        assert.strictEqual(span.meta.component, 'azure-functions')
+        assert.strictEqual(span.meta['http.route'], '/api/httptest')
+        assert.strictEqual(span.resource, 'GET /api/httptest')
       })
     }).timeout(60_000)
 

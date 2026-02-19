@@ -5,6 +5,38 @@ const id = require('../../id')
 const { getValueFromEnvSources } = require('../../config/helper')
 const log = require('../../log')
 
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_TEST_MANAGEMENT_TESTS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_MS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
+  TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
+} = require('../telemetry')
+
+// Calculate the number of tests from the test management tests response, which has a shape like:
+// { module: { suites: { suite: { tests: { testName: { properties: {...} } } } } } }
+function getNumFromTestManagementTests (testManagementTests) {
+  if (!testManagementTests) {
+    return 0
+  }
+
+  let totalNumTests = 0
+
+  for (const testModule of Object.values(testManagementTests)) {
+    const { suites } = testModule
+    if (!suites) continue
+    for (const testSuite of Object.values(suites)) {
+      const { tests } = testSuite
+      if (!tests) continue
+      totalNumTests += Object.keys(tests).length
+    }
+  }
+
+  return totalNumTests
+}
+
 function getTestManagementTests ({
   url,
   isEvpProxy,
@@ -58,12 +90,23 @@ function getTestManagementTests ({
 
   log.debug('Requesting test management tests: %s', data)
 
-  request(data, options, (err, res) => {
+  incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS)
+
+  const startTime = Date.now()
+
+  request(data, options, (err, res, statusCode) => {
+    distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_MS, {}, Date.now() - startTime)
     if (err) {
+      incrementCountMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_ERRORS, { statusCode })
       done(err)
     } else {
       try {
         const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
+
+        const numTests = getNumFromTestManagementTests(testManagementTests)
+
+        distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS, {}, numTests)
+        distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)
 
         log.debug('Test management tests received: %j', testManagementTests)
 

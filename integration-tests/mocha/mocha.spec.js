@@ -1827,12 +1827,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           )
           // It does not mark as unskippable if there is no docblock
           assert.strictEqual(passedSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(!('TEST_ITR_UNSKIPPABLE' in passedSuite.content.meta))
-          assert.ok(!('TEST_ITR_FORCED_RUN' in passedSuite.content.meta))
+          assert.ok(!(TEST_ITR_UNSKIPPABLE in passedSuite.content.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in passedSuite.content.meta))
 
           assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
-          assert.ok(!('TEST_ITR_UNSKIPPABLE' in skippedSuite.content.meta))
-          assert.ok(!('TEST_ITR_FORCED_RUN' in skippedSuite.content.meta))
+          assert.ok(!(TEST_ITR_UNSKIPPABLE in skippedSuite.content.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in skippedSuite.content.meta))
 
           assert.strictEqual(forcedToRunSuite.content.meta[TEST_STATUS], 'pass')
           assert.strictEqual(forcedToRunSuite.content.meta[TEST_ITR_UNSKIPPABLE], 'true')
@@ -1880,9 +1880,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           const testSession = events.find(event => event.type === 'test_session_end').content
           const testModule = events.find(event => event.type === 'test_module_end').content
-          assert.ok(!('TEST_ITR_FORCED_RUN' in testSession.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in testSession.meta))
           assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
-          assert.ok(!('TEST_ITR_FORCED_RUN' in testModule.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in testModule.meta))
           assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
 
           const passedSuite = suites.find(
@@ -1897,15 +1897,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
           // It does not mark as unskippable if there is no docblock
           assert.strictEqual(passedSuite.content.meta[TEST_STATUS], 'pass')
-          assert.ok(!('TEST_ITR_UNSKIPPABLE' in passedSuite.content.meta))
-          assert.ok(!('TEST_ITR_FORCED_RUN' in passedSuite.content.meta))
+          assert.ok(!(TEST_ITR_UNSKIPPABLE in passedSuite.content.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in passedSuite.content.meta))
 
           assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
 
           assert.strictEqual(nonSkippedSuite.meta[TEST_STATUS], 'pass')
           assert.strictEqual(nonSkippedSuite.meta[TEST_ITR_UNSKIPPABLE], 'true')
           // it was not forced to run because it wasn't going to be skipped
-          assert.ok(!('TEST_ITR_FORCED_RUN' in nonSkippedSuite.meta))
+          assert.ok(!(TEST_ITR_FORCED_RUN in nonSkippedSuite.meta))
         }, 25000)
 
       childProcess = exec(
@@ -2061,7 +2061,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!('TEST_IS_NEW' in test.meta))
+            assert.ok(!(TEST_IS_NEW in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -2093,6 +2093,77 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             TESTS_TO_RUN: JSON.stringify([
               './test/ci-visibility-test.js',
               './test/ci-visibility-test-2.js',
+            ]),
+          },
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
+      // fail-test.js will be considered new and will always fail
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const failTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/fail-test.js'
+          )
+
+          // Should have 1 initial attempt + NUM_RETRIES_EFD retries
+          assert.strictEqual(failTests.length, NUM_RETRIES_EFD + 1)
+
+          // All attempts should be marked as new
+          failTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          })
+
+          // Check retries
+          const retriedTests = failTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          })
+
+          // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
+          const lastRetry = failTests[failTests.length - 1]
+          assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+          // Earlier attempts should not have the flag
+          for (let i = 0; i < failTests.length - 1; i++) {
+            assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in failTests[i].meta))
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test/fail-test.js',
             ]),
           },
         }
@@ -2202,7 +2273,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const newTests = tests.filter(test =>
@@ -2334,7 +2405,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test => test.meta[TEST_NAME] === 'ci visibility skip will not be retried'
           )
           assert.strictEqual(newSkippedTests.length, 1)
-          assert.ok(!('TEST_IS_RETRY' in newSkippedTests[0].meta))
+          assert.ok(!(TEST_IS_RETRY in newSkippedTests[0].meta))
         })
 
       childProcess = exec(
@@ -2440,7 +2511,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2566,7 +2637,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2753,7 +2824,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2812,7 +2883,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
 
             const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2867,7 +2938,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -2875,14 +2946,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!('TEST_IS_NEW' in test.meta))
+            assert.ok(!(TEST_IS_NEW in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
           const newTests = tests.filter(test =>
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
           )
           newTests.forEach(test => {
-            assert.ok(!('TEST_IS_NEW' in test.meta))
+            assert.ok(!(TEST_IS_NEW in test.meta))
           })
           const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
           assert.strictEqual(retriedTests.length, 0)
@@ -3412,7 +3483,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -3421,7 +3492,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           oldTests.forEach(test => {
-            assert.ok(!('TEST_IS_NEW' in test.meta))
+            assert.ok(!(TEST_IS_NEW in test.meta))
           })
           assert.strictEqual(oldTests.length, 1)
 
@@ -3527,7 +3598,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isAttemptToFix) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
@@ -3547,16 +3618,16 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               const isFirstAttempt = i === 0
               const isLastAttempt = i === retriedTests.length - 1
               if (!isAttemptToFix) {
-                assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
-                assert.ok(!('TEST_IS_RETRY' in test.meta))
-                assert.ok(!('TEST_RETRY_REASON' in test.meta))
+                assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
+                assert.ok(!(TEST_IS_RETRY in test.meta))
+                assert.ok(!(TEST_RETRY_REASON in test.meta))
                 continue
               }
 
               assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
               if (isFirstAttempt) {
-                assert.ok(!('TEST_IS_RETRY' in test.meta))
-                assert.ok(!('TEST_RETRY_REASON' in test.meta))
+                assert.ok(!(TEST_IS_RETRY in test.meta))
+                assert.ok(!(TEST_RETRY_REASON in test.meta))
               } else {
                 assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
@@ -3573,9 +3644,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               if (isLastAttempt) {
                 if (shouldAlwaysPass) {
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-                  assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                 } else if (shouldFailSometimes) {
-                  assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 } else {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
@@ -3752,7 +3823,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isDisabling) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
             } else {
-              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
@@ -3772,7 +3843,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               assert.strictEqual(skippedTests.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
             } else {
               assert.strictEqual(skippedTests.meta[TEST_STATUS], 'fail')
-              assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in skippedTests.meta))
+              assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in skippedTests.meta))
             }
           })
 
@@ -3874,8 +3945,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
             if (isQuarantining) {
               assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+              // Session should pass because the only failing test is quarantined
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
             } else {
-              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
             }
 
             const resourceNames = tests.map(span => span.resource)
@@ -3896,7 +3970,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isQuarantining) {
               assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
             } else {
-              assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in failedTest.meta))
+              assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in failedTest.meta))
             }
           })
 
@@ -3982,7 +4056,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const testSession = events.find(event => event.type === 'test_session_end').content
-          assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+          assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
@@ -4318,7 +4392,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           if (isEfd) {
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           } else {
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
           }
 
           const resourceNames = tests.map(span => span.resource)
@@ -4354,12 +4428,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isModified) {
               assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
             } else {
-              assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
+              assert.ok(!(TEST_IS_MODIFIED in impactedTest.meta))
             }
             if (isNew) {
               assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
             } else {
-              assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
+              assert.ok(!(TEST_IS_NEW in impactedTest.meta))
             }
           }
 

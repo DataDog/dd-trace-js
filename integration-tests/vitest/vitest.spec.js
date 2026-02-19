@@ -60,6 +60,7 @@ const {
   GIT_REPOSITORY_URL,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
+const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { NODE_MAJOR } = require('../../version')
 
 const NUM_RETRIES_EFD = 3
@@ -712,6 +713,28 @@ versions.forEach((version) => {
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+
+            // Check that TEST_HAS_FAILED_ALL_RETRIES is set for tests that fail all EFD attempts
+            const alwaysFailTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'early flake detection can retry tests that always pass'
+            )
+            assert.strictEqual(alwaysFailTests.length, 4) // 1 initial + 3 retries
+            // The last execution should have TEST_HAS_FAILED_ALL_RETRIES set
+            const testsWithFlag = alwaysFailTests.filter(test =>
+              test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+            )
+            assert.strictEqual(
+              testsWithFlag.length,
+              1,
+              'Exactly one test should have TEST_HAS_FAILED_ALL_RETRIES set'
+            )
+            // It should be the last one
+            const lastAttempt = alwaysFailTests[alwaysFailTests.length - 1]
+            assert.strictEqual(
+              lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES],
+              'true',
+              'Last attempt should have the flag'
+            )
           })
 
         childProcess = exec(
@@ -949,7 +972,7 @@ versions.forEach((version) => {
 
             assert.strictEqual(tests[0].meta[TEST_SUITE], 'ci-visibility/subproject/vitest-test.mjs')
             // it's not considered new
-            assert.ok(!('TEST_IS_NEW' in tests[0].meta))
+            assert.ok(!(TEST_IS_NEW in tests[0].meta))
           })
 
         childProcess = exec(
@@ -1024,7 +1047,7 @@ versions.forEach((version) => {
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSessionEvent.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSessionEvent.meta))
           })
 
         childProcess = exec(
@@ -1454,7 +1477,7 @@ versions.forEach((version) => {
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-            assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSessionEvent.meta))
+            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSessionEvent.meta))
           })
 
         childProcess = exec(
@@ -1547,7 +1570,7 @@ versions.forEach((version) => {
                 if (isAttemptingToFix) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
@@ -1575,8 +1598,8 @@ versions.forEach((version) => {
                   if (isAttemptingToFix) {
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
                     if (isFirstAttempt) {
-                      assert.ok(!('TEST_IS_RETRY' in test.meta))
-                      assert.ok(!('TEST_RETRY_REASON' in test.meta))
+                      assert.ok(!(TEST_IS_RETRY in test.meta))
+                      assert.ok(!(TEST_RETRY_REASON in test.meta))
                       continue
                     }
                     assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
@@ -1586,16 +1609,16 @@ versions.forEach((version) => {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
                       } else if (shouldFailSometimes) {
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                        assert.ok(!('TEST_HAS_FAILED_ALL_RETRIES' in test.meta))
+                        assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
                       } else {
                         assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                       }
                     }
                   } else {
-                    assert.ok(!('TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX' in test.meta))
-                    assert.ok(!('TEST_IS_RETRY' in test.meta))
-                    assert.ok(!('TEST_RETRY_REASON' in test.meta))
+                    assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
+                    assert.ok(!(TEST_IS_RETRY in test.meta))
+                    assert.ok(!(TEST_RETRY_REASON in test.meta))
                   }
                 }
               })
@@ -1765,7 +1788,7 @@ versions.forEach((version) => {
                 if (isDisabling) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
@@ -1785,7 +1808,7 @@ versions.forEach((version) => {
                   assert.strictEqual(skippedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
                 } else {
                   assert.strictEqual(skippedTest.meta[TEST_STATUS], 'fail')
-                  assert.ok(!('TEST_MANAGEMENT_IS_DISABLED' in skippedTest.meta))
+                  assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in skippedTest.meta))
                 }
               })
 
@@ -1874,7 +1897,7 @@ versions.forEach((version) => {
                 if (isQuarantining) {
                   assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 } else {
-                  assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+                  assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
                 }
 
                 const resourceNames = tests.map(span => span.resource)
@@ -1896,7 +1919,7 @@ versions.forEach((version) => {
                   assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 } else {
                   assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-                  assert.ok(!('TEST_MANAGEMENT_IS_QUARANTINED' in quarantinedTest.meta))
+                  assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTest.meta))
                 }
               })
 
@@ -1967,7 +1990,7 @@ versions.forEach((version) => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const testSession = events.find(event => event.type === 'test_session_end').content
-              assert.ok(!('TEST_MANAGEMENT_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               // it is not retried
               assert.strictEqual(tests.length, 1)
@@ -2097,7 +2120,7 @@ versions.forEach((version) => {
             if (isEfd) {
               assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
             } else {
-              assert.ok(!('TEST_EARLY_FLAKE_ENABLED' in testSession.meta))
+              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
             }
 
             const resourceNames = tests.map(span => span.resource)
@@ -2122,12 +2145,12 @@ versions.forEach((version) => {
               if (isModified) {
                 assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
               } else {
-                assert.ok(!('TEST_IS_MODIFIED' in impactedTest.meta))
+                assert.ok(!(TEST_IS_MODIFIED in impactedTest.meta))
               }
               if (isNew) {
                 assert.strictEqual(impactedTest.meta[TEST_IS_NEW], 'true')
               } else {
-                assert.ok(!('TEST_IS_NEW' in impactedTest.meta))
+                assert.ok(!(TEST_IS_NEW in impactedTest.meta))
               }
             }
 
@@ -2329,6 +2352,45 @@ versions.forEach((version) => {
           await Promise.all([
             coverageReportPromise,
             once(childProcess, 'exit'),
+          ])
+        })
+
+        it('sends coverage_upload.request telemetry metric when coverage is uploaded', async () => {
+          receiver.setSettings({
+            coverage_report_upload_enabled: true,
+          })
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+
+          const telemetryPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
+              const telemetryMetrics = payloads.flatMap(({ payload }) => payload.payload.series)
+
+              const coverageUploadMetric = telemetryMetrics.find(
+                ({ metric }) => metric === TELEMETRY_COVERAGE_UPLOAD
+              )
+
+              assert.ok(coverageUploadMetric, 'coverage_upload.request telemetry metric should be sent')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --coverage',
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
+                COVERAGE_PROVIDER: 'v8',
+                TEST_DIR: 'ci-visibility/vitest-tests/coverage-test.mjs',
+                DD_GIT_COMMIT_SHA: gitCommitSha,
+                DD_GIT_REPOSITORY_URL: gitRepositoryUrl,
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            telemetryPromise,
           ])
         })
 

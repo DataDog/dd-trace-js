@@ -60,7 +60,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
       // Debug adds this, which we don't care about in these tests
       out = out.replace('Flushing 0 metrics via HTTP\n', '')
     }
-    assert.match(out, new RegExp(expectedOut), `output "${out} does not contain expected output "${expectedOut}"`)
+    assert.match(out, new RegExp(expectedOut), `output "${out}" does not contain expected output "${expectedOut}"`)
   }
 
   if (expectedSource) {
@@ -516,6 +516,7 @@ async function createSandbox (
  * @param {string} bindingName - The binding name that will be use to bind to the packageName.
  * @param {string} [namedExport] - The name of the named variant to use.
  * @param {string} [packageName] - The name of the package. If not provided, the binding name will be used.
+ * @param {boolean} [byPassDefault] - Skip default export variant generation.
  * @returns {Variants} A map from variant names to resulting filenames
  */
 /**
@@ -527,28 +528,32 @@ async function createSandbox (
  * whose value is the original text within the file that will be replaced.
  *
  * @param {string} filename - The file that will be copied and modified for each variant.
- * @param {Variants} variants - The variants.
+ * @param {Variants|string} variants - The variants or binding name.
+ * @param {string} [namedExport] - Named export to use for star/destructure variants.
+ * @param {string} [packageName] - Module specifier for the import.
+ * @param {boolean} [byPassDefault] - Skip default export variant generation.
  * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (filename, variants, namedExport, packageName = variants, byPassDefault) {
+function varySandbox (filename, variants, namedExport, packageName, byPassDefault) {
   if (typeof variants === 'string') {
     const bindingName = variants
+    const resolvedName = packageName || bindingName
     // Default namedVariant to bindingName when bypassing default export
     if (byPassDefault && !namedExport) namedExport = bindingName
     variants = byPassDefault
       ? {
           // eslint-disable-next-line @stylistic/max-len
-          star: `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
-          destructure: `import { ${namedExport} } from '${packageName}'`,
+          star: `import * as mod${bindingName} from '${resolvedName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
+          destructure: `import { ${namedExport} } from '${resolvedName}'`,
         }
       : {
-          default: `import ${bindingName} from '${packageName}'`,
+          default: `import ${bindingName} from '${resolvedName}'`,
           star: namedExport
-            ? `import * as ${bindingName} from '${packageName}'`
-            : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
+            ? `import * as ${bindingName} from '${resolvedName}'`
+            : `import * as mod${bindingName} from '${resolvedName}'; const ${bindingName} = mod${bindingName}.default`,
           destructure: namedExport
-            ? `import { ${namedExport} } from '${packageName}'; const ${bindingName} = { ${namedExport} }`
-            : `import { default as ${bindingName}} from '${packageName}'`,
+            ? `import { ${namedExport} } from '${resolvedName}'; const ${bindingName} = { ${namedExport} }`
+            : `import { default as ${bindingName}} from '${resolvedName}'`,
         }
   }
 

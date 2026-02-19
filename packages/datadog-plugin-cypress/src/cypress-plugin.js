@@ -769,8 +769,10 @@ class CypressPlugin {
         if (cypressTest.displayError) {
           latestError = new Error(cypressTest.displayError)
         }
-        // Update test status
-        if (cypressTestStatus !== finishedTest.testStatus) {
+        // Update test status - but NOT for quarantined tests where we intentionally
+        // report 'fail' to Datadog even though Cypress sees it as 'pass'
+        const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+        if (cypressTestStatus !== finishedTest.testStatus && !isQuarantinedTest) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
         }
@@ -844,11 +846,12 @@ class CypressPlugin {
           return { shouldSkip: true }
         }
 
-        // TODO: I haven't found a way to trick cypress into ignoring a test
-        // The way we'll implement quarantine in cypress is by skipping the test altogether
-        if (!isAttemptToFix && (isDisabled || isQuarantined)) {
+        // For disabled tests (not attemptToFix), skip them
+        if (!isAttemptToFix && isDisabled) {
           return { shouldSkip: true }
         }
+        // Quarantined tests (not attemptToFix) run normally but their failures are caught
+        // by Cypress.on('fail') in support.js and suppressed, so Cypress sees them as passed
 
         if (!this.activeTestSpan) {
           this.activeTestSpan = this.getTestSpan({
@@ -880,6 +883,7 @@ class CypressPlugin {
           isEfdRetry,
           isAttemptToFix,
           isModified,
+          isQuarantined: isQuarantinedFromSupport,
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -933,6 +937,13 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
           }
         }
+        // Check if all EFD retries failed
+        if ((isNew || isModified) && this.earlyFlakeDetectionNumRetries > 0) {
+          const isLastEfdAttempt = testStatuses.length === this.earlyFlakeDetectionNumRetries + 1
+          if (isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
+            this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+          }
+        }
         if (isAttemptToFix) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
           if (testStatuses.length > 1) {
@@ -952,6 +963,12 @@ class CypressPlugin {
           }
         }
 
+        // Ensure quarantined tests reported from support.js are tagged
+        // (This catches cases where the test ran but failed, but Cypress saw it as passed)
+        if (isQuarantinedFromSupport) {
+          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+        }
+
         const finishedTest = {
           testName,
           testStatus,
@@ -966,11 +983,15 @@ class CypressPlugin {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
         // test spans are finished at after:spec
+        const activeSpanTags = this.activeTestSpan.context()._tags
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeOwners: !!this.activeTestSpan.context()._tags[TEST_CODE_OWNERS],
+          hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
+          isQuarantined: isQuarantinedFromSupport,
+          isModified,
+          isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
         })
         this.activeTestSpan = null
 

@@ -136,6 +136,7 @@ module.exports = {
   'selenium-webdriver': () => require('../selenium'),
   sequelize: () => require('../sequelize'),
   sharedb: () => require('../sharedb'),
+  stripe: () => require('../stripe'),
   tedious: () => require('../tedious'),
   tinypool: { esmFirst: true, fn: () => require('../vitest') },
   undici: () => require('../undici'),

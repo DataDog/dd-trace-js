@@ -12,15 +12,12 @@ const {
   curlAndAssertMessage,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
 
-  // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
-  // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
-  withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
+  withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',

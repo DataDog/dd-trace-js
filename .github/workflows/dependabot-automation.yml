@@ -1,4 +1,4 @@
-name: 'Dependabot Automation'
+name: "Dependabot Automation"
 
 on:
   pull_request:
@@ -160,10 +160,9 @@ jobs:
     if: github.event.pull_request.user.login == 'dependabot[bot]' && needs.vendor-build.outputs.is_vendor_group == 'true' && needs.vendor-build.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     needs: vendor-build
-    # Security: this job has write permissions but never runs installs/builds.
-    # It only applies the vetted patch artifact and pushes a single commit.
+    # Security: this job never runs installs/builds.
+    # It only applies the vetted patch artifact and writes the update via the GitHub API.
     permissions:
-      contents: write
       id-token: write
     steps:
       - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
@@ -212,28 +211,77 @@ jobs:
             echo "Refusing to proceed: unexpected paths changed."
             exit 1
           fi
-      - name: Create commit
-        id: create-commit
-        run: |
-          set -euo pipefail
-
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-
-          git add vendor/dist vendor/package.json vendor/yarn.lock
-          git commit -m "update vendored dependencies with new versions"
-          echo "commits=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
-      - name: Push commit
+      - name: Create verified commit via GitHub API (server-side)
         env:
-          DD_OCTO_STS_TOKEN: ${{ steps.octo-sts.outputs.token }}
           TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
           set -euo pipefail
 
-          # Ensure the push is attributed to the octo-sts GitHub App token (not GITHUB_TOKEN),
-          # so the resulting push triggers CI workflows normally.
-          auth_header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$DD_OCTO_STS_TOKEN" | base64 | tr -d '\n')"
-          git -c "http.https://github.com/.extraheader=$auth_header" push origin "HEAD:$TARGET_BRANCH"
+          repo="${GITHUB_REPOSITORY}"
+          expected_head_oid="$(git rev-parse HEAD)"
+
+          max_files=200
+          max_total_bytes=$((10 * 1024 * 1024)) # 10 MiB
+
+          mapfile -t changes < <(git diff --name-status)
+          change_count="${#changes[@]}"
+          if [ "$change_count" -eq 0 ]; then
+            echo "No changed files detected."
+            exit 1
+          fi
+          if [ "$change_count" -gt "$max_files" ]; then
+            echo "Too many changed files ($change_count > $max_files)."
+            exit 1
+          fi
+
+          additions='[]'
+          deletions='[]'
+          total_bytes=0
+          for change in "${changes[@]}"; do
+            read -r status path path2 <<<"$change"
+
+            if [[ "$status" == D ]]; then
+              deletions="$(jq -c --arg path "$path" '. + [{path: $path}]' <<<"$deletions")"
+              continue
+            fi
+
+            # Treat renames as delete+add to keep the server-side tree in sync.
+            if [[ "$status" == R* ]]; then
+              deletions="$(jq -c --arg path "$path" '. + [{path: $path}]' <<<"$deletions")"
+              path="$path2"
+            fi
+
+            test -f "$path"
+            file_bytes="$(stat -c '%s' "$path")"
+            total_bytes=$((total_bytes + file_bytes))
+            if [ "$total_bytes" -gt "$max_total_bytes" ]; then
+              echo "Total changes too large (${total_bytes} bytes)."
+              exit 1
+            fi
+            contents="$(base64 -w 0 "$path")"
+            additions="$(jq -c --arg path "$path" --arg contents "$contents" '. + [{path: $path, contents: $contents}]' <<<"$additions")"
+          done
+
+          variables="$(jq -c \
+            --arg repo "$repo" \
+            --arg branch "$TARGET_BRANCH" \
+            --arg msg "update vendored dependencies with new versions" \
+            --arg expected "$expected_head_oid" \
+            --argjson additions "$additions" \
+            --argjson deletions "$deletions" \
+            '{
+              input: {
+                branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                message: { headline: $msg },
+                expectedHeadOid: $expected,
+                fileChanges: { additions: $additions, deletions: $deletions }
+              }
+            }'
+          )"
+
+          query='mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }'
+          gh api graphql -f query="$query" -f variables="$variables" -q '.data.createCommitOnBranch.commit.oid' >/dev/null
 
       # If branch protection is configured to dismiss stale approvals when new commits are pushed,
       # the vendoring commit will invalidate the earlier approval. Re-approve and (re-)enable
@@ -264,7 +312,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}

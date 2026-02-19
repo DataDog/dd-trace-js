@@ -265,6 +265,68 @@ describe('Plugin', () => {
           axios.get(`http://localhost:${port}/health`).catch(done)
         })
       })
+
+      describe('with resourceRenamingEnabled configuration', () => {
+        beforeEach(() => {
+          return agent.load('http', { client: false, resourceRenamingEnabled: true })
+            .then(() => {
+              http = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          const server = new http.Server(listener)
+          appListener = server
+            .listen(0, 'localhost', () => {
+              port = appListener.address().port
+              done()
+            })
+        })
+
+        it('should normalize hex segments in the path', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:hex}/profile')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/users/a1f3e2d1c0/profile`).catch(done)
+        })
+
+        it('should normalize int segments in the path', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:int}/profile')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/users/1234/profile`).catch(done)
+        })
+
+        it('should normalize int id segments in the path', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/users/{param:int_id}/profile')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/users/1234-1234/profile`).catch(done)
+        })
+
+        it('should keep short path segments unchanged', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['http.endpoint'], '/api/v1/users')
+            })
+            .then(done)
+            .catch(done)
+
+          axios.get(`http://localhost:${port}/api/v1/users`).catch(done)
+        })
+      })
     })
   })
 })

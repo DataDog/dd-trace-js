@@ -186,6 +186,10 @@ describe('Plugin', () => {
 
         describe('onmessage', () => {
           it('should be instrumented', async () => {
+            const [topic] = await pubsub.createTopic(topicName)
+            const [sub] = await topic.createSubscription('foo')
+            const subscriptionName = sub.name
+
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.receive.opName,
               service: expectedSchema.receive.serviceName,
@@ -194,13 +198,14 @@ describe('Plugin', () => {
                 component: 'google-cloud-pubsub',
                 'span.kind': 'consumer',
                 'pubsub.topic': resource,
+                'pubsub.subscription': subscriptionName,
+                'pubsub.subscription_type': 'pull',
               },
               metrics: {
                 'pubsub.ack': 1,
               },
             })
-            const [topic] = await pubsub.createTopic(topicName)
-            const [sub] = await topic.createSubscription('foo')
+
             sub.on('message', msg => msg.ack())
             await publish(topic, { data: Buffer.from('hello') })
             return expectedSpanPromise
@@ -597,7 +602,7 @@ describe('Plugin', () => {
           prefixedResource = resource
         }
 
-        let defaultOpName = 'pubsub.receive'
+        let defaultOpName
         if (spanKind === 'consumer') {
           defaultOpName = expectedSchema.receive.opName
         } else if (spanKind === 'producer') {

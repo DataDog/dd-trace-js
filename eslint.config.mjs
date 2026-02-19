@@ -1,3 +1,7 @@
+// TODO: once we've well iterated on this file (6 months+),
+// we can plan to move it to its own package to reuse elsewhere.
+// written on 2026-02-12
+
 import { readFileSync } from 'fs'
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
@@ -14,6 +18,7 @@ import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -26,6 +31,8 @@ const SRC_FILES = [
   'ci/**/*.mjs',
   'scripts/**/*.js',
   'scripts/**/*.mjs',
+  'packages/*/*.js',
+  'packages/*/*.mjs',
   'packages/*/src/**/*.js',
   'packages/*/src/**/*.mjs',
 ]
@@ -36,6 +43,33 @@ const TEST_FILES = [
   'integration-tests/**/*.js',
   'integration-tests/**/*.mjs',
   '**/*.spec.js',
+]
+
+const GLOBAL_RESTRICTED_REQUIRES = [
+  {
+    name: 'diagnostics_channel',
+    message: 'Please use `dc-polyfill` instead.',
+  },
+  {
+    name: 'get-port',
+    message: 'Please listen on port 0 instead.',
+  },
+  {
+    name: 'rimraf',
+    message: 'Please use `fs.rm(path, { recursive: true, force: true })` instead.',
+  },
+  {
+    name: 'koalas',
+    message: 'Please use nullish coalescing operator (??) instead.',
+  },
+  {
+    name: 'chai',
+    message: 'Please use `node:assert/strict` instead.',
+  },
+  {
+    name: 'tap',
+    message: 'Please use `mocha` instead.',
+  },
 ]
 
 export default [
@@ -52,6 +86,7 @@ export default [
       '**/acmeair-nodejs', // We don't own this.
       '**/vendor', // Generally, we didn't author this code.
       '**/.analysis', // Ignore apm-instrumentation-toolkit analysis results
+      'integration-tests/ci-visibility/test-management/test-suite-failed-to-run-parse.js', // Intentional syntax error
       'integration-tests/code-origin/typescript.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/bundle.js', // Generated
       'integration-tests/debugger/target-app/source-map-support/hello/world.js', // Generated
@@ -67,14 +102,6 @@ export default [
   eslintPluginJs.configs.recommended,
   eslintPluginJSDoc.configs['flat/recommended'],
   {
-    // The following config and rules have been inlined from `eslint-config-standard` with the following modifications:
-    // - Rules that were overridden elsewhere in this file have been removed.
-    // - Deprecated rules have been replaced with their official replacements.
-    //
-    // We've inlined these to avoid having to depend on `eslint-config-standard` as:
-    // 1. It's no longer maintained.
-    // 2. It came with an older bundled version of `eslint-plugin-n` which conflicted with our version.
-    //
     // TODO: Move these rules to dd-trace/defaults or where they otherwise belong.
     name: 'standard',
     languageOptions: {
@@ -337,13 +364,22 @@ export default [
       'packages/datadog-plugin-next/test/app/**/*.js',
       'packages/datadog-plugin-next/test/**/pages/**/*.js',
       'packages/datadog-plugin-next/test/middleware.js',
-      '**/*.mjs', // TODO: This shoudln't be required, research why it is
+      '**/*.mjs', // TODO: This shouldn't be required, research why it is
     ],
   },
   {
     name: 'dd-trace/defaults',
     plugins: {
       '@stylistic': eslintPluginStylistic,
+      'eslint-rules': {
+        rules: {
+          'eslint-process-env': eslintProcessEnv,
+          'eslint-env-aliases': eslintEnvAliases,
+          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
+          'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-require-export-exists': eslintRequireExportExists,
+        },
+      },
       import: eslintPluginImport,
       n: eslintPluginN,
     },
@@ -376,16 +412,18 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
+      'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
+      'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-extraneous-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
+      'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
+      'n/no-restricted-require': ['error', GLOBAL_RESTRICTED_REQUIRES],
       'n/no-unpublished-require': ['error', {
         allowModules: Object.keys(dependencies),
       }],
-      'n/no-restricted-require': ['error', ['diagnostics_channel']],
-      'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
-      'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-unsupported-features/node-builtins': ['error', {
         ignores: [
           'Request',
@@ -398,8 +436,15 @@ export default [
         ],
       }],
       'no-console': 'error',
+      'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
       'no-prototype-builtins': 'off', // Override (turned on by @eslint/js/recommended)
+      'no-useless-assignment': 'error',
       'no-var': 'error',
+      'no-void': ['error', { allowAsStatement: true }],
+      'operator-assignment': 'error',
+      'prefer-exponentiation-operator': 'error',
+      'prefer-object-has-own': 'error',
+      'prefer-object-spread': 'error',
       'require-await': 'error',
       strict: 'error',
     },
@@ -408,61 +453,24 @@ export default [
     name: 'dd-trace/src/all',
     files: SRC_FILES,
     plugins: {
-      'eslint-rules': {
-        rules: {
-          'eslint-process-env': eslintProcessEnv,
-          'eslint-env-aliases': eslintEnvAliases,
-          'eslint-safe-typeof-object': eslintSafeTypeOfObject,
-          'eslint-log-printf-style': eslintLogPrintfStyle,
-        },
-      },
-      n: eslintPluginN,
       unicorn: eslintPluginUnicorn,
     },
     rules: {
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
-      'eslint-rules/eslint-safe-typeof-object': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
+
       'n/no-restricted-require': ['error', [
-        {
-          name: 'diagnostics_channel',
-          message: 'Please use `dc-polyfill` instead.',
-        },
+        ...GLOBAL_RESTRICTED_REQUIRES,
         {
           name: 'semver',
           message: 'Please use `semifies` instead.',
-        },
-        {
-          name: 'get-port',
-          message: 'Please listen on port 0 instead.',
-        },
-        {
-          name: 'rimraf',
-          message: 'Please use `fs.rm(path, { recursive: true, force: true })` instead.',
-        },
-        {
-          name: 'koalas',
-          message: 'Please use nullish coalescing operator (??) instead.',
-        },
-        {
-          name: 'chai',
-          message: 'Please use `node:assert/strict` instead.',
-        },
-        {
-          name: 'tap',
-          message: 'Please use `mocha` instead.',
         },
       ]],
 
       'no-await-in-loop': 'error',
       'no-else-return': ['error', { allowElseIf: true }],
-      'no-implicit-coercion': ['error', { boolean: true, number: true, string: true, allow: ['!!'] }],
-      'no-useless-assignment': 'error',
-      'operator-assignment': 'error',
-      'prefer-exponentiation-operator': 'error',
-      'prefer-object-has-own': 'error',
-      'prefer-object-spread': 'error',
+      'no-unused-expressions': 'error',
 
       // Too strict for now. Slowly migrate to this rule by using rest parameters.
       // 'prefer-rest-params': 'error',
@@ -475,6 +483,7 @@ export default [
       'unicorn/explicit-length-check': 'off', // 68 errors
       'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
       'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
+      'unicorn/prefer-export-from': ['error', { ignoreUsedVariables: true }],
       'unicorn/prevent-abbreviations': 'off', // too strict
 
       // These rules require a newer Node.js version than we support
