@@ -21,7 +21,7 @@ const {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
 } = require('../serverless')
-const { ORIGIN_KEY } = require('../constants')
+const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
   require('./git_properties')
@@ -614,7 +614,11 @@ class Config {
     unprocessedTarget['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
     setBoolean(target, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     setString(target, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    if (AWS_LAMBDA_FUNCTION_NAME) {
+    if (AWS_LAMBDA_FUNCTION_NAME && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
+      // Standard Lambda (with or without the Datadog Extension): flush every span
+      // immediately so traces reach the extension before the invocation window closes.
+      // Skipped for Lambda Lite + mini agent, which is a long-running web server where
+      // batching is safe and flushInterval=0 would saturate the 8-request exporter limit.
       target.flushInterval = 0
     } else if (DD_TRACE_FLUSH_INTERVAL) {
       target.flushInterval = maybeInt(DD_TRACE_FLUSH_INTERVAL)
