@@ -24,7 +24,6 @@ const getDsmPathwayHash = (testTopic, clusterIdAvailable, isProducer, parentHash
     edgeTags = ['direction:in', 'group:test-group', 'topic:' + testTopic, 'type:kafka']
   }
 
-  // kafka_cluster_id is only available in kafkajs >=1.13
   if (clusterIdAvailable) {
     edgeTags.push(`kafka_cluster_id:${testKafkaClusterId}`)
   }
