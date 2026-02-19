@@ -4,9 +4,10 @@ const assert = require('node:assert/strict')
 const { Buffer } = require('node:buffer')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -272,6 +273,62 @@ describe('Plugin', () => {
                   'pathway.hash': expectedConsumerHash,
                 })
               }, { timeoutMs: 10000 }).then(done, done)
+            })
+          })
+        })
+
+        describe('concurrent context isolation', function () {
+          this.timeout(30000)
+
+          it('Should maintain separate DSM context for sequential consume-produce flows', (done) => {
+            const setCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'setCheckpoint')
+            const queueA = `queue-a-${id()}`
+            const queueB = `queue-b-${id()}`
+            const queueAOut = `queue-a-out-${id()}`
+            const queueBOut = `queue-b-out-${id()}`
+
+            let doneCount = 0
+            const checkAssertions = () => {
+              if (++doneCount < 2) return
+
+              try {
+                // setCheckpoint(edgeTags, span, parentCtx, payloadSize) → returns new DSM context
+                const calls = setCheckpointSpy.getCalls()
+                const checkpoint = (dir, topic) => calls.find(c =>
+                  c.args[0].includes(`direction:${dir}`) && c.args[0].includes(`topic:${topic}`)
+                )
+
+                const consumeA = checkpoint('in', queueA)
+                const consumeB = checkpoint('in', queueB)
+                const produceA = checkpoint('out', queueAOut)
+                const produceB = checkpoint('out', queueBOut)
+
+                assert.ok(produceA?.args[2], 'Process A produce should have a parent DSM context')
+                assert.ok(produceB?.args[2], 'Process B produce should have a parent DSM context')
+                assert.deepStrictEqual(produceA.args[2].hash, consumeA.returnValue.hash)
+                assert.deepStrictEqual(produceB.args[2].hash, consumeB.returnValue.hash)
+                done()
+              } catch (e) {
+                done(e)
+              } finally {
+                setCheckpointSpy.restore()
+              }
+            }
+
+            channel.assertQueue(queueA, {}, () => {
+              channel.assertQueue(queueB, {}, () => {
+                channel.consume(queueA, () => {
+                  channel.sendToQueue(queueAOut, Buffer.from('from-a'))
+                  checkAssertions()
+                }, { noAck: true })
+                channel.consume(queueB, () => {
+                  channel.sendToQueue(queueBOut, Buffer.from('from-b'))
+                  checkAssertions()
+                }, { noAck: true })
+
+                channel.sendToQueue(queueA, Buffer.from('msg-a'))
+                channel.sendToQueue(queueB, Buffer.from('msg-b'))
+              })
             })
           })
         })
