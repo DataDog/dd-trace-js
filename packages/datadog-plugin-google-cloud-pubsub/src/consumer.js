@@ -96,20 +96,6 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     })
   }
 
-  start (ctx) {
-    if (!this.config.dsmEnabled) return
-    const { message } = ctx
-    if (!message?.attributes) return
-
-    const { span } = ctx.currentStore
-    const subscription = message._subscriber._subscription
-    const topic = subscription?.metadata?.topic || message.attributes?.['pubsub.topic']
-    const payloadSize = getMessageSize(message)
-    this.tracer.decodeDataStreamsContext(message.attributes)
-    this.tracer
-      .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
-  }
-
   bindStart (ctx) {
     const { message } = ctx
     const subscription = message._subscriber._subscription
@@ -196,6 +182,13 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
         const deliveryDuration = Date.now() - Number(publishStartTime)
         span.setTag('pubsub.delivery_duration_ms', deliveryDuration)
       }
+    }
+
+    if (this.config.dsmEnabled && message?.attributes) {
+      const payloadSize = getMessageSize(message)
+      this.tracer.decodeDataStreamsContext(message.attributes)
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${topic}`, 'type:google-pubsub'], span, payloadSize)
     }
 
     return ctx.currentStore
