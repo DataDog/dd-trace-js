@@ -125,7 +125,6 @@ createIntegrationTestSuite('bullmq', 'bullmq', {
             jobB.waitUntilFinished(queueBEvents),
           ])
 
-          // setCheckpoint(edgeTags, span, parentCtx, payloadSize) → returns new DSM context
           const calls = setCheckpointSpy.getCalls()
           const checkpoint = (dir, topic) => calls.find(c =>
             c.args[0].includes(`direction:${dir}`) && c.args[0].includes(`topic:${topic}`)
