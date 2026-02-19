@@ -35,7 +35,7 @@ const triggerWorkflow = () => {
     // eslint-disable-next-line
     let response = ''
     const body = JSON.stringify({
-      ref: 'vendor-on-prepare',
+      ref: 'main',
       inputs: { branch: getBranchUnderTest() },
     })
     const request = https.request(
