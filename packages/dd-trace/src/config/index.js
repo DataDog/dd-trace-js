@@ -283,6 +283,7 @@ class Config {
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED,
       DD_DATA_STREAMS_ENABLED,
       DD_DBM_PROPAGATION_MODE,
+      DD_DBM_INJECT_SQL_BASEHASH,
       DD_DOGSTATSD_HOST,
       DD_DOGSTATSD_PORT,
       DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS,
@@ -574,6 +575,7 @@ class Config {
       DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
     )
     setString(target, 'dbmPropagationMode', DD_DBM_PROPAGATION_MODE)
+    setBoolean(target, 'dbm.injectSqlBaseHash', DD_DBM_INJECT_SQL_BASEHASH)
     setString(target, 'dogstatsd.hostname', DD_DOGSTATSD_HOST)
     setString(target, 'dogstatsd.port', DD_DOGSTATSD_PORT)
     setBoolean(target, 'dsmEnabled', DD_DATA_STREAMS_ENABLED)
@@ -900,6 +902,7 @@ class Config {
       options.codeOriginForSpans?.experimental?.exit_spans?.enabled
     )
     setString(opts, 'dbmPropagationMode', options.dbmPropagationMode)
+    setBoolean(opts, 'dbm.injectSqlBaseHash', options.dbm?.injectSqlBaseHash)
     if (options.dogstatsd) {
       setString(opts, 'dogstatsd.hostname', options.dogstatsd.hostname)
       setString(opts, 'dogstatsd.port', options.dogstatsd.port)
