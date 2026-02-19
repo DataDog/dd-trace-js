@@ -35,7 +35,7 @@ jobs:
       - name: Check out dd-license-attribution
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: DataDog/dd-license-attribution
+          repository: watson/dd-license-attribution
           ref: 8ea483b9f735bf8da632c89796789cc2a050a9a6
           path: dd-license-attribution
 
