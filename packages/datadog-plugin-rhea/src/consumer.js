@@ -15,27 +15,12 @@ class RheaConsumerPlugin extends ConsumerPlugin {
     })
   }
 
-  start (ctx) {
-    if (!this.config.dsmEnabled) return
-    const { msgObj } = ctx
-    if (!msgObj?.message?.delivery_annotations) return
-
-    const { span } = ctx.currentStore
-    const name = getResourceNameFromMessage(msgObj)
-    const payloadSize = getAmqpMessageSize(
-      { headers: msgObj.message.delivery_annotations, content: msgObj.message.body }
-    )
-    this.tracer.decodeDataStreamsContext(msgObj.message.delivery_annotations)
-    this.tracer
-      .setCheckpoint(['direction:in', `topic:${name}`, 'type:rabbitmq'], span, payloadSize)
-  }
-
   bindStart (ctx) {
     const { msgObj } = ctx
     const name = getResourceNameFromMessage(msgObj)
     const childOf = extractTextMap(msgObj, this.tracer)
 
-    this.startSpan({
+    const span = this.startSpan({
       childOf,
       resource: name,
       type: 'worker',
@@ -45,6 +30,18 @@ class RheaConsumerPlugin extends ConsumerPlugin {
         'amqp.link.role': 'receiver',
       },
     }, ctx)
+
+    if (
+      this.config.dsmEnabled &&
+      msgObj?.message?.delivery_annotations
+    ) {
+      const payloadSize = getAmqpMessageSize(
+        { headers: msgObj.message.delivery_annotations, content: msgObj.message.body }
+      )
+      this.tracer.decodeDataStreamsContext(msgObj.message.delivery_annotations)
+      this.tracer
+        .setCheckpoint(['direction:in', `topic:${name}`, 'type:rabbitmq'], span, payloadSize)
+    }
 
     return ctx.currentStore
   }
