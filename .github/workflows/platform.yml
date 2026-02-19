@@ -452,7 +452,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
       - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
-      - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
+      - run: node node_modules/.bin/mocha --allow-uncaught --colors --timeout 30000 integration-tests/init.spec.js
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
