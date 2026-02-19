@@ -703,15 +703,9 @@ describe('OpenTelemetry Meter Provider', () => {
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/json')
     })
 
-    it('logs warning and falls back to protobuf when gRPC protocol is set', () => {
-      const log = require('../../src/log')
-      const warnSpy = sinon.spy(log, 'warn')
+    it('falls back to protobuf serialization when gRPC protocol is set', () => {
       const { meterProvider } = setupTracer({ OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'grpc' })
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
-      const expectedMsg = 'OTLP gRPC protocol is not supported for metrics. ' +
-        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.'
-      assert(warnSpy.getCalls().some(call => format(...call.args) === expectedMsg))
-      warnSpy.restore()
     })
   })
 

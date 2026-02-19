@@ -4,6 +4,7 @@ const os = require('os')
 
 const log = require('../../log')
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
+const OtlpGrpcTraceExporter = require('./otlp_grpc_trace_exporter')
 
 /**
  * @typedef {import('../../config')} Config
@@ -18,7 +19,8 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
  * exporter to additionally send DD-formatted spans to an OTLP endpoint.
  *
  * Key Components:
- * - OtlpHttpTraceExporter: Exports spans via OTLP over HTTP
+ * - OtlpHttpTraceExporter: Exports spans via OTLP over HTTP (port 4318)
+ * - OtlpGrpcTraceExporter: Exports spans via OTLP over gRPC (port 4317)
  * - OtlpTraceTransformer: Transforms DD-formatted spans to OTLP format
  *
  * This supports dual-export: spans continue to flow to the DD Agent via the
@@ -58,6 +60,32 @@ function buildResourceAttributes (config) {
 }
 
 /**
+ * Creates the appropriate OTLP trace exporter based on the configured protocol.
+ *
+ * @param {Config} config - Tracer configuration instance
+ * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+ * @returns {OtlpHttpTraceExporter|OtlpGrpcTraceExporter} The OTLP exporter
+ */
+function createOtlpTraceExporter (config, resourceAttributes) {
+  if (config.otelTracesProtocol === 'grpc') {
+    return new OtlpGrpcTraceExporter(
+      config.otelTracesUrl,
+      config.otelTracesHeaders,
+      config.otelTracesTimeout,
+      resourceAttributes
+    )
+  }
+
+  return new OtlpHttpTraceExporter(
+    config.otelTracesUrl,
+    config.otelTracesHeaders,
+    config.otelTracesTimeout,
+    config.otelTracesProtocol,
+    resourceAttributes
+  )
+}
+
+/**
  * Initializes OTLP trace export by wrapping the existing span exporter
  * with a composite that sends spans to both the DD Agent and an OTLP endpoint.
  *
@@ -66,14 +94,7 @@ function buildResourceAttributes (config) {
  */
 function initializeOtlpTraceExport (config, tracer) {
   const resourceAttributes = buildResourceAttributes(config)
-
-  const otlpExporter = new OtlpHttpTraceExporter(
-    config.otelTracesUrl,
-    config.otelTracesHeaders,
-    config.otelTracesTimeout,
-    config.otelTracesProtocol,
-    resourceAttributes
-  )
+  const otlpExporter = createOtlpTraceExporter(config, resourceAttributes)
 
   // Wrap the existing exporter in the span processor for dual-export.
   // The original exporter (e.g. AgentExporter) continues to receive spans,
@@ -107,6 +128,6 @@ function initializeOtlpTraceExport (config, tracer) {
 
 module.exports = {
   OtlpHttpTraceExporter,
+  OtlpGrpcTraceExporter,
   initializeOtlpTraceExport,
 }
-

@@ -4,6 +4,7 @@
 process.setMaxListeners(50)
 
 const assert = require('assert')
+const http2 = require('http2')
 const os = require('os')
 const http = require('http')
 
@@ -475,6 +476,261 @@ describe('OpenTelemetry Traces', () => {
     })
   })
 
+  describe('gRPC Exporter', () => {
+    const OtlpGrpcTraceExporter = require('../../src/opentelemetry/trace/otlp_grpc_trace_exporter')
+
+    it('creates an instance with correct gRPC service path', () => {
+      const exporter = new OtlpGrpcTraceExporter(
+        'http://localhost:4317', '', 10000, { 'service.name': 'test' }
+      )
+      assert(exporter instanceof OtlpGrpcTraceExporter)
+      assert.strictEqual(exporter.signalType, 'traces')
+    })
+
+    it('does not export empty span arrays', () => {
+      const exporter = new OtlpGrpcTraceExporter(
+        'http://localhost:4317', '', 10000, {}
+      )
+
+      sinon.stub(http2, 'connect')
+      exporter.export([])
+
+      assert(http2.connect.notCalled, 'should not connect for empty spans')
+    })
+
+    it('transforms spans to protobuf and sends via gRPC framing', () => {
+      const exporter = new OtlpGrpcTraceExporter(
+        'http://localhost:4317', '', 10000, { 'service.name': 'grpc-test' }
+      )
+
+      let capturedData
+      let capturedHeaders
+
+      const mockStream = {
+        setTimeout: sinon.stub(),
+        on: sinon.stub(),
+        end: sinon.stub().callsFake((data) => {
+          capturedData = data
+
+          // Verify gRPC framing: 1 byte flag + 4 bytes length + protobuf payload
+          assert.strictEqual(data[0], 0, 'first byte should be compression flag (0 = uncompressed)')
+          const messageLength = data.readUInt32BE(1)
+          assert.strictEqual(data.length, 5 + messageLength, 'total length should be 5 + message length')
+
+          // Decode the protobuf payload (after the 5-byte gRPC header)
+          const protobufPayload = data.slice(5)
+          const decoded = protoTraceService.decode(protobufPayload)
+          assert.strictEqual(decoded.resourceSpans.length, 1)
+          assert.strictEqual(decoded.resourceSpans[0].scopeSpans[0].spans[0].name, 'grpc.test.op')
+
+          // Simulate successful gRPC response via trailers
+          const trailersHandler = mockStream.on.getCalls().find(c => c.args[0] === 'trailers')
+          if (trailersHandler) {
+            trailersHandler.args[1]({ 'grpc-status': '0' })
+          }
+        }),
+      }
+
+      const mockSession = {
+        closed: false,
+        destroyed: false,
+        request: sinon.stub().callsFake((headers) => {
+          capturedHeaders = headers
+          return mockStream
+        }),
+        on: sinon.stub(),
+        once: sinon.stub(),
+        destroy: sinon.stub(),
+      }
+
+      sinon.stub(http2, 'connect').returns(mockSession)
+
+      const span = createMockSpan({ name: 'grpc.test.op' })
+      exporter.export([span])
+
+      assert(http2.connect.calledOnce)
+      assert(http2.connect.calledWith('http://localhost:4317'))
+      assert.strictEqual(capturedHeaders[':method'], 'POST')
+      assert.strictEqual(
+        capturedHeaders[':path'],
+        '/opentelemetry.proto.collector.trace.v1.TraceService/Export'
+      )
+      assert.strictEqual(capturedHeaders['content-type'], 'application/grpc')
+      assert.strictEqual(capturedHeaders.te, 'trailers')
+      assert(capturedData, 'payload should have been sent')
+    })
+
+    it('parses custom headers from config', () => {
+      const exporter = new OtlpGrpcTraceExporter(
+        'http://localhost:4317', 'x-api-key=secret,x-org=test-org', 10000, {}
+      )
+
+      let capturedHeaders
+      const mockStream = {
+        setTimeout: sinon.stub(),
+        on: sinon.stub(),
+        end: sinon.stub().callsFake(() => {
+          const trailersHandler = mockStream.on.getCalls().find(c => c.args[0] === 'trailers')
+          if (trailersHandler) {
+            trailersHandler.args[1]({ 'grpc-status': '0' })
+          }
+        }),
+      }
+      const mockSession = {
+        closed: false,
+        destroyed: false,
+        request: sinon.stub().callsFake((headers) => {
+          capturedHeaders = headers
+          return mockStream
+        }),
+        on: sinon.stub(),
+        once: sinon.stub(),
+        destroy: sinon.stub(),
+      }
+      sinon.stub(http2, 'connect').returns(mockSession)
+
+      exporter.export([createMockSpan()])
+
+      assert.strictEqual(capturedHeaders['x-api-key'], 'secret')
+      assert.strictEqual(capturedHeaders['x-org'], 'test-org')
+    })
+
+    it('reuses HTTP/2 session across multiple exports', () => {
+      const exporter = new OtlpGrpcTraceExporter(
+        'http://localhost:4317', '', 10000, {}
+      )
+
+      const mockStream = {
+        setTimeout: sinon.stub(),
+        on: sinon.stub(),
+        end: sinon.stub().callsFake(() => {
+          const trailersHandler = mockStream.on.getCalls().find(c => c.args[0] === 'trailers')
+          if (trailersHandler) {
+            trailersHandler.args[1]({ 'grpc-status': '0' })
+          }
+        }),
+      }
+      const mockSession = {
+        closed: false,
+        destroyed: false,
+        request: sinon.stub().returns(mockStream),
+        on: sinon.stub(),
+        once: sinon.stub(),
+        destroy: sinon.stub(),
+      }
+      sinon.stub(http2, 'connect').returns(mockSession)
+
+      exporter.export([createMockSpan()])
+      exporter.export([createMockSpan()])
+
+      assert.strictEqual(http2.connect.callCount, 1, 'should reuse the HTTP/2 session')
+      assert.strictEqual(mockSession.request.callCount, 2, 'should make two requests on same session')
+    })
+
+    it('handles gRPC error status in trailers', () => {
+      const exporter = new OtlpGrpcTraceExporter(
+        'http://localhost:4317', '', 10000, {}
+      )
+
+      let exportResult
+      const mockStream = {
+        setTimeout: sinon.stub(),
+        on: sinon.stub(),
+        end: sinon.stub().callsFake(() => {
+          const trailersHandler = mockStream.on.getCalls().find(c => c.args[0] === 'trailers')
+          if (trailersHandler) {
+            trailersHandler.args[1]({ 'grpc-status': '14', 'grpc-message': 'unavailable' })
+          }
+        }),
+      }
+      const mockSession = {
+        closed: false,
+        destroyed: false,
+        request: sinon.stub().returns(mockStream),
+        on: sinon.stub(),
+        once: sinon.stub(),
+        destroy: sinon.stub(),
+      }
+      sinon.stub(http2, 'connect').returns(mockSession)
+
+      sinon.stub(exporter, 'sendPayload').callsFake((payload, cb) => {
+        cb({ code: 1, error: new Error('unavailable') })
+        exportResult = { code: 1 }
+      })
+
+      exporter.export([createMockSpan()])
+      assert.strictEqual(exportResult.code, 1)
+    })
+
+    it('shuts down and destroys the HTTP/2 session', () => {
+      const exporter = new OtlpGrpcTraceExporter(
+        'http://localhost:4317', '', 10000, {}
+      )
+
+      const mockStream = {
+        setTimeout: sinon.stub(),
+        on: sinon.stub(),
+        end: sinon.stub().callsFake(() => {
+          const trailersHandler = mockStream.on.getCalls().find(c => c.args[0] === 'trailers')
+          if (trailersHandler) {
+            trailersHandler.args[1]({ 'grpc-status': '0' })
+          }
+        }),
+      }
+      const mockSession = {
+        closed: false,
+        destroyed: false,
+        request: sinon.stub().returns(mockStream),
+        on: sinon.stub(),
+        once: sinon.stub(),
+        destroy: sinon.stub(),
+      }
+      sinon.stub(http2, 'connect').returns(mockSession)
+
+      exporter.export([createMockSpan()])
+      exporter.shutdown()
+
+      assert(mockSession.destroy.calledOnce, 'should destroy the HTTP/2 session')
+    })
+
+    it('records telemetry metrics with grpc protocol tag', () => {
+      const telemetryMetrics = {
+        manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) },
+      }
+      const MockedGrpcExporter = proxyquire('../../src/opentelemetry/trace/otlp_grpc_trace_exporter', {
+        '../otlp/otlp_grpc_exporter_base': proxyquire('../../src/opentelemetry/otlp/otlp_grpc_exporter_base', {
+          '../../telemetry/metrics': telemetryMetrics,
+        }),
+      })
+
+      const exporter = new MockedGrpcExporter('http://localhost:4317', '', 1000, {})
+
+      const mockStream = {
+        setTimeout: sinon.stub(),
+        on: sinon.stub(),
+        end: sinon.stub().callsFake(() => {
+          const trailersHandler = mockStream.on.getCalls().find(c => c.args[0] === 'trailers')
+          if (trailersHandler) {
+            trailersHandler.args[1]({ 'grpc-status': '0' })
+          }
+        }),
+      }
+      const mockSession = {
+        closed: false,
+        destroyed: false,
+        request: sinon.stub().returns(mockStream),
+        on: sinon.stub(),
+        once: sinon.stub(),
+        destroy: sinon.stub(),
+      }
+      sinon.stub(http2, 'connect').returns(mockSession)
+
+      exporter.export([createMockSpan()])
+
+      assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
+    })
+  })
+
   describe('Configurations', () => {
     it('uses default protobuf protocol', () => {
       delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
@@ -483,6 +739,29 @@ describe('OpenTelemetry Traces', () => {
       const tracer = setupTracer()
       const config = tracer._tracer._config
       assert.strictEqual(config.otelTracesProtocol, 'http/protobuf')
+    })
+
+    it('uses port 4317 when gRPC protocol is configured', () => {
+      process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
+
+      const config = getConfigFresh()
+      assert.strictEqual(config.otelTracesProtocol, 'grpc')
+      assert(config.otelTracesUrl.includes(':4317'), `expected port 4317 in URL, got: ${config.otelTracesUrl}`)
+    })
+
+    it('uses port 4318 when http/protobuf protocol is configured', () => {
+      process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/protobuf'
+
+      const config = getConfigFresh()
+      assert(config.otelTracesUrl.includes(':4318'), `expected port 4318 in URL, got: ${config.otelTracesUrl}`)
+    })
+
+    it('respects explicit endpoint even with grpc protocol', () => {
+      process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
+      process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://custom-collector:9999'
+
+      const config = getConfigFresh()
+      assert.strictEqual(config.otelTracesUrl, 'http://custom-collector:9999')
     })
 
     // Note: Configuration env var tests are skipped due to test setup complexity.
