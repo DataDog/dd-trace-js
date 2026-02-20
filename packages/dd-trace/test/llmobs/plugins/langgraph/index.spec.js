@@ -333,7 +333,7 @@ describe('integrations', () => {
             span: apmSpans[0],
             spanKind: 'workflow',
             name: 'langgraph.workflow',
-            inputValue: MOCK_STRING, // Complex input
+            inputValue: JSON.stringify({ config: { raw: true }, data: { initial: 'value' } }),
             outputValue: MOCK_STRING, // Complex output
             tags: { ml_app: 'test', integration: 'langgraph' },
           })
@@ -509,7 +509,7 @@ describe('integrations', () => {
             spanKind: 'workflow',
             name: 'langgraph.workflow',
             inputValue: JSON.stringify({ value: 0 }),
-            outputValue: '', // No output on error
+            outputValue: undefined, // No output on error
             error: {
               type: 'Error',
               message: 'Streaming error',
