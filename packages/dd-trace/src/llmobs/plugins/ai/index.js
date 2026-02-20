@@ -18,6 +18,7 @@ const {
   getToolNameFromTags,
   getToolCallResultContent,
   getLlmObsSpanName,
+  getTelemetryMetadata,
 } = require('./util')
 
 /**
@@ -197,8 +198,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagTextIO(span, parsedInputs, output)
 
-    const metadata = getGenerationMetadata(tags)
-    this._tagger.tagMetadata(span, metadata)
+    const generationMetadata = getGenerationMetadata(tags) || {}
+    const telemetryMetadata = getTelemetryMetadata(tags) || {}
+    const metadata = { ...generationMetadata, ...telemetryMetadata }
+    this._tagger.tagMetadata(span, Object.keys(metadata).length ? metadata : null)
   }
 
   setEmbeddingTags (span, tags) {
@@ -213,6 +216,9 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const output = `[${numberOfEmbeddings} embedding(s) returned with size ${embeddingsLength}]`
 
     this._tagger.tagEmbeddingIO(span, parsedInputs, output)
+
+    const metadata = getTelemetryMetadata(tags)
+    this._tagger.tagMetadata(span, metadata)
 
     const usage = tags['ai.usage.tokens']
     this._tagger.tagMetrics(span, {
@@ -232,8 +238,13 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagTextIO(span, prompt, output)
 
-    const metadata = getGenerationMetadata(tags) ?? {}
-    metadata.schema = getJsonStringValue(tags['ai.schema'], {})
+    const generationMetadata = getGenerationMetadata(tags) || {}
+    const telemetryMetadata = getTelemetryMetadata(tags) || {}
+    const metadata = {
+      ...generationMetadata,
+      ...telemetryMetadata,
+      schema: getJsonStringValue(tags['ai.schema'], {}),
+    }
     this._tagger.tagMetadata(span, metadata)
   }
 
@@ -248,7 +259,9 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagTextIO(span, prompt, output)
 
-    const metadata = getGenerationMetadata(tags)
+    const generationMetadata = getGenerationMetadata(tags)
+    const telemetryMetadata = getTelemetryMetadata(tags)
+    const metadata = { ...generationMetadata, ...telemetryMetadata }
     this._tagger.tagMetadata(span, metadata)
   }
 
@@ -270,7 +283,9 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagLLMIO(span, parsedInputMessages, outputMessage)
 
-    const metadata = getModelMetadata(tags)
+    const modelMetadata = getModelMetadata(tags)
+    const telemetryMetadata = getTelemetryMetadata(tags)
+    const metadata = { ...modelMetadata, ...telemetryMetadata }
     this._tagger.tagMetadata(span, metadata)
 
     const usage = getUsage(tags)

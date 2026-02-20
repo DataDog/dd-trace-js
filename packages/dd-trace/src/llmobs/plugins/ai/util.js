@@ -10,6 +10,8 @@ const MODEL_METADATA_KEYS = new Set([
   'stop_sequences',
 ])
 
+const VERCEL_AI_TELEMETRY_METADATA_PREFIX = 'ai.telemetry.metadata.'
+
 /**
  * @typedef {import('../../../opentracing/span')} Span
  *
@@ -205,6 +207,26 @@ function getLlmObsSpanName (operation, functionId) {
   return functionId ? `${functionId}.${operation}` : operation
 }
 
+/**
+ * Get custom telemetry metadata from ai.telemetry.metadata.* attributes
+ * @param {Record<string, unknown>} tags
+ * @returns {Record<string, unknown> | null}
+ */
+function getTelemetryMetadata (tags) {
+  const metadata = {}
+
+  for (const tag of Object.keys(tags)) {
+    if (!tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)) continue
+
+    const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
+    if (metadataKey) {
+      metadata[metadataKey] = tags[tag]
+    }
+  }
+
+  return metadata
+}
+
 module.exports = {
   getSpanTags,
   getOperation,
@@ -215,4 +237,5 @@ module.exports = {
   getToolNameFromTags,
   getToolCallResultContent,
   getLlmObsSpanName,
+  getTelemetryMetadata,
 }
