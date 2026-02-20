@@ -83,6 +83,14 @@ describe('OpenTelemetry Logs', () => {
     }
   }
 
+  function mockLogWarn () {
+    const log = require('../../src/log')
+    const originalWarn = log.warn
+    let warningMessage = ''
+    log.warn = (msg) => { warningMessage = msg }
+    return { restore: () => { log.warn = originalWarn }, getMessage: () => warningMessage }
+  }
+
   beforeEach(() => {
     originalEnv = { ...process.env }
   })
@@ -484,11 +492,15 @@ describe('OpenTelemetry Logs', () => {
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/json')
     })
 
-    it('falls back to protobuf serialization when gRPC protocol is set', () => {
+    it('warns and falls back to protobuf when gRPC protocol is set', () => {
+      const logMock = mockLogWarn()
       process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = 'grpc'
 
       const { loggerProvider } = setupTracer()
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
+      assert.match(logMock.getMessage(), /OTLP gRPC protocol is not supported/)
+
+      logMock.restore()
     })
 
     it('configures OTLP endpoint from environment variable', () => {
