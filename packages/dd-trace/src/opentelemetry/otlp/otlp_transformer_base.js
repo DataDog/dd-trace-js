@@ -33,6 +33,7 @@ class OtlpTransformerBase {
         'OTLP gRPC protocol is not supported for %s. Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.',
         signalType
       )
+      protocol = 'http/protobuf'
     }
     this.protocol = protocol
   }
