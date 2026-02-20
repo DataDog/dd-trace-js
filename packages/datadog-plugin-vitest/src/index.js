@@ -301,14 +301,17 @@ class VitestPlugin extends CiPlugin {
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'vitest'
-      )
-      testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
-      testSuiteMetadata[TEST_SOURCE_START] = 1
+      // Request error tags are applied to test spans in the main process (worker-report:trace handler)
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'vitest'
+        ),
+        [TEST_SOURCE_FILE]: testSuite,
+        [TEST_SOURCE_START]: 1,
+      }
 
       const codeOwners = this.getCodeOwners(testSuiteMetadata)
       if (codeOwners) {

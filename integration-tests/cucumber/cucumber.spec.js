@@ -326,6 +326,21 @@ describe(`cucumber@${version} commonJS`, () => {
         envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
         logsEndpoint = isAgentless ? '/api/v2/logs' : '/debugger/v1/input'
       })
+
+      it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', (done) => {
+        if (!isAgentless) return done()
+        receiver.setSettingsResponseCode(404)
+        receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle')).then((eventsRequest) => {
+          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta['_dd.ci.library_configuration_error'], '4xx')
+          const testEvent = eventsRequest.payload.events.find(event => event.type === 'test')
+          assert.ok(testEvent, 'should have test event')
+          assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], '4xx')
+          done()
+        }).catch(done)
+        childProcess = exec(runTestsCommand, { cwd, env: envVars })
+      })
+
       const runModes = ['serial']
 
       if (version !== '7.0.0') { // only on latest or 9 if node is old
