@@ -48,7 +48,6 @@ const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 s
 const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'ignore'])
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 const DEFAULT_OTLP_HTTP_PORT = 4318
-const DEFAULT_OTLP_GRPC_PORT = 4317
 const RUNTIME_ID = uuid()
 const NAMING_VERSIONS = new Set(['v0', 'v1'])
 const DEFAULT_NAMING_VERSION = 'v0'
@@ -1138,12 +1137,9 @@ class Config {
 
     // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent
     const agentHostname = this.#getHostname()
-    const otelTracesPort = this.#env.otelTracesProtocol === 'grpc'
-      ? DEFAULT_OTLP_GRPC_PORT
-      : DEFAULT_OTLP_HTTP_PORT
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}/v1/metrics`
-    calc.otelTracesUrl = `http://${agentHostname}:${otelTracesPort}`
+    calc.otelTracesUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}`
 
     setBoolean(calc, 'isGitUploadEnabled',

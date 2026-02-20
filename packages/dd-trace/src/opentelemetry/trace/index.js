@@ -4,7 +4,6 @@ const os = require('os')
 
 const log = require('../../log')
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
-const OtlpGrpcTraceExporter = require('./otlp_grpc_trace_exporter')
 
 /**
  * @typedef {import('../../config')} Config
@@ -19,9 +18,8 @@ const OtlpGrpcTraceExporter = require('./otlp_grpc_trace_exporter')
  * exporter to additionally send DD-formatted spans to an OTLP endpoint.
  *
  * Key Components:
- * - OtlpHttpTraceExporter: Exports spans via OTLP over HTTP (port 4318)
- * - OtlpGrpcTraceExporter: Exports spans via OTLP over gRPC (port 4317)
- * - OtlpTraceTransformer: Transforms DD-formatted spans to OTLP format
+ * - OtlpHttpTraceExporter: Exports spans via OTLP over HTTP/JSON (port 4318)
+ * - OtlpTraceTransformer: Transforms DD-formatted spans to OTLP JSON format
  *
  * This supports dual-export: spans continue to flow to the DD Agent via the
  * existing exporter, and are additionally sent to an OTLP endpoint.
@@ -60,27 +58,17 @@ function buildResourceAttributes (config) {
 }
 
 /**
- * Creates the appropriate OTLP trace exporter based on the configured protocol.
+ * Creates the OTLP HTTP/JSON trace exporter.
  *
  * @param {Config} config - Tracer configuration instance
  * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
- * @returns {OtlpHttpTraceExporter|OtlpGrpcTraceExporter} The OTLP exporter
+ * @returns {OtlpHttpTraceExporter} The OTLP HTTP/JSON exporter
  */
 function createOtlpTraceExporter (config, resourceAttributes) {
-  if (config.otelTracesProtocol === 'grpc') {
-    return new OtlpGrpcTraceExporter(
-      config.otelTracesUrl,
-      config.otelTracesHeaders,
-      config.otelTracesTimeout,
-      resourceAttributes
-    )
-  }
-
   return new OtlpHttpTraceExporter(
     config.otelTracesUrl,
     config.otelTracesHeaders,
     config.otelTracesTimeout,
-    config.otelTracesProtocol,
     resourceAttributes
   )
 }
@@ -128,6 +116,5 @@ function initializeOtlpTraceExport (config, tracer) {
 
 module.exports = {
   OtlpHttpTraceExporter,
-  OtlpGrpcTraceExporter,
   initializeOtlpTraceExport,
 }

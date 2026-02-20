@@ -1,7 +1,7 @@
 'use strict'
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
-const { getProtobufTypes } = require('../otlp/protobuf_loader')
+const { VERSION } = require('../../../../../version')
 
 /**
  * @typedef {object} DDFormattedSpan
@@ -48,13 +48,13 @@ const EXCLUDED_META_KEYS = new Set([
 ])
 
 /**
- * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace format.
+ * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
  * This implementation follows the OTLP Trace v1.7.0 Data Model specification:
  * https://opentelemetry.io/docs/specs/otlp/#trace-data-model
  *
  * It receives DD-formatted spans (from span_format.js) and produces
- * an ExportTraceServiceRequest serialized as protobuf or JSON.
+ * an ExportTraceServiceRequest serialized as JSON (http/json protocol only).
  *
  * @class OtlpTraceTransformer
  * @augments OtlpTransformerBase
@@ -64,51 +64,18 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * Creates a new OtlpTraceTransformer instance.
    *
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
-   * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    */
-  constructor (resourceAttributes, protocol) {
-    super(resourceAttributes, protocol, 'traces')
+  constructor (resourceAttributes) {
+    super(resourceAttributes, 'http/json', 'traces')
   }
 
   /**
-   * Transforms DD-formatted spans to OTLP format based on the configured protocol.
-   *
-   * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans to transform
-   * @returns {Buffer} Transformed spans in the appropriate format
-   */
-  transformSpans (spans) {
-    if (this.protocol === 'http/json') {
-      return this.#transformToJson(spans)
-    }
-    return this.#transformToProtobuf(spans)
-  }
-
-  /**
-   * Transforms spans to protobuf format.
-   *
-   * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans to transform
-   * @returns {Buffer} Protobuf-encoded trace data
-   */
-  #transformToProtobuf (spans) {
-    const { protoTraceService } = getProtobufTypes()
-
-    const traceData = {
-      resourceSpans: [{
-        resource: this.transformResource(),
-        scopeSpans: this.#transformScopeSpans(spans),
-      }],
-    }
-
-    return this.serializeToProtobuf(protoTraceService, traceData)
-  }
-
-  /**
-   * Transforms spans to JSON format.
+   * Transforms DD-formatted spans to OTLP JSON format.
    *
    * @param {DDFormattedSpan[]} spans - Array of DD-formatted spans to transform
    * @returns {Buffer} JSON-encoded trace data
    */
-  #transformToJson (spans) {
+  transformSpans (spans) {
     const traceData = {
       resourceSpans: [{
         resource: this.transformResource(),
@@ -129,7 +96,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     return [{
       scope: {
         name: 'dd-trace-js',
-        version: '',
+        version: VERSION,
         attributes: [],
         droppedAttributesCount: 0,
       },
