@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
-const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
 const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
@@ -32,13 +31,13 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         const allSpans = traces.flat()
-        const invokeSpan = allSpans.find(span => span.name === 'langgraph.invoke')
+        const invokeSpan = allSpans.find(span => span.name === 'LangGraph')
 
         if (!invokeSpan) {
-          throw new Error('langgraph.invoke span not found')
+          throw new Error('LangGraph span not found')
         }
 
-        assert.equal(invokeSpan.name, 'langgraph.invoke')
+        assert.equal(invokeSpan.name, 'LangGraph')
         assert.equal(invokeSpan.meta['span.kind'], 'internal')
         assert.equal(invokeSpan.meta.component, 'langgraph')
       })
@@ -51,12 +50,12 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         const allSpans = traces.flat()
-        const invokeSpan = allSpans.find(span => span.name === 'langgraph.invoke' && span.error === 1)
+        const invokeSpan = allSpans.find(span => span.name === 'LangGraph' && span.error === 1)
 
         if (!invokeSpan) {
-          throw new Error('langgraph.invoke error span not found')
+          throw new Error('LangGraph error span not found')
         }
-        assert.equal(invokeSpan.name, 'langgraph.invoke')
+        assert.equal(invokeSpan.name, 'LangGraph')
         assert.equal(invokeSpan.error, 1)
         assert.equal(invokeSpan.meta['span.kind'], 'internal')
         assert.equal(invokeSpan.meta.component, 'langgraph')
@@ -75,13 +74,13 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         const allSpans = traces.flat()
-        const streamSpan = allSpans.find(span => span.name === 'langgraph.stream')
+        const streamSpan = allSpans.find(span => span.name === 'LangGraph')
 
         if (!streamSpan) {
-          throw new Error('langgraph.stream span not found')
+          throw new Error('LangGraph span not found')
         }
 
-        assert.equal(streamSpan.name, 'langgraph.stream')
+        assert.equal(streamSpan.name, 'LangGraph')
         assert.equal(streamSpan.meta['span.kind'], 'internal')
         assert.equal(streamSpan.meta.component, 'langgraph')
       })
@@ -94,13 +93,13 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         const allSpans = traces.flat()
-        const streamSpan = allSpans.find(span => span.name === 'langgraph.stream' && span.error === 1)
+        const streamSpan = allSpans.find(span => span.name === 'LangGraph' && span.error === 1)
 
         if (!streamSpan) {
-          throw new Error('langgraph.stream error span not found')
+          throw new Error('LangGraph error span not found')
         }
 
-        assert.equal(streamSpan.name, 'langgraph.stream')
+        assert.equal(streamSpan.name, 'LangGraph')
         assert.equal(streamSpan.error, 1)
         assert.equal(streamSpan.meta['span.kind'], 'internal')
         assert.equal(streamSpan.meta.component, 'langgraph')
