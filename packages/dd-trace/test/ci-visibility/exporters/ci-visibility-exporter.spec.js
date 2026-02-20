@@ -755,7 +755,7 @@ describe('CI Visibility Exporter', () => {
       it('should return an error if the request fails', (done) => {
         const scope = nock(url)
           .post('/api/v2/ci/libraries/tests')
-          .reply(500)
+          .reply(404)
         const ciVisibilityExporter = new CiVisibilityExporter({ port })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
