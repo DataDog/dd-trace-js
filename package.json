@@ -59,6 +59,7 @@
     "test:integration": "mocha --timeout 60000 \"integration-tests/*.spec.js\"",
     "test:integration:aiguard": "mocha --timeout 60000 \"integration-tests/aiguard/*.spec.js\"",
     "test:integration:appsec": "mocha --timeout 60000 \"integration-tests/appsec/*.spec.js\"",
+    "test:integration:bun": "mocha --timeout 60000 \"integration-tests/bun/*.spec.js\"",
     "test:integration:cucumber": "mocha --timeout 60000 \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cypress": "mocha --timeout 60000 \"integration-tests/cypress/*.spec.js\"",
     "test:integration:debugger": "mocha --timeout 60000 \"integration-tests/debugger/*.spec.js\"",
