@@ -26,19 +26,6 @@
   },
 
   // Extension settings
-  "cSpell.words": [
-    "aerospike",
-    "appsec",
-    "backportability",
-    "ddsource",
-    "kafkajs",
-    "llmobs",
-    "microbenchmarks",
-    "oracledb",
-    "rabbitmq",
-    "rspack",
-    "sirun"
-  ],
   "eslint.format.enable": true,
   "yaml.schemas": {
     "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yml"
