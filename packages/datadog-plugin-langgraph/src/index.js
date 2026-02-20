@@ -2,7 +2,7 @@
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const langgraphLLMObsPlugins = require('../../dd-trace/src/llmobs/plugins/langgraph')
-const internalPlugin = require('./internal')
+const internalPlugin = require('./stream')
 
 const plugins = {}
 
