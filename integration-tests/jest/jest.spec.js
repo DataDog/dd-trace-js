@@ -5971,9 +5971,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           assertObjectContains(test, {
             meta: {
+              'outer_scope.beforeEach': 'true',
               'custom_tag.beforeEach': 'true',
               'custom_tag.it': 'true',
               'custom_tag.afterEach': 'true',
+              'outer_scope.afterEach': 'true',
             },
           })
         })
