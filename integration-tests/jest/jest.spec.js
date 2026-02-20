@@ -5876,6 +5876,423 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
         assert.strictEqual(exitCode, 1, 'exit code 1 when suite fails (resolution error)')
       })
+
+      it('ATR + quarantine exits with code 0 when SHOULD_CHECK_RESULTS is set', async () => {
+        receiver.setSettings({
+          test_management: { enabled: true },
+          flaky_test_retries_enabled: true,
+        })
+
+        let stdout = ''
+        const testAssertionsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            // Session should pass because the only failing test is quarantined
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            // The quarantined test should have been retried by ATR
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const quarantinedTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+            )
+            assert.ok(quarantinedTests.length > 1, 'quarantined test should have been retried by ATR')
+            for (const test of quarantinedTests) {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-quarantine-1',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+
+        // Exit code should be 0 because the only failing test is quarantined (even after ATR retries)
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /Datadog Test Optimization/)
+        assert.match(stdout, /\d+ test failure\(s\) were ignored\. Exit code set to 0\./)
+      })
+
+      it('EFD flaky + quarantine exits with code 0 when SHOULD_CHECK_RESULTS is set', async () => {
+        const NUM_RETRIES_EFD = 3
+
+        // The new flaky test is NOT in known tests so EFD will retry it
+        receiver.setKnownTests({ jest: {} })
+
+        receiver.setSettings({
+          test_management: { enabled: true },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': NUM_RETRIES_EFD },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        // Only quarantine the always-failing test
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-efd-and-quarantine.js': {
+                tests: {
+                  'efd and quarantine is a quarantined failing test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const testAssertionsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            // Session should pass: EFD covers the flaky test's failures, quarantine covers the quarantined test
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+            // Verify the quarantined test is tagged
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const quarantinedTests = tests.filter(
+              test => test.meta[TEST_NAME] === 'efd and quarantine is a quarantined failing test'
+            )
+            assert.ok(quarantinedTests.length >= 1)
+            for (const test of quarantinedTests) {
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+            }
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-efd-and-quarantine',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+
+        // Exit code should be 0 because all failures are accounted for (EFD + quarantine)
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /Datadog Test Optimization/)
+        assert.match(stdout, /\d+ test failure\(s\) were ignored\. Exit code set to 0\./)
+      })
+
+      it('multiple quarantined tests in same suite exit with code 0', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-many-quarantined.js': {
+                tests: {
+                  'multiple quarantine tests first failing test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                  'multiple quarantine tests second failing test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const testAssertionsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            // Session should pass because all failing tests are quarantined
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const firstFailingTest = tests.find(
+              t => t.meta[TEST_NAME] === 'multiple quarantine tests first failing test'
+            )
+            assert.strictEqual(firstFailingTest.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(firstFailingTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+            const secondFailingTest = tests.find(
+              t => t.meta[TEST_NAME] === 'multiple quarantine tests second failing test'
+            )
+            assert.strictEqual(secondFailingTest.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(secondFailingTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+            const passingTest = tests.find(t => t.meta[TEST_NAME] === 'multiple quarantine tests passing test')
+            assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-many-quarantined',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+
+        // Exit code should be 0 because both failing tests are quarantined
+        assert.strictEqual(exitCode, 0)
+        assert.match(stdout, /Datadog Test Optimization/)
+        assert.match(stdout, /2 test failure\(s\) were ignored\. Exit code set to 0\./)
+      })
+
+      it('afterAll failure prevents quarantine flip even when the only test failure is quarantined', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-suite-after-all-failure.js': {
+                tests: {
+                  'quarantine tests with afterAll failure failing quarantined test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const testAssertionsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end')?.content
+            // Session status is 'fail' because afterAll raised a suite-level error
+            // (numRuntimeErrorTestSuites > 0 → mustNotFlipSuccess = true → no quarantine flip)
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const quarantinedTest = tests.find(
+              t => t.meta[TEST_NAME] === 'quarantine tests with afterAll failure failing quarantined test'
+            )
+            assert.ok(quarantinedTest, 'quarantined test should be reported')
+            assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          })
+
+        let stderr = ''
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-suite-after-all-failure',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+        childProcess.stderr?.on('data', (chunk) => { stderr += chunk.toString() })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+        // Exit code is 1 because afterAll failure sets numRuntimeErrorTestSuites > 0,
+        // preventing the quarantine flip (mustNotFlipSuccess = true)
+        assert.strictEqual(exitCode, 1, 'exit code should be 1 when afterAll fails')
+        // A warning should explain that the suite-level error is blocking quarantine,
+        // and identify both the suite with the error and the quarantined tests
+        assert.match(stderr, /1 test failure\(s\) are quarantined, but the exit code is still 1/)
+        assert.match(stderr, /Test suite failed to run/)
+        assert.match(stderr, /test-suite-after-all-failure/) // suite with the runtime error
+        assert.match(
+          stderr,
+          /quarantine tests with afterAll failure.*failing quarantined test.*Quarantine/
+        )
+      })
+
+      it('afterAll failure in one suite blocks flip even when another suite has only quarantined failures',
+        async () => {
+        // Suite A (test-suite-after-all-failure): afterAll error + 1 quarantined failing test
+        // Suite B (test-many-quarantined):        2 quarantined failing tests, no suite error
+        // Expected: exit code 1 (Suite A's afterAll blocks the flip for the whole run),
+        //           warning lists only Suite A as having the runtime error,
+        //           warning lists all 3 quarantined tests (1 from A + 2 from B)
+          receiver.setSettings({ test_management: { enabled: true } })
+
+          receiver.setTestManagementTests({
+            jest: {
+              suites: {
+                'ci-visibility/test-management/test-suite-after-all-failure.js': {
+                  tests: {
+                    'quarantine tests with afterAll failure failing quarantined test': {
+                      properties: { quarantined: true },
+                    },
+                  },
+                },
+                'ci-visibility/test-management/test-many-quarantined.js': {
+                  tests: {
+                    'multiple quarantine tests first failing test': {
+                      properties: { quarantined: true },
+                    },
+                    'multiple quarantine tests second failing test': {
+                      properties: { quarantined: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          const testAssertionsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end')?.content
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const quarantinedTests = tests.filter(t => t.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true')
+              assert.strictEqual(quarantinedTests.length, 3, 'all 3 quarantined tests should be tagged')
+
+              const passingTest = tests.find(t => t.meta[TEST_NAME] === 'multiple quarantine tests passing test')
+              assert.strictEqual(
+                passingTest?.meta[TEST_STATUS], 'pass', 'non-quarantined passing test should still pass'
+              )
+            })
+
+          let stderr = ''
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TESTS_TO_RUN: 'test-management/(test-suite-after-all-failure|test-many-quarantined)',
+                SHOULD_CHECK_RESULTS: '1',
+              },
+            }
+          )
+          childProcess.stderr?.on('data', (chunk) => { stderr += chunk.toString() })
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+          assert.strictEqual(exitCode, 1, 'exit code should be 1 when a suite has an afterAll error')
+
+          // Extract just the Datadog warning section (printed at the end of stderr after jest output)
+          const ddWarningMatch = stderr.match(/-{50}\nDatadog Test Optimization[\s\S]+/)
+          assert.ok(ddWarningMatch, 'Datadog warning should be present in stderr')
+          const ddWarning = ddWarningMatch[0]
+
+          // Warning header: all 3 quarantined tests
+          assert.match(ddWarning, /3 test failure\(s\) are quarantined, but the exit code is still 1/)
+
+          // Suite error list: only Suite A (with the afterAll) should appear, not Suite B
+          const suiteErrorSection = ddWarning.split('Quarantine suppresses')[0]
+          assert.match(suiteErrorSection, /test-suite-after-all-failure/)
+          assert.doesNotMatch(suiteErrorSection, /test-many-quarantined/)
+
+          // Quarantined tests list: tests from both suites should appear
+          assert.match(ddWarning, /quarantine tests with afterAll failure.*failing quarantined test.*Quarantine/)
+          assert.match(ddWarning, /multiple quarantine tests first failing test.*Quarantine/)
+          assert.match(ddWarning, /multiple quarantine tests second failing test.*Quarantine/)
+        })
+
+      it('beforeAll failure + all quarantined tests exits with code 0', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-suite-before-all-failure.js': {
+                tests: {
+                  'quarantine tests with beforeAll failure failing quarantined test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                  'quarantine tests with beforeAll failure another failing quarantined test': {
+                    properties: {
+                      quarantined: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let stdout = ''
+        const testAssertionsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end')?.content
+            // Session status is 'pass' because beforeAll failures go to individual test errors
+            // (not testExecError), so numRuntimeErrorTestSuites = 0 → quarantine flip happens
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const quarantinedTests = tests.filter(t => t.meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true')
+            assert.strictEqual(quarantinedTests.length, 2, 'both tests should be quarantined')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-suite-before-all-failure',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        childProcess.stderr?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+        // Exit code should be 0 because beforeAll errors are attached to individual tests,
+        // not to testExecError, so mustNotFlipSuccess = false and quarantine flip succeeds
+        assert.strictEqual(exitCode, 0, 'exit code should be 0 when only quarantined tests fail (via beforeAll)')
+        assert.match(stdout, /2 test failure\(s\) were ignored\. Exit code set to 0\./)
+      })
     })
 
     it('does not crash if the request to get test management tests fails', async () => {

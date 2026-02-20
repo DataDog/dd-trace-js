@@ -164,6 +164,64 @@ function logIgnoredFailuresSummary (efdNames, quarantineNames, totalCount) {
   )
 }
 
+/**
+ * Prints a warning when quarantine/EFD would have suppressed all individual test failures
+ * but a suite-level or run-level error is blocking the exit-code flip to 0.
+ * @param {string[]} efdNames
+ * @param {string[]} quarantineNames
+ * @param {number} totalCount
+ * @param {boolean} hasSuiteLevelFailures - true when numRuntimeErrorTestSuites > 0 (e.g. afterAll hook error)
+ * @param {boolean} hasRunLevelFailure - true when runExecError != null or wasInterrupted
+ * @param {string[]} suitesWithRuntimeErrors - paths of suites that had runtime errors
+ */
+function logBlockedFlipWarning (
+  efdNames,
+  quarantineNames,
+  totalCount,
+  hasSuiteLevelFailures,
+  hasRunLevelFailure,
+  suitesWithRuntimeErrors
+) {
+  const names = []
+  for (const n of efdNames) {
+    names.push({ name: n, reason: 'Early Flake Detection' })
+  }
+  for (const n of quarantineNames) {
+    names.push({ name: n, reason: 'Quarantine' })
+  }
+  const shown = names.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = names.length - shown.length
+  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
+  const list = shown.map(({ name, reason }) => `  • ${name} (${reason})`).join('\n')
+  const line = '-'.repeat(50)
+
+  let reason
+  if (hasSuiteLevelFailures) {
+    const suiteList = suitesWithRuntimeErrors.map(s => `  • ${s}`).join('\n')
+    reason =
+      'The following test suite(s) encountered a suite-level error ' +
+      '(reported by Jest as "● Test suite failed to run", e.g. an afterAll hook that threw ' +
+      'or a module that failed to load):\n' +
+      `${suiteList}\n\n` +
+      'Quarantine suppresses individual test failures only — suite-level errors are not suppressible.'
+  } else if (hasRunLevelFailure) {
+    reason =
+      'The test run could not complete (a run-level error occurred or the run was interrupted). ' +
+      'Quarantine suppresses individual test failures only — run-level errors are not suppressible.'
+  } else {
+    reason = 'A non-suppressible error prevented the exit code from being set to 0.'
+  }
+
+  // eslint-disable-next-line no-console -- Intentional user-facing message when quarantine flip is blocked
+  console.warn(
+    `\n${line}\nDatadog Test Optimization\n${line}\n` +
+    `${totalCount} test failure(s) are quarantined, but the exit code is still 1.\n\n` +
+    `${reason}\n\n` +
+    'The following failures would have been ignored if not for the suite-level error:\n' +
+    `${list}${moreSuffix}\n`
+  )
+}
+
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -1070,9 +1128,14 @@ function getCliWrapper (isNewJestVersion) {
       const quarantineIgnoredNames = []
 
       // Build fullName -> suite map from results (for EFD display)
+      // Also collect suites with runtime errors (e.g. afterAll hook failures, module load errors)
       const fullNameToSuite = new Map()
-      for (const { testResults, testFilePath } of result.results.testResults) {
+      const suitesWithRuntimeErrors = []
+      for (const { testResults, testFilePath, testExecError } of result.results.testResults) {
         const suite = getTestSuitePath(testFilePath, result.globalConfig.rootDir)
+        if (testExecError) {
+          suitesWithRuntimeErrors.push(suite)
+        }
         for (const { fullName } of testResults) {
           const name = testSuiteAbsolutePathsWithFastCheck.has(testFilePath)
             ? fullName.replace(SEED_SUFFIX_RE, '')
@@ -1185,6 +1248,27 @@ function getCliWrapper (isNewJestVersion) {
             quarantineNames: quarantineIgnoredNames,
             totalCount: totalIgnoredFailures,
           }
+        }
+      }
+
+      // Warn when mustNotFlipSuccess blocked a flip that would otherwise have succeeded —
+      // i.e. all individual test failures are quarantined/EFD but a suite-level error prevents exit code 0.
+      if (
+        !result.results.success &&
+        mustNotFlipSuccess &&
+        (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)
+      ) {
+        const totalIgnoredFailures =
+          numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+        if (totalIgnoredFailures !== 0 && result.results.numFailedTests === totalIgnoredFailures) {
+          logBlockedFlipWarning(
+            efdIgnoredNames,
+            quarantineIgnoredNames,
+            totalIgnoredFailures,
+            hasSuiteLevelFailures,
+            hasRunLevelFailure,
+            suitesWithRuntimeErrors
+          )
         }
       }
 
