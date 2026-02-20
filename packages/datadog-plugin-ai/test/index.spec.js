@@ -490,7 +490,7 @@ describe('Plugin', () => {
       })
 
       let tools
-      let maxStepsArg = {}
+      let maxStepsArg
       const toolSchema = ai.jsonSchema({
         type: 'object',
         properties: {
