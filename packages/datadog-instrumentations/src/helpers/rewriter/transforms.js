@@ -298,16 +298,16 @@ function wrapIterator (state, node, program) {
         return iter.then(result => {
           ctx.result = result;
 
-          asyncStart.publish(ctx);
-          asyncEnd.publish(ctx);
+          ${channelVariable}.asyncStart.publish(ctx);
+          ${channelVariable}.asyncEnd.publish(ctx);
 
           return wrap(result);
         }, err => {
           ctx.error = err;
 
-          error.publish(ctx);
-          asyncStart.publish(ctx);
-          asyncEnd.publish(ctx);
+          ${channelVariable}.error.publish(ctx);
+          ${channelVariable}.asyncStart.publish(ctx);
+          ${channelVariable}.asyncEnd.publish(ctx);
 
           return Promise.reject(err);
         });
