@@ -262,10 +262,14 @@ module.exports = class FakeAgent extends EventEmitter {
         if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
           resultResolve()
         }
+
+        if (resolveAtFirstSuccess) {
+          this.removeListener('telemetry', messageHandler)
+        }
       } catch (e) {
         errors.push(e)
       }
-      if (msgCount === expectedMessageCount) {
+      if (!resolveAtFirstSuccess && msgCount === expectedMessageCount) {
         this.removeListener('telemetry', messageHandler)
       }
     }
