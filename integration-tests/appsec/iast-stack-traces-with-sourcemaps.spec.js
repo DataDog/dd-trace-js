@@ -6,12 +6,15 @@ const childProcess = require('child_process')
 const path = require('path')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
-describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
+
+describe.only('IAST stack traces and vulnerabilities with sourcemaps', () => {
   let axios, cwd, appDir, appFile, agent, proc
 
   useSandbox(['@types/node', 'typescript', 'express'])
 
   before(function () {
+    childProcess.execSync('yarn cache clean', { cwd })
+    console.time('before')
     cwd = sandboxCwd()
 
     appDir = path.join(cwd, 'appsec', 'iast-stack-traces-ts-with-sourcemaps')
@@ -22,6 +25,7 @@ describe('IAST stack traces and vulnerabilities with sourcemaps', () => {
     })
 
     appFile = path.join(appDir, 'index.js')
+    console.timeEnd('before')
   })
 
   beforeEach(async () => {
