@@ -133,6 +133,30 @@ versions.forEach((version) => {
 
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
+        it('tags session and children with _dd.ci.library_configuration_error when settings fail 4xx', function (done) {
+          if (reportMethod !== 'agentless') return done()
+          receiver.setSettingsResponseCode(404)
+          receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then((eventsRequest) => {
+            const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta['_dd.ci.library_configuration_error'], '4xx')
+            const testEvent = eventsRequest.payload.events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], '4xx')
+            done()
+          }).catch(done)
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TEST_SESSION_NAME: 'my-test-session',
+              },
+            }
+          )
+        })
+
         it('can run and report tests', (done) => {
           const envVars = reportMethod === 'agentless'
             ? getCiVisAgentlessConfig(receiver.port)

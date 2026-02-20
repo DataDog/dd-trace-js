@@ -335,6 +335,38 @@ moduleTypes.forEach(({
       })
     }
 
+    it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisAgentlessConfig(receiver.port)
+
+      receiver.setSettingsResponseCode(404)
+      const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
+          },
+        }
+      )
+
+      const eventsRequest = await eventsRequestPromise
+      await once(childProcess, 'exit')
+      const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+      assert.strictEqual(testSession.meta['_dd.ci.library_configuration_error'], '4xx',
+        'test_session_end should have _dd.ci.library_configuration_error tag')
+      const testEvent = eventsRequest.payload.events.find(event => event.type === 'test')
+      assert.ok(testEvent, 'should have test event')
+      assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], '4xx',
+        'test event should have _dd.ci.library_configuration_error tag (from getSessionRequestErrorTags)')
+    })
+
     it('does not crash if badly init', async () => {
       const {
         NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress

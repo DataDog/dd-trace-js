@@ -145,6 +145,13 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.tes
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
+
+// Test optimization request error tags (hidden; for UI to show which requests failed and error class)
+const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
+const DD_CI_KNOWN_TESTS_ERROR = '_dd.ci.known_tests_error'
+const DD_CI_TEST_MANAGEMENT_TESTS_ERROR = '_dd.ci.test_management_tests_error'
+const DD_CI_SKIPPABLE_SUITES_ERROR = '_dd.ci.skippable_suites_error'
+
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
@@ -201,6 +208,44 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
+
+/**
+ * Returns '4xx', '5xx', or 'unknown' from a request error for test session tagging.
+ * Uses err.status (set by request layer for HTTP errors).
+ * @param {Error & { status?: number }} err
+ * @returns {'4xx' | '5xx' | 'unknown'}
+ */
+function getRequestErrorCategory (err) {
+  const status = err?.status
+  if (status >= 400 && status < 500) return '4xx'
+  if (status >= 500) return '5xx'
+  return 'unknown'
+}
+
+const REQUEST_ERROR_TAG_PREFIX = '_dd.ci.'
+const REQUEST_ERROR_TAG_SUFFIX = '_error'
+
+/**
+ * Returns request error tags from a test session span for propagation to child events.
+ * Only includes tags that match _dd.ci.*_error (hidden tags set when test-optimization requests fail).
+ * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @returns {Record<string, string>}
+ */
+function getSessionRequestErrorTags (sessionSpan) {
+  const tags = sessionSpan?.context()._tags
+  if (!tags || typeof tags !== 'object') return {}
+  const result = {}
+  for (const key of Object.keys(tags)) {
+    if (
+      key.startsWith(REQUEST_ERROR_TAG_PREFIX) &&
+      key.endsWith(REQUEST_ERROR_TAG_SUFFIX) &&
+      typeof tags[key] === 'string'
+    ) {
+      result[key] = tags[key]
+    }
+  }
+  return result
+}
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -308,6 +353,12 @@ module.exports = {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
+  getRequestErrorCategory,
+  getSessionRequestErrorTags,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_KNOWN_TESTS_ERROR,
+  DD_CI_TEST_MANAGEMENT_TESTS_ERROR,
+  DD_CI_SKIPPABLE_SUITES_ERROR,
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,

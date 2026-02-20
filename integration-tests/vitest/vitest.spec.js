@@ -242,6 +242,56 @@ versions.forEach((version) => {
       })
     })
 
+    // Skipped: Vitest workers are forked before session:start, so DD_CIVISIBILITY_REQUEST_ERROR_TAGS
+    // is not available in worker env and request error tags are not propagated to worker-spawned events.
+    it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
+      receiver.setSettingsResponseCode(404)
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          const testEvent = events.find(event => event.type === 'test')
+          if (!testSessionEvent || !testEvent) {
+            const eventTypes = events.map(e => e.type)
+            throw new Error(`Missing events: have ${eventTypes.join(', ')}; need test_session_end and test`)
+          }
+          const testSession = testSessionEvent.content
+          const libraryConfigError = testSession.meta['_dd.ci.library_configuration_error']
+          if (libraryConfigError !== '4xx') {
+            // Debug: log what meta we got on session
+            const ddKeys = Object.keys(testSession.meta || {}).filter(k => k.startsWith('_dd.'))
+            process.stdout.write(
+              `[debug] test_session_end meta _dd.* keys: ${JSON.stringify(ddKeys)}; ` +
+              `_dd.ci.library_configuration_error=${JSON.stringify(libraryConfigError)}\n`
+            )
+          }
+          assert.strictEqual(libraryConfigError, '4xx',
+            'test_session_end should have _dd.ci.library_configuration_error tag')
+          const testLibraryConfigError = testEvent.content.meta['_dd.ci.library_configuration_error']
+          if (testLibraryConfigError !== '4xx') {
+            const ddKeys = Object.keys(testEvent.content.meta || {}).filter(k => k.startsWith('_dd.'))
+            process.stdout.write(
+              `[debug] test event meta _dd.* keys: ${JSON.stringify(ddKeys)}; ` +
+              `_dd.ci.library_configuration_error=${JSON.stringify(testLibraryConfigError)}\n`
+            )
+          }
+          assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], '4xx',
+            'test event should have _dd.ci.library_configuration_error tag (propagated via getSessionRequestErrorTags)')
+        }
+      )
+
+      childProcess = exec('./node_modules/.bin/vitest run', {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+        },
+      })
+      await once(childProcess, 'exit')
+      await eventsPromise
+    })
+
     it('sends telemetry with test_session metric when telemetry is enabled', async () => {
       const telemetryPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {

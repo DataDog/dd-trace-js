@@ -63,6 +63,12 @@ const {
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
+  getRequestErrorCategory,
+  getSessionRequestErrorTags,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  DD_CI_KNOWN_TESTS_ERROR,
+  DD_CI_TEST_MANAGEMENT_TESTS_ERROR,
+  DD_CI_SKIPPABLE_SUITES_ERROR,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_IS_NEW,
   TEST_IS_RUM_ACTIVE,
@@ -120,6 +126,7 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
     this._testSuiteSpansByTestSuite = new Map()
+    this._pendingRequestErrorTags = []
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
       const { onDone, isParallel, frameworkVersion } = ctx
@@ -131,9 +138,14 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
           log.error('Library configuration could not be fetched. %s', err.message)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR, err)
         } else {
           this.libraryConfig = libraryConfig
         }
+
+        const requestErrorTags = this.testSessionSpan
+          ? getSessionRequestErrorTags(this.testSessionSpan)
+          : Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
 
         const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel, frameworkVersion)
         const metadataTags = {
@@ -142,7 +154,7 @@ module.exports = class CiPlugin extends Plugin {
           },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
-        onDone({ err, libraryConfig })
+        onDone({ err, libraryConfig, requestErrorTags })
       })
     })
 
@@ -157,6 +169,7 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
           log.error('Skippable suites could not be fetched. %s', err.message)
+          this._addRequestErrorTag(DD_CI_SKIPPABLE_SUITES_ERROR, err)
         } else {
           this.itrCorrelationId = itrCorrelationId
         }
@@ -200,6 +213,10 @@ module.exports = class CiPlugin extends Plugin {
         },
         integrationName: this.constructor.id,
       })
+      for (const { tag, value } of this._pendingRequestErrorTags) {
+        this.testSessionSpan.setTag(tag, value)
+      }
+      this._pendingRequestErrorTags = []
       // TODO: add telemetry tag when we can add `is_agentless_log_submission_enabled` for agentless log submission
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
 
@@ -209,6 +226,7 @@ module.exports = class CiPlugin extends Plugin {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
           ...testModuleSpanMetadata,
+          ...getSessionRequestErrorTags(this.testSessionSpan),
         },
         integrationName: this.constructor.id,
       })
@@ -230,7 +248,10 @@ module.exports = class CiPlugin extends Plugin {
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
       const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
       for (const testSuite of skippedSuites) {
-        const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id)
+        const testSuiteMetadata = {
+          ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
+          ...getSessionRequestErrorTags(this.testSessionSpan),
+        }
         if (this.itrCorrelationId) {
           testSuiteMetadata[ITR_CORRELATION_ID] = this.itrCorrelationId
         }
@@ -261,8 +282,11 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
           log.error('Known tests could not be fetched. %s', err.message)
-          this.libraryConfig.isEarlyFlakeDetectionEnabled = false
-          this.libraryConfig.isKnownTestsEnabled = false
+          this._addRequestErrorTag(DD_CI_KNOWN_TESTS_ERROR, err)
+          if (this.libraryConfig) {
+            this.libraryConfig.isEarlyFlakeDetectionEnabled = false
+            this.libraryConfig.isKnownTestsEnabled = false
+          }
         }
         onDone({ err, knownTests })
       })
@@ -279,7 +303,10 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
         if (err) {
           log.error('Test management tests could not be fetched. %s', err.message)
-          this.libraryConfig.isTestManagementEnabled = false
+          this._addRequestErrorTag(DD_CI_TEST_MANAGEMENT_TESTS_ERROR, err)
+          if (this.libraryConfig) {
+            this.libraryConfig.isTestManagementEnabled = false
+          }
         }
         onDone({ err, testManagementTests })
       })
@@ -346,7 +373,14 @@ module.exports = class CiPlugin extends Plugin {
             span.meta = {
               ...span.meta,
               ...testSuiteTags,
+              ...getSessionRequestErrorTags(this.testSessionSpan),
             }
+          }
+
+          // Vitest worker test spans are serialized in the worker and may not include
+          // request error tags; add them from the session span in the main process.
+          if (span.name === 'vitest.test' && this.testSessionSpan) {
+            Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
           }
         }
         this.tracer._exporter.export(trace)
@@ -416,6 +450,30 @@ module.exports = class CiPlugin extends Plugin {
         distributionMetric(name, tags, measure)
       },
     }
+  }
+
+  /**
+   * Adds a hidden _dd tag to the test session span when a test-optimization request fails.
+   * If the session span does not exist yet (e.g. library-configuration failed before session:start),
+   * the tag is queued and applied when the span is created.
+   * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR)
+   * @param {Error & { status?: number }} err - Request error; err.status used for 4xx vs 5xx
+   */
+  _addRequestErrorTag (tag, err) {
+    const value = getRequestErrorCategory(err)
+    if (this.testSessionSpan) {
+      this.testSessionSpan.setTag(tag, value)
+    } else {
+      this._pendingRequestErrorTags.push({ tag, value })
+    }
+  }
+
+  /**
+   * Returns request error tags from the test session span for propagation to module, suite and test spans.
+   * @returns {Record<string, string>}
+   */
+  getSessionRequestErrorTags () {
+    return getSessionRequestErrorTags(this.testSessionSpan)
   }
 
   configure (config, shouldGetEnvironmentData = true) {
@@ -529,6 +587,7 @@ module.exports = class CiPlugin extends Plugin {
         [TEST_SESSION_ID]: testSuiteSpan.context().toTraceId(),
         [TEST_COMMAND]: testSuiteSpan.context()._tags[TEST_COMMAND],
         [TEST_MODULE]: this.constructor.id,
+        ...getSessionRequestErrorTags(this.testSessionSpan),
       }
       if (testSuiteSpan.context()._parentId) {
         suiteTags[TEST_MODULE_ID] = testSuiteSpan.context()._parentId.toString(10)

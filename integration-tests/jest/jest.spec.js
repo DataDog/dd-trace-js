@@ -1417,6 +1417,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
+      receiver.setSettingsResponseCode(404)
+      const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      const eventsRequest = await eventsRequestPromise
+      await once(childProcess, 'exit')
+      const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+      assert.strictEqual(testSession.meta['_dd.ci.library_configuration_error'], '4xx')
+      const testEvent = eventsRequest.payload.events.find(event => event.type === 'test')
+      assert.ok(testEvent, 'should have test event')
+      assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], '4xx')
+    })
+
     it('can report code coverage', async () => {
       const libraryConfigRequestPromise = receiver.payloadReceived(
         ({ url }) => url === '/api/v2/libraries/tests/services/setting'
