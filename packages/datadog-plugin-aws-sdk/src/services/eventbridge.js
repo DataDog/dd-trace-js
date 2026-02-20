@@ -25,7 +25,7 @@ class EventBridge extends BaseAwsSdkPlugin {
    * Docs: https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_PutEventsRequestEntry.html
    * We cannot use the traceHeader field as that's reserved for X-Ray.
    * Detail must be a valid JSON string
-   * Max size per event is 256kb (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevent-size.html)
+   * Max size per event is 1mb (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevent-size.html)
    */
   requestInject (span, request) {
     const operation = request.operation
@@ -50,7 +50,7 @@ class EventBridge extends BaseAwsSdkPlugin {
         return
       }
 
-      if (Buffer.byteLength(finalData) >= 1024 * 256) {
+      if (Buffer.byteLength(finalData) >= 1024 * 1024) {
         log.info('Payload size too large to pass context')
         return
       }
