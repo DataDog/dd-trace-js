@@ -23,8 +23,11 @@ module.exports = function getExporter (name) {
       return require('./ci-visibility/exporters/test-worker')
     default: {
       const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-      const usingLambdaExtension = inAWSLambda && fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH)
-      return require(inAWSLambda && !usingLambdaExtension ? './exporters/log' : './exporters/agent')
+      const usingAgent = inAWSLambda && (
+        fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
+        fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
+      )
+      return require(inAWSLambda && !usingAgent ? './exporters/log' : './exporters/agent')
     }
   }
 }

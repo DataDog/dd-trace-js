@@ -2311,6 +2311,29 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.enabled, false)
   })
 
+  describe('flushInterval in Lambda', () => {
+    afterEach(() => {
+      existsSyncReturn = undefined
+    })
+
+    it('should set flushInterval to 0 in standard Lambda environment', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.flushInterval, 0)
+    })
+
+    it('should not set flushInterval to 0 in Lambda environment with mini agent', () => {
+      process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-great-lambda-function'
+      existsSyncReturn = true
+
+      const config = getConfig()
+
+      assert.strictEqual(config.flushInterval, 2000)
+    })
+  })
+
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
     process.env.FUNCTION_NAME = 'function_name'
     process.env.GCP_PROJECT = 'project_name'
