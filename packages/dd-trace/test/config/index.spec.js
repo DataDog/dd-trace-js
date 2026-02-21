@@ -42,7 +42,7 @@ describe('Config', () => {
 
   const comparator = (a, b) => a.name.localeCompare(b.name) || a.origin.localeCompare(b.origin)
 
-  function reloadLoggerAndConfig () {
+  function reloadLoggerAndConfig() {
     log = proxyquire('../../src/log', {})
     log.use = sinon.spy()
     log.toggle = sinon.spy()
@@ -2985,7 +2985,7 @@ describe('Config', () => {
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
 
-      ;({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: 7 } }))
+        ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: 7 } }))
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 7,
         requestsEnabled: true,
@@ -3003,7 +3003,7 @@ describe('Config', () => {
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
 
-      ;({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: NaN } }))
+        ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: NaN } }))
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 10,
       })
@@ -3866,6 +3866,40 @@ rules:
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+  })
+
+  describe('should detect when service name is inferred', () => {
+    it('should set isServiceNameInferred to false when DD_SERVICE is defined ', () => {
+      process.env.DD_SERVICE = 'test-service'
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service')
+    })
+
+    it('should set isServiceNameInferred to false when options.service is defined', () => {
+      const config = getConfig({ service: 'test-service-option' })
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-option')
+    })
+
+    it('should set isServiceNameInferred to false when OTEL_SERVICE_NAME is defined', () => {
+      process.env.OTEL_SERVICE_NAME = 'test-service-otel'
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-otel')
+    })
+
+    it('should set isServiceNameInferred to false when tags.service is defined', () => {
+      const config = getConfig({ tags: { service: 'test-service-tags' } })
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-tags')
+    })
+
+    it('should set isServiceNameInfered to true when no name is given', () => {
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, true)
+      assert.strictEqual(config.service, 'node')
     })
   })
 })

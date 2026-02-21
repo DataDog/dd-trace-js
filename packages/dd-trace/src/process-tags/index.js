@@ -13,7 +13,7 @@ const ENTRYPOINT_PATH = require.main?.filename || ''
 // package.json.name = <from package.json>
 
 // process tags are constant throughout the lifetime of a process
-function getProcessTags () {
+function getProcessTags (config) {
   // Lazy load pkg to avoid issues with require.main during test initialization
   const pkg = require('../pkg')
 
@@ -34,6 +34,12 @@ function getProcessTags () {
     // the .name field from the application's package.json
     ['package.json.name', pkg.name || undefined],
   ]
+
+  if (config && config.isServiceNameInferred) {
+    tags.push(['svc.auto', config.service])
+  } else if (config) {
+    tags.push(['svc.user', true])
+  }
 
   const tagsArray = []
   const tagsObject = {}
@@ -56,8 +62,23 @@ function getProcessTags () {
   }
 }
 
+// This lets the singletong be initialiazed with config values,
+// we should only allow one initialization to take place
+// module.exports = processTags
+const processTags = {}
+module.exports = processTags
+let initialized = false
+
+module.exports.initialize = (config) => {
+  // ensure initialize only happens once
+  if (initialized) return
+  initialized = true
+
+  Object.assign(processTags, getProcessTags(config))
+}
+
 // Export the singleton
-module.exports = getProcessTags()
+// module.exports = getProcessTags()
 
 module.exports.TRACING_FIELD_NAME = '_dd.tags.process'
 module.exports.DSM_FIELD_NAME = 'ProcessTags'

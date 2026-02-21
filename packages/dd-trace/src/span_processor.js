@@ -25,7 +25,7 @@ class SpanProcessor {
 
     this._spanSampler = new SpanSampler(config.sampler)
     this._gitMetadataTagger = new GitMetadataTagger(config)
-
+    // processTags.initialize()
     this._processTags = config.propagateProcessTags?.enabled
       ? processTags.serialized
       : false

@@ -22,6 +22,10 @@ describe('SpanProcessor', () => {
   let SpanSampler
   let sample
 
+  before(() => {
+    require('../src/process-tags').initialize()
+  })
+
   beforeEach(() => {
     tracer = {}
     trace = {
@@ -201,7 +205,8 @@ describe('SpanProcessor', () => {
       tags.split(',').forEach(tag => {
         const [key, value] = tag.split(':')
         if (key !== 'entrypoint.basedir') return
-        assert.strictEqual(value, 'test')
+        // The value will be 'bin' when running via mocha CLI, 'test' when running the test file directly
+        assert.ok(value === 'test' || value === 'bin')
         foundATag = true
       })
       assert.ok(foundATag)

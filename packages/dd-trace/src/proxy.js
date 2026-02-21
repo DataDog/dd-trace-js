@@ -13,6 +13,7 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS } = require('./serverless')
+const processTags = require('./process-tags')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -22,21 +23,21 @@ const {
 } = require('./baggage')
 
 class LazyModule {
-  constructor (provider) {
+  constructor(provider) {
     this.provider = provider
   }
 
-  enable (...args) {
+  enable(...args) {
     this.module = this.provider()
     this.module.enable(...args)
   }
 
-  disable () {
+  disable() {
     this.module?.disable()
   }
 }
 
-function lazyProxy (...args) {
+function lazyProxy(...args) {
   if (IS_SERVERLESS === false) {
     defineEagerly(...args)
   } else {
@@ -44,15 +45,15 @@ function lazyProxy (...args) {
   }
 }
 
-function defineEagerly (obj, property, getClass, ...args) {
+function defineEagerly(obj, property, getClass, ...args) {
   const RealClass = getClass()
 
   obj[property] = new RealClass(...args)
 }
 
-function defineLazily (obj, property, getClass, ...args) {
+function defineLazily(obj, property, getClass, ...args) {
   Reflect.defineProperty(obj, property, {
-    get () {
+    get() {
       const RealClass = getClass()
       const value = new RealClass(...args)
 
@@ -66,7 +67,7 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
-  constructor () {
+  constructor() {
     super()
 
     this._initialized = false
@@ -94,13 +95,15 @@ class Tracer extends NoopProxy {
   /**
    * @override
    */
-  init (options) {
+  init(options) {
     if (this._initialized) return this
 
     this._initialized = true
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
+
+      processTags.initialize(config)
 
       // Configure propagation hash manager for process tags + container tags
       const propagationHash = require('./propagation-hash')
@@ -239,7 +242,7 @@ class Tracer extends NoopProxy {
     return this
   }
 
-  _startProfiler (config) {
+  _startProfiler(config) {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
       return require('./profiler').start(config)
@@ -251,7 +254,7 @@ class Tracer extends NoopProxy {
     }
   }
 
-  #updateTracing (config) {
+  #updateTracing(config) {
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
@@ -303,7 +306,7 @@ class Tracer extends NoopProxy {
    * @param {object} config - The tracer configuration object
    * @param {object} rc - The RemoteConfig instance
    */
-  #updateDebugger (config, rc) {
+  #updateDebugger(config, rc) {
     const shouldBeEnabled = config.dynamicInstrumentation.enabled
     const isCurrentlyStarted = DynamicInstrumentation.isStarted()
 
@@ -324,7 +327,7 @@ class Tracer extends NoopProxy {
   /**
    * @override
    */
-  profilerStarted () {
+  profilerStarted() {
     if (!this._profilerStarted) {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
@@ -335,7 +338,7 @@ class Tracer extends NoopProxy {
   /**
    * @override
    */
-  use () {
+  use() {
     this._pluginManager.configurePlugin(...arguments)
     return this
   }
@@ -343,7 +346,7 @@ class Tracer extends NoopProxy {
   /**
    * @override
    */
-  get TracerProvider () {
+  get TracerProvider() {
     return require('./opentelemetry/tracer_provider')
   }
 }
