@@ -18,14 +18,23 @@ jobs:
       checks: read
       contents: read
     steps:
-      - uses: wechuli/allcheckspassed@1d00cf0c34c4b0805db8866d8913f22e7125301e # v2.3.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          delay: ${{ github.run_attempt == 1 && '7' || '0' }} # 7 minutes on first attempt, no delay on reruns
-          retries: 15
-          polling_interval: 2 # Once every 2 minutes
-          checks_exclude: devflow.*
-          fail_fast: false
-          verbose: true # What checks are still waited for?
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .github
+            scripts
+      - uses: ./.github/actions/node
+        with:
+          version: active
+      - run: yarn add @actions/github octokit
+      - run: node scripts/all-green.mjs
+        env:
+          DELAY: ${{ github.run_attempt == 1 && '7' || '0' }} # 7 minutes on first attempt, no delay on reruns
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+          POLLING_INTERVAL: 1
+          RETRIES: 15
       - name: Require vendor validation when vendor/ changes
         if: github.event_name == 'pull_request'
         env:
