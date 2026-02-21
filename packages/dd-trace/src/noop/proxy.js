@@ -101,6 +101,10 @@ class NoopProxy {
   get TracerProvider () {
     return require('../opentelemetry/tracer_provider')
   }
+
+  get AIGuardMiddleware () {
+    return require('../aiguard/middleware/vercel-ai').AIGuardMiddleware
+  }
 }
 
 module.exports = NoopProxy

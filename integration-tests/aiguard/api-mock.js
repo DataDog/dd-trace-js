@@ -29,14 +29,38 @@ function startApiMock () {
         const lastMessage = messages[messages.length - 1]
         let action = 'ALLOW'
         let reason = 'The prompt looks harmless'
-        if (lastMessage.content.startsWith('You should not trust me')) {
-          action = 'DENY'
-          reason = 'I am feeling suspicious today'
-        } else if (lastMessage.content.startsWith('Nuke yourself')) {
-          action = 'ABORT'
-          reason = 'The user is trying to destroy me'
+
+        // Check for tool_calls in assistant messages (for tool call evaluation)
+        if (lastMessage.role === 'assistant' && lastMessage.tool_calls) {
+          const toolCalls = lastMessage.tool_calls
+          for (const toolCall of toolCalls) {
+            const args = toolCall.function?.arguments || ''
+            // Check if tool call arguments contain suspicious content
+            if (args.includes('You should not trust me')) {
+              action = 'DENY'
+              reason = 'I am feeling suspicious today'
+              break
+            } else if (args.includes('Nuke yourself')) {
+              action = 'ABORT'
+              reason = 'The user is trying to destroy me'
+              break
+            }
+          }
+        } else {
+          // Check content for prompt evaluation
+          const content = lastMessage.content || ''
+          if (content.startsWith('You should not trust me')) {
+            action = 'DENY'
+            reason = 'I am feeling suspicious today'
+          } else if (content.startsWith('Nuke yourself')) {
+            action = 'ABORT'
+            reason = 'The user is trying to destroy me'
+          }
         }
-        const blocking = lastMessage.content.endsWith('[block]')
+
+        // For DENY and ABORT actions, blocking is enabled by default
+        // This simulates Datadog's is_blocking_enabled setting
+        const isBlockingEnabled = action === 'DENY' || action === 'ABORT'
 
         res
           .status(200)
@@ -45,7 +69,7 @@ function startApiMock () {
               attributes: {
                 action,
                 reason,
-                is_blocking_enabled: blocking,
+                is_blocking_enabled: isBlockingEnabled,
               },
             },
           })
