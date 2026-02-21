@@ -62,6 +62,7 @@ module.exports = {
   'codeOriginForSpans.enabled': true,
   'codeOriginForSpans.experimental.exit_spans.enabled': false,
   dbmPropagationMode: 'disabled',
+  'dbm.injectSqlBaseHash': false,
   'dogstatsd.hostname': '127.0.0.1',
   'dogstatsd.port': '8125',
   dsmEnabled: false,

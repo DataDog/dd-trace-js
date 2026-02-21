@@ -98,7 +98,6 @@ typings/
 !.vscode/launch.json
 !.vscode/extensions.json
 .history
-.cursor/skills
 
 # IntelliJ
 .idea
@@ -142,7 +141,8 @@ __queuestorage__/AzuriteConfig
 .analysis/
 
 # ignore claude settings
-.claude/
+.claude/*
+!.claude/skills/
 
 # Husky generates a helper dir under .husky/_ (including husky.sh). Don't commit it.
 .husky/_/

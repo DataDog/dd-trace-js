@@ -466,7 +466,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         testContexts.set(event.test, ctx)
 
         testStartCh.runStores(ctx, () => {
-          for (const hook of event.test.parent.hooks) {
+          let p = event.test.parent
+          const hooks = []
+          while (p != null) {
+            hooks.push(...p.hooks)
+            p = p.parent
+          }
+          for (const hook of hooks) {
             let hookFn = hook.fn
             if (originalHookFns.has(hook)) {
               hookFn = originalHookFns.get(hook)

@@ -5,7 +5,7 @@ on:
     paths:
       - "vendor/**"
   push:
-    branches: [master]
+    branches: [master, mq-working-branch-master-*]
     paths:
       - "vendor/**"
   workflow_dispatch:
