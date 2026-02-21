@@ -3804,4 +3804,38 @@ rules:
       assert.strictEqual(config.sampleRate, undefined)
     })
   })
+
+  describe('should detect when service name is inferred', () => {
+    it('should set isServiceNameInferred to false when DD_SERVICE is defined ', () => {
+      process.env.DD_SERVICE = 'test-service'
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service')
+    })
+
+    it('should set isServiceNameInferred to false when options.service is defined', () => {
+      const config = getConfig({ service: 'test-service-option' })
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-option')
+    })
+
+    it('should set isServiceNameInferred to false when OTEL_SERVICE_NAME is defined', () => {
+      process.env.OTEL_SERVICE_NAME = 'test-service-otel'
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-otel')
+    })
+
+    it('should set isServiceNameInferred to false when tags.service is defined', () => {
+      const config = getConfig({ tags: { service: 'test-service-tags' } })
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-tags')
+    })
+
+    it('should set isServiceNameInfered to true when no name is given', () => {
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, true)
+      assert.strictEqual(config.service, 'node')
+    })
+  })
 })

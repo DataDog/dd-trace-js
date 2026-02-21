@@ -130,6 +130,7 @@ module.exports = {
   legacyBaggageEnabled: true,
   isTestDynamicInstrumentationEnabled: false,
   isServiceUserProvided: false,
+  isServiceNameInferred: true,
   testManagementAttemptToFixRetries: 20,
   isTestManagementEnabled: false,
   isImpactedTestsEnabled: false,

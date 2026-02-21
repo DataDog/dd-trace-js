@@ -13,6 +13,7 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS } = require('./serverless')
+const processTags = require('./process-tags')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -101,6 +102,8 @@ class Tracer extends NoopProxy {
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
+
+      processTags.initialize(config)
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)

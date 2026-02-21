@@ -12,6 +12,10 @@ describe('process-tags', () => {
   const processTags = require('../src/process-tags')
   const { sanitize } = require('../src/process-tags')
 
+  before(() => {
+    processTags.initialize()
+  })
+
   describe('field name constants', () => {
     it('should define field names for different subsystems', () => {
       assertObjectContains(processTags, {
@@ -247,10 +251,9 @@ describe('process-tags', () => {
     it('should enable process tags propagation when set to true', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'true'
 
-      // Need to reload config first, then process-tags (which reads from config)
-      delete require.cache[require.resolve('../src/process-tags')]
-
       const config = getConfigFresh()
+      const processTagsModule = require('../src/process-tags')
+      processTagsModule.initialize()
 
       assert.ok(config.propagateProcessTags)
       assert.strictEqual(config.propagateProcessTags.enabled, true)
@@ -266,6 +269,8 @@ describe('process-tags', () => {
       process.env.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED = 'false'
 
       const config = getConfigFresh()
+      const processTagsModule = require('../src/process-tags')
+      processTagsModule.initialize()
 
       assert.ok(config.propagateProcessTags)
       assert.strictEqual(config.propagateProcessTags.enabled, false)
@@ -280,6 +285,8 @@ describe('process-tags', () => {
       // Don't set the environment variable
 
       const config = getConfigFresh()
+      const processTagsModule = require('../src/process-tags')
+      processTagsModule.initialize()
 
       assert.notStrictEqual(config.propagateProcessTags?.enabled, true)
 
