@@ -427,6 +427,42 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with DBM propagation enabled with service using tracer configurations', () => {
+        let connection
+
+        before(async () => {
+          await agent.load('mysql', { service: 'serviced', dbmPropagationMode: 'service' })
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+
+          connection = mysql.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db',
+          })
+          connection.connect()
+        })
+
+        after((done) => {
+          connection.end(() => {
+            agent.close({ ritmReset: false }).then(done)
+          })
+        })
+
+        it('should contain service mode comment in query text', done => {
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              assert.strictEqual(connection._protocol._queue[0].sql,
+                '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\',' +
+                `ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+      })
+
       describe('DBM propagation should handle special characters', () => {
         let connection
 
