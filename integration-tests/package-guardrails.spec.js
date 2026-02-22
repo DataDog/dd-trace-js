@@ -129,4 +129,33 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
           }, []))
     })
   })
+
+  context('when running against an ESBuild bundle', () => {
+    useSandbox(['bluebird'])
+
+    let file
+
+    before(() => {
+      file = path.join(sandboxCwd(), 'app.js')
+      const code = `console.log('hi');\nconst __defProp = 'bar';\nvoid __defProp;\n
+        /*${'foobar'.repeat(50_000)}*/\n// Bundled license information\n\n`
+      fs.writeFileSync(file, code)
+    })
+
+    context('with DD_INJECTION_ENABLED', () => {
+      useEnv({ DD_INJECTION_ENABLED })
+
+      it('should not instrument the package, and send telemetry', () =>
+        testFile(
+          file,
+          'hi',
+          [
+            'abort', 'reason:incompatible_bundle',
+            'abort.bundle', '',
+          ],
+          undefined
+        )
+      )
+    })
+  })
 })
