@@ -1356,7 +1356,7 @@ function isInvalidOtelEnvironmentVariable (envVar, value) {
       return value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false'
     case 'OTEL_TRACES_EXPORTER': {
       const lower = value.toLowerCase()
-      return lower !== 'none' && lower !== 'otlp'
+      return lower !== 'otlp'
     }
     case 'OTEL_METRICS_EXPORTER':
     case 'OTEL_LOGS_EXPORTER':

@@ -21,6 +21,7 @@ let _root = null
 let protoLogsService = null
 let protoSeverityNumber = null
 let protoTraceService = null
+let protoSpanKind = null
 let protoMetricsService = null
 let protoAggregationTemporality = null
 
@@ -30,6 +31,7 @@ function getProtobufTypes () {
       protoLogsService,
       protoSeverityNumber,
       protoTraceService,
+      protoSpanKind,
       protoMetricsService,
       protoAggregationTemporality,
     }
@@ -55,6 +57,7 @@ function getProtobufTypes () {
 
   // Get the message types for traces
   protoTraceService = _root.lookupType('opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest')
+  protoSpanKind = _root.lookupEnum('opentelemetry.proto.trace.v1.SpanKind')
 
   // Get the message types for metrics
   protoMetricsService = _root.lookupType('opentelemetry.proto.collector.metrics.v1.ExportMetricsServiceRequest')
@@ -64,6 +67,7 @@ function getProtobufTypes () {
     protoLogsService,
     protoSeverityNumber,
     protoTraceService,
+    protoSpanKind,
     protoMetricsService,
     protoAggregationTemporality,
   }

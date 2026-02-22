@@ -1,7 +1,16 @@
 'use strict'
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
+const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { VERSION } = require('../../../../../version')
+
+const { protoSpanKind } = getProtobufTypes()
+const SPAN_KIND_UNSPECIFIED = protoSpanKind.values.SPAN_KIND_UNSPECIFIED
+const SPAN_KIND_INTERNAL = protoSpanKind.values.SPAN_KIND_INTERNAL
+const SPAN_KIND_SERVER = protoSpanKind.values.SPAN_KIND_SERVER
+const SPAN_KIND_CLIENT = protoSpanKind.values.SPAN_KIND_CLIENT
+const SPAN_KIND_PRODUCER = protoSpanKind.values.SPAN_KIND_PRODUCER
+const SPAN_KIND_CONSUMER = protoSpanKind.values.SPAN_KIND_CONSUMER
 
 /**
  * @typedef {object} DDFormattedSpan
@@ -19,14 +28,6 @@ const { VERSION } = require('../../../../../version')
  * @property {number} duration - Duration in nanoseconds
  * @property {object[]} [span_events] - Span events
  */
-
-// OTLP SpanKind values (from trace.proto Span.SpanKind enum)
-const SPAN_KIND_UNSPECIFIED = 0
-const SPAN_KIND_INTERNAL = 1
-const SPAN_KIND_SERVER = 2
-const SPAN_KIND_CLIENT = 3
-const SPAN_KIND_PRODUCER = 4
-const SPAN_KIND_CONSUMER = 5
 
 // Map DD span.kind string values to OTLP SpanKind numeric values
 const SPAN_KIND_MAP = {
