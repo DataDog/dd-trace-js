@@ -40,14 +40,18 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
    * @returns {ConsumerBacklog}
    */
   transformCommit (commit) {
-    const { groupId, partition, offset, topic } = commit
-    return {
+    const { groupId, partition, offset, topic, clusterId } = commit
+    const backlog = {
       partition,
       topic,
       type: 'kafka_commit',
       offset: Number(offset),
       consumer_group: groupId,
     }
+    if (clusterId) {
+      backlog.kafka_cluster_id = clusterId
+    }
+    return backlog
   }
 
   commit (commitList) {
