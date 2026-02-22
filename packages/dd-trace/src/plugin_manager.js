@@ -64,6 +64,7 @@ function getEnabled (Plugin) {
 module.exports = class PluginManager {
   constructor (tracer) {
     this._tracer = tracer
+    /** @type {ReturnType<import('./config/index.js')> | null} */
     this._tracerConfig = null
     this._pluginsByName = {}
     this._configsByName = {}
