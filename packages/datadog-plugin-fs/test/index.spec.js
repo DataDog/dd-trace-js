@@ -8,6 +8,7 @@ const util = require('node:util')
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const realFS = { ...require('node:fs') }
+const { storage } = require('../../datadog-core')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
@@ -109,6 +110,16 @@ describe('Plugin', () => {
               realFS.closeSync(fd)
             }
           })
+        })
+      })
+
+      describe('existsSync', () => {
+        it('should not leak noop store to parent context', () => {
+          const storeBefore = storage('legacy').getStore()
+
+          fs.existsSync(__filename)
+
+          assert.strictEqual(storage('legacy').getStore(), storeBefore)
         })
       })
     })
