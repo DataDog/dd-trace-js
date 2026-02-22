@@ -51,7 +51,6 @@ tracer.use('pg', {
 <h5 id="fetch"></h5>
 <h5 id="find-my-way"></h5>
 <h5 id="fs"></h5>
-<h5 id="generic-pool"></h5>
 <h5 id="google-cloud-pubsub"></h5>
 <h5 id="google-cloud-vertexai"></h5>
 <h5 id="google-genai"></h5>
@@ -65,7 +64,6 @@ tracer.use('pg', {
 <h5 id="iovalkey"></h5>
 <h5 id="jest"></h5>
 <h5 id="kafkajs"></h5>
-<h5 id="knex"></h5>
 <h5 id="koa"></h5>
 <h5 id="langchain"></h5>
 <h5 id="langgraph"></h5>
@@ -131,7 +129,6 @@ tracer.use('pg', {
 * [fetch](./interfaces/export_.plugins.fetch.html)
 * [find-my-way](./interfaces/export_.plugins.find_my_way.html)
 * [fs](./interfaces/export_.plugins.fs.html)
-* [generic-pool](./interfaces/export_.plugins.generic_pool.html)
 * [google-cloud-pubsub](./interfaces/export_.plugins.google_cloud_pubsub.html)
 * [google-cloud-vertexai](./interfaces/export_.plugins.google_cloud_vertexai.html)
 * [google-genai](./interfaces/export_.plugins.google_genai.html)
@@ -145,7 +142,6 @@ tracer.use('pg', {
 * [iovalkey](./interfaces/export_.plugins.iovalkey.html)
 * [jest](./interfaces/export_.plugins.jest.html)
 * [kafkajs](./interfaces/export_.plugins.kafkajs.html)
-* [knex](./interfaces/export_.plugins.knex.html)
 * [koa](./interfaces/export_.plugins.koa.html)
 * [langchain](./interfaces/export_.plugins.langchain.html)
 * [langgraph](./interfaces/export_.plugins.langgraph.html)

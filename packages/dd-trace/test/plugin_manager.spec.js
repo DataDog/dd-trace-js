@@ -28,11 +28,16 @@ describe('Plugin Manager', () => {
       _nomenclature: nomenclature,
     }
     instantiated = []
+
     class FakePlugin {
+      static id = ''
+
       constructor (aTracer) {
         assert.strictEqual(aTracer, tracer)
-        instantiated.push(this.constructor.id)
+        instantiated.push(/** @type {typeof FakePlugin} */(this.constructor).id)
       }
+
+      configure () {}
     }
 
     const plugins = {
