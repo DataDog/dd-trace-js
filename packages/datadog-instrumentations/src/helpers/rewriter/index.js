@@ -42,6 +42,7 @@ const instrumentations = require('./instrumentations')
 
 const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 
+/** @type {Record<string, string[]>} map of module base name to supported function query versions */
 const supported = {}
 const disabled = new Set()
 
@@ -104,19 +105,21 @@ function disable (instrumentation) {
 function satisfies (filename, filePath, versions) {
   const [basename] = filename.split(filePath)
 
-  if (supported[basename] === undefined) {
+  supported[basename] ??= []
+
+  if (!supported[basename].includes(versions)) {
     try {
       const pkg = JSON.parse(readFileSync(
         join(basename, 'package.json'), 'utf8'
       ))
 
-      supported[basename] = semifies(pkg.version, versions)
-    } catch {
-      supported[basename] = false
-    }
+      if (semifies(pkg.version, versions)) {
+        supported[basename].push(versions)
+      }
+    } catch {}
   }
 
-  return supported[basename]
+  return supported[basename].includes(versions)
 }
 
 // TODO: Support index
