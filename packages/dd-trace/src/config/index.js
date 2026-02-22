@@ -89,6 +89,8 @@ class Config {
 
     options = {
       ...options,
+      // TODO(BridgeAR): Remove the experimental prefix once we have a major version.
+      // That also applies to index.d.ts
       appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
       iast: options.iast == null ? options.experimental?.iast : options.iast,
     }

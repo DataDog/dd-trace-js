@@ -8,13 +8,14 @@ stages:
   - macrobenchmarks-notify
 
 # Config Registry CI jobs
-validate_supported_configurations_local_file:
-  extends: .validate_supported_configurations_local_file
+validate_supported_configurations_v2_local_file:
+  extends: .validate_supported_configurations_v2_local_file
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/config/supported-configurations.json"
+    BACKFILLED: "false"
 
-update_central_configurations_version_range:
-  extends: .update_central_configurations_version_range
+update_central_configurations_version_range_v2:
+  extends: .update_central_configurations_version_range_v2
   variables:
     LOCAL_REPO_NAME: "dd-trace-js"
     LOCAL_JSON_PATH: "packages/dd-trace/src/config/supported-configurations.json"

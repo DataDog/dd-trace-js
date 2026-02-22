@@ -331,7 +331,7 @@ describe('Config', () => {
         },
         rateLimit: 100,
         sca: {
-          enabled: null,
+          enabled: undefined
         },
         stackTrace: {
           enabled: true,
@@ -341,7 +341,7 @@ describe('Config', () => {
         wafTimeout: 5e3,
       },
       clientIpEnabled: false,
-      clientIpHeader: null,
+      clientIpHeader: undefined,
       codeOriginForSpans: {
         enabled: true,
         experimental: {
@@ -385,18 +385,18 @@ describe('Config', () => {
       iast: {
         enabled: false,
         redactionEnabled: true,
-        redactionNamePattern: null,
-        redactionValuePattern: null,
+        redactionNamePattern: undefined,
+        redactionValuePattern: undefined,
         telemetryVerbosity: 'INFORMATION',
         stackTrace: {
           enabled: true,
         },
       },
-      injectForce: null,
+      injectForce: undefined,
       installSignature: {
-        id: null,
-        time: null,
-        type: null,
+        id: undefined,
+        time: undefined,
+        type: undefined
       },
       instrumentationSource: 'manual',
       instrumentation_config_id: undefined,
@@ -480,7 +480,7 @@ describe('Config', () => {
       { name: 'appsec.rasp.enabled', value: true, origin: 'default' },
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
-      { name: 'appsec.sca.enabled', value: null, origin: 'default' },
+      { name: 'appsec.sca.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'appsec.stackTrace.maxDepth', value: 32, origin: 'default' },
       { name: 'appsec.stackTrace.maxStackTraces', value: 2, origin: 'default' },
@@ -488,7 +488,7 @@ describe('Config', () => {
       { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
       { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
-      { name: 'clientIpHeader', value: null, origin: 'default' },
+      { name: 'clientIpHeader', value: undefined, origin: 'default' },
       { name: 'codeOriginForSpans.enabled', value: true, origin: 'default' },
       { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: false, origin: 'default' },
       { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
@@ -520,13 +520,13 @@ describe('Config', () => {
       { name: 'iast.maxConcurrentRequests', value: 2, origin: 'default' },
       { name: 'iast.maxContextOperations', value: 2, origin: 'default' },
       { name: 'iast.redactionEnabled', value: true, origin: 'default' },
-      { name: 'iast.redactionNamePattern', value: null, origin: 'default' },
-      { name: 'iast.redactionValuePattern', value: null, origin: 'default' },
+      { name: 'iast.redactionNamePattern', value: undefined, origin: 'default' },
+      { name: 'iast.redactionValuePattern', value: undefined, origin: 'default' },
       { name: 'iast.requestSampling', value: 30, origin: 'default' },
-      { name: 'iast.securityControlsConfiguration', value: null, origin: 'default' },
+      { name: 'iast.securityControlsConfiguration', value: undefined, origin: 'default' },
       { name: 'iast.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
-      { name: 'injectForce', value: null, origin: 'default' },
+      { name: 'injectForce', value: undefined, origin: 'default' },
       { name: 'injectionEnabled', value: [], origin: 'default' },
       { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
@@ -2084,7 +2084,7 @@ describe('Config', () => {
       rateLimit: 42,
       rules: undefined,
       sca: {
-        enabled: null,
+        enabled: undefined
       },
       stackTrace: {
         enabled: true,
@@ -2104,7 +2104,7 @@ describe('Config', () => {
       redactionNamePattern: 'REDACTION_NAME_PATTERN',
       redactionValuePattern: 'REDACTION_VALUE_PATTERN',
       requestSampling: 15,
-      securityControlsConfiguration: null,
+      securityControlsConfiguration: undefined,
       stackTrace: {
         enabled: false,
       },
@@ -3290,7 +3290,7 @@ apm_configuration_default:
 
     // Regression test for fields that were previously set directly from environment variables
     // before they were supported by stable config as well.
-    it('should support legacy direct-set fields through all stableconfig and env var sources', () => {
+    it('should support legacy direct-set fields through all stable config and env var sources', () => {
       // Test 1: Local stable config should work
       fs.writeFileSync(
         localConfigPath,
