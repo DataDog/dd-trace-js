@@ -74,8 +74,9 @@ describe('typescript', () => {
   for (const version of testVersions) {
     // TODO: Figure out the real version without using `npm show` as it causes rate limit errors.
     context(`with version ${version}`, () => {
+      const packages = ['@types/node', `typescript@${version}`, '@opentelemetry/api']
       useSandbox(
-        ['@types/node', `typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
+        packages, false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
       )
 
       beforeEach(async () => {
