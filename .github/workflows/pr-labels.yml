@@ -8,8 +8,14 @@ jobs:
   label:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/actions/rate-limit-status
+      - uses: ./.github/actions/rate-limit-status
       - uses: mheap/github-action-required-labels@8afbe8ae6ab7647d0c9f0cfa7c2f939650d22509 # v5.5.1
         with:
           mode: exactly
           count: 1
           labels: "semver-patch, semver-minor, semver-major"
+      - uses: ./.github/actions/rate-limit-status
+        if: always()

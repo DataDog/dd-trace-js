@@ -18,6 +18,10 @@ jobs:
       checks: read
       contents: read
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: .github/actions/rate-limit-status
+      - uses: ./.github/actions/rate-limit-status
       - uses: wechuli/allcheckspassed@1d00cf0c34c4b0805db8866d8913f22e7125301e # v2.3.0
         with:
           delay: ${{ github.run_attempt == 1 && '7' || '0' }} # 7 minutes on first attempt, no delay on reruns
@@ -26,6 +30,8 @@ jobs:
           checks_exclude: devflow.*
           fail_fast: false
           verbose: true # What checks are still waited for?
+      - uses: ./.github/actions/rate-limit-status
+        if: always()
       - name: Require vendor validation when vendor/ changes
         if: github.event_name == 'pull_request'
         env:
