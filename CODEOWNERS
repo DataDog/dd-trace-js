@@ -1,5 +1,4 @@
-* @DataDog/dd-trace-js
-
+# AppSec
 /integration-tests/appsec/ @DataDog/asm-js
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
@@ -8,19 +7,30 @@
 /packages/dd-trace/src/aiguard/ @DataDog/asm-js
 /packages/dd-trace/test/aiguard/ @DataDog/asm-js
 
+/packages/dd-trace/*/standalone @DataDog/asm-js
+
+# Dynamic Instrumentation
 /integration-tests/debugger/ @DataDog/debugger-nodejs
 /packages/datadog-code-origin/ @DataDog/debugger-nodejs
 /packages/datadog-plugin-*/**/code_origin.* @DataDog/debugger-nodejs
 /packages/dd-trace/src/debugger/ @DataDog/debugger-nodejs
 /packages/dd-trace/test/debugger/ @DataDog/debugger-nodejs
 
+# Serverless
 /packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 /packages/dd-trace/test/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 
+# IDM
+/packages/datadog-esbuild @Datadog/apm-idm-js
 /packages/datadog-plugin-*/ @Datadog/apm-idm-js
 /packages/datadog-instrumentations/ @Datadog/apm-idm-js
 /packages/ddtrace/src/plugins/ @Datadog/apm-idm-js
 /packages/ddtrace/test/plugins/ @Datadog/apm-idm-js
+/packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
+/packages/dd-trace/test/service-naming/ @Datadog/apm-idm-js
+
+# Test Optimization
+/ci @DataDog/ci-app-libraries
 
 /packages/dd-trace/src/ci-visibility/ @DataDog/ci-app-libraries
 /packages/datadog-plugin-jest/ @DataDog/ci-app-libraries
@@ -57,9 +67,6 @@
 /integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities-js
-
-/packages/dd-trace/src/service-naming/ @Datadog/apm-idm-js
-/packages/dd-trace/test/service-naming/ @Datadog/apm-idm-js
 
 # LLM Observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
@@ -120,3 +127,14 @@
 /.github/workflows/profiling.yml @DataDog/profiling-js
 /.github/workflows/system-tests.yml @DataDog/asm-js
 /.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
+
+# Profiling
+/packages/dd-trace/*/profiling @DataDog/profiling-js
+
+# Language Platform
+/packages/datadog-core @DataDog/lang-platform-js
+/packages/datadog-shimmer @DataDog/lang-platform-js
+/packages/dd-trace/*/crashtracking @DataDog/lang-platform-js
+/packages/dd-trace/test/ritm-tests @DataDog/lang-platform-js
+/packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/setup @DataDog/lang-platform-js
