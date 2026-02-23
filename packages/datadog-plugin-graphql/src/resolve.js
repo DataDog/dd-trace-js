@@ -13,44 +13,40 @@ class GraphQLResolvePlugin extends TracingPlugin {
     if (this.config.collapse) field.depth += getListLevel(info.path)
     if (!this.shouldInstrument(field)) return
 
-    // we need to get the parent span to the field if it exists for correct span parenting
-    // of nested fields
-    const childOf = parentField ? this.getFieldContext(parentField).currentStore?.span : undefined
+    let childOf, path, ctx
 
-    let path, ctx
     if (this.config.collapse) {
+      const parent = parentField?.shared
       const sharedContexts = parentField
-        ? parentField.shared.collapsedChildren
+        ? parent.collapsedChildren
         : (rootCtx.toplevelCollapsed ??= {})
       ctx = sharedContexts[info.fieldName]
       if (ctx) {
         // Add reference to the shared context object,
-        // for the `updateField` to store the `.finishTime` on
+        // for the `finish` subscription to store the `.finishTime` on
         // and for children resolvers to find `.collapsedChildren`.
-        // Should not be `finish`ed again and again though, so we don't use .finishCtx`
         field.shared = ctx
         this.enter(ctx.currentStore.span) // TODO: test this!
         return
       }
+      childOf = parent ? parent.currentStore?.span : undefined
       path = collapsePath(pathToArray(info.path))
       // create shared context
       ctx = sharedContexts[info.fieldName] = {
         fieldName: info.fieldName,
         path,
-        parent: parentField?.shared,
+        parent,
         finishTime: 0,
         collapsedChildren: {}, // slightly pointless on leaf fields?
         // more to be added by `startSpan`
       }
       field.shared = ctx
-      // make this.finish(fieldCtx) be called before operation execution ends:
-      field.finishCtx = ctx
+      // make `field.finalize()` be called before operation execution ends:
+      field.finalize = finalizeCollapsedField
     } else {
+      childOf = parentField ? parentField.currentStore?.span : undefined
       path = pathToArray(info.path)
       ctx = field
-      // make this.finish(fieldCtx) be called before operation execution ends:
-      // and also to receive events when there's an `.error` on them
-      field.finishCtx = field
     }
 
     const document = rootCtx.source
@@ -61,7 +57,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
       resource: `${info.fieldName}:${info.returnType}`,
-      childOf,
+      childOf, // span used by parent field (if it exists) for correct span parenting of nested fields
       type: 'graphql',
       meta: {
         'graphql.field.name': info.fieldName,
@@ -94,28 +90,30 @@ class GraphQLResolvePlugin extends TracingPlugin {
     // return ctx.currentStore // seems unused? This is not `bindStart`!
   }
 
+  finish (field) {
+    if (!this.shouldInstrument(field)) return
+
+    if (this.config.collapse) {
+      const fieldCtx = field.shared
+      const span = fieldCtx.currentStore?.span
+      if (field.error) {
+        fieldCtx.error ??= field.error
+        // TODO: use `extractErrorIntoSpanEvent`
+      }
+      fieldCtx.finishTime = span._getTime ? span._getTime() : 0
+      this.config.hooks.resolve(span, field)
+    } else {
+      const span = field.currentStore?.span
+      this.config.hooks.resolve(span, field)
+      span?.finish()
+    }
+  }
+
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('updateField', (field) => {
-      if (!this.shouldInstrument(field)) return
-
-      const fieldCtx = this.getFieldContext(field)
-      const span = fieldCtx.currentStore?.span || this.activeSpan
-      fieldCtx.finishTime = span._getTime ? span._getTime() : 0
-
-      if (this.config.collapse && field.error) {
-        // the `field.shared` context is used to publish `error` events in `finishResolvers` :-/
-        // FIXME: this should probably use `extractErrorIntoSpanEvent`
-        fieldCtx.error ??= field.error // notice the first error wins (like in `validate` and `execute`)
-      }
-
-      this.config.hooks.resolve(span, field)
-    })
-
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
     this.shouldInstrument = _field => false
-    this.getFieldContext = _field => null
   }
 
   configure (config) {
@@ -125,22 +123,20 @@ class GraphQLResolvePlugin extends TracingPlugin {
     this.shouldInstrument = config.depth < 0
       ? _field => true
       : field => config.depth >= field.depth
-    this.getFieldContext = config.collapse
-      ? field => field.shared
-      : field => field
-  }
-
-  finish ({ finishTime, currentStore }) {
-    const span = currentStore?.span // no `|| this.activeSpan`, which might be anything
-    if (!span) return
-    // we care only about the span that was opened for the respective context
-    span.finish(finishTime)
-
-    // return fieldCtx.parentStore
   }
 }
 
 // helpers
+
+/** The method that is put as `.finalize` on a field when a shared context is created */
+function finalizeCollapsedField () {
+  const { shared } = this
+  const span = shared.currentStore?.span
+  if (shared.error) { // an error from any of the fields (that failed first)
+    span.setTag('error', shared.error) // like `TracingPlugin.prototype.error(shared)`
+  }
+  span?.finish(shared.finishTime)
+}
 
 /** Count `*` chars in front of last path segment for a collapsed path */
 function getListLevel (path) {
