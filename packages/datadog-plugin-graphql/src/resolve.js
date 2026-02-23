@@ -34,7 +34,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     const document = rootCtx.source
-    const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
+    const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field') // FIXME: https://github.com/graphql/graphql-js/issues/605#issuecomment-266160864
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
 
@@ -56,10 +56,12 @@ class GraphQLResolvePlugin extends TracingPlugin {
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(info.variableValues)
 
-      for (const arg of fieldNode.arguments) {
-        if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
-          const name = arg.value.name.value
-          span.setTag(`graphql.variables.${name}`, variables[name])
+      for (const { value: argValue } of fieldNode.arguments) {
+        if (argValue.kind === 'Variable') {
+          const varName = argValue.name.value
+          if (variables[varName] != null) {
+            span.setTag(`graphql.variables.${varName}`, variables[varName])
+          }
         }
       }
     }
