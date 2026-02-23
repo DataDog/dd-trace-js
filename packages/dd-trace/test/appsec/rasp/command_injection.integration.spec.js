@@ -8,7 +8,7 @@ const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
-describe.only('RASP - command_injection - integration', () => {
+describe('RASP - command_injection - integration', () => {
   let axios, cwd, appFile, agent, proc
 
   useSandbox(
@@ -58,7 +58,7 @@ describe.only('RASP - command_injection - integration', () => {
       const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
         assert.match(payload[0][0].meta['_dd.appsec.json'], new RegExp(`"rasp-command_injection-rule-id-${ruleId}"`))
-      })
+      }, 4_000)
 
       const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
         const namespace = payload.payload.namespace
@@ -79,8 +79,10 @@ describe.only('RASP - command_injection - integration', () => {
           assert.ok(matchSerie.tags.includes('rule_type:command_injection'))
           assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`))
           assert.strictEqual(matchSerie.type, 'count')
+        } else {
+          assert.fail('namespace should be appsec')
         }
-      }, 'generate-metrics', 30_000, 2)
+      }, 'generate-metrics', 4_000, 1, true)
 
       await Promise.all([checkMessages, checkTelemetry])
 
