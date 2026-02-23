@@ -150,6 +150,7 @@ interface Tracer extends opentracing.Tracer {
    * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
    * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
    *
+   * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
    * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
@@ -469,6 +470,8 @@ declare namespace tracer {
     /**
      * Used to disable APM Tracing when using standalone products
      * @default true
+     * @env DD_APM_TRACING_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     apmTracingEnabled?: boolean
 
@@ -507,6 +510,8 @@ declare namespace tracer {
     /**
      * The url of the trace agent that the tracer will submit to.
      * Takes priority over hostname and port, if set.
+     * @env DD_TRACE_AGENT_URL
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     url?: string;
 
@@ -528,6 +533,8 @@ declare namespace tracer {
 
     /**
      * Whether to enable profiling.
+     * @env DD_PROFILING_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     profiling?: boolean
 
@@ -568,6 +575,8 @@ declare namespace tracer {
 
     /**
      * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
+     * @env DD_TRACE_SAMPLE_RATE, OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     sampleRate?: number;
 
@@ -575,6 +584,8 @@ declare namespace tracer {
      * Global rate limit that is applied on the global sample rate and all rules,
      * and controls the ingestion rate limit between the agent and the backend.
      * Defaults to deferring the decision to the agent.
+     * @env DD_TRACE_RATE_LIMIT
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     rateLimit?: number,
 
@@ -584,12 +595,16 @@ declare namespace tracer {
      * a trace's `service` and `name`, and a corresponding `sampleRate`. If not
      * specified, will defer to global sampling rate for all spans.
      * @default []
+     * @env DD_TRACE_SAMPLING_RULES
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     samplingRules?: SamplingRule[]
 
     /**
      * Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans
      * @default []
+     * @env DD_SPAN_SAMPLING_RULES, DD_SPAN_SAMPLING_RULES_FILE
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     spanSamplingRules?: SpanSamplingRule[]
 
@@ -665,11 +680,15 @@ declare namespace tracer {
     ingestion?: {
       /**
        * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
+       * @env DD_TRACE_SAMPLE_RATE, OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       sampleRate?: number
 
       /**
        * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
+       * @env DD_TRACE_RATE_LIMIT
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       rateLimit?: number
     };
@@ -773,6 +792,8 @@ declare namespace tracer {
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
+         * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
       }
@@ -798,6 +819,8 @@ declare namespace tracer {
 
     /**
      * Global tags that should be assigned to every span.
+     * @env DD_TAGS, OTEL_RESOURCE_ATTRIBUTES
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     tags?: { [key: string]: any };
 
@@ -812,6 +835,8 @@ declare namespace tracer {
     /**
      * A string representing the minimum tracer log level to use when debug logging is enabled
      * @default 'debug'
+     * @env DD_TRACE_LOG_LEVEL, OTEL_LOG_LEVEL
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     logLevel?: 'error' | 'debug'
 
@@ -828,6 +853,8 @@ declare namespace tracer {
      * Can also be enabled via the DD_DATA_STREAMS_ENABLED environment variable.
      * When not provided, the value of DD_DATA_STREAMS_ENABLED is used.
      * @default false
+     * @env DD_DATA_STREAMS_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     dsmEnabled?: boolean
 
@@ -840,6 +867,8 @@ declare namespace tracer {
        * This option requires DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true to take effect.
        * The propagation hash enables correlation between traces and database operations.
        * @default false
+       * @env DD_DBM_INJECT_SQL_BASEHASH
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       injectSqlBaseHash?: boolean
     }
@@ -1086,11 +1115,16 @@ declare namespace tracer {
 
     /**
      * Custom header name to source the http.client_ip tag from.
+     * @env DD_TRACE_CLIENT_IP_HEADER
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     clientIpHeader?: string,
 
     /**
      * The selection and priority order of context propagation injection and extraction mechanisms.
+     * @env DD_TRACE_PROPAGATION_STYLE, DD_TRACE_PROPAGATION_STYLE_INJECT, DD_TRACE_PROPAGATION_STYLE_EXTRACT
+     * Also configurable via OTEL_PROPAGATORS when DD-specific propagation vars are not set.
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     tracePropagationStyle?: string[] | PropagationStyle
 
@@ -1101,11 +1135,15 @@ declare namespace tracer {
       /**
        *  Additional JSONPath queries to replace with `redacted` in request payloads
        *  Undefined or invalid JSONPath queries disable the feature for requests.
+       * @env DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       request?: string,
       /**
        *  Additional JSONPath queries to replace with `redacted` in response payloads
        *  Undefined or invalid JSONPath queries disable the feature for responses.
+       * @env DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       response?: string,
       /**
@@ -1118,6 +1156,8 @@ declare namespace tracer {
 
     /**
      * Configuration enabling LLM Observability. Enablement is superseded by the DD_LLMOBS_ENABLED environment variable.
+     * @env DD_LLMOBS_ENABLED
+     * The environment variable listed above takes precedence over programmatic configuration.
      */
     llmobs?: llmobs.LLMObsEnableOptions
 
@@ -2610,6 +2650,7 @@ declare namespace tracer {
      * [openai](https://platform.openai.com/docs/api-reference?lang=node.js) module.
      *
      * Note that for logs to work you'll need to set the `DD_API_KEY` environment variable.
+     * @env DD_API_KEY
      * You'll also need to adjust any firewall settings to allow the tracer to communicate
      * with `http-intake.logs.datadoghq.com`.
      *
@@ -2822,6 +2863,7 @@ declare namespace tracer {
       /**
        * Controls whether websocket messages should be traced.
        * This is also configurable via `DD_TRACE_WEBSOCKET_MESSAGES_ENABLED`.
+       * @env DD_TRACE_WEBSOCKET_MESSAGES_ENABLED
        */
       traceWebsocketMessagesEnabled?: boolean;
     }
@@ -3660,6 +3702,7 @@ declare namespace tracer {
       /**
        * The name of the ML application that the agent is orchestrating.
        * If not provided, the default value will be set to mlApp provided during initialization, or `DD_LLMOBS_ML_APP`.
+       * @env DD_LLMOBS_ML_APP
        */
       mlApp?: string,
 

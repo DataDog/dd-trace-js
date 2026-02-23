@@ -12,11 +12,14 @@ const context = describe
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
-const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../../src/constants')
+const defaults = require('../../src/config/defaults')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+
+const GRPC_CLIENT_ERROR_STATUSES = defaults['grpc.client.error.statuses']
+const GRPC_SERVER_ERROR_STATUSES = defaults['grpc.server.error.statuses']
 
 describe('Config', () => {
   let getConfig
@@ -533,8 +536,8 @@ describe('Config', () => {
       { name: 'injectionEnabled', value: [], origin: 'default' },
       { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
-      { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
-      { name: 'isFlakyTestRetriesEnabled', value: false, origin: 'default' },
+      { name: 'isEarlyFlakeDetectionEnabled', value: true, origin: 'default' },
+      { name: 'isFlakyTestRetriesEnabled', value: true, origin: 'default' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
@@ -543,7 +546,7 @@ describe('Config', () => {
       { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
       { name: 'llmobs.agentlessEnabled', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
-      { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
+      { name: 'isTestDynamicInstrumentationEnabled', value: true, origin: 'default' },
       { name: 'logInjection', value: true, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'middlewareTracingEnabled', value: true, origin: 'default' },
@@ -558,8 +561,7 @@ describe('Config', () => {
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
       {
         name: 'queryStringObfuscation',
-        // eslint-disable-next-line @stylistic/max-len
-        value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
+        value: config.queryStringObfuscation,
         origin: 'default',
       },
       { name: 'remoteConfig.enabled', value: true, origin: 'default' },

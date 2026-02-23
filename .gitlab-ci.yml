@@ -12,7 +12,7 @@ validate_supported_configurations_v2_local_file:
   extends: .validate_supported_configurations_v2_local_file
   variables:
     LOCAL_JSON_PATH: "packages/dd-trace/src/config/supported-configurations.json"
-    BACKFILLED: "false"
+    BACKFILLED: "true"
 
 update_central_configurations_version_range_v2:
   extends: .update_central_configurations_version_range_v2
