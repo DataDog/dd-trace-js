@@ -28,6 +28,7 @@ tracer.use('pg', {
 <h5 id="ai"></h5>
 <h5 id="amqp10"></h5>
 <h5 id="anthropic"></h5>
+<h5 id="claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-sdk"></h5>
@@ -106,6 +107,7 @@ tracer.use('pg', {
 * [amqp10](./interfaces/export_.plugins.amqp10.html)
 * [amqplib](./interfaces/export_.plugins.amqplib.html)
 * [anthropic](./interfaces/export_.plugins.anthropic.html)
+* [claude-agent-sdk](./interfaces/export_.plugins.claude_agent_sdk.html)
 * [apollo](./interfaces/export_.plugins.apollo.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
