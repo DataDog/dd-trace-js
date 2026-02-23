@@ -178,7 +178,31 @@ beforeEach(function () {
     testSuite: Cypress.mocha.getRootSuite().file,
   }).then(({ traceId, shouldSkip }) => {
     if (traceId) {
-      cy.setCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId)
+      cy.setCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId).then(() => {
+        // When testIsolation:false, the page is not reset between tests, so the RUM session
+        // stopped in afterEach must be explicitly restarted so events in this test are
+        // associated with the new testExecutionId.
+        //
+        // After stopSession(), the RUM SDK creates a new session upon a user interaction
+        // (click, scroll, keydown, or touchstart). We dispatch a synthetic click on the window
+        // to trigger session renewal, then call startView() to establish a view boundary.
+        if (!isTestIsolationEnabled && originalWindow) {
+          const rum = safeGetRum(originalWindow)
+          if (rum) {
+            try {
+              const evt = new originalWindow.MouseEvent('click', { bubbles: true, cancelable: true })
+              // The browser-sdk addEventListener wrapper filters out untrusted synthetic events
+              // unless __ddIsTrusted is set. Set it so the click triggers expandOrRenewSession().
+              // See: https://github.com/DataDog/browser-sdk/blob/v6.27.1/packages/core/src/browser/addEventListener.ts#L119
+              Object.defineProperty(evt, '__ddIsTrusted', { value: true })
+              originalWindow.dispatchEvent(evt)
+            } catch {}
+            if (rum.startView) {
+              rum.startView()
+            }
+          }
+        }
+      })
     }
     if (shouldSkip) {
       this.skip()
