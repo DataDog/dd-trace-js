@@ -50,7 +50,6 @@ declare -a plugins=(
   "iovalkey"
   "jest"
   "kafkajs"
-  "knex"
   "koa"
   "langchain"
   "ldapjs"
