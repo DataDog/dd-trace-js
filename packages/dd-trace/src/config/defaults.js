@@ -1,11 +1,11 @@
 'use strict'
 
 const pkg = require('../pkg')
-const { getEnvironmentVariable: getEnv } = require('./helper')
 const { isFalse, isTrue } = require('../util')
+const { getEnvironmentVariable: getEnv } = require('./helper')
 
 const {
-  supportedConfigurations
+  supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
 const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
@@ -52,12 +52,7 @@ function parseDefaultByType (raw, type) {
 const metadataDefaults = {}
 for (const entries of Object.values(supportedConfigurations)) {
   for (const entry of entries) {
-    if (
-      entry.implementation !== 'A' ||
-      entry.default === '$dynamic' ||
-      !('configurationNames' in entry) ||
-      !Array.isArray(entry.configurationNames)
-    ) {
+    if (entry.default === '$dynamic' || !Array.isArray(entry.configurationNames)) {
       continue
     }
 
@@ -100,9 +95,8 @@ const defaults = {
   ...defaultsWithoutSupportedConfigurationEntry,
   ...metadataDefaults,
   ...defaultsWithConditionalRuntimeBehavior,
+  service: service,
+  version: pkg.version,
 }
-
-defaults.service = service
-defaults.version = pkg.version
 
 module.exports = defaults

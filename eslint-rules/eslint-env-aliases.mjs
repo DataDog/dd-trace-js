@@ -13,9 +13,11 @@ const { supportedConfigurations } = JSON.parse(fs.readFileSync(supportedConfigsP
 const aliasToCanonical = {}
 for (const [canonical, entries] of Object.entries(supportedConfigurations)) {
   for (const entry of entries) {
-    for (const alias of entry.aliases ?? []) {
-      aliasToCanonical[alias] ??= []
-      aliasToCanonical[alias].push(canonical)
+    if (entry.aliases && !entry.deprecated) {
+      for (const alias of entry.aliases) {
+        aliasToCanonical[alias] ??= []
+        aliasToCanonical[alias].push(canonical)
+      }
     }
   }
 }

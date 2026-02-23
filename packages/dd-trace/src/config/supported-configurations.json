@@ -243,7 +243,7 @@
     ],
     "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "appsec.blockedTemplateHtml"
@@ -253,7 +253,7 @@
     ],
     "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "appsec.blockedTemplateJson"
@@ -293,7 +293,7 @@
     ],
     "DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "appsec.obfuscatorKeyRegex"
@@ -303,7 +303,7 @@
     ],
     "DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP": [
       {
-        "implementation": "A",
+        "implementation": "G",
         "type": "string",
         "configurationNames": [
           "appsec.obfuscatorValueRegex"
@@ -333,7 +333,7 @@
     ],
     "DD_APPSEC_RULES": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "appsec.rules"
@@ -343,7 +343,7 @@
     ],
     "DD_APPSEC_SCA_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": null,
         "configurationNames": [
@@ -414,7 +414,7 @@
     ],
     "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "false"
       }
@@ -435,7 +435,7 @@
     ],
     "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true",
         "configurationNames": [
@@ -657,7 +657,7 @@
     ],
     "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "dynamicInstrumentation.probeFile"
@@ -704,7 +704,7 @@
     ],
     "DD_ENV": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "env"
@@ -964,7 +964,7 @@
     ],
     "DD_IAST_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "configurationNames": [
           "iast.enabled"
@@ -1034,7 +1034,7 @@
     ],
     "DD_IAST_SECURITY_CONTROLS_CONFIGURATION": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "iast.securityControlsConfiguration"
@@ -1044,7 +1044,7 @@
     ],
     "DD_IAST_STACK_TRACE_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "configurationNames": [
           "iast.stackTrace.enabled"
@@ -1054,7 +1054,7 @@
     ],
     "DD_IAST_TELEMETRY_VERBOSITY": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "iast.telemetryVerbosity"
@@ -1201,7 +1201,7 @@
     ],
     "DD_LLMOBS_ML_APP": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "llmobs.mlApp"
@@ -1211,7 +1211,7 @@
     ],
     "DD_LOGS_INJECTION": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "configurationNames": [
           "logInjection"
@@ -1231,7 +1231,7 @@
     ],
     "DD_LOG_LEVEL": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "default": null
       }
@@ -1518,7 +1518,7 @@
     ],
     "DD_PROFILING_WALLTIME_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
@@ -1632,7 +1632,7 @@
     ],
     "DD_SITE": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "string",
         "default": "datadoghq.com",
         "configurationNames": [
@@ -1805,7 +1805,7 @@
     ],
     "DD_TRACE_AEROSPIKE_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
@@ -2002,7 +2002,7 @@
     ],
     "DD_TRACE_AWS_SDK_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
@@ -2191,7 +2191,7 @@
     ],
     "DD_TRACE_AZURE_FUNCTIONS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
@@ -2308,7 +2308,7 @@
     ],
     "DD_TRACE_CLIENT_IP_HEADER": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "clientIpHeader"
@@ -2390,7 +2390,7 @@
     ],
     "DD_TRACE_COUCHBASE_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
@@ -2411,7 +2411,7 @@
     ],
     "DD_TRACE_CUCUMBER_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
@@ -2432,7 +2432,7 @@
     ],
     "DD_TRACE_DEBUG": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "false"
       }
@@ -3278,7 +3278,7 @@
     ],
     "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "int",
         "configurationNames": [
           "flushMinSpans"
@@ -3420,7 +3420,7 @@
     ],
     "DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "default": "continue",
         "configurationNames": [
@@ -3588,7 +3588,7 @@
     ],
     "DD_TRACE_SAMPLE_RATE": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "decimal",
         "configurationNames": [
           "ingestion.sampleRate"
@@ -3619,7 +3619,7 @@
     ],
     "DD_TRACE_SELENIUM_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
@@ -3654,7 +3654,7 @@
     ],
     "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "spanAttributeSchema"
@@ -3982,7 +3982,7 @@
     ],
     "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "default": "http/protobuf",
         "configurationNames": [
@@ -4002,7 +4002,7 @@
     ],
     "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "int",
         "configurationNames": [
           "otelMetricsTimeout"
@@ -4039,7 +4039,7 @@
     ],
     "OTEL_LOG_LEVEL": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "string",
         "default": null
       }
@@ -4124,7 +4124,7 @@
     ],
     "OTEL_TRACES_SAMPLER_ARG": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "decimal",
         "configurationNames": [
           "sampleRate"
