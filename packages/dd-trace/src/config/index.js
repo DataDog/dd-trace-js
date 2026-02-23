@@ -1139,7 +1139,7 @@ class Config {
     const agentHostname = this.#getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}/v1/metrics`
-    calc.otelTracesUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}`
+    calc.otelTracesUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}/v1/traces`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}`
 
     setBoolean(calc, 'isGitUploadEnabled',
@@ -1354,10 +1354,6 @@ function isInvalidOtelEnvironmentVariable (envVar, value) {
       return Number.isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false'
-    case 'OTEL_TRACES_EXPORTER': {
-      const lower = value.toLowerCase()
-      return lower !== 'otlp'
-    }
     case 'OTEL_METRICS_EXPORTER':
     case 'OTEL_LOGS_EXPORTER':
       return value.toLowerCase() !== 'none'
