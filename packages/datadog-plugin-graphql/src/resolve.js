@@ -71,7 +71,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
       })
     }
 
-    return field.currentStore
+    // return field.currentStore // seems unused? This is not `bindStart`!
   }
 
   constructor (...args) {
@@ -103,7 +103,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const span = fieldCtx?.currentStore?.span || this.activeSpan
     span.finish(finishTime)
 
-    return fieldCtx.parentStore
+    // return fieldCtx.parentStore
   }
 }
 
