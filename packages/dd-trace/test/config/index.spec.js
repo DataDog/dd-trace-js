@@ -584,7 +584,7 @@ describe('Config', () => {
       { name: 'telemetry.debug', value: false, origin: 'default' },
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
       { name: 'telemetry.enabled', value: true, origin: 'default' },
-      { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
+      { name: 'telemetry.heartbeatInterval', value: 60, origin: 'default' },
       { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'traceEnabled', value: true, origin: 'default' },

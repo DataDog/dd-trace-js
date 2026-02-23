@@ -675,7 +675,7 @@
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
-        "default": ""
+        "default": "[]"
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS": [
@@ -889,7 +889,7 @@
       {
         "implementation": "A",
         "type": "array",
-        "default": "[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]",
+        "default": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16",
         "configurationNames": [
           "grpc.client.error.statuses"
         ]
@@ -899,7 +899,7 @@
       {
         "implementation": "A",
         "type": "array",
-        "default": "[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]",
+        "default": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16",
         "configurationNames": [
           "grpc.server.error.statuses"
         ]
@@ -1012,7 +1012,7 @@
         "configurationNames": [
           "iast.redactionValuePattern"
         ],
-        "default": "(?:bearers+[a-z0-9._-]+|glpat-[w-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][w=-]+.ey[I-L][w=-]+(?:.[w.+/=-]+)?|(?:[-]{5}BEGIN[a-zs]+PRIVATEsKEY[-]{5}[^-]+[-]{5}END[a-zs]+PRIVATEsKEY[-]{5}|ssh-rsas*[a-z0-9/.+]{100,})|[w.-]+@[a-zA-Zd.-]+.[a-zA-Z]{2,})"
+        "default": "(?:bearer\\s+[a-z0-9\\._\\-]+|glpat-[\\w\\-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=\\-]+\\.ey[I-L][\\w=\\-]+(?:\\.[\\w.+/=\\-]+)?|(?:[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY[\\-]{5}|ssh-rsa\\s*[a-z0-9/\\.+]{100,})|[\\w\\.-]+@[a-zA-Z\\d\\.-]+\\.[a-zA-Z]{2,})"
       }
     ],
     "DD_IAST_REQUEST_SAMPLING": [
@@ -1340,7 +1340,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "on"
+        "default": "zstd"
       }
     ],
     "DD_PROFILING_ENABLED": [
@@ -1350,7 +1350,7 @@
         "configurationNames": [
           "profiling.enabled"
         ],
-        "default": null,
+        "default": "false",
         "aliases": [
           "DD_EXPERIMENTAL_PROFILING_ENABLED"
         ]
@@ -1363,7 +1363,7 @@
         "configurationNames": [
           "profiling"
         ],
-        "default": null,
+        "default": "false",
         "aliases": [
           "DD_PROFILING_ENABLED"
         ],
@@ -1433,7 +1433,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_PROFILING_HEAP_SAMPLING_INTERVAL": [
@@ -1490,14 +1490,14 @@
     ],
     "DD_PROFILING_UPLOAD_PERIOD": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "int",
         "default": "65"
       }
     ],
     "DD_PROFILING_UPLOAD_TIMEOUT": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "int",
         "default": "60000"
       }
@@ -1536,7 +1536,7 @@
         "configurationNames": [
           "remoteConfig.pollInterval"
         ],
-        "default": "5"
+        "default": "5.0"
       }
     ],
     "DD_RUNTIME_METRICS_ENABLED": [
@@ -1591,7 +1591,7 @@
     ],
     "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "false",
         "aliases": [
@@ -1602,7 +1602,7 @@
     ],
     "DD_SERVICE": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "string",
         "configurationNames": [
           "service"
@@ -1615,7 +1615,7 @@
     ],
     "DD_SERVICE_MAPPING": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "map",
         "configurationNames": [
           "serviceMapping"
@@ -1641,13 +1641,13 @@
           "spanSamplingRules",
           "sampler.spanSamplingRules"
         ],
-        "default": ""
+        "default": "[]"
       }
     ],
     "DD_SPAN_SAMPLING_RULES_FILE": [
       {
-        "implementation": "A",
-        "type": "array",
+        "implementation": "B",
+        "type": "string",
         "configurationNames": [
           "spanSamplingRules",
           "sampler.spanSamplingRules"
@@ -1694,9 +1694,9 @@
     ],
     "DD_TELEMETRY_HEARTBEAT_INTERVAL": [
       {
-        "implementation": "A",
-        "type": "int",
-        "default": "60000",
+        "implementation": "B",
+        "type": "decimal",
+        "default": "60",
         "configurationNames": [
           "telemetry.heartbeatInterval"
         ]
@@ -1748,7 +1748,7 @@
     ],
     "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "int",
         "default": "20",
         "configurationNames": [
@@ -1770,7 +1770,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "",
+        "default": null,
         "configurationNames": [
           "ciVisibilityTestSessionName"
         ]
@@ -1806,7 +1806,7 @@
     "DD_TRACE_AGENT_PORT": [
       {
         "implementation": "A",
-        "type": "string",
+        "type": "int",
         "configurationNames": [
           "port"
         ],
@@ -1825,15 +1825,12 @@
     ],
     "DD_TRACE_AGENT_URL": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "string",
         "configurationNames": [
           "url"
         ],
-        "default": null,
-        "aliases": [
-          "DD_TRACE_URL"
-        ]
+        "default": null
       }
     ],
     "DD_TRACE_AI_ENABLED": [
@@ -3828,7 +3825,7 @@
     ],
     "DD_VERSION": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "version"
@@ -3906,8 +3903,8 @@
     "OTEL_EXPORTER_OTLP_HEADERS": [
       {
         "implementation": "A",
-        "type": "string",
-        "default": null,
+        "type": "map",
+        "default": "",
         "configurationNames": [
           "otelHeaders"
         ]
@@ -3925,17 +3922,20 @@
     ],
     "OTEL_EXPORTER_OTLP_LOGS_HEADERS": [
       {
-        "implementation": "A",
-        "type": "string",
-        "default": "",
+        "implementation": "B",
+        "type": "map",
+        "default": null,
         "configurationNames": [
           "otelLogsHeaders"
+        ],
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_HEADERS"
         ]
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "string",
         "default": "http/protobuf",
         "configurationNames": [
@@ -3966,8 +3966,8 @@
     "OTEL_EXPORTER_OTLP_METRICS_HEADERS": [
       {
         "implementation": "A",
-        "type": "string",
-        "default": "",
+        "type": "map",
+        "default": null,
         "configurationNames": [
           "otelMetricsHeaders"
         ]
@@ -3990,7 +3990,7 @@
         "configurationNames": [
           "otelMetricsTemporalityPreference"
         ],
-        "default": "DELTA"
+        "default": "delta"
       }
     ],
     "OTEL_EXPORTER_OTLP_METRICS_TIMEOUT": [
@@ -4039,9 +4039,9 @@
     ],
     "OTEL_METRICS_EXPORTER": [
       {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false"
+        "implementation": "C",
+        "type": "string",
+        "default": null
       }
     ],
     "OTEL_METRIC_EXPORT_INTERVAL": [
@@ -4067,8 +4067,8 @@
     "OTEL_PROPAGATORS": [
       {
         "implementation": "A",
-        "type": "boolean",
-        "default": "false",
+        "type": "array",
+        "default": "",
         "configurationNames": [
           "tracePropagationStyle.otelPropagators"
         ]
@@ -4078,19 +4078,19 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": ""
       }
     ],
     "OTEL_SDK_DISABLED": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "boolean",
         "default": "true"
       }
     ],
     "OTEL_SERVICE_NAME": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "service"
