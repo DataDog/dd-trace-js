@@ -36,10 +36,12 @@ function parseDefaultByType (raw, type) {
       return Number(raw)
     }
     case 'array': {
+      // TODO: Implement comma separated list
       if (raw.length === 0) return []
       return JSON.parse(raw)
     }
     case 'map': {
+      // TODO: Implement comma separated list with colon separated key value pairs
       if (raw.length === 0) return {}
       return JSON.parse(raw)
     }

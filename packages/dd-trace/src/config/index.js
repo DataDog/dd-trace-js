@@ -652,6 +652,7 @@ class Config {
     setString(target, 'installSignature.id', DD_INSTRUMENTATION_INSTALL_ID)
     setString(target, 'installSignature.time', DD_INSTRUMENTATION_INSTALL_TIME)
     setString(target, 'installSignature.type', DD_INSTRUMENTATION_INSTALL_TYPE)
+    // TODO: Why is DD_INJECTION_ENABLED a comma separated list?
     setArray(target, 'injectionEnabled', DD_INJECTION_ENABLED)
     if (DD_INJECTION_ENABLED !== undefined) {
       setString(target, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')

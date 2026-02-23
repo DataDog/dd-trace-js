@@ -1,13 +1,6 @@
 {
   "version": "2",
   "supportedConfigurations": {
-    "DD_AAS_DOTNET_EXTENSION_VERSION": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "default": null
-      }
-    ],
     "DD_ACTION_EXECUTION_ID": [
       {
         "implementation": "A",
@@ -29,7 +22,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "$dynamic"
+        "default": null
       }
     ],
     "DD_AGENT_HOST": [
@@ -39,7 +32,7 @@
         "configurationNames": [
           "hostname"
         ],
-        "default": "127.0.0.1",
+        "default": "localhost",
         "aliases": [
           "DD_TRACE_AGENT_HOSTNAME"
         ]
@@ -190,7 +183,7 @@
     ],
     "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": [
       {
-        "implementation": "A",
+        "implementation": "E",
         "type": "string",
         "configurationNames": [
           "appsec.eventTracking.mode"
@@ -218,7 +211,7 @@
         "configurationNames": [
           "appsec.enabled"
         ],
-        "default": null
+        "default": "false"
       }
     ],
     "DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON": [
@@ -373,7 +366,7 @@
     ],
     "DD_APPSEC_WAF_TIMEOUT": [
       {
-        "implementation": "A",
+        "implementation": "E",
         "type": "int",
         "configurationNames": [
           "appsec.wafTimeout"
@@ -409,7 +402,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "$dynamic"
+        "default": null
       }
     ],
     "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": [
@@ -519,7 +512,7 @@
     ],
     "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "int",
         "default": "1000"
       }
@@ -619,7 +612,7 @@
         "configurationNames": [
           "dogstatsd.hostname"
         ],
-        "default": "127.0.0.1",
+        "default": "localhost",
         "aliases": [
           "DD_DOGSTATSD_HOSTNAME"
         ]
@@ -628,7 +621,7 @@
     "DD_DOGSTATSD_PORT": [
       {
         "implementation": "A",
-        "type": "string",
+        "type": "int",
         "configurationNames": [
           "dogstatsd.port"
         ],
@@ -672,7 +665,7 @@
         "configurationNames": [
           "dynamicInstrumentation.redactedIdentifiers"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS": [
@@ -682,7 +675,7 @@
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS": [
@@ -746,7 +739,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": null,
+        "default": "false",
         "configurationNames": [
           "propagateProcessTags.enabled"
         ]
@@ -763,7 +756,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "/{os.tmpdir()}/dd-trace-git-cache"
+        "default": "${os.tmpdir()}/dd-trace-git-cache"
       }
     ],
     "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED": [
@@ -1009,7 +1002,7 @@
         "configurationNames": [
           "iast.redactionNamePattern"
         ],
-        "default": null
+        "default": "(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|(?:sur|last)name|user(?:name)?|address|e?mail)"
       }
     ],
     "DD_IAST_REDACTION_VALUE_PATTERN": [
@@ -1019,7 +1012,7 @@
         "configurationNames": [
           "iast.redactionValuePattern"
         ],
-        "default": null
+        "default": "(?:bearers+[a-z0-9._-]+|glpat-[w-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][w=-]+.ey[I-L][w=-]+(?:.[w.+/=-]+)?|(?:[-]{5}BEGIN[a-zs]+PRIVATEsKEY[-]{5}[^-]+[-]{5}END[a-zs]+PRIVATEsKEY[-]{5}|ssh-rsas*[a-z0-9/.+]{100,})|[w.-]+@[a-zA-Zd.-]+.[a-zA-Z]{2,})"
       }
     ],
     "DD_IAST_REQUEST_SAMPLING": [
@@ -1066,7 +1059,7 @@
       {
         "implementation": "A",
         "type": "array",
-        "default": "[]",
+        "default": "",
         "configurationNames": [
           "injectionEnabled"
         ]
@@ -1076,7 +1069,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": null,
+        "default": "false",
         "configurationNames": [
           "injectForce"
         ]
@@ -1124,7 +1117,7 @@
     ],
     "DD_INSTRUMENTATION_TELEMETRY_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true",
         "aliases": [
@@ -1139,7 +1132,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": null,
+        "default": "30000",
         "configurationNames": [
           "profiling.longLivedThreshold"
         ]
@@ -1181,12 +1174,12 @@
     ],
     "DD_LLMOBS_AGENTLESS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "configurationNames": [
           "llmobs.agentlessEnabled"
         ],
-        "default": null
+        "default": "false"
       }
     ],
     "DD_LLMOBS_ENABLED": [
@@ -1291,14 +1284,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "$dynamic"
+        "default": "true"
       }
     ],
     "DD_PROFILING_CODEHOTSPOTS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
+        "default": "true",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED"
         ]
@@ -1308,7 +1301,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
+        "default": "true",
         "aliases": [
           "DD_PROFILING_CODEHOTSPOTS_ENABLED"
         ],
@@ -1319,7 +1312,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true (non-Windows) / false (Windows)",
+        "default": "true",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED"
         ]
@@ -1329,7 +1322,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true (non-Windows) / false (Windows)",
+        "default": "true",
         "aliases": [
           "DD_PROFILING_CPU_ENABLED"
         ],
@@ -1381,7 +1374,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true (non-Windows) / false (Windows)",
+        "default": "true",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED"
         ]
@@ -1391,7 +1384,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true (non-Windows) / false (Windows)",
+        "default": "true",
         "aliases": [
           "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED"
         ],
@@ -1423,7 +1416,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true (non-Windows) / false (Windows)"
+        "default": "true"
       }
     ],
     "DD_PROFILING_EXPORTERS": [
@@ -1478,7 +1471,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true (non-Windows) / false (Windows)",
+        "default": "true",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED"
         ]
@@ -1488,7 +1481,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true (non-Windows) / false (Windows)",
+        "default": "true",
         "aliases": [
           "DD_PROFILING_TIMELINE_ENABLED"
         ],
@@ -1614,7 +1607,7 @@
         "configurationNames": [
           "service"
         ],
-        "default": "$dynamic",
+        "default": null,
         "aliases": [
           "DD_SERVICE_NAME"
         ]
@@ -1627,7 +1620,7 @@
         "configurationNames": [
           "serviceMapping"
         ],
-        "default": "{}"
+        "default": ""
       }
     ],
     "DD_SITE": [
@@ -1648,7 +1641,7 @@
           "spanSamplingRules",
           "sampler.spanSamplingRules"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_SPAN_SAMPLING_RULES_FILE": [
@@ -1659,14 +1652,14 @@
           "spanSamplingRules",
           "sampler.spanSamplingRules"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_TAGS": [
       {
         "implementation": "A",
         "type": "map",
-        "default": "{}",
+        "default": "",
         "configurationNames": [
           "tags"
         ]
@@ -2333,7 +2326,7 @@
         "configurationNames": [
           "cloudPayloadTagging.request"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING": [
@@ -2343,7 +2336,7 @@
         "configurationNames": [
           "cloudPayloadTagging.response"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_TRACE_COLLECTIONS_ENABLED": [
@@ -2682,7 +2675,7 @@
       {
         "implementation": "A",
         "type": "array",
-        "default": "[]",
+        "default": "",
         "configurationNames": [
           "graphqlErrorExtensions"
         ]
@@ -2769,7 +2762,7 @@
       {
         "implementation": "A",
         "type": "array",
-        "default": "[]",
+        "default": "",
         "configurationNames": [
           "headerTags"
         ]
@@ -3324,7 +3317,7 @@
         "configurationNames": [
           "peerServiceMapping"
         ],
-        "default": "{}"
+        "default": ""
       }
     ],
     "DD_TRACE_PG_CURSOR_ENABLED": [
@@ -3604,7 +3597,7 @@
           "samplingRules",
           "sampler.rules"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_TRACE_SCOPE": [
@@ -3840,7 +3833,7 @@
         "configurationNames": [
           "version"
         ],
-        "default": "$dynamic"
+        "default": null
       }
     ],
     "DD_VERTEXAI_SPAN_CHAR_LIMIT": [
@@ -4102,7 +4095,7 @@
         "configurationNames": [
           "service"
         ],
-        "default": "$dynamic"
+        "default": null
       }
     ],
     "OTEL_TRACES_EXPORTER": [
