@@ -13,8 +13,6 @@ const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 
-const plugins = require('../../dd-trace/src/plugins')
-
 const hasOSymlink = realFS.constants.O_SYMLINK
 
 describe('Plugin', () => {
@@ -85,13 +83,11 @@ describe('Plugin', () => {
 
     before(() => {
       tmpdir = realFS.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-js-test'))
-      plugins.fs = require('../../datadog-plugin-fs/src')
       channel('dd-trace:instrumentation:load').publish({ name: 'fs' })
     })
 
     after((done) => {
       realFS.rm(tmpdir, { force: true, recursive: true }, done)
-      delete plugins.fs
     })
 
     describe('without parent span', () => {
