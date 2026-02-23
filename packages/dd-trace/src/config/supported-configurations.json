@@ -5,28 +5,31 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_ACTION_EXECUTION_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_AGENTLESS_LOG_SUBMISSION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "false",
+        "configurationNames": [
+          "ciVisAgentlessLogSubmissionEnabled"
+        ]
       }
     ],
     "DD_AGENTLESS_LOG_SUBMISSION_URL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": "$dynamic"
       }
     ],
     "DD_AGENT_HOST": [
@@ -49,7 +52,7 @@
         "configurationNames": [
           "experimental.aiguard.enabled"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_AI_GUARD_ENDPOINT": [
@@ -59,7 +62,7 @@
         "configurationNames": [
           "experimental.aiguard.endpoint"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_AI_GUARD_MAX_CONTENT_SIZE": [
@@ -69,7 +72,7 @@
         "configurationNames": [
           "experimental.aiguard.maxContentSize"
         ],
-        "default": 524288
+        "default": "524288"
       }
     ],
     "DD_AI_GUARD_MAX_MESSAGES_LENGTH": [
@@ -79,7 +82,7 @@
         "configurationNames": [
           "experimental.aiguard.maxMessagesLength"
         ],
-        "default": 16
+        "default": "16"
       }
     ],
     "DD_AI_GUARD_TIMEOUT": [
@@ -89,14 +92,14 @@
         "configurationNames": [
           "experimental.aiguard.timeout"
         ],
-        "default": 10000
+        "default": "10000"
       }
     ],
     "DD_API_KEY": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__",
+        "default": null,
         "aliases": [
           "DATADOG_API_KEY"
         ]
@@ -109,7 +112,7 @@
         "configurationNames": [
           "appsec.apiSecurity.enabled"
         ],
-        "default": true,
+        "default": "true",
         "aliases": [
           "DD_EXPERIMENTAL_API_SECURITY_ENABLED"
         ]
@@ -122,7 +125,7 @@
         "configurationNames": [
           "appsec.apiSecurity.endpointCollectionEnabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT": [
@@ -132,7 +135,7 @@
         "configurationNames": [
           "appsec.apiSecurity.endpointCollectionMessageLimit"
         ],
-        "default": 300
+        "default": "300"
       }
     ],
     "DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE": [
@@ -152,21 +155,21 @@
         "configurationNames": [
           "appsec.apiSecurity.maxDownstreamRequestBodyAnalysis"
         ],
-        "default": 1
+        "default": "1"
       }
     ],
     "DD_API_SECURITY_SAMPLE_DELAY": [
       {
         "implementation": "A",
         "type": "decimal",
-        "default": 30
+        "default": "30"
       }
     ],
     "DD_APM_FLUSH_DEADLINE_MILLISECONDS": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 100
+        "default": "100"
       }
     ],
     "DD_APM_TRACING_ENABLED": [
@@ -176,7 +179,7 @@
         "configurationNames": [
           "apmTracingEnabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": [
@@ -199,7 +202,7 @@
         "configurationNames": [
           "appsec.extendedHeadersCollection.enabled"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_APPSEC_ENABLED": [
@@ -209,7 +212,7 @@
         "configurationNames": [
           "appsec.enabled"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON": [
@@ -219,7 +222,7 @@
         "configurationNames": [
           "appsec.blockedTemplateGraphql"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED": [
@@ -229,7 +232,7 @@
         "configurationNames": [
           "appsec.extendedHeadersCollection.redaction"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": [
@@ -239,7 +242,7 @@
         "configurationNames": [
           "appsec.blockedTemplateHtml"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON": [
@@ -249,7 +252,7 @@
         "configurationNames": [
           "appsec.blockedTemplateJson"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_APPSEC_MAX_COLLECTED_HEADERS": [
@@ -259,7 +262,7 @@
         "configurationNames": [
           "appsec.extendedHeadersCollection.maxHeaders"
         ],
-        "default": 50
+        "default": "50"
       }
     ],
     "DD_APPSEC_MAX_STACK_TRACES": [
@@ -269,7 +272,7 @@
         "configurationNames": [
           "appsec.stackTrace.maxStackTraces"
         ],
-        "default": 2
+        "default": "2"
       }
     ],
     "DD_APPSEC_MAX_STACK_TRACE_DEPTH": [
@@ -279,7 +282,7 @@
         "configurationNames": [
           "appsec.stackTrace.maxDepth"
         ],
-        "default": 32
+        "default": "32"
       }
     ],
     "DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP": [
@@ -309,7 +312,7 @@
         "configurationNames": [
           "appsec.rasp.bodyCollection"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_APPSEC_RASP_ENABLED": [
@@ -319,7 +322,7 @@
         "configurationNames": [
           "appsec.rasp.enabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_APPSEC_RULES": [
@@ -329,14 +332,14 @@
         "configurationNames": [
           "appsec.rules"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_APPSEC_SCA_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_APPSEC_STACK_TRACE_ENABLED": [
@@ -346,7 +349,7 @@
         "configurationNames": [
           "appsec.stackTrace.enabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_APPSEC_TRACE_RATE_LIMIT": [
@@ -356,7 +359,7 @@
         "configurationNames": [
           "appsec.rateLimit"
         ],
-        "default": 100
+        "default": "100"
       }
     ],
     "DD_APPSEC_WAF_TIMEOUT": [
@@ -366,147 +369,159 @@
         "configurationNames": [
           "appsec.wafTimeout"
         ],
-        "default": 5000
+        "default": "5000"
       }
     ],
     "DD_APP_KEY": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_AZURE_RESOURCE_GROUP": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_CIVISIBILITY_AGENTLESS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_CIVISIBILITY_AGENTLESS_URL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": "$dynamic"
       }
     ],
     "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": [
       {
         "implementation": "A",
-        "type": "string",
-        "default": "__UNKNOWN__"
+        "type": "boolean",
+        "default": "false"
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "false"
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "false"
       }
     ],
     "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true",
+        "configurationNames": [
+          "isEarlyFlakeDetectionEnabled"
+        ]
       }
     ],
     "DD_CIVISIBILITY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "false"
       }
     ],
     "DD_CIVISIBILITY_FLAKY_RETRY_COUNT": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "5",
+        "configurationNames": [
+          "flakyTestRetriesCount"
+        ]
       }
     ],
     "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true",
+        "configurationNames": [
+          "isFlakyTestRetriesEnabled"
+        ]
       }
     ],
     "DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_CIVISIBILITY_ITR_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_CIVISIBILITY_MANUAL_API_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true",
+        "configurationNames": [
+          "isManualApiEnabled"
+        ]
       }
     ],
     "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "1000"
       }
     ],
     "DD_CIVISIBILITY_TEST_COMMAND": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_CIVISIBILITY_TEST_MODULE_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_CIVISIBILITY_TEST_SESSION_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_CODE_ORIGIN_FOR_SPANS_ENABLED": [
@@ -516,35 +531,35 @@
         "configurationNames": [
           "codeOriginForSpans.enabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_CRASHTRACKING_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_CUSTOM_TRACE_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_DATA_STREAMS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_DBM_INJECT_SQL_BASEHASH": [
@@ -554,7 +569,7 @@
         "configurationNames": [
           "dbm.injectSqlBaseHash"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_DBM_PROPAGATION_MODE": [
@@ -597,7 +612,7 @@
         "configurationNames": [
           "dynamicInstrumentation.captureTimeoutMs"
         ],
-        "default": 15
+        "default": "15"
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_ENABLED": [
@@ -607,7 +622,7 @@
         "configurationNames": [
           "dynamicInstrumentation.enabled"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE": [
@@ -617,7 +632,7 @@
         "configurationNames": [
           "dynamicInstrumentation.probeFile"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS": [
@@ -627,7 +642,7 @@
         "configurationNames": [
           "dynamicInstrumentation.redactedIdentifiers"
         ],
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS": [
@@ -637,7 +652,7 @@
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS": [
@@ -647,14 +662,14 @@
         "configurationNames": [
           "dynamicInstrumentation.uploadIntervalSeconds"
         ],
-        "default": 1
+        "default": "1"
       }
     ],
     "DD_ENABLE_NX_SERVICE_NAME": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_ENV": [
@@ -664,7 +679,7 @@
         "configurationNames": [
           "env"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": [
@@ -674,7 +689,7 @@
         "configurationNames": [
           "apmTracingEnabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS": [
@@ -684,7 +699,7 @@
         "configurationNames": [
           "experimental.flaggingProvider.initializationTimeoutMs"
         ],
-        "default": 30000
+        "default": "30000"
       }
     ],
     "DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED": [
@@ -694,14 +709,14 @@
         "configurationNames": [
           "experimental.flaggingProvider.enabled"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE": [
@@ -715,35 +730,28 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": "/{os.tmpdir()}/dd-trace-git-cache"
       }
     ],
     "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_EXTERNAL_ENV": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
-      }
-    ],
-    "DD_FLAGGING_PROVIDER_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_BRANCH": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_AUTHOR_DATE": [
@@ -855,54 +863,21 @@
       {
         "implementation": "A",
         "type": "array",
-        "default": [
-          1,
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          14,
-          15,
-          16
-        ]
+        "default": "[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
       }
     ],
     "DD_GRPC_SERVER_ERROR_STATUSES": [
       {
         "implementation": "A",
         "type": "array",
-        "default": [
-          2,
-          3,
-          4,
-          5,
-          6,
-          7,
-          8,
-          9,
-          10,
-          11,
-          12,
-          13,
-          14,
-          15,
-          16
-        ]
+        "default": "[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
       }
     ],
     "DD_HEAP_SNAPSHOT_COUNT": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 0
+        "default": "0"
       }
     ],
     "DD_HEAP_SNAPSHOT_DESTINATION": [
@@ -916,7 +891,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": 3600
+        "default": "3600"
       }
     ],
     "DD_IAST_DB_ROWS_TO_TAINT": [
@@ -926,7 +901,7 @@
         "configurationNames": [
           "iast.dbRowsToTaint"
         ],
-        "default": 1
+        "default": "1"
       }
     ],
     "DD_IAST_DEDUPLICATION_ENABLED": [
@@ -936,7 +911,7 @@
         "configurationNames": [
           "iast.deduplicationEnabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_IAST_ENABLED": [
@@ -946,7 +921,7 @@
         "configurationNames": [
           "iast.enabled"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_IAST_MAX_CONCURRENT_REQUESTS": [
@@ -956,7 +931,7 @@
         "configurationNames": [
           "iast.maxConcurrentRequests"
         ],
-        "default": 2
+        "default": "2"
       }
     ],
     "DD_IAST_MAX_CONTEXT_OPERATIONS": [
@@ -966,7 +941,7 @@
         "configurationNames": [
           "iast.maxContextOperations"
         ],
-        "default": 2
+        "default": "2"
       }
     ],
     "DD_IAST_REDACTION_ENABLED": [
@@ -976,7 +951,7 @@
         "configurationNames": [
           "iast.redactionEnabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_IAST_REDACTION_NAME_PATTERN": [
@@ -986,7 +961,7 @@
         "configurationNames": [
           "iast.redactionNamePattern"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_IAST_REDACTION_VALUE_PATTERN": [
@@ -996,7 +971,7 @@
         "configurationNames": [
           "iast.redactionValuePattern"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_IAST_REQUEST_SAMPLING": [
@@ -1006,7 +981,7 @@
         "configurationNames": [
           "iast.requestSampling"
         ],
-        "default": 30
+        "default": "30"
       }
     ],
     "DD_IAST_SECURITY_CONTROLS_CONFIGURATION": [
@@ -1016,7 +991,7 @@
         "configurationNames": [
           "iast.securityControlsConfiguration"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_IAST_STACK_TRACE_ENABLED": [
@@ -1026,7 +1001,7 @@
         "configurationNames": [
           "iast.stackTrace.enabled"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_IAST_TELEMETRY_VERBOSITY": [
@@ -1043,49 +1018,49 @@
       {
         "implementation": "A",
         "type": "array",
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_INJECT_FORCE": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_CONFIG_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_INSTALL_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_INSTALL_TIME": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_INSTALL_TYPE": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_INSTRUMENTATION_TELEMETRY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true,
+        "default": "true",
         "aliases": [
           "DD_TRACE_TELEMETRY_ENABLED"
         ]
@@ -1095,7 +1070,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED": [
@@ -1116,14 +1091,14 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": 128
+        "default": "128"
       }
     ],
     "DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": [
       {
         "implementation": "A",
         "type": "decimal",
-        "default": 1
+        "default": "1"
       }
     ],
     "DD_LLMOBS_AGENTLESS_ENABLED": [
@@ -1133,14 +1108,14 @@
         "configurationNames": [
           "llmobs.agentlessEnabled"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_LLMOBS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_LLMOBS_ML_APP": [
@@ -1150,7 +1125,7 @@
         "configurationNames": [
           "llmobs.mlApp"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_LOGS_INJECTION": [
@@ -1160,14 +1135,14 @@
         "configurationNames": [
           "logInjection"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_LOGS_OTEL_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_LOG_LEVEL": [
@@ -1181,7 +1156,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_MINI_AGENT_PATH": [
@@ -1195,14 +1170,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_OPENAI_SPAN_CHAR_LIMIT": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 128
+        "default": "128"
       }
     ],
     "DD_PIPELINE_EXECUTION_ID": [
@@ -1216,7 +1191,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
@@ -1236,6 +1211,17 @@
         ]
       }
     ],
+    "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "__UNKNOWN__",
+        "aliases": [
+          "DD_PROFILING_CODEHOTSPOTS_ENABLED"
+        ],
+        "deprecated": true
+      }
+    ],
     "DD_PROFILING_CPU_ENABLED": [
       {
         "implementation": "A",
@@ -1244,6 +1230,17 @@
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED"
         ]
+      }
+    ],
+    "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "__UNKNOWN__",
+        "aliases": [
+          "DD_PROFILING_CPU_ENABLED"
+        ],
+        "deprecated": true
       }
     ],
     "DD_PROFILING_DEBUG_SOURCE_MAPS": [
@@ -1267,10 +1264,24 @@
         "configurationNames": [
           "profiling"
         ],
-        "default": "__UNSET__",
+        "default": null,
         "aliases": [
           "DD_EXPERIMENTAL_PROFILING_ENABLED"
         ]
+      }
+    ],
+    "DD_EXPERIMENTAL_PROFILING_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "profiling"
+        ],
+        "default": null,
+        "aliases": [
+          "DD_PROFILING_ENABLED"
+        ],
+        "deprecated": true
       }
     ],
     "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED": [
@@ -1281,6 +1292,17 @@
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED"
         ]
+      }
+    ],
+    "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "__UNKNOWN__",
+        "aliases": [
+          "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED"
+        ],
+        "deprecated": true
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES": [
@@ -1350,17 +1372,28 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_PROFILING_TIMELINE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__",
+        "default": "true (non-Windows) / false (Windows)",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED"
         ]
+      }
+    ],
+    "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true (non-Windows) / false (Windows)",
+        "aliases": [
+          "DD_PROFILING_TIMELINE_ENABLED"
+        ],
+        "deprecated": true
       }
     ],
     "DD_PROFILING_UPLOAD_PERIOD": [
@@ -1395,7 +1428,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true,
+        "default": "true",
         "aliases": [
           "DD_REMOTE_CONFIG_ENABLED"
         ]
@@ -1408,7 +1441,7 @@
         "configurationNames": [
           "remoteConfig.pollInterval"
         ],
-        "default": 5
+        "default": "5"
       }
     ],
     "DD_RUNTIME_METRICS_ENABLED": [
@@ -1418,7 +1451,7 @@
         "configurationNames": [
           "runtimeMetrics.enabled"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED": [
@@ -1428,7 +1461,7 @@
         "configurationNames": [
           "runtimeMetrics.eventLoop"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_RUNTIME_METRICS_FLUSH_INTERVAL": [
@@ -1445,7 +1478,7 @@
         "configurationNames": [
           "runtimeMetrics.gc"
         ],
-        "default": true
+        "default": "true"
       }
     ],
     "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": [
@@ -1455,10 +1488,21 @@
         "configurationNames": [
           "runtimeMetricsRuntimeId"
         ],
-        "default": false,
+        "default": "false",
         "aliases": [
           "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED"
         ]
+      }
+    ],
+    "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "aliases": [
+          "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED"
+        ],
+        "deprecated": true
       }
     ],
     "DD_SERVICE": [
@@ -1481,7 +1525,7 @@
         "configurationNames": [
           "serviceMapping"
         ],
-        "default": {}
+        "default": "{}"
       }
     ],
     "DD_SITE": [
@@ -1498,7 +1542,7 @@
         "configurationNames": [
           "spanSamplingRules"
         ],
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_SPAN_SAMPLING_RULES_FILE": [
@@ -1508,63 +1552,66 @@
         "configurationNames": [
           "spanSamplingRules"
         ],
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_TAGS": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TELEMETRY_DEBUG": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TELEMETRY_FORWARDER_PATH": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TELEMETRY_HEARTBEAT_INTERVAL": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 60000
+        "default": "60000"
       }
     ],
     "DD_TELEMETRY_LOG_COLLECTION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TELEMETRY_METRICS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TEST_FAILED_TEST_REPLAY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "__UNKNOWN__",
+        "configurationNames": [
+          "isTestDynamicInstrumentationEnabled"
+        ]
       }
     ],
     "DD_TEST_FLEET_CONFIG_PATH": [
@@ -1606,21 +1653,21 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AEROSPIKE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AGENT_PORT": [
@@ -1660,56 +1707,56 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AMQP10_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AMQPLIB_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_ANTHROPIC_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_APOLLO_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_APOLLO_GATEWAY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_APOLLO_SERVER_CORE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_APOLLO_SERVER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_APOLLO_SERVER_EXPRESS_ENABLED": [
@@ -1737,14 +1784,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_ADD_SPAN_POINTERS": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED": [
@@ -1814,7 +1861,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_EVENTBRIDGE_BATCH_PROPAGATION_ENABLED": [
@@ -1919,7 +1966,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_SNS_BATCH_PROPAGATION_ENABLED": [
@@ -1996,14 +2043,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AZURE_FUNCTIONS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED": [
@@ -2017,21 +2064,21 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_BAGGAGE_MAX_BYTES": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 8192
+        "default": "8192"
       }
     ],
     "DD_TRACE_BAGGAGE_MAX_ITEMS": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 64
+        "default": "64"
       }
     ],
     "DD_TRACE_BAGGAGE_TAG_KEYS": [
@@ -2052,14 +2099,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_BODY_PARSER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_BSON_ENABLED": [
@@ -2073,28 +2120,28 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_BUNYAN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_CASSANDRA_DRIVER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_CHILD_PROCESS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_CLIENT_IP_ENABLED": [
@@ -2104,7 +2151,7 @@
         "configurationNames": [
           "clientIpEnabled"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_CLIENT_IP_HEADER": [
@@ -2114,7 +2161,7 @@
         "configurationNames": [
           "clientIpHeader"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH": [
@@ -2124,7 +2171,7 @@
         "configurationNames": [
           "cloudPayloadTagging.maxDepth"
         ],
-        "default": 10
+        "default": "10"
       }
     ],
     "DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING": [
@@ -2134,7 +2181,7 @@
         "configurationNames": [
           "cloudPayloadTagging.request"
         ],
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING": [
@@ -2144,7 +2191,7 @@
         "configurationNames": [
           "cloudPayloadTagging.request"
         ],
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_TRACE_COLLECTIONS_ENABLED": [
@@ -2165,70 +2212,70 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_CONNECT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_COOKIE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_COOKIE_PARSER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_COUCHBASE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_CRYPTO_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_CUCUMBER_CUCUMBER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_CUCUMBER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_CYPRESS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_DD_TRACE_API_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_DEBUG": [
@@ -2256,49 +2303,49 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_DYNAMODB_TABLE_PRIMARY_KEYS": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_TRACE_ELASTICSEARCH_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_ELASTIC_ELASTICSEARCH_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_ELASTIC_TRANSPORT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_ENCODING_DEBUG": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_EXPERIMENTAL_B3_ENABLED": [
@@ -2318,7 +2365,7 @@
         "configurationNames": [
           "experimental.exporter"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED": [
@@ -2328,7 +2375,7 @@
         "configurationNames": [
           "experimental.enableGetRumData"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_EXPERIMENTAL_SPAN_COUNTS": [
@@ -2349,42 +2396,42 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_EXPRESS_MONGO_SANITIZE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_EXPRESS_SESSION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_FASTIFY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_FETCH_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_FIND_MY_WAY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_FLUSH_INTERVAL": [
@@ -2394,14 +2441,14 @@
         "configurationNames": [
           "flushInterval"
         ],
-        "default": 2000
+        "default": "2000"
       }
     ],
     "DD_TRACE_FS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GCP_PUBSUB_PUSH_ENABLED": [
@@ -2415,14 +2462,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GIT_METADATA_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GLOBAL_TAGS": [
@@ -2436,14 +2483,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GOOGLE_CLOUD_VERTEXAI_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GOOGLE_GAX_ENABLED": [
@@ -2457,21 +2504,21 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GRAPHQL_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GRAPHQL_ERROR_EXTENSIONS": [
       {
         "implementation": "A",
         "type": "array",
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_TRACE_GRAPHQL_TAG_ENABLED": [
@@ -2492,7 +2539,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GRAPHQL_YOGA_ENABLED": [
@@ -2506,14 +2553,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GRPC_GRPC_JS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_GRPC_PROTO_LOADER_ENABLED": [
@@ -2527,7 +2574,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_HAPI_BOOM_ENABLED": [
@@ -2541,112 +2588,112 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_HAPI_HAPI_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_HEADER_TAGS": [
       {
         "implementation": "A",
         "type": "array",
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_TRACE_HONO_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_HTTP2_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_HTTPS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_HTTP_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_IOREDIS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_IOVALKEY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_CIRCUS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_CONFIG_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_CORE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_ENVIRONMENT_JSDOM_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_ENVIRONMENT_NODE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_GLOBALS_ENABLED": [
@@ -2660,63 +2707,63 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_RUNTIME_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_TEST_SEQUENCER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_TRANSFORM_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_WORKER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_KAFKAJS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_KNEX_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_KOA_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_KOA_ROUTER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_KOA_ROUTE_ENABLED": [
@@ -2751,14 +2798,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_LANGCHAIN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_LANGCHAIN_GOOGLE_GENAI_ENABLED": [
@@ -2779,7 +2826,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_LDAPJS_PROMISE_ENABLED": [
@@ -2793,21 +2840,21 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_LIMITD_CLIENT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_LODASH_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_LOG_LEVEL": [
@@ -2828,28 +2875,28 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MEMCACHED_COMMAND_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_MEMCACHED_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MICROGATEWAY_CORE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MIDDIE_ENABLED": [
@@ -2863,42 +2910,42 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MOCHA_EACH_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MOCHA_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MOLECULER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MONGODB_CORE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MONGODB_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MONGODB_HEARTBEAT_ENABLED": [
@@ -2912,56 +2959,56 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MQUERY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MULTER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MYSQL2_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_MYSQL_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_NATIVE_SPAN_EVENTS": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_NET_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_NEXT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_NODE_CHILD_PROCESS_ENABLED": [
@@ -2975,21 +3022,21 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_NODE_SERIALIZE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_NYC_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP": [
@@ -3003,42 +3050,42 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_OPENSEARCH_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_ORACLEDB_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_OTEL_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [
@@ -3048,28 +3095,28 @@
         "configurationNames": [
           "flushMinSpans"
         ],
-        "default": 1000
+        "default": "1000"
       }
     ],
     "DD_TRACE_PASSPORT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PASSPORT_HTTP_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PASSPORT_LOCAL_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED": [
@@ -3086,7 +3133,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": {}
+        "default": "{}"
       }
     ],
     "DD_TRACE_PG_CURSOR_ENABLED": [
@@ -3100,14 +3147,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PG_NATIVE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PG_QUERY_STREAM_ENABLED": [
@@ -3121,42 +3168,42 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PINO_PRETTY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PLAYWRIGHT_CORE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PLAYWRIGHT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PLAYWRIGHT_TEST_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PRISMA_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PROCESS_ENABLED": [
@@ -3170,14 +3217,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PROMISE_JS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT": [
@@ -3191,7 +3238,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE": [
@@ -3240,21 +3287,21 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_PUG_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_Q_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_RATE_LIMIT": [
@@ -3264,7 +3311,7 @@
         "configurationNames": [
           "ingestion.rateLimit"
         ],
-        "default": 100
+        "default": "100"
       }
     ],
     "DD_TRACE_REACT_DOM_ENABLED": [
@@ -3285,21 +3332,21 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_REDIS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_REPORT_HOSTNAME": [
@@ -3309,7 +3356,7 @@
         "configurationNames": [
           "reportHostname"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_REQUEST_ENABLED": [
@@ -3323,28 +3370,28 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_RESTIFY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_RHEA_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_ROUTER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_SAMPLE_RATE": [
@@ -3354,7 +3401,7 @@
         "configurationNames": [
           "ingestion.sampleRate"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_TRACE_SAMPLING_RULES": [
@@ -3364,49 +3411,49 @@
         "configurationNames": [
           "samplingRules"
         ],
-        "default": []
+        "default": "[]"
       }
     ],
     "DD_TRACE_SCOPE": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "DD_TRACE_SELENIUM_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_SELENIUM_WEBDRIVER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_SEQUELIZE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_SHAREDB_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": [
@@ -3423,7 +3470,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": 0
+        "default": "0"
       }
     ],
     "DD_TRACE_SQLITE3_ENABLED": [
@@ -3440,7 +3487,7 @@
         "configurationNames": [
           "startupLogs"
         ],
-        "default": false
+        "default": "false"
       }
     ],
     "DD_TRACE_STATS_COMPUTATION_ENABLED": [
@@ -3471,105 +3518,105 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_UNDICI_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_URL_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_VITEST_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_VITEST_RUNNER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_VM_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_WEBSOCKET_MESSAGES_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_WHEN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_WINSTON_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_WORKERPOOL_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_WS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 512
+        "default": "512"
       }
     ],
     "DD_TRACING_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": true
+        "default": "true"
       }
     ],
     "DD_VERSION": [
@@ -3586,63 +3633,63 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": 128
+        "default": "128"
       }
     ],
     "DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": [
       {
         "implementation": "A",
         "type": "decimal",
-        "default": 1
+        "default": "1"
       }
     ],
     "DD_VITEST_WORKER": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "OTEL_BSP_MAX_EXPORT_BATCH_SIZE": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 512
+        "default": "512"
       }
     ],
     "OTEL_BSP_MAX_QUEUE_SIZE": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 2048
+        "default": "2048"
       }
     ],
     "OTEL_BSP_SCHEDULE_DELAY": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 5000
+        "default": "5000"
       }
     ],
     "OTEL_EXPORTER_OTLP_ENDPOINT": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_HEADERS": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_HEADERS": [
@@ -3663,14 +3710,14 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": 10000
+        "default": "10000"
       }
     ],
     "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_METRICS_HEADERS": [
@@ -3698,7 +3745,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": 10000
+        "default": "10000"
       }
     ],
     "OTEL_EXPORTER_OTLP_PROTOCOL": [
@@ -3712,7 +3759,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": 10000
+        "default": "10000"
       }
     ],
     "OTEL_LOGS_EXPORTER": [
@@ -3733,28 +3780,28 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "OTEL_METRIC_EXPORT_INTERVAL": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 10000
+        "default": "10000"
       }
     ],
     "OTEL_METRIC_EXPORT_TIMEOUT": [
       {
         "implementation": "A",
         "type": "int",
-        "default": 7500
+        "default": "7500"
       }
     ],
     "OTEL_PROPAGATORS": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": false
+        "default": "false"
       }
     ],
     "OTEL_RESOURCE_ATTRIBUTES": [
@@ -3768,7 +3815,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "OTEL_SERVICE_NAME": [
@@ -3785,7 +3832,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": "otlp"
       }
     ],
     "OTEL_TRACES_SAMPLER": [
@@ -3795,7 +3842,7 @@
         "configurationNames": [
           "sampleRate"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ],
     "OTEL_TRACES_SAMPLER_ARG": [
@@ -3805,16 +3852,8 @@
         "configurationNames": [
           "sampleRate"
         ],
-        "default": "__UNSET__"
+        "default": null
       }
     ]
-  },
-  "deprecations": {
-    "DD_EXPERIMENTAL_PROFILING_ENABLED": "DD_PROFILING_ENABLED",
-    "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED": "DD_PROFILING_CODEHOTSPOTS_ENABLED",
-    "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED": "DD_PROFILING_CPU_ENABLED",
-    "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED",
-    "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED": "DD_PROFILING_TIMELINE_ENABLED",
-    "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED": "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED"
   }
 }

@@ -8,18 +8,18 @@
  * @property {string} type
  * @property {string|number|boolean|null|object|unknown[]} default
  * @property {string[]} [aliases]
+ * @property {string[]} [configurationNames]
+ * @property {string|boolean} [deprecated]
  */
 
 /**
  * @typedef {object} SupportedConfigurationsJson
  * @property {Record<`DD_${string}` | `OTEL_${string}`, SupportedConfigurationEntry[]>} supportedConfigurations
- * @property {Record<string, string>?} deprecations
  */
 
 const { deprecate } = require('util')
 const {
   supportedConfigurations,
-  deprecations = {},
 } = /** @type {SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
 /**
@@ -33,6 +33,7 @@ const {
 // - `aliases`: Record<canonicalEnvVar, string[]>
 // - `deprecations`: Record<deprecatedEnvVar, string> (message suffix)
 const aliases = {}
+const deprecations = {}
 
 for (const [canonical, configuration] of Object.entries(supportedConfigurations)) {
   for (const implementation of configuration) {
@@ -40,6 +41,13 @@ for (const [canonical, configuration] of Object.entries(supportedConfigurations)
       for (const alias of implementation.aliases) {
         aliases[canonical] ??= new Set()
         aliases[canonical].add(alias)
+      }
+    }
+    if (implementation.deprecated !== undefined) {
+      deprecations[canonical] = implementation.deprecated
+      // Deprecated entries with an alias may not be listed in the supported configurations map
+      if (implementation.aliases) {
+        delete supportedConfigurations[canonical]
       }
     }
   }
