@@ -32,9 +32,9 @@ describeNotWindows('crashtracker', () => {
       error: sinon.stub(),
     }
 
-    sinon.spy(binding, 'init')
-    sinon.spy(binding, 'updateConfig')
-    sinon.spy(binding, 'updateMetadata')
+    sinon.stub(binding, 'init')
+    sinon.stub(binding, 'updateConfig')
+    sinon.stub(binding, 'updateMetadata')
 
     crashtracker = proxyquire('../../src/crashtracking/crashtracker', {
       '../log': log,

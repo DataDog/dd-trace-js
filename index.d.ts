@@ -770,6 +770,19 @@ declare namespace tracer {
     dsmEnabled?: boolean
 
     /**
+     * Configuration for Database Monitoring (DBM).
+     */
+    dbm?: {
+      /**
+       * Controls whether to inject the SQL base hash (propagation hash) in DBM SQL comments.
+       * This option requires DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true to take effect.
+       * The propagation hash enables correlation between traces and database operations.
+       * @default false
+       */
+      injectSqlBaseHash?: boolean
+    }
+
+    /**
      * Configuration of the AppSec protection. Can be a boolean as an alias to `appsec.enabled`.
      */
     appsec?: boolean | {
@@ -1013,7 +1026,7 @@ declare namespace tracer {
 
       /**
        * Timeout in milliseconds for capturing variable values.
-       * @default 100
+       * @default 15
        */
       captureTimeoutMs?: number
 
@@ -1025,12 +1038,19 @@ declare namespace tracer {
 
       /**
        * List of identifier names to redact in captured data.
+       * These are added to the built-in default list, which always applies.
+       * See {@link https://github.com/DataDog/dd-trace-js/blob/master/packages/dd-trace/src/debugger/devtools_client/snapshot/redaction.js | redaction.js}
+       * for the default identifiers.
+       * To avoid redacting some of those built-in identifiers, use
+       * {@link redactionExcludedIdentifiers}.
        * @default []
        */
       redactedIdentifiers?: string[]
 
       /**
        * List of identifier names to exclude from redaction.
+       * Use this to avoid redacting some of the built-in identifiers (see
+       * {@link redactedIdentifiers}).
        * @default []
        */
       redactionExcludedIdentifiers?: string[]

@@ -52,6 +52,12 @@ class Crashtracker {
   #getConfig (config) {
     const url = getAgentUrl(config)
 
+    // Out-of-process symbolication currently (crashtracker 27.0.0) works on
+    // Linux only, does not work on Mac.
+    const resolveMode = require('os').platform === 'linux'
+      ? 'EnabledWithSymbolsInReceiver'
+      : 'EnabledWithInprocessSymbols'
+
     return {
       additional_files: [],
       create_alt_stack: true,
@@ -67,9 +73,10 @@ class Crashtracker {
         },
         timeout_ms: 3000,
       },
-      timeout_ms: 5000,
-      // TODO: Use `EnabledWithSymbolsInReceiver` instead for Linux when fixed.
-      resolve_frames: 'EnabledWithInprocessSymbols',
+      timeout: { secs: 5, nanos: 0 },
+      demangle_names: false,
+      signals: [],
+      resolve_frames: resolveMode,
     }
   }
 
