@@ -73,9 +73,10 @@ class PregelStreamLLMObsPlugin extends BaseLangGraphLLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
+    // Store inputs and initialize chunk accumulator
     streamDataMap.set(span, {
       streamInputs: ctx.arguments?.[0],
-      streamResult: ctx.result,
+      chunks: [],
     })
   }
 }
@@ -94,13 +95,39 @@ class NextStreamLLMObsPlugin extends BaseLangGraphLLMObsPlugin {
   }
 
   asyncStart (ctx) {
-    if (!ctx.result?.done) return
-    this.#tagOnComplete(ctx)
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    // Accumulate chunks before done
+    if (!ctx.result?.done && ctx.result?.value) {
+      const streamData = streamDataMap.get(span)
+      if (streamData) {
+        streamData.chunks.push(ctx.result.value)
+      }
+    }
+
+    // Tag when done
+    if (ctx.result?.done) {
+      this.#tagOnComplete(ctx)
+    }
   }
 
   asyncEnd (ctx) {
-    if (!ctx.result?.done) return
-    this.#tagOnComplete(ctx)
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    // Accumulate chunks before done
+    if (!ctx.result?.done && ctx.result?.value) {
+      const streamData = streamDataMap.get(span)
+      if (streamData) {
+        streamData.chunks.push(ctx.result.value)
+      }
+    }
+
+    // Tag when done
+    if (ctx.result?.done) {
+      this.#tagOnComplete(ctx)
+    }
   }
 
   error (ctx) {
@@ -119,15 +146,16 @@ class NextStreamLLMObsPlugin extends BaseLangGraphLLMObsPlugin {
     if (!streamData) return
 
     const inputs = streamData.streamInputs
-    const results = streamData.streamResult
+    const chunks = streamData.chunks
     const hasError = ctx.error || spanHasError(span)
 
     const input = inputs !== undefined && inputs !== null ? this.formatIO(inputs) : undefined
-    // For streaming, only tag output if there's no error
-    // ctx.result is the iterator result, and results is the iterator object
+
+    // Use the last chunk as output (for both invoke and stream)
+    const lastChunk = chunks.length > 0 ? chunks[chunks.length - 1] : undefined
     const output = hasError
       ? undefined
-      : (results !== undefined && results !== null ? this.formatIO(results) : undefined)
+      : (lastChunk !== undefined && lastChunk !== null ? this.formatIO(lastChunk) : undefined)
 
     this._tagger.tagTextIO(span, input, output)
 
