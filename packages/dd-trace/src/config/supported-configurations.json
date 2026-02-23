@@ -145,7 +145,7 @@
         "configurationNames": [
           "appsec.apiSecurity.downstreamBodyAnalysisSampleRate"
         ],
-        "default": 0.5
+        "default": "0.5"
       }
     ],
     "DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS": [
