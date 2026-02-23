@@ -1,5 +1,8 @@
 'use strict'
 
+const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
+const DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS = 500
+
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
@@ -15,9 +18,10 @@ const retryReasonsByTestName = new Map()
 // Track quarantined test errors - we catch them in Cypress.on('fail') but need to report to Datadog
 const quarantinedTestErrors = new Map()
 
-// We need to grab the original window as soon as possible,
-// in case the test changes the origin. If the test does change the origin,
-// any call to `cy.window()` will result in a cross origin error.
+// Track the most recently loaded window in the AUT. Updated via the 'window:load'
+// event so we always get the real app window (after cy.visit()), not the
+// about:blank window that exists when beforeEach runs. If the test later navigates
+// to a cross-origin URL, safeGetRum() handles the access error.
 let originalWindow
 
 // If the test is using multi domain with cy.origin, trying to access
@@ -165,17 +169,20 @@ beforeEach(function () {
     retryReasonsByTestName.delete(testName)
   }
 
+  cy.on('window:load', (win) => {
+    originalWindow = win
+  })
+
   cy.task('dd:beforeEach', {
     testName,
     testSuite: Cypress.mocha.getRootSuite().file,
   }).then(({ traceId, shouldSkip }) => {
-    Cypress.env('traceId', traceId)
+    if (traceId) {
+      cy.setCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId)
+    }
     if (shouldSkip) {
       this.skip()
     }
-  })
-  cy.window().then(win => {
-    originalWindow = win
   })
 })
 
@@ -241,8 +248,14 @@ afterEach(function () {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
   } catch {}
 
-  if (safeGetRum(originalWindow)) {
+  const rum = safeGetRum(originalWindow)
+  if (rum) {
     testInfo.isRUMActive = true
+    if (rum.stopSession) {
+      rum.stopSession()
+      // eslint-disable-next-line cypress/no-unnecessary-waiting
+      cy.wait(DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
+    }
   }
   let coverage
   try {
