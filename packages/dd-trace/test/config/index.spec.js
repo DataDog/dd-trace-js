@@ -52,7 +52,10 @@ describe('Config', () => {
 
     // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
     getConfig = (options) => {
-      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {})
+      const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
+        './supported-configurations.json': supportedConfigurations,
+      })
       const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
       return proxyquire.noPreserveCache()('../../src/config', {
         './defaults': configDefaults,

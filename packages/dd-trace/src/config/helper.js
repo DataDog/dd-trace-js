@@ -37,17 +37,18 @@ const deprecations = {}
 
 for (const [canonical, configuration] of Object.entries(supportedConfigurations)) {
   for (const implementation of configuration) {
-    if (Array.isArray(implementation.aliases)) {
-      for (const alias of implementation.aliases) {
-        aliases[canonical] ??= new Set()
-        aliases[canonical].add(alias)
-      }
-    }
-    if (implementation.deprecated !== undefined) {
+    if (implementation.deprecated) {
       deprecations[canonical] = implementation.deprecated
       // Deprecated entries with an alias may not be listed in the supported configurations map
       if (implementation.aliases) {
         delete supportedConfigurations[canonical]
+        continue
+      }
+    }
+    if (Array.isArray(implementation.aliases)) {
+      for (const alias of implementation.aliases) {
+        aliases[canonical] ??= new Set()
+        aliases[canonical].add(alias)
       }
     }
   }

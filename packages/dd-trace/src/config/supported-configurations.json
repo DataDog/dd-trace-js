@@ -758,105 +758,105 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_AUTHOR_EMAIL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_AUTHOR_NAME": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_COMMITTER_DATE": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_COMMITTER_EMAIL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_COMMITTER_NAME": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_HEAD_SHA": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_MESSAGE": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_COMMIT_SHA": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_FOLDER_PATH": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_PROPERTIES_FILE": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_PULL_REQUEST_BASE_BRANCH": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_PULL_REQUEST_BASE_BRANCH_SHA": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_REPOSITORY_URL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GIT_TAG": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_GRPC_CLIENT_ERROR_STATUSES": [
@@ -1077,14 +1077,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_LAMBDA_HANDLER": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_LANGCHAIN_SPAN_CHAR_LIMIT": [
@@ -1149,7 +1149,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_METRICS_OTEL_ENABLED": [
@@ -1163,7 +1163,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_OPENAI_LOGS_ENABLED": [
@@ -1184,7 +1184,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_PLAYWRIGHT_WORKER": [
@@ -1205,7 +1205,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__",
+        "default": "false",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED"
         ]
@@ -1215,7 +1215,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__",
+        "default": "false",
         "aliases": [
           "DD_PROFILING_CODEHOTSPOTS_ENABLED"
         ],
@@ -1226,7 +1226,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__",
+        "default": "true (non-Windows) / false (Windows)",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED"
         ]
@@ -1236,7 +1236,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__",
+        "default": "true (non-Windows) / false (Windows)",
         "aliases": [
           "DD_PROFILING_CPU_ENABLED"
         ],
@@ -1247,14 +1247,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "false"
       }
     ],
     "DD_PROFILING_DEBUG_UPLOAD_COMPRESSION": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": "on"
       }
     ],
     "DD_PROFILING_ENABLED": [
@@ -1288,7 +1288,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__",
+        "default": "true (non-Windows) / false (Windows)",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED"
         ]
@@ -1298,7 +1298,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__",
+        "default": "true (non-Windows) / false (Windows)",
         "aliases": [
           "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED"
         ],
@@ -1309,28 +1309,28 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": "process"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "0"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "0"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true (non-Windows) / false (Windows)"
       }
     ],
     "DD_PROFILING_EXPORTERS": [
@@ -1344,28 +1344,28 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_PROFILING_HEAP_SAMPLING_INTERVAL": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "524288"
       }
     ],
     "DD_PROFILING_PPROF_PREFIX": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": ""
       }
     ],
     "DD_PROFILING_PROFILERS": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": "space,wall"
       }
     ],
     "DD_PROFILING_SOURCE_MAP": [
@@ -1400,28 +1400,28 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "65"
       }
     ],
     "DD_PROFILING_UPLOAD_TIMEOUT": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "60000"
       }
     ],
     "DD_PROFILING_V8_PROFILER_BUG_WORKAROUND": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_PROFILING_WALLTIME_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_REMOTE_CONFIGURATION_ENABLED": [
@@ -1468,7 +1468,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "10000"
       }
     ],
     "DD_RUNTIME_METRICS_GC_ENABLED": [
@@ -1608,7 +1608,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__",
+        "default": "true",
         "configurationNames": [
           "isTestDynamicInstrumentationEnabled"
         ]
@@ -1618,35 +1618,35 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TEST_LOCAL_CONFIG_PATH": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "__UNKNOWN__"
+        "default": "20"
       }
     ],
     "DD_TEST_MANAGEMENT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED": [
@@ -1697,7 +1697,7 @@
         "configurationNames": [
           "url"
         ],
-        "default": "__UNKNOWN__",
+        "default": null,
         "aliases": [
           "DD_TRACE_URL"
         ]
@@ -1763,21 +1763,21 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_APOLLO_SERVER_FASTIFY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_APOLLO_SUBGRAPH_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AVSC_ENABLED": [
@@ -1798,63 +1798,63 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_AWS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_BEDROCKRUNTIME_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_CLOUDWATCHLOGS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_DYNAMODB_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_DYNAMODB_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_ENABLED": [
@@ -1868,98 +1868,98 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_EVENTBRIDGE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_KINESIS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_LAMBDA_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_LAMBDA_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_NODE_HTTP_HANDLER_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_REDSHIFT_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_REDSHIFT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_S3_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_S3_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_SFN_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_SFN_CLIENT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_SFN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_SMITHY_CLIENT_ENABLED": [
@@ -1973,70 +1973,70 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_SNS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_SQS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_STATES_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_STATES_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_STEPFUNCTIONS_BATCH_PROPAGATION_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AWS_SDK_STEPFUNCTIONS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AXIOS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AZURE_EVENTHUBS_BATCH_LINKS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AZURE_EVENT_HUBS_ENABLED": [
@@ -2057,7 +2057,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_AZURE_SERVICE_BUS_ENABLED": [
@@ -2092,7 +2092,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_BLUEBIRD_ENABLED": [
@@ -2113,7 +2113,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_BULLMQ_ENABLED": [
@@ -2198,14 +2198,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_COMMONPLUGIN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_CONFLUENTINC_KAFKA_JAVASCRIPT_ENABLED": [
@@ -2282,7 +2282,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "false"
       }
     ],
     "DD_TRACE_DISABLED_INSTRUMENTATIONS": [
@@ -2296,7 +2296,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TRACE_DNS_ENABLED": [
@@ -2355,7 +2355,7 @@
         "configurationNames": [
           "experimental.b3"
         ],
-        "default": "__UNKNOWN__"
+        "default": "false"
       }
     ],
     "DD_TRACE_EXPERIMENTAL_EXPORTER": [
@@ -2382,14 +2382,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TRACE_EXPERIMENTAL_STATE_TRACKING": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TRACE_EXPRESS_ENABLED": [
@@ -2455,7 +2455,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_GENERIC_POOL_ENABLED": [
@@ -2476,7 +2476,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED": [
@@ -2497,7 +2497,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_GOOGLE_GENAI_ENABLED": [
@@ -2525,14 +2525,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_GRAPHQL_TOOLS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_GRAPHQL_TOOLS_EXECUTOR_ENABLED": [
@@ -2546,7 +2546,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_GRPC_ENABLED": [
@@ -2567,7 +2567,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_HANDLEBARS_ENABLED": [
@@ -2581,7 +2581,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_HAPI_ENABLED": [
@@ -2700,7 +2700,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_JEST_REPORTERS_ENABLED": [
@@ -2770,28 +2770,28 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_KOA_WEBSOCKET_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_LANGCHAIN_COHERE_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_LANGCHAIN_CORE_ENABLED": [
@@ -2812,14 +2812,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_LANGCHAIN_OPENAI_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_LDAPJS_ENABLED": [
@@ -2833,7 +2833,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_LEGACY_BAGGAGE_ENABLED": [
@@ -2861,14 +2861,14 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": "debug"
       }
     ],
     "DD_TRACE_LOOPBACK_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_MARIADB_ENABLED": [
@@ -2903,7 +2903,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_MIDDLEWARE_TRACING_ENABLED": [
@@ -2952,7 +2952,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_MONGOOSE_ENABLED": [
@@ -3015,7 +3015,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_NODE_REDIS_CLIENT_ENABLED": [
@@ -3126,7 +3126,7 @@
         "configurationNames": [
           "spanComputePeerService"
         ],
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_PEER_SERVICE_MAPPING": [
@@ -3140,7 +3140,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_PG_ENABLED": [
@@ -3161,7 +3161,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_PINO_ENABLED": [
@@ -3210,7 +3210,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_PROMISE_ENABLED": [
@@ -3318,14 +3318,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_REACT_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_REDIS_CLIENT_ENABLED": [
@@ -3363,7 +3363,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_RESOURCE_RENAMING_ENABLED": [
@@ -3477,7 +3477,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_STARTUP_LOGS": [
@@ -3497,21 +3497,21 @@
         "configurationNames": [
           "stats"
         ],
-        "default": "__UNKNOWN__"
+        "default": "false"
       }
     ],
     "DD_TRACE_SUFFIXPLUGIN_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "__UNKNOWN__"
+        "default": "true"
       }
     ],
     "DD_TRACE_TAGS": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "DD_TRACE_TEDIOUS_ENABLED": [
@@ -3766,14 +3766,14 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "OTEL_LOG_LEVEL": [
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "OTEL_METRICS_EXPORTER": [
@@ -3808,7 +3808,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "__UNKNOWN__"
+        "default": null
       }
     ],
     "OTEL_SDK_DISABLED": [
