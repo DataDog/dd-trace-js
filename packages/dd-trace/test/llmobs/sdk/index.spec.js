@@ -1189,8 +1189,12 @@ describe('sdk', () => {
       })
 
       assert.deepStrictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0], {
-        trace_id: spanCtx.traceId,
-        span_id: spanCtx.spanId,
+        join_on: {
+          span: {
+            trace_id: spanCtx.traceId,
+            span_id: spanCtx.spanId,
+          },
+        },
         ml_app: 'test',
         timestamp_ms: 1234,
         label: 'test',
@@ -1241,8 +1245,12 @@ describe('sdk', () => {
       const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
 
       assert.deepStrictEqual(evalMetric, {
-        span_id: '5678',
-        trace_id: '1234',
+        join_on: {
+          span: {
+            span_id: '5678',
+            trace_id: '1234',
+          },
+        },
         label: 'has_toxicity',
         metric_type: 'boolean',
         ml_app: 'mlApp',
@@ -1258,6 +1266,101 @@ describe('sdk', () => {
         metricType: 'boolean',
         value: 'it is super toxic!',
       }), { message: 'value must be a boolean for a boolean metric' })
+    })
+
+    it('submits a json evaluation metric', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'json',
+        value: { f1: 0.8, recall: 1, precision: 0.5 },
+        timestampMs: 1234,
+      })
+
+      const evalMetric = LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0]
+
+      assert.deepStrictEqual(evalMetric, {
+        join_on: {
+          span: {
+            span_id: '5678',
+            trace_id: '1234',
+          },
+        },
+        label: 'has_toxicity',
+        metric_type: 'json',
+        ml_app: 'mlApp',
+        json_value: { f1: 0.8, recall: 1, precision: 0.5 },
+        timestamp_ms: 1234,
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:mlApp'],
+      })
+    })
+
+    it('throws an error when submitting a non-JSON object json evaluation metric', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'json',
+        value: 'it is super toxic!',
+      }), { message: 'value must be a JSON object for a json metric' })
+    })
+
+    it('submits an enriched evaluation metric', () => {
+      llmobs.submitEvaluation(spanCtx, {
+        mlApp: 'test',
+        timestampMs: 1234,
+        label: 'toxic',
+        metricType: 'score',
+        value: 0.6,
+        reasoning: 'this input is toxic',
+        assessment: 'fail',
+        metadata: { some: 'details' },
+        tags: {
+          host: 'localhost',
+        },
+      })
+
+      assert.deepStrictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0], {
+        join_on: {
+          span: {
+            span_id: spanCtx.spanId,
+            trace_id: spanCtx.traceId,
+          },
+        },
+        ml_app: 'test',
+        timestamp_ms: 1234,
+        label: 'toxic',
+        metric_type: 'score',
+        score_value: 0.6,
+        tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test', 'host:localhost'],
+        reasoning: 'this input is toxic',
+        assessment: 'fail',
+        metadata: { some: 'details' },
+      })
+    })
+
+    it('throws an error when submitting a non-string reasoning', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: true,
+        reasoning: 1,
+      }), { message: 'reasoning must be a string' })
+    })
+
+    it('throws an error when submitting a non pass/fail assessment', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: true,
+        assessment: 'correct',
+      }), { message: 'assessment must be pass or fail' })
+    })
+
+    it('throws an error when submitting an non JSON object metadata', () => {
+      assert.throws(() => llmobs.submitEvaluation(spanCtx, {
+        label: 'has_toxicity',
+        metricType: 'boolean',
+        value: true,
+        metadata: 'some metadata',
+      }), { message: 'metadata must be a JSON object' })
     })
 
     describe('with DD_TRACE_OTEL_ENABLED set', () => {

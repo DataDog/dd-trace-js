@@ -296,7 +296,7 @@ describe('exporters/agent', function () {
         assert.strictEqual(Number.isInteger(call.args[0].timeout), true)
 
         // Retry is 1-indexed so add 1 to i
-        assert.strictEqual(call.args[0].timeout, initialTimeout * Math.pow(2, i + 1))
+        assert.strictEqual(call.args[0].timeout, initialTimeout * 2 ** (i + 1))
       }
     })
 

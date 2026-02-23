@@ -306,6 +306,9 @@ class CypressPlugin {
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
+    const envFlushWait = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS'))
+    this.rumFlushWaitMillis = Number.isFinite(envFlushWait) ? envFlushWait : undefined
+
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
     }
@@ -823,6 +826,7 @@ class CypressPlugin {
           isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
+          rumFlushWaitMillis: this.rumFlushWaitMillis,
         }
 
         if (this.testSuiteSpan) {
@@ -937,6 +941,13 @@ class CypressPlugin {
             this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
           }
         }
+        // Check if all EFD retries failed
+        if ((isNew || isModified) && this.earlyFlakeDetectionNumRetries > 0) {
+          const isLastEfdAttempt = testStatuses.length === this.earlyFlakeDetectionNumRetries + 1
+          if (isLastEfdAttempt && testStatuses.every(status => status === 'fail')) {
+            this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
+          }
+        }
         if (isAttemptToFix) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX, 'true')
           if (testStatuses.length > 1) {
@@ -976,11 +987,15 @@ class CypressPlugin {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
         // test spans are finished at after:spec
+        const activeSpanTags = this.activeTestSpan.context()._tags
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeOwners: !!this.activeTestSpan.context()._tags[TEST_CODE_OWNERS],
+          hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
+          isQuarantined: isQuarantinedFromSupport,
+          isModified,
+          isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
         })
         this.activeTestSpan = null
 

@@ -3,7 +3,7 @@ name: System Tests
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, mq-working-branch-master-*]
   workflow_dispatch:
   schedule:
     - cron: 0 4 * * *
@@ -45,9 +45,9 @@ jobs:
     with:
       library: nodejs
       binaries_artifact: system_tests_binaries
-      desired_execution_time: 300  # 5 minutes
+      desired_execution_time: 300 # 5 minutes
       scenarios_groups: tracer-release
-      excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN  # require AWS and datadog credentials
+      excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN # require AWS and datadog credentials
       parametric_job_count: 8
       skip_empty_scenarios: true
       push_to_test_optimization: ${{ github.actor != 'dependabot[bot]' }}

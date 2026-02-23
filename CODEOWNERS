@@ -8,19 +8,19 @@
 /packages/dd-trace/src/aiguard/ @DataDog/asm-js
 /packages/dd-trace/test/aiguard/ @DataDog/asm-js
 
-/integration-tests/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/packages/datadog-code-origin/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/packages/datadog-plugin-*/**/code_origin.* @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/packages/dd-trace/src/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
-/packages/dd-trace/test/debugger/ @DataDog/dd-trace-js @DataDog/debugger-nodejs
+/integration-tests/debugger/ @DataDog/debugger-nodejs
+/packages/datadog-code-origin/ @DataDog/debugger-nodejs
+/packages/datadog-plugin-*/**/code_origin.* @DataDog/debugger-nodejs
+/packages/dd-trace/src/debugger/ @DataDog/debugger-nodejs
+/packages/dd-trace/test/debugger/ @DataDog/debugger-nodejs
 
-/packages/dd-trace/src/lambda/ @DataDog/serverless-aws
-/packages/dd-trace/test/lambda/ @DataDog/serverless-aws
+/packages/dd-trace/src/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
+/packages/dd-trace/test/lambda/ @DataDog/serverless-aws @DataDog/apm-serverless
 
-/packages/datadog-plugin-*/ @Datadog/dd-trace-js @Datadog/apm-idm-js
-/packages/datadog-instrumentations/ @Datadog/dd-trace-js @Datadog/apm-idm-js
-/packages/ddtrace/src/plugins/ @DataDog/dd-trace-js @Datadog/apm-idm-js
-/packages/ddtrace/test/plugins/ @DataDog/dd-trace-js @Datadog/apm-idm-js
+/packages/datadog-plugin-*/ @Datadog/apm-idm-js
+/packages/datadog-instrumentations/ @Datadog/apm-idm-js
+/packages/ddtrace/src/plugins/ @Datadog/apm-idm-js
+/packages/ddtrace/test/plugins/ @Datadog/apm-idm-js
 
 /packages/dd-trace/src/ci-visibility/ @DataDog/ci-app-libraries
 /packages/datadog-plugin-jest/ @DataDog/ci-app-libraries
@@ -114,22 +114,9 @@
 /.github/workflows/apm-integrations.yml @Datadog/apm-idm-js
 /.github/workflows/aiguard.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
-/.github/workflows/codeql-analysis.yml @DataDog/dd-trace-js
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless
 /.github/workflows/llmobs.yml @DataDog/ml-observability
-/.github/workflows/platform.yml @DataDog/dd-trace-js
-/.github/workflows/pr-labels.yml @DataDog/dd-trace-js
 /.github/workflows/profiling.yml @DataDog/profiling-js
-/.github/workflows/project.yml @DataDog/dd-trace-js
-/.github/workflows/release-3.yml @DataDog/dd-trace-js
-/.github/workflows/release-dev.yml @DataDog/dd-trace-js
-/.github/workflows/release-latest.yml @DataDog/dd-trace-js
-/.github/workflows/release-proposal.yml @DataDog/dd-trace-js
-/.github/workflows/release-validate.yml @DataDog/dd-trace-js
-/.github/workflows/stale.yml @DataDog/dd-trace-js @DataDog/dd-trace-js
-/.github/workflows/system-tests.yml @DataDog/dd-trace-js @DataDog/asm-js
-/.github/workflows/test-k8s-lib-injection.yaml @DataDog/dd-trace-js
+/.github/workflows/system-tests.yml @DataDog/asm-js
 /.github/workflows/test-optimization.yml @DataDog/ci-app-libraries
-/.gitlab/benchmarks.yml @DataDog/dd-trace-js
-/.gitlab-ci.yml @DataDog/dd-trace-js

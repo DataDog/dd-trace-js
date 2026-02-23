@@ -9,26 +9,31 @@ const { COMPONENT } = require('../../dd-trace/src/constants')
 class RouterPlugin extends WebPlugin {
   static id = 'router'
 
+  #storeStacks = new WeakMap()
+  #contexts = new WeakMap()
+
   constructor (...args) {
     super(...args)
 
-    this._storeStack = []
-    this._contexts = new WeakMap()
-
     this.addSub(`apm:${this.constructor.id}:middleware:enter`, ({ req, name, route }) => {
-      const childOf = this._getActive(req) || this._getStoreSpan()
+      const childOf = this.#getActive(req) || this.#getStoreSpan()
 
       if (!childOf) return
 
-      const span = this._getMiddlewareSpan(name, childOf)
-      const context = this._createContext(req, route, childOf)
+      const span = this.#getMiddlewareSpan(name, childOf)
+      const context = this.#createContext(req, route, childOf)
 
       if (childOf !== span) {
         context.middleware.push(span)
       }
 
       const store = storage('legacy').getStore()
-      this._storeStack.push(store)
+      let storeStack = this.#storeStacks.get(req)
+      if (!storeStack) {
+        storeStack = []
+        this.#storeStacks.set(req, storeStack)
+      }
+      storeStack.push(store)
       this.enter(span, store)
 
       web.patch(req)
@@ -36,7 +41,7 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:next`, ({ req }) => {
-      const context = this._contexts.get(req)
+      const context = this.#contexts.get(req)
 
       if (!context) return
 
@@ -44,7 +49,7 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:finish`, ({ req }) => {
-      const context = this._contexts.get(req)
+      const context = this.#contexts.get(req)
 
       if (!context || context.middleware.length === 0) return
 
@@ -52,7 +57,11 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub(`apm:${this.constructor.id}:middleware:exit`, ({ req }) => {
-      const savedStore = this._storeStack.pop()
+      const storeStack = this.#storeStacks.get(req)
+      const savedStore = storeStack && storeStack.pop()
+      if (storeStack && storeStack.length === 0) {
+        this.#storeStacks.delete(req)
+      }
       const span = savedStore && savedStore.span
       this.enter(span, savedStore)
     })
@@ -62,7 +71,7 @@ class RouterPlugin extends WebPlugin {
 
       if (!this.config.middleware) return
 
-      const span = this._getActive(req)
+      const span = this.#getActive(req)
 
       if (!span) return
 
@@ -70,7 +79,7 @@ class RouterPlugin extends WebPlugin {
     })
 
     this.addSub('apm:http:server:request:finish', ({ req }) => {
-      const context = this._contexts.get(req)
+      const context = this.#contexts.get(req)
 
       if (!context) return
 
@@ -82,8 +91,8 @@ class RouterPlugin extends WebPlugin {
     })
   }
 
-  _getActive (req) {
-    const context = this._contexts.get(req)
+  #getActive (req) {
+    const context = this.#contexts.get(req)
 
     if (!context) return
     if (context.middleware.length === 0) return context.span
@@ -91,13 +100,13 @@ class RouterPlugin extends WebPlugin {
     return context.middleware.at(-1)
   }
 
-  _getStoreSpan () {
+  #getStoreSpan () {
     const store = storage('legacy').getStore()
 
     return store && store.span
   }
 
-  _getMiddlewareSpan (name, childOf) {
+  #getMiddlewareSpan (name, childOf) {
     if (this.config.middleware === false) {
       return childOf
     }
@@ -116,8 +125,8 @@ class RouterPlugin extends WebPlugin {
     return span
   }
 
-  _createContext (req, route, span) {
-    let context = this._contexts.get(req)
+  #createContext (req, route, span) {
+    let context = this.#contexts.get(req)
 
     if (!route || route === '/' || route === '*') {
       route = ''
@@ -140,7 +149,7 @@ class RouterPlugin extends WebPlugin {
         middleware: [],
       }
 
-      this._contexts.set(req, context)
+      this.#contexts.set(req, context)
     }
 
     return context

@@ -13,7 +13,6 @@ const {
   isModifiedTest,
   CUCUMBER_IS_PARALLEL,
   ITR_CORRELATION_ID,
-  TEST_BROWSER_DRIVER,
   TEST_CODE_OWNERS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
@@ -21,7 +20,6 @@ const {
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_IS_RUM_ACTIVE,
   TEST_ITR_FORCED_RUN,
   TEST_ITR_UNSKIPPABLE,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
@@ -108,7 +106,9 @@ class CucumberPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
@@ -362,13 +362,7 @@ class CucumberPlugin extends CiPlugin {
         }
       }
 
-      const spanTags = span.context()._tags
-      const telemetryTags = {
-        hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-        isNew,
-        isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-        browserDriver: spanTags[TEST_BROWSER_DRIVER],
-      }
+      const telemetryTags = this.getTestTelemetryTags(span)
       span.finish()
       if (!isStep) {
         this.telemetry.ciVisEvent(
