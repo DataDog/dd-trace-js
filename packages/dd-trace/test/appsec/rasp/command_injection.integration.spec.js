@@ -8,7 +8,7 @@ const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
-describe('RASP - command_injection - integration', () => {
+describe.only('RASP - command_injection - integration', () => {
   let axios, cwd, appFile, agent, proc
 
   useSandbox(
