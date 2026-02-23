@@ -26,8 +26,14 @@ function Hook (modules, hookOptions, onrequire) {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
-    if (this._patched[filename] && patched.has(moduleExports)) {
-      return patched.get(moduleExports)
+    if (this._patched[filename]) {
+      if (patched.has(moduleExports)) {
+        return patched.get(moduleExports)
+      }
+      // Already patched via a different loader don't re-patch,
+      // but still cache this exports reference.
+      patched.set(moduleExports, moduleExports)
+      return moduleExports
     }
 
     let defaultWrapResult
