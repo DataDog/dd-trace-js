@@ -1025,7 +1025,7 @@ declare namespace tracer {
 
       /**
        * Timeout in milliseconds for capturing variable values.
-       * @default 100
+       * @default 15
        */
       captureTimeoutMs?: number
 
@@ -1037,12 +1037,19 @@ declare namespace tracer {
 
       /**
        * List of identifier names to redact in captured data.
+       * These are added to the built-in default list, which always applies.
+       * See {@link https://github.com/DataDog/dd-trace-js/blob/master/packages/dd-trace/src/debugger/devtools_client/snapshot/redaction.js | redaction.js}
+       * for the default identifiers.
+       * To avoid redacting some of those built-in identifiers, use
+       * {@link redactionExcludedIdentifiers}.
        * @default []
        */
       redactedIdentifiers?: string[]
 
       /**
        * List of identifier names to exclude from redaction.
+       * Use this to avoid redacting some of the built-in identifiers (see
+       * {@link redactedIdentifiers}).
        * @default []
        */
       redactionExcludedIdentifiers?: string[]
