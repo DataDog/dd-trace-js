@@ -153,6 +153,8 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     consumer.run = function ({ eachMessage, eachBatch, ...runArgs }) {
       const wrapConsume = (clusterId) => {
+	// In kafkajs COMMIT_OFFSETS always happens in the context of one synchronous run
+	// So this will always reference a correct cluster id
         resolvedClusterId = clusterId
         return run({
           eachMessage: wrappedCallback(
