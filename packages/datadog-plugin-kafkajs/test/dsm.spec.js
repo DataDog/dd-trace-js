@@ -156,6 +156,97 @@ describe('Plugin', () => {
           })
         })
 
+        describe('concurrent context isolation', function () {
+          this.timeout(30000)
+          let setCheckpointSpy
+          let consumerA
+          let consumerB
+          let producer
+
+          beforeEach(async () => {
+            tracer.init()
+            tracer.use('kafkajs', { dsmEnabled: true })
+            setCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'setCheckpoint')
+          })
+
+          afterEach(async () => {
+            setCheckpointSpy.restore()
+            if (consumerA) await consumerA.disconnect()
+            if (consumerB) await consumerB.disconnect()
+            if (producer) await producer.disconnect()
+          })
+
+          it('Should maintain separate DSM context for interleaved consume-produce flows', async () => {
+            // Four topics: A reads aIn → produces aOut, B reads bIn → produces bOut
+            const topicAIn = `topic-a-in-${randomUUID()}`
+            const topicAOut = `topic-a-out-${randomUUID()}`
+            const topicBIn = `topic-b-in-${randomUUID()}`
+            const topicBOut = `topic-b-out-${randomUUID()}`
+
+            await admin.createTopics({
+              topics: [topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
+                topic,
+                numPartitions: 1,
+                replicationFactor: 1,
+              })),
+            })
+
+            producer = kafka.producer()
+            await producer.connect()
+
+            // Synchronization: both consumers must enter eachMessage before either produces.
+            let resolveAEntered, resolveBEntered, resolveAllDone
+            const aEntered = new Promise(resolve => { resolveAEntered = resolve })
+            const bEntered = new Promise(resolve => { resolveBEntered = resolve })
+            let doneCount = 0
+            const allDone = new Promise(resolve => { resolveAllDone = resolve })
+
+            consumerA = kafka.consumer({ groupId: 'test-group-a' })
+            await consumerA.connect()
+            await consumerA.subscribe({ topic: topicAIn })
+            await consumerA.run({
+              eachMessage: async () => {
+                resolveAEntered()
+                await bEntered // wait for B to also consume (DSM checkpoint set)
+                await producer.send({ topic: topicAOut, messages: [{ key: 'a', value: 'from-a' }] })
+                if (++doneCount === 2) resolveAllDone()
+              },
+            })
+
+            consumerB = kafka.consumer({ groupId: 'test-group-b' })
+            await consumerB.connect()
+            await consumerB.subscribe({ topic: topicBIn })
+            await consumerB.run({
+              eachMessage: async () => {
+                resolveBEntered()
+                await aEntered // wait for A to also consume
+                await producer.send({ topic: topicBOut, messages: [{ key: 'b', value: 'from-b' }] })
+                if (++doneCount === 2) resolveAllDone()
+              },
+            })
+
+            await sendMessages(kafka, topicAIn, [{ key: 'a', value: 'msg-a' }])
+            await sendMessages(kafka, topicBIn, [{ key: 'b', value: 'msg-b' }])
+
+            await allDone
+
+            const calls = setCheckpointSpy.getCalls()
+            const checkpoint = (dir, topic) => calls.find(c =>
+              c.args[0].includes(`direction:${dir}`) && c.args[0].includes(`topic:${topic}`)
+            )
+
+            const consumeA = checkpoint('in', topicAIn)
+            const consumeB = checkpoint('in', topicBIn)
+            const produceA = checkpoint('out', topicAOut)
+            const produceB = checkpoint('out', topicBOut)
+
+            assert.ok(produceA?.args[2], 'Process A produce should have a parent DSM context')
+            assert.ok(produceB?.args[2], 'Process B produce should have a parent DSM context')
+            assert.deepStrictEqual(produceA.args[2].hash, consumeA.returnValue.hash)
+            assert.deepStrictEqual(produceB.args[2].hash, consumeB.returnValue.hash)
+          })
+        })
+
         describe('backlogs', () => {
           let consumer
           let setOffsetSpy

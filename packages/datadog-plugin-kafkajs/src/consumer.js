@@ -65,6 +65,22 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
     }
   }
 
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { topic, message, groupId, clusterId } = ctx.extractedArgs || ctx
+    const headers = convertToTextMap(message?.headers)
+    if (!headers) return
+
+    const { span } = ctx.currentStore
+    const payloadSize = getMessageSize(message)
+    this.tracer.decodeDataStreamsContext(headers)
+    const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
+    if (clusterId) {
+      edgeTags.push(`kafka_cluster_id:${clusterId}`)
+    }
+    this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+  }
+
   bindStart (ctx) {
     const { topic, partition, message, groupId, clusterId } = ctx.extractedArgs || ctx
 
@@ -88,16 +104,6 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       },
     }, ctx)
     if (message?.offset) span.setTag('kafka.message.offset', message?.offset)
-
-    if (this.config.dsmEnabled && headers) {
-      const payloadSize = getMessageSize(message)
-      this.tracer.decodeDataStreamsContext(headers)
-      const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
-      if (clusterId) {
-        edgeTags.push(`kafka_cluster_id:${clusterId}`)
-      }
-      this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-    }
 
     if (afterStartCh.hasSubscribers) {
       afterStartCh.publish({ topic, partition, message, groupId, currentStore: ctx.currentStore })
