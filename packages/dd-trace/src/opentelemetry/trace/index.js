@@ -1,7 +1,5 @@
 'use strict'
 
-const os = require('os')
-
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 
 /**
@@ -35,10 +33,13 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
  */
 function buildResourceAttributes (config) {
   const resourceAttributes = {
-    'service.name': config.service,
-    'service.version': config.version,
-    'deployment.environment': config.env,
+    'service.name': config.service || config.tags.service,
   }
+
+  const env = config.env || config.tags.env
+  if (env) resourceAttributes['deployment.environment.name'] = env
+  const version = config.version || config.tags.version
+  if (version) resourceAttributes['service.version'] = version
 
   if (config.tags) {
     const filteredTags = { ...config.tags }
@@ -46,10 +47,6 @@ function buildResourceAttributes (config) {
     delete filteredTags.version
     delete filteredTags.env
     Object.assign(resourceAttributes, filteredTags)
-  }
-
-  if (config.reportHostname) {
-    resourceAttributes['host.name'] = os.hostname()
   }
 
   return resourceAttributes

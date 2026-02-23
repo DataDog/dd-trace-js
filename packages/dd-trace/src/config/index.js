@@ -501,6 +501,9 @@ class Config {
     if (OTEL_TRACES_EXPORTER) {
       setBoolean(target, 'otelTracesEnabled', OTEL_TRACES_EXPORTER.toLowerCase() === 'otlp')
     }
+    if (OTEL_TRACES_SAMPLER) {
+      setString(target, 'otelTracesSampler', OTEL_TRACES_SAMPLER.toLowerCase())
+    }
     // Set OpenTelemetry traces configuration with specific _TRACES_ vars
     // taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {

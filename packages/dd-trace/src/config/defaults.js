@@ -150,6 +150,7 @@ module.exports = {
   otelMetricsProtocol: 'http/protobuf',
   otelMetricsTimeout: 10_000,
   otelTracesEnabled: false,
+  otelTracesSampler: 'parentbased_always_on',
   otelTracesUrl: undefined, // Will be computed using agent host
   otelTracesHeaders: '',
   otelTracesProtocol: 'http/json',

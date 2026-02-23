@@ -212,4 +212,75 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
+
+  describe('OTLP sampling', () => {
+    it('should drop rejected traces when otelTracesEnabled is true', () => {
+      config.otelTracesEnabled = true
+      const proc = new SpanProcessor(exporter, prioritySampler, config)
+
+      prioritySampler.sample.callsFake((ctx) => { ctx._sampling.priority = 0 })
+
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+      proc.process(finishedSpan)
+
+      sinon.assert.notCalled(exporter.export)
+      assert.deepStrictEqual(trace.started, [])
+      assert.deepStrictEqual(trace.finished, [])
+    })
+
+    it('should drop user-rejected traces when otelTracesEnabled is true', () => {
+      config.otelTracesEnabled = true
+      const proc = new SpanProcessor(exporter, prioritySampler, config)
+
+      prioritySampler.sample.callsFake((ctx) => { ctx._sampling.priority = -1 })
+
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+      proc.process(finishedSpan)
+
+      sinon.assert.notCalled(exporter.export)
+    })
+
+    it('should export kept traces when otelTracesEnabled is true', () => {
+      config.otelTracesEnabled = true
+      const proc = new SpanProcessor(exporter, prioritySampler, config)
+
+      prioritySampler.sample.callsFake((ctx) => { ctx._sampling.priority = 1 })
+
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+      proc.process(finishedSpan)
+
+      sinon.assert.calledOnce(exporter.export)
+    })
+
+    it('should preserve active spans when dropping a rejected trace', () => {
+      config.otelTracesEnabled = true
+      config.flushMinSpans = 1
+      const proc = new SpanProcessor(exporter, prioritySampler, config)
+
+      prioritySampler.sample.callsFake((ctx) => { ctx._sampling.priority = 0 })
+
+      trace.started = [activeSpan, finishedSpan]
+      trace.finished = [finishedSpan]
+      proc.process(finishedSpan)
+
+      sinon.assert.notCalled(exporter.export)
+      assert.deepStrictEqual(trace.started, [activeSpan])
+    })
+
+    it('should still export rejected traces when otelTracesEnabled is false', () => {
+      config.otelTracesEnabled = false
+      const proc = new SpanProcessor(exporter, prioritySampler, config)
+
+      prioritySampler.sample.callsFake((ctx) => { ctx._sampling.priority = 0 })
+
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+      proc.process(finishedSpan)
+
+      sinon.assert.calledOnce(exporter.export)
+    })
+  })
 })
