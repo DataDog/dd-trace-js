@@ -1,5 +1,6 @@
 'use strict'
 const path = require('path')
+const Module = require('module')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 
@@ -33,7 +34,7 @@ function Hook (modules, hookOptions, onrequire) {
       // Already patched via a different loader don't re-patch,
       // but still cache this exports reference.
       patched.set(moduleExports, moduleExports)
-      return moduleExports
+      if (!Module.builtinModules.includes(filename)) return moduleExports
     }
 
     let defaultWrapResult
