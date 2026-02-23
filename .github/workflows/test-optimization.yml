@@ -58,6 +58,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      # Install chromium (configured in integration-tests/playwright.config.js)
+      # *Be advised*: this means that we'll only be using chromium for this test suite
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
       - run: yarn test:integration:testopt
 
   integration-playwright:
