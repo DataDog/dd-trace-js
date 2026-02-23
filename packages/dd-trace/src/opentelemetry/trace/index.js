@@ -2,7 +2,6 @@
 
 const os = require('os')
 
-const log = require('../../log')
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 
 /**
@@ -15,14 +14,15 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
  *
  * This module provides OTLP trace export support that integrates with
  * the existing Datadog tracing pipeline. It hooks into the SpanProcessor's
- * exporter to additionally send DD-formatted spans to an OTLP endpoint.
+ * exporter to send DD-formatted spans to an OTLP endpoint instead of the
+ * Datadog Agent.
  *
  * Key Components:
  * - OtlpHttpTraceExporter: Exports spans via OTLP over HTTP/JSON (port 4318)
  * - OtlpTraceTransformer: Transforms DD-formatted spans to OTLP JSON format
  *
- * This supports dual-export: spans continue to flow to the DD Agent via the
- * existing exporter, and are additionally sent to an OTLP endpoint.
+ * When enabled, traces are exported exclusively via OTLP. The original
+ * Datadog Agent exporter is replaced.
  *
  * @package
  */
@@ -40,8 +40,6 @@ function buildResourceAttributes (config) {
     'deployment.environment': config.env,
   }
 
-  // Add all tracer tags (includes DD_TAGS, OTEL_RESOURCE_ATTRIBUTES, DD_TRACE_TAGS, etc.)
-  // Exclude Datadog-style keys that duplicate OpenTelemetry standard keys
   if (config.tags) {
     const filteredTags = { ...config.tags }
     delete filteredTags.service
@@ -74,8 +72,8 @@ function createOtlpTraceExporter (config, resourceAttributes) {
 }
 
 /**
- * Initializes OTLP trace export by wrapping the existing span exporter
- * with a composite that sends spans to both the DD Agent and an OTLP endpoint.
+ * Initializes OTLP trace export by replacing the existing span exporter
+ * so that spans are sent exclusively to the OTLP endpoint.
  *
  * @param {Config} config - Tracer configuration instance
  * @param {DatadogTracer} tracer - The Datadog tracer instance
@@ -84,34 +82,7 @@ function initializeOtlpTraceExport (config, tracer) {
   const resourceAttributes = buildResourceAttributes(config)
   const otlpExporter = createOtlpTraceExporter(config, resourceAttributes)
 
-  // Wrap the existing exporter in the span processor for dual-export.
-  // The original exporter (e.g. AgentExporter) continues to receive spans,
-  // and the OTLP exporter additionally receives the same formatted spans.
-  const processor = tracer._processor
-  const originalExporter = processor._exporter
-
-  processor._exporter = {
-    export (spans) {
-      originalExporter.export(spans)
-      try {
-        otlpExporter.export(spans)
-      } catch (err) {
-        log.error('Error exporting OTLP traces:', err)
-      }
-    },
-
-    setUrl (url) {
-      originalExporter.setUrl?.(url)
-    },
-
-    flush (done) {
-      originalExporter.flush?.(done)
-    },
-
-    get _url () {
-      return originalExporter._url
-    },
-  }
+  tracer._processor._exporter = otlpExporter
 }
 
 module.exports = {

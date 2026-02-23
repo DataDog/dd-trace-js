@@ -397,21 +397,19 @@ describe('OpenTelemetry Traces', () => {
       const processor = tracer._tracer._processor
       const exporter = processor._exporter
 
-      // The OTLP part of the composite exporter should not make HTTP requests for empty arrays
       exporter.export([])
-      assert(!exportCalled || true) // Soft check; the original exporter may still be called
+      assert(!exportCalled, 'No HTTP request should be made for empty span arrays')
     })
 
-    it('still forwards spans to the original DD Agent exporter', () => {
+    it('replaces the original DD Agent exporter', () => {
       mockOtlpExport(() => {})
 
       const tracer = setupTracer()
       const processor = tracer._tracer._processor
       const exporter = processor._exporter
 
-      // The composite exporter wraps the original, so export should not throw
-      const span = createMockSpan()
-      exporter.export([span])
+      const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
+      assert(exporter instanceof OtlpHttpTraceExporter, 'Exporter should be the OTLP exporter, not a wrapper')
     })
   })
 
