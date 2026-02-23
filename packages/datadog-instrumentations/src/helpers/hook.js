@@ -28,13 +28,13 @@ function Hook (modules, hookOptions, onrequire) {
     const filename = path.join(...parts)
 
     if (this._patched[filename]) {
-      if (patched.has(moduleExports)) {
-        return patched.get(moduleExports)
-      }
+      // if (patched.has(moduleExports)) {
+      //   return patched.get(moduleExports)
+      // }
       // Already patched via a different loader don't re-patch,
       // but still cache this exports reference.
-      patched.set(moduleExports, moduleExports)
-      if (!Module.builtinModules.includes(filename)) return moduleExports
+      // patched.set(moduleExports, moduleExports)
+      return moduleExports
     }
 
     let defaultWrapResult
@@ -56,7 +56,7 @@ function Hook (modules, hookOptions, onrequire) {
     if (newExports &&
       (typeof newExports === 'object' ||
       typeof newExports === 'function')) {
-      patched.set(moduleExports, newExports)
+      // patched.set(moduleExports, newExports)
     }
     return newExports
   }
