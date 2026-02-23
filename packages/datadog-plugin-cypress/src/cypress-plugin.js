@@ -306,6 +306,9 @@ class CypressPlugin {
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
+    const envFlushWait = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS'))
+    this.rumFlushWaitMillis = Number.isFinite(envFlushWait) ? envFlushWait : undefined
+
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
     }
@@ -823,6 +826,7 @@ class CypressPlugin {
           isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
+          rumFlushWaitMillis: this.rumFlushWaitMillis,
         }
 
         if (this.testSuiteSpan) {
