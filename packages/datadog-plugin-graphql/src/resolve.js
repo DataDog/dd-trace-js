@@ -109,6 +109,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
         // FIXME: this should probably use `extractErrorIntoSpanEvent`
         fieldCtx.error ??= field.error // notice the first error wins (like in `validate` and `execute`)
       }
+
+      this.config.hooks.resolve(span, field)
     })
 
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')

@@ -2009,16 +2009,31 @@ declare namespace tracer {
     */
    interface google_genai extends Integration {}
 
-   /** @hidden */
-   interface ExecutionArgs {
-     schema: any,
-     document: any,
-     rootValue?: any,
-     contextValue?: any,
-     variableValues?: any,
-     operationName?: string,
-     fieldResolver?: any,
-     typeResolver?: any,
+    /** @hidden - the `graphql.ExecutionArgs` passed to the `execute` call */
+    interface ExecutionArgs {
+      schema: any,
+      document: any,
+      rootValue?: any,
+      contextValue?: any,
+      variableValues?: any,
+      operationName?: string,
+      fieldResolver?: any,
+      typeResolver?: any,
+    }
+
+    interface FieldContext {
+      /** The `graphql.GraphQLResolveInfo` for the resolver call */
+      info: any;
+      /** The arguments passed to the resolver */
+      args: any;
+      /** The error thrown by the resolver, if any */
+      error: null | Error;
+      /** The result returned by the resolver, if any */
+      res: unknown;
+      /** The field context from the resolver of the parent field (a level up on the path) */
+      parentField: FieldContext | null;
+      /** The nesting depth of the field in the query */
+      depth: number;
     }
 
     /**
@@ -2099,6 +2114,7 @@ declare namespace tracer {
         execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
         validate?: (span?: Span, document?: any, errors?: any) => void;
         parse?: (span?: Span, source?: any, document?: any) => void;
+        resolve?: (span?: Span, field: FieldContext) => void;
       }
     }
 
