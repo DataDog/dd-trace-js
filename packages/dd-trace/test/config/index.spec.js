@@ -331,7 +331,7 @@ describe('Config', () => {
         },
         rateLimit: 100,
         sca: {
-          enabled: undefined
+          enabled: undefined,
         },
         stackTrace: {
           enabled: true,
@@ -396,7 +396,7 @@ describe('Config', () => {
       installSignature: {
         id: undefined,
         time: undefined,
-        type: undefined
+        type: undefined,
       },
       instrumentationSource: 'manual',
       instrumentation_config_id: undefined,
@@ -2084,7 +2084,7 @@ describe('Config', () => {
       rateLimit: 42,
       rules: undefined,
       sca: {
-        enabled: undefined
+        enabled: undefined,
       },
       stackTrace: {
         enabled: true,

@@ -10,12 +10,17 @@
  * @property {string[]} [aliases]
  */
 
+/**
+ * @typedef {object} SupportedConfigurationsJson
+ * @property {Record<`DD_${string}` | `OTEL_${string}`, SupportedConfigurationEntry[]>} supportedConfigurations
+ * @property {Record<string, string>?} deprecations
+ */
+
 const { deprecate } = require('util')
-const supportedConfigurationsJson = /** @type {{
-  supportedConfigurations: Record<`DD_${string}` | `OTEL_${string}`, SupportedConfigurationEntry[]>,
-  deprecations?: Record<string, string>
-}} */ (require('./supported-configurations.json'))
-const { supportedConfigurations, deprecations = {} } = supportedConfigurationsJson
+const {
+  supportedConfigurations,
+  deprecations = {},
+} = /** @type {SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
 /**
  * Types for environment variable handling.

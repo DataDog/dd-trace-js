@@ -33,7 +33,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "hostname",
+        "configurationNames": [
+          "hostname"
+        ],
         "default": "127.0.0.1",
         "aliases": [
           "DD_TRACE_AGENT_HOSTNAME"
@@ -44,7 +46,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "experimental.aiguard.enabled",
+        "configurationNames": [
+          "experimental.aiguard.enabled"
+        ],
         "default": false
       }
     ],
@@ -52,7 +56,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "experimental.aiguard.endpoint",
+        "configurationNames": [
+          "experimental.aiguard.endpoint"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -60,7 +66,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "experimental.aiguard.maxContentSize",
+        "configurationNames": [
+          "experimental.aiguard.maxContentSize"
+        ],
         "default": 524288
       }
     ],
@@ -68,7 +76,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "experimental.aiguard.maxMessagesLength",
+        "configurationNames": [
+          "experimental.aiguard.maxMessagesLength"
+        ],
         "default": 16
       }
     ],
@@ -76,7 +86,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "experimental.aiguard.timeout",
+        "configurationNames": [
+          "experimental.aiguard.timeout"
+        ],
         "default": 10000
       }
     ],
@@ -94,7 +106,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "appsec.apiSecurity.enabled",
+        "configurationNames": [
+          "appsec.apiSecurity.enabled"
+        ],
         "default": true,
         "aliases": [
           "DD_EXPERIMENTAL_API_SECURITY_ENABLED"
@@ -105,7 +119,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "appsec.apiSecurity.endpointCollectionEnabled",
+        "configurationNames": [
+          "appsec.apiSecurity.endpointCollectionEnabled"
+        ],
         "default": true
       }
     ],
@@ -113,7 +129,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "appsec.apiSecurity.endpointCollectionMessageLimit",
+        "configurationNames": [
+          "appsec.apiSecurity.endpointCollectionMessageLimit"
+        ],
         "default": 300
       }
     ],
@@ -121,7 +139,9 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "programmaticConfig": "appsec.apiSecurity.downstreamBodyAnalysisSampleRate",
+        "configurationNames": [
+          "appsec.apiSecurity.downstreamBodyAnalysisSampleRate"
+        ],
         "default": 0.5
       }
     ],
@@ -129,7 +149,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "appsec.apiSecurity.maxDownstreamRequestBodyAnalysis",
+        "configurationNames": [
+          "appsec.apiSecurity.maxDownstreamRequestBodyAnalysis"
+        ],
         "default": 1
       }
     ],
@@ -151,7 +173,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "apmTracingEnabled",
+        "configurationNames": [
+          "apmTracingEnabled"
+        ],
         "default": true
       }
     ],
@@ -159,7 +183,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "appsec.eventTracking.mode",
+        "configurationNames": [
+          "appsec.eventTracking.mode"
+        ],
         "default": "identification",
         "aliases": [
           "DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING"
@@ -170,7 +196,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "appsec.extendedHeadersCollection.enabled",
+        "configurationNames": [
+          "appsec.extendedHeadersCollection.enabled"
+        ],
         "default": false
       }
     ],
@@ -178,7 +206,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "appsec.enabled",
+        "configurationNames": [
+          "appsec.enabled"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -186,7 +216,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "appsec.blockedTemplateGraphql",
+        "configurationNames": [
+          "appsec.blockedTemplateGraphql"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -194,7 +226,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "appsec.extendedHeadersCollection.redaction",
+        "configurationNames": [
+          "appsec.extendedHeadersCollection.redaction"
+        ],
         "default": true
       }
     ],
@@ -202,7 +236,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "appsec.blockedTemplateHtml",
+        "configurationNames": [
+          "appsec.blockedTemplateHtml"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -210,7 +246,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "appsec.blockedTemplateJson",
+        "configurationNames": [
+          "appsec.blockedTemplateJson"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -218,7 +256,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "appsec.extendedHeadersCollection.maxHeaders",
+        "configurationNames": [
+          "appsec.extendedHeadersCollection.maxHeaders"
+        ],
         "default": 50
       }
     ],
@@ -226,7 +266,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "appsec.stackTrace.maxStackTraces",
+        "configurationNames": [
+          "appsec.stackTrace.maxStackTraces"
+        ],
         "default": 2
       }
     ],
@@ -234,7 +276,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "appsec.stackTrace.maxDepth",
+        "configurationNames": [
+          "appsec.stackTrace.maxDepth"
+        ],
         "default": 32
       }
     ],
@@ -242,7 +286,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "appsec.obfuscatorKeyRegex",
+        "configurationNames": [
+          "appsec.obfuscatorKeyRegex"
+        ],
         "default": "(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt"
       }
     ],
@@ -250,7 +296,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "appsec.obfuscatorValueRegex",
+        "configurationNames": [
+          "appsec.obfuscatorValueRegex"
+        ],
         "default": "(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=([^;&]+)|\"\\s*:\\s*(\"[^\"]+\"|\\d+))|bearer\\s+([a-z0-9\\._\\-]+)|token\\s*:\\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\\w=-]+\\.(ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?)|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}([^\\-]+)[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*([a-z0-9\\/\\.+]{100,})"
       }
     ],
@@ -258,7 +306,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "appsec.rasp.bodyCollection",
+        "configurationNames": [
+          "appsec.rasp.bodyCollection"
+        ],
         "default": false
       }
     ],
@@ -266,7 +316,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "appsec.rasp.enabled",
+        "configurationNames": [
+          "appsec.rasp.enabled"
+        ],
         "default": true
       }
     ],
@@ -274,7 +326,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "appsec.rules",
+        "configurationNames": [
+          "appsec.rules"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -289,7 +343,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "appsec.stackTrace.enabled",
+        "configurationNames": [
+          "appsec.stackTrace.enabled"
+        ],
         "default": true
       }
     ],
@@ -297,7 +353,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "appsec.rateLimit",
+        "configurationNames": [
+          "appsec.rateLimit"
+        ],
         "default": 100
       }
     ],
@@ -305,7 +363,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "appsec.wafTimeout",
+        "configurationNames": [
+          "appsec.wafTimeout"
+        ],
         "default": 5000
       }
     ],
@@ -453,7 +513,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "codeOriginForSpans.enabled",
+        "configurationNames": [
+          "codeOriginForSpans.enabled"
+        ],
         "default": true
       }
     ],
@@ -489,7 +551,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "dbm.injectSqlBaseHash",
+        "configurationNames": [
+          "dbm.injectSqlBaseHash"
+        ],
         "default": false
       }
     ],
@@ -497,7 +561,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "dbmPropagationMode",
+        "configurationNames": [
+          "dbmPropagationMode"
+        ],
         "default": "disabled"
       }
     ],
@@ -505,7 +571,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "dogstatsd.hostname",
+        "configurationNames": [
+          "dogstatsd.hostname"
+        ],
         "default": "127.0.0.1",
         "aliases": [
           "DD_DOGSTATSD_HOSTNAME"
@@ -516,7 +584,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "dogstatsd.port",
+        "configurationNames": [
+          "dogstatsd.port"
+        ],
         "default": "8125"
       }
     ],
@@ -524,7 +594,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "dynamicInstrumentation.captureTimeoutMs",
+        "configurationNames": [
+          "dynamicInstrumentation.captureTimeoutMs"
+        ],
         "default": 15
       }
     ],
@@ -532,7 +604,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "dynamicInstrumentation.enabled",
+        "configurationNames": [
+          "dynamicInstrumentation.enabled"
+        ],
         "default": false
       }
     ],
@@ -540,7 +614,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "dynamicInstrumentation.probeFile",
+        "configurationNames": [
+          "dynamicInstrumentation.probeFile"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -548,7 +624,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "dynamicInstrumentation.redactedIdentifiers",
+        "configurationNames": [
+          "dynamicInstrumentation.redactedIdentifiers"
+        ],
         "default": []
       }
     ],
@@ -556,7 +634,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "dynamicInstrumentation.redactionExcludedIdentifiers",
+        "configurationNames": [
+          "dynamicInstrumentation.redactionExcludedIdentifiers"
+        ],
         "default": []
       }
     ],
@@ -564,7 +644,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "dynamicInstrumentation.uploadIntervalSeconds",
+        "configurationNames": [
+          "dynamicInstrumentation.uploadIntervalSeconds"
+        ],
         "default": 1
       }
     ],
@@ -579,7 +661,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "env",
+        "configurationNames": [
+          "env"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -587,7 +671,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "apmTracingEnabled",
+        "configurationNames": [
+          "apmTracingEnabled"
+        ],
         "default": true
       }
     ],
@@ -595,7 +681,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "experimental.flaggingProvider.initializationTimeoutMs",
+        "configurationNames": [
+          "experimental.flaggingProvider.initializationTimeoutMs"
+        ],
         "default": 30000
       }
     ],
@@ -603,7 +691,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "experimental.flaggingProvider.enabled",
+        "configurationNames": [
+          "experimental.flaggingProvider.enabled"
+        ],
         "default": false
       }
     ],
@@ -833,7 +923,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "iast.dbRowsToTaint",
+        "configurationNames": [
+          "iast.dbRowsToTaint"
+        ],
         "default": 1
       }
     ],
@@ -841,7 +933,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "iast.deduplicationEnabled",
+        "configurationNames": [
+          "iast.deduplicationEnabled"
+        ],
         "default": true
       }
     ],
@@ -849,7 +943,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "iast.enabled",
+        "configurationNames": [
+          "iast.enabled"
+        ],
         "default": false
       }
     ],
@@ -857,7 +953,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "iast.maxConcurrentRequests",
+        "configurationNames": [
+          "iast.maxConcurrentRequests"
+        ],
         "default": 2
       }
     ],
@@ -865,7 +963,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "iast.maxContextOperations",
+        "configurationNames": [
+          "iast.maxContextOperations"
+        ],
         "default": 2
       }
     ],
@@ -873,7 +973,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "iast.redactionEnabled",
+        "configurationNames": [
+          "iast.redactionEnabled"
+        ],
         "default": true
       }
     ],
@@ -881,7 +983,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "iast.redactionNamePattern",
+        "configurationNames": [
+          "iast.redactionNamePattern"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -889,7 +993,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "iast.redactionValuePattern",
+        "configurationNames": [
+          "iast.redactionValuePattern"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -897,7 +1003,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "iast.requestSampling",
+        "configurationNames": [
+          "iast.requestSampling"
+        ],
         "default": 30
       }
     ],
@@ -905,7 +1013,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "iast.securityControlsConfiguration",
+        "configurationNames": [
+          "iast.securityControlsConfiguration"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -913,7 +1023,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "iast.stackTrace.enabled",
+        "configurationNames": [
+          "iast.stackTrace.enabled"
+        ],
         "default": true
       }
     ],
@@ -921,7 +1033,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "iast.telemetryVerbosity",
+        "configurationNames": [
+          "iast.telemetryVerbosity"
+        ],
         "default": "INFORMATION"
       }
     ],
@@ -1016,7 +1130,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "llmobs.agentlessEnabled",
+        "configurationNames": [
+          "llmobs.agentlessEnabled"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -1031,7 +1147,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "llmobs.mlApp",
+        "configurationNames": [
+          "llmobs.mlApp"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -1039,7 +1157,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "logInjection",
+        "configurationNames": [
+          "logInjection"
+        ],
         "default": true
       }
     ],
@@ -1144,7 +1264,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "profiling",
+        "configurationNames": [
+          "profiling"
+        ],
         "default": "__UNSET__",
         "aliases": [
           "DD_EXPERIMENTAL_PROFILING_ENABLED"
@@ -1283,7 +1405,9 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "programmaticConfig": "remoteConfig.pollInterval",
+        "configurationNames": [
+          "remoteConfig.pollInterval"
+        ],
         "default": 5
       }
     ],
@@ -1291,7 +1415,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "runtimeMetrics.enabled",
+        "configurationNames": [
+          "runtimeMetrics.enabled"
+        ],
         "default": false
       }
     ],
@@ -1299,7 +1425,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "runtimeMetrics.eventLoop",
+        "configurationNames": [
+          "runtimeMetrics.eventLoop"
+        ],
         "default": true
       }
     ],
@@ -1314,7 +1442,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "runtimeMetrics.gc",
+        "configurationNames": [
+          "runtimeMetrics.gc"
+        ],
         "default": true
       }
     ],
@@ -1322,7 +1452,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "runtimeMetricsRuntimeId",
+        "configurationNames": [
+          "runtimeMetricsRuntimeId"
+        ],
         "default": false,
         "aliases": [
           "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED"
@@ -1333,7 +1465,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "service",
+        "configurationNames": [
+          "service"
+        ],
         "default": "$dynamic",
         "aliases": [
           "DD_SERVICE_NAME"
@@ -1344,7 +1478,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "serviceMapping",
+        "configurationNames": [
+          "serviceMapping"
+        ],
         "default": {}
       }
     ],
@@ -1359,7 +1495,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "spanSamplingRules",
+        "configurationNames": [
+          "spanSamplingRules"
+        ],
         "default": []
       }
     ],
@@ -1367,7 +1505,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "spanSamplingRules",
+        "configurationNames": [
+          "spanSamplingRules"
+        ],
         "default": []
       }
     ],
@@ -1487,7 +1627,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "port",
+        "configurationNames": [
+          "port"
+        ],
         "default": "8126"
       }
     ],
@@ -1495,7 +1637,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "protocolVersion",
+        "configurationNames": [
+          "protocolVersion"
+        ],
         "default": "0.4"
       }
     ],
@@ -1503,7 +1647,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "url",
+        "configurationNames": [
+          "url"
+        ],
         "default": "__UNKNOWN__",
         "aliases": [
           "DD_TRACE_URL"
@@ -1955,7 +2101,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "clientIpEnabled",
+        "configurationNames": [
+          "clientIpEnabled"
+        ],
         "default": false
       }
     ],
@@ -1963,7 +2111,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "clientIpHeader",
+        "configurationNames": [
+          "clientIpHeader"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -1971,7 +2121,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "cloudPayloadTagging.maxDepth",
+        "configurationNames": [
+          "cloudPayloadTagging.maxDepth"
+        ],
         "default": 10
       }
     ],
@@ -1979,7 +2131,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "cloudPayloadTagging.request",
+        "configurationNames": [
+          "cloudPayloadTagging.request"
+        ],
         "default": []
       }
     ],
@@ -1987,7 +2141,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "cloudPayloadTagging.request",
+        "configurationNames": [
+          "cloudPayloadTagging.request"
+        ],
         "default": []
       }
     ],
@@ -2149,7 +2305,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "experimental.b3",
+        "configurationNames": [
+          "experimental.b3"
+        ],
         "default": "__UNKNOWN__"
       }
     ],
@@ -2157,7 +2315,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "experimental.exporter",
+        "configurationNames": [
+          "experimental.exporter"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -2165,7 +2325,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "experimental.enableGetRumData",
+        "configurationNames": [
+          "experimental.enableGetRumData"
+        ],
         "default": false
       }
     ],
@@ -2229,7 +2391,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "flushInterval",
+        "configurationNames": [
+          "flushInterval"
+        ],
         "default": 2000
       }
     ],
@@ -2881,7 +3045,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "flushMinSpans",
+        "configurationNames": [
+          "flushMinSpans"
+        ],
         "default": 1000
       }
     ],
@@ -2910,7 +3076,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "spanComputePeerService",
+        "configurationNames": [
+          "spanComputePeerService"
+        ],
         "default": "__UNKNOWN__"
       }
     ],
@@ -3030,7 +3198,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "tracePropagationStyle.inject",
+        "configurationNames": [
+          "tracePropagationStyle.inject"
+        ],
         "default": [
           "datadog",
           "tracecontext",
@@ -3042,7 +3212,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "tracePropagationStyle.extract",
+        "configurationNames": [
+          "tracePropagationStyle.extract"
+        ],
         "default": [
           "datadog",
           "tracecontext",
@@ -3054,7 +3226,9 @@
       {
         "implementation": "A",
         "type": "array",
-        "programmaticConfig": "tracePropagationStyle.inject",
+        "configurationNames": [
+          "tracePropagationStyle.inject"
+        ],
         "default": [
           "datadog",
           "tracecontext",
@@ -3087,7 +3261,9 @@
       {
         "implementation": "A",
         "type": "int",
-        "programmaticConfig": "ingestion.rateLimit",
+        "configurationNames": [
+          "ingestion.rateLimit"
+        ],
         "default": 100
       }
     ],
@@ -3130,7 +3306,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "reportHostname",
+        "configurationNames": [
+          "reportHostname"
+        ],
         "default": false
       }
     ],
@@ -3173,7 +3351,9 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "programmaticConfig": "ingestion.sampleRate",
+        "configurationNames": [
+          "ingestion.sampleRate"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -3181,7 +3361,9 @@
       {
         "implementation": "A",
         "type": "json",
-        "programmaticConfig": "samplingRules",
+        "configurationNames": [
+          "samplingRules"
+        ],
         "default": []
       }
     ],
@@ -3231,7 +3413,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "spanAttributeSchema",
+        "configurationNames": [
+          "spanAttributeSchema"
+        ],
         "default": "v0"
       }
     ],
@@ -3253,7 +3437,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "startupLogs",
+        "configurationNames": [
+          "startupLogs"
+        ],
         "default": false
       }
     ],
@@ -3261,7 +3447,9 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "programmaticConfig": "stats",
+        "configurationNames": [
+          "stats"
+        ],
         "default": "__UNKNOWN__"
       }
     ],
@@ -3388,7 +3576,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "version",
+        "configurationNames": [
+          "version"
+        ],
         "default": "$dynamic"
       }
     ],
@@ -3585,7 +3775,9 @@
       {
         "implementation": "A",
         "type": "string",
-        "programmaticConfig": "service",
+        "configurationNames": [
+          "service"
+        ],
         "default": "$dynamic"
       }
     ],
@@ -3600,7 +3792,9 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "programmaticConfig": "sampleRate",
+        "configurationNames": [
+          "sampleRate"
+        ],
         "default": "__UNSET__"
       }
     ],
@@ -3608,7 +3802,9 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "programmaticConfig": "sampleRate",
+        "configurationNames": [
+          "sampleRate"
+        ],
         "default": "__UNSET__"
       }
     ]
