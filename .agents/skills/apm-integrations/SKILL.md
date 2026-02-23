@@ -2,8 +2,8 @@
 name: apm-integrations
 description: |
   This skill should be used when the user asks to "add a new integration",
-  "create a new plugin", "instrument a library", "add instrumentation for",
-  "write a plugin", "create instrumentation", "new dd-trace plugin",
+  "instrument a library", "add instrumentation for",
+  "create instrumentation", "new dd-trace integration",
   "add tracing for", "TracingPlugin", "DatabasePlugin", "CachePlugin",
   "ClientPlugin", "ServerPlugin", "CompositePlugin", "ConsumerPlugin",
   "ProducerPlugin", "addHook", "shimmer.wrap", "orchestrion",
@@ -123,6 +123,27 @@ For the complete list by base class, see [Reference Plugins](references/referenc
 - Spans missing → verify `hasSubscribers` guard; check channel names match between layers
 - Context lost → ensure `runStores()` (not `publish()`) for start events
 - ESM fails but CJS works → check `esmFirst: true` in hooks.js (or switch to orchestrion)
+
+## Implementation Workflow
+
+Follow these steps when creating or modifying an integration:
+
+1. **Investigate** — Read 1-2 reference integrations of the same type (see table above). Understand the instrumentation and plugin patterns before writing code.
+2. **Implement instrumentation** — Create the instrumentation in `packages/datadog-instrumentations/src/`. Use orchestrion for instrumentation. 
+3. **Implement plugin** — Create the plugin in `packages/datadog-plugin-<name>/src/`. Extend the correct base class.
+4. **Register** — Add entries in `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, and `.github/workflows/apm-integrations.yml`.
+5. **Write tests** — Add unit tests and ESM integration tests. See [Testing](references/testing.md) for templates.
+6. **Run tests** — Validate with:
+   ```bash
+   # Run plugin tests (preferred CI command — handles yarn services automatically)
+   PLUGINS="<name>" npm run test:plugins:ci
+
+   # If the plugin needs external services (databases, message brokers, etc.),
+   # check docker-compose.yml for available service names, then:
+  docker compose up -d <service>
+   PLUGINS="<name>" npm run test:plugins:ci
+   ```
+7. **Verify** — Confirm all tests pass before marking work as complete.
 
 ## Reference Files
 
