@@ -1,7 +1,7 @@
 'use strict'
 
 const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
-const DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS = 500
+let rumFlushWaitMillis = 500
 
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
@@ -226,6 +226,9 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
+        rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis
+      }
     }
   })
 })
@@ -278,7 +281,7 @@ afterEach(function () {
     if (rum.stopSession) {
       rum.stopSession()
       // eslint-disable-next-line cypress/no-unnecessary-waiting
-      cy.wait(DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS)
+      cy.wait(rumFlushWaitMillis)
     }
   }
   let coverage
