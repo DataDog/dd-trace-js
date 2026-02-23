@@ -7,6 +7,7 @@ const {
   channel,
   addHook,
 } = require('./helpers/instrument')
+const { getKafkaClusterId, isPromise } = require('./helpers/kafka')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
 const producerCommitCh = channel('apm:kafkajs:produce:commit')
@@ -231,36 +232,3 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
     : fn
 }
 
-const getKafkaClusterId = (kafka) => {
-  if (kafka._ddKafkaClusterId) {
-    return kafka._ddKafkaClusterId
-  }
-
-  if (!kafka.admin) {
-    return null
-  }
-
-  const admin = kafka.admin()
-
-  if (!admin.describeCluster) {
-    return null
-  }
-
-  return admin.connect()
-    .then(() => {
-      return admin.describeCluster()
-    })
-    .then((clusterInfo) => {
-      const clusterId = clusterInfo?.clusterId
-      kafka._ddKafkaClusterId = clusterId
-      admin.disconnect()
-      return clusterId
-    })
-    .catch((error) => {
-      throw error
-    })
-}
-
-function isPromise (obj) {
-  return !!obj && (typeof obj === 'object' || typeof obj === 'function') && typeof obj.then === 'function'
-}

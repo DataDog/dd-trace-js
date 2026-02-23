@@ -7,6 +7,7 @@ const {
   addHook,
   channel,
 } = require('./helpers/instrument')
+const { getKafkaClusterId, isPromise } = require('./helpers/kafka')
 
 // Create channels for Confluent Kafka JavaScript
 const channels = {
@@ -195,6 +196,8 @@ function instrumentKafkaJS (kafkaJS) {
 
         // Wrap the producer method if it exists
         if (typeof kafka?.producer === 'function') {
+          const kafkaProducerClusterIdPromise = getKafkaClusterId(kafka)
+
           shimmer.wrap(kafka, 'producer', function wrapProducerMethod (producerMethod) {
             return function wrappedProducerMethod () {
               const producer = producerMethod.apply(this, arguments)
@@ -211,48 +214,58 @@ function instrumentKafkaJS (kafkaJS) {
                       return send.apply(this, arguments)
                     }
 
-                    const ctx = {
-                      topic: payload?.topic,
-                      messages: payload?.messages || [],
-                      bootstrapServers: kafka._ddBrokers,
-                      disableHeaderInjection: disabledHeaderWeakSet.has(producer),
+                    const wrappedSendWithClusterId = (clusterId) => {
+                      const ctx = {
+                        topic: payload?.topic,
+                        messages: payload?.messages || [],
+                        bootstrapServers: kafka._ddBrokers,
+                        disableHeaderInjection: disabledHeaderWeakSet.has(producer),
+                        clusterId,
+                      }
+
+                      return channels.producerStart.runStores(ctx, () => {
+                        try {
+                          const result = send.apply(this, arguments)
+
+                          result.then((res) => {
+                            ctx.result = res
+                            channels.producerCommit.publish(ctx)
+                            channels.producerFinish.publish(ctx)
+                          }, (err) => {
+                            if (err) {
+                              // Fixes bug where we would inject message headers for kafka brokers
+                              // that don't support headers (version <0.11). On the error, we disable
+                              // header injection. Tnfortunately the error name / type is not more specific.
+                              // This approach is implemented by other tracers as well.
+                              if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
+                                disabledHeaderWeakSet.add(producer)
+                                log.error(
+                                  // eslint-disable-next-line @stylistic/max-len
+                                  'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
+                                )
+                              }
+                              ctx.error = err
+                              channels.producerError.publish(ctx)
+                            }
+                            channels.producerFinish.publish(ctx)
+                          })
+
+                          return result
+                        } catch (e) {
+                          ctx.error = e
+                          channels.producerError.publish(ctx)
+                          channels.producerFinish.publish(ctx)
+                          throw e
+                        }
+                      })
                     }
 
-                    return channels.producerStart.runStores(ctx, () => {
-                      try {
-                        const result = send.apply(this, arguments)
-
-                        result.then((res) => {
-                          ctx.result = res
-                          channels.producerCommit.publish(ctx)
-                          channels.producerFinish.publish(ctx)
-                        }, (err) => {
-                          if (err) {
-                            // Fixes bug where we would inject message headers for kafka brokers
-                            // that don't support headers (version <0.11). On the error, we disable
-                            // header injection. Tnfortunately the error name / type is not more specific.
-                            // This approach is implemented by other tracers as well.
-                            if (err.name === 'KafkaJSError' && err.type === 'ERR_UNKNOWN') {
-                              disabledHeaderWeakSet.add(producer)
-                              log.error(
-                                // eslint-disable-next-line @stylistic/max-len
-                                'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
-                              )
-                            }
-                            ctx.error = err
-                            channels.producerError.publish(ctx)
-                          }
-                          channels.producerFinish.publish(ctx)
-                        })
-
-                        return result
-                      } catch (e) {
-                        ctx.error = e
-                        channels.producerError.publish(ctx)
-                        channels.producerFinish.publish(ctx)
-                        throw e
-                      }
-                    })
+                    if (isPromise(kafkaProducerClusterIdPromise)) {
+                      return kafkaProducerClusterIdPromise.then((clusterId) => {
+                        return wrappedSendWithClusterId(clusterId)
+                      })
+                    }
+                    return wrappedSendWithClusterId(kafkaProducerClusterIdPromise)
                   }
                 })
               }
@@ -264,10 +277,13 @@ function instrumentKafkaJS (kafkaJS) {
 
         // Wrap the consumer method if it exists
         if (typeof kafka?.consumer === 'function') {
+          const kafkaConsumerClusterIdPromise = getKafkaClusterId(kafka)
+
           shimmer.wrap(kafka, 'consumer', function wrapConsumerMethod (consumerMethod) {
             return function wrappedConsumerMethod (config) {
               const consumer = consumerMethod.apply(this, arguments)
               const groupId = getGroupId(config)
+              let resolvedClusterId = null
 
               // Wrap the run method for handling message consumption
               if (typeof consumer?.run === 'function') {
@@ -277,49 +293,62 @@ function instrumentKafkaJS (kafkaJS) {
                       return run.apply(this, arguments)
                     }
 
-                    const eachMessage = options?.eachMessage
-                    const eachBatch = options?.eachBatch
-                    if (eachMessage) {
-                      options.eachMessage = wrapKafkaCallback(
-                        eachMessage,
-                        {
-                          startCh: channels.consumerStart,
-                          commitCh: channels.consumerCommit,
-                          finishCh: channels.consumerFinish,
-                          errorCh: channels.consumerError,
-                        },
-                        (payload) => {
-                          return {
-                            topic: payload?.topic,
-                            partition: payload?.partition,
-                            offset: payload?.message?.offset,
-                            message: payload?.message,
-                            groupId,
+                    const wrapConsume = (clusterId) => {
+                      resolvedClusterId = clusterId
+
+                      const eachMessage = options?.eachMessage
+                      const eachBatch = options?.eachBatch
+                      if (eachMessage) {
+                        options.eachMessage = wrapKafkaCallback(
+                          eachMessage,
+                          {
+                            startCh: channels.consumerStart,
+                            commitCh: channels.consumerCommit,
+                            finishCh: channels.consumerFinish,
+                            errorCh: channels.consumerError,
+                          },
+                          (payload) => {
+                            return {
+                              topic: payload?.topic,
+                              partition: payload?.partition,
+                              offset: payload?.message?.offset,
+                              message: payload?.message,
+                              groupId,
+                              clusterId,
+                            }
+                          })
+                      } else if (eachBatch) {
+                        options.eachBatch = wrapKafkaCallback(
+                          eachBatch,
+                          {
+                            startCh: channels.batchConsumerStart,
+                            commitCh: channels.batchConsumerCommit,
+                            finishCh: channels.batchConsumerFinish,
+                            errorCh: channels.batchConsumerError,
+                          },
+                          (payload) => {
+                            const { batch } = payload
+                            return {
+                              topic: batch?.topic,
+                              partition: batch?.partition,
+                              offset: batch?.messages[batch?.messages?.length - 1]?.offset,
+                              messages: batch?.messages,
+                              groupId,
+                              clusterId,
+                            }
                           }
-                        })
-                    } else if (eachBatch) {
-                      options.eachBatch = wrapKafkaCallback(
-                        eachBatch,
-                        {
-                          startCh: channels.batchConsumerStart,
-                          commitCh: channels.batchConsumerCommit,
-                          finishCh: channels.batchConsumerFinish,
-                          errorCh: channels.batchConsumerError,
-                        },
-                        (payload) => {
-                          const { batch } = payload
-                          return {
-                            topic: batch?.topic,
-                            partition: batch?.partition,
-                            offset: batch?.messages[batch?.messages?.length - 1]?.offset,
-                            messages: batch?.messages,
-                            groupId,
-                          }
-                        }
-                      )
+                        )
+                      }
+
+                      return run.apply(this, arguments)
                     }
 
-                    return run.apply(this, arguments)
+                    if (isPromise(kafkaConsumerClusterIdPromise)) {
+                      return kafkaConsumerClusterIdPromise.then((clusterId) => {
+                        return wrapConsume(clusterId)
+                      })
+                    }
+                    return wrapConsume(kafkaConsumerClusterIdPromise)
                   }
                 })
               }
@@ -362,7 +391,10 @@ function wrapKafkaCallback (callback, { startCh, commitCh, finishCh, errorCh }, 
     }
 
     return startCh.runStores(ctx, () => {
-      updateLatestOffset(commitPayload?.topic, commitPayload?.partition, commitPayload?.offset, commitPayload?.groupId)
+      updateLatestOffset(
+        commitPayload?.topic, commitPayload?.partition, commitPayload?.offset,
+        commitPayload?.groupId, commitPayload?.clusterId
+      )
 
       try {
         const result = callback.apply(this, arguments)
@@ -401,13 +433,14 @@ function getGroupId (config) {
   return ''
 }
 
-function updateLatestOffset (topic, partition, offset, groupId) {
-  const key = `${topic}:${partition}`
+function updateLatestOffset (topic, partition, offset, groupId, clusterId) {
+  const key = `${topic}:${partition}:${clusterId || ''}`
   latestConsumerOffsets.set(key, {
     topic,
     partition,
     offset,
     groupId,
+    clusterId,
   })
 }
 
