@@ -174,7 +174,6 @@ module.exports = class FakeAgent extends EventEmitter {
     const errors = []
 
     const timeoutObj = setTimeout(() => {
-      console.log('timeout')
       const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
@@ -335,15 +334,11 @@ function buildExpressServer (agent) {
   })
 
   app.put('/v0.4/traces', (req, res) => {
-    console.log('v0.4/traces', req.body.length)
     if (req.body.length === 0) return res.status(200).send()
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
-
-    const payload = msgpack.decode(req.body, { useBigInt64: true })
-    console.log('v0.4/traces - payload', payload)
     agent.emit('message', {
       headers: req.headers,
-      payload,
+      payload: msgpack.decode(req.body, { useBigInt64: true }),
     })
   })
 
