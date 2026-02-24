@@ -42,6 +42,7 @@ function parseDefaultByType (raw, type) {
         parsedAsJson = JSON.parse(raw)
       } catch {}
       if (Array.isArray(parsedAsJson)) return parsedAsJson
+      // TODO: Make the parsing a helper that is reused.
       return raw.split(',').map(item => {
         const colonIndex = item.indexOf(':')
         if (colonIndex === -1) {
@@ -62,6 +63,7 @@ function parseDefaultByType (raw, type) {
         return parsedAsJson
       }
 
+      // TODO: Make the parsing a helper that is reused.
       /** @type {Record<string, string>} */
       const entries = {}
       for (const item of raw.split(',')) {
