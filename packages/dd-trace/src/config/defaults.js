@@ -144,7 +144,7 @@ const defaults = {
   ...defaultsWithoutSupportedConfigurationEntry,
   ...metadataDefaults,
   ...defaultsWithConditionalRuntimeBehavior,
-  service: service,
+  service,
   version: pkg.version,
 }
 

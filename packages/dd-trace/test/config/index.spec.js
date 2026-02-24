@@ -321,7 +321,7 @@ describe('Config', () => {
         blockedTemplateHtml: undefined,
         blockedTemplateJson: undefined,
         blockedTemplateGraphql: undefined,
-        enabled: false,
+        enabled: undefined,
         eventTracking: {
           mode: 'identification',
         },
@@ -378,7 +378,7 @@ describe('Config', () => {
           timeout: 10_000,
           maxContentSize: 512 * 1024,
         },
-        exporter: undefined,
+        exporter: '',
         enableGetRumData: false,
       },
       flushInterval: 2000,
@@ -465,7 +465,7 @@ describe('Config', () => {
       { name: 'appsec.apiSecurity.maxDownstreamRequestBodyAnalysis', value: 1, origin: 'default' },
       { name: 'appsec.blockedTemplateHtml', value: undefined, origin: 'default' },
       { name: 'appsec.blockedTemplateJson', value: undefined, origin: 'default' },
-      { name: 'appsec.enabled', value: false, origin: 'default' },
+      { name: 'appsec.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.eventTracking.mode', value: 'identification', origin: 'default' },
       { name: 'appsec.extendedHeadersCollection.enabled', value: false, origin: 'default' },
       { name: 'appsec.extendedHeadersCollection.maxHeaders', value: 50, origin: 'default' },
@@ -513,7 +513,7 @@ describe('Config', () => {
       { name: 'experimental.aiguard.maxMessagesLength', value: 16, origin: 'default' },
       { name: 'experimental.aiguard.timeout', value: 10_000, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
-      { name: 'experimental.exporter', value: undefined, origin: 'default' },
+      { name: 'experimental.exporter', value: '', origin: 'default' },
       { name: 'flakyTestRetriesCount', value: 5, origin: 'default' },
       { name: 'flushInterval', value: 2000, origin: 'default' },
       { name: 'flushMinSpans', value: 1000, origin: 'default' },
@@ -591,7 +591,7 @@ describe('Config', () => {
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
-      { name: 'url', value: undefined, origin: 'default' },
+      { name: 'url', value: '', origin: 'default' },
       { name: 'version', value: '', origin: 'default' },
       { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
@@ -2495,7 +2495,7 @@ describe('Config', () => {
       it('should not be used', () => {
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
     })
 
@@ -2509,7 +2509,7 @@ describe('Config', () => {
 
         if (os.type() === 'Windows_NT') {
           assert.strictEqual(existsSyncParam, undefined)
-          assert.strictEqual(config.url, undefined)
+          assert.strictEqual(config.url, '')
         } else {
           assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
           assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
@@ -2543,13 +2543,13 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
 
       it('should not be used when options.port provided', () => {
         const config = getConfig({ port: 12345 })
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
 
       it('should not be used when DD_TRACE_AGENT_HOSTNAME provided', () => {
@@ -2557,7 +2557,7 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
 
       it('should not be used when DD_AGENT_HOST provided', () => {
@@ -2565,13 +2565,13 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
 
       it('should not be used when options.hostname provided', () => {
         const config = getConfig({ hostname: 'example.com' })
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
     })
   })

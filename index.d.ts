@@ -486,7 +486,7 @@ declare namespace tracer {
 
     /**
      * Whether to enable startup logs.
-     * @default true
+     * @default false
      * @env DD_TRACE_STARTUP_LOGS
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
@@ -698,11 +698,16 @@ declare namespace tracer {
      * @default {}
      */
     experimental?: {
+
+      /**
+       * @default false
+       * @env DD_TRACE_EXPERIMENTAL_B3_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       b3?: boolean
 
       /**
        * Whether to write traces to log output or agentless, rather than send to an agent
-       * @default false
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
@@ -838,7 +843,7 @@ declare namespace tracer {
      * @env DD_TRACE_LOG_LEVEL, OTEL_LOG_LEVEL
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    logLevel?: 'error' | 'debug'
+    logLevel?: 'debug' | 'info' | 'warn' | 'error'
 
     /**
      * Enables DBM to APM link using tag injection.

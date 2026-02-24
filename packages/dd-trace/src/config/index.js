@@ -60,11 +60,6 @@ let configInstance = null
 module.exports = getConfig
 
 class Config {
-  /**
-   * parsed DD_TAGS, usable as a standalone tag set across products
-   * @type {Record<string, string> | undefined}
-   */
-  #parsedDdTags = {}
   #envUnprocessed = {}
   #optsUnprocessed = {}
   #remoteUnprocessed = {}
@@ -154,10 +149,6 @@ class Config {
     if (this.gitMetadataEnabled) {
       this.#loadGitMetadata()
     }
-  }
-
-  get parsedDdTags () {
-    return this.#parsedDdTags
   }
 
   /**
@@ -371,7 +362,6 @@ class Config {
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,
       DD_TRACE_GIT_METADATA_ENABLED,
-      DD_TRACE_GLOBAL_TAGS,
       DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
       DD_TRACE_HEADER_TAGS,
       DD_TRACE_LEGACY_BAGGAGE_ENABLED,
@@ -438,13 +428,9 @@ class Config {
 
     const tags = {}
 
-    const parsedDdTags = parseSpaceSeparatedTags(DD_TAGS)
-    tagger.add(this.#parsedDdTags, parsedDdTags)
-
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
-    tagger.add(tags, parsedDdTags)
-    tagger.add(tags, DD_TRACE_TAGS)
-    tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
+    tagger.add(tags, parseSpaceSeparatedTags(DD_TAGS))
+    tagger.add(tags, parseSpaceSeparatedTags(DD_TRACE_TAGS))
 
     setString(target, 'apiKey', DD_API_KEY)
     setBoolean(target, 'otelLogsEnabled', DD_LOGS_OTEL_ENABLED)

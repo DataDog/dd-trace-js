@@ -3,6 +3,7 @@
 
 const log = require('../../../../log')
 const vulnerabilities = require('../../vulnerabilities')
+const defaults = require('../../../../config/defaults')
 
 const { contains, intersects, remove } = require('./range-utils')
 
@@ -13,8 +14,6 @@ const ldapSensitiveAnalyzer = require('./sensitive-analyzers/ldap-sensitive-anal
 const sqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyzer')
 const taintedRangeBasedSensitiveAnalyzer = require('./sensitive-analyzers/tainted-range-based-sensitive-analyzer')
 const urlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
-
-const defaults = require('../../../../config/defaults')
 
 const REDACTED_SOURCE_BUFFER = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 

@@ -673,7 +673,8 @@ class TextMapPropagator {
     const tagAllKeys = this._config.baggageTagKeys === '*'
     const keysToSpanTag = tagAllKeys
       ? undefined
-      : new Set(this._config.baggageTagKeys.split(','))
+      // TODO: Move the splitting and trimming to the config to run only once
+      : new Set(this._config.baggageTagKeys.split(',').map(key => key.trim()))
     for (const keyValue of baggages) {
       if (!keyValue) continue
 

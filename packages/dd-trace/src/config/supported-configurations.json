@@ -201,7 +201,8 @@
         "configurationNames": [
           "appsec.extendedHeadersCollection.enabled"
         ],
-        "default": "false"
+        "default": "false",
+        "deprecated": true
       }
     ],
     "DD_APPSEC_ENABLED": [
@@ -311,7 +312,8 @@
         "configurationNames": [
           "appsec.rasp.bodyCollection"
         ],
-        "default": "false"
+        "default": "false",
+        "deprecated": true
       }
     ],
     "DD_APPSEC_RASP_ENABLED": [
@@ -1356,9 +1358,9 @@
     "DD_EXPERIMENTAL_PROFILING_ENABLED": [
       {
         "implementation": "A",
-        "type": "string",
+        "type": "boolean",
         "configurationNames": [
-          "profiling"
+          "profiling.enabled"
         ],
         "default": "false",
         "aliases": [
@@ -1689,7 +1691,7 @@
       {
         "implementation": "B",
         "type": "decimal",
-        "default": "60",
+        "default": "60.0",
         "configurationNames": [
           "telemetry.heartbeatInterval"
         ]
@@ -1818,12 +1820,12 @@
     ],
     "DD_TRACE_AGENT_URL": [
       {
-        "implementation": "C",
+        "implementation": "A",
         "type": "string",
         "configurationNames": [
           "url"
         ],
-        "default": null,
+        "default": "",
         "aliases": [
           "DD_TRACE_URL"
         ]
@@ -2220,7 +2222,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "user.id,session.id,account.id",
+        "default": "user.id, session.id, account.id",
         "configurationNames": [
           "baggageTagKeys"
         ]
@@ -2230,7 +2232,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_BLUEBIRD_ENABLED": [
@@ -2319,7 +2321,7 @@
         "configurationNames": [
           "cloudPayloadTagging.request"
         ],
-        "default": ""
+        "default": null
       }
     ],
     "DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING": [
@@ -2329,7 +2331,7 @@
         "configurationNames": [
           "cloudPayloadTagging.response"
         ],
-        "default": ""
+        "default": null
       }
     ],
     "DD_TRACE_COLLECTIONS_ENABLED": [
@@ -2403,13 +2405,6 @@
       }
     ],
     "DD_TRACE_CYPRESS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "true"
-      }
-    ],
-    "DD_TRACE_DD_TRACE_API_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -2509,7 +2504,7 @@
         "configurationNames": [
           "experimental.exporter"
         ],
-        "default": null
+        "default": ""
       }
     ],
     "DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED": [
@@ -2526,14 +2521,14 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": null
+        "default": "false"
       }
     ],
     "DD_TRACE_EXPERIMENTAL_STATE_TRACKING": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": null
+        "default": "false"
       }
     ],
     "DD_TRACE_EXPRESS_ENABLED": [
@@ -2580,7 +2575,7 @@
     ],
     "DD_TRACE_FLUSH_INTERVAL": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "int",
         "configurationNames": [
           "flushInterval"
@@ -2620,13 +2615,6 @@
         "configurationNames": [
           "gitMetadataEnabled"
         ]
-      }
-    ],
-    "DD_TRACE_GLOBAL_TAGS": [
-      {
-        "implementation": "A",
-        "type": "string",
-        "default": null
       }
     ],
     "DD_TRACE_GOOGLE_CLOUD_PUBSUB_ENABLED": [
@@ -3021,7 +3009,7 @@
     ],
     "DD_TRACE_LOG_LEVEL": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "string",
         "default": "debug"
       }
@@ -3212,7 +3200,7 @@
     ],
     "DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP": [
       {
-        "implementation": "A",
+        "implementation": "E",
         "type": "string",
         "default": "(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:\"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:\"|%22)(?:%2[^2]|%[^2]|[^\"%])+(?:\"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}",
         "configurationNames": [
@@ -3300,7 +3288,7 @@
         "configurationNames": [
           "spanComputePeerService"
         ],
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_PEER_SERVICE_MAPPING": [
@@ -3426,32 +3414,32 @@
     ],
     "DD_TRACE_PROPAGATION_STYLE": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "array",
         "configurationNames": [
           "tracePropagationStyle"
         ],
-        "default": "[\"datadog\", \"tracecontext\", \"baggage\"]"
+        "default": "datadog,tracecontext,baggage"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_EXTRACT": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "array",
         "configurationNames": [
           "tracePropagationStyle.extract"
         ],
-        "default": "[\"datadog\", \"tracecontext\", \"baggage\"]"
+        "default": "datadog, tracecontext, baggage"
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_INJECT": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "array",
         "configurationNames": [
           "tracePropagationStyle.inject"
         ],
-        "default": "[\"datadog\", \"tracecontext\", \"baggage\"]"
+        "default": "datadog, tracecontext, baggage"
       }
     ],
     "DD_TRACE_PROTOBUFJS_ENABLED": [
@@ -3667,7 +3655,7 @@
     ],
     "DD_TRACE_STARTUP_LOGS": [
       {
-        "implementation": "A",
+        "implementation": "D",
         "type": "boolean",
         "configurationNames": [
           "startupLogs"
@@ -3694,9 +3682,12 @@
     ],
     "DD_TRACE_TAGS": [
       {
-        "implementation": "A",
-        "type": "string",
-        "default": null
+        "implementation": "B",
+        "type": "map",
+        "default": null,
+        "aliases": [
+          "DD_TRACE_GLOBAL_TAGS"
+        ]
       }
     ],
     "DD_TRACE_TEDIOUS_ENABLED": [

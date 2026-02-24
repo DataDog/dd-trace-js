@@ -14,11 +14,12 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { getValueFromEnvSources } = require('../config/helper')
 const SpanContext = require('./span_context')
+const { isTrue } = require('../util')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
-const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
+const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING'))
+const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS'))
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
@@ -251,7 +252,7 @@ class DatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext._tags['service.name']) {
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext._tags['service.name']) {
       log.error('Finishing invalid span: %s', this)
     }
 
