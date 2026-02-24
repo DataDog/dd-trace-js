@@ -118,7 +118,9 @@ describe('esbuild support for IAST', () => {
   describe('cjs', () => {
     const context = { proc: null, agent: null, axios: null, applicationDir: null, bundledApplicationDir: null }
 
-    before(async () => {
+    before(async function () {
+      this.timeout(120_000)
+
       const setup = await setupApplication('iast-esbuild-cjs')
       context.applicationDir = setup.applicationDir
       context.bundledApplicationDir = setup.bundledApplicationDir
