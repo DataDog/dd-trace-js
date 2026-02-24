@@ -394,11 +394,11 @@ describe('CheckpointRegistry', () => {
     // 'foo': [0x01, 0x03, 'f', 'o', 'o']
     // 'bar': [0x02, 0x03, 'b', 'a', 'r']
     assert.strictEqual(encoded.length, 10)
-    assert.strictEqual(encoded.readUInt8(0), 1)         // id
-    assert.strictEqual(encoded.readUInt8(1), 3)         // nameLen
+    assert.strictEqual(encoded.readUInt8(0), 1) // id
+    assert.strictEqual(encoded.readUInt8(1), 3) // nameLen
     assert.strictEqual(encoded.toString('utf8', 2, 5), 'foo')
-    assert.strictEqual(encoded.readUInt8(5), 2)         // id
-    assert.strictEqual(encoded.readUInt8(6), 3)         // nameLen
+    assert.strictEqual(encoded.readUInt8(5), 2) // id
+    assert.strictEqual(encoded.readUInt8(6), 3) // nameLen
     assert.strictEqual(encoded.toString('utf8', 7, 10), 'bar')
   })
 
@@ -470,9 +470,9 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     const txBytes = bucket._transactions
 
     // [checkpointId=1 uint8][timestamp int64 BE 8 bytes][idLen=6 uint8]['tx-001' 6 bytes]
-    assert.strictEqual(txBytes.readUInt8(0), 1)          // checkpointId
+    assert.strictEqual(txBytes.readUInt8(0), 1) // checkpointId
 
-    const timestampNs = BigInt(DEFAULT_TIMESTAMP) * 1000000n
+    const timestampNs = BigInt(DEFAULT_TIMESTAMP) * 1_000_000n
     assert.strictEqual(txBytes.readBigInt64BE(1), timestampNs)
 
     assert.strictEqual(txBytes.readUInt8(9), 6)          // idLen for 'tx-001'

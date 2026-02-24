@@ -90,7 +90,7 @@ class CheckpointRegistry {
   getId (name) {
     const existing = this._nameToId.get(name)
     if (existing !== undefined) return existing
-    if (this._nextId > 254) return undefined
+    if (this._nextId > 254) return
     const id = this._nextId++
     this._nameToId.set(name, id)
     return id
@@ -372,7 +372,7 @@ class DataStreamsProcessor {
 
     const idBytes = Buffer.from(transactionId, 'utf8').subarray(0, 255)
     // Multiply as BigInt to avoid precision loss past MAX_SAFE_INTEGER
-    const timestampNs = BigInt(Date.now()) * 1000000n
+    const timestampNs = BigInt(Date.now()) * 1_000_000n
 
     const entry = Buffer.alloc(1 + 8 + 1 + idBytes.length)
     entry.writeUInt8(checkpointId, 0)
