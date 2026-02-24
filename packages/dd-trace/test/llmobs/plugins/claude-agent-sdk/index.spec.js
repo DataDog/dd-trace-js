@@ -51,8 +51,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'agent',
           name: 'claude-agent-sdk.session',
-          modelName: 'claude-opus-4-6',
-          modelProvider: 'anthropic',
           inputValue: 'Fix the bug in auth.py',
           outputValue: '',
           metadata: {
@@ -86,8 +84,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'agent',
           name: 'claude-agent-sdk.session',
-          modelName: 'claude-opus-4-6',
-          modelProvider: 'anthropic',
           inputValue: 'Continue',
           outputValue: '',
           metadata: {
@@ -116,7 +112,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'agent',
           name: 'claude-agent-sdk.session',
-          modelProvider: 'anthropic',
           inputValue: 'Hello',
           outputValue: '',
           metadata: {
@@ -143,8 +138,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'agent',
           name: 'claude-agent-sdk.session',
-          modelName: 'claude-opus-4-6',
-          modelProvider: 'anthropic',
           inputValue: '',
           outputValue: '',
           metadata: {
@@ -176,7 +169,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'workflow',
           name: 'claude-agent-sdk.turn',
-          modelProvider: 'anthropic',
           inputValue: 'List all files',
           outputValue: 'end_turn',
           metadata: {
@@ -203,7 +195,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'workflow',
           name: 'claude-agent-sdk.turn',
-          modelProvider: 'anthropic',
           inputValue: '',
           outputValue: '',
           metadata: {
@@ -236,7 +227,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'tool',
           name: 'Read',
-          modelProvider: 'anthropic',
           inputValue: '{"file_path":"/tmp/test.txt"}',
           outputValue: 'Hello from the file',
           metadata: {
@@ -269,7 +259,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'tool',
           name: 'Bash',
-          modelProvider: 'anthropic',
           inputValue: 'echo hello',
           outputValue: 'hello',
           metadata: {
@@ -299,7 +288,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'tool',
           name: 'Noop',
-          modelProvider: 'anthropic',
           inputValue: '',
           outputValue: '',
           metadata: {
@@ -331,7 +319,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'tool',
           name: 'claude-agent-sdk.tool',
-          modelProvider: 'anthropic',
           inputValue: '{"key":"value"}',
           outputValue: 'result',
           metadata: {
@@ -366,7 +353,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'tool',
           name: 'Circular',
-          modelProvider: 'anthropic',
           inputValue: '[unserializable]',
           outputValue: 'done',
           metadata: {
@@ -400,7 +386,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'agent',
           name: 'claude-agent-sdk.subagent',
-          modelProvider: 'anthropic',
           inputValue: '',
           outputValue: '',
           metadata: {
@@ -430,7 +415,6 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'agent',
           name: 'claude-agent-sdk.subagent',
-          modelProvider: 'anthropic',
           inputValue: '',
           outputValue: '',
           metadata: {
