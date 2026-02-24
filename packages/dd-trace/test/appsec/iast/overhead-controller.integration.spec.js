@@ -50,34 +50,40 @@ describe.only('IAST - overhead-controller - integration', () => {
       // agent.assertMessageReceived(({ payload }) => {
       //   console.log('executed', payload)
       // }, 1000, 1, true)
-      console.log('before request')
+      console.log('before request - ' + path)
       function messageHandler (msg) {
-        console.log('messageHandler', msg)
+        console.log('messageHandler - ' + path, msg)
       }
       agent.on('message', messageHandler)
       await axios.request(path, { method })
       agent.off('message', messageHandler)
 
-      console.log('before assertMessageReceived')
+      console.log('before assertMessageReceived - ' + path)
       await agent.assertMessageReceived(({ payload }) => {
-        console.log('assertMessageReceived', payload)
-        assert.strictEqual(payload[0][0].type, 'web')
-        assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
-        const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
-        assert.notStrictEqual(vulnerabilitiesTrace, null)
+        try {
+          console.log('assertMessageReceived - ' + path, payload)
+          assert.strictEqual(payload[0][0].type, 'web')
+          assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
+          assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
+          const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
+          assert.notStrictEqual(vulnerabilitiesTrace, null)
 
-        const vulnerabilities = {}
-        vulnerabilitiesTrace.vulnerabilities.forEach(v => {
-          const vulnCount = vulnerabilities[v.type]
-          vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
-        })
+          const vulnerabilities = {}
+          vulnerabilitiesTrace.vulnerabilities.forEach(v => {
+            const vulnCount = vulnerabilities[v.type]
+            vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
+          })
 
-        assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
+          assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
 
-        Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
-          assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
-        })
+          Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
+            assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType],
+              `route: ${path} - type: ${vType}`)
+          })
+        } catch (error) {
+          console.log('error - ' + path, error)
+          throw error
+        }
       }, 1000, 1, true)
     }
 
