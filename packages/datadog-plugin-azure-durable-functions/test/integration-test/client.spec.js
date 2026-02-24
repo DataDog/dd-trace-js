@@ -10,6 +10,7 @@ const {
   sandboxCwd,
   useSandbox,
   curlAndAssertMessage,
+  assertObjectContains,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -60,16 +61,36 @@ describe('esm', () => {
         assert.strictEqual(maybeHttpSpan[0].resource, 'GET /api/httptest')
 
         assert.strictEqual(maybeHolaActivity.length, 1)
-        assert.strictEqual(maybeHolaActivity[0].resource, 'Activity hola')
-        assert.strictEqual(maybeHolaActivity[0].name, 'azure.durable-functions.invoke')
+        assertObjectContains(maybeHolaActivity[0], {
+          name: 'azure.durable-functions.invoke',
+          resource: 'Activity hola',
+          meta: {
+            'aas.function.trigger': 'Activity',
+            'aas.function.name': 'hola',
+          },
+        })
 
         assert.strictEqual(maybeAddNEntity.length, 1)
-        assert.strictEqual(maybeAddNEntity[0].resource, 'Entity Counter add_n')
-        assert.strictEqual(maybeAddNEntity[0].name, 'azure.durable-functions.invoke')
+        assertObjectContains(maybeAddNEntity[0], {
+          name: 'azure.durable-functions.invoke',
+          resource: 'Entity counter add_n',
+          meta: {
+            'aas.function.trigger': 'Entity',
+            'aas.function.name': 'counter',
+            'aas.function.operation': 'add_n',
+          },
+        })
 
         assert.strictEqual(maybeGetCountEntity.length, 1)
-        assert.strictEqual(maybeGetCountEntity[0].resource, 'Entity Counter get_count')
-        assert.strictEqual(maybeGetCountEntity[0].name, 'azure.durable-functions.invoke')
+        assertObjectContains(maybeGetCountEntity[0], {
+          name: 'azure.durable-functions.invoke',
+          resource: 'Entity counter get_count',
+          meta: {
+            'aas.function.trigger': 'Entity',
+            'aas.function.name': 'counter',
+            'aas.function.operation': 'get_count',
+          },
+        })
       })
     }).timeout(60_000)
   })
@@ -95,7 +116,7 @@ async function spawnPluginIntegrationTestProc (agentPort) {
   return proc
 }
 
-function spawnProc (command, args, options = {}) {
+function spawnProc(command, args, options = {}) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
