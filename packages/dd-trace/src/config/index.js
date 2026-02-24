@@ -60,6 +60,11 @@ let configInstance = null
 module.exports = getConfig
 
 class Config {
+  /**
+   * parsed DD_TAGS, usable as a standalone tag set across products
+   * @type {Record<string, string>}
+   */
+  #parsedDdTags = {}
   #envUnprocessed = {}
   #optsUnprocessed = {}
   #remoteUnprocessed = {}
@@ -149,6 +154,10 @@ class Config {
     if (this.gitMetadataEnabled) {
       this.#loadGitMetadata()
     }
+  }
+
+  get parsedDdTags () {
+    return this.#parsedDdTags
   }
 
   /**
@@ -430,7 +439,9 @@ class Config {
 
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
     tagger.add(tags, parseSpaceSeparatedTags(DD_TAGS))
-    tagger.add(tags, parseSpaceSeparatedTags(DD_TRACE_TAGS))
+    tagger.add(tags, DD_TRACE_TAGS)
+
+    Object.assign(this.#parsedDdTags, tags)
 
     setString(target, 'apiKey', DD_API_KEY)
     setBoolean(target, 'otelLogsEnabled', DD_LOGS_OTEL_ENABLED)
@@ -537,7 +548,7 @@ class Config {
       maybeInt(DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS)
     target.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
     target.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
-    target.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
+    setSet(target, 'baggageTagKeys', DD_TRACE_BAGGAGE_TAG_KEYS)
     setBoolean(target, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     setString(target, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     if (DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING || DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING) {
@@ -886,7 +897,7 @@ class Config {
     opts['cloudPayloadTagging.maxDepth'] = maybeInt(options.cloudPayloadTagging?.maxDepth)
     opts.baggageMaxBytes = options.baggageMaxBytes
     opts.baggageMaxItems = options.baggageMaxItems
-    opts.baggageTagKeys = options.baggageTagKeys
+    setSet(opts, 'baggageTagKeys', options.baggageTagKeys)
     setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     setBoolean(
       opts,
@@ -1513,6 +1524,11 @@ function setUnit (obj, name, value) {
     // TODO: Ignore out of range values instead of normalizing them.
     obj[name] = Math.min(Math.max(value, 0), 1)
   }
+}
+
+function setSet (obj, name, value) {
+  setArray(obj, name, value)
+  obj[name] = new Set(obj[name])
 }
 
 function setArray (obj, name, value) {

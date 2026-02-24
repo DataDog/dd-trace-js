@@ -3,7 +3,6 @@
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
-const dateNow = Date.now
 const util = require('util')
 const { channel } = require('dc-polyfill')
 const id = require('../id')
@@ -13,8 +12,10 @@ const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { getValueFromEnvSources } = require('../config/helper')
-const SpanContext = require('./span_context')
 const { isTrue } = require('../util')
+const SpanContext = require('./span_context')
+
+const dateNow = Date.now
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
