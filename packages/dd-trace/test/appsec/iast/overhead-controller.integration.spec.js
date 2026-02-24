@@ -5,119 +5,130 @@ const assert = require('node:assert/strict')
 const path = require('path')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+for (let i = 0; i < 100; i++) {
+  describe.only('IAST - overhead-controller - integration', () => {
+    let axios, cwd, agent, proc
 
-describe('IAST - overhead-controller - integration', () => {
-  let axios, cwd, agent, proc
+    useSandbox(
+      ['express'],
+      false,
+      [path.join(__dirname, 'resources')]
+    )
 
-  useSandbox(
-    ['express'],
-    false,
-    [path.join(__dirname, 'resources')]
-  )
+    before(function () {
+      cwd = sandboxCwd()
+    })
 
-  before(function () {
-    cwd = sandboxCwd()
-  })
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
 
-  beforeEach(async () => {
-    agent = await new FakeAgent().start()
-  })
+    afterEach(async () => {
+      proc.kill()
+      await agent.stop()
+    })
 
-  afterEach(async () => {
-    proc.kill()
-    await agent.stop()
-  })
+    describe('vulnerability sampling algorithm', () => {
+      beforeEach(async function () {
+        this.timeout(30_000)
 
-  describe('vulnerability sampling algorithm', () => {
-    beforeEach(async function () {
-      this.timeout(30_000)
-
-      proc = await spawnProc(path.join(cwd, 'resources', 'overhead-controller.js'), {
-        cwd,
-        env: {
-          DD_TRACE_AGENT_PORT: agent.port,
-          DD_IAST_ENABLED: 'true',
-          DD_IAST_REQUEST_SAMPLING: '100',
-          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-          NODE_OPTIONS: '--require ./resources/init.js',
-        },
+        proc = await spawnProc(path.join(cwd, 'resources', 'overhead-controller.js'), {
+          cwd,
+          env: {
+            DD_TRACE_AGENT_PORT: agent.port,
+            DD_IAST_ENABLED: 'true',
+            DD_IAST_REQUEST_SAMPLING: '100',
+            DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+            NODE_OPTIONS: '--require ./resources/init.js',
+          },
+        })
+        axios = Axios.create({ baseURL: proc.url })
       })
-      axios = Axios.create({ baseURL: proc.url })
-    })
 
-    async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
-      await axios.request(path, { method })
+      async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
+      // agent.assertMessageReceived(({ payload }) => {
+      //   console.log('executed', payload)
+      // }, 1000, 1, true)
+        console.log('before request')
+        function messageHandler (msg) {
+          console.log('messageHandler', msg)
+        }
+        agent.on('message', messageHandler)
+        await axios.request(path, { method })
+        agent.off('message', messageHandler)
 
-      await agent.assertMessageReceived(({ payload }) => {
-        assert.strictEqual(payload[0][0].type, 'web')
-        assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
-        const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
-        assert.notStrictEqual(vulnerabilitiesTrace, null)
+        console.log('before assertMessageReceived')
+        await agent.assertMessageReceived(({ payload }) => {
+          assert.strictEqual(payload[0][0].type, 'web')
+          assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
+          assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
+          const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
+          assert.notStrictEqual(vulnerabilitiesTrace, null)
 
-        const vulnerabilities = {}
-        vulnerabilitiesTrace.vulnerabilities.forEach(v => {
-          const vulnCount = vulnerabilities[v.type]
-          vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
-        })
+          const vulnerabilities = {}
+          vulnerabilitiesTrace.vulnerabilities.forEach(v => {
+            const vulnCount = vulnerabilities[v.type]
+            vulnerabilities[v.type] = vulnCount ? vulnCount + 1 : 1
+          })
 
-        assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
+          assert.strictEqual(Object.keys(vulnerabilities).length, Object.keys(vulnerabilitiesAndCount).length)
 
-        Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
-          assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
-        })
-      }, 1000, 1, true)
-    }
+          Object.keys(vulnerabilitiesAndCount).forEach((vType) => {
+            assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
+          })
+        }, 1000, 1, true)
+      }
 
-    async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {
-      await axios.request(path, { method })
+      async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {
+        await axios.request(path, { method })
 
-      await agent.assertMessageReceived(({ payload }) => {
-        assert.strictEqual(payload[0][0].type, 'web')
-        assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-        assert.ok(!('_dd.iast.json' in payload[0][0].meta))
-      }, 1000, 1, true)
-    }
+        await agent.assertMessageReceived(({ payload }) => {
+          assert.strictEqual(payload[0][0].type, 'web')
+          assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
+          assert.ok(!('_dd.iast.json' in payload[0][0].meta))
+        }, 1000, 1, true)
+      }
 
-    it('should report vulnerability only in the first request', async () => {
-      await checkVulnerabilitiesInEndpoint('/one-vulnerability', { WEAK_HASH: 1 })
-      await checkNoVulnerabilitiesInEndpoint('/one-vulnerability')
-    })
+      it('should report vulnerability only in the first request', async () => {
+        await checkVulnerabilitiesInEndpoint('/one-vulnerability', { WEAK_HASH: 1 })
+        await checkNoVulnerabilitiesInEndpoint('/one-vulnerability')
+      })
 
-    it('should report vulnerabilities in different request when they are different', async () => {
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 })
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 })
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 })
+      it('should report vulnerabilities in different request when they are different', async () => {
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 })
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 })
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 })
 
-      await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
-    })
+        await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
+      })
 
-    it('should differentiate different routes in the same request', async () => {
-      await checkVulnerabilitiesInEndpoint('/route1/sub1', { WEAK_RANDOMNESS: 2 })
-      await checkVulnerabilitiesInEndpoint('/route1/sub2', { WEAK_HASH: 2 })
-      await checkVulnerabilitiesInEndpoint('/route1/sub1', { WEAK_HASH: 2 })
+      it('should differentiate different routes in the same request', async () => {
+        await checkVulnerabilitiesInEndpoint('/route1/sub1', { WEAK_RANDOMNESS: 2 })
+        await checkVulnerabilitiesInEndpoint('/route1/sub2', { WEAK_HASH: 2 })
+        await checkVulnerabilitiesInEndpoint('/route1/sub1', { WEAK_HASH: 2 })
 
-      await checkNoVulnerabilitiesInEndpoint('/route1/sub2')
-      await checkNoVulnerabilitiesInEndpoint('/route1/sub1')
-    })
+        await checkNoVulnerabilitiesInEndpoint('/route1/sub2')
+        await checkNoVulnerabilitiesInEndpoint('/route1/sub1')
+      })
 
-    it('should differentiate different methods in the same route', async () => {
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'GET')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'POST')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'GET')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'POST')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 }, 'GET')
-      await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 }, 'POST')
+      it('should differentiate different methods in the same route', async () => {
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'GET')
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'POST')
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'GET')
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 2 }, 'POST')
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 }, 'GET')
+        await checkVulnerabilitiesInEndpoint('/five-vulnerabilities', { WEAK_HASH: 1 }, 'POST')
 
-      await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
-      await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
-    })
+        await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
+        await checkNoVulnerabilitiesInEndpoint('/five-vulnerabilities')
+      })
 
-    it('should not differentiate between different route params', async () => {
-      await checkVulnerabilitiesInEndpoint('/route2/one', { WEAK_HASH: 2 })
-      await checkVulnerabilitiesInEndpoint('/route2/two', { WEAK_HASH: 1 })
+      it('should not differentiate between different route params', async () => {
+        await checkVulnerabilitiesInEndpoint('/route2/one', { WEAK_HASH: 2 })
+        await checkVulnerabilitiesInEndpoint('/route2/two', { WEAK_HASH: 1 })
 
-      await checkNoVulnerabilitiesInEndpoint('/route2/three')
+        await checkNoVulnerabilitiesInEndpoint('/route2/three')
+      })
     })
   })
-})
+}
