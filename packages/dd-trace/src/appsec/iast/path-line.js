@@ -20,9 +20,20 @@ const EXCLUDED_PATHS = [
  * Processes and filters call site frames to find the best location for a vulnerability.
  * Returns client frames if available, otherwise falls back to all processed frames.
  * Excludes dd-trace frames and all Node.js built-in/internal modules (node:*).
- * @param {Array} callSiteFrames
- * @param {Array} externallyExcludedPaths
- * @returns {Array} Client frames if available, otherwise all processed frames
+ * @param {CallSiteFrame[]} callSiteFrames
+ * @param {string[]} externallyExcludedPaths
+ * @returns {CallSiteFrame[]} Client frames if available, otherwise all processed frames
+ *
+ * @typedef {object} CallSiteFrame
+ * @property {number} id
+ * @property {string} file - Original file path
+ * @property {number} line
+ * @property {number} column
+ * @property {string} function
+ * @property {string} class_name
+ * @property {boolean} isNative
+ * @property {string} [path] - Relative path, added during processing
+ * @property {boolean} [isInternal] - Whether the frame is internal, added during processing
  */
 function getCallSiteFramesForLocation (callSiteFrames, externallyExcludedPaths) {
   if (!callSiteFrames) {
