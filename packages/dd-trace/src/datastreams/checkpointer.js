@@ -60,6 +60,16 @@ class DataStreamsCheckpointer {
 
     return ctx
   }
+
+  /**
+   * Records a transaction ID at a named checkpoint without pathway propagation.
+   * @param {string} transactionId - The transaction identifier to track.
+   * @param {string} checkpointName - The logical checkpoint name.
+   */
+  trackTransaction (transactionId, checkpointName) {
+    if (!this.config.dsmEnabled) return
+    this.dsmProcessor.trackTransaction(transactionId, checkpointName)
+  }
 }
 
 module.exports = {

@@ -25,6 +25,7 @@ const writer = {
 }
 const DataStreamsWriter = sinon.stub().returns(writer)
 const {
+  CheckpointRegistry,
   StatsPoint,
   Backlog,
   StatsBucket,
@@ -355,6 +356,217 @@ describe('DataStreamsProcessor', () => {
 
     // Cleanup
     propagationHash.configure(null)
+  })
+})
+
+describe('CheckpointRegistry', () => {
+  let registry
+
+  beforeEach(() => {
+    registry = new CheckpointRegistry()
+  })
+
+  it('assigns IDs sequentially starting at 1', () => {
+    assert.strictEqual(registry.getId('alpha'), 1)
+    assert.strictEqual(registry.getId('beta'), 2)
+    assert.strictEqual(registry.getId('gamma'), 3)
+  })
+
+  it('returns the same ID for repeated names', () => {
+    const first = registry.getId('alpha')
+    const second = registry.getId('alpha')
+    assert.strictEqual(first, second)
+    assert.strictEqual(first, 1)
+  })
+
+  it('returns undefined when 254 names are exhausted', () => {
+    for (let i = 1; i <= 254; i++) {
+      registry.getId(`name-${i}`)
+    }
+    assert.strictEqual(registry.getId('overflow'), undefined)
+  })
+
+  it('encodedKeys returns correct [id][nameLen][name] wire bytes', () => {
+    registry.getId('foo')
+    registry.getId('bar')
+    const encoded = registry.encodedKeys
+
+    // 'foo': [0x01, 0x03, 'f', 'o', 'o']
+    // 'bar': [0x02, 0x03, 'b', 'a', 'r']
+    assert.strictEqual(encoded.length, 10)
+    assert.strictEqual(encoded.readUInt8(0), 1)         // id
+    assert.strictEqual(encoded.readUInt8(1), 3)         // nameLen
+    assert.strictEqual(encoded.toString('utf8', 2, 5), 'foo')
+    assert.strictEqual(encoded.readUInt8(5), 2)         // id
+    assert.strictEqual(encoded.readUInt8(6), 3)         // nameLen
+    assert.strictEqual(encoded.toString('utf8', 7, 10), 'bar')
+  })
+
+  it('encodedKeys returns empty Buffer when empty', () => {
+    const encoded = registry.encodedKeys
+    assert.ok(Buffer.isBuffer(encoded))
+    assert.strictEqual(encoded.length, 0)
+  })
+
+  it('truncates names longer than 255 bytes in encodedKeys', () => {
+    // Build a name that is 260 UTF-8 bytes (all ASCII)
+    const longName = 'a'.repeat(260)
+    registry.getId(longName)
+    const encoded = registry.encodedKeys
+    // [id uint8][nameLen uint8][name 255 bytes] = 257 bytes total
+    assert.strictEqual(encoded.length, 257)
+    assert.strictEqual(encoded.readUInt8(1), 255)
+  })
+})
+
+describe('DataStreamsProcessor.trackTransaction', () => {
+  const config = {
+    dsmEnabled: true,
+    hostname: '127.0.0.1',
+    port: 8126,
+    url: new URL('http://127.0.0.1:8126'),
+    env: 'test',
+    version: 'v1',
+    service: 'service1',
+    tags: {},
+  }
+
+  let processor
+  let clock
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers({ now: DEFAULT_TIMESTAMP, toFake: ['Date'] })
+    processor = new DataStreamsProcessor(config)
+    clearTimeout(processor.timer)
+  })
+
+  afterEach(() => {
+    clock.restore()
+  })
+
+  it('no-ops and warns when processor is disabled', () => {
+    const warnStub = sinon.stub()
+    const { DataStreamsProcessor: PatchedProcessor } = proxyquire('../../src/datastreams/processor', {
+      './writer': { DataStreamsWriter },
+      '../log': { warn: warnStub },
+    })
+    const disabledProcessor = new PatchedProcessor({ ...config, dsmEnabled: false })
+    clearTimeout(disabledProcessor.timer)
+    disabledProcessor.trackTransaction('tx-001', 'ingested')
+    assert.strictEqual(disabledProcessor.buckets.size, 0)
+    sinon.assert.calledOnce(warnStub)
+  })
+
+  it('adds transaction to the correct time bucket', () => {
+    processor.trackTransaction('tx-001', 'ingested')
+    assert.strictEqual(processor.buckets.size, 1)
+    const bucket = processor.buckets.values().next().value
+    assert.ok(bucket._transactions !== null)
+  })
+
+  it('encodes correct binary wire format', () => {
+    processor.trackTransaction('tx-001', 'ingested')
+    const bucket = processor.buckets.values().next().value
+    const txBytes = bucket._transactions
+
+    // [checkpointId=1 uint8][timestamp int64 BE 8 bytes][idLen=6 uint8]['tx-001' 6 bytes]
+    assert.strictEqual(txBytes.readUInt8(0), 1)          // checkpointId
+
+    const timestampNs = BigInt(DEFAULT_TIMESTAMP) * 1000000n
+    assert.strictEqual(txBytes.readBigInt64BE(1), timestampNs)
+
+    assert.strictEqual(txBytes.readUInt8(9), 6)          // idLen for 'tx-001'
+    assert.strictEqual(txBytes.toString('utf8', 10, 16), 'tx-001')
+    assert.strictEqual(txBytes.length, 16)
+  })
+
+  it('truncates transactionId longer than 255 bytes', () => {
+    const longId = 'x'.repeat(300)
+    processor.trackTransaction(longId, 'ingested')
+    const bucket = processor.buckets.values().next().value
+    const txBytes = bucket._transactions
+    // [1 byte id][8 byte ts][1 byte len][255 bytes id] = 265 total
+    assert.strictEqual(txBytes.length, 265)
+    assert.strictEqual(txBytes.readUInt8(9), 255)
+  })
+
+  it('silently drops transaction when registry is full', () => {
+    // Fill registry with 254 unique names
+    for (let i = 1; i <= 254; i++) {
+      processor.trackTransaction('tx', `checkpoint-${i}`)
+    }
+    const bucketsBefore = processor.buckets.size
+    // 255th unique checkpoint name — registry is full
+    processor.trackTransaction('tx-overflow', 'checkpoint-255')
+    // No new bucket created for the dropped transaction
+    assert.strictEqual(processor.buckets.size, bucketsBefore)
+  })
+
+  it('concatenates multiple transactions within the same bucket', () => {
+    processor.trackTransaction('tx-001', 'ingested')
+    processor.trackTransaction('tx-002', 'ingested')
+    const bucket = processor.buckets.values().next().value
+    const txBytes = bucket._transactions
+    // Each entry: [1 id][8 ts][1 len][6 id bytes] = 16 bytes → total 32
+    assert.strictEqual(txBytes.length, 32)
+  })
+})
+
+describe('_serializeBuckets with transactions', () => {
+  const config = {
+    dsmEnabled: true,
+    hostname: '127.0.0.1',
+    port: 8126,
+    url: new URL('http://127.0.0.1:8126'),
+    env: 'test',
+    version: 'v1',
+    service: 'service1',
+    tags: {},
+  }
+
+  let processor
+  let clock
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers({ now: DEFAULT_TIMESTAMP, toFake: ['Date'] })
+    processor = new DataStreamsProcessor(config)
+    clearTimeout(processor.timer)
+  })
+
+  afterEach(() => {
+    clock.restore()
+  })
+
+  it('includes Transactions and TransactionCheckpointIds when transactions are present', () => {
+    processor.trackTransaction('tx-001', 'ingested')
+    const { Stats } = processor._serializeBuckets()
+    assert.strictEqual(Stats.length, 1)
+    assert.ok(Buffer.isBuffer(Stats[0].Transactions))
+    assert.ok(Buffer.isBuffer(Stats[0].TransactionCheckpointIds))
+    assert.ok(Stats[0].TransactionCheckpointIds.length > 0)
+  })
+
+  it('omits Transactions and TransactionCheckpointIds when no transactions in bucket', () => {
+    processor.recordCheckpoint(mockCheckpoint)
+    const { Stats } = processor._serializeBuckets()
+    assert.strictEqual(Stats.length, 1)
+    assert.strictEqual(Stats[0].Transactions, undefined)
+    assert.strictEqual(Stats[0].TransactionCheckpointIds, undefined)
+  })
+
+  it('both buckets share the same TransactionCheckpointIds snapshot when transactions span multiple buckets', () => {
+    processor.trackTransaction('tx-001', 'ingested')
+
+    // Advance clock to create a second time bucket
+    clock.tick(15000)
+    processor.trackTransaction('tx-002', 'processed')
+
+    const { Stats } = processor._serializeBuckets()
+    const bucketsWithTx = Stats.filter(b => b.Transactions !== undefined)
+    assert.strictEqual(bucketsWithTx.length, 2)
+
+    // Both buckets should have the same checkpoint ID mapping snapshot
+    assert.deepStrictEqual(bucketsWithTx[0].TransactionCheckpointIds, bucketsWithTx[1].TransactionCheckpointIds)
   })
 })
 

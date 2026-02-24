@@ -69,10 +69,58 @@ class Backlog {
   }
 }
 
+/**
+ * Maps checkpoint name strings to single-byte IDs (1–254).
+ * ID 0 is reserved; 254 is the maximum number of unique names.
+ * Scope is per-processor so IDs are stable across bucket boundaries within a process lifetime.
+ */
+class CheckpointRegistry {
+  constructor () {
+    /** @type {Map<string, number>} */
+    this._nameToId = new Map()
+    this._nextId = 1
+  }
+
+  /**
+   * Returns the byte ID for the given checkpoint name, assigning one if not seen before.
+   * Returns undefined when registry is full (254 entries exhausted).
+   * @param {string} name
+   * @returns {number | undefined}
+   */
+  getId (name) {
+    const existing = this._nameToId.get(name)
+    if (existing !== undefined) return existing
+    if (this._nextId > 254) return undefined
+    const id = this._nextId++
+    this._nameToId.set(name, id)
+    return id
+  }
+
+  /**
+   * Returns a Buffer encoding all registered names as [id uint8][nameLen uint8][name bytes].
+   * Names are truncated to 255 UTF-8 bytes.
+   * @returns {Buffer}
+   */
+  get encodedKeys () {
+    const chunks = []
+    for (const [name, id] of this._nameToId) {
+      const nameBytes = Buffer.from(name, 'utf8').subarray(0, 255)
+      const entry = Buffer.alloc(2 + nameBytes.length)
+      entry.writeUInt8(id, 0)
+      entry.writeUInt8(nameBytes.length, 1)
+      nameBytes.copy(entry, 2)
+      chunks.push(entry)
+    }
+    return chunks.length > 0 ? Buffer.concat(chunks) : Buffer.alloc(0)
+  }
+}
+
 class StatsBucket {
   constructor () {
     this._checkpoints = new Map()
     this._backlogs = new Map()
+    /** @type {Buffer | null} */
+    this._transactions = null
   }
 
   get checkpoints () {
@@ -91,6 +139,16 @@ class StatsBucket {
     }
 
     return checkpoint
+  }
+
+  /**
+   * Appends pre-encoded transaction bytes to this bucket.
+   * @param {Buffer} bytes
+   */
+  addTransaction (bytes) {
+    this._transactions = this._transactions === null
+      ? bytes
+      : Buffer.concat([this._transactions, bytes])
   }
 
   /**
@@ -153,6 +211,7 @@ class DataStreamsProcessor {
     this.sequence = 0
     this.flushInterval = flushInterval
     this._schemaSamplers = {}
+    this._checkpointRegistry = new CheckpointRegistry()
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
@@ -294,9 +353,41 @@ class DataStreamsProcessor {
     this.recordOffset(backlogData)
   }
 
+  /**
+   * Records a transaction ID at a named checkpoint using the binary wire format shared with Go/Java tracers.
+   *
+   * Wire format per entry: [checkpointId uint8][timestamp int64 big-endian 8 bytes][idLen uint8][id bytes]
+   *
+   * @param {string} transactionId - Truncated to 255 UTF-8 bytes.
+   * @param {string} checkpointName - Mapped to a stable 1-byte ID; silently dropped if registry full.
+   */
+  trackTransaction (transactionId, checkpointName) {
+    if (!this.enabled) {
+      log.warn('trackTransaction called but DD_DATA_STREAMS_ENABLED is not set. Transaction will not be tracked.')
+      return
+    }
+
+    const checkpointId = this._checkpointRegistry.getId(checkpointName)
+    if (checkpointId === undefined) return
+
+    const idBytes = Buffer.from(transactionId, 'utf8').subarray(0, 255)
+    // Multiply as BigInt to avoid precision loss past MAX_SAFE_INTEGER
+    const timestampNs = BigInt(Date.now()) * 1000000n
+
+    const entry = Buffer.alloc(1 + 8 + 1 + idBytes.length)
+    entry.writeUInt8(checkpointId, 0)
+    entry.writeBigInt64BE(timestampNs, 1)
+    entry.writeUInt8(idBytes.length, 9)
+    idBytes.copy(entry, 10)
+
+    // Number() cast is safe here: 10s bucket granularity tolerates ~0.5ns precision loss
+    this.bucketFromTimestamp(Number(timestampNs)).addTransaction(entry)
+  }
+
   _serializeBuckets () {
     // TimeBuckets
     const serializedBuckets = []
+    const registrySnapshot = this._checkpointRegistry.encodedKeys
 
     for (const [timeNs, bucket] of this.buckets.entries()) {
       const points = []
@@ -311,12 +402,20 @@ class DataStreamsProcessor {
       for (const backlog of bucket._backlogs.values()) {
         backlogs.push(backlog.encode())
       }
-      serializedBuckets.push({
+
+      const serializedBucket = {
         Start: BigInt(timeNs),
         Duration: BigInt(this.bucketSizeNs),
         Stats: points,
         Backlogs: backlogs,
-      })
+      }
+
+      if (bucket._transactions !== null) {
+        serializedBucket.Transactions = bucket._transactions
+        serializedBucket.TransactionCheckpointIds = registrySnapshot
+      }
+
+      serializedBuckets.push(serializedBucket)
     }
 
     this.buckets.clear()
@@ -358,6 +457,7 @@ class DataStreamsProcessor {
 }
 
 module.exports = {
+  CheckpointRegistry,
   DataStreamsProcessor,
   StatsPoint,
   StatsBucket,
