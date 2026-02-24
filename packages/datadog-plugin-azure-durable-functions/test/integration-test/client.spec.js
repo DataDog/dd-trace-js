@@ -116,7 +116,7 @@ async function spawnPluginIntegrationTestProc (agentPort) {
   return proc
 }
 
-function spawnProc(command, args, options = {}) {
+function spawnProc (command, args, options = {}) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
