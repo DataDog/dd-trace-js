@@ -475,7 +475,7 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     const timestampNs = BigInt(DEFAULT_TIMESTAMP) * 1_000_000n
     assert.strictEqual(txBytes.readBigInt64BE(1), timestampNs)
 
-    assert.strictEqual(txBytes.readUInt8(9), 6)          // idLen for 'tx-001'
+    assert.strictEqual(txBytes.readUInt8(9), 6) // idLen for 'tx-001'
     assert.strictEqual(txBytes.toString('utf8', 10, 16), 'tx-001')
     assert.strictEqual(txBytes.length, 16)
   })
