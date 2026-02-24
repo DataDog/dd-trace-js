@@ -60,6 +60,7 @@ describe.only('IAST - overhead-controller - integration', () => {
 
       console.log('before assertMessageReceived')
       await agent.assertMessageReceived(({ payload }) => {
+        console.log('assertMessageReceived', payload)
         assert.strictEqual(payload[0][0].type, 'web')
         assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
