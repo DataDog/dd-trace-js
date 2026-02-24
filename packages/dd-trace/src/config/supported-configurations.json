@@ -1173,7 +1173,7 @@
     ],
     "DD_LLMOBS_AGENTLESS_ENABLED": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "boolean",
         "configurationNames": [
           "llmobs.agentlessEnabled"
@@ -4060,7 +4060,7 @@
     ],
     "OTEL_RESOURCE_ATTRIBUTES": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "default": ""
       }
@@ -4084,7 +4084,7 @@
     ],
     "OTEL_TRACES_EXPORTER": [
       {
-        "implementation": "A",
+        "implementation": "F",
         "type": "string",
         "default": "otlp"
       }

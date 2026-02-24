@@ -548,7 +548,7 @@ class Config {
       maybeInt(DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS)
     target.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
     target.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
-    setSet(target, 'baggageTagKeys', DD_TRACE_BAGGAGE_TAG_KEYS)
+    setArray(target, 'baggageTagKeys', DD_TRACE_BAGGAGE_TAG_KEYS)
     setBoolean(target, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     setString(target, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     if (DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING || DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING) {
@@ -897,7 +897,7 @@ class Config {
     opts['cloudPayloadTagging.maxDepth'] = maybeInt(options.cloudPayloadTagging?.maxDepth)
     opts.baggageMaxBytes = options.baggageMaxBytes
     opts.baggageMaxItems = options.baggageMaxItems
-    setSet(opts, 'baggageTagKeys', options.baggageTagKeys)
+    setArray(opts, 'baggageTagKeys', options.baggageTagKeys)
     setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     setBoolean(
       opts,
@@ -1524,11 +1524,6 @@ function setUnit (obj, name, value) {
     // TODO: Ignore out of range values instead of normalizing them.
     obj[name] = Math.min(Math.max(value, 0), 1)
   }
-}
-
-function setSet (obj, name, value) {
-  setArray(obj, name, value)
-  obj[name] = new Set(obj[name])
 }
 
 function setArray (obj, name, value) {
