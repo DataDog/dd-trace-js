@@ -50,15 +50,15 @@ describe.only('IAST - overhead-controller - integration', () => {
       // agent.assertMessageReceived(({ payload }) => {
       //   console.log('executed', payload)
       // }, 1000, 1, true)
-      console.log('before request - ' + path)
+      console.log('checkVulnerabilitiesInEndpoint - before request - ' + path)
       function messageHandler (msg) {
-        console.log('messageHandler - ' + path, msg)
+        console.log('checkVulnerabilitiesInEndpoint - messageHandler - ' + path, msg)
       }
       agent.on('message', messageHandler)
       await axios.request(path, { method })
       agent.off('message', messageHandler)
 
-      console.log('before assertMessageReceived - ' + path)
+      console.log('checkVulnerabilitiesInEndpoint - before assertMessageReceived - ' + path)
       await agent.assertMessageReceived(({ payload }) => {
         try {
           console.log('assertMessageReceived - ' + path, payload)
@@ -88,9 +88,17 @@ describe.only('IAST - overhead-controller - integration', () => {
     }
 
     async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {
+      console.log('checkNoVulnerabilitiesInEndpoint - before request - ' + path)
+      function messageHandler (msg) {
+        console.log('checkNoVulnerabilitiesInEndpoint - messageHandler - ' + path, msg)
+      }
+      agent.on('message', messageHandler)
       await axios.request(path, { method })
+      agent.off('message', messageHandler)
 
+      console.log('checkNoVulnerabilitiesInEndpoint - before assertMessageReceived - ' + path)
       await agent.assertMessageReceived(({ payload }) => {
+        console.log('checkNoVulnerabilitiesInEndpoint - assertMessageReceived - ' + path, payload)
         assert.strictEqual(payload[0][0].type, 'web')
         assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
         assert.ok(!('_dd.iast.json' in payload[0][0].meta))
