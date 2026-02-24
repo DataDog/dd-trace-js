@@ -3895,9 +3895,9 @@
     ],
     "OTEL_EXPORTER_OTLP_HEADERS": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "map",
-        "default": "",
+        "default": null,
         "configurationNames": [
           "otelHeaders"
         ]
@@ -3920,9 +3920,6 @@
         "default": null,
         "configurationNames": [
           "otelLogsHeaders"
-        ],
-        "aliases": [
-          "OTEL_EXPORTER_OTLP_HEADERS"
         ]
       }
     ],

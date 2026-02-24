@@ -164,7 +164,7 @@ class Config {
    * Set the configuration with remote config settings.
    * Applies remote configuration, recalculates derived values, and merges all configuration sources.
    *
-   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
+   * @param {import('./remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
    *   Config or null to reset all remote configuration
    */
   setRemoteConfig (options) {
@@ -1166,7 +1166,7 @@ class Config {
   /**
    * Applies remote configuration options from APM_TRACING configs.
    *
-   * @param {import('./config/remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
+   * @param {import('./remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
    */
   #applyRemoteConfig (options) {
     const opts = this.#remote
