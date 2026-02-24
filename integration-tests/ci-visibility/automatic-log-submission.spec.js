@@ -27,19 +27,23 @@ describe('test optimization automatic log submission', () => {
     '@playwright/test',
   ], true)
 
-  before(done => {
+  before(async () => {
     cwd = sandboxCwd()
     const { NODE_OPTIONS, ...restOfEnv } = process.env
     // Install chromium (configured in integration-tests/playwright.config.js)
     // *Be advised*: this means that we'll only be using chromium for this test suite
-    execSync('npx playwright install --with-deps chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
-    webAppServer.listen(0, () => {
-      const address = webAppServer.address()
-      if (!address || typeof address === 'string') {
-        return done(new Error('Failed to determine web app server port'))
-      }
-      webAppPort = address.port
-      done()
+    // Must run in before hook: sandbox is created at test time so workflow can't install
+    execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+    await new Promise((resolve, reject) => {
+      webAppServer.listen(0, () => {
+        const address = webAppServer.address()
+        if (!address || typeof address === 'string') {
+          reject(new Error('Failed to determine web app server port'))
+          return
+        }
+        webAppPort = address.port
+        resolve()
+      })
     })
   })
 
