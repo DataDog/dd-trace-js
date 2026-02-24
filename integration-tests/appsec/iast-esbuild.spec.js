@@ -118,12 +118,12 @@ describe.only('esbuild support for IAST', () => {
   describe('cjs', () => {
     const context = { proc: null, agent: null, axios: null, applicationDir: null, bundledApplicationDir: null }
 
-    before(async () => {
-      console.time('setupApplication')
+    before(async function () {
+      this.timeout(120_000)
+
       const setup = await setupApplication('iast-esbuild-cjs')
       context.applicationDir = setup.applicationDir
       context.bundledApplicationDir = setup.bundledApplicationDir
-      console.timeEnd('setupApplication')
     })
 
     const startServer = createServerStarter(context)
