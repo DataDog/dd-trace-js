@@ -120,7 +120,6 @@ describe('Plugin', () => {
           tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
         })
       })
-
     })
 
     describe('turn', () => {
@@ -152,7 +151,6 @@ describe('Plugin', () => {
           tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
         })
       })
-
     })
 
     describe('tool', () => {
