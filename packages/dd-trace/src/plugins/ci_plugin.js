@@ -63,12 +63,8 @@ const {
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
-  getRequestErrorCategory,
   getSessionRequestErrorTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
-  DD_CI_KNOWN_TESTS_ERROR,
-  DD_CI_TEST_MANAGEMENT_TESTS_ERROR,
-  DD_CI_SKIPPABLE_SUITES_ERROR,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_IS_NEW,
   TEST_IS_RUM_ACTIVE,
@@ -169,7 +165,6 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getSkippableSuites(this.testConfiguration, (err, skippableSuites, itrCorrelationId) => {
         if (err) {
           log.error('Skippable suites could not be fetched. %s', err.message)
-          this._addRequestErrorTag(DD_CI_SKIPPABLE_SUITES_ERROR, err)
         } else {
           this.itrCorrelationId = itrCorrelationId
         }
@@ -282,7 +277,6 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getKnownTests(this.testConfiguration, (err, knownTests) => {
         if (err) {
           log.error('Known tests could not be fetched. %s', err.message)
-          this._addRequestErrorTag(DD_CI_KNOWN_TESTS_ERROR, err)
           if (this.libraryConfig) {
             this.libraryConfig.isEarlyFlakeDetectionEnabled = false
             this.libraryConfig.isKnownTestsEnabled = false
@@ -303,7 +297,6 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getTestManagementTests(this.testConfiguration, (err, testManagementTests) => {
         if (err) {
           log.error('Test management tests could not be fetched. %s', err.message)
-          this._addRequestErrorTag(DD_CI_TEST_MANAGEMENT_TESTS_ERROR, err)
           if (this.libraryConfig) {
             this.libraryConfig.isTestManagementEnabled = false
           }
@@ -377,9 +370,9 @@ module.exports = class CiPlugin extends Plugin {
             }
           }
 
-          // Vitest worker test spans are serialized in the worker and may not include
+          // Jest and Vitest worker test spans are serialized in the worker and may not include
           // request error tags; add them from the session span in the main process.
-          if (span.name === 'vitest.test' && this.testSessionSpan) {
+          if ((span.name === 'jest.test' || span.name === 'vitest.test') && this.testSessionSpan) {
             Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
           }
         }
@@ -457,10 +450,10 @@ module.exports = class CiPlugin extends Plugin {
    * If the session span does not exist yet (e.g. library-configuration failed before session:start),
    * the tag is queued and applied when the span is created.
    * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR)
-   * @param {Error & { status?: number }} err - Request error; err.status used for 4xx vs 5xx
+   * @param {Error} err - Request error
    */
   _addRequestErrorTag (tag, err) {
-    const value = getRequestErrorCategory(err)
+    const value = 'true'
     if (this.testSessionSpan) {
       this.testSessionSpan.setTag(tag, value)
     } else {

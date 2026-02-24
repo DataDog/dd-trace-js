@@ -258,7 +258,7 @@ versions.forEach((version) => {
           }
           const testSession = testSessionEvent.content
           const libraryConfigError = testSession.meta['_dd.ci.library_configuration_error']
-          if (libraryConfigError !== '4xx') {
+          if (libraryConfigError !== 'true') {
             // Debug: log what meta we got on session
             const ddKeys = Object.keys(testSession.meta || {}).filter(k => k.startsWith('_dd.'))
             process.stdout.write(
@@ -266,17 +266,17 @@ versions.forEach((version) => {
               `_dd.ci.library_configuration_error=${JSON.stringify(libraryConfigError)}\n`
             )
           }
-          assert.strictEqual(libraryConfigError, '4xx',
+          assert.strictEqual(libraryConfigError, 'true',
             'test_session_end should have _dd.ci.library_configuration_error tag')
           const testLibraryConfigError = testEvent.content.meta['_dd.ci.library_configuration_error']
-          if (testLibraryConfigError !== '4xx') {
+          if (testLibraryConfigError !== 'true') {
             const ddKeys = Object.keys(testEvent.content.meta || {}).filter(k => k.startsWith('_dd.'))
             process.stdout.write(
               `[debug] test event meta _dd.* keys: ${JSON.stringify(ddKeys)}; ` +
               `_dd.ci.library_configuration_error=${JSON.stringify(testLibraryConfigError)}\n`
             )
           }
-          assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], '4xx',
+          assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], 'true',
             'test event should have _dd.ci.library_configuration_error tag (propagated via getSessionRequestErrorTags)')
         }
       )

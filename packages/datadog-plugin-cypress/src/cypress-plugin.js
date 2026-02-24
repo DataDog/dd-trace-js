@@ -46,7 +46,6 @@ const {
   TEST_RETRY_REASON_TYPES,
   getPullRequestDiff,
   getModifiedFilesFromDiff,
-  getRequestErrorCategory,
   getSessionRequestErrorTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_IS_MODIFIED,
@@ -327,7 +326,7 @@ class CypressPlugin {
           log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
           this._pendingRequestErrorTags.push({
             tag: DD_CI_LIBRARY_CONFIGURATION_ERROR,
-            value: getRequestErrorCategory(libraryConfigurationResponse.err),
+            value: 'true',
           })
         } else {
           const {

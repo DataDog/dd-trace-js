@@ -62,6 +62,7 @@ const {
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
@@ -342,7 +343,17 @@ moduleTypes.forEach(({
       } = getCiVisAgentlessConfig(receiver.port)
 
       receiver.setSettingsResponseCode(404)
-      const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true',
+            'test_session_end should have _dd.ci.library_configuration_error tag')
+          const testEvent = events.find(event => event.type === 'test')
+          assert.ok(testEvent, 'should have test event')
+          assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true',
+            'test event should have _dd.ci.library_configuration_error tag (from getSessionRequestErrorTags)')
+        })
 
       childProcess = exec(
         testCommand,
@@ -356,15 +367,7 @@ moduleTypes.forEach(({
         }
       )
 
-      const eventsRequest = await eventsRequestPromise
-      await once(childProcess, 'exit')
-      const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-      assert.strictEqual(testSession.meta['_dd.ci.library_configuration_error'], '4xx',
-        'test_session_end should have _dd.ci.library_configuration_error tag')
-      const testEvent = eventsRequest.payload.events.find(event => event.type === 'test')
-      assert.ok(testEvent, 'should have test event')
-      assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], '4xx',
-        'test event should have _dd.ci.library_configuration_error tag (from getSessionRequestErrorTags)')
+      await Promise.all([eventsPromise, once(childProcess, 'exit')])
     })
 
     it('does not crash if badly init', async () => {

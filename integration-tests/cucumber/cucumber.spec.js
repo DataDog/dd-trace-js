@@ -72,6 +72,7 @@ const {
   TEST_FRAMEWORK_VERSION,
   CI_APP_ORIGIN,
   TEST_SKIP_REASON,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
@@ -327,18 +328,19 @@ describe(`cucumber@${version} commonJS`, () => {
         logsEndpoint = isAgentless ? '/api/v2/logs' : '/debugger/v1/input'
       })
 
-      it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', (done) => {
-        if (!isAgentless) return done()
+      it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
         receiver.setSettingsResponseCode(404)
-        receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle')).then((eventsRequest) => {
-          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
-          assert.strictEqual(testSession.meta['_dd.ci.library_configuration_error'], '4xx')
-          const testEvent = eventsRequest.payload.events.find(event => event.type === 'test')
-          assert.ok(testEvent, 'should have test event')
-          assert.strictEqual(testEvent.content.meta['_dd.ci.library_configuration_error'], '4xx')
-          done()
-        }).catch(done)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+          })
         childProcess = exec(runTestsCommand, { cwd, env: envVars })
+        await Promise.all([eventsPromise, once(childProcess, 'exit')])
       })
 
       const runModes = ['serial']
