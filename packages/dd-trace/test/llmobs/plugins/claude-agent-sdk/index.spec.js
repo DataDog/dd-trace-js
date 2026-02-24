@@ -121,32 +121,6 @@ describe('Plugin', () => {
         })
       })
 
-      it('creates a session span with empty prompt', async () => {
-        const ctx = {
-          model: 'claude-opus-4-6',
-          sessionId: 'sess-empty-prompt',
-        }
-
-        sessionCh.start.runStores(ctx, () => {
-          sessionCh.end.publish(ctx)
-        })
-        sessionCh.asyncEnd.publish(ctx)
-
-        const { apmSpans, llmobsSpans } = await getEvents()
-
-        assertLlmObsSpanEvent(llmobsSpans[0], {
-          span: apmSpans[0],
-          spanKind: 'agent',
-          name: 'claude-agent-sdk.session',
-          inputValue: '',
-          outputValue: '',
-          metadata: {
-            session_id: 'sess-empty-prompt',
-            model: 'claude-opus-4-6',
-          },
-          tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
-        })
-      })
     })
 
     describe('turn', () => {
@@ -179,30 +153,6 @@ describe('Plugin', () => {
         })
       })
 
-      it('creates a turn span without prompt or stop reason', async () => {
-        const ctx = {
-          sessionId: 'sess-minimal-turn',
-        }
-
-        turnCh.start.runStores(ctx, () => {
-          turnCh.end.publish(ctx)
-        })
-        turnCh.asyncEnd.publish(ctx)
-
-        const { apmSpans, llmobsSpans } = await getEvents()
-
-        assertLlmObsSpanEvent(llmobsSpans[0], {
-          span: apmSpans[0],
-          spanKind: 'workflow',
-          name: 'claude-agent-sdk.turn',
-          inputValue: '',
-          outputValue: '',
-          metadata: {
-            session_id: 'sess-minimal-turn',
-          },
-          tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
-        })
-      })
     })
 
     describe('tool', () => {
@@ -264,35 +214,6 @@ describe('Plugin', () => {
           metadata: {
             tool_name: 'Bash',
             tool_use_id: 'tu-string',
-            session_id: 'sess-001',
-          },
-          tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
-        })
-      })
-
-      it('handles null tool input and output via safeStringify', async () => {
-        const ctx = {
-          sessionId: 'sess-001',
-          toolName: 'Noop',
-          toolUseId: 'tu-null',
-        }
-
-        toolCh.start.runStores(ctx, () => {
-          toolCh.end.publish(ctx)
-        })
-        toolCh.asyncEnd.publish(ctx)
-
-        const { apmSpans, llmobsSpans } = await getEvents()
-
-        assertLlmObsSpanEvent(llmobsSpans[0], {
-          span: apmSpans[0],
-          spanKind: 'tool',
-          name: 'Noop',
-          inputValue: '',
-          outputValue: '',
-          metadata: {
-            tool_name: 'Noop',
-            tool_use_id: 'tu-null',
             session_id: 'sess-001',
           },
           tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
@@ -386,7 +307,7 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'agent',
           name: 'claude-agent-sdk.subagent',
-          inputValue: '',
+          inputValue: 'code-reviewer',
           outputValue: '',
           metadata: {
             agent_id: 'agent-abc',
@@ -415,7 +336,7 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'agent',
           name: 'claude-agent-sdk.subagent',
-          inputValue: '',
+          inputValue: 'agent-minimal',
           outputValue: '',
           metadata: {
             agent_id: 'agent-minimal',

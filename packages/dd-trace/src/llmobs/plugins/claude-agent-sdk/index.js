@@ -120,6 +120,9 @@ class SubagentLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
+    const input = ctx.agentType || ctx.agentId || ''
+    if (input) this._tagger.tagTextIO(span, input, '')
+
     const metadata = {}
     if (ctx.agentId) metadata.agent_id = ctx.agentId
     if (ctx.agentType) metadata.agent_type = ctx.agentType
