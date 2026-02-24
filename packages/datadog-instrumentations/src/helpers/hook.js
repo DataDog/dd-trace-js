@@ -1,6 +1,5 @@
 'use strict'
 const path = require('path')
-const Module = require('module')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 
@@ -29,13 +28,12 @@ function Hook (modules, hookOptions, onrequire) {
 
     let defaultWrapResult
 
-    const original = onrequire
-    onrequire = (moduleExports, ...args) => {
+    const wrappedOnrequire = (moduleExports, ...args) => {
       if (this._patched[filename] && patched.has(moduleExports)) {
         return patched.get(moduleExports)
       }
 
-      const result = original(moduleExports, ...args)
+      const result = onrequire(moduleExports, ...args)
       if (result && (typeof result === 'object' || typeof result === 'function')) {
         patched.set(moduleExports, result)
         patched.set(result, result)
@@ -50,10 +48,10 @@ function Hook (modules, hookOptions, onrequire) {
       (typeof moduleExports.default === 'object' ||
       typeof moduleExports.default === 'function')
     ) {
-      defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      defaultWrapResult = wrappedOnrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
-    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+    const newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
     if (defaultWrapResult) newExports.default = defaultWrapResult
 
