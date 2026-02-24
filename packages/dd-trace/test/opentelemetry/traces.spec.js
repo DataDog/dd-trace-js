@@ -467,7 +467,7 @@ describe('OpenTelemetry Traces', () => {
 
         assert.strictEqual(resourceAttrs['service.name'], 'my-trace-service')
         assert.strictEqual(resourceAttrs['service.version'], 'v2.0.0')
-        assert.strictEqual(resourceAttrs['deployment.environment'], 'staging')
+        assert.strictEqual(resourceAttrs['deployment.environment.name'], 'staging')
         assert.strictEqual(resourceAttrs['host.name'], os.hostname())
       })
 

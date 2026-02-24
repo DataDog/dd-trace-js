@@ -37,7 +37,7 @@ function buildResourceAttributes (config) {
   }
 
   const env = config.env || config.tags.env
-  if (env) resourceAttributes['deployment.environment.name'] = env
+  if (env) resourceAttributes['deployment.environment'] = env
   const version = config.version || config.tags.version
   if (version) resourceAttributes['service.version'] = version
 

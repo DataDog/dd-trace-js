@@ -80,7 +80,7 @@ describe('OTLP Trace Export', () => {
       resource.attributes.map(({ key, value }) => [key, value])
     )
     assert.deepStrictEqual(resourceAttrs['service.name'], { stringValue: 'otlp-test-service' })
-    assert.deepStrictEqual(resourceAttrs['deployment.environment.name'], { stringValue: 'test' })
+    assert.deepStrictEqual(resourceAttrs['deployment.environment'], { stringValue: 'test' })
     assert.deepStrictEqual(resourceAttrs['service.version'], { stringValue: '1.0.0' })
 
     // Validate scopeSpans
