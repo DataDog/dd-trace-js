@@ -71,6 +71,27 @@ class KafkajsProducerPlugin extends ProducerPlugin {
     }
   }
 
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { topic, messages, clusterId, disableHeaderInjection, currentStore: { span } } = ctx
+
+    for (const message of messages) {
+      if (message !== null && typeof message === 'object') {
+        const payloadSize = getMessageSize(message)
+        const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
+
+        if (clusterId) {
+          edgeTags.push(`kafka_cluster_id:${clusterId}`)
+        }
+
+        const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+        if (!disableHeaderInjection) {
+          DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+        }
+      }
+    }
+  }
+
   bindStart (ctx) {
     const { topic, messages, bootstrapServers, clusterId, disableHeaderInjection } = ctx
     const span = this.startSpan({
@@ -89,25 +110,10 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)
     }
     for (const message of messages) {
-      if (message !== null && typeof message === 'object') {
-        // message headers are not supported for kafka broker versions <0.11
-        if (!disableHeaderInjection) {
-          message.headers ??= {}
-          this.tracer.inject(span, 'text_map', message.headers)
-        }
-        if (this.config.dsmEnabled) {
-          const payloadSize = getMessageSize(message)
-          const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
-
-          if (clusterId) {
-            edgeTags.push(`kafka_cluster_id:${clusterId}`)
-          }
-
-          const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-          if (!disableHeaderInjection) {
-            DsmPathwayCodec.encode(dataStreamsContext, message.headers)
-          }
-        }
+      // message headers are not supported for kafka broker versions <0.11
+      if (message !== null && typeof message === 'object' && !disableHeaderInjection) {
+        message.headers ??= {}
+        this.tracer.inject(span, 'text_map', message.headers)
       }
     }
 
