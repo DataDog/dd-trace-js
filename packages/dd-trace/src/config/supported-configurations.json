@@ -27,12 +27,12 @@
     ],
     "DD_AGENT_HOST": [
       {
-        "implementation": "A",
+        "implementation": "E",
         "type": "string",
         "configurationNames": [
           "hostname"
         ],
-        "default": "localhost",
+        "default": "127.0.0.1",
         "aliases": [
           "DD_TRACE_AGENT_HOSTNAME"
         ]
@@ -709,9 +709,6 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "configurationNames": [
-          "apmTracingEnabled"
-        ],
         "default": "true"
       }
     ],
@@ -1179,7 +1176,7 @@
         "configurationNames": [
           "llmobs.agentlessEnabled"
         ],
-        "default": "false"
+        "default": null
       }
     ],
     "DD_LLMOBS_ENABLED": [
@@ -1346,7 +1343,7 @@
     "DD_PROFILING_ENABLED": [
       {
         "implementation": "A",
-        "type": "string",
+        "type": "boolean",
         "configurationNames": [
           "profiling.enabled"
         ],
@@ -1648,10 +1645,6 @@
       {
         "implementation": "B",
         "type": "string",
-        "configurationNames": [
-          "spanSamplingRules",
-          "sampler.spanSamplingRules"
-        ],
         "default": ""
       }
     ],
@@ -3433,7 +3426,7 @@
         "implementation": "A",
         "type": "array",
         "configurationNames": [
-          "tracePropagationStyle.inject"
+          "tracePropagationStyle"
         ],
         "default": "[\"datadog\", \"tracecontext\", \"baggage\"]"
       }
@@ -3589,7 +3582,7 @@
     "DD_TRACE_SAMPLING_RULES": [
       {
         "implementation": "A",
-        "type": "map",
+        "type": "array",
         "configurationNames": [
           "samplingRules",
           "sampler.rules"
@@ -4107,12 +4100,9 @@
     ],
     "OTEL_TRACES_SAMPLER": [
       {
-        "implementation": "A",
-        "type": "decimal",
-        "configurationNames": [
-          "sampleRate"
-        ],
-        "default": null
+        "implementation": "E",
+        "type": "string",
+        "default": "parentbased_always_on"
       }
     ],
     "OTEL_TRACES_SAMPLER_ARG": [

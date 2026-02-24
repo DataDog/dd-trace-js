@@ -36,14 +36,50 @@ function parseDefaultByType (raw, type) {
       return Number(raw)
     }
     case 'array': {
-      // TODO: Implement comma separated list
       if (raw.length === 0) return []
-      return JSON.parse(raw)
+      let parsedAsJson
+      try {
+        parsedAsJson = JSON.parse(raw)
+      } catch {}
+      if (Array.isArray(parsedAsJson)) return parsedAsJson
+      return raw.split(',').map(item => {
+        const colonIndex = item.indexOf(':')
+        if (colonIndex === -1) {
+          return item.trim()
+        }
+        const key = item.slice(0, colonIndex).trim()
+        const value = item.slice(colonIndex + 1).trim()
+        return `${key}:${value}`
+      })
     }
     case 'map': {
-      // TODO: Implement comma separated list with colon separated key value pairs
       if (raw.length === 0) return {}
-      return JSON.parse(raw)
+      let parsedAsJson
+      try {
+        parsedAsJson = JSON.parse(raw)
+      } catch {}
+      if (parsedAsJson && typeof parsedAsJson === 'object') {
+        return parsedAsJson
+      }
+
+      /** @type {Record<string, string>} */
+      const entries = {}
+      for (const item of raw.split(',')) {
+        const colonIndex = item.indexOf(':')
+        if (colonIndex === -1) {
+          const key = item.trim()
+          if (key.length > 0) {
+            entries[key] = ''
+          }
+          continue
+        }
+        const key = item.slice(0, colonIndex).trim()
+        const value = item.slice(colonIndex + 1).trim()
+        if (key.length > 0) {
+          entries[key] = value
+        }
+      }
+      return entries
     }
     default:
       return raw
@@ -90,6 +126,9 @@ const defaultsWithConditionalRuntimeBehavior = {
   isIntelligentTestRunnerEnabled: false,
   isManualApiEnabled: false,
   isTestManagementEnabled: false,
+  // TODO: These are not conditional, they would just be of type number.
+  'dogstatsd.port': '8125',
+  port: '8126',
 }
 
 /** @type {Record<string, unknown>} */

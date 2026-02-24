@@ -712,8 +712,11 @@ class Config {
       maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE) ??
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     ))
-    setUnit(target, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
-    getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
+    setUnit(
+      target,
+      'sampleRate',
+      DD_TRACE_SAMPLE_RATE || getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG)
+    )
     target['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
     setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     unprocessedTarget['sampler.rules'] = DD_TRACE_SAMPLING_RULES
@@ -1135,6 +1138,7 @@ class Config {
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc['telemetry.heartbeatInterval'] = maybeInt(Math.floor(this.#defaults['telemetry.heartbeatInterval'] * 1000))
 
     setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(getEnv('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED')))

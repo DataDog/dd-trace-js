@@ -54,6 +54,20 @@ for (const [canonical, configuration] of Object.entries(supportedConfigurations)
   }
 }
 
+// Backward-compatible aliases that are still supported at runtime but are not
+// currently represented in supported-configurations metadata.
+const legacyAliases = {
+  DD_AGENT_HOST: ['DD_TRACE_AGENT_HOSTNAME'],
+  DD_TRACE_AGENT_URL: ['DD_TRACE_URL'],
+}
+
+for (const [canonical, entries] of Object.entries(legacyAliases)) {
+  aliases[canonical] ??= new Set()
+  for (const alias of entries) {
+    aliases[canonical].add(alias)
+  }
+}
+
 const aliasToCanonical = {}
 for (const canonical of Object.keys(aliases)) {
   for (const alias of aliases[canonical]) {
@@ -117,6 +131,24 @@ function validateAccess (name) {
     !supportedConfigurations[name]) {
     throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
   }
+}
+
+/**
+ * Parses a comma separated list of items into an array of key value pairs.
+ *
+ * @param {string} value
+ * @returns {string[]}
+ */
+function parseArray (value) {
+  return value.split(',').map(item => {
+    const colonIndex = item.indexOf(':')
+    if (colonIndex === -1) {
+      return item.trim()
+    }
+    const key = item.slice(0, colonIndex).trim()
+    const val = item.slice(colonIndex + 1).trim()
+    return val === undefined ? key : `${key}:${val}`
+  })
 }
 
 module.exports = {
@@ -211,4 +243,5 @@ module.exports = {
       return getValueFromSource(name, localStableConfig)
     }
   },
+  parseArray,
 }
