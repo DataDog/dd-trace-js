@@ -2,8 +2,7 @@
 
 const assert = require('node:assert')
 const { describe, before, after, it } = require('mocha')
-const { tracingChannel } = require('dc-polyfill')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { tracingChannel, channel } = require('dc-polyfill')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 // Use tracingChannel to match the shimmer's channel contract.
@@ -357,18 +356,27 @@ describe('Plugin', () => {
       })
     })
 
-    withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', (version) => {
+    // Channel-based span tests — verify that the TracingPlugin creates and finishes
+    // spans when diagnostics channels fire. These do NOT require the actual SDK.
+    //
+    // NOTE: The Claude Agent SDK is pure ESM ("type": "module", "main": "sdk.mjs")
+    // which cannot be loaded via CJS require() in the test harness. withVersions
+    // is not used because it requires the SDK to be CJS-importable for .get().
+    // Full ESM integration testing (shimmer wrapping the real SDK) requires a
+    // subprocess with --import dd-trace/initialize.mjs (deferred to follow-up).
+    describe('tracing', () => {
       before(async () => {
         await agent.load('claude-agent-sdk')
+
+        // The Claude Agent SDK is pure ESM and can't be CJS-required in tests.
+        // Simulate the module load event so the plugin manager activates the
+        // plugin's channel subscriptions (same event register.js publishes
+        // when a real SDK module is loaded and version-matched).
+        const loadCh = channel('dd-trace:instrumentation:load')
+        loadCh.publish({ name: '@anthropic-ai/claude-agent-sdk' })
       })
 
       after(() => agent.close({ ritmReset: false }))
-
-      // NOTE: The SDK is pure ESM ("type": "module", "main": "sdk.mjs") which
-      // cannot be loaded via CJS require() in the test harness. Shimmer wrapping
-      // is verified in the shimmer unit tests above (wrapQuery, mergeHooks,
-      // buildTracerHooks). Full ESM integration testing requires a subprocess
-      // with --import dd-trace/initialize.mjs (deferred to follow-up).
 
       describe('session span', () => {
         it('creates an agent span for a session', async () => {

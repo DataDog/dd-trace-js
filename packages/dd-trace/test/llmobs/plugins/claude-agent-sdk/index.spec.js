@@ -1,7 +1,7 @@
 'use strict'
 
-const { describe, it } = require('mocha')
-const { tracingChannel } = require('dc-polyfill')
+const { describe, before, it } = require('mocha')
+const { tracingChannel, channel } = require('dc-polyfill')
 
 const {
   useLlmObs,
@@ -16,6 +16,15 @@ const subagentCh = tracingChannel('apm:claude-agent-sdk:subagent')
 
 describe('Plugin', () => {
   const { getEvents } = useLlmObs({ plugin: 'claude-agent-sdk' })
+
+  // The Claude Agent SDK is pure ESM and can't be CJS-required in tests.
+  // Simulate the module load event so the plugin manager activates the
+  // plugin's channel subscriptions (same event register.js publishes
+  // when a real SDK module is loaded and version-matched).
+  before(() => {
+    const loadCh = channel('dd-trace:instrumentation:load')
+    loadCh.publish({ name: '@anthropic-ai/claude-agent-sdk' })
+  })
 
   describe('claude-agent-sdk', () => {
     describe('session', () => {
