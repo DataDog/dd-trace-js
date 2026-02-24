@@ -22,7 +22,7 @@ const retry = async fn => {
   }
 }
 
-describe('esbuild support for IAST', () => {
+describe.only('esbuild support for IAST', () => {
   let cwd, craftedNodeModulesDir
 
   useSandbox()
@@ -119,9 +119,11 @@ describe('esbuild support for IAST', () => {
     const context = { proc: null, agent: null, axios: null, applicationDir: null, bundledApplicationDir: null }
 
     before(async () => {
+      console.time('setupApplication')
       const setup = await setupApplication('iast-esbuild-cjs')
       context.applicationDir = setup.applicationDir
       context.bundledApplicationDir = setup.bundledApplicationDir
+      console.timeEnd('setupApplication')
     })
 
     const startServer = createServerStarter(context)
