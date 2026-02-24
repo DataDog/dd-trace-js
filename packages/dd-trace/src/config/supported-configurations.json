@@ -206,12 +206,12 @@
     ],
     "DD_APPSEC_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "boolean",
         "configurationNames": [
           "appsec.enabled"
         ],
-        "default": "false"
+        "default": null
       }
     ],
     "DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON": [

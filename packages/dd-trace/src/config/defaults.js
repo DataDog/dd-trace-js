@@ -21,7 +21,7 @@ const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
  * @returns {string|number|boolean|Record<string, string>|unknown[]|undefined}
  */
 function parseDefaultByType (raw, type) {
-  if (raw === null || raw === '$dynamic') {
+  if (raw === null) {
     return
   }
 
@@ -92,7 +92,13 @@ function parseDefaultByType (raw, type) {
 const metadataDefaults = {}
 for (const entries of Object.values(supportedConfigurations)) {
   for (const entry of entries) {
-    if (entry.default === '$dynamic' || !Array.isArray(entry.configurationNames)) {
+    // TODO: Replace $dynamic with method names that would be called and that
+    // are also called when the user passes through the value. That way the
+    // handling is unified and methods can be declared as default.
+    // The name of that method should be expressive for users.
+    // TODO: Add handling for all environment variable names. They should not
+    // need a configuration name for being listed with their default.
+    if (!Array.isArray(entry.configurationNames)) {
       continue
     }
 
