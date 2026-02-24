@@ -6,7 +6,7 @@ const path = require('path')
 const Axios = require('axios')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
-describe.only('IAST - overhead-controller - integration', () => {
+describe('IAST - overhead-controller - integration', () => {
   let axios, cwd, agent, proc
 
   useSandbox(
