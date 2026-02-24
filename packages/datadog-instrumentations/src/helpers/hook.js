@@ -27,17 +27,22 @@ function Hook (modules, hookOptions, onrequire) {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
-    if (this._patched[filename]) {
-      // if (patched.has(moduleExports)) {
-      //   return patched.get(moduleExports)
-      // }
-      // Already patched via a different loader don't re-patch,
-      // but still cache this exports reference.
-      // patched.set(moduleExports, moduleExports)
-      return moduleExports
-    }
-
     let defaultWrapResult
+
+    const original = onrequire
+    onrequire = (moduleExports, ...args) => {
+      if (this._patched[filename] && patched.has(moduleExports)) {
+        return patched.get(moduleExports)
+      }
+
+      const result = original(moduleExports, ...args)
+      if (result && (typeof result === 'object' || typeof result === 'function')) {
+        patched.set(moduleExports, result)
+        patched.set(result, result)
+      }
+
+      return result
+    }
 
     if (
       isIitm &&
@@ -53,11 +58,7 @@ function Hook (modules, hookOptions, onrequire) {
     if (defaultWrapResult) newExports.default = defaultWrapResult
 
     this._patched[filename] = true
-    if (newExports &&
-      (typeof newExports === 'object' ||
-      typeof newExports === 'function')) {
-      // patched.set(moduleExports, newExports)
-    }
+
     return newExports
   }
 
