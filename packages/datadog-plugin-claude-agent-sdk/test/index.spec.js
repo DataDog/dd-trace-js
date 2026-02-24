@@ -710,6 +710,66 @@ describe('Plugin', () => {
           await tracesPromise
         })
       })
+
+      // wrapQuery integration tests — exercise the subscriber code path in the shimmer.
+      // The shimmer unit tests above only cover the no-subscriber path because agent.load
+      // isn't called there. Here, agent.load has activated the channel subscribers.
+      describe('wrapQuery with active subscribers', () => {
+        const { wrapQuery } = require('../../datadog-instrumentations/src/claude-agent-sdk')
+
+        it('calls originalQuery through the tracing path', () => {
+          let queryCalled = false
+          const originalQuery = function ({ prompt, options }) {
+            queryCalled = true
+            assert.equal(prompt, 'Subscriber test')
+            assert.ok(options.hooks, 'options should have merged tracer hooks')
+            return 'sync-result'
+          }
+
+          const wrapped = wrapQuery(originalQuery)
+          const result = wrapped({ prompt: 'Subscriber test', options: { model: 'test-model' } })
+
+          assert.equal(queryCalled, true)
+          assert.equal(result, 'sync-result')
+        })
+
+        it('handles undefined options gracefully', () => {
+          const originalQuery = function ({ prompt, options }) {
+            assert.ok(options.hooks, 'should have tracer hooks even with no user options')
+            return 'default-opts'
+          }
+
+          const wrapped = wrapQuery(originalQuery)
+          const result = wrapped({ prompt: 'No options' })
+
+          assert.equal(result, 'default-opts')
+        })
+
+        it('publishes error and asyncEnd when originalQuery throws', () => {
+          const testErr = new Error('wrapQuery sync error')
+          const originalQuery = function () { throw testErr }
+
+          const wrapped = wrapQuery(originalQuery)
+
+          assert.throws(() => {
+            wrapped({ prompt: 'Will throw', options: {} })
+          }, (err) => err === testErr)
+        })
+
+        it('attaches rejection handler when originalQuery returns a thenable', () => {
+          const testErr = new Error('wrapQuery async rejection')
+          const originalQuery = function () {
+            return Promise.reject(testErr)
+          }
+
+          const wrapped = wrapQuery(originalQuery)
+          const result = wrapped({ prompt: 'Will reject', options: {} })
+
+          // wrapQuery attaches its own .then(null, handler) for error/asyncEnd publishing.
+          // Suppress the rejection in the test to avoid unhandled rejection warnings.
+          return result.catch(() => {})
+        })
+      })
     })
   })
 })
