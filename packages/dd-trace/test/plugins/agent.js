@@ -342,6 +342,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
         Object.defineProperty(error, 'errors', {
           enumerable: true,
         })
+        console.error(error.errors)
       }
       // Hack for the information to be fully visible.
       error.message = util.inspect(error, { depth: null })

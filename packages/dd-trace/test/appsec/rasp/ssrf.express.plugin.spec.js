@@ -11,11 +11,12 @@ const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
+const log = require('../../../src/log')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 function noop () {}
 
-describe('RASP - ssrf', () => {
+describe.only('RASP - ssrf', () => {
   withVersions('express', 'express', expressVersion => {
     let app, server, axios
 
@@ -49,6 +50,10 @@ describe('RASP - ssrf', () => {
       })
     })
 
+    afterEach(() => {
+      log.toggle(false, 'debug')
+    })
+
     after(() => {
       appsec.disable()
       server.close()
@@ -73,6 +78,11 @@ describe('RASP - ssrf', () => {
       ['http', 'https'].forEach(protocol => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
+            log.toggle(true, 'debug')
+            const subscribeHandler = ({ payload }) => {
+              console.log('executed here', JSON.stringify(payload))
+            }
+            agent.subscribe(subscribeHandler)
             // Hack to enforce the module to be loaded once before the actual request
             const module = require(protocol)
 
@@ -84,7 +94,9 @@ describe('RASP - ssrf', () => {
 
             axios.get('/?host=www.datadoghq.com')
 
-            return checkRaspExecutedAndNotThreat(agent)
+            const result = checkRaspExecutedAndNotThreat(agent)
+            agent.unsubscribe(subscribeHandler)
+            return result
           })
 
           it('Should detect threat doing a GET request', async () => {
