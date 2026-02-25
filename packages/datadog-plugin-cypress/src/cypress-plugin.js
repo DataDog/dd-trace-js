@@ -46,6 +46,8 @@ const {
   TEST_RETRY_REASON_TYPES,
   getPullRequestDiff,
   getModifiedFilesFromDiff,
+  getSessionRequestErrorTags,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_IS_MODIFIED,
   getPullRequestBaseBranch,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -317,10 +319,15 @@ class CypressPlugin {
     this.testEnvironmentMetadata[DD_TEST_IS_USER_PROVIDED_SERVICE] =
       tracer._tracer._config.isServiceUserProvided ? 'true' : 'false'
 
+    this._pendingRequestErrorTags = []
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
         if (libraryConfigurationResponse.err) {
           log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
+          this._pendingRequestErrorTags.push({
+            tag: DD_CI_LIBRARY_CONFIGURATION_ERROR,
+            value: 'true',
+          })
         } else {
           const {
             libraryConfig: {
@@ -415,6 +422,7 @@ class CypressPlugin {
     if (this.testSessionSpan && this.testModuleSpan) {
       testSuiteTags[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
       testSuiteTags[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
+      Object.assign(testSuiteTags, this.getSessionRequestErrorTags())
       // If testSuiteSpan couldn't be created, we'll use the testModuleSpan as the parent
       if (!this.testSuiteSpan) {
         testSuiteTags[TEST_SUITE_ID] = this.testModuleSpan.context().toSpanId()
@@ -469,6 +477,14 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+  }
+
+  /**
+   * Returns request error tags from the test session span for propagation to test spans.
+   * @returns {Record<string, string>}
+   */
+  getSessionRequestErrorTags () {
+    return getSessionRequestErrorTags(this.testSessionSpan)
   }
 
   ciVisEvent (name, testLevel, tags = {}) {
@@ -599,14 +615,20 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    for (const { tag, value } of this._pendingRequestErrorTags) {
+      this.testSessionSpan.setTag(tag, value)
+    }
+    this._pendingRequestErrorTags = []
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
 
+    const sessionRequestErrorTags = getSessionRequestErrorTags(this.testSessionSpan)
     this.testModuleSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
       childOf: this.testSessionSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...this.testEnvironmentMetadata,
         ...testModuleSpanMetadata,
+        ...sessionRequestErrorTags,
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
