@@ -67,7 +67,7 @@ function rewrite (content, filename, format) {
       if (!filename.endsWith(`${name}/${filePath}`)) continue
       if (!satisfies(filename, filePath, versionRange)) continue
 
-      ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
+      ast ??= parse(content.toString(), { range: true, sourceType: format })
 
       const query = astQuery || fromFunctionQuery(functionQuery)
       const state = { ...inst, format, functionQuery }
