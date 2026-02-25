@@ -49,10 +49,10 @@ class GraphQLResolvePlugin extends TracingPlugin {
       ctx = field
     }
 
-    const document = rootCtx.source
+    const docSource = rootCtx.docSource
     const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field') // FIXME: https://github.com/graphql/graphql-js/issues/605#issuecomment-266160864
-    const loc = this.config.source && document && fieldNode && fieldNode.loc
-    const source = loc && document.slice(loc.start, loc.end)
+    const loc = this.config.source && docSource && fieldNode && fieldNode.loc
+    const source = loc && docSource.slice(loc.start, loc.end)
 
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,

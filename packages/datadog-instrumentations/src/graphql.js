@@ -148,9 +148,8 @@ function wrapExecute (execute) {
       }
 
       const args = normalizeArgs(arguments, defaultFieldResolver)
-      const schema = args.schema
-      const document = args.document
-      const source = documentSources.get(document)
+      const { schema, document } = args
+      const docSource = documentSources.get(document)
       const contextValue = args.contextValue
       const operation = getOperation(document, args.operationName)
 
@@ -161,8 +160,7 @@ function wrapExecute (execute) {
       const ctx = {
         operation,
         args,
-        docSource: documentSources.get(document),
-        source,
+        docSource,
         fields: new WeakMap(), // fields keyed by their Path object
         finalizations: [], // fields whose `.finalize()` method needs to be invoked before finishing execution
         abortController: new AbortController(), // allow startExecuteCh/startResolveCh subscribers to block execution
