@@ -12,7 +12,7 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
  * @param {string} moduleName
  * @returns {string|undefined}
  */
-function getVersion (moduleBaseDir, moduleName) {
+function getVersion (moduleBaseDir) {
   if (moduleBaseDir) {
     return requirePackageJson(moduleBaseDir, /** @type {import('module').Module} */ (module)).version
   }
@@ -68,7 +68,7 @@ function Hook (modules, hookOptions, onrequire) {
     }
 
     try {
-      moduleVersion ||= getVersion(moduleBaseDir, moduleName)
+      moduleVersion ||= getVersion(moduleBaseDir)
     } catch (error) {
       log.error('Error getting version for "%s": %s', moduleName, error.message, error)
       return

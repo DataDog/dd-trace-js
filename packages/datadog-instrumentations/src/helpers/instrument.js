@@ -42,7 +42,7 @@ exports.tracingChannel = function (name) {
   return tc
 }
 
-exports.getHooks = function getHooks(names) {
+exports.getHooks = function getHooks (names) {
   names = [names].flat()
 
   return rewriterInstrumentations
@@ -60,8 +60,7 @@ exports.getHooks = function getHooks(names) {
  * @param {boolean} [args.patchDefault=true] whether to patch the default export
  * @param {import('./instrumentations').Hook} hook
  */
-exports.addHook = function addHook({ name, versions, file, filePattern, patchDefault }, hook) {
-  if (name && typeof name === 'object') process._rawDebug('Hellow World')
+exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
   if (!instrumentations[name]) {
     instrumentations[name] = []
   }

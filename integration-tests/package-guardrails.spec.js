@@ -24,10 +24,8 @@ delete process.env.DD_INJECT_FORCE
 
 describe('package guardrails', () => {
   useEnv({ NODE_OPTIONS })
-  const runTest = (expectedOut, expectedTelemetryPoints, expectedSource = '') => {
-    setTimeout(() => {}, 100)
+  const runTest = (expectedOut, expectedTelemetryPoints, expectedSource = '') =>
     testFile('package-guardrails/index.js', expectedOut, expectedTelemetryPoints, expectedSource)
-  }
 
   context('when package is out of range', () => {
     useSandbox(['bluebird@1.0.0'])
