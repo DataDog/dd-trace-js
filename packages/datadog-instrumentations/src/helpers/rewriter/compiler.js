@@ -1,33 +1,56 @@
 'use strict'
 
-let meriyah
-let astring
-let esquery
+const compiler = module.exports = {
+  parse: (filename, sourceText, options) => {
+    try {
+      const oxc = require('oxc-parser')
 
-module.exports = {
-  parse: (...args) => {
-    meriyah ??= require('../../../../../vendor/dist/meriyah')
+      compiler.parse = (sourceText, options) => {
+        const { program, errors } = oxc.parseSync('index.js', sourceText, options)
 
-    return meriyah.parse(...args)
+        if (errors?.length > 0) throw errors[0]
+
+        return program
+      }
+    } catch {
+      // Fallback for when OXC is not available.
+      const meriyah = require('../../../../../vendor/dist/meriyah')
+
+      compiler.parse = (sourceText, { range, sourceType } = {}) => {
+        return meriyah.parse(sourceText.toString(), {
+          loc: range,
+          ranges: range,
+          module: sourceType === 'module',
+        })
+      }
+    }
+
+    return compiler.parse(filename, sourceText, options)
   },
 
   generate: (...args) => {
-    astring ??= require('../../../../../vendor/dist/astring')
+    const astring = require('../../../../../vendor/dist/astring')
 
-    return astring.generate(...args)
+    compiler.generate = astring.generate
+
+    return compiler.generate(...args)
   },
 
   traverse: (ast, query, visitor) => {
-    esquery ??= require('../../../../../vendor/dist/esquery').default
+    const esquery = require('../../../../../vendor/dist/esquery').default
 
-    const selector = esquery.parse(query)
+    compiler.traverse = (ast, query, visitor) => {
+      return esquery.traverse(ast, esquery.parse(query), visitor)
+    }
 
-    return esquery.traverse(ast, selector, visitor)
+    return compiler.traverse(ast, query, visitor)
   },
 
   query: (ast, query) => {
-    esquery ??= require('../../../../../vendor/dist/esquery').default
+    const esquery = require('../../../../../vendor/dist/esquery').default
 
-    return esquery.query(ast, query)
+    compiler.query = esquery.query
+
+    return compiler.query(ast, query)
   },
 }

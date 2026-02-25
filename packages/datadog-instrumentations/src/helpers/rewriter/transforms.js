@@ -16,7 +16,7 @@ const transforms = module.exports = {
       ? 'import { tracingChannel as tr_ch_apm_tracingChannel } from "diagnostics_channel"'
       : 'const {tracingChannel: tr_ch_apm_tracingChannel} = require("diagnostics_channel")'
 
-    node.body.splice(index + 1, 0, parse(code, { module: format === 'module' }).body[0])
+    node.body.splice(index + 1, 0, parse(code, { sourceType: format }).body[0])
   },
 
   tracingChannelDeclaration (state, node) {
