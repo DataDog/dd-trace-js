@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -35,7 +36,7 @@ describe('TracerProxy', () => {
   let PluginManager
   let pluginManager
   let flare
-  let remoteConfig
+  let RemoteConfig
   let handlers
   let rc
   let dogStatsD
@@ -45,7 +46,7 @@ describe('TracerProxy', () => {
   let openfeatureProvider
 
   beforeEach(() => {
-    process.env.DD_TRACE_MOCHA_ENABLED = false
+    process.env.DD_TRACE_MOCHA_ENABLED = 'false'
 
     aiguardSdk = {
       evaluate: sinon.stub(),
@@ -54,11 +55,11 @@ describe('TracerProxy', () => {
     appsecSdk = {
       trackUserLoginSuccessEvent: sinon.stub(),
       trackUserLoginFailureEvent: sinon.stub(),
-      trackCustomEvent: sinon.stub()
+      trackCustomEvent: sinon.stub(),
     }
 
     pluginManager = {
-      configure: sinon.spy()
+      configure: sinon.spy(),
     }
 
     tracer = {
@@ -69,7 +70,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
     }
 
     noop = {
@@ -80,7 +81,7 @@ describe('TracerProxy', () => {
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
-      configure: sinon.spy()
+      configure: sinon.spy(),
     }
 
     noopAiguardSdk = {
@@ -90,7 +91,7 @@ describe('TracerProxy', () => {
     noopAppsecSdk = {
       trackUserLoginSuccessEvent: sinon.stub(),
       trackUserLoginFailureEvent: sinon.stub(),
-      trackCustomEvent: sinon.stub()
+      trackCustomEvent: sinon.stub(),
     }
 
     noopDogStatsDClient = {
@@ -99,7 +100,7 @@ describe('TracerProxy', () => {
       gauge: sinon.spy(),
       distribution: sinon.spy(),
       histogram: sinon.spy(),
-      flush: sinon.spy()
+      flush: sinon.spy(),
     }
 
     {
@@ -125,12 +126,12 @@ describe('TracerProxy', () => {
         CustomMetrics: FauxDogStatsDClient,
         _increments: () => dogstatsdIncrements,
         _config: () => dogstatsdConfig,
-        _flushes: () => dogstatsdFlushes
+        _flushes: () => dogstatsdFlushes,
       }
     }
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     DatadogTracer = sinon.stub().returns(tracer)
@@ -147,8 +148,8 @@ describe('TracerProxy', () => {
       experimental: {
         flaggingProvider: {},
         aiguard: {
-          enabled: true
-        }
+          enabled: true,
+        },
       },
       injectionEnabled: [],
       logger: 'logger',
@@ -160,46 +161,46 @@ describe('TracerProxy', () => {
       crashtracking: {},
       dynamicInstrumentation: {},
       remoteConfig: {
-        enabled: true
+        enabled: true,
       },
       runtimeMetrics: {
-        enabled: false
+        enabled: false,
       },
-      configure: sinon.spy(),
+      setRemoteConfig: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {}
+      heapSnapshot: {},
     }
     Config = sinon.stub().returns(config)
 
     runtimeMetrics = {
-      start: sinon.spy()
+      start: sinon.spy(),
     }
 
     profiler = {
-      start: sinon.spy()
+      start: sinon.spy(),
     }
 
     appsec = {
       enable: sinon.spy(),
-      disable: sinon.spy()
+      disable: sinon.spy(),
     }
 
     telemetry = {
-      start: sinon.spy()
+      start: sinon.spy(),
     }
 
     iast = {
       enable: sinon.spy(),
-      disable: sinon.spy()
+      disable: sinon.spy(),
     }
 
     openfeature = {
       enable: sinon.spy(),
-      disable: sinon.spy()
+      disable: sinon.spy(),
     }
 
     openfeatureProvider = {
-      _setConfiguration: sinon.spy()
+      _setConfiguration: sinon.spy(),
     }
 
     OpenFeatureProvider = sinon.stub().returns(openfeatureProvider)
@@ -209,26 +210,31 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
       prepare: sinon.spy(),
       send: sinon.spy(),
-      cleanup: sinon.spy()
-    }
-
-    remoteConfig = {
-      enable: sinon.stub()
+      cleanup: sinon.spy(),
     }
 
     handlers = new Map()
     rc = {
       setProductHandler (product, handler) { handlers.set(product, handler) },
-      removeProductHandler (product) { handlers.delete(product) }
+      removeProductHandler (product) { handlers.delete(product) },
+      updateCapabilities: sinon.spy(),
+      setBatchHandler (products, handler) {
+        for (const product of products) {
+          handlers.set(product, handler)
+        }
+      },
+      removeBatchHandler: sinon.spy(),
+      subscribeProducts: sinon.spy(),
+      unsubscribeProducts: sinon.spy(),
     }
 
-    remoteConfig.enable.returns(rc)
+    RemoteConfig = sinon.stub().returns(rc)
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
       '../aiguard/noop': NoopAIGuardSdk,
       '../appsec/sdk/noop': NoopAppsecSdk,
-      './dogstatsd': NoopDogStatsDClient
+      './dogstatsd': NoopDogStatsDClient,
     })
 
     Proxy = proxyquire('../src/proxy', {
@@ -242,14 +248,14 @@ describe('TracerProxy', () => {
       './appsec': appsec,
       './appsec/iast': iast,
       './telemetry': telemetry,
-      './remote_config': remoteConfig,
+      './remote_config': RemoteConfig,
       './aiguard/sdk': AIGuardSdk,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
       './openfeature': openfeature,
-      './openfeature/flagging_provider': OpenFeatureProvider
+      './openfeature/flagging_provider': OpenFeatureProvider,
     })
 
     proxy = new Proxy()
@@ -268,7 +274,7 @@ describe('TracerProxy', () => {
 
         sinon.assert.calledWith(Config, options)
         sinon.assert.calledWith(DatadogTracer, config)
-        sinon.assert.calledOnceWithMatch(remoteConfig.enable, config)
+        sinon.assert.calledOnceWithExactly(RemoteConfig, config)
       })
 
       it('should not initialize twice', () => {
@@ -276,7 +282,7 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.calledOnce(DatadogTracer)
-        sinon.assert.calledOnce(remoteConfig.enable)
+        sinon.assert.calledOnce(RemoteConfig)
       })
 
       it('should not enable remote config when disabled', () => {
@@ -285,7 +291,7 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.calledOnce(DatadogTracer)
-        sinon.assert.notCalled(remoteConfig.enable)
+        sinon.assert.notCalled(RemoteConfig)
       })
 
       it('should not initialize when disabled', () => {
@@ -307,9 +313,9 @@ describe('TracerProxy', () => {
 
         proxy.init()
 
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config', conf))
 
-        sinon.assert.calledWith(config.configure, conf)
+        sinon.assert.calledWith(config.setRemoteConfig, conf)
         sinon.assert.calledWith(tracer.configure, config)
         sinon.assert.calledWith(pluginManager.configure, config)
       })
@@ -321,9 +327,9 @@ describe('TracerProxy', () => {
 
         handlers.get('AGENT_CONFIG')('apply', {
           config: {
-            log_level: logLevel
+            log_level: logLevel,
           },
-          name: 'flare-log-level.debug'
+          name: 'flare-log-level.debug',
         })
 
         sinon.assert.calledWith(flare.enable, config)
@@ -334,7 +340,7 @@ describe('TracerProxy', () => {
         const task = {
           case_id: '111',
           hostname: 'myhostname',
-          user_handle: 'user.name@datadoghq.com'
+          user_handle: 'user.name@datadoghq.com',
         }
 
         proxy.init()
@@ -342,7 +348,7 @@ describe('TracerProxy', () => {
         handlers.get('AGENT_TASK')('apply', {
           args: task,
           task_type: 'tracer_flare',
-          uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81'
+          uuid: 'd53fc8a4-8820-47a2-aa7d-d565582feb81',
         })
 
         sinon.assert.calledWith(flare.enable, config)
@@ -352,9 +358,9 @@ describe('TracerProxy', () => {
       it('should cleanup flares when the config is removed', () => {
         const conf = {
           config: {
-            log_level: 'debug'
+            log_level: 'debug',
           },
-          name: 'flare-log-level.debug'
+          name: 'flare-log-level.debug',
         }
 
         proxy.init()
@@ -394,8 +400,8 @@ describe('TracerProxy', () => {
           './tracer': DatadogTracer,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
-          './appsec/sdk': AppsecSdk
+          './remote_config': RemoteConfig,
+          './appsec/sdk': AppsecSdk,
         })
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -407,12 +413,12 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(iast.enable)
 
         let conf = { tracing_enabled: false }
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
         conf = { tracing_enabled: true }
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
         sinon.assert.notCalled(appsec.enable)
@@ -425,14 +431,14 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
-          './appsec/sdk': AppsecSdk
+          './remote_config': RemoteConfig,
+          './appsec/sdk': AppsecSdk,
         })
 
         config.telemetry = {}
         config.appsec.enabled = true
         config.iast.enabled = true
-        config.configure = conf => {
+        config.setRemoteConfig = conf => {
           config.tracing = conf.tracing_enabled
         }
 
@@ -443,12 +449,12 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
         let conf = { tracing_enabled: false }
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
         conf = { tracing_enabled: true }
-        handlers.get('APM_TRACING')('apply', { lib_config: conf })
+        handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
         sinon.assert.calledTwice(iast.enable)
@@ -478,12 +484,12 @@ describe('TracerProxy', () => {
       it('should expose real metrics methods after init when configured', () => {
         config.dogstatsd = {
           hostname: 'localhost',
-          port: 9876
+          port: 9876,
         }
         config.tags = {
           service: 'photos',
           env: 'prod',
-          version: '1.2.3'
+          version: '1.2.3',
         }
 
         proxy.init()
@@ -566,7 +572,7 @@ describe('TracerProxy', () => {
           './profiler': null, // this will cause the import failure error
           './appsec': appsec,
           './telemetry': telemetry,
-          './remote_config': remoteConfig
+          './remote_config': RemoteConfig,
         })
 
         const profilerImportFailureProxy = new ProfilerImportFailureProxy()
@@ -585,7 +591,7 @@ describe('TracerProxy', () => {
 
       it('should configure standalone', () => {
         const standalone = {
-          configure: sinon.stub()
+          configure: sinon.stub(),
         }
 
         const options = {}
@@ -594,10 +600,10 @@ describe('TracerProxy', () => {
           './config': Config,
           './appsec': appsec,
           './appsec/iast': iast,
-          './remote_config': remoteConfig,
+          './remote_config': RemoteConfig,
           './appsec/sdk': AppsecSdk,
           './standalone': standalone,
-          './telemetry': telemetry
+          './telemetry': telemetry,
         })
 
         const proxy = new DatadogProxy()
@@ -710,6 +716,19 @@ describe('TracerProxy', () => {
           const baggage = proxy.setBaggageItem('key2', 'value2')
           assert.deepStrictEqual(baggage, { key1: 'value1', key2: 'value2' })
         })
+
+        it('should ignore invalid key or value', () => {
+          proxy.setBaggageItem(null, 'value')
+          proxy.setBaggageItem(123, 'value')
+
+          // Valid
+          proxy.setBaggageItem('key1', 'value1')
+
+          proxy.setBaggageItem('key2', 333)
+          const baggage = proxy.setBaggageItem('key3', {})
+
+          assert.deepStrictEqual(baggage, { key1: 'value1' })
+        })
       })
 
       describe('getBaggageItem', () => {
@@ -755,7 +774,7 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key1', 'value1')
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
-          assert.strictEqual(baggage, undefined)
+          assert.deepStrictEqual(baggage, {})
         })
       })
     })
@@ -934,3 +953,20 @@ describe('TracerProxy', () => {
     })
   })
 })
+
+// Helper function to create APM_TRACING batch transaction objects
+function createApmTracingTransaction (configId, libConfig, action = 'apply') {
+  const item = {
+    id: configId,
+    file: { lib_config: libConfig },
+    path: `datadog/1/APM_TRACING/${configId}`,
+  }
+
+  return {
+    toUnapply: action === 'unapply' ? [item] : [],
+    toApply: action === 'apply' ? [item] : [],
+    toModify: action === 'modify' ? [item] : [],
+    ack: sinon.spy(),
+    error: sinon.spy(),
+  }
+}

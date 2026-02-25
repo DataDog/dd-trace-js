@@ -5,10 +5,10 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../../../../datadog-core')
 const shimmer = require('../../../../../datadog-shimmer')
 const log = require('../../../log')
-const { parse, SANITIZER_TYPE } = require('./parser')
 const TaintTrackingOperations = require('../taint-tracking/operations')
 const { getIastContext } = require('../iast-context')
 const { iterateObjectStrings } = require('../utils')
+const { parse, SANITIZER_TYPE } = require('./parser')
 
 // esm
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
@@ -67,11 +67,11 @@ function getControls (filename) {
 
 function hookModule (filename, module, controlsByFile) {
   try {
-    controlsByFile.forEach(({ type, method, parameters, secureMarks }) => {
+    for (const { type, method, parameters, secureMarks } of controlsByFile) {
       const { target, parent, methodName } = resolve(method, module)
       if (!target) {
         log.error('[ASM] Unable to resolve IAST security control %s:%s', filename, method)
-        return
+        continue
       }
 
       const wrapper = type === SANITIZER_TYPE
@@ -83,7 +83,7 @@ function hookModule (filename, module, controlsByFile) {
       } else {
         module = wrapper
       }
-    })
+    }
   } catch (e) {
     log.error('[ASM] Error initializing IAST security control for %s', filename, e)
   }
@@ -127,18 +127,18 @@ function wrapSanitizer (target, secureMarks) {
 function wrapInputValidator (target, parameters, secureMarks) {
   const allParameters = !parameters?.length
 
-  return shimmer.wrapFunction(target, orig => function () {
+  return shimmer.wrapFunction(target, orig => function (...args) {
     try {
-      [...arguments].forEach((arg, index) => {
+      for (let index = 0; index < args.length; index++) {
         if (allParameters || parameters.includes(index)) {
-          addSecureMarks(arg, secureMarks, false)
+          addSecureMarks(args[index], secureMarks, false)
         }
-      })
-    } catch (e) {
-      log.error('[ASM] Error adding Secure mark for input validator', e)
+      }
+    } catch (error) {
+      log.error('[ASM] Error adding Secure mark for input validator', error)
     }
 
-    return orig.apply(this, arguments)
+    return orig.apply(this, args)
   })
 }
 
@@ -175,5 +175,5 @@ function disable () {
 
 module.exports = {
   configure,
-  disable
+  disable,
 }

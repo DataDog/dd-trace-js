@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
@@ -54,7 +53,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           server = Hapi.server({
             address: 'localhost',
-            port: 0
+            port: 0,
           })
           return server.start().then(() => {
             port = server.listener.address().port
@@ -94,7 +93,7 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler
+          handler,
         })
 
         agent
@@ -109,7 +108,10 @@ describe('Plugin', () => {
             assert.ok(Object.hasOwn(traces[0][0].meta, 'http.status_code'))
             assert.strictEqual(traces[0][0].meta.component, 'hapi')
             assert.strictEqual(traces[0][0].meta['_dd.integration'], 'hapi')
-            expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
+            assert.ok(
+              Number(traces[0][0].meta['http.status_code']) >= 200 &&
+              Number(traces[0][0].meta['http.status_code']) <= 299
+            )
           })
           .then(done)
           .catch(done)
@@ -127,7 +129,7 @@ describe('Plugin', () => {
             assert.notStrictEqual(tracer.scope().active(), null)
             done()
             return handler(request, h)
-          }
+          },
         })
 
         axios
@@ -150,7 +152,7 @@ describe('Plugin', () => {
               }
 
               return handler(request, h)
-            }
+            },
           })
 
           axios
@@ -169,10 +171,10 @@ describe('Plugin', () => {
                 assert.notStrictEqual(tracer.scope().active(), null)
                 done()
                 return handler(request, h)
-              }
+              },
             ],
-            handler
-          }
+            handler,
+          },
         })
 
         axios
@@ -185,8 +187,8 @@ describe('Plugin', () => {
           method: 'GET',
           path: '/user/{id}',
           config: {
-            handler
-          }
+            handler,
+          },
         })
 
         server.ext('onPostAuth', (request, h) => {
@@ -211,15 +213,15 @@ describe('Plugin', () => {
             method: 'GET',
             path: '/user/{id}',
             config: {
-              handler
-            }
+              handler,
+            },
           })
 
           server.ext({
             type: 'onPostAuth',
             method: (request, h) => {
               return tracer.scope().activate(null, reply(request, h))
-            }
+            },
           })
 
           server.ext({
@@ -229,7 +231,7 @@ describe('Plugin', () => {
               done()
 
               return reply(request, h)
-            }
+            },
           })
 
           axios
@@ -242,7 +244,7 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler
+          handler,
         })
 
         server.ext('onRequest', (request, h) => {
@@ -261,7 +263,7 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler
+          handler,
         })
 
         agent
@@ -277,8 +279,8 @@ describe('Plugin', () => {
             headers: {
               'x-datadog-trace-id': '1234',
               'x-datadog-parent-id': '5678',
-              'ot-baggage-foo': 'bar'
-            }
+              'ot-baggage-foo': 'bar',
+            },
           })
           .catch(done)
       })
@@ -308,7 +310,7 @@ describe('Plugin', () => {
             } else {
               throw error
             }
-          }
+          },
         })
 
         agent
@@ -340,7 +342,7 @@ describe('Plugin', () => {
             } else {
               throw error
             }
-          }
+          },
         })
 
         agent
@@ -372,7 +374,7 @@ describe('Plugin', () => {
             assert.deepStrictEqual(storage.getStore(), { path })
             done()
             return h.response ? h.response() : h()
-          }
+          },
         })
 
         axios

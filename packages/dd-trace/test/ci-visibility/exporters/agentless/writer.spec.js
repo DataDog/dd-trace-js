@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -24,16 +24,16 @@ describe('CI Visibility Writer', () => {
     encoder = {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns(Buffer.from(''))
+      makePayload: sinon.stub().returns(Buffer.from('')),
     }
 
     url = {
       protocol: 'https:',
-      hostname: 'citestcycle-intake.datadog.com'
+      hostname: 'citestcycle-intake.datadog.com',
     }
 
     log = {
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     const AgentlessCiVisibilityEncoder = function () {
@@ -43,7 +43,7 @@ describe('CI Visibility Writer', () => {
     coverageEncoder = {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns([])
+      makePayload: sinon.stub().returns([]),
     }
 
     const CoverageCIVisibilityEncoder = function () {
@@ -54,7 +54,7 @@ describe('CI Visibility Writer', () => {
       '../../../exporters/common/request': request,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
-      '../../../log': log
+      '../../../log': log,
     })
     writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' }, coverageUrl: url })
   })
@@ -98,8 +98,8 @@ describe('CI Visibility Writer', () => {
           path: '/api/v2/citestcycle',
           method: 'POST',
           headers: {
-            'Content-Type': 'application/msgpack'
-          }
+            'Content-Type': 'application/msgpack',
+          },
         })
         done()
       })

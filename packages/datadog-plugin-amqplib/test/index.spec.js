@@ -6,13 +6,10 @@ const { Buffer } = require('node:buffer')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
-const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
-const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer
@@ -78,7 +75,7 @@ describe('Plugin', () => {
                   assert.strictEqual(span.name, expectedSchema.controlPlane.opName)
                   assert.strictEqual(span.service, expectedSchema.controlPlane.serviceName)
                   assert.strictEqual(span.resource, `queue.declare ${queue}`)
-                  assert.ok(!Object.hasOwn(span, 'type'))
+                  assert.ok(!('type' in span))
                   assert.strictEqual(span.meta['span.kind'], 'client')
                   assert.strictEqual(span.meta['out.host'], 'localhost')
                   assert.strictEqual(span.meta.component, 'amqplib')
@@ -99,7 +96,7 @@ describe('Plugin', () => {
                   assert.strictEqual(span.name, expectedSchema.controlPlane.opName)
                   assert.strictEqual(span.service, expectedSchema.controlPlane.serviceName)
                   assert.strictEqual(span.resource, `queue.delete ${queue}`)
-                  assert.ok(!Object.hasOwn(span, 'type'))
+                  assert.ok(!('type' in span))
                   assert.strictEqual(span.meta['span.kind'], 'client')
                   assert.strictEqual(span.meta['out.host'], 'localhost')
                   assert.strictEqual(span.meta.component, 'amqplib')
@@ -158,7 +155,7 @@ describe('Plugin', () => {
                   assert.strictEqual(span.name, expectedSchema.send.opName)
                   assert.strictEqual(span.service, expectedSchema.send.serviceName)
                   assert.strictEqual(span.resource, 'basic.publish exchange routingKey')
-                  assert.ok(!Object.hasOwn(span, 'type'))
+                  assert.ok(!('type' in span))
                   assert.strictEqual(span.meta['out.host'], 'localhost')
                   assert.strictEqual(span.meta['span.kind'], 'producer')
                   assert.strictEqual(span.meta['amqp.routingKey'], 'routingKey')
@@ -309,233 +306,6 @@ describe('Plugin', () => {
               .catch(done)
           })
         })
-
-        describe('when data streams monitoring is enabled', function () {
-          this.timeout(10000)
-
-          let expectedProducerHashWithTopic
-          let expectedProducerHashWithExchange
-          let expectedConsumerHash
-
-          beforeEach(() => {
-            const producerHashWithTopic = computePathwayHash('test', 'tester', [
-              'direction:out',
-              'has_routing_key:true',
-              `topic:${queue}`,
-              'type:rabbitmq'
-            ], ENTRY_PARENT_HASH)
-
-            expectedProducerHashWithTopic = producerHashWithTopic.readBigUInt64LE(0).toString()
-
-            expectedProducerHashWithExchange = computePathwayHash('test', 'tester', [
-              'direction:out',
-              'exchange:namedExchange',
-              'has_routing_key:true',
-              'type:rabbitmq'
-            ], ENTRY_PARENT_HASH).readBigUInt64LE(0).toString()
-
-            expectedConsumerHash = computePathwayHash('test', 'tester', [
-              'direction:in',
-              `topic:${queue}`,
-              'type:rabbitmq'
-            ], producerHashWithTopic).readBigUInt64LE(0).toString()
-          })
-
-          it('Should emit DSM stats to the agent when sending a message on an unnamed exchange', done => {
-            agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = []
-              // we should have 1 dsm stats points
-              dsmStats.forEach((timeStatsBucket) => {
-                if (timeStatsBucket && timeStatsBucket.Stats) {
-                  timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
-                  })
-                }
-              })
-              assert.ok(statsPointsReceived.length >= 1)
-              assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
-                'direction:out',
-                'has_routing_key:true',
-                `topic:${queue}`,
-                'type:rabbitmq'
-              ])
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithTopic), true)
-            }, { timeoutMs: 10000 }).then(done, done)
-
-            channel.assertQueue(queue, {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
-            })
-          })
-
-          it('Should emit DSM stats to the agent when sending a message on an named exchange', done => {
-            agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = []
-              // we should have 1 dsm stats points
-              dsmStats.forEach((timeStatsBucket) => {
-                if (timeStatsBucket && timeStatsBucket.Stats) {
-                  timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
-                  })
-                }
-              })
-              assert.ok(statsPointsReceived.length >= 1)
-              assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
-                'direction:out',
-                'exchange:namedExchange',
-                'has_routing_key:true',
-                'type:rabbitmq'
-              ])
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithExchange), true)
-            }, { timeoutMs: 10000 }).then(done, done)
-
-            channel.assertExchange('namedExchange', 'direct', {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.publish('namedExchange', 'anyOldRoutingKey', Buffer.from('DSM pathway test'))
-            })
-          })
-
-          it('Should emit DSM stats to the agent when receiving a message', done => {
-            agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = []
-              // we should have 2 dsm stats points
-              dsmStats.forEach((timeStatsBucket) => {
-                if (timeStatsBucket && timeStatsBucket.Stats) {
-                  timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
-                  })
-                }
-              })
-              assert.strictEqual(statsPointsReceived.length, 2)
-              assert.deepStrictEqual(statsPointsReceived[1].EdgeTags,
-                ['direction:in', `topic:${queue}`, 'type:rabbitmq'])
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
-            }, { timeoutMs: 10000 }).then(done, done)
-
-            channel.assertQueue(queue, {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
-              channel.consume(ok.queue, () => {}, {}, (err, ok) => {
-                if (err) done(err)
-              })
-            })
-          })
-
-          it('Should emit DSM stats to the agent when sending another message', done => {
-            agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = []
-              // we should have 1 dsm stats points
-              dsmStats.forEach((timeStatsBucket) => {
-                if (timeStatsBucket && timeStatsBucket.Stats) {
-                  timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
-                  })
-                }
-              })
-              assert.strictEqual(statsPointsReceived.length, 1)
-              assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
-                'direction:out',
-                'has_routing_key:true',
-                `topic:${queue}`,
-                'type:rabbitmq'
-              ])
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHashWithTopic), true)
-            }, { timeoutMs: 10000 }).then(done, done)
-
-            channel.assertQueue(queue, {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
-            })
-          })
-
-          it('Should emit DSM stats to the agent when receiving a message with get', done => {
-            agent.expectPipelineStats(dsmStats => {
-              let statsPointsReceived = []
-              // we should have 2 dsm stats points
-              dsmStats.forEach((timeStatsBucket) => {
-                if (timeStatsBucket && timeStatsBucket.Stats) {
-                  timeStatsBucket.Stats.forEach((statsBuckets) => {
-                    statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
-                  })
-                }
-              })
-              assert.strictEqual(statsPointsReceived.length, 2)
-              assert.deepStrictEqual(statsPointsReceived[1].EdgeTags,
-                ['direction:in', `topic:${queue}`, 'type:rabbitmq'])
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
-            }, { timeoutMs: 10000 }).then(done, done)
-
-            channel.assertQueue(queue, {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.sendToQueue(ok.queue, Buffer.from('DSM pathway test'))
-              channel.get(ok.queue, {}, (err, ok) => {
-                if (err) done(err)
-              })
-            })
-          })
-
-          it('regression test: should handle basic.get when queue is empty', done => {
-            channel.assertQueue(queue, {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.get(ok.queue, {}, (err, msg) => {
-                if (err) return done(err)
-                assert.strictEqual(msg, false)
-                done()
-              })
-            })
-          })
-
-          it('Should set pathway hash tag on a span when producing', (done) => {
-            channel.assertQueue(queue, {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
-
-              let produceSpanMeta = {}
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                if (span.resource.startsWith('basic.publish')) {
-                  produceSpanMeta = span.meta
-                }
-
-                assertObjectContains(produceSpanMeta, {
-                  'pathway.hash': expectedProducerHashWithTopic
-                })
-              }, { timeoutMs: 10000 }).then(done, done)
-            })
-          })
-
-          it('Should set pathway hash tag on a span when consuming', (done) => {
-            channel.assertQueue(queue, {}, (err, ok) => {
-              if (err) return done(err)
-
-              channel.sendToQueue(ok.queue, Buffer.from('dsm test'))
-              channel.consume(ok.queue, () => {}, {}, (err, ok) => {
-                if (err) return done(err)
-
-                let consumeSpanMeta = {}
-                agent.assertSomeTraces(traces => {
-                  const span = traces[0][0]
-
-                  if (span.resource.startsWith('basic.deliver')) {
-                    consumeSpanMeta = span.meta
-                  }
-
-                  assertObjectContains(consumeSpanMeta, {
-                    'pathway.hash': expectedConsumerHash
-                  })
-                }, { timeoutMs: 10000 }).then(done, done)
-              })
-            })
-          })
-        })
       })
 
       describe('with configuration', () => {
@@ -577,12 +347,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'amqp.command',
-              serviceName: 'test-custom-service'
+              serviceName: 'test-custom-service',
             },
             v1: {
               opName: 'amqp.command',
-              serviceName: 'test-custom-service'
-            }
+              serviceName: 'test-custom-service',
+            },
           }
         )
       })

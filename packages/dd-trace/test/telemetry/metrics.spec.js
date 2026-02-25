@@ -2,8 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -21,8 +20,8 @@ describe('metrics', () => {
     sendData = sinon.stub()
     metrics = proxyquire('../../src/telemetry/metrics', {
       './send-data': {
-        sendData
-      }
+        sendData,
+      },
     })
   })
 
@@ -69,12 +68,12 @@ describe('metrics', () => {
                 interval: undefined,
                 type: 'count',
                 tags: [
-                  'bar:baz'
+                  'bar:baz',
                 ],
-                common: true
-              }
-            ]
-          }
+                common: true,
+              },
+            ],
+          },
         },
         {
           distributions: undefined,
@@ -87,13 +86,13 @@ describe('metrics', () => {
                 interval: undefined,
                 type: 'count',
                 tags: [
-                  'bux:bax'
+                  'bux:bax',
                 ],
-                common: true
-              }
-            ]
-          }
-        }
+                common: true,
+              },
+            ],
+          },
+        },
       ])
     })
 
@@ -110,49 +109,47 @@ describe('metrics', () => {
         hostname: 'localhost',
         port: 12345,
         tags: {
-          'runtime-id': 'abc123'
-        }
+          'runtime-id': 'abc123',
+        },
       }
       const application = {
         language_name: 'nodejs',
-        tracer_version: '1.2.3'
+        tracer_version: '1.2.3',
       }
       const host = {}
 
       manager.send(config, application, host)
 
-      expect(sendData).to.have.been
-        .calledWith(config, application, host, 'generate-metrics', {
-          namespace: 'test1',
-          series: [
-            {
-              metric: 'metric1',
-              points: [[now / 1e3, 1]],
-              interval: undefined,
-              type: 'count',
-              tags: [
-                'bar:baz'
-              ],
-              common: true
-            }
-          ]
-        })
-      expect(sendData).to.have.been
-        .calledWith(config, application, host, 'generate-metrics', {
-          namespace: 'test2',
-          series: [
-            {
-              metric: 'metric2',
-              points: [[now / 1e3, 1]],
-              interval: undefined,
-              type: 'count',
-              tags: [
-                'bux:bax'
-              ],
-              common: true
-            }
-          ]
-        })
+      sinon.assert.calledWith(sendData, config, application, host, 'generate-metrics', {
+        namespace: 'test1',
+        series: [
+          {
+            metric: 'metric1',
+            points: [[now / 1e3, 1]],
+            interval: undefined,
+            type: 'count',
+            tags: [
+              'bar:baz',
+            ],
+            common: true,
+          },
+        ],
+      })
+      sinon.assert.calledWith(sendData, config, application, host, 'generate-metrics', {
+        namespace: 'test2',
+        series: [
+          {
+            metric: 'metric2',
+            points: [[now / 1e3, 1]],
+            interval: undefined,
+            type: 'count',
+            tags: [
+              'bux:bax',
+            ],
+            common: true,
+          },
+        ],
+      })
     })
 
     it('should not send empty metrics', () => {
@@ -168,12 +165,12 @@ describe('metrics', () => {
         hostname: 'localhost',
         port: 12345,
         tags: {
-          'runtime-id': 'abc123'
-        }
+          'runtime-id': 'abc123',
+        },
       }
       const application = {
         language_name: 'nodejs',
-        tracer_version: '1.2.3'
+        tracer_version: '1.2.3',
       }
       const host = {}
 
@@ -192,22 +189,22 @@ describe('metrics', () => {
 
     it('should get count metric', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns.count('name')).to.be.instanceOf(metrics.CountMetric)
+      assert.ok(ns.count('name') instanceof metrics.CountMetric)
     })
 
     it('should get distribution metric', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns.distribution('name')).to.be.instanceOf(metrics.DistributionMetric)
+      assert.ok(ns.distribution('name') instanceof metrics.DistributionMetric)
     })
 
     it('should get gauge metric', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns.gauge('name')).to.be.instanceOf(metrics.GaugeMetric)
+      assert.ok(ns.gauge('name') instanceof metrics.GaugeMetric)
     })
 
     it('should get rate metric', () => {
       const ns = new metrics.Namespace('name')
-      expect(ns.rate('name')).to.be.instanceOf(metrics.RateMetric)
+      assert.ok(ns.rate('name') instanceof metrics.RateMetric)
     })
 
     it('should have unique metrics per unique tag set', () => {
@@ -251,9 +248,9 @@ describe('metrics', () => {
               interval: undefined,
               type: 'count',
               tags: [
-                'bar:baz'
+                'bar:baz',
               ],
-              common: true
+              common: true,
             },
             {
               metric: 'foo',
@@ -261,12 +258,12 @@ describe('metrics', () => {
               interval: undefined,
               type: 'count',
               tags: [
-                'bux:bax'
+                'bux:bax',
               ],
-              common: true
-            }
-          ]
-        }
+              common: true,
+            },
+          ],
+        },
       })
     })
 
@@ -278,7 +275,7 @@ describe('metrics', () => {
 
       assert.deepStrictEqual(ns.toJSON(), {
         distributions: undefined,
-        metrics: undefined
+        metrics: undefined,
       })
     })
   })
@@ -288,7 +285,7 @@ describe('metrics', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name', {
         foo: 'bar',
-        baz: 'buz'
+        baz: 'buz',
       })
 
       assert.strictEqual(metric.type, 'count')
@@ -297,10 +294,10 @@ describe('metrics', () => {
         metric: 'name',
         tags: [
           'foo:bar',
-          'baz:buz'
+          'baz:buz',
         ],
         common: true,
-        points: []
+        points: [],
       }
       Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
       assert.deepStrictEqual(metric, expected)
@@ -317,13 +314,13 @@ describe('metrics', () => {
       sinon.assert.called(metric.track)
 
       assert.deepStrictEqual(metric.points, [
-        [now / 1e3, 1]
+        [now / 1e3, 1],
       ])
 
       metric.inc()
 
       assert.deepStrictEqual(metric.points, [
-        [now / 1e3, 2]
+        [now / 1e3, 2],
       ])
     })
 
@@ -338,10 +335,10 @@ describe('metrics', () => {
 
       metric.dec()
 
-      expect(metric.track).to.be.calledWith(-1)
+      sinon.assert.calledWith(metric.track, -1)
 
       assert.deepStrictEqual(metric.points, [
-        [now / 1e3, 1]
+        [now / 1e3, 1],
       ])
     })
 
@@ -355,10 +352,10 @@ describe('metrics', () => {
 
       metric.dec(2)
 
-      expect(metric.track).to.be.calledWith(-2)
+      sinon.assert.calledWith(metric.track, -2)
 
       assert.deepStrictEqual(metric.points, [
-        [now / 1e3, 1]
+        [now / 1e3, 1],
       ])
     })
 
@@ -375,7 +372,7 @@ describe('metrics', () => {
       metric.inc()
 
       assert.deepStrictEqual(metric.points, [
-        [now / 1e3, 2]
+        [now / 1e3, 2],
       ])
     })
 
@@ -393,7 +390,7 @@ describe('metrics', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.count('name', {
         foo: 'bar',
-        baz: 'buz'
+        baz: 'buz',
       })
 
       metric.inc()
@@ -405,9 +402,9 @@ describe('metrics', () => {
         type: 'count',
         tags: [
           'foo:bar',
-          'baz:buz'
+          'baz:buz',
         ],
-        common: true
+        common: true,
       })
     })
   })
@@ -417,7 +414,7 @@ describe('metrics', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name', {
         foo: 'bar',
-        baz: 'buz'
+        baz: 'buz',
       })
 
       assert.strictEqual(metric.type, 'distribution')
@@ -426,10 +423,10 @@ describe('metrics', () => {
         metric: 'name',
         tags: [
           'foo:bar',
-          'baz:buz'
+          'baz:buz',
         ],
         common: true,
-        points: []
+        points: [],
       }
       Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
       assert.deepStrictEqual(metric, expected)
@@ -446,7 +443,7 @@ describe('metrics', () => {
       assert.deepStrictEqual(metric.points, [
         100,
         50,
-        300
+        300,
       ])
     })
 
@@ -464,7 +461,7 @@ describe('metrics', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.distribution('name', {
         foo: 'bar',
-        baz: 'buz'
+        baz: 'buz',
       })
 
       metric.track(123)
@@ -472,13 +469,13 @@ describe('metrics', () => {
       assert.deepStrictEqual(metric.toJSON(), {
         metric: 'name',
         points: [
-          123
+          123,
         ],
         common: true,
         tags: [
           'foo:bar',
-          'baz:buz'
-        ]
+          'baz:buz',
+        ],
       })
     })
   })
@@ -488,7 +485,7 @@ describe('metrics', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.gauge('name', {
         foo: 'bar',
-        baz: 'buz'
+        baz: 'buz',
       })
 
       assert.strictEqual(metric.type, 'gauge')
@@ -497,10 +494,10 @@ describe('metrics', () => {
         metric: 'name',
         tags: [
           'foo:bar',
-          'baz:buz'
+          'baz:buz',
         ],
         common: true,
-        points: []
+        points: [],
       }
       Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
       assert.deepStrictEqual(metric, expected)
@@ -517,7 +514,7 @@ describe('metrics', () => {
       sinon.assert.called(metric.track)
 
       assert.deepStrictEqual(metric.points, [
-        [now / 1e3, 1]
+        [now / 1e3, 1],
       ])
 
       Date.now.restore()
@@ -528,7 +525,7 @@ describe('metrics', () => {
 
       assert.deepStrictEqual(metric.points, [
         [now / 1e3, 1],
-        [newNow / 1e3, 2]
+        [newNow / 1e3, 2],
       ])
     })
 
@@ -546,7 +543,7 @@ describe('metrics', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.gauge('name', {
         foo: 'bar',
-        baz: 'buz'
+        baz: 'buz',
       })
 
       metric.mark(1)
@@ -561,15 +558,15 @@ describe('metrics', () => {
         metric: 'name',
         points: [
           [now / 1e3, 1],
-          [newNow / 1e3, 2]
+          [newNow / 1e3, 2],
         ],
         interval: undefined,
         type: 'gauge',
         tags: [
           'foo:bar',
-          'baz:buz'
+          'baz:buz',
         ],
-        common: true
+        common: true,
       })
     })
   })
@@ -579,7 +576,7 @@ describe('metrics', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.rate('name', 1000, {
         foo: 'bar',
-        baz: 'buz'
+        baz: 'buz',
       })
 
       assert.strictEqual(metric.type, 'rate')
@@ -588,12 +585,12 @@ describe('metrics', () => {
         metric: 'name',
         tags: [
           'foo:bar',
-          'baz:buz'
+          'baz:buz',
         ],
         common: true,
         points: [],
         interval: 1000,
-        rate: 0
+        rate: 0,
       }
       Object.setPrototypeOf(expected, Object.getPrototypeOf(metric))
       assert.deepStrictEqual(metric, expected)
@@ -606,7 +603,7 @@ describe('metrics', () => {
       metric.track(100)
 
       assert.deepStrictEqual(metric.points, [
-        [now / 1e3, 0.1]
+        [now / 1e3, 0.1],
       ])
     })
 
@@ -624,7 +621,7 @@ describe('metrics', () => {
       const ns = new metrics.Namespace('tracers')
       const metric = ns.rate('name', 1000, {
         foo: 'bar',
-        baz: 'buz'
+        baz: 'buz',
       })
 
       metric.track(123)
@@ -632,15 +629,15 @@ describe('metrics', () => {
       assert.deepStrictEqual(metric.toJSON(), {
         metric: 'name',
         points: [
-          [now / 1e3, 0.123]
+          [now / 1e3, 0.123],
         ],
         interval: 1000,
         type: 'rate',
         tags: [
           'foo:bar',
-          'baz:buz'
+          'baz:buz',
         ],
-        common: true
+        common: true,
       })
     })
   })

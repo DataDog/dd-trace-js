@@ -1,13 +1,13 @@
 'use strict'
 
-const ProducerPlugin = require('./producer')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const ProducerPlugin = require('./producer')
 
 class AzureServiceBusPlugin extends CompositePlugin {
   static get id () { return 'azure-service-bus' }
   static get plugins () {
     return {
-      producer: ProducerPlugin
+      producer: ProducerPlugin,
     }
   }
 }

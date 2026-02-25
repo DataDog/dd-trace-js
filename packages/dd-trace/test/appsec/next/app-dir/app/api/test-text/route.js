@@ -4,6 +4,6 @@ export async function POST (request) {
   return NextResponse.json({
     now: Date.now(),
     cache: 'no-store',
-    data: body
+    data: body,
   })
 }

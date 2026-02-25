@@ -1,4 +1,16 @@
 {
-  "eslint.workingDirectories": ["."],
-  "typescript.tsdk": "node_modules/typescript/lib"
+  // Core VSCode settings
+  "editor.formatOnSave": true,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.tsdk": "node_modules/typescript/lib", // Use the workspace version of TypeScript instead of VSCode's bundled version
+  // Extension settings
+  "eslint.format.enable": true,
+  "yaml.schemas": {
+    "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yml"
+  }
 }

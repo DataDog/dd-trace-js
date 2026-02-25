@@ -1,12 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const path = require('node:path')
 const dc = require('dc-polyfill')
 
 require('../setup/core')
@@ -29,7 +28,7 @@ describe('dependencies', () => {
       const subscribe = sinon.stub()
       const dc = { channel () { return { subscribe } } }
       const dependencies = proxyquire('../../src/telemetry/dependencies', {
-        'dc-polyfill': dc
+        'dc-polyfill': dc,
       })
 
       dependencies.start()
@@ -57,7 +56,7 @@ describe('dependencies', () => {
       dependencies = proxyquire('../../src/telemetry/dependencies', {
         './index': { getRetryData, updateRetryData },
         './send-data': { sendData },
-        '../require-package-json': requirePackageJson
+        '../require-package-json': requirePackageJson,
       })
 
       global.setImmediate = setImmediate2
@@ -160,11 +159,17 @@ describe('dependencies', () => {
       moduleLoadStartChannel.publish({ filename })
       const expectedDependencies = {
         dependencies: [
-          { name: request, version: packageVersion }
-        ]
+          { name: request, version: packageVersion },
+        ],
       }
-      expect(sendData)
-        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should call sendData with computed request from file path when it does not come in message', () => {
@@ -175,11 +180,17 @@ describe('dependencies', () => {
       moduleLoadStartChannel.publish({ filename })
       const expectedDependencies = {
         dependencies: [
-          { name: request, version: packageVersion }
-        ]
+          { name: request, version: packageVersion },
+        ],
       }
-      expect(sendData)
-        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should call sendData with computed request from filename with scope when it does not come in message', () => {
@@ -191,11 +202,17 @@ describe('dependencies', () => {
       moduleLoadStartChannel.publish({ filename })
       const expectedDependencies = {
         dependencies: [
-          { name: request, version: packageVersion }
-        ]
+          { name: request, version: packageVersion },
+        ],
       }
-      expect(sendData)
-        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should only include one copy of each dependency, regardless of how many of its files are loaded', () => {
@@ -208,11 +225,17 @@ describe('dependencies', () => {
       moduleLoadStartChannel.publish({ request: moduleName, filename: filename2 })
       const expectedDependencies = {
         dependencies: [
-          { name: moduleName, version: packageVersion }
-        ]
+          { name: moduleName, version: packageVersion },
+        ],
       }
-      expect(sendData)
-        .to.have.been.calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should include two dependencies when they are in different paths', () => {
@@ -236,21 +259,33 @@ describe('dependencies', () => {
 
       const expectedDependencies1 = {
         dependencies: [
-          { name: moduleName, version: packageVersion }
-        ]
+          { name: moduleName, version: packageVersion },
+        ],
       }
       const expectedDependencies2 = {
         dependencies: [
-          { name: moduleName, version: nestedPackageVersion }
-        ]
+          { name: moduleName, version: nestedPackageVersion },
+        ],
       }
       sinon.assert.calledTwice(sendData)
 
-      expect(sendData.firstCall)
-        .to.have.been.calledWith(config, application, host, 'app-dependencies-loaded', expectedDependencies1)
+      sinon.assert.calledWith(
+        sendData.firstCall,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies1
+      )
 
-      expect(sendData.secondCall)
-        .to.have.been.calledWith(config, application, host, 'app-dependencies-loaded', expectedDependencies2)
+      sinon.assert.calledWith(
+        sendData.secondCall,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies2
+      )
     })
 
     it('should include only one dependency when they are in different paths but the version number is the same', () => {
@@ -273,11 +308,17 @@ describe('dependencies', () => {
 
       const expectedDependencies = {
         dependencies: [
-          { name: moduleName, version: packageVersion }
-        ]
+          { name: moduleName, version: packageVersion },
+        ],
       }
-      expect(sendData).to.have.been
-        .calledOnceWith(config, application, host, 'app-dependencies-loaded', expectedDependencies)
+      sinon.assert.calledOnceWithMatch(
+        sendData,
+        config,
+        application,
+        host,
+        'app-dependencies-loaded',
+        expectedDependencies
+      )
     })
 
     it('should call sendData only once with duplicated dependency', () => {
@@ -323,8 +364,8 @@ describe('dependencies', () => {
   describe('with configuration', () => {
     const config = {
       telemetry: {
-        dependencyCollection: false
-      }
+        dependencyCollection: false,
+      },
     }
     const application = 'test'
     const host = 'host'
@@ -344,7 +385,7 @@ describe('dependencies', () => {
       dependencies = proxyquire('../../src/telemetry/dependencies', {
         './index': { getRetryData, updateRetryData },
         './send-data': { sendData },
-        '../require-package-json': requirePackageJson
+        '../require-package-json': requirePackageJson,
       })
       global.setImmediate = setImmediate2
 
@@ -400,14 +441,14 @@ describe('dependencies', () => {
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
           payload,
-          reqType: 'app-integrations-change'
+          reqType: 'app-integrations-change',
         })
       }
       getRetryData = sinon.stub()
       updateRetryData = sinon.stub()
       dependencies = proxyquire('../../src/telemetry/dependencies', {
         './send-data': { sendData },
-        '../require-package-json': requirePackageJson
+        '../require-package-json': requirePackageJson,
       })
       global.setImmediate = setImmediate2
 
@@ -450,9 +491,9 @@ describe('dependencies', () => {
           integrations: [{
             name: 'zoo1',
             enabled: true,
-            auto_enabled: true
-          }]
-        }
+            auto_enabled: true,
+          }],
+        },
 
       })
 

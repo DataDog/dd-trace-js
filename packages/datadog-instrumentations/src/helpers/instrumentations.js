@@ -1,19 +1,8 @@
 'use strict'
 
+// Use a global symbol to prevent stealthy-require to interfere.
+// TODO: Use the symbol from dd-trace instead and remove this file.
 const sym = Symbol.for('_ddtrace_instrumentations')
+globalThis[sym] ??= {}
 
-global[sym] = global[sym] || {}
-
-/** @template T */
-/**
- * @typedef {(moduleExports: T, version: string) => T} Hook
- *
- * @type {Record<string, Instrumentation[]>}
- * @typedef {Object} Instrumentation
- * @property {string[]} [versions]
- * @property {string} [file]
- * @property {string} [filePattern]
- * @property {Hook} hook
- * @property {boolean} [patchDefault]
- */
-module.exports = global[sym]
+module.exports = globalThis[sym]

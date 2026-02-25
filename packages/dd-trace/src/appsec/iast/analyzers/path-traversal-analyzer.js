@@ -2,10 +2,10 @@
 
 const path = require('path')
 
-const InjectionAnalyzer = require('./injection-analyzer')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const { PATH_TRAVERSAL } = require('../vulnerabilities')
+const InjectionAnalyzer = require('./injection-analyzer')
 
 const ignoredOperations = new Set(['dir.close', 'close'])
 
@@ -14,7 +14,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
     super(PATH_TRAVERSAL)
 
     this.exclusionList = [
-      path.join('node_modules', 'send') + path.sep
+      path.join('node_modules', 'send') + path.sep,
     ]
 
     this.internalExclusionList = [
@@ -23,7 +23,7 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
       String.raw`node:internal\fs`,
       'fs.js',
       'internal/fs',
-      String.raw`internal\fs`
+      String.raw`internal\fs`,
     ]
   }
 

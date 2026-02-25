@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
+
+const { describe, it, beforeEach } = require('mocha')
 
 require('../../setup/core')
-
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
@@ -22,7 +22,7 @@ describe('BinaryPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       propagator.inject(spanContext, carrier)

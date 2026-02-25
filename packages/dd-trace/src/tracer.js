@@ -1,13 +1,14 @@
 'use strict'
 
-const Tracer = require('./opentracing/tracer')
 const tags = require('../../../ext/tags')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
+const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
 const { isError } = require('./util')
 const { setStartupLogConfig } = require('./startup-log')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
-const { flushStartupLogs } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
+const { IS_SERVERLESS } = require('./serverless')
 const log = require('./log/writer')
 
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -25,7 +26,7 @@ class DatadogTracer extends Tracer {
     setStartupLogConfig(config)
     flushStartupLogs(log)
 
-    if (!config._isInServerlessEnvironment()) {
+    if (!IS_SERVERLESS) {
       const storeConfig = require('./tracer_metadata')
       // Keep a reference to the handle, to keep the memfd alive in memory.
       // It is read by the service discovery feature.
@@ -150,7 +151,7 @@ function addError (span, error) {
     span.addTags({
       [ERROR_TYPE]: error.name,
       [ERROR_MESSAGE]: error.message,
-      [ERROR_STACK]: error.stack
+      [ERROR_STACK]: error.stack,
     })
   }
 }

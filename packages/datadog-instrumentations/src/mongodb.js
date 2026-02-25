@@ -2,11 +2,11 @@
 
 require('./mongodb-core')
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 // collection methods with filter
 const collectionMethodsWithFilter = [
@@ -17,20 +17,20 @@ const collectionMethodsWithFilter = [
   'find',
   'findOneAndDelete',
   'findOneAndReplace',
-  'replaceOne'
+  'replaceOne',
 ] // findOne is ignored because it calls to find
 
 const collectionMethodsWithTwoFilters = [
   'findOneAndUpdate',
   'updateMany',
-  'updateOne'
+  'updateOne',
 ]
 
 const startCh = channel('datadog:mongodb:collection:filter:start')
 
 addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
-  [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters].forEach(methodName => {
-    if (!(methodName in mongodb.Collection.prototype)) return
+  for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
+    if (!(methodName in mongodb.Collection.prototype)) continue
 
     const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
 
@@ -42,7 +42,7 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
 
         const ctx = {
           filters: [arguments[0]],
-          methodName
+          methodName,
         }
 
         if (useTwoArguments) {
@@ -54,6 +54,6 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
         })
       }
     })
-  })
+  }
   return mongodb
 })

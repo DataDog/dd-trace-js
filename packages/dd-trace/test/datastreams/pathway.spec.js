@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 
 require('../setup/core')
 
@@ -11,7 +12,7 @@ const {
   decodePathwayContext,
   encodePathwayContextBase64,
   decodePathwayContextBase64,
-  DsmPathwayCodec
+  DsmPathwayCodec,
 } = require('../../src/datastreams/pathway')
 
 describe('encoding', () => {
@@ -24,11 +25,39 @@ describe('encoding', () => {
     assert.deepStrictEqual(hash, Buffer.from('67b0b35e65c0acfa', 'hex'))
   })
 
+  it('hash should include propagation hash when provided', () => {
+    const propagationHash = BigInt('0x123456789abcdef0')
+    const hash1 = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash)
+    const hash2 = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), null)
+    assert.notDeepStrictEqual(hash1, hash2, 'Hashes should differ with/without propagation hash')
+  })
+
+  it('hash should be consistent with same propagation hash', () => {
+    const propagationHash = BigInt('0x123456789abcdef0')
+    const hash1 = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash)
+    const hash2 = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash)
+    assert.deepStrictEqual(hash1, hash2, 'Same propagation hash should produce same pathway hash')
+  })
+
+  it('hash should differ with different propagation hashes', () => {
+    const propagationHash1 = BigInt('0x123456789abcdef0')
+    const propagationHash2 = BigInt('0xfedcba9876543210')
+    const hash1 = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash1)
+    const hash2 = computePathwayHash('test-service', 'test-env',
+      ['direction:in', 'type:kafka'], Buffer.from('0000000000000000', 'hex'), propagationHash2)
+    assert.notDeepStrictEqual(hash1, hash2, 'Different propagation hashes should produce different pathway hashes')
+  })
+
   it('encoding and decoding should be a no op', () => {
     const expectedContext = {
       hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
       pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000
+      edgeStartNs: 1685673506404000000,
     }
     const encoded = encodePathwayContext(expectedContext)
     const decoded = decodePathwayContext(encoded)
@@ -44,7 +73,7 @@ describe('encoding', () => {
     const expectedContext = {
       hash: Buffer.from('67b0b35e65c0acfa', 'hex'),
       pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000
+      edgeStartNs: 1685673506404000000,
     }
     assert.strictEqual(decoded.hash.toString(), expectedContext.hash.toString())
     assert.strictEqual(decoded.pathwayStartNs, expectedContext.pathwayStartNs)
@@ -54,7 +83,7 @@ describe('encoding', () => {
   it('should encode and decode to the same value when using base64', () => {
     const ctx = {
       pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000
+      edgeStartNs: 1685673506404000000,
     }
     ctx.hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
@@ -70,7 +99,7 @@ describe('encoding', () => {
   it('should encode and decode to the same value when using the PathwayCodec', () => {
     const ctx = {
       pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000
+      edgeStartNs: 1685673506404000000,
     }
     const carrier = {}
     ctx.hash = computePathwayHash('test-service', 'test-env',
@@ -87,7 +116,7 @@ describe('encoding', () => {
   it('should encode/decode to the same value when using the PathwayCodec, base64 and the deprecated ctx key', () => {
     const ctx = {
       pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000
+      edgeStartNs: 1685673506404000000,
     }
     const carrier = {}
     ctx.hash = computePathwayHash('test-service', 'test-env',
@@ -106,7 +135,7 @@ describe('encoding', () => {
   it('should encode/decode to the same value when using the PathwayCodec and the deprecated encoding', () => {
     const ctx = {
       pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000
+      edgeStartNs: 1685673506404000000,
     }
     const carrier = {}
     ctx.hash = computePathwayHash('test-service', 'test-env',
@@ -123,7 +152,7 @@ describe('encoding', () => {
   it('should inject the base64 encoded string to the carrier', () => {
     const ctx = {
       pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000
+      edgeStartNs: 1685673506404000000,
     }
     const carrier = {}
     ctx.hash = computePathwayHash('test-service', 'test-env',
@@ -138,7 +167,7 @@ describe('encoding', () => {
   it('should extract the base64 encoded string from the carrier', () => {
     const ctx = {
       pathwayStartNs: 1685673482722000000,
-      edgeStartNs: 1685673506404000000
+      edgeStartNs: 1685673506404000000,
     }
     ctx.hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))

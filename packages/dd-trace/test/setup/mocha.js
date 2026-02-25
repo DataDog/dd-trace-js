@@ -1,20 +1,21 @@
 'use strict'
 
-const assert = require('node:assert')
-const fs = require('node:fs')
-const { platform } = require('node:os')
-const path = require('node:path')
-const util = require('node:util')
+const assert = require('assert')
+const fs = require('fs')
+const { platform } = require('os')
+const path = require('path')
+const util = require('util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 require('./core')
 
-const externals = require('../plugins/externals.json')
+const externals = require('../plugins/externals')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
+const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
 
@@ -50,7 +51,7 @@ function withNamingSchema (
           Nomenclature.configure({
             spanAttributeSchema: versionName,
             spanRemoveIntegrationFromService: false,
-            service: fullConfig.service // Hack: only way to retrieve the test agent configuration
+            service: fullConfig.service, // Hack: only way to retrieve the test agent configuration
           })
         })
 
@@ -95,7 +96,7 @@ function withNamingSchema (
         Nomenclature.configure({
           spanAttributeSchema: 'v0',
           service: fullConfig.service,
-          spanRemoveIntegrationFromService: true
+          spanRemoveIntegrationFromService: true,
         })
       })
 
@@ -147,7 +148,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     it('should compute peer service', async () => {
       const useCallback = spanGenerationFn.length === 1
       const spanGenerationPromise = useCallback
-        ? new Promise((resolve, reject) => {
+        ? new Promise(/** @type {() => void} */ (resolve, reject) => {
           const result = spanGenerationFn((err) => err ? reject(err) : resolve())
           // Some callback based methods are a mixture of callback and promise,
           // depending on the module version. Await the promises as well.
@@ -169,7 +170,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
           assert.strictEqual(span.meta['peer.service'], typeof service === 'function' ? service() : service)
           assert.strictEqual(span.meta['_dd.peer.service.source'], serviceSource)
         }),
-        spanGenerationPromise
+        spanGenerationPromise,
       ])
     })
   })
@@ -230,16 +231,17 @@ function withVersions (plugin, modules, range, cb) {
     for (const instrumentation of instrumentations) {
       if (instrumentation.name !== moduleName) continue
 
+      // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
+      // Treat those as "not a test target" instead of crashing.
       const versions = process.env.PACKAGE_VERSION_RANGE
         ? [process.env.PACKAGE_VERSION_RANGE]
-        : instrumentation.versions
+        : normalizeVersions(instrumentation.versions)
 
       for (const version of versions) {
         if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
         if (version !== '*') {
-          const result = semver.coerce(version)
-          if (!result) throw new Error(`Invalid version: ${version}`)
-          const min = result.version
+          const min = semver.coerce(version)?.version
+          if (!min) throw new Error(`Invalid version: ${version}`)
           testVersions.set(min, { versionRange: version, versionKey: min, resolvedVersion: min })
         }
 
@@ -286,6 +288,11 @@ function withVersions (plugin, modules, range, cb) {
       })
     }
   }
+}
+
+function normalizeVersions (versions) {
+  if (!versions) return []
+  return Array.isArray(versions) ? versions : [versions]
 }
 
 /**
@@ -355,10 +362,22 @@ function insertVersionDep (dir, pkgName, version) {
   })
 }
 
+const ORIGINAL_PROCESS_EXIT = process.exit
+
 exports.mochaHooks = {
+  beforeAll () {
+    process.exit = (code) => {
+      throw new Error(`process.exit(${code}) was called during tests`)
+    }
+  },
+  afterAll () {
+    process.exit = ORIGINAL_PROCESS_EXIT
+  },
   afterEach () {
     agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
-  }
+    storage('baggage').enterWith(undefined)
+    extraServices.clear()
+  },
 }

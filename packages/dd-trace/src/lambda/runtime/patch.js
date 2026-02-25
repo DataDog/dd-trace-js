@@ -2,17 +2,17 @@
 
 const path = require('path')
 
-const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePaths } = require('./ritm')
 const { datadog } = require('../handler')
 const { addHook } = require('../../../../datadog-instrumentations/src/helpers/instrument')
 const shimmer = require('../../../../datadog-shimmer')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../config/helper')
+const { _extractModuleNameAndHandlerPath, _extractModuleRootAndHandler, _getLambdaFilePaths } = require('./ritm')
 
 /**
  * Patches a Datadog Lambda module by calling `patchDatadogLambdaHandler`
  * with the handler name `datadog`.
  *
- * @param {*} datadogLambdaModule node module to be patched.
+ * @param {object} datadogLambdaModule node module to be patched.
  * @returns a Datadog Lambda module with the `datadog` function from
  * `datadog-lambda-js` patched.
  */
@@ -27,7 +27,7 @@ const patchDatadogLambdaModule = (datadogLambdaModule) => {
  * Datadog instrumentation by getting the Lambda handler from its
  * arguments.
  *
- * @param {*} datadogHandler the Datadog Lambda handler to destructure.
+ * @param {Function} datadogHandler the Datadog Lambda handler to destructure.
  * @returns the datadogHandler with its arguments patched.
  */
 function patchDatadogLambdaHandler (datadogHandler) {
@@ -51,7 +51,7 @@ const patchLambdaModule = (handlerPath) => (lambdaModule) => {
 /**
  * Patches a Lambda handler in order to do Datadog instrumentation.
  *
- * @param {*} lambdaHandler the Lambda handler to be patched.
+ * @param {Function} lambdaHandler the Lambda handler to be patched.
  * @returns a function which patches the given Lambda handler.
  */
 function patchLambdaHandler (lambdaHandler) {
@@ -59,7 +59,7 @@ function patchLambdaHandler (lambdaHandler) {
 }
 
 const lambdaTaskRoot = getEnvironmentVariable('LAMBDA_TASK_ROOT')
-const originalLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER')
+const originalLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER')
 
 if (originalLambdaHandler === undefined) {
   // Instrumentation is done manually.

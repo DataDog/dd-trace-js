@@ -1,9 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
 const os = require('node:os')
 const { execSync } = require('node:child_process')
+
+const { describe, it, beforeEach } = require('mocha')
+
 const proxyquire = require('proxyquire').noPreserveCache()
 
 require('./setup/core')
@@ -15,7 +17,7 @@ describe('pkg', () => {
     describe('in pre-require', () => {
       it('should load the package.json correctly', () => {
         const pkg = JSON.parse(execSync('node --require ./pkg-loader.js -e ""', {
-          cwd: __dirname
+          cwd: __dirname,
         }).toString())
         assert.strictEqual(pkg.name, 'dd-trace')
       })

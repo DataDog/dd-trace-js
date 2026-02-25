@@ -10,9 +10,8 @@ const semver = require('semver')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -56,7 +55,12 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        server.destroy()
+        // Newer versions of mongodb-core use the close method instead of destroy
+        if ('close' in server) {
+          server.close()
+        } else {
+          server.destroy()
+        }
       })
 
       describe('without configuration', () => {
@@ -74,7 +78,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -119,7 +123,7 @@ describe('Plugin', () => {
 
             server.command(`test.${collection}`, {
               planCacheListPlans: `test.${collection}`,
-              query: {}
+              query: {},
             }, () => {})
           })
 
@@ -139,8 +143,8 @@ describe('Plugin', () => {
             server.command(`test.${collection}`, {
               find: `test.${collection}`,
               query: {
-                _id: Buffer.from('1234')
-              }
+                _id: Buffer.from('1234'),
+              },
             }, () => {})
           })
 
@@ -161,8 +165,8 @@ describe('Plugin', () => {
               server.command(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {
-                  _id: 9999999999999999999999n
-                }
+                  _id: 9999999999999999999999n,
+                },
               }, () => {})
             } catch (err) {
               // It appears that most versions of MongodDB are happy to use a BigInt instance.
@@ -196,8 +200,8 @@ describe('Plugin', () => {
             server.command(`test.${collection}`, {
               find: `test.${collection}`,
               query: {
-                _id: new BSON.ObjectID(id)
-              }
+                _id: new BSON.ObjectID(id),
+              },
             }, () => {})
           })
 
@@ -218,8 +222,8 @@ describe('Plugin', () => {
               find: `test.${collection}`,
               query: {
                 _id: '1234',
-                foo: () => {}
-              }
+                foo: () => {},
+              },
             }, () => {})
           })
 
@@ -245,7 +249,11 @@ describe('Plugin', () => {
 
             server.insert('', [{ a: 1 }], (err) => {
               error = err
-              server.destroy()
+              if ('close' in server) {
+                server.close()
+              } else {
+                server.destroy()
+              }
             })
           })
 
@@ -274,7 +282,7 @@ describe('Plugin', () => {
               agent
                 .assertSomeTraces(traces => {
                   assert.strictEqual(traces[0][0].resource, `killCursors test.${collection}`)
-                })
+                }),
             ])
               .then(() => done())
               .catch(done)
@@ -283,7 +291,7 @@ describe('Plugin', () => {
               cursor = server.cursor(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {},
-                batchSize: 1
+                batchSize: 1,
               }, { batchSize: 1 })
 
               next(cursor, () => next(cursor, () => cursor.kill(() => {})))
@@ -308,9 +316,9 @@ describe('Plugin', () => {
               query: {
                 foo: 1,
                 bar: {
-                  baz: [1, 2, 3]
-                }
-              }
+                  baz: [1, 2, 3],
+                },
+              },
             })
 
             next(cursor)
@@ -319,7 +327,7 @@ describe('Plugin', () => {
           it('should run the callback in the parent context', done => {
             const cursor = server.cursor(`test.${collection}`, {
               find: `test.${collection}`,
-              query: { a: 1 }
+              query: { a: 1 },
             })
 
             next(cursor, () => {
@@ -343,7 +351,7 @@ describe('Plugin', () => {
 
             const cursor = server.cursor(`test.${collection}`, {
               find: `test.${collection}`,
-              query: 'invalid'
+              query: 'invalid',
             })
 
             next(cursor, err => {
@@ -373,7 +381,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -399,12 +407,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -424,7 +432,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -444,7 +452,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               assert.strictEqual(startSpy.called, true)
               const ops = startSpy.getCall(0).args[0].ops
-              assert.ok(!Object.hasOwn(ops, 'comment'))
+              assert.ok(!('comment' in ops))
             })
             .then(done)
             .catch(done)
@@ -468,7 +476,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -509,9 +517,9 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: 'test comment'
+            comment: 'test comment',
           }, () => {})
         })
       })
@@ -531,7 +539,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -593,9 +601,9 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: 'test comment'
+            comment: 'test comment',
           }, () => {})
         })
 
@@ -614,7 +622,7 @@ describe('Plugin', () => {
                 `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
-                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`,
               ])
             })
             .then(done)
@@ -623,15 +631,16 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: ['test comment']
+            comment: ['test comment'],
           }, () => {})
         })
       })
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
+          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
           return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
         })
 
@@ -645,7 +654,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -662,8 +671,7 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
+            .assertFirstTraceSpan(span => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
@@ -706,7 +714,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())

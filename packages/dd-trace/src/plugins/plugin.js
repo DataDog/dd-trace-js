@@ -172,14 +172,24 @@ module.exports = class Plugin {
       config = { enabled: config }
     }
     this.config = config
-    if (config.enabled && !this._enabled) {
-      this._enabled = true
-      this._subscriptions.forEach(sub => sub.enable())
-      this._bindings.forEach(sub => sub.enable())
-    } else if (!config.enabled && this._enabled) {
+    if (config.enabled) {
+      if (!this._enabled) {
+        this._enabled = true
+        for (const sub of this._subscriptions) {
+          sub.enable()
+        }
+        for (const sub of this._bindings) {
+          sub.enable()
+        }
+      }
+    } else if (this._enabled) {
       this._enabled = false
-      this._subscriptions.forEach(sub => sub.disable())
-      this._bindings.forEach(sub => sub.disable())
+      for (const sub of this._subscriptions) {
+        sub.disable()
+      }
+      for (const sub of this._bindings) {
+        sub.disable()
+      }
     }
   }
 }

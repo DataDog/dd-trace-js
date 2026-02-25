@@ -8,11 +8,11 @@ const http = require('http')
 const https = require('https')
 const zlib = require('zlib')
 
+const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
-const { storage } = require('../../../../datadog-core')
-const log = require('../../log')
 
 const maxActiveRequests = 8
 
@@ -78,7 +78,7 @@ function request (data, options, callback) {
 
   options.agent = isSecure ? httpsAgent : httpAgent
 
-  const onResponse = res => {
+  const onResponse = (res, finalize) => {
     const chunks = []
 
     res.setTimeout(timeout)
@@ -86,8 +86,9 @@ function request (data, options, callback) {
     res.on('data', chunk => {
       chunks.push(chunk)
     })
-    res.on('end', () => {
-      activeRequests--
+
+    res.once('end', () => {
+      finalize()
       const buffer = Buffer.concat(chunks)
 
       if (res.statusCode >= 200 && res.statusCode <= 299) {
@@ -96,13 +97,13 @@ function request (data, options, callback) {
           zlib.gunzip(buffer, (err, result) => {
             if (err) {
               log.error('Could not gunzip response: %s', err.message)
-              callback(null, '', res.statusCode)
+              callback(null, '', res.statusCode, res.headers)
             } else {
-              callback(null, result.toString(), res.statusCode)
+              callback(null, result.toString(), res.statusCode, res.headers)
             }
           })
         } else {
-          callback(null, buffer.toString(), res.statusCode)
+          callback(null, buffer.toString(), res.statusCode, res.headers)
         }
       } else {
         let errorMessage = ''
@@ -123,7 +124,7 @@ function request (data, options, callback) {
         const error = new log.NoTransmitError(errorMessage)
         error.status = res.statusCode
 
-        callback(error, null, res.statusCode)
+        callback(error, null, res.statusCode, res.headers)
       }
     })
   }
@@ -136,31 +137,50 @@ function request (data, options, callback) {
 
     activeRequests++
 
-    const store = storage('legacy').getStore()
+    storage('legacy').run({ noop: true }, () => {
+      let finished = false
+      const finalize = () => {
+        if (finished) return
+        finished = true
+        activeRequests--
+      }
 
-    storage('legacy').enterWith({ noop: true })
+      const req = client.request(options, (res) => onResponse(res, finalize))
 
-    const req = client.request(options, onResponse)
+      req.once('close', finalize)
+      req.once('timeout', finalize)
 
-    req.once('error', err => {
-      activeRequests--
-      onError(err)
+      req.once('error', err => {
+        finalize()
+        onError(err)
+      })
+
+      req.setTimeout(timeout, () => {
+        try {
+          if (typeof req.abort === 'function') {
+            req.abort()
+          } else {
+            req.destroy()
+          }
+        } catch {
+          // ignore
+        }
+      })
+
+      if (isReadable) {
+        data.pipe(req) // TODO: Validate whether this is actually retriable.
+      } else {
+        for (const buffer of dataArray) req.write(buffer)
+        req.end()
+      }
     })
-
-    req.setTimeout(timeout, req.abort)
-
-    if (isReadable) {
-      data.pipe(req) // TODO: Validate whether this is actually retriable.
-    } else {
-      dataArray.forEach(buffer => req.write(buffer))
-      req.end()
-    }
-
-    storage('legacy').enterWith(store)
   }
 
-  // TODO: Figure out why setTimeout is needed to avoid losing the async context
-  // in the retry request before socket.connect() is called.
+  // The setTimeout is needed to avoid losing the async context in the retry
+  // request before socket.connect() is called. This is a workaround for the
+  // issue that the AsyncLocalStorage.run() method does not call the
+  // AsyncLocalStorage.enterWith() method when not using AsyncContextFrame.
+  //
   // TODO: Test that this doesn't trace itself on retry when the diagnostics
   // channel events are available in the agent exporter.
   makeRequest(() => setTimeout(() => makeRequest(callback)))
@@ -173,7 +193,7 @@ function byteLength (data) {
 Object.defineProperty(request, 'writable', {
   get () {
     return activeRequests < maxActiveRequests
-  }
+  },
 })
 
 module.exports = request

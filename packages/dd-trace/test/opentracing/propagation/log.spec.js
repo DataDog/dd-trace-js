@@ -2,11 +2,10 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
-
 const id = require('../../../src/id')
 const SpanContext = require('../../../src/opentracing/span_context')
 
@@ -20,15 +19,15 @@ describe('LogPropagator', () => {
     config = {
       service: 'test',
       env: 'dev',
-      version: '1.0.0'
+      version: '1.0.0',
     }
     LogPropagator = require('../../../src/opentracing/propagation/log')
     propagator = new LogPropagator(config)
     log = {
       dd: {
         trace_id: '123',
-        span_id: '456'
-      }
+        span_id: '456',
+      },
     }
   })
 
@@ -37,7 +36,7 @@ describe('LogPropagator', () => {
       const carrier = {}
       const spanContext = new SpanContext({
         traceId: id('123', 10),
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       propagator.inject(spanContext, carrier)
@@ -52,12 +51,12 @@ describe('LogPropagator', () => {
 
       propagator.inject(null, carrier)
 
-      expect(carrier).to.deep.include({
+      assertObjectContains(carrier, {
         dd: {
           service: 'test',
           env: 'dev',
-          version: '1.0.0'
-        }
+          version: '1.0.0',
+        },
       })
     })
 
@@ -70,7 +69,7 @@ describe('LogPropagator', () => {
       const traceIdTag = '8765432187654321'
       const spanContext = new SpanContext({
         traceId,
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       spanContext._trace.tags['_dd.p.tid'] = traceIdTag
@@ -90,7 +89,7 @@ describe('LogPropagator', () => {
       const traceIdTag = '8765432187654321'
       const spanContext = new SpanContext({
         traceId,
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       spanContext._trace.tags['_dd.p.tid'] = traceIdTag
@@ -110,7 +109,7 @@ describe('LogPropagator', () => {
       const traceIdTag = '8765432187654321'
       const spanContext = new SpanContext({
         traceId,
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       spanContext._trace.tags['_dd.p.tid'] = traceIdTag
@@ -130,7 +129,7 @@ describe('LogPropagator', () => {
       const traceIdTag = '8765432187654321'
       const spanContext = new SpanContext({
         traceId,
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       })
 
       spanContext._trace.tags['_dd.p.tid'] = traceIdTag
@@ -150,7 +149,7 @@ describe('LogPropagator', () => {
 
       assert.deepStrictEqual(spanContext, new SpanContext({
         traceId: id('123', 10),
-        spanId: id('456', 10)
+        spanId: id('456', 10),
       }))
     })
 
@@ -163,7 +162,7 @@ describe('LogPropagator', () => {
 
       assert.deepStrictEqual(spanContext, new SpanContext({
         traceId: id('18446744073709551493', 10), // -123 casted to uint64
-        spanId: id('18446744073709551160', 10) // -456 casted to uint64
+        spanId: id('18446744073709551160', 10), // -456 casted to uint64
       }))
     })
 
@@ -188,9 +187,9 @@ describe('LogPropagator', () => {
           started: [],
           finished: [],
           tags: {
-            '_dd.p.tid': '8765432187654321'
-          }
-        }
+            '_dd.p.tid': '8765432187654321',
+          },
+        },
       }))
     })
   })

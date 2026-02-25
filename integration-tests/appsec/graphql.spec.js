@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const path = require('path')
 const axios = require('axios')
 
@@ -8,7 +8,7 @@ const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
-  spawnProc
+  spawnProc,
 } = require('../helpers')
 
 describe('graphql', () => {
@@ -26,8 +26,8 @@ describe('graphql', () => {
     proc = await spawnProc(webFile, {
       cwd,
       env: {
-        AGENT_PORT: agent.port
-      }
+        AGENT_PORT: agent.port,
+      },
     })
   })
 
@@ -38,30 +38,30 @@ describe('graphql', () => {
 
   it('should not report any attack', async () => {
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
-      assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-      assert.isArray(payload)
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+      assert.ok(Array.isArray(payload))
       assert.strictEqual(payload.length, 2)
       // Apollo server 5 is using Node.js http server instead of express
-      assert.propertyVal(payload[1][0], 'name', 'web.request')
-      assert.propertyVal(payload[1][0].metrics, '_dd.appsec.enabled', 1)
-      assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
-      assert.notProperty(payload[1][0].meta, '_dd.appsec.event')
-      assert.notProperty(payload[1][0].meta, '_dd.appsec.json')
+      assert.strictEqual(payload[1][0].name, 'web.request')
+      assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
+      assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
+      assert.ok(!('_dd.appsec.event' in payload[1][0].meta))
+      assert.ok(!('_dd.appsec.json' in payload[1][0].meta))
     })
 
     await axios({
       url: `${proc.url}/graphql`,
       method: 'post',
       headers: {
-        'Content-type': 'application/json'
+        'Content-type': 'application/json',
       },
       data: {
         query: 'query getSingleImage($imageId: Int!) { image(imageId: $imageId) { title owner category url }}',
         variables: {
-          imageId: 1
+          imageId: 1,
         },
-        operationName: 'getSingleImage'
-      }
+        operationName: 'getSingleImage',
+      },
     })
 
     return agentPromise
@@ -77,9 +77,9 @@ describe('graphql', () => {
             tags:
             {
               type: 'security_scanner',
-              category: 'attack_attempt'
+              category: 'attack_attempt',
             },
-            on_match: []
+            on_match: [],
           },
           rule_matches: [
             {
@@ -90,25 +90,25 @@ describe('graphql', () => {
                   address: 'graphql.server.resolver',
                   key_path: ['images', 'category'],
                   value: 'testattack',
-                  highlight: ['testattack']
-                }
-              ]
-            }
-          ]
-        }
-      ]
+                  highlight: ['testattack'],
+                },
+              ],
+            },
+          ],
+        },
+      ],
     }
 
     const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
-      assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-      assert.isArray(payload)
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+      assert.ok(Array.isArray(payload))
       assert.strictEqual(payload.length, 2)
       // Apollo server 5 is using Node.js http server instead of express
-      assert.propertyVal(payload[1][0], 'name', 'web.request')
-      assert.propertyVal(payload[1][0].metrics, '_dd.appsec.enabled', 1)
-      assert.property(payload[1][0].metrics, '_dd.appsec.waf.duration')
-      assert.propertyVal(payload[1][0].meta, 'appsec.event', 'true')
-      assert.property(payload[1][0].meta, '_dd.appsec.json')
+      assert.strictEqual(payload[1][0].name, 'web.request')
+      assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
+      assert.ok(Object.hasOwn(payload[1][0].metrics, '_dd.appsec.waf.duration'))
+      assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
+      assert.ok(Object.hasOwn(payload[1][0].meta, '_dd.appsec.json'))
       assert.deepStrictEqual(JSON.parse(payload[1][0].meta['_dd.appsec.json']), result)
     })
 
@@ -116,15 +116,15 @@ describe('graphql', () => {
       url: `${proc.url}/graphql`,
       method: 'post',
       headers: {
-        'Content-type': 'application/json'
+        'Content-type': 'application/json',
       },
       data: {
         query: 'query getImagesByCategory($category: String) { images(category: $category) { title owner url }}',
         variables: {
-          category: 'testattack'
+          category: 'testattack',
         },
-        operationName: 'getImagesByCategory'
-      }
+        operationName: 'getImagesByCategory',
+      },
     })
 
     return agentPromise

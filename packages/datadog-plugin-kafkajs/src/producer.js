@@ -45,7 +45,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       type: 'kafka_produce',
       partition,
       offset: offsetAsLong ? Number(offsetAsLong) : undefined,
-      topic
+      topic,
     }
   }
 
@@ -63,11 +63,32 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       'type',
       'partition',
       'offset',
-      'topic'
+      'topic',
     ]
     for (const commit of commitList.map(this.transformProduceResponse)) {
       if (keys.some(key => !commit.hasOwnProperty(key))) continue
       this.tracer.setOffset(commit)
+    }
+  }
+
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { topic, messages, clusterId, disableHeaderInjection, currentStore: { span } } = ctx
+
+    for (const message of messages) {
+      if (message !== null && typeof message === 'object') {
+        const payloadSize = getMessageSize(message)
+        const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
+
+        if (clusterId) {
+          edgeTags.push(`kafka_cluster_id:${clusterId}`)
+        }
+
+        const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+        if (!disableHeaderInjection) {
+          DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+        }
+      }
     }
   }
 
@@ -79,35 +100,20 @@ class KafkajsProducerPlugin extends ProducerPlugin {
         component: this.constructor.id,
         'kafka.topic': topic,
         'kafka.cluster_id': clusterId,
-        [MESSAGING_DESTINATION_KEY]: topic
+        [MESSAGING_DESTINATION_KEY]: topic,
       },
       metrics: {
-        'kafka.batch_size': messages.length
-      }
+        'kafka.batch_size': messages.length,
+      },
     }, ctx)
     if (bootstrapServers) {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)
     }
     for (const message of messages) {
-      if (message !== null && typeof message === 'object') {
-        // message headers are not supported for kafka broker versions <0.11
-        if (!disableHeaderInjection) {
-          message.headers ??= {}
-          this.tracer.inject(span, 'text_map', message.headers)
-        }
-        if (this.config.dsmEnabled) {
-          const payloadSize = getMessageSize(message)
-          const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
-
-          if (clusterId) {
-            edgeTags.push(`kafka_cluster_id:${clusterId}`)
-          }
-
-          const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-          if (!disableHeaderInjection) {
-            DsmPathwayCodec.encode(dataStreamsContext, message.headers)
-          }
-        }
+      // message headers are not supported for kafka broker versions <0.11
+      if (message !== null && typeof message === 'object' && !disableHeaderInjection) {
+        message.headers ??= {}
+        this.tracer.inject(span, 'text_map', message.headers)
       }
     }
 

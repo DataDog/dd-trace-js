@@ -14,7 +14,7 @@ const ipHeaderList = [
   'x-cluster-client-ip',
   'fastly-client-ip',
   'cf-connecting-ip',
-  'cf-connecting-ipv6'
+  'cf-connecting-ipv6',
 ]
 
 const privateCIDRs = [
@@ -28,7 +28,7 @@ const privateCIDRs = [
   'fec0::/10',
   'fe80::/10',
   'fc00::/7',
-  'fd00::/8'
+  'fd00::/8',
 ]
 
 const privateIPMatcher = new net.BlockList()
@@ -135,5 +135,5 @@ function cleanIp (input) {
 
 module.exports = {
   extractIp,
-  ipHeaderList
+  ipHeaderList,
 }

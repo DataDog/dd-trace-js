@@ -1,10 +1,10 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
-const TraceSourcePrioritySampler = require('./tracesource_priority_sampler')
 const { USER_KEEP } = require('../../../../ext/priority')
 const TraceState = require('../opentracing/propagation/tracestate')
 const { APM_TRACING_ENABLED_KEY } = require('../constants')
+const TraceSourcePrioritySampler = require('./tracesource_priority_sampler')
 const { hasTraceSourcePropagationTag } = require('./tracesource')
 
 const startCh = channel('dd-trace:span:start')
@@ -66,5 +66,5 @@ function onSpanExtract ({ spanContext = {} }) {
 
 module.exports = {
   configure,
-  hasTraceSourcePropagationTag
+  hasTraceSourcePropagationTag,
 }

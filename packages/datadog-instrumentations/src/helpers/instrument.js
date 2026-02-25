@@ -1,8 +1,9 @@
 'use strict'
 
+const { AsyncResource } = require('async_hooks')
 const dc = /** @type {typeof import('node:diagnostics_channel')} */ (require('dc-polyfill'))
 const instrumentations = require('./instrumentations')
-const { AsyncResource } = require('async_hooks')
+const rewriterInstrumentations = require('./rewriter/instrumentations')
 
 /**
  * @typedef {import('node:diagnostics_channel').Channel} Channel
@@ -41,6 +42,15 @@ exports.tracingChannel = function (name) {
   return tc
 }
 
+exports.getHooks = function getHooks(names) {
+  names = [names].flat()
+
+  return rewriterInstrumentations
+    .map(inst => inst.module)
+    .filter(({ name }) => names.includes(name))
+    .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
+}
+
 /**
  * @param {object} args
  * @param {string} args.name module name
@@ -50,7 +60,7 @@ exports.tracingChannel = function (name) {
  * @param {boolean} [args.patchDefault=true] whether to patch the default export
  * @param {import('./instrumentations').Hook} hook
  */
-exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
+exports.addHook = function addHook({ name, versions, file, filePattern, patchDefault }, hook) {
   if (name && typeof name === 'object') process._rawDebug('Hellow World')
   if (!instrumentations[name]) {
     instrumentations[name] = []

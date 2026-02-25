@@ -6,36 +6,36 @@ const rawExpectedSchema = {
   producer: {
     v0: {
       serviceName: () => 'test-aws-sqs',
-      opName: () => 'aws.request'
+      opName: () => 'aws.request',
     },
     v1: {
       serviceName: () => 'test',
-      opName: () => 'aws.sqs.send'
-    }
+      opName: () => 'aws.sqs.send',
+    },
   },
   consumer: {
     v0: {
       serviceName: () => 'test-aws-sqs',
-      opName: () => 'aws.request'
+      opName: () => 'aws.request',
     },
     v1: {
       serviceName: () => 'test',
-      opName: () => 'aws.sqs.process'
-    }
+      opName: () => 'aws.sqs.process',
+    },
   },
   client: {
     v0: {
       serviceName: () => 'test-aws-sqs',
-      opName: () => 'aws.request'
+      opName: () => 'aws.request',
     },
     v1: {
       serviceName: () => 'test',
-      opName: () => 'aws.sqs.request'
-    }
-  }
+      opName: () => 'aws.sqs.request',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

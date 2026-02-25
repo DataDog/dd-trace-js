@@ -1,15 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire').noPreserveCache()
-const nock = require('nock')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 
-require('../../../../../dd-trace/test/setup/core')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire').noPreserveCache()
+const nock = require('nock')
 
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
+require('../../../../../dd-trace/test/setup/core')
 const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../src/plugins/util/user-provided-git')
 
 describe('git_metadata', () => {
@@ -19,7 +20,7 @@ describe('git_metadata', () => {
   // same character range but invalid length
   const badLatestCommits = [
     '87ce64f636853fbebc05edfcefe9cccc28a7968b8b',
-    'cc424c261da5e261b76d982d5d361a023556e2aacc424c261da5e261b76d982d5d361a023556e2aa'
+    'cc424c261da5e261b76d982d5d361a023556e2aacc424c261da5e261b76d982d5d361a023556e2aa',
   ]
 
   const temporaryPackFile = `${os.tmpdir()}/1111-87ce64f636853fbebc05edfcefe9cccc28a7968b.pack`
@@ -61,8 +62,8 @@ describe('git_metadata', () => {
         generatePackFilesForCommits: generatePackFilesForCommitsStub,
         getCommitsRevList: getCommitsRevListStub,
         isShallowRepository: isShallowRepositoryStub,
-        unshallowRepository: unshallowRepositoryStub
-      }
+        unshallowRepository: unshallowRepositoryStub,
+      },
     })
   })
 
@@ -77,9 +78,9 @@ describe('git_metadata', () => {
 
     isShallowRepositoryStub.returns(true)
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(unshallowRepositoryStub).not.to.have.been.called
-      expect(err).to.be.null
-      expect(scope.isDone()).to.be.true
+      sinon.assert.notCalled(unshallowRepositoryStub)
+      assert.strictEqual(err, null)
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -95,9 +96,9 @@ describe('git_metadata', () => {
 
     isShallowRepositoryStub.returns(true)
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(unshallowRepositoryStub).to.have.been.called
-      expect(err).to.be.null
-      expect(scope.isDone()).to.be.true
+      sinon.assert.called(unshallowRepositoryStub)
+      assert.strictEqual(err, null)
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -114,9 +115,9 @@ describe('git_metadata', () => {
 
     isShallowRepositoryStub.returns(true)
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(unshallowRepositoryStub).not.to.have.been.called
-      expect(err).to.be.null
-      expect(scope.isDone()).to.be.true
+      sinon.assert.notCalled(unshallowRepositoryStub)
+      assert.strictEqual(err, null)
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -129,8 +130,8 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err).to.be.null
-      expect(scope.isDone()).to.be.true
+      assert.strictEqual(err, null)
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -145,10 +146,10 @@ describe('git_metadata', () => {
     getCommitsRevListStub.returns([])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err).to.be.null
+      assert.strictEqual(err, null)
       // to check that it is not called
-      expect(scope.isDone()).to.be.false
-      expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
+      assert.strictEqual(scope.isDone(), false)
+      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
       done()
     })
   })
@@ -161,10 +162,10 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain('Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
+      assertObjectContains(err.message, 'Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
       // to check that it is not called
-      expect(scope.isDone()).to.be.false
-      expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
+      assert.strictEqual(scope.isDone(), false)
+      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
       done()
     })
   })
@@ -177,10 +178,10 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit type response")
+      assertObjectContains(err.message, "Can't parse commits to exclude response: Invalid commit type response")
       // to check that it is not called
-      expect(scope.isDone()).to.be.false
-      expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
+      assert.strictEqual(scope.isDone(), false)
+      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
       done()
     })
   })
@@ -193,10 +194,10 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain("Can't parse commits to exclude response: Invalid commit format")
+      assertObjectContains(err.message, "Can't parse commits to exclude response: Invalid commit format")
       // to check that it is not called
-      expect(scope.isDone()).to.be.false
-      expect(scope.pendingMocks()).to.contain('POST https://api.test.com:443/api/v2/git/repository/packfile')
+      assert.strictEqual(scope.isDone(), false)
+      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
       done()
     })
   })
@@ -209,8 +210,8 @@ describe('git_metadata', () => {
       .reply(502)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain('Could not upload packfiles: status code 502')
-      expect(scope.isDone()).to.be.true
+      assert.match(err.message, /Could not upload packfiles: status code 502/)
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -223,8 +224,8 @@ describe('git_metadata', () => {
       .reply(200, JSON.stringify({ data: [] }))
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain('git rev-list failed')
-      expect(scope.isDone()).to.be.true
+      assert.match(err.message, /git rev-list failed/)
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -246,12 +247,12 @@ describe('git_metadata', () => {
       temporaryPackFile,
       secondTemporaryPackFile,
       temporaryPackFile,
-      secondTemporaryPackFile
+      secondTemporaryPackFile,
     ])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err).to.be.null
-      expect(scope.isDone()).to.be.true
+      assert.strictEqual(err, null)
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -261,10 +262,10 @@ describe('git_metadata', () => {
       const invalidUrls = [
         'www.test.com/repo/dummy.git',
         'test.com/repo/dummy.git',
-        'test.com/repo/dummy'
+        'test.com/repo/dummy',
       ]
       invalidUrls.forEach((invalidUrl) => {
-        expect(validateGitRepositoryUrl(invalidUrl), `${invalidUrl} is a valid URL`).to.be.false
+        assert.strictEqual(validateGitRepositoryUrl(invalidUrl), false)
       })
     })
 
@@ -277,11 +278,11 @@ describe('git_metadata', () => {
         'https://github.com/DataDog/dd-trace-js',
         'git@github.com:DataDog/dd-trace-js.git',
         'git@github.com:user/repo.git',
-        'git@github.com:user/repo'
+        'git@github.com:user/repo',
       ]
 
       validUrls.forEach((validUrl) => {
-        expect(validateGitRepositoryUrl(validUrl), `${validUrl} is an invalid URL`).to.be.true
+        assert.strictEqual(validateGitRepositoryUrl(validUrl), true)
       })
     })
   })
@@ -297,7 +298,7 @@ describe('git_metadata', () => {
       const invalidSha7 = 'cb466452bfe18d4f6be2836c2a5551843013cf3812342239203182304928'
       const invalidShas = [invalidSha1, invalidSha2, invalidSha3, invalidSha4, invalidSha5, invalidSha6, invalidSha7]
       invalidShas.forEach((invalidSha) => {
-        expect(validateGitCommitSha(invalidSha)).to.be.false
+        assert.strictEqual(validateGitCommitSha(invalidSha), false)
       })
     })
 
@@ -307,7 +308,7 @@ describe('git_metadata', () => {
 
       const validShas = [validSha1, validSha2]
       validShas.forEach((validSha) => {
-        expect(validateGitCommitSha(validSha)).to.be.true
+        assert.strictEqual(validateGitCommitSha(validSha), true)
       })
     })
   })
@@ -321,12 +322,12 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub.returns([
       'not-there',
-      'not there either'
+      'not there either',
     ])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain('Could not read "not-there"')
-      expect(scope.isDone()).to.be.false
+      assert.match(err.message, /Could not read "not-there"/)
+      assert.strictEqual(scope.isDone(), false)
       done()
     })
   })
@@ -341,8 +342,8 @@ describe('git_metadata', () => {
     generatePackFilesForCommitsStub.returns([])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain('Failed to generate packfiles')
-      expect(scope.isDone()).to.be.false
+      assert.match(err.message, /Failed to generate packfiles/)
+      assert.strictEqual(scope.isDone(), false)
       done()
     })
   })
@@ -359,8 +360,8 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err.message).to.contain('Git is not available')
-      expect(scope.isDone()).to.be.false
+      assert.match(err.message, /Git is not available/)
+      assert.strictEqual(scope.isDone(), false)
       process.env.PATH = oldPath
       done()
     })
@@ -378,8 +379,8 @@ describe('git_metadata', () => {
       .reply(204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      expect(err).to.be.null
-      expect(scope.isDone()).to.be.true
+      assert.strictEqual(err, null)
+      assert.strictEqual(scope.isDone(), true)
       done()
     })
   })
@@ -390,7 +391,7 @@ describe('git_metadata', () => {
       .reply(200, JSON.stringify({ data: [] }))
       .post('/evp_proxy/v2/api/v2/git/repository/packfile')
       .reply(204, function (uri, body) {
-        expect(this.req.headers['x-datadog-evp-subdomain']).to.equal('api')
+        assert.strictEqual(this.req.headers['x-datadog-evp-subdomain'], 'api')
         done()
       })
 
@@ -399,8 +400,8 @@ describe('git_metadata', () => {
       { isEvpProxy: true, evpProxyPrefix: '/evp_proxy/v2' },
       '',
       (err) => {
-        expect(err).to.be.null
-        expect(scope.isDone()).to.be.true
+        assert.strictEqual(err, null)
+        assert.strictEqual(scope.isDone(), true)
       })
   })
 
@@ -424,11 +425,11 @@ describe('git_metadata', () => {
       { isEvpProxy: true, evpProxyPrefix: '/evp_proxy/v2' },
       'https://custom-git@datadog.com',
       (err) => {
-        expect(err).to.be.null
-        expect(scope.isDone()).to.be.true
+        assert.strictEqual(err, null)
+        assert.strictEqual(scope.isDone(), true)
         requestPromise.then((repositoryUrl) => {
-          expect(getRepositoryUrlStub).not.to.have.been.called
-          expect(repositoryUrl).to.equal('https://custom-git@datadog.com')
+          sinon.assert.notCalled(getRepositoryUrlStub)
+          assert.strictEqual(repositoryUrl, 'https://custom-git@datadog.com')
           done()
         })
       })

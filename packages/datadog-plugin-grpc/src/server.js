@@ -44,11 +44,11 @@ class GrpcServerPlugin extends ServerPlugin {
         'grpc.method.path': method.path,
         'grpc.method.name': method.name,
         'grpc.method.service': method.service,
-        'grpc.method.package': method.package
+        'grpc.method.package': method.package,
       },
       metrics: {
-        'grpc.status.code': 0
-      }
+        'grpc.status.code': 0,
+      },
     })
 
     addMetadataTags(span, metadata, metadataFilter, 'request')

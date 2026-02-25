@@ -1,114 +1,270 @@
 'use strict'
 
-const {
-  channel,
-  addHook
-} = require('./helpers/instrument')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const { channel, addHook } = require('./helpers/instrument')
+const prismaHelperInit = channel('apm:prisma:helper:init')
 
-const prismaEngineStart = channel('apm:prisma:engine:start')
-const tracingChannel = require('dc-polyfill').tracingChannel
-const clientCH = tracingChannel('apm:prisma:client')
+/**
+ * @typedef {object} EnvValue
+ * @property {string|undefined} [value]
+ * @property {string|null|undefined} [fromEnvVar]
+ */
 
-const allowedClientSpanOperations = new Set([
-  'operation',
-  'serialize',
-  'transaction'
-])
+/**
+ * @typedef {object} DatasourceConfig
+ * @property {string|EnvValue|undefined} [url]
+ */
 
-class TracingHelper {
-  dbConfig = null
-  isEnabled () {
-    return true
-  }
+/**
+ * @typedef {object} PrismaRuntimeConfig
+ * @property {Record<string, DatasourceConfig>|undefined} [inlineDatasources]
+ * @property {Record<string, { url?: string }>|undefined} [overrideDatasources]
+ * @property {Record<string, { url?: string }>|undefined} [datasources]
+ * @property {string[]|undefined} [datasourceNames]
+ */
 
-  // needs a sampled tracecontext to generate engine spans
-  getTraceParent (context) {
-    return '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01' // valid sampled traceparent
-  }
+/**
+ * @typedef {object} DbConfig
+ * @property {string|undefined} [user]
+ * @property {string|undefined} [password]
+ * @property {string|undefined} [host]
+ * @property {string|number|undefined} [port]
+ * @property {string|undefined} [database]
+ */
 
-  dispatchEngineSpans (spans) {
-    for (const span of spans) {
-      if (span.parentId === null) {
-        prismaEngineStart.publish({ engineSpan: span, allEngineSpans: spans, dbConfig: this.dbConfig })
-      }
-    }
-  }
+/**
+ * @typedef {object} AdapterConfig
+ * @property {string|undefined} [connectionString]
+ * @property {string|undefined} [user]
+ * @property {string|undefined} [password]
+ * @property {string|undefined} [host]
+ * @property {string|number|undefined} [port]
+ * @property {string|undefined} [database]
+ */
 
-  getActiveContext () {}
+/**
+ * @typedef {object} Adapter
+ * @property {AdapterConfig|undefined} [config]
+ * @property {{ options?: AdapterConfig }|undefined} [externalPool]
+ */
 
-  runInChildSpan (options, callback) {
-    if (typeof options === 'string') {
-      options = {
-        name: options
-      }
-    }
+/**
+ * @typedef {object} PrismaClientConfig
+ * @property {string|undefined} [datasourceUrl]
+ * @property {Record<string, { url?: string }>|undefined} [datasources]
+ * @property {Adapter|undefined} [adapter]
+ */
 
-    if (allowedClientSpanOperations.has(options.name)) {
-      const ctx = {
-        resourceName: options.name,
-        attributes: options.attributes || {}
-      }
+/**
+ * @typedef {object} PrismaHelperCtx
+ * @property {DbConfig} [dbConfig]
+ * @property {import('../../datadog-plugin-prisma/src/datadog-tracing-helper')} [helper]
+ */
 
-      if (options.name !== 'serialize') {
-        return clientCH.tracePromise(callback, ctx, this, ...arguments)
-      }
-
-      return clientCH.traceSync(callback, ctx, this, ...arguments)
-    }
-    return callback()
-  }
-
-  setDbString (dbConfig) {
-    this.dbConfig = dbConfig
-  }
+/**
+ * @param {string|EnvValue|undefined} envValue
+ * @returns {string|undefined}
+ */
+function resolveEnvValue (envValue) {
+  return typeof envValue === 'object' && envValue
+    ? (envValue.value || getEnvironmentVariable(envValue.fromEnvVar ?? ''))
+    : envValue
 }
 
-addHook({ name: '@prisma/client', versions: ['>=6.1.0'] }, (prisma, version) => {
-  const tracingHelper = new TracingHelper()
+/**
+ * @param {PrismaRuntimeConfig|undefined} config
+ * @param {string} datasourceName
+ * @returns {string|undefined}
+ */
+function resolveDatasourceUrl (config, datasourceName) {
+  return resolveEnvValue(config?.inlineDatasources?.[datasourceName]?.url) ??
+    config?.overrideDatasources?.[datasourceName]?.url ??
+    config?.datasources?.[datasourceName]?.url ??
+    getEnvironmentVariable('DATABASE_URL')
+}
 
-  // we need to patch the prototype to get db config since this works for ESM and CJS alike.
-  const originalRequest = prisma.PrismaClient.prototype._request
-  prisma.PrismaClient.prototype._request = function () {
-    if (!tracingHelper.dbConfig) {
-      const inlineDatasources = this._engine?.config.inlineDatasources
-      const overrideDatasources = this._engine?.config.overrideDatasources
-      const datasources = inlineDatasources?.db.url?.value ?? overrideDatasources?.db?.url
-      if (datasources) {
-        const result = parseDBString(datasources)
-        tracingHelper.setDbString(result)
+/**
+ * @param {DbConfig} dbConfig
+ * @returns {DbConfig|undefined}
+ */
+function normalizeDbConfig (dbConfig) {
+  dbConfig.port = dbConfig.port == null ? undefined : String(dbConfig.port)
+  const hasValues = dbConfig.user || dbConfig.password || dbConfig.host || dbConfig.port || dbConfig.database
+  return hasValues ? dbConfig : undefined
+}
+
+/**
+ * @param {Adapter|undefined} adapter
+ * @returns {DbConfig|undefined}
+ */
+function resolveAdapterDbConfig (adapter) {
+  const adapterConfig = adapter?.config || adapter?.externalPool?.options
+  if (!adapterConfig) {
+    return
+  }
+
+  if (typeof adapterConfig === 'string') {
+    return parseDBString(adapterConfig)
+  }
+
+  const parsed = parseDBString(adapterConfig.connectionString)
+  if (parsed) {
+    return parsed
+  }
+
+  return normalizeDbConfig({
+    user: adapterConfig.user,
+    password: adapterConfig.password,
+    host: adapterConfig.host,
+    port: adapterConfig.port,
+    database: adapterConfig.database,
+  })
+}
+
+/**
+ * @param {PrismaClientConfig|undefined} clientConfig
+ * @param {string} datasourceName
+ * @param {DbConfig|undefined} runtimeDbConfig
+ * @returns {DbConfig|undefined}
+ */
+function resolveClientDbConfig (clientConfig, datasourceName, runtimeDbConfig) {
+  return resolveAdapterDbConfig(clientConfig?.adapter) ||
+    parseDBString(clientConfig?.datasources?.[datasourceName]?.url ?? clientConfig?.datasourceUrl) ||
+    runtimeDbConfig
+}
+
+/**
+ * @param {unknown} runtime
+ * @param {string} versions
+ * @param {string} [name]
+ * @param {boolean} [isIitm]
+ * @returns {object}
+ */
+const prismaHook = (runtime, versions, name, isIitm) => {
+  /**
+   * @typedef {{ getPrismaClient?: (config: PrismaRuntimeConfig, ...args: unknown[]) => Function }} PrismaRuntime
+   */
+  const prismaRuntime = /** @type {PrismaRuntime} */ (runtime)
+  const originalGetPrismaClient = prismaRuntime.getPrismaClient
+
+  if (!originalGetPrismaClient) {
+    return runtime
+  }
+
+  /**
+   * @param {PrismaRuntimeConfig|undefined} config
+   */
+  const wrappedGetPrismaClient = function (config) {
+    const datasourceName = config?.datasourceNames?.[0] || 'db'
+    const runtimeDatasourceUrl = resolveDatasourceUrl(config, datasourceName)
+    const runtimeDbConfig = parseDBString(runtimeDatasourceUrl)
+
+    const PrismaClient = originalGetPrismaClient.call(this, config)
+    return class WrappedPrismaClientClass extends PrismaClient {
+      constructor (clientConfig) {
+        super(clientConfig)
+        /**
+         * @type {PrismaHelperCtx}
+         */
+        const prismaHelperCtx = {
+          dbConfig: resolveClientDbConfig(clientConfig, datasourceName, runtimeDbConfig),
+        }
+        prismaHelperInit.publish(prismaHelperCtx)
+
+        const helper = prismaHelperCtx.helper
+        this._tracingHelper = helper
+        this._engine.tracingHelper = helper
       }
     }
-    return originalRequest.apply(this, arguments)
   }
 
-  /*
-    * This is taking advantage of the built in tracing support from Prisma.
-    * The below variable is setting a global tracing helper that Prisma uses
-    * to enable OpenTelemetry.
-  */
-  // https://github.com/prisma/prisma/blob/478293bbfce91e41ceff02f2a0b03bb8acbca03e/packages/instrumentation/src/PrismaInstrumentation.ts#L42
-  const versions = version.split('.')
-  if (versions[0] === '6' && versions[1] < 4) {
-    global.PRISMA_INSTRUMENTATION = {
-      helper: tracingHelper
-    }
-  } else {
-    global[`V${versions[0]}_PRISMA_INSTRUMENTATION`] = {
-      helper: tracingHelper
-    }
+  if (isIitm) {
+    prismaRuntime.getPrismaClient = wrappedGetPrismaClient
+    return runtime
   }
 
-  return prisma
-})
+  return new Proxy(prismaRuntime, {
+    get (target, prop) {
+      if (prop === 'getPrismaClient') {
+        return wrappedGetPrismaClient
+      }
+      return target[prop]
+    },
+  })
+}
 
+const prismaConfigs = [
+  { name: '@prisma/client', versions: ['>=6.1.0 <7.0.0'], filePattern: 'runtime/library.*' },
+  { name: './runtime/library.js', versions: ['>=6.1.0 <7.0.0'], file: 'runtime/library.js' },
+  { name: '@prisma/client', versions: ['>=7.0.0'], filePattern: 'runtime/client.*' },
+]
+
+for (const config of prismaConfigs) {
+  addHook(config, prismaHook)
+}
+
+/**
+ * @param {string|undefined} dbString
+ * @returns {DbConfig|undefined}
+ */
 function parseDBString (dbString) {
-  const url = new URL(dbString)
-  const dbConfig = {
-    user: url.username,
-    password: url.password,
-    host: url.hostname,
-    port: url.port,
-    database: url.pathname.slice(1) // Remove leading slash
+  if (!dbString || typeof dbString !== 'string') {
+    return
   }
-  return dbConfig
+
+  const sqlServerConfig = parseSqlServerConnectionString(dbString)
+  if (sqlServerConfig) {
+    return sqlServerConfig
+  }
+
+  try {
+    const url = new URL(dbString)
+    return normalizeDbConfig({
+      user: url.username,
+      password: url.password,
+      host: url.hostname,
+      port: url.port,
+      database: url.pathname?.slice(1) || undefined,
+    })
+  } catch {}
+}
+
+/**
+ * @param {string} dbString
+ * @returns {DbConfig|undefined}
+ */
+function parseSqlServerConnectionString (dbString) {
+  if (!dbString.startsWith('sqlserver://')) {
+    return
+  }
+  const segments = dbString.slice(12).split(';').filter(Boolean)
+  if (!segments.length) {
+    return
+  }
+
+  let hostPart = segments.shift()
+  let user
+  let password
+  if (hostPart?.includes('@')) {
+    const [userInfo, hostInfo] = hostPart.split('@')
+    hostPart = hostInfo
+    ;[user, password] = userInfo.split(':')
+  }
+
+  let database
+  for (const segment of segments) {
+    const [rawKey, ...rawValue] = segment.split('=')
+    const value = rawValue.join('=').trim()
+    const key = rawKey?.trim().toLowerCase()
+    if (!key || !value) {
+      continue
+    }
+    if (key === 'database' || key === 'databasename' || key === 'db') database = value
+    else if (key === 'user' || key === 'username' || key === 'uid') user = value
+    else if (key === 'password' || key === 'pwd') password = value
+  }
+
+  const [host, port] = hostPart?.split(':') ?? []
+
+  return normalizeDbConfig({ user, password, host, port, database })
 }

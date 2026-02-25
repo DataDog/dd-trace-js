@@ -8,7 +8,7 @@ const fixtures = {
   s3: require('./s3'),
   redshift: require('./redshift'),
   sns: require('./sns'),
-  sqs: require('./sqs')
+  sqs: require('./sqs'),
 }
 
 module.exports = fixtures

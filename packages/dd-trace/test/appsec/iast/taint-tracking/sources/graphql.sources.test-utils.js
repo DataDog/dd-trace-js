@@ -39,8 +39,8 @@ query GetBooks {
 const books = [
   {
     title: 'Test title',
-    author: 'Test author'
-  }
+    author: 'Test author',
+  },
 ]
 
 const resolvers = {
@@ -51,19 +51,19 @@ const resolvers = {
       return books.filter(book => {
         return book.title.includes(args.title)
       })
-    }
-  }
+    },
+  },
 }
 
 async function makeGraphqlRequest (port, query, variables = {}) {
   const headers = {
-    'content-type': 'application/json'
+    'content-type': 'application/json',
   }
 
   return axios.post(`http://localhost:${port}/graphql`, {
     operationName: 'GetBooks',
     query,
-    variables
+    variables,
   }, { headers, maxRedirects: 0 })
 }
 
@@ -74,9 +74,9 @@ function graphqlCommonTests (config) {
         experimental: {
           iast: {
             enabled: true,
-            requestSampling: 100
-          }
-        }
+            requestSampling: 100,
+          },
+        },
       }))
       vulnerabilityReporter.clearCache()
       overheadController.clearGlobalRouteMap()
@@ -108,7 +108,7 @@ function graphqlCommonTests (config) {
       })
 
       makeGraphqlRequest(config.port, query, {
-        title: 'test'
+        title: 'test',
       })
     })
   })
@@ -119,5 +119,5 @@ module.exports = {
   schema,
   query,
   resolvers,
-  graphqlCommonTests
+  graphqlCommonTests,
 }

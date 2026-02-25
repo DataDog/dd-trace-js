@@ -5,7 +5,8 @@ const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const { isTrue } = require('../../dd-trace/src/util')
 const { tagsFromRequest, tagsFromResponse } = require('../../dd-trace/src/payload-tagging')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { IS_SERVERLESS } = require('../../dd-trace/src/serverless')
 
 class BaseAwsSdkPlugin extends ClientPlugin {
   static id = 'aws'
@@ -17,7 +18,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       configurable: true,
       writable: true,
       enumerable: true,
-      value: id
+      value: id,
     })
     return id
   }
@@ -40,7 +41,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         request,
         operation,
         awsRegion,
-        awsService
+        awsService,
       } = ctx
 
       const parentStore = ctx.parentStore = storage('legacy').getStore()
@@ -61,14 +62,14 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         'aws.partition': getPartition(awsRegion),
         aws_service: awsService,
         'aws.service': awsService,
-        component: 'aws-sdk'
+        component: 'aws-sdk',
       }
       if (this.requestTags) this.requestTags.set(request, meta)
 
       const span = this.startSpan(this.operationFromRequest(request), {
         childOf,
         meta,
-        integrationName: 'aws-sdk'
+        integrationName: 'aws-sdk',
       }, ctx)
 
       analyticsSampler.sample(span, this.config.measured)
@@ -87,7 +88,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     })
 
     this.addSub(`apm:aws:request:start:${this.serviceIdentifier}`, (ctx) => {
-      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+      if (!IS_SERVERLESS) return
 
       const { awsRegion, awsService, currentStore, request } = ctx
       const peerServerlessStorage = storage('peerServerless')
@@ -120,7 +121,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         span.setTag('aws.partition', partition)
       }
 
-      if (!this._tracerConfig?._isInServerlessEnvironment()) return
+      if (!IS_SERVERLESS) return
 
       const hostname = getHostname(store, region)
       if (!hostname) return
@@ -174,7 +175,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       id: 'aws',
       type: 'web',
       kind: 'client',
-      awsService: this.serviceIdentifier
+      awsService: this.serviceIdentifier,
     })
   }
 
@@ -184,13 +185,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         id: 'aws',
         type: 'web',
         kind: 'client',
-        awsService: this.serviceIdentifier
+        awsService: this.serviceIdentifier,
       })
   }
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
-    const envVarValue = getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
+    const envVarValue = getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
     return envVarValue ? isTrue(envVarValue) : true
   }
 
@@ -204,7 +205,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       'aws.response.request_id': response.requestId,
       'resource.name': operation,
       'span.kind': 'client',
-      ...extraTags
+      ...extraTags,
     }
 
     span.addTags(tags)
@@ -273,9 +274,9 @@ function normalizeConfig (config, serviceIdentifier) {
   const serviceId = serviceIdentifier.toUpperCase()
   const batchPropagationEnabled = isTrue(
     specificConfig.batchPropagationEnabled ??
-    getEnvironmentVariable(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
+    getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_BATCH_PROPAGATION_ENABLED`) ??
     config.batchPropagationEnabled ??
-    getEnvironmentVariable('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
+    getValueFromEnvSources('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED')
   )
 
   // Merge the specific config back into the main config
@@ -283,7 +284,7 @@ function normalizeConfig (config, serviceIdentifier) {
     ...config,
     ...specificConfig,
     batchPropagationEnabled,
-    hooks
+    hooks,
   }
 }
 

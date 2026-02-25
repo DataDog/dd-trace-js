@@ -1,19 +1,19 @@
 'use strict'
 
-const retry = require('retry')
 const { request: httpRequest } = require('http')
 const { request: httpsRequest } = require('https')
-const { EventSerializer } = require('./event_serializer')
+const perf = require('perf_hooks').performance
+const { urlToHttpOptions } = require('url')
 
+const retry = require('../../../../../vendor/dist/retry')
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
-const { urlToHttpOptions } = require('url')
-const perf = require('perf_hooks').performance
-
 const telemetryMetrics = require('../../telemetry/metrics')
+const { EventSerializer } = require('./event_serializer')
+
 const profilersNamespace = telemetryMetrics.manager.namespace('profilers')
 
 const statusCodeCounters = []
@@ -38,32 +38,31 @@ function countStatusCode (statusCode) {
 function sendRequest (options, form, callback) {
   const request = options.protocol === 'https:' ? httpsRequest : httpRequest
 
-  const store = storage('legacy').getStore()
-  storage('legacy').enterWith({ noop: true })
-  requestCounter.inc()
-  const start = perf.now()
-  const req = request(options, res => {
-    durationDistribution.track(perf.now() - start)
-    countStatusCode(res.statusCode)
-    if (res.statusCode >= 400) {
-      statusCodeErrorCounter.inc()
-      const error = new Error(`HTTP Error ${res.statusCode}`)
-      error.status = res.statusCode
-      callback(error)
-    } else {
-      callback(null, res)
+  storage('legacy').run({ noop: true }, () => {
+    requestCounter.inc()
+    const start = perf.now()
+    const req = request(options, res => {
+      durationDistribution.track(perf.now() - start)
+      countStatusCode(res.statusCode)
+      if (res.statusCode >= 400) {
+        statusCodeErrorCounter.inc()
+        const error = new Error(`HTTP Error ${res.statusCode}`)
+        error.status = res.statusCode
+        callback(error)
+      } else {
+        callback(null, res)
+      }
+    })
+
+    req.on('error', (err) => {
+      networkErrorCounter.inc()
+      callback(err)
+    })
+    if (form) {
+      sizeDistribution.track(form.size())
+      form.pipe(req)
     }
   })
-
-  req.on('error', (err) => {
-    networkErrorCounter.inc()
-    callback(err)
-  })
-  if (form) {
-    sizeDistribution.track(form.size())
-    form.pipe(req)
-  }
-  storage('legacy').enterWith(store)
 }
 
 function getBody (stream, callback) {
@@ -73,7 +72,7 @@ function getBody (stream, callback) {
     callback(err)
   })
   stream.on('data', chunk => chunks.push(chunk))
-  stream.on('end', () => {
+  stream.once('end', () => {
     callback(null, Buffer.concat(chunks))
   })
 }
@@ -107,7 +106,7 @@ class AgentExporter extends EventSerializer {
     const event = this.getEventJSON(exportSpec)
     fields.push(['event', event, {
       filename: 'event.json',
-      contentType: 'application/json'
+      contentType: 'application/json',
     }])
 
     this._logger.debug(() => {
@@ -123,7 +122,7 @@ class AgentExporter extends EventSerializer {
       const filename = this.typeToFile(type)
       fields.push([filename, buffer, {
         filename,
-        contentType: 'application/octet-stream'
+        contentType: 'application/octet-stream',
       }])
     }
 
@@ -132,7 +131,7 @@ class AgentExporter extends EventSerializer {
         randomize: true,
         minTimeout: this._backoffTime,
         retries: this._backoffTries,
-        unref: true
+        unref: true,
       })
 
       operation.attempt((attempt) => {
@@ -148,9 +147,9 @@ class AgentExporter extends EventSerializer {
           headers: {
             'DD-EVP-ORIGIN': 'dd-trace-js',
             'DD-EVP-ORIGIN-VERSION': version,
-            ...form.getHeaders()
+            ...form.getHeaders(),
           },
-          timeout: this._backoffTime * 2 ** attempt
+          timeout: this._backoffTime * 2 ** attempt,
         }
 
         docker.inject(options.headers)

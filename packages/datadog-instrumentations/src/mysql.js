@@ -1,7 +1,7 @@
 'use strict'
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connection => {
   const startCh = channel('apm:mysql:query:start')
@@ -39,12 +39,12 @@ addHook({ name: 'mysql', file: 'lib/Connection.js', versions: ['>=2'] }, Connect
             return finishCh.runStores(ctx, cb, this, error, result)
           })
         } else {
-          res.on('end', () => finishCh.publish(ctx))
+          res.once('end', () => finishCh.publish(ctx))
         }
 
         return res
       } catch (err) {
-        err.stack // trigger getting the stack at the original throwing point
+        void err.stack // trigger getting the stack at the original throwing point
         ctx.error = err
         errorCh.publish(ctx)
 

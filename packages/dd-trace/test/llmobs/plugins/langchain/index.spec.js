@@ -1,19 +1,19 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, it, beforeEach, before, after } = require('mocha')
 
+const semifies = require('semifies')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
 const { withVersions } = require('../../../setup/mocha')
-const assert = require('node:assert')
 
 const {
   assertLlmObsSpanEvent,
   MOCK_NOT_NULLISH,
   MOCK_STRING,
-  useLlmObs
+  useLlmObs,
 } = require('../../util')
-const semifies = require('semifies')
 
 const isDdTrace = iastFilter.isDdTrace
 
@@ -34,14 +34,14 @@ describe('integrations', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     ANTHROPIC_API_KEY: '<not-a-real-key>',
-    COHERE_API_KEY: '<not-a-real-key>'
+    COHERE_API_KEY: '<not-a-real-key>',
   })
 
   function getLangChainOpenAiClient (type = 'llm', options = {}) {
     Object.assign(options, {
       configuration: {
-        baseURL: 'http://127.0.0.1:9126/vcr/openai'
-      }
+        baseURL: 'http://127.0.0.1:9126/vcr/openai',
+      },
     })
 
     if (type === 'llm') {
@@ -62,8 +62,8 @@ describe('integrations', () => {
   function getLangChainAnthropicClient (type = 'chat', options = {}) {
     Object.assign(options, {
       clientOptions: {
-        baseURL: 'http://127.0.0.1:9126/vcr/anthropic'
-      }
+        baseURL: 'http://127.0.0.1:9126/vcr/anthropic',
+      },
     })
 
     if (type === 'chat') {
@@ -74,7 +74,7 @@ describe('integrations', () => {
   }
 
   describe('langchain', () => {
-    const getEvents = useLlmObs({ plugin: 'langchain' })
+    const { getEvents } = useLlmObs({ plugin: 'langchain' })
 
     before(async () => {
       iastFilter.isDdTrace = file => {
@@ -142,7 +142,7 @@ describe('integrations', () => {
               outputMessages: [{ content: '\n\n4', role: '' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 8, output_tokens: 2, total_tokens: 10 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -167,8 +167,8 @@ describe('integrations', () => {
               error: {
                 type: 'Error',
                 message: MOCK_STRING,
-                stack: MOCK_NOT_NULLISH
-              }
+                stack: MOCK_NOT_NULLISH,
+              },
             })
           })
 
@@ -182,18 +182,18 @@ describe('integrations', () => {
                   return {
                     generations: [
                       {
-                        text: 'hello world!'
-                      }
+                        text: 'hello world!',
+                      },
                     ],
                     meta: {
                       billed_units: {
                         input_tokens: 8,
-                        output_tokens: 12
-                      }
-                    }
+                        output_tokens: 12,
+                      },
+                    },
                   }
-                }
-              }
+                },
+              },
             })
 
             await cohere.invoke('Hello!')
@@ -210,7 +210,7 @@ describe('integrations', () => {
               metadata: MOCK_NOT_NULLISH,
               // @langchain/cohere does not provide token usage in the response
               metrics: { input_tokens: 0, output_tokens: 0, total_tokens: 0 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
         })
@@ -232,7 +232,7 @@ describe('integrations', () => {
               outputMessages: [{ content: '2 + 2 = 4', role: 'assistant' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 15, output_tokens: 7, total_tokens: 22 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -257,8 +257,8 @@ describe('integrations', () => {
               error: {
                 type: 'Error',
                 message: MOCK_STRING,
-                stack: MOCK_NOT_NULLISH
-              }
+                stack: MOCK_NOT_NULLISH,
+              },
             })
           })
 
@@ -278,7 +278,7 @@ describe('integrations', () => {
               outputMessages: [{ content: 'Hi there! How can I help you today?', role: 'assistant' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 9, output_tokens: 13, total_tokens: 22 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -293,11 +293,11 @@ describe('integrations', () => {
                     type: 'object',
                     properties: {
                       name: { type: 'string', description: 'Name of the character' },
-                      origin: { type: 'string', description: 'Where they live' }
-                    }
-                  }
-                }
-              }
+                      origin: { type: 'string', description: 'Where they live' },
+                    },
+                  },
+                },
+              },
             ]
 
             const model = getLangChainOpenAiClient('chat', { model: 'gpt-4' })
@@ -319,14 +319,14 @@ describe('integrations', () => {
                 tool_calls: [{
                   arguments: {
                     name: 'SpongeBob',
-                    origin: 'Bikini Bottom'
+                    origin: 'Bikini Bottom',
                   },
-                  name: 'extract_fictional_info'
-                }]
+                  name: 'extract_fictional_info',
+                }],
               }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 82, output_tokens: 31, total_tokens: 113 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
         })
@@ -347,7 +347,7 @@ describe('integrations', () => {
               inputDocuments: [{ text: 'Hello, world!' }],
               outputValue: '[1 embedding(s) returned with size 1536]',
               metadata: MOCK_NOT_NULLISH,
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -371,8 +371,8 @@ describe('integrations', () => {
               error: {
                 type: 'Error',
                 message: MOCK_STRING,
-                stack: MOCK_NOT_NULLISH
-              }
+                stack: MOCK_NOT_NULLISH,
+              },
             })
           })
 
@@ -391,7 +391,7 @@ describe('integrations', () => {
               inputDocuments: [{ text: 'Hello, world!' }, { text: 'Goodbye, world!' }],
               outputValue: '[2 embedding(s) returned with size 1536]',
               metadata: MOCK_NOT_NULLISH,
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
         })
@@ -400,7 +400,7 @@ describe('integrations', () => {
           it('submits a workflow and llm spans for a simple chain call', async () => {
             const prompt = langchainPrompts.ChatPromptTemplate.fromMessages([
               ['system', 'You are a world class technical documentation writer'],
-              ['user', '{input}']
+              ['user', '{input}'],
             ])
 
             const llm = getLangChainOpenAiClient('llm', { model: 'gpt-3.5-turbo-instruct' })
@@ -427,7 +427,7 @@ describe('integrations', () => {
               name: 'langchain_core.runnables.RunnableSequence',
               inputValue: JSON.stringify({ input: 'Can you tell me about LangSmith?' }),
               outputValue: expectedOutput,
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -440,12 +440,12 @@ describe('integrations', () => {
               inputMessages: [{
                 content: 'System: You are a world class technical documentation writer\n' +
                 'Human: Can you tell me about LangSmith?',
-                role: ''
+                role: '',
               }],
               outputMessages: [{ content: expectedOutput, role: '' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 21, output_tokens: 94, total_tokens: 115 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -468,8 +468,8 @@ describe('integrations', () => {
               error: {
                 type: 'Error',
                 message: MOCK_STRING,
-                stack: MOCK_NOT_NULLISH
-              }
+                stack: MOCK_NOT_NULLISH,
+              },
             })
           })
 
@@ -488,9 +488,9 @@ describe('integrations', () => {
             const completeChain = langchainRunnables.RunnableSequence.from([
               {
                 city: firstChain,
-                language: input => input.language
+                language: input => input.language,
               },
-              secondChain
+              secondChain,
             ])
 
             const result = await llmobs.annotationContext({ tags: { foo: 'bar' } }, () => {
@@ -515,7 +515,7 @@ describe('integrations', () => {
               name: 'langchain_core.runnables.RunnableSequence',
               inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
               outputValue: expectedOutput,
-              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -526,7 +526,7 @@ describe('integrations', () => {
               inputValue: JSON.stringify({ person: 'Abraham Lincoln', language: 'Spanish' }),
               outputValue: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
               'in Springfield, Illinois, which is often associated with him as his home city.',
-              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[2], {
@@ -537,16 +537,16 @@ describe('integrations', () => {
               modelProvider: 'openai',
               name: 'langchain.chat_models.openai.ChatOpenAI',
               inputMessages: [
-                { content: 'what is the city Abraham Lincoln is from?', role: 'user' }
+                { content: 'what is the city Abraham Lincoln is from?', role: 'user' },
               ],
               outputMessages: [{
                 content: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived ' +
               'in Springfield, Illinois, which is often associated with him as his home city.',
-                role: 'assistant'
+                role: 'assistant',
               }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 16, output_tokens: 30, total_tokens: 46 },
-              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[3], {
@@ -557,10 +557,10 @@ describe('integrations', () => {
               inputValue: JSON.stringify({
                 language: 'Spanish',
                 city: 'Abraham Lincoln was born in Hodgenville, Kentucky. He later lived in ' +
-                'Springfield, Illinois, which is often associated with him as his home city.'
+                'Springfield, Illinois, which is often associated with him as his home city.',
               }),
               outputValue: expectedOutput,
-              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[4], {
@@ -575,13 +575,13 @@ describe('integrations', () => {
                   content: 'what country is the city Abraham Lincoln was born in Hodgenville, Kentucky. ' +
                   'He later lived in Springfield, Illinois, which is often associated with him as his home city. ' +
                   'in? respond in Spanish',
-                  role: 'user'
-                }
+                  role: 'user',
+                },
               ],
               outputMessages: [{ content: expectedOutput, role: 'assistant' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 46, output_tokens: 37, total_tokens: 83 },
-              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' }
+              tags: { ml_app: 'test', integration: 'langchain', foo: 'bar' },
             })
           })
 
@@ -596,11 +596,11 @@ describe('integrations', () => {
 
             const chain = langchainRunnables.RunnableSequence.from([
               {
-                topic: new langchainRunnables.RunnablePassthrough()
+                topic: new langchainRunnables.RunnablePassthrough(),
               },
               prompt,
               model,
-              parser
+              parser,
             ])
 
             await chain.batch(['chickens', 'dogs'])
@@ -620,7 +620,7 @@ describe('integrations', () => {
                 "Why don't chickens use Facebook?\n\nBecause they already know what everyone's clucking about!",
                 'Why did the scarecrow adopt a dog?\n\nBecause he needed a "barking" buddy!']
               ),
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -634,11 +634,11 @@ describe('integrations', () => {
               outputMessages: [{
                 content: "Why don't chickens use Facebook?\n\nBecause " +
                 "they already know what everyone's clucking about!",
-                role: 'assistant'
+                role: 'assistant',
               }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 13, output_tokens: 18, total_tokens: 31 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[2], {
@@ -651,11 +651,11 @@ describe('integrations', () => {
               inputMessages: [{ content: 'Tell me a joke about dogs', role: 'user' }],
               outputMessages: [{
                 content: 'Why did the scarecrow adopt a dog?\n\nBecause he needed a "barking" buddy!',
-                role: 'assistant'
+                role: 'assistant',
               }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 13, output_tokens: 19, total_tokens: 32 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -663,7 +663,7 @@ describe('integrations', () => {
             const prompt = langchainPrompts.ChatPromptTemplate.fromMessages([
               ['system', 'You are an assistant who is good at {ability}. Respond in 20 words or fewer'],
               new langchainPrompts.MessagesPlaceholder('history'),
-              ['human', '{input}']
+              ['human', '{input}'],
             ])
 
             const model = getLangChainOpenAiClient('chat', { model: 'gpt-3.5-turbo' })
@@ -673,9 +673,9 @@ describe('integrations', () => {
               ability: 'world capitals',
               history: [
                 new langchainMessages.HumanMessage('Can you be my science teacher instead?'),
-                new langchainMessages.AIMessage('Yes')
+                new langchainMessages.AIMessage('Yes'),
               ],
-              input: 'What is the powerhouse of the cell?'
+              input: 'What is the powerhouse of the cell?',
             })
 
             const { apmSpans, llmobsSpans } = await getEvents(2)
@@ -692,21 +692,21 @@ describe('integrations', () => {
                 history: [
                   {
                     content: 'Can you be my science teacher instead?',
-                    role: 'user'
+                    role: 'user',
                   },
                   {
                     content: 'Yes',
-                    role: 'assistant'
-                  }
+                    role: 'assistant',
+                  },
                 ],
-                input: 'What is the powerhouse of the cell?'
+                input: 'What is the powerhouse of the cell?',
               }),
               // takes the form of an AIMessage struct since there is no output parser
               outputValue: JSON.stringify({
                 content: 'Mitochondria',
-                role: 'assistant'
+                role: 'assistant',
               }),
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -719,25 +719,25 @@ describe('integrations', () => {
               inputMessages: [
                 {
                   content: 'You are an assistant who is good at world capitals. Respond in 20 words or fewer',
-                  role: 'system'
+                  role: 'system',
                 },
                 {
                   content: 'Can you be my science teacher instead?',
-                  role: 'user'
+                  role: 'user',
                 },
                 {
                   content: 'Yes',
-                  role: 'assistant'
+                  role: 'assistant',
                 },
                 {
                   content: 'What is the powerhouse of the cell?',
-                  role: 'user'
-                }
+                  role: 'user',
+                },
               ],
               outputMessages: [{ content: 'Mitochondria', role: 'assistant' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 54, output_tokens: 3, total_tokens: 57 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -745,7 +745,7 @@ describe('integrations', () => {
             let lengthFunction = (input = { foo: '' }) => {
               llmobs.annotate({ inputData: input }) // so we don't try and tag `config` with auto-annotation
               return {
-                length: input.foo.length.toString()
+                length: input.foo.length.toString(),
               }
             }
             lengthFunction = llmobs.wrap({ kind: 'task' }, lengthFunction)
@@ -773,7 +773,7 @@ describe('integrations', () => {
               name: 'langchain_core.runnables.RunnableSequence',
               inputValue: JSON.stringify({ foo: 'bar' }),
               outputValue: '3 squared is 9.',
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -783,7 +783,7 @@ describe('integrations', () => {
               name: 'lengthFunction',
               inputValue: JSON.stringify({ foo: 'bar' }),
               outputValue: JSON.stringify({ length: '3' }),
-              tags: { ml_app: 'test' }
+              tags: { ml_app: 'test' },
             })
 
             assertLlmObsSpanEvent(llmobsSpans[2], {
@@ -797,7 +797,7 @@ describe('integrations', () => {
               outputMessages: [{ content: '3 squared is 9.', role: 'assistant' }],
               metadata: MOCK_NOT_NULLISH,
               metrics: { input_tokens: 13, output_tokens: 6, total_tokens: 19 },
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
         })
@@ -813,8 +813,8 @@ describe('integrations', () => {
                 description: 'A tool that adds two numbers',
                 schema: {
                   a: { type: 'number' },
-                  b: { type: 'number' }
-                }
+                  b: { type: 'number' },
+                },
               }
             )
 
@@ -828,7 +828,7 @@ describe('integrations', () => {
               name: 'add',
               inputValue: JSON.stringify({ a: 1, b: 2 }),
               outputValue: JSON.stringify(3),
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -844,8 +844,8 @@ describe('integrations', () => {
                 description: 'A tool that adds two numbers',
                 schema: {
                   a: { type: 'number' },
-                  b: { type: 'number' }
-                }
+                  b: { type: 'number' },
+                },
               }
             )
 
@@ -864,8 +864,8 @@ describe('integrations', () => {
               error: {
                 type: 'Error',
                 message: 'This is a test error',
-                stack: MOCK_NOT_NULLISH
-              }
+                stack: MOCK_NOT_NULLISH,
+              },
             })
           })
         })
@@ -879,7 +879,7 @@ describe('integrations', () => {
 
             const document = {
               pageContent: 'The powerhouse of the cell is the mitochondria',
-              metadata: { source: 'https://example.com' }
+              metadata: { source: 'https://example.com' },
             }
 
             await vectorstore.addDocuments([document])
@@ -910,9 +910,9 @@ describe('integrations', () => {
               inputValue: 'Biology',
               outputDocuments: [{
                 text: 'The powerhouse of the cell is the mitochondria',
-                name: 'https://example.com'
+                name: 'https://example.com',
               }],
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
 
@@ -936,9 +936,9 @@ describe('integrations', () => {
               outputDocuments: [{
                 text: 'The powerhouse of the cell is the mitochondria',
                 name: 'https://example.com',
-                score: 0.7882083567178202
+                score: 0.7882083567178202,
               }],
-              tags: { ml_app: 'test', integration: 'langchain' }
+              tags: { ml_app: 'test', integration: 'langchain' },
             })
           })
         })

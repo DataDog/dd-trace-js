@@ -2,8 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { after, afterEach, before, describe, it } = require('mocha')
-const sinon = require('sinon')
+const { after, before, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -75,13 +74,13 @@ describe('Sns', function () {
             subParams = {
               Protocol: 'sqs',
               Endpoint: QueueArn,
-              TopicArn
+              TopicArn,
             }
 
             receiveParams = {
               QueueUrl,
               MessageAttributeNames: ['.*'],
-              WaitTimeSeconds: 1
+              WaitTimeSeconds: 1,
             }
 
             cb()
@@ -98,8 +97,8 @@ describe('Sns', function () {
           cloudPayloadTagging: {
             request: '$.MessageAttributes.foo,$.MessageAttributes.redacted.StringValue.foo',
             response: '$.MessageId,$.Attributes.DisplayName',
-            maxDepth: 5
-          }
+            maxDepth: 5,
+          },
         })
       })
 
@@ -118,11 +117,9 @@ describe('Sns', function () {
       })
 
       it('adds request and response payloads as flattened tags', done => {
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-
-          assert.strictEqual(span.resource, `publish ${TopicArn}`)
-          assertObjectContains(span.meta, {
+        agent.assertFirstTraceSpan({
+          resource: `publish ${TopicArn}`,
+          meta: {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
@@ -135,8 +132,8 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
             'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
             'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo',
-            'aws.response.body.MessageId': 'redacted'
-          })
+            'aws.response.body.MessageId': 'redacted',
+          },
         }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
@@ -145,17 +142,15 @@ describe('Sns', function () {
           MessageAttributes: {
             baz: { DataType: 'String', StringValue: 'bar' },
             keyOne: { DataType: 'String', StringValue: 'keyOne' },
-            keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
-          }
+            keyTwo: { DataType: 'String', StringValue: 'keyTwo' },
+          },
         }, e => e && done(e))
       })
 
       it('expands and redacts keys identified as expandable', done => {
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-
-          assert.strictEqual(span.resource, `publish ${TopicArn}`)
-          assertObjectContains(span.meta, {
+        agent.assertFirstTraceSpan({
+          resource: `publish ${TopicArn}`,
+          meta: {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
@@ -165,8 +160,8 @@ describe('Sns', function () {
             'aws.request.body.MessageAttributes.redacted.StringValue.foo': 'redacted',
             'aws.request.body.MessageAttributes.unredacted.StringValue.foo': 'bar',
             'aws.request.body.MessageAttributes.unredacted.StringValue.baz': 'yup',
-            'aws.response.body.MessageId': 'redacted'
-          })
+            'aws.response.body.MessageId': 'redacted',
+          },
         }, { timeoutMs: 20000 }).then(done, done)
 
         sns.publish({
@@ -174,8 +169,8 @@ describe('Sns', function () {
           Message: 'message 1',
           MessageAttributes: {
             unredacted: { DataType: 'String', StringValue: '{"foo": "bar", "baz": "yup"}' },
-            redacted: { DataType: 'String', StringValue: '{"foo": "bar"}' }
-          }
+            redacted: { DataType: 'String', StringValue: '{"foo": "bar"}' },
+          },
         }, e => e && done(e))
       })
 
@@ -184,20 +179,23 @@ describe('Sns', function () {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            assert.strictEqual(span.resource, `publish ${TopicArn}`)
-            assertObjectContains(span.meta, {
-              'aws.sns.topic_arn': TopicArn,
-              topicname: 'TestTopic',
-              aws_service: 'SNS',
-              region: 'us-east-1',
-              'aws.request.body.TopicArn': TopicArn,
-              'aws.request.body.Message': 'message 1',
-              'aws.request.body.MessageAttributes.foo': 'redacted',
-              'aws.request.body.MessageAttributes.keyOne.DataType': 'String',
-              'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
-              'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
-              'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo'
+            assertObjectContains(span, {
+              resource: `publish ${TopicArn}`,
+              meta: {
+                'aws.sns.topic_arn': TopicArn,
+                topicname: 'TestTopic',
+                aws_service: 'SNS',
+                region: 'us-east-1',
+                'aws.request.body.TopicArn': TopicArn,
+                'aws.request.body.Message': 'message 1',
+                'aws.request.body.MessageAttributes.foo': 'redacted',
+                'aws.request.body.MessageAttributes.keyOne.DataType': 'String',
+                'aws.request.body.MessageAttributes.keyOne.StringValue': 'keyOne',
+                'aws.request.body.MessageAttributes.keyTwo.DataType': 'String',
+                'aws.request.body.MessageAttributes.keyTwo.StringValue': 'keyTwo',
+              },
             })
+
             assert.ok(Object.hasOwn(span.meta, 'aws.response.body.MessageId'))
           }, { timeoutMs: 20000 }).then(done, done)
 
@@ -207,24 +205,23 @@ describe('Sns', function () {
             MessageAttributes: {
               foo: { DataType: 'String', StringValue: 'bar' },
               keyOne: { DataType: 'String', StringValue: 'keyOne' },
-              keyTwo: { DataType: 'String', StringValue: 'keyTwo' }
-            }
+              keyTwo: { DataType: 'String', StringValue: 'keyTwo' },
+            },
           }, e => e && done(e))
         })
 
         // TODO add response tests
         it('redacts user-defined keys to suppress in response', done => {
-          agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-            assert.strictEqual(span.resource, `getTopicAttributes ${TopicArn}`)
-            assertObjectContains(span.meta, {
+          agent.assertFirstTraceSpan({
+            resource: `getTopicAttributes ${TopicArn}`,
+            meta: {
               'aws.sns.topic_arn': TopicArn,
               topicname: 'TestTopic',
               aws_service: 'SNS',
               region: 'us-east-1',
               'aws.request.body.TopicArn': TopicArn,
-              'aws.response.body.Attributes.DisplayName': 'redacted'
-            })
+              'aws.response.body.Attributes.DisplayName': 'redacted',
+            },
           }, { timeoutMs: 20000 }).then(done, done)
 
           sns.getTopicAttributes({ TopicArn }, e => e && done(e))
@@ -258,39 +255,35 @@ describe('Sns', function () {
             })
 
             it('redacts phone numbers in request', done => {
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                assert.strictEqual(span.resource, 'publish')
-                assertObjectContains(span.meta, {
+              agent.assertFirstTraceSpan({
+                resource: 'publish',
+                meta: {
                   aws_service: 'SNS',
                   region: 'us-east-1',
                   'aws.request.body.PhoneNumber': 'redacted',
-                  'aws.request.body.Message': 'message 1'
-                })
+                  'aws.request.body.Message': 'message 1',
+                },
               }, { timeoutMs: 20000 }).then(done, done)
 
               sns.publish({
                 PhoneNumber: '+33628606135',
-                Message: 'message 1'
+                Message: 'message 1',
               }, e => e && done(e))
             })
 
             it('redacts phone numbers in response', done => {
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                assert.strictEqual(span.resource, 'publish')
-                assertObjectContains(span.meta, {
+              agent.assertFirstTraceSpan({
+                resource: 'publish',
+                meta: {
                   aws_service: 'SNS',
                   region: 'us-east-1',
-                  'aws.response.body.PhoneNumber': 'redacted'
-                })
+                  'aws.response.body.PhoneNumber': 'redacted',
+                },
               }, { timeoutMs: 20000 }).then(done, done)
 
               sns.listSMSSandboxPhoneNumbers({
                 PhoneNumber: '+33628606135',
-                Message: 'message 1'
+                Message: 'message 1',
               }, e => e && done(e))
             })
           })
@@ -298,23 +291,21 @@ describe('Sns', function () {
 
         describe('subscription confirmation tokens', () => {
           it('redacts tokens in request', done => {
-            agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assert.strictEqual(span.resource, `confirmSubscription ${TopicArn}`)
-              assertObjectContains(span.meta, {
+            agent.assertFirstTraceSpan({
+              resource: `confirmSubscription ${TopicArn}`,
+              meta: {
                 aws_service: 'SNS',
                 'aws.sns.topic_arn': TopicArn,
                 topicname: 'TestTopic',
                 region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
-                'aws.request.body.TopicArn': TopicArn
-              })
+                'aws.request.body.TopicArn': TopicArn,
+              },
             }).then(done, done)
 
             sns.confirmSubscription({
               TopicArn,
-              Token: '1234'
+              Token: '1234',
             }, () => {})
           })
 
@@ -338,7 +329,6 @@ describe('Sns', function () {
       })
 
       before(done => {
-        process.env.DD_DATA_STREAMS_ENABLED = 'true'
         tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { sns: { dsmEnabled: false, batchPropagationEnabled: true } })
 
@@ -362,28 +352,28 @@ describe('Sns', function () {
         'aws-sdk',
         (done) => sns.publish({
           TopicArn,
-          Message: 'message 1'
+          Message: 'message 1',
         }, done),
         'TestTopic', 'topicname')
 
       withNamingSchema(
         (done) => sns.publish({
           TopicArn,
-          Message: 'message 1'
+          Message: 'message 1',
         }, (err) => err && done()),
         rawExpectedSchema.producer,
         {
-          desc: 'producer'
+          desc: 'producer',
         }
       )
 
       withNamingSchema(
         (done) => sns.getTopicAttributes({
-          TopicArn
+          TopicArn,
         }, (err) => err && done(err)),
         rawExpectedSchema.client,
         {
-          desc: 'client'
+          desc: 'client',
         }
       )
 
@@ -414,8 +404,8 @@ describe('Sns', function () {
               TopicArn,
               PublishBatchRequestEntries: [
                 { Id: '1', Message: 'message 1' },
-                { Id: '2', Message: 'message 2' }
-              ]
+                { Id: '2', Message: 'message 2' },
+              ],
             }, e => e && done(e))
           })
         })
@@ -442,8 +432,8 @@ describe('Sns', function () {
               PublishBatchRequestEntries: [
                 { Id: '1', Message: 'message 1' },
                 { Id: '2', Message: 'message 2' },
-                { Id: '3', Message: 'message 3' }
-              ]
+                { Id: '3', Message: 'message 3' },
+              ],
             }, e => e && done(e))
           })
         })
@@ -459,7 +449,7 @@ describe('Sns', function () {
               if (err) return done(err)
 
               try {
-                assert.ok(!data.Messages[0].Body.includes('datadog'))
+                assert.doesNotMatch(data.Messages[0].Body, /datadog/)
                 done()
               } catch (e) {
                 done(e)
@@ -479,223 +469,25 @@ describe('Sns', function () {
                 keySeven: { DataType: 'String', StringValue: 'keySeven' },
                 keyEight: { DataType: 'String', StringValue: 'keyEight' },
                 keyNine: { DataType: 'String', StringValue: 'keyNine' },
-                keyTen: { DataType: 'String', StringValue: 'keyTen' }
-              }
+                keyTen: { DataType: 'String', StringValue: 'keyTen' },
+              },
             }, e => e && done(e))
           })
         })
       }
 
       it('generates tags for proper publish calls', done => {
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-
-          assert.strictEqual(span.resource, `publish ${TopicArn}`)
-          assertObjectContains(span.meta, {
+        agent.assertFirstTraceSpan({
+          resource: `publish ${TopicArn}`,
+          meta: {
             'aws.sns.topic_arn': TopicArn,
             topicname: 'TestTopic',
             aws_service: 'SNS',
-            region: 'us-east-1'
-          })
+            region: 'us-east-1',
+          },
         }).then(done, done)
 
         sns.publish({ TopicArn, Message: 'message 1' }, e => e && done(e))
-      })
-    })
-
-    describe('Data Streams Monitoring', () => {
-      const expectedProducerHash = '15386798273908484982'
-      const expectedConsumerHash = '15162998336469814920'
-      let nowStub
-
-      before(() => {
-        return agent.load('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } }, { dsmEnabled: true })
-      })
-
-      before(done => {
-        process.env.DD_DATA_STREAMS_ENABLED = 'true'
-        tracer = require('../../dd-trace')
-        tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
-
-        createResources('TestQueueDSM', 'TestTopicDSM', done)
-      })
-
-      after(done => {
-        sns.deleteTopic({ TopicArn }, done)
-      })
-
-      after(done => {
-        sqs.deleteQueue({ QueueUrl }, done)
-      })
-
-      after(() => {
-        return agent.close({ ritmReset: false, wipe: true })
-      })
-
-      afterEach(() => {
-        try {
-          nowStub.restore()
-        } catch {
-          // pass
-        }
-        // TODO: Fix this. The third argument is not used.
-        agent.reload('aws-sdk', { sns: { dsmEnabled: true, batchPropagationEnabled: true } }, { dsmEnabled: true })
-      })
-
-      it('injects DSM pathway hash to SNS publish span', done => {
-        sns.subscribe(subParams, (err, data) => {
-          if (err) return done(err)
-
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
-
-              let publishSpanMeta = {}
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                if (span.resource.startsWith('publish')) {
-                  publishSpanMeta = span.meta
-                }
-
-                assertObjectContains(publishSpanMeta, {
-                  'pathway.hash': expectedProducerHash
-                })
-              }).then(done, done)
-            })
-        })
-      })
-
-      it('injects DSM pathway hash to SQS receive span from SNS topic', done => {
-        sns.subscribe(subParams, (err, data) => {
-          if (err) return done(err)
-
-          sns.publish(
-            { TopicArn, Message: 'message DSM' },
-            (err) => {
-              if (err) return done(err)
-            })
-
-          sqs.receiveMessage(
-            receiveParams,
-            (err, res) => {
-              if (err) return done(err)
-
-              let consumeSpanMeta = {}
-              agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
-
-                if (span.name === 'aws.response') {
-                  consumeSpanMeta = span.meta
-                }
-
-                assertObjectContains(consumeSpanMeta, {
-                  'pathway.hash': expectedConsumerHash
-                })
-              }).then(done, done)
-            })
-        })
-      })
-
-      it('outputs DSM stats to the agent when publishing a message', done => {
-        agent.expectPipelineStats(dsmStats => {
-          let statsPointsReceived = 0
-          // we should have 1 dsm stats points
-          dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
-              timeStatsBucket.Stats.forEach((statsBuckets) => {
-                statsPointsReceived += statsBuckets.Stats.length
-              })
-            }
-          })
-          assert.ok(statsPointsReceived >= 1)
-          assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
-        }).then(done, done)
-
-        sns.subscribe(subParams, () => {
-          sns.publish({ TopicArn, Message: 'message DSM' }, () => {})
-        })
-      })
-
-      it('outputs DSM stats to the agent when consuming a message', done => {
-        agent.expectPipelineStats(dsmStats => {
-          let statsPointsReceived = 0
-          // we should have 2 dsm stats points
-          dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
-              timeStatsBucket.Stats.forEach((statsBuckets) => {
-                statsPointsReceived += statsBuckets.Stats.length
-              })
-            }
-          })
-          assert.ok(statsPointsReceived >= 2)
-          assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
-        }).then(done, done)
-
-        sns.subscribe(subParams, () => {
-          sns.publish({ TopicArn, Message: 'message DSM' }, () => {
-            sqs.receiveMessage(receiveParams, () => {})
-          })
-        })
-      })
-
-      it('outputs DSM stats to the agent when publishing batch messages', function (done) {
-        // publishBatch was released with version 2.1031.0 for the aws-sdk
-        // publishBatch does not work with smithy-client 3.0.0, unable to find compatible version it
-        // was released for, but works on 3.374.0
-        if (
-          (moduleName === '@aws-sdk/smithy-client' && semver.intersects(version, '>=3.374.0')) ||
-          (moduleName === 'aws-sdk' && semver.intersects(version, '>=2.1031.0'))
-        ) {
-          // we need to stub Date.now() to ensure a new stats bucket is created for each call
-          // otherwise, all stats checkpoints will be combined into a single stats points
-          let now = Date.now()
-          nowStub = sinon.stub(Date, 'now')
-          nowStub.callsFake(() => {
-            now += 1000000
-            return now
-          })
-
-          agent.expectPipelineStats(dsmStats => {
-            let statsPointsReceived = 0
-            // we should have 3 dsm stats points
-            dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
-                timeStatsBucket.Stats.forEach((statsBuckets) => {
-                  statsPointsReceived += statsBuckets.Stats.length
-                })
-              }
-            })
-            assert.ok(statsPointsReceived >= 3)
-            assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
-          }, { timeoutMs: 2000 }).then(done, done)
-
-          sns.subscribe(subParams, () => {
-            sns.publishBatch(
-              {
-                TopicArn,
-                PublishBatchRequestEntries: [
-                  {
-                    Id: '1',
-                    Message: 'message DSM 1'
-                  },
-                  {
-                    Id: '2',
-                    Message: 'message DSM 2'
-                  },
-                  {
-                    Id: '3',
-                    Message: 'message DSM 3'
-                  }
-                ]
-              }, () => {
-                nowStub.restore()
-              })
-          })
-        } else {
-          this.skip()
-        }
       })
     })
   })

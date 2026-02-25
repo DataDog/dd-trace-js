@@ -3,22 +3,22 @@
 const { errorMonitor } = require('events')
 const util = require('util')
 
-const {
-  addHook
-} = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 const dc = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
+const {
+  addHook,
+} = require('./helpers/instrument')
 
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
 // ignored exec method because it calls to execFile directly
 const execAsyncMethods = ['execFile', 'spawn']
 
-function throwSyncError (error) {
+function throwSyncError(error) {
   throw error
 }
 
-function returnSpawnSyncError (error, context) {
+function returnSpawnSyncError(error, context) {
   context.result = {
     error,
     status: null,
@@ -26,7 +26,7 @@ function returnSpawnSyncError (error, context) {
     output: null,
     stdout: null,
     stderr: null,
-    pid: 0
+    pid: 0,
   }
 
   return context.result
@@ -41,10 +41,10 @@ addHook({ name: 'child_process' }, childProcess => {
   return childProcess
 })
 
-function normalizeArgs (args, shell) {
+function normalizeArgs(args, shell) {
   const childProcessInfo = {
     command: args[0],
-    file: args[0]
+    file: args[0],
   }
 
   if (Array.isArray(args[1])) {
@@ -65,12 +65,12 @@ function normalizeArgs (args, shell) {
   return childProcessInfo
 }
 
-function createContextFromChildProcessInfo (childProcessInfo) {
+function createContextFromChildProcessInfo(childProcessInfo) {
   const context = {
     command: childProcessInfo.command,
     file: childProcessInfo.file,
     shell: childProcessInfo.shell,
-    abortController: new AbortController()
+    abortController: new AbortController(),
   }
 
   if (childProcessInfo.fileArgs) {
@@ -80,8 +80,8 @@ function createContextFromChildProcessInfo (childProcessInfo) {
   return context
 }
 
-function wrapChildProcessSyncMethod (returnError, shell = false) {
-  return function wrapMethod (childProcessMethod) {
+function wrapChildProcessSyncMethod(returnError, shell = false) {
+  return function wrapMethod(childProcessMethod) {
     return function () {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
         return childProcessMethod.apply(this, arguments)
@@ -115,7 +115,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
   }
 }
 
-function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
+function wrapChildProcessCustomPromisifyMethod(customPromisifyMethod, shell) {
   return function () {
     if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
       return customPromisifyMethod.apply(this, arguments)
@@ -143,7 +143,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       }
     }
 
-    function reject (err) {
+    function reject(err) {
       context.error = err
       error.publish(context)
       asyncStart.publish(context)
@@ -152,7 +152,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       return Promise.reject(err)
     }
 
-    function resolve (result) {
+    function resolve(result) {
       context.result = result
       asyncStart.publish(context)
 
@@ -164,9 +164,9 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
   }
 }
 
-function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
-  return function wrapMethod (childProcessMethod) {
-    function wrappedChildProcessMethod () {
+function wrapChildProcessAsyncMethod(ChildProcess, shell = false) {
+  return function wrapMethod(childProcessMethod) {
+    function wrappedChildProcessMethod() {
       if (!childProcessChannel.start.hasSubscribers || arguments.length === 0) {
         return childProcessMethod.apply(this, arguments)
       }
@@ -178,7 +178,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
         let childProcess
         if (context.abortController.signal.aborted) {
           childProcess = new ChildProcess()
-          childProcess.on('error', () => {}) // Original method does not crash when non subscribers
+          childProcess.on('error', () => { }) // Original method does not crash when non subscribers
 
           process.nextTick(() => {
             const error = context.abortController.signal.reason || new Error('Aborted')
@@ -204,7 +204,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             childProcessChannel.error.publish(context)
           })
 
-          childProcess.on('close', (code = 0) => {
+          childProcess.once('close', (code = 0) => {
             if (!errorExecuted && code !== 0) {
               childProcessChannel.error.publish(context)
             }
@@ -228,7 +228,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
         util.promisify.custom,
         {
           ...descriptor,
-          value: wrapedChildProcessCustomPromisifyMethod
+          value: wrapedChildProcessCustomPromisifyMethod,
         })
     }
     return wrappedChildProcessMethod

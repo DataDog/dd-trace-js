@@ -2,7 +2,7 @@
 
 const {
   channel,
-  addHook
+  addHook,
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -114,7 +114,7 @@ function wrapWriteHead (writeHead) {
       res: this,
       abortController,
       statusCode,
-      responseHeaders
+      responseHeaders,
     })
 
     if (abortController.signal.aborted) {
@@ -140,7 +140,7 @@ function wrapWrite (write) {
       res: this,
       abortController,
       statusCode: this.statusCode,
-      responseHeaders
+      responseHeaders,
     })
 
     if (abortController.signal.aborted) {
@@ -208,7 +208,7 @@ function wrapEnd (end) {
       res: this,
       abortController,
       statusCode: this.statusCode,
-      responseHeaders
+      responseHeaders,
     })
 
     if (abortController.signal.aborted) {

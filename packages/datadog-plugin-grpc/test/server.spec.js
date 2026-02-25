@@ -1,74 +1,76 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
 const Readable = require('node:stream').Readable
 const path = require('node:path')
 
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const satisfies = require('semifies')
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_SERVER_ERROR_STATUSES } = require('../../dd-trace/src/constants')
-
 const { NODE_MAJOR } = require('../../../version')
+
 const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
-  let grpc
-  let port = 0
-  let server
-  let tracer
-  let call
-
-  function buildClient (service, callback) {
-    service = Object.assign({
-      getBidi: () => {},
-      getServerStream: () => {},
-      getClientStream: () => {},
-      getUnary: () => {}
-    }, service)
-
-    const loader = require('../../../versions/@grpc/proto-loader').get()
-    const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
-    const TestService = grpc.loadPackageDefinition(definition).test.TestService
-
-    server = new grpc.Server()
-
-    return new Promise((resolve, reject) => {
-      if (server.bindAsync) {
-        server.bindAsync('0.0.0.0:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
-          if (err) return reject(err)
-          port = boundPort
-
-          server.addService(TestService.service, service)
-          server.start()
-
-          resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
-        })
-      } else {
-        port = server.bind('0.0.0.0:0', grpc.ServerCredentials.createInsecure())
-        server.addService(TestService.service, service)
-        server.start()
-
-        resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
-      }
-    })
-  }
-
   describe('grpc/server', () => {
-    beforeEach(() => {
-      call = null
-    })
+    withVersions('grpc', pkgs, NODE_MAJOR >= 25 ? '>=1.3.0' : '*', (version, pkg, resolvedVersion) => {
+      let grpc
+      let port = 0
+      let server
+      let tracer
+      let call
 
-    afterEach(() => {
-      server.forceShutdown()
-    })
+      function buildClient (service) {
+        service = {
+          getBidi: () => {},
+          getServerStream: () => {},
+          getClientStream: () => {},
+          getUnary: () => {},
+          ...service,
+        }
 
-    withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0', (version, pkg) => {
+        const loader = require('../../../versions/@grpc/proto-loader').get()
+        const definition = loader.loadSync(path.join(__dirname, 'test.proto'))
+        const TestService = grpc.loadPackageDefinition(definition).test.TestService
+
+        server = new grpc.Server()
+
+        return new Promise((resolve, reject) => {
+          if (server.bindAsync) {
+            server.bindAsync('0.0.0.0:0', grpc.ServerCredentials.createInsecure(), (err, boundPort) => {
+              if (err) return reject(err)
+              port = boundPort
+
+              server.addService(TestService.service, service)
+
+              if (satisfies(resolvedVersion, '<1.10.0')) {
+                server.start()
+              }
+
+              resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+            })
+          } else {
+            port = server.bind('0.0.0.0:0', grpc.ServerCredentials.createInsecure())
+            server.addService(TestService.service, service)
+            server.start()
+
+            resolve(new TestService(`localhost:${port}`, grpc.credentials.createInsecure()))
+          }
+        })
+      }
+
+      beforeEach(() => {
+        call = null
+      })
+
+      afterEach(() => {
+        server.forceShutdown()
+      })
+
       describe('without configuration', () => {
         before(() => {
           return agent.load('grpc', { client: false })
@@ -85,7 +87,7 @@ describe('Plugin', () => {
         withNamingSchema(
           async () => {
             const client = await buildClient({
-              getUnary: (_, callback) => callback()
+              getUnary: (_, callback) => callback(),
             })
 
             client.getUnary({ first: 'foobar' }, () => {})
@@ -93,18 +95,18 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'grpc.server',
-              serviceName: 'test'
+              serviceName: 'test',
             },
             v1: {
               opName: 'grpc.server.request',
-              serviceName: 'test'
-            }
+              serviceName: 'test',
+            },
           }
         )
 
         it('should handle `unary` calls', async () => {
           const client = await buildClient({
-            getUnary: (_, callback) => callback()
+            getUnary: (_, callback) => callback(),
           })
 
           client.getUnary({ first: 'foobar' }, () => {})
@@ -115,7 +117,7 @@ describe('Plugin', () => {
                 name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getUnary',
-                type: 'web'
+                type: 'web',
               })
               assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getUnary')
               assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
@@ -130,7 +132,7 @@ describe('Plugin', () => {
 
         it('should handle `stream` calls', async () => {
           const client = await buildClient({
-            getServerStream: stream => stream.end()
+            getServerStream: stream => stream.end(),
           })
 
           client.getServerStream({ first: 'foobar' }, () => {})
@@ -141,7 +143,7 @@ describe('Plugin', () => {
                 name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getServerStream',
-                type: 'web'
+                type: 'web',
               })
               assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getServerStream')
               assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
@@ -155,7 +157,7 @@ describe('Plugin', () => {
 
         it('should handle `bidi` calls', async () => {
           const client = await buildClient({
-            getBidi: stream => stream.end()
+            getBidi: stream => stream.end(),
           })
 
           call = client.getBidi(new Readable(), () => {})
@@ -167,7 +169,7 @@ describe('Plugin', () => {
                 name: 'grpc.server',
                 service: 'test',
                 resource: '/test.TestService/getBidi',
-                type: 'web'
+                type: 'web',
               })
               assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getBidi')
               assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
@@ -182,7 +184,7 @@ describe('Plugin', () => {
         it('should handle cancelled `unary` calls', async () => {
           let call = null
           const client = await buildClient({
-            getUnary: () => call.cancel()
+            getUnary: () => call.cancel(),
           })
 
           call = client.getUnary({ first: 'foobar' }, () => {})
@@ -197,7 +199,7 @@ describe('Plugin', () => {
         it('should handle cancelled `stream` calls', async () => {
           let call = null
           const client = await buildClient({
-            getServerStream: () => call.cancel()
+            getServerStream: () => call.cancel(),
           })
 
           call = client.getServerStream({ first: 'foobar' }, () => {})
@@ -211,7 +213,7 @@ describe('Plugin', () => {
 
         it('should handle cancelled `bidi` calls', async () => {
           const client = await buildClient({
-            getBidi: () => call.cancel()
+            getBidi: () => call.cancel(),
           })
 
           call = client.getBidi(new Readable(), () => {})
@@ -231,7 +233,7 @@ describe('Plugin', () => {
               metadata.set('extra', 'information')
 
               callback(new Error('foobar'), {}, metadata)
-            }
+            },
           })
 
           client.getUnary({ first: 'foobar' }, () => {})
@@ -241,7 +243,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].error, 1)
               assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], 'foobar')
               assert.strictEqual(traces[0][0].meta[ERROR_TYPE], 'Error')
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'grpc.status.code'))
+              assert.ok(!('grpc.status.code' in traces[0][0].meta))
             })
         })
 
@@ -263,7 +265,7 @@ describe('Plugin', () => {
               setTimeout(() => child.finish())
 
               callback(error, {}, metadata)
-            }
+            },
           })
 
           client.getUnary({ first: 'foobar' }, () => {})
@@ -298,7 +300,7 @@ describe('Plugin', () => {
               setTimeout(() => child.finish())
 
               callback(error, {}, metadata)
-            }
+            },
           })
 
           client.getUnary({ first: 'foobar' }, () => {})
@@ -319,7 +321,7 @@ describe('Plugin', () => {
               metadata.set('extra', 'information')
 
               callback({ message: 'foobar', code: grpc.status.NOT_FOUND }, {}, metadata)
-            }
+            },
           })
 
           client.getUnary({ first: 'foobar' }, () => {})
@@ -341,7 +343,7 @@ describe('Plugin', () => {
               error.code = grpc.status.NOT_FOUND
 
               stream.emit('error', error)
-            }
+            },
           })
 
           call = client.getBidi(new Readable(), () => {})
@@ -367,7 +369,7 @@ describe('Plugin', () => {
               } catch (e) {
                 done(e)
               }
-            }
+            },
           }).then(client => client.getUnary({ first: 'foobar' }, () => {}), done)
         })
 
@@ -386,7 +388,7 @@ describe('Plugin', () => {
               })
 
               callback(null, {})
-            }
+            },
           }).then(client => {
             client.getUnary({ first: 'foobar' }, () => {
               emitter.emit('test')
@@ -399,9 +401,9 @@ describe('Plugin', () => {
         before(() => {
           const config = {
             server: {
-              service: 'custom'
+              service: 'custom',
             },
-            client: false
+            client: false,
           }
 
           return agent.load('grpc', config)
@@ -416,17 +418,14 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', async () => {
           const client = await buildClient({
-            getUnary: (_, callback) => callback()
+            getUnary: (_, callback) => callback(),
           })
 
           client.getUnary({ first: 'foobar' }, () => {})
 
-          return agent
-            .assertSomeTraces(traces => {
-              assertObjectContains(traces[0][0], {
-                service: 'custom'
-              })
-            })
+          return agent.assertFirstTraceSpan({
+            service: 'custom',
+          })
         })
       })
 
@@ -434,9 +433,9 @@ describe('Plugin', () => {
         before(() => {
           const config = {
             server: {
-              metadata: values => values
+              metadata: values => values,
             },
-            client: false
+            client: false,
           }
 
           return agent.load('grpc', config)
@@ -451,7 +450,7 @@ describe('Plugin', () => {
 
         it('should handle request metadata', async () => {
           const client = await buildClient({
-            getUnary: (_, callback) => callback()
+            getUnary: (_, callback) => callback(),
           })
 
           const metadata = new grpc.Metadata()
@@ -474,7 +473,7 @@ describe('Plugin', () => {
               metadata.set('foo', 'bar')
 
               callback(null, {}, metadata)
-            }
+            },
           })
 
           client.getUnary({ first: 'foobar' }, () => {})
@@ -491,12 +490,13 @@ describe('Plugin', () => {
               callback(null, {})
 
               try {
-                expect(call.metadata.getMap()).to.have.property('foo', 'bar')
+                assert.ok('foo' in call.metadata.getMap())
+                assert.strictEqual(call.metadata.getMap().foo, 'bar')
                 done()
               } catch (e) {
                 done(e)
               }
-            }
+            },
           }).then(client => {
             const metadata = new grpc.Metadata()
 

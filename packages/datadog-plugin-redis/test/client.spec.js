@@ -33,7 +33,7 @@ describe('Plugin', () => {
             client.get('bar'),
             connectPromise,
           ]), {
-            message: /queue/
+            message: /queue/,
           })
           await passingPromise
           await client.quit()
@@ -149,7 +149,7 @@ describe('Plugin', () => {
         before(() => {
           return agent.load('redis', {
             service: 'custom',
-            allowlist: ['GET']
+            allowlist: ['GET'],
           })
         })
 
@@ -199,12 +199,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'redis.command',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -214,8 +214,8 @@ describe('Plugin', () => {
           return agent.load('redis', {
             blocklist: [
               'Set', // this should block set and SET commands
-              'FOO'
-            ]
+              'FOO',
+            ],
           })
         })
 
@@ -242,6 +242,38 @@ describe('Plugin', () => {
           await client.set('turtle', 'like')
           await client.get('turtle')
           await promise
+        })
+      })
+
+      describe('with filter', () => {
+        before(() => {
+          return agent.load('redis', {
+            filter: (command) => command !== 'SET' && command !== 'CLIENT',
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+          client = redis.createClient()
+
+          await client.connect()
+        })
+
+        it('should be able to filter commands', (done) => {
+          const timer = setTimeout(done, 200)
+
+          agent
+            .assertSomeTraces((traces) => {
+              clearTimeout(timer)
+              done(new Error('Filtered commands should not be recorded.'))
+            })
+            .catch(done)
+
+          client.set('turtle', 'like')
         })
       })
     })

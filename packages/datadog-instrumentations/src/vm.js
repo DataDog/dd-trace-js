@@ -1,14 +1,14 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
-
 const runScriptStartChannel = channel('datadog:vm:run-script:start')
 const sourceTextModuleStartChannel = channel('datadog:vm:source-text-module:start')
 
 addHook({ name: 'vm' }, function (vm) {
   vm.Script = class extends vm.Script {
-    constructor (code) {
+    constructor(code) {
       super(...arguments)
 
       if (runScriptStartChannel.hasSubscribers && code) {
@@ -19,7 +19,7 @@ addHook({ name: 'vm' }, function (vm) {
 
   if (vm.SourceTextModule && typeof vm.SourceTextModule === 'function') {
     vm.SourceTextModule = class extends vm.SourceTextModule {
-      constructor (code) {
+      constructor(code) {
         super(...arguments)
 
         if (sourceTextModuleStartChannel.hasSubscribers && code) {
@@ -37,8 +37,8 @@ addHook({ name: 'vm' }, function (vm) {
   return vm
 })
 
-function wrapVMMethod (original) {
-  return function wrappedVMMethod (code) {
+function wrapVMMethod(original) {
+  return function wrappedVMMethod(code) {
     if (runScriptStartChannel.hasSubscribers && code) {
       runScriptStartChannel.publish({ code })
     }

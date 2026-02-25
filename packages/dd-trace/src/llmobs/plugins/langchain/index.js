@@ -38,7 +38,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       llm: new LlmHandler(this._tagger),
       embedding: new EmbeddingHandler(this._tagger),
       tool: new ToolHandler(this._tagger),
-      similarity_search: new VectorStoreHandler(this._tagger)
+      similarity_search: new VectorStoreHandler(this._tagger),
     }
   }
 
@@ -58,7 +58,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
       modelProvider,
       modelName,
       kind,
-      name
+      name,
     }
   }
 
@@ -174,13 +174,13 @@ class BaseLLMGeneratePlugin extends BaseLangChainLLMObsPlugin {
 class EmbeddingsEmbedQueryPlugin extends BaseLangChainLLMObsPlugin {
   static id = 'llmobs_langchain_embeddings_embed_query'
   static lcType = 'embedding'
-  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedQuery'
+  static prefix = 'tracing:orchestrion:@langchain/core:Embeddings_embedQuery'
 }
 
 class EmbeddingsEmbedDocumentsPlugin extends BaseLangChainLLMObsPlugin {
   static id = 'llmobs_langchain_embeddings_embed_documents'
   static lcType = 'embedding'
-  static prefix = 'tracing:apm:@langchain/core:Embeddings_embedDocuments'
+  static prefix = 'tracing:orchestrion:@langchain/core:Embeddings_embedDocuments'
 }
 
 class ToolInvokePlugin extends BaseLangChainLLMObsPlugin {
@@ -210,5 +210,5 @@ module.exports = [
   EmbeddingsEmbedDocumentsPlugin,
   ToolInvokePlugin,
   VectorStoreSimilaritySearchPlugin,
-  VectorStoreSimilaritySearchWithScorePlugin
+  VectorStoreSimilaritySearchWithScorePlugin,
 ]

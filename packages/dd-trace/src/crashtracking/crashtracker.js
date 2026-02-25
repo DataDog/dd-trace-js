@@ -5,9 +5,9 @@ const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
-const defaults = require('../config_defaults')
-const { URL } = require('url')
+const { getAgentUrl } = require('../agent/url')
 const pkg = require('../../../../package.json')
+const processTags = require('../process-tags')
 
 class Crashtracker {
   #started = false
@@ -50,8 +50,13 @@ class Crashtracker {
 
   // TODO: Send only configured values when defaults are fixed.
   #getConfig (config) {
-    const { hostname = defaults.hostname, port = defaults.port } = config
-    const url = config.url || new URL(`http://${hostname}:${port}`)
+    const url = getAgentUrl(config)
+
+    // Out-of-process symbolication currently (crashtracker 27.0.0) works on
+    // Linux only, does not work on Mac.
+    const resolveMode = require('os').platform === 'linux'
+      ? 'EnabledWithSymbolsInReceiver'
+      : 'EnabledWithInprocessSymbols'
 
     return {
       additional_files: [],
@@ -64,18 +69,26 @@ class Crashtracker {
           authority: url.protocol === 'unix:'
             ? Buffer.from(url.pathname).toString('hex')
             : url.host,
-          path_and_query: ''
+          path_and_query: '',
         },
-        timeout_ms: 3000
+        timeout_ms: 3000,
       },
-      timeout_ms: 5000,
-      // TODO: Use `EnabledWithSymbolsInReceiver` instead for Linux when fixed.
-      resolve_frames: 'EnabledWithInprocessSymbols'
+      timeout: { secs: 5, nanos: 0 },
+      demangle_names: false,
+      signals: [],
+      resolve_frames: resolveMode,
     }
   }
 
   #getMetadata (config) {
     const tags = Object.keys(config.tags).map(key => `${key}:${config.tags[key]}`)
+
+    // Add process tags to the tags array
+    for (const [key, value] of processTags.tags) {
+      if (value !== undefined) {
+        tags.push(`${key}:${value}`)
+      }
+    }
 
     return {
       library_name: pkg.name,
@@ -88,8 +101,8 @@ class Crashtracker {
         `library_version:${pkg.version}`,
         'runtime:nodejs',
         `runtime_version:${process.versions.node}`,
-        'severity:crash'
-      ]
+        'severity:crash',
+      ],
     }
   }
 
@@ -99,7 +112,7 @@ class Crashtracker {
       env: [],
       path_to_receiver_binary: libdatadog.find('crashtracker-receiver', true),
       stderr_filename: null,
-      stdout_filename: null
+      stdout_filename: null,
     }
   }
 }

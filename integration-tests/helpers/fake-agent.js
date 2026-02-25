@@ -10,13 +10,46 @@ const upload = require('multer')()
 
 const noop = () => {}
 
+/**
+ * @typedef {object} RemoteConfigFile
+ * @property {number} orgId
+ * @property {string} product
+ * @property {string} id
+ * @property {string} name
+ * @property {string} config
+ * @property {string} path
+ * @property {string} fileHash
+ * @property {object} meta
+ * @property {object} meta.custom
+ * @property {number} meta.custom.v
+ * @property {object} meta.hashes
+ * @property {string} meta.hashes.sha256
+ * @property {number} meta.length
+ */
+
 module.exports = class FakeAgent extends EventEmitter {
-  constructor (port = 0) {
+  port = 0
+  advertiseDebuggerV2IntakeSupport = true
+  debuggerV2IntakeStatusCode = 202
+  /** @type {Set<import('net').Socket>} */
+  #sockets = new Set()
+  /** @type {Record<string, RemoteConfigFile>} */
+  _rcFiles = {}
+  _rcTargetsVersion = 0
+  /** @type {Set<string>} */
+  _rcSeenStates = new Set()
+
+  constructor (port = 0, options = {}) {
     // Redirect rejections to the error event
     super({ captureRejections: true })
     this.port = port
-    this.resetRemoteConfig()
-    this._sockets = new Set()
+
+    if (options.advertiseDebuggerV2IntakeSupport !== undefined) {
+      this.advertiseDebuggerV2IntakeSupport = options.advertiseDebuggerV2IntakeSupport
+    }
+    if (options.debuggerV2IntakeStatusCode !== undefined) {
+      this.debuggerV2IntakeStatusCode = options.debuggerV2IntakeStatusCode
+    }
   }
 
   start () {
@@ -29,14 +62,16 @@ module.exports = class FakeAgent extends EventEmitter {
 
       // Track connections to force close them later
       this.server.on('connection', (socket) => {
-        this._sockets.add(socket)
+        this.#sockets.add(socket)
         socket.on('close', () => {
-          this._sockets.delete(socket)
+          this.#sockets.delete(socket)
         })
       })
 
       this.server.listen(this.port, () => {
-        this.port = this.server.address().port
+        this.port = (/** @type {import('net').AddressInfo} */ (
+          (/** @type {import('http').Server} */ (this.server)).address()
+        )).port
         clearTimeout(timeoutObj)
         resolve(this)
       })
@@ -46,10 +81,10 @@ module.exports = class FakeAgent extends EventEmitter {
   stop () {
     if (!this.server?.listening) return
 
-    for (const socket of this._sockets) {
+    for (const socket of this.#sockets) {
       socket.destroy()
     }
-    this._sockets.clear()
+    this.#sockets.clear()
     this.server.close()
 
     return once(this.server, 'close')
@@ -57,34 +92,42 @@ module.exports = class FakeAgent extends EventEmitter {
 
   /**
    * Add a config object to be returned by the fake Remote Config endpoint.
-   * @param {Object} config - Object containing the Remote Config "file" and metadata
+   * @param {object} config - Object containing the Remote Config "file" and metadata
    * @param {number} [config.orgId=2] - The Datadog organization ID
    * @param {string} config.product - The Remote Config product name
    * @param {string} config.id - The Remote Config config ID
    * @param {string} [config.name] - The Remote Config "name". Defaults to the sha256 hash of `config.id`
-   * @param {Object} config.config - The Remote Config "file" object
+   * @param {object} config.config - The Remote Config "file" object
    */
   addRemoteConfig (config) {
-    config = { ...config }
-    config.orgId = config.orgId || 2
-    config.name = config.name || createHash('sha256').update(config.id).digest('hex')
-    config.config = JSON.stringify(config.config)
-    config.path = `datadog/${config.orgId}/${config.product}/${config.id}/${config.name}`
-    config.fileHash = createHash('sha256').update(config.config).digest('hex')
-    config.meta = {
+    const orgId = config.orgId || 2
+    const name = config.name || createHash('sha256').update(config.id).digest('hex')
+    const configStr = JSON.stringify(config.config)
+    const path = `datadog/${orgId}/${config.product}/${config.id}/${name}`
+    const fileHash = createHash('sha256').update(configStr).digest('hex')
+    const meta = {
       custom: { v: 1 },
-      hashes: { sha256: config.fileHash },
-      length: config.config.length
+      hashes: { sha256: fileHash },
+      length: configStr.length,
     }
 
-    this._rcFiles[config.id] = config
+    this._rcFiles[config.id] = {
+      orgId,
+      product: config.product,
+      id: config.id,
+      name,
+      config: configStr,
+      path,
+      fileHash,
+      meta,
+    }
     this._rcTargetsVersion++
   }
 
   /**
    * Update an existing config object
    * @param {string} id - The Remote Config config ID
-   * @param {Object} config - The Remote Config "file" object
+   * @param {object} config - The Remote Config "file" object
    */
   updateRemoteConfig (id, config) {
     config = JSON.stringify(config)
@@ -92,7 +135,7 @@ module.exports = class FakeAgent extends EventEmitter {
       this._rcFiles[id],
       {
         config,
-        fileHash: createHash('sha256').update(config).digest('hex')
+        fileHash: createHash('sha256').update(config).digest('hex'),
       }
     )
     config.meta.custom.v++
@@ -182,7 +225,7 @@ module.exports = class FakeAgent extends EventEmitter {
    *     the function `fn` has finished running. If `fn` throws an error, the promise will be rejected once `timeout`
    *     is reached.
    */
-  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1) {
+  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1, resolveAtFirstSuccess = false) {
     if (typeof fn !== 'function') {
       expectedMessageCount = timeout
       timeout = requestType
@@ -216,13 +259,17 @@ module.exports = class FakeAgent extends EventEmitter {
       msgCount += 1
       try {
         fn(msg)
-        if (msgCount === expectedMessageCount) {
+        if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
           resultResolve()
+        }
+
+        if (resolveAtFirstSuccess) {
+          this.removeListener('telemetry', messageHandler)
         }
       } catch (e) {
         errors.push(e)
       }
-      if (msgCount === expectedMessageCount) {
+      if (!resolveAtFirstSuccess && msgCount === expectedMessageCount) {
         this.removeListener('telemetry', messageHandler)
       }
     }
@@ -279,9 +326,11 @@ function buildExpressServer (agent) {
   app.use(bodyParser.json({ limit: Infinity, type: 'application/json' }))
 
   app.get('/info', (req, res) => {
-    res.json({
-      endpoints: ['/evp_proxy/v2']
-    })
+    const endpoints = ['/evp_proxy/v2', '/debugger/v1/input']
+    if (agent.advertiseDebuggerV2IntakeSupport) {
+      endpoints.push('/debugger/v2/input')
+    }
+    res.json({ endpoints })
   })
 
   app.put('/v0.4/traces', (req, res) => {
@@ -289,15 +338,18 @@ function buildExpressServer (agent) {
     res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
     agent.emit('message', {
       headers: req.headers,
-      payload: msgpack.decode(req.body, { useBigInt64: true })
+      payload: msgpack.decode(req.body, { useBigInt64: true }),
     })
   })
 
   app.post('/v0.7/config', (req, res) => {
     const {
       client: { products, state },
-      cached_target_files: cachedTargetFiles
+      cached_target_files: cachedTargetFiles,
     } = req.body
+
+    // Emit the remote config request payload for testing
+    agent.emit('remote-config-request', req.body)
 
     if (state.has_error) {
       // Print the error sent by the client in case it's useful in debugging tests
@@ -318,7 +370,7 @@ function buildExpressServer (agent) {
     }
 
     res.on('close', () => {
-      agent.emit('remote-confg-responded')
+      agent.emit('remote-config-responded')
     })
 
     if (agent._rcTargetsVersion === state.targets_version) {
@@ -340,8 +392,8 @@ function buildExpressServer (agent) {
       signed: {
         custom: { opaque_backend_state: 'foo' },
         targets: {},
-        version: agent._rcTargetsVersion
-      }
+        version: agent._rcTargetsVersion,
+      },
     }
     const targetFiles = []
     const clientConfigs = []
@@ -366,25 +418,60 @@ function buildExpressServer (agent) {
     res.json({
       targets: clientConfigs.length === 0 ? undefined : base64(targets),
       target_files: targetFiles,
-      client_configs: clientConfigs
+      client_configs: clientConfigs,
     })
   })
 
   app.post('/debugger/v1/input', (req, res) => {
-    res.status(200).send()
+    res.status(202).send()
     agent.emit('debugger-input', {
       headers: req.headers,
       query: req.query,
-      payload: req.body
+      payload: req.body,
+    })
+    agent.emit('debugger-input-v1', {
+      headers: req.headers,
+      query: req.query,
+      payload: req.body,
+    })
+  })
+
+  app.post('/debugger/v2/input', (req, res) => {
+    res.status(agent.debuggerV2IntakeStatusCode).send()
+    if (agent.debuggerV2IntakeStatusCode === 404) {
+      agent.emit('debugger-input-v2-404')
+      return
+    }
+    agent.emit('debugger-input', {
+      headers: req.headers,
+      query: req.query,
+      payload: req.body,
+    })
+    agent.emit('debugger-input-v2', {
+      headers: req.headers,
+      query: req.query,
+      payload: req.body,
     })
   })
 
   app.post('/debugger/v1/diagnostics', upload.any(), (req, res) => {
-    res.status(200).send()
-    agent.emit('debugger-diagnostics', {
-      headers: req.headers,
-      payload: JSON.parse(req.files[0].buffer.toString())
-    })
+    res.status(200).send() // TODO: Should we send a 202 here instead?
+    // The diagnostics endpoint can receive both probe results and status messages
+    // Emit the appropriate events based on payload structure
+    const isProbeResult = req.body[0]?.debugger?.snapshot !== undefined
+    if (isProbeResult) {
+      const event = {
+        headers: req.headers,
+        payload: req.body,
+      }
+      agent.emit('debugger-input', event)
+      agent.emit('debugger-diagnostics-input', event)
+    } else {
+      agent.emit('debugger-diagnostics', {
+        headers: req.headers,
+        payload: JSON.parse((/** @type {Express.Multer.File[]} */ (req.files))[0].buffer.toString()),
+      })
+    }
   })
 
   app.post('/profiling/v1/input', upload.any(), (req, res) => {
@@ -392,7 +479,7 @@ function buildExpressServer (agent) {
     agent.emit('message', {
       headers: req.headers,
       payload: req.body,
-      files: req.files
+      files: req.files,
     })
   })
 
@@ -400,7 +487,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('telemetry', {
       headers: req.headers,
-      payload: req.body
+      payload: req.body,
     })
   })
 
@@ -408,7 +495,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('llmobs', {
       headers: req.headers,
-      payload: req.body
+      payload: req.body,
     })
   })
 
@@ -416,7 +503,7 @@ function buildExpressServer (agent) {
     res.status(200).send()
     agent.emit('exposures', {
       headers: req.headers,
-      payload: req.body
+      payload: req.body,
     })
   })
 

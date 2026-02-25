@@ -3,13 +3,13 @@
 const path = require('path')
 
 const { getNodeModulesPaths } = require('../path-line')
-const Analyzer = require('./vulnerability-analyzer')
 const { WEAK_HASH } = require('../vulnerabilities')
+const Analyzer = require('./vulnerability-analyzer')
 
 const INSECURE_HASH_ALGORITHMS = new Set([
   'md4', 'md4WithRSAEncryption', 'RSA-MD4',
   'RSA-MD5', 'md5', 'md5-sha1', 'ssl3-md5', 'md5WithRSAEncryption',
-  'RSA-SHA1', 'RSA-SHA1-2', 'sha1', 'md5-sha1', 'sha1WithRSAEncryption', 'ssl3-sha1'
+  'RSA-SHA1', 'RSA-SHA1-2', 'sha1', 'md5-sha1', 'sha1WithRSAEncryption', 'ssl3-sha1',
 ].map(algorithm => algorithm.toLowerCase()))
 
 const EXCLUDED_LOCATIONS = getNodeModulesPaths(
@@ -23,13 +23,14 @@ const EXCLUDED_LOCATIONS = getNodeModulesPaths(
   'ws/lib/websocket-server.js',
   'google-gax/build/src/grpc.js',
   'cookie-signature/index.js',
-  'express-session/index.js'
+  'express-session/index.js',
+  'node-preload/preload-list-env.js'
 )
 
 const EXCLUDED_PATHS_FROM_STACK = [
   path.join('node_modules', 'object-hash', path.sep),
   path.join('node_modules', 'aws-sdk', 'lib', 'util.js'),
-  path.join('node_modules', 'keygrip', path.sep)
+  path.join('node_modules', 'keygrip', path.sep),
 ]
 class WeakHashAnalyzer extends Analyzer {
   constructor () {

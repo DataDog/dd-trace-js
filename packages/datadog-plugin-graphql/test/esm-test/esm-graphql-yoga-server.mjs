@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import { createSchema, createYoga } from 'graphql-yoga'
 import { createServer } from 'node:http'
+import { createSchema, createYoga } from 'graphql-yoga'
 
 const typeDefs = /* GraphQL */ `
   type Query {
@@ -12,18 +12,18 @@ const resolvers = {
   Query: {
     hello: (_, { name }) => {
       return `Hello, ${name || 'world'}!`
-    }
-  }
+    },
+  },
 }
 
 const schema = createSchema({
   typeDefs,
-  resolvers
+  resolvers,
 })
 
 const yoga = createYoga({
   schema,
-  graphqlEndpoint: '/graphql'
+  graphqlEndpoint: '/graphql',
 })
 
 const server = createServer(yoga)

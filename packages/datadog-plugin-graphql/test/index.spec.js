@@ -5,18 +5,17 @@ const http = require('node:http')
 const { performance } = require('perf_hooks')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const plugin = require('../src')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer
@@ -60,7 +59,7 @@ describe('Plugin', () => {
           type: graphql.GraphQLString,
           resolve (obj, args) {
             return 'test'
-          }
+          },
         },
         address: {
           type: new graphql.GraphQLObjectType({
@@ -68,17 +67,17 @@ describe('Plugin', () => {
             fields: {
               civicNumber: {
                 type: graphql.GraphQLString,
-                resolve: () => 123
+                resolve: () => 123,
               },
               street: {
                 type: graphql.GraphQLString,
-                resolve: () => 'foo street'
-              }
-            }
+                resolve: () => 'foo street',
+              },
+            },
           }),
           resolve (obj, args) {
             return {}
-          }
+          },
         },
         pets: {
           type: new graphql.GraphQLList(new graphql.GraphQLNonNull(new graphql.GraphQLObjectType({
@@ -86,15 +85,15 @@ describe('Plugin', () => {
             fields: () => ({
               type: {
                 type: graphql.GraphQLString,
-                resolve: () => 'dog'
+                resolve: () => 'dog',
               },
               name: {
                 type: graphql.GraphQLString,
-                resolve: () => 'foo bar'
+                resolve: () => 'foo bar',
               },
               owner: {
                 type: Human,
-                resolve: () => ({})
+                resolve: () => ({}),
               },
               colours: {
                 type: new graphql.GraphQLList(new graphql.GraphQLObjectType({
@@ -102,19 +101,19 @@ describe('Plugin', () => {
                   fields: {
                     code: {
                       type: graphql.GraphQLString,
-                      resolve: () => '#ffffff'
-                    }
-                  }
+                      resolve: () => '#ffffff',
+                    },
+                  },
                 })),
                 resolve (obj, args) {
                   return [{}, {}]
-                }
-              }
-            })
+                },
+              },
+            }),
           }))),
           resolve (obj, args) {
             return [{}, {}, {}]
-          }
+          },
         },
         fastAsyncField: {
           type: graphql.GraphQLString,
@@ -123,7 +122,7 @@ describe('Plugin', () => {
               markFast = performance.now()
               resolve('fast field')
             })
-          }
+          },
         },
         slowAsyncField: {
           type: graphql.GraphQLString,
@@ -132,20 +131,20 @@ describe('Plugin', () => {
               markSlow = performance.now()
               resolve('slow field')
             })
-          }
+          },
         },
         syncField: {
           type: graphql.GraphQLString,
           resolve (obj, args) {
             markSync = performance.now()
             return 'sync field'
-          }
+          },
         },
         oneTime: {
           type: graphql.GraphQLString,
-          resolve: () => new Query('one-time result')
-        }
-      }
+          resolve: () => new Query('one-time result'),
+        },
+      },
     })
 
     schema = new graphql.GraphQLSchema({
@@ -156,30 +155,30 @@ describe('Plugin', () => {
             type: graphql.GraphQLString,
             args: {
               name: {
-                type: graphql.GraphQLString
+                type: graphql.GraphQLString,
               },
               title: {
                 type: graphql.GraphQLString,
-                defaultValue: null
-              }
+                defaultValue: null,
+              },
             },
             resolve (obj, args) {
               return args.name
-            }
+            },
           },
           human: {
             type: Human,
             resolve (obj, args) {
               return Promise.resolve({})
-            }
+            },
           },
           friends: {
             type: new graphql.GraphQLList(Human),
             resolve () {
               return [{ name: 'alice' }, { name: 'bob' }]
-            }
-          }
-        }
+            },
+          },
+        },
       }),
 
       mutation: new graphql.GraphQLObjectType({
@@ -189,9 +188,9 @@ describe('Plugin', () => {
             type: Human,
             resolve () {
               return Promise.resolve({ name: 'human name' })
-            }
-          }
-        }
+            },
+          },
+        },
       }),
 
       subscription: new graphql.GraphQLObjectType({
@@ -201,10 +200,10 @@ describe('Plugin', () => {
             type: Human,
             resolve () {
               return Promise.resolve({ name: 'human name' })
-            }
-          }
-        }
-      })
+            },
+          },
+        },
+      }),
     })
   }
 
@@ -220,7 +219,7 @@ describe('Plugin', () => {
             'graphql.validate',
             expectedSchema.server.opName,
             'graphql.field',
-            'graphql.resolve'
+            'graphql.resolve',
           ]
 
           if (a.start.toString() === b.start.toString()) {
@@ -253,12 +252,12 @@ describe('Plugin', () => {
                   Query: {
                     hello: (_, { name }) => {
                       return `Hello, ${name || 'world'}!`
-                    }
-                  }
+                    },
+                  },
                 }
 
                 const schema = graphqlYoga.createSchema({
-                  typeDefs, resolvers
+                  typeDefs, resolvers,
                 })
 
                 const yoga = graphqlYoga.createYoga({ schema })
@@ -289,7 +288,7 @@ describe('Plugin', () => {
                 assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
                 assert.strictEqual(spans[0].type, 'graphql')
                 assert.strictEqual(spans[0].error, 0)
-                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+                assert.ok(!('graphql.source' in spans[0].meta))
                 assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
                 assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
                 assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -304,7 +303,7 @@ describe('Plugin', () => {
             `
 
             axios.post(`http://localhost:${port}/graphql`, {
-              query
+              query,
             }).catch(done)
           })
         })
@@ -335,7 +334,7 @@ describe('Plugin', () => {
             selectSpan: (traces) => {
               const spans = sort(traces[0])
               return spans[0]
-            }
+            },
           }
         )
 
@@ -352,7 +351,7 @@ describe('Plugin', () => {
               assert.strictEqual(span.resource, 'graphql.parse')
               assert.strictEqual(span.type, 'graphql')
               assert.strictEqual(span.error, 0)
-              assert.ok(!Object.hasOwn(span.meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in span.meta))
               assert.strictEqual(span.meta.component, 'graphql')
             })
             .then(done)
@@ -374,7 +373,7 @@ describe('Plugin', () => {
               assert.strictEqual(span.resource, 'graphql.validate')
               assert.strictEqual(span.type, 'graphql')
               assert.strictEqual(span.error, 0)
-              assert.ok(!Object.hasOwn(span.meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in span.meta))
               assert.strictEqual(span.meta.component, 'graphql')
             })
             .then(done)
@@ -396,7 +395,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
               assert.strictEqual(spans[0].type, 'graphql')
               assert.strictEqual(spans[0].error, 0)
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
               assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -413,7 +412,7 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.variables'))
+              assert.ok(!('graphql.variables' in spans[0].meta))
             })
             .then(done)
             .catch(done)
@@ -438,7 +437,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].meta['graphql.field.name'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.path'], 'hello')
               assert.strictEqual(spans[1].meta['graphql.field.type'], 'String')
-              assert.ok(!Object.hasOwn(spans[1].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[1].meta))
               assert.strictEqual(spans[1].meta.component, 'graphql')
             })
             .then(done)
@@ -795,7 +794,7 @@ describe('Plugin', () => {
               } catch (e) {
                 done(e)
               }
-            }
+            },
           }
 
           graphql.graphql({ schema, source, rootValue }).catch(done)
@@ -813,7 +812,7 @@ describe('Plugin', () => {
           const rootValue = {
             hello () {
               return Promise.resolve('test')
-            }
+            },
           }
 
           const span = tracer.startSpan('test')
@@ -821,7 +820,7 @@ describe('Plugin', () => {
           return tracer.scope().activate(span, () => {
             return graphql.graphql({ schema, source, rootValue })
               .then(value => {
-                expect(value).to.have.nested.property('data.hello', 'test')
+                assert.strictEqual(value?.data?.hello, 'test')
                 assert.strictEqual(tracer.scope().active(), span)
               })
           })
@@ -834,7 +833,7 @@ describe('Plugin', () => {
           return graphql.graphql({ schema, source })
             .then(() => graphql.graphql({ schema, source: subscription }))
             .then(result => {
-              assert.ok(!Object.hasOwn(result, 'errors'))
+              assert.ok(!('errors' in result))
             })
         })
 
@@ -855,7 +854,7 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
                 assert.strictEqual(spans[0].name, expectedSchema.server.opName)
                 assert.strictEqual(spans[1].name, 'graphql.resolve')
-              })
+              }),
             ])
             .then(() => done())
             .catch(done)
@@ -870,7 +869,7 @@ describe('Plugin', () => {
           const source = '{ human { oneTime } }'
 
           const result = await graphql.graphql({ schema, source })
-          assert.ok(!Object.hasOwn(result, 'errors'))
+          assert.ok(!('errors' in result))
           assert.strictEqual(result.data.human.oneTime, 'one-time result')
         })
 
@@ -886,7 +885,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
               assert.strictEqual(spans[0].name, expectedSchema.server.opName)
               assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
@@ -967,10 +966,10 @@ describe('Plugin', () => {
               const spanEvents = agent.unformatSpanEvents(spans[0])
 
               assert.strictEqual(spanEvents.length, 1)
-              assert.ok(Object.hasOwn(spanEvents[0], 'startTime'))
+              assert.ok(('startTime' in spanEvents[0]))
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
+              assert.ok(('stacktrace' in spanEvents[0].attributes))
               assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
                 'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
               assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
@@ -1024,7 +1023,7 @@ describe('Plugin', () => {
           const rootValue = {
             hello: () => {
               throw new Error('test')
-            }
+            },
           }
 
           let error
@@ -1078,7 +1077,7 @@ describe('Plugin', () => {
           const rootValue = {
             hello: () => {
               throw error
-            }
+            },
           }
 
           agent
@@ -1112,7 +1111,7 @@ describe('Plugin', () => {
           const rootValue = {
             hello: () => {
               return Promise.reject(error)
-            }
+            },
           }
 
           agent
@@ -1142,7 +1141,7 @@ describe('Plugin', () => {
           const source = '{ hello }'
 
           const rootValue = {
-            hello: () => 'world'
+            hello: () => 'world',
           }
 
           const contextValue = {}
@@ -1207,7 +1206,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
               assert.strictEqual(spans[0].name, expectedSchema.server.opName)
               assert.strictEqual(spans[0].resource, 'query SecondQuery{hello(name:"")}')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(spans[0].meta['graphql.operation.name'], 'SecondQuery')
               assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -1239,7 +1238,7 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].service, 'test')
               assert.strictEqual(spans[0].name, expectedSchema.server.opName)
               assert.strictEqual(spans[0].resource, resource)
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+              assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
               assert.strictEqual(spans[0].meta['graphql.operation.name'], 'WithFragments')
               assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -1264,9 +1263,9 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].service, 'test')
               assert.strictEqual(spans[0].name, 'graphql.parse')
               assert.strictEqual(spans[0].resource, 'graphql.parse')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.operation.type'))
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.operation.name'))
+              assert.ok(!('graphql.source' in spans[0].meta))
+              assert.ok(!('graphql.operation.type' in spans[0].meta))
+              assert.ok(!('graphql.operation.name' in spans[0].meta))
               assert.strictEqual(spans[0].meta.component, 'graphql')
             })
             .then(done)
@@ -1289,7 +1288,7 @@ describe('Plugin', () => {
                 assert.strictEqual(spans[0].name, expectedSchema.server.opName)
                 assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
                 assert.strictEqual(spans[0].type, 'graphql')
-                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+                assert.ok(!('graphql.source' in spans[0].meta))
                 assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
                 assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
                 assert.strictEqual(spans[0].meta.component, 'graphql')
@@ -1320,7 +1319,7 @@ describe('Plugin', () => {
         //       assert.strictEqual(spans[0].service, 'test')
         //       assert.strictEqual(spans[0].name, expectedSchema.server.opName)
         //       assert.strictEqual(spans[0].resource, resource)
-        //       assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+        //       assert.ok(!('graphql.source' in spans[0].meta))
         //       assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
         //       assert.strictEqual(spans[0].meta['graphql.operation.name'], 'WithFragments')
         //     })
@@ -1353,8 +1352,8 @@ describe('Plugin', () => {
 
           return agent.load('graphql', {
             service: 'custom',
-            variables: variables => Object.assign({}, variables, { who: 'REDACTED' }),
-            source: true
+            variables: variables => ({ ...variables, who: 'REDACTED' }),
+            source: true,
           })
         })
 
@@ -1417,7 +1416,7 @@ describe('Plugin', () => {
           tracer = require('../../dd-trace')
 
           return agent.load('graphql', {
-            variables: ['title']
+            variables: ['title'],
           })
         })
 
@@ -1443,7 +1442,7 @@ describe('Plugin', () => {
               const spans = sort(traces[0])
 
               assert.strictEqual(spans[0].meta['graphql.variables.title'], 'planet')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.variables.who'))
+              assert.ok(!('graphql.variables.who' in spans[0].meta))
             })
             .then(done)
             .catch(done)
@@ -1509,12 +1508,13 @@ describe('Plugin', () => {
 
               try {
                 assert.notStrictEqual(span, null)
-                expect(span.context()).to.have.property('_name', expectedSchema.server.opName)
+                assert.ok('_name' in span.context())
+                assert.strictEqual(span.context()._name, expectedSchema.server.opName)
                 done()
               } catch (e) {
                 done(e)
               }
-            }
+            },
           }
 
           graphql.graphql({ schema, source, rootValue }).catch(done)
@@ -1559,7 +1559,7 @@ describe('Plugin', () => {
               const ignored = spans.filter(span => {
                 return [
                   'human.address.civicNumber',
-                  'human.address.street'
+                  'human.address.street',
                 ].indexOf(span.resource) !== -1
               })
 
@@ -1665,8 +1665,8 @@ describe('Plugin', () => {
           hooks: {
             execute: sinon.spy((span, context, res) => {}),
             parse: sinon.spy((span, document, operation) => {}),
-            validate: sinon.spy((span, document, error) => {})
-          }
+            validate: sinon.spy((span, document, error) => {}),
+          },
         }
 
         const source = `
@@ -1702,13 +1702,13 @@ describe('Plugin', () => {
             schema,
             document,
             rootValue: {
-              hello: () => 'world'
+              hello: () => 'world',
             },
             contextValue: {},
             variableValues: { who: 'world' },
             operationName: 'MyQuery',
             fieldResolver: (source, args, contextValue, info) => args.name,
-            typeResolver: (value, context, info, abstractType) => 'Query'
+            typeResolver: (value, context, info, abstractType) => 'Query',
           }
 
           let result
@@ -1738,7 +1738,7 @@ describe('Plugin', () => {
                 variableValues: params.variableValues,
                 operationName: params.operationName,
                 fieldResolver: params.fieldResolver,
-                typeResolver: params.typeResolver
+                typeResolver: params.typeResolver,
               })
               assert.strictEqual(res, result)
             })
@@ -1847,13 +1847,13 @@ describe('Plugin', () => {
 
                 assert.strictEqual(spans[0].name, expectedSchema.server.opName)
                 assert.strictEqual(spans[0].resource, 'query MyQuery{hello}')
-                assert.ok(!Object.hasOwn(spans[0].meta, 'graphql.source'))
+                assert.ok(!('graphql.source' in spans[0].meta))
 
                 assert.strictEqual(spans[1].name, 'graphql.resolve')
                 assert.strictEqual(spans[1].resource, 'hello:String')
 
                 assert.strictEqual(spans[2].name, 'graphql.validate')
-                assert.ok(!Object.hasOwn(spans[2].meta, 'graphql.source'))
+                assert.ok(!('graphql.source' in spans[2].meta))
               })
               .then(done)
               .catch(done)
@@ -1868,9 +1868,9 @@ describe('Plugin', () => {
               `,
                   resolvers: {
                     Query: {
-                      hello: () => 'Hello world!'
-                    }
-                  }
+                      hello: () => 'Hello world!',
+                    },
+                  },
                 }),
                 makeExecutableSchema({
                   typeDefs: `
@@ -1880,17 +1880,17 @@ describe('Plugin', () => {
               `,
                   resolvers: {
                     Query: {
-                      world: () => 'Hello world!'
-                    }
-                  }
-                })
-              ]
+                      world: () => 'Hello world!',
+                    },
+                  },
+                }),
+              ],
             })
 
             const params = {
               schema,
               query: 'query MyQuery { hello }',
-              operationName: 'MyQuery'
+              operationName: 'MyQuery',
             }
 
             runQuery(params)

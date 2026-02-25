@@ -1,18 +1,28 @@
 'use strict'
 
-const mutex = require('mutexify/promise')()
+const mutex = require('../../../../../vendor/dist/mutexify/promise')()
 const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
-const { compile: compileCondition, compileSegments, templateRequiresEvaluation } = require('./condition')
+const { compile, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
+const {
+  DEFAULT_MAX_REFERENCE_DEPTH,
+  DEFAULT_MAX_COLLECTION_SIZE,
+  DEFAULT_MAX_FIELD_COUNT,
+  DEFAULT_MAX_LENGTH,
+} = require('./snapshot/constants')
 const {
   findScriptFromPartialPath,
   clearState,
   locationToBreakpoint,
   breakpointToProbes,
-  probeToLocation
+  probeToLocation,
 } = require('./state')
 const log = require('./log')
+
+/**
+ * @typedef {import('inspector').Debugger.SetBreakpointReturnType} SetBreakpointResponse
+ */
 
 let sessionStarted = false
 const probes = new Map()
@@ -38,7 +48,7 @@ session.on('scriptLoadingStabilized', () => {
 module.exports = {
   addBreakpoint: lock(addBreakpoint),
   removeBreakpoint: lock(removeBreakpoint),
-  modifyBreakpoint: lock(modifyBreakpoint)
+  modifyBreakpoint: lock(modifyBreakpoint),
 }
 
 async function addBreakpoint (probe) {
@@ -50,7 +60,7 @@ async function addBreakpoint (probe) {
   let lineNumber = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
   let columnNumber = 0 // Probes do not contain/support column information
 
-  // Optimize for sending data to /debugger/v1/input endpoint
+  // Optimize for sending data to debugger input endpoint
   probe.location = { file, lines: [String(lineNumber)] }
 
   // Optimize for fast calculations when probe is hit
@@ -64,8 +74,9 @@ async function addBreakpoint (probe) {
   const snapshotsPerSecond = probe.sampling?.snapshotsPerSecond ?? (probe.captureSnapshot
     ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
     : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
-  probe.nsBetweenSampling = BigInt(1 / snapshotsPerSecond * 1e9)
-  probe.lastCaptureNs = 0n
+  probe.nsBetweenSampling = BigInt(Math.trunc(1 / snapshotsPerSecond * 1e9))
+  // Initialize to a large negative value to ensure first probe hit is always captured
+  probe.lastCaptureNs = BigInt(Number.MIN_SAFE_INTEGER)
 
   // Warning: The code below relies on undocumented behavior of the inspector!
   // It expects that `await session.post('Debugger.enable')` will wait for all loaded scripts to be emitted as
@@ -94,12 +105,51 @@ async function addBreakpoint (probe) {
   }
 
   try {
-    probe.condition = probe.when?.json && compileCondition(probe.when.json)
+    probe.condition = probe.when?.json && compile(probe.when.json)
   } catch (err) {
     throw new Error(
       `Cannot compile expression: ${probe.when.dsl} (probe: ${probe.id}, version: ${probe.version})`,
       { cause: err }
     )
+  }
+
+  if (probe.captureSnapshot) {
+    probe.capture = {
+      maxReferenceDepth: probe.capture?.maxReferenceDepth ?? DEFAULT_MAX_REFERENCE_DEPTH,
+      maxCollectionSize: probe.capture?.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE,
+      maxFieldCount: probe.capture?.maxFieldCount ?? DEFAULT_MAX_FIELD_COUNT,
+      maxLength: probe.capture?.maxLength ?? DEFAULT_MAX_LENGTH,
+    }
+  }
+
+  if (probe.captureExpressions?.length > 0) {
+    probe.compiledCaptureExpressions = []
+    for (const captureExpr of probe.captureExpressions) {
+      let expression
+      try {
+        expression = compile(captureExpr.expr.json)
+      } catch (err) {
+        throw new Error(
+          `Cannot compile capture expression: ${captureExpr.name} (probe: ${probe.id}, version: ${probe.version})`,
+          { cause: err }
+        )
+      }
+
+      probe.compiledCaptureExpressions.push({
+        name: captureExpr.name,
+        expression,
+        limits: {
+          maxReferenceDepth: captureExpr.capture?.maxReferenceDepth ??
+            probe.capture?.maxReferenceDepth ?? DEFAULT_MAX_REFERENCE_DEPTH,
+          maxCollectionSize: captureExpr.capture?.maxCollectionSize ??
+            probe.capture?.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE,
+          maxFieldCount: captureExpr.capture?.maxFieldCount ??
+            probe.capture?.maxFieldCount ?? DEFAULT_MAX_FIELD_COUNT,
+          maxLength: captureExpr.capture?.maxLength ??
+            probe.capture?.maxLength ?? DEFAULT_MAX_LENGTH,
+        },
+      })
+    }
   }
 
   const locationKey = generateLocationKey(scriptId, lineNumber, columnNumber)
@@ -118,14 +168,14 @@ async function addBreakpoint (probe) {
     const location = {
       scriptId,
       lineNumber: lineNumber - 1, // Beware! lineNumber is zero-indexed
-      columnNumber
+      columnNumber,
     }
     let result
     try {
-      result = await session.post('Debugger.setBreakpoint', {
+      result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
         location,
-        condition: probe.condition
-      })
+        condition: probe.condition,
+      }))
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
@@ -199,10 +249,10 @@ async function updateBreakpointInternal (breakpoint, probe) {
     breakpointToProbes.delete(breakpoint.id)
     let result
     try {
-      result = await session.post('Debugger.setBreakpoint', {
+      result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
         location: breakpoint.location,
-        condition
-      })
+        condition,
+      }))
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }

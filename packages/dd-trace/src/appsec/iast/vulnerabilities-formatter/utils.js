@@ -14,7 +14,7 @@ const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(String.raw`"(${STRINGIFY_
 const sensitiveValueRegex = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
 
 function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Set()) {
-  Object.keys(target).forEach((key) => {
+  for (const key of Object.keys(target)) {
     const nextLevelKeys = [...levelKeys, key]
     const val = target[key]
 
@@ -26,7 +26,7 @@ function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Se
         iterateObject(val, fn, nextLevelKeys, depth - 1, visited)
       }
     }
-  })
+  }
 }
 
 function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
@@ -125,7 +125,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
             return {
               ...range,
               start: range.start + offset,
-              end: range.end + offset
+              end: range.end + offset,
             }
           })
 
@@ -136,7 +136,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
           sensitiveRanges.push({
             start: offset,
-            end: offset + Number.parseInt(regexRes[3])
+            end: offset + Number.parseInt(regexRes[3]),
           })
 
           value = value.replace(sensitiveId, '')
@@ -147,7 +147,7 @@ function stringifyWithRanges (obj, objRanges, loadSensitiveRanges = false) {
 
           sensitiveRanges.push({
             start: regexRes.index,
-            end: regexRes.index + originalValue.length
+            end: regexRes.index + originalValue.length,
           })
 
           value = value.replace(sensitiveId, originalValue)

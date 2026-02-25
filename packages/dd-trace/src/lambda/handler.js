@@ -3,8 +3,9 @@
 const log = require('../log')
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
+const { getValueFromEnvSources } = require('../config/helper')
 const { ImpendingTimeout } = require('./runtime/errors')
-const { getEnvironmentVariable } = require('../config-helper')
+const { extractContext } = require('./context')
 
 const globalTracer = global._ddtrace
 const tracer = globalTracer._tracer
@@ -21,12 +22,12 @@ let __lambdaTimeout
  * Publishes to the `apm:aws:lambda:timeout` channel when
  * the AWS Lambda run time is about to end.
  *
- * @param {*} context AWS Lambda context object.
+ * @param {object} context AWS Lambda context object.
  */
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
 
-  let apmFlushDeadline = Number.parseInt(getEnvironmentVariable('DD_APM_FLUSH_DEADLINE_MILLISECONDS')) || 100
+  let apmFlushDeadline = Number.parseInt(getValueFromEnvSources('DD_APM_FLUSH_DEADLINE_MILLISECONDS')) || 100
   apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
 
   __lambdaTimeout = setTimeout(() => {
@@ -50,7 +51,7 @@ function crashFlush () {
     const error = new ImpendingTimeout('Datadog detected an impending timeout')
     activeSpan.addTags({
       [ERROR_MESSAGE]: error.message,
-      [ERROR_TYPE]: error.name
+      [ERROR_TYPE]: error.name,
     })
   }
 
@@ -61,32 +62,18 @@ function crashFlush () {
 }
 
 /**
- * Extracts the context from the given Lambda handler arguments.
- *
- * @param {*} args any amount of arguments
- * @returns the context, if extraction was succesful.
- */
-function extractContext (args) {
-  let context = args.length > 1 ? args[1] : undefined
-  if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-    context = args.length > 2 ? args[2] : undefined
-    if (context === undefined || context.getRemainingTimeInMillis === undefined) {
-      throw new Error('Could not extract context')
-    }
-  }
-  return context
-}
-
-/**
  * Patches your AWS Lambda handler function to add some tracing support.
  *
- * @param {*} lambdaHandler a Lambda handler function.
+ * @param {Function} lambdaHandler a Lambda handler function.
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
     const context = extractContext(args)
 
-    checkTimeout(context)
+    if (context) {
+      checkTimeout(context)
+    }
+
     const result = lambdaHandler.apply(this, args)
     if (result && typeof result.then === 'function') {
       return result.then((res) => {

@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 
 require('../../../../dd-trace/test/setup/core')
-
 const parseTags = require('../../../src/utils/src/parse-tags')
 
 describe('parseTags', () => {
@@ -12,11 +12,11 @@ describe('parseTags', () => {
     const obj = {
       'a.0.a': 'foo',
       'a.0.b': 'bar',
-      'a.1.a': 'baz'
+      'a.1.a': 'baz',
     }
 
     assert.deepStrictEqual(parseTags(obj), {
-      a: [{ a: 'foo', b: 'bar' }, { a: 'baz' }]
+      a: [{ a: 'foo', b: 'bar' }, { a: 'baz' }],
     })
   })
 

@@ -5,10 +5,11 @@ const http = require('http')
 const path = require('path')
 const util = require('util')
 
-const msgpack = require('@msgpack/msgpack')
 const bodyParser = require('body-parser')
 const express = require('express')
+const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
+const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
@@ -16,6 +17,7 @@ const ritm = require('../../src/ritm')
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
+let llmobsEvaluationMetricsRequests = []
 let sockets = []
 let agent = null
 let listener = null
@@ -118,7 +120,7 @@ function unformatSpanEvents (span) {
       return {
         name: event.name,
         startTime: event.time_unix_nano / 1e6, // Convert from nanoseconds back to milliseconds
-        attributes: event.attributes ? event.attributes : undefined
+        attributes: event.attributes ? event.attributes : undefined,
       }
     })
 
@@ -193,8 +195,8 @@ function handleTraceRequest (req, res, sendToTestAgent) {
         headers: {
           ...req.headers,
           'X-Datadog-Agent-Proxy-Disabled': 'True',
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
 
     testAgentReq.on('response', testAgentRes => {
@@ -322,6 +324,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
 function runCallbackAgainstTraces (callback, options = {}, handlers) {
+  /** @type {Error[]} */
   const errors = []
   let resolve
   let reject
@@ -332,20 +335,23 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   const rejectionTimeout = setTimeout(() => {
     if (errors.length) {
-      const error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
-      // Mark errors enumerable for older Node.js versions to be visible.
-      Object.defineProperty(error, 'errors', {
-        enumerable: true
-      })
+      let error = errors[0]
+      if (errors.length > 1) {
+        error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
+        // Mark errors enumerable for older Node.js versions to be visible.
+        Object.defineProperty(error, 'errors', {
+          enumerable: true,
+        })
+      }
       // Hack for the information to be fully visible.
-      error.message = util.inspect(error)
+      error.message = util.inspect(error, { depth: null })
       reject(error)
     }
   }, options.timeoutMs || 1000)
 
   const handlerPayload = {
     handler,
-    spanResourceMatch: options.spanResourceMatch
+    spanResourceMatch: options.spanResourceMatch,
   }
 
   /**
@@ -382,7 +388,7 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @overload
-   * @param {String|String[]} pluginNames - Name or list of names of plugins to load
+   * @param {string | string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
@@ -391,7 +397,7 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @overload
-   * @param {String[]} pluginNames - Name or list of names of plugins to load
+   * @param {string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>[]} config
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
@@ -408,14 +414,17 @@ module.exports = {
     currentIntegrationName = getCurrentIntegrationName()
 
     const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+    // Reload dogstatsd to avoid adding new events to the global process object
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
     const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh
+      './config': getConfigFresh,
+      './dogstatsd': dogstatsd,
     })
     const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy
+      './proxy': proxy,
     })
     tracer = proxyquire('../../', {
-      './src': TracerProxy
+      './src': TracerProxy,
     })
 
     agent = express()
@@ -439,7 +448,7 @@ module.exports = {
 
     agent.get('/info', (req, res) => {
       res.status(202).send({
-        endpoints: availableEndpoints
+        endpoints: availableEndpoints,
       })
     })
 
@@ -463,11 +472,17 @@ module.exports = {
       res.status(200).send()
     })
 
+    // LLM Observability evaluation metrics endpoint
+    agent.post('/evp_proxy/v2/api/intake/llm-obs/v2/eval-metric', (req, res) => {
+      llmobsEvaluationMetricsRequests.push(JSON.parse(req.body))
+      res.status(200).send()
+    })
+
     // DSM Checkpoint endpoint
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
       dsmStats.push(req.body)
-      statsHandlers.forEach(({ handler, spanResourceMatch }) => {
+      statsHandlers.forEach(({ handler }) => {
         handler(dsmStats)
       })
       res.status(200).send()
@@ -489,13 +504,14 @@ module.exports = {
       listener = server.listen(0, () => {
         const port = listener.address().port
 
-        tracer.init(Object.assign({}, {
+        tracer.init({
           service: 'test',
           env: 'tester',
           port,
           flushInterval: 0,
-          plugins: false
-        }, tracerConfig))
+          plugins: false,
+          ...tracerConfig,
+        })
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
@@ -583,8 +599,11 @@ module.exports = {
         try {
           assertObjectContains(traces[0][0], callbackOrExpected)
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error('Expected span %o did not match traces:\n%o', callbackOrExpected, traces)
+          // Enrich error with actual and expected traces for Node.js < 22.17.0
+          if (semifies(process.version, '<22.17.0')) {
+            error.actualTraces = util.inspect(traces, { depth: null })
+            error.expectedTraces = util.inspect(callbackOrExpected, { depth: null })
+          }
           throw error
         }
       } else {
@@ -607,12 +626,26 @@ module.exports = {
   /**
    * Get the LLM Observability span events requests.
    * @param {boolean} clear - Clear the requests after getting them.
-   * @returns {Array<Object>} The LLM Observability span events requests.
+   * @returns {Array<object>} The LLM Observability span events requests.
    */
   getLlmObsSpanEventsRequests (clear = false) {
     const requests = llmobsSpanEventsRequests
     if (clear) {
       llmobsSpanEventsRequests = []
+    }
+
+    return requests
+  },
+
+  /**
+   * Get the LLM Observability evaluation metrics requests.
+   * @param {boolean} clear - Clear the requests after getting them.
+   * @returns {Array<object>} The LLM Observability evaluation metrics requests.
+   */
+  getLlmObsEvaluationMetricsRequests (clear = false) {
+    const requests = llmobsEvaluationMetricsRequests
+    if (clear) {
+      llmobsEvaluationMetricsRequests = []
     }
 
     return requests
@@ -625,6 +658,7 @@ module.exports = {
     traceHandlers.clear()
     statsHandlers.clear()
     llmobsSpanEventsRequests = []
+    llmobsEvaluationMetricsRequests = []
   },
 
   /**
@@ -634,7 +668,7 @@ module.exports = {
    * - ritmReset: true
    * - wipe: false
    *
-   * @param {Object} [options]
+   * @param {object} [options]
    * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
    * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
    *     need this.
@@ -654,6 +688,7 @@ module.exports = {
     traceHandlers.clear()
     statsHandlers.clear()
     llmobsSpanEventsRequests = []
+    llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
@@ -688,6 +723,9 @@ module.exports = {
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
 
+    process.removeAllListeners('exit')
+    process.removeAllListeners('beforeExit')
+
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
     const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
       .map(exception => new RegExp(exception))
@@ -704,5 +742,5 @@ module.exports = {
   getDsmStats,
   dsmStatsExist,
   dsmStatsExistWithParentHash,
-  unformatSpanEvents
+  unformatSpanEvents,
 }

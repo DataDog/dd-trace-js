@@ -1,9 +1,9 @@
 'use strict'
 
-const { addHook, AsyncResource } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { addHook, AsyncResource } = require('./helpers/instrument')
 
-function wrapRequest (original) {
+function wrapRequest(original) {
   return function () {
     const id = arguments.length - 1
     arguments[id] = AsyncResource.bind(arguments[id])

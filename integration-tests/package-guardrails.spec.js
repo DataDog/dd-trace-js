@@ -1,19 +1,21 @@
 'use strict'
 
+const path = require('path')
+const fs = require('fs')
+const assert = require('assert')
 const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
   useSandbox,
-  sandboxCwd
+  sandboxCwd,
 } = require('./helpers')
-const path = require('path')
-const fs = require('fs')
-const assert = require('assert')
 
 const NODE_OPTIONS = '--require dd-trace/init.js'
 const DD_TRACE_DEBUG = 'true'
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_LOG_LEVEL = 'error'
+const NODE_MAJOR = Number(process.versions.node.split('.')[0])
+const FASTIFY_DEP = NODE_MAJOR < 20 ? 'fastify@4' : 'fastify'
 
 // These are on by default in release tests, so we'll turn them off for
 // more fine-grained control of these variables in these tests.
@@ -22,8 +24,8 @@ delete process.env.DD_INJECT_FORCE
 
 describe('package guardrails', () => {
   useEnv({ NODE_OPTIONS })
-  const runTest = (...args) =>
-    testFile('package-guardrails/index.js', ...args)
+  const runTest = (expectedOut, expectedTelemetryPoints, expectedSource = '') =>
+    testFile('package-guardrails/index.js', expectedOut, expectedTelemetryPoints, expectedSource)
 
   context('when package is out of range', () => {
     useSandbox(['bluebird@1.0.0'])
@@ -34,7 +36,7 @@ describe('package guardrails', () => {
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
           ['complete', 'injection_forced:false',
-            'abort.integration', 'integration:bluebird,integration_version:1.0.0'
+            'abort.integration', 'integration:bluebird,integration_version:1.0.0',
           ]
         ))
     })
@@ -71,13 +73,13 @@ Found incompatible integration version: bluebird@1.0.0
 
   context('when package is in range (fastify)', () => {
     context('when fastify is latest', () => {
-      useSandbox(['fastify'])
+      useSandbox([FASTIFY_DEP])
 
       it('should instrument the package', () => runTest('true\n', [], 'manual'))
     })
 
     context('when fastify is latest and logging enabled', () => {
-      useSandbox(['fastify'])
+      useSandbox([FASTIFY_DEP])
       useEnv({ DD_TRACE_DEBUG })
 
       it('should instrument the package', () =>
@@ -120,11 +122,11 @@ addHook({ name: 'bluebird', versions: ['*'] }, Promise => {
       it('should not instrument the package', () =>
         runTest(
           log => {
-            assert.ok(log.includes(`
-Error during ddtrace instrumentation of application, aborting.
-ReferenceError: this is a test error
-    at `))
-            assert.ok(log.includes('\nfalse\n'))
+            assert.match(
+              log,
+              /\nError during ddtrace instrumentation of application, aborting.\nReferenceError: this is a test error\n {4}at /m
+            )
+            assert.match(log, /\nfalse\n/)
           }, []))
     })
   })

@@ -1,4 +1,23 @@
 ---
 schema-version: v1
 kind: mergequeue
+
 enable: false
+
+branches:
+  master:
+    enable: true
+
+# PRs A, B -> A, A+B workflows being generated
+workflow_type: speculative
+merge_method: squash
+gitlab_check_enable: true
+gitlab_jobs_retry_enable: true
+# Wait for the full pipeline to complete before checking the status (we have some jobs which auto-retry)
+gitlab_fail_fast: false
+# Do not add merge queue status labels on the PR, they will trigger required status checks and block the PR from the MQ
+skip_labels: true
+# Validate up to 5 PRs from the queue at once
+speculative_max_depth: 5
+# Run CI for A, A+B, and B such that if A or A+B fail, but B passes, we can still merge B
+speculative_fallback_enable: true

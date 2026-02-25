@@ -3,33 +3,16 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
-const { expect } = require('chai')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const agent = require('../../dd-trace/test/plugins/agent.js')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const accounts = require('./fixtures.js')
 const { expectedSchema, rawExpectedSchema } = require('./naming.js')
-const graphqlTag = require('../../../versions/graphql-tag/index.js').get()
-const gql = graphqlTag.gql
-accounts.typeDefs = gql(accounts.typeDefs)
 
 const fixtures = [accounts]
-
-async function execute (executor, source, variables, operationName) {
-  const resp = await executor({
-    source,
-    document: gql(source),
-    request: {
-      variables
-    },
-    operationName,
-    queryHash: 'hashed',
-    context: null,
-    cache: {}
-  })
-  return resp
-}
+const typeDefs = accounts.typeDefs
 
 describe('Plugin', () => {
   let ApolloGateway
@@ -37,12 +20,28 @@ describe('Plugin', () => {
   let buildSubgraphSchema
   let ApolloServer
   let startStandaloneServer
+  let gql
+
+  function setupFixtures () {
+    const graphqlTag = require('../../../versions/graphql-tag/index.js').get()
+    gql = graphqlTag.gql
+    accounts.typeDefs = gql(typeDefs)
+  }
+
+  function setupApollo (version) {
+    require('../../dd-trace/index.js')
+    const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
+    const subgraph = require('../../../versions/@apollo/subgraph').get()
+    buildSubgraphSchema = subgraph.buildSubgraphSchema
+    ApolloGateway = apollo.ApolloGateway
+    LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
+  }
 
   function setupGateway () {
     const localDataSources = Object.fromEntries(
       fixtures.map((f) => [
         f.name,
-        new LocalGraphQLDataSource(buildSubgraphSchema(f))
+        new LocalGraphQLDataSource(buildSubgraphSchema(f)),
       ])
     )
 
@@ -50,9 +49,24 @@ describe('Plugin', () => {
       localServiceList: fixtures,
       buildService (service) {
         return localDataSources[service.name]
-      }
+      },
     })
     return gateway
+  }
+
+  async function execute (executor, source, variables, operationName) {
+    const resp = await executor({
+      source,
+      document: gql(source),
+      request: {
+        variables,
+      },
+      operationName,
+      queryHash: 'hashed',
+      context: null,
+      cache: {},
+    })
+    return resp
   }
 
   function gateway () {
@@ -61,14 +75,6 @@ describe('Plugin', () => {
 
   describe('@apollo/gateway', () => {
     withVersions('apollo', '@apollo/gateway', version => {
-      before(() => {
-        require('../../dd-trace/index.js')
-        const apollo = require(`../../../versions/@apollo/gateway@${version}`).get()
-        const subgraph = require('../../../versions/@apollo/subgraph').get()
-        buildSubgraphSchema = subgraph.buildSubgraphSchema
-        ApolloGateway = apollo.ApolloGateway
-        LocalGraphQLDataSource = apollo.LocalGraphQLDataSource
-      })
       after(() => {
         return agent.close({ ritmReset: false })
       })
@@ -76,6 +82,10 @@ describe('Plugin', () => {
       describe('@apollo/server', () => {
         let server
         let port
+
+        before(() => agent.load('apollo'))
+        before(() => setupFixtures())
+        before(() => setupApollo(version))
 
         before(() => {
           ApolloServer = require('../../../versions/@apollo/server/index.js').get().ApolloServer
@@ -85,18 +95,14 @@ describe('Plugin', () => {
 
           server = new ApolloServer({
             gateway: setupGateway(),
-            subscriptions: false // Disable subscriptions (not supported with Apollo Gateway)
+            subscriptions: false, // Disable subscriptions (not supported with Apollo Gateway)
           })
 
           return startStandaloneServer(server, {
-            listen: { port: 0 }
+            listen: { port: 0 },
           }).then(({ url }) => {
             port = new URL(url).port
           })
-        })
-
-        before(() => {
-          return agent.load('apollo')
         })
 
         after(() => {
@@ -126,15 +132,15 @@ describe('Plugin', () => {
             .catch(done)
 
           axios.post(`http://localhost:${port}/`, {
-            query
+            query,
           })
         })
       })
 
       describe('without configuration', () => {
-        before(() => {
-          return agent.load('apollo')
-        })
+        before(() => agent.load('apollo'))
+        before(() => setupFixtures())
+        before(() => setupApollo(version))
 
         it('should instrument apollo/gateway', done => {
           const operationName = 'MyQuery'
@@ -143,47 +149,63 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces((traces) => {
               // the spans are in order of execution
-              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][0].resource, 'query MyQuery{hello(name:"")}')
-              assert.strictEqual(traces[0][0].type, 'web')
-              assert.strictEqual(traces[0][0].error, 0)
-              assert.strictEqual(traces[0][0].meta['graphql.operation.name'], operationName)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'graphql.source'))
-              assert.strictEqual(traces[0][0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(traces[0][0].meta.component, 'apollo.gateway')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'apollo.gateway')
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.server.opName,
+                service: expectedSchema.server.serviceName,
+                resource: 'query MyQuery{hello(name:"")}',
+                type: 'web',
+                error: 0,
+                meta: {
+                  'graphql.operation.name': operationName,
+                  'graphql.operation.type': 'query',
+                  component: 'apollo.gateway',
+                  '_dd.integration': 'apollo.gateway',
+                },
+              })
+              assert.ok(!('graphql.source' in traces[0][0].meta))
 
-              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
-              assert.strictEqual(traces[0][1].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][1].type, 'web')
-              assert.strictEqual(traces[0][1].error, 0)
-              assert.strictEqual(traces[0][1].meta.component, 'apollo.gateway')
+              assertObjectContains(traces[0][1], {
+                name: 'apollo.gateway.validate',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: { component: 'apollo.gateway' },
+              })
 
-              assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
-              assert.strictEqual(traces[0][2].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][2].type, 'web')
-              assert.strictEqual(traces[0][2].error, 0)
-              assert.strictEqual(traces[0][2].meta.component, 'apollo.gateway')
+              assertObjectContains(traces[0][2], {
+                name: 'apollo.gateway.plan',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: { component: 'apollo.gateway' },
+              })
 
-              assert.strictEqual(traces[0][3].name, 'apollo.gateway.execute')
-              assert.strictEqual(traces[0][3].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][3].type, 'web')
-              assert.strictEqual(traces[0][3].error, 0)
-              assert.strictEqual(traces[0][3].meta.component, 'apollo.gateway')
+              assertObjectContains(traces[0][3], {
+                name: 'apollo.gateway.execute',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: { component: 'apollo.gateway' },
+              })
 
-              assert.strictEqual(traces[0][4].name, 'apollo.gateway.fetch')
-              assert.strictEqual(traces[0][4].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][4].type, 'web')
-              assert.strictEqual(traces[0][4].error, 0)
-              assert.strictEqual(traces[0][4].meta.serviceName, 'accounts')
-              assert.strictEqual(traces[0][4].meta.component, 'apollo.gateway')
+              assertObjectContains(traces[0][4], {
+                name: 'apollo.gateway.fetch',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: {
+                  serviceName: 'accounts',
+                  component: 'apollo.gateway',
+                },
+              })
 
-              assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
-              assert.strictEqual(traces[0][5].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][5].type, 'web')
-              assert.strictEqual(traces[0][5].error, 0)
-              assert.strictEqual(traces[0][5].meta.component, 'apollo.gateway')
+              assertObjectContains(traces[0][5], {
+                name: 'apollo.gateway.postprocessing',
+                service: expectedSchema.server.serviceName,
+                type: 'web',
+                error: 0,
+                meta: { component: 'apollo.gateway' },
+              })
             })
             .then(done)
             .catch(done)
@@ -203,9 +225,11 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].resource, '{hello(name:"")}')
               assert.strictEqual(traces[0][0].type, 'web')
               assert.strictEqual(traces[0][0].error, 0)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'graphql.source'))
-              assert.strictEqual(traces[0][0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(traces[0][0].meta.component, 'apollo.gateway')
+              assert.ok(!('graphql.source' in traces[0][0].meta))
+              assertObjectContains(traces[0][0].meta, {
+                'graphql.operation.type': 'query',
+                component: 'apollo.gateway',
+              })
             })
             .then(done)
             .catch(done)
@@ -235,9 +259,11 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].resource, '{human{address{civicNumber street}name}}')
               assert.strictEqual(traces[0][0].type, 'web')
               assert.strictEqual(traces[0][0].error, 0)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'graphql.source'))
-              assert.strictEqual(traces[0][0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(traces[0][0].meta.component, 'apollo.gateway')
+              assert.ok(!('graphql.source' in traces[0][0].meta))
+              assertObjectContains(traces[0][0].meta, {
+                'graphql.operation.type': 'query',
+                component: 'apollo.gateway',
+              })
             })
             .then(done)
             .catch(done)
@@ -251,10 +277,11 @@ describe('Plugin', () => {
         it('should instrument mutations', done => {
           const source = 'mutation { human { name } }'
 
-          agent
-            .assertSomeTraces((traces) => {
-              assert.strictEqual(traces[0][0].meta['graphql.operation.type'], 'mutation')
-            })
+          agent.assertFirstTraceSpan({
+            meta: {
+              'graphql.operation.type': 'mutation',
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -288,22 +315,30 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0].length).equal(2)
-              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][0].error, 1)
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(traces[0][0].meta.component, 'apollo.gateway')
+              assert.strictEqual(traces[0].length, 2)
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.server.opName,
+                service: expectedSchema.server.serviceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'apollo.gateway',
+                },
+              })
 
-              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
-              assert.strictEqual(traces[0][1].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][1].error, 1)
-              assert.strictEqual(traces[0][1].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][1].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][1].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(traces[0][1].meta.component, 'apollo.gateway')
+              assertObjectContains(traces[0][1], {
+                name: 'apollo.gateway.validate',
+                service: expectedSchema.server.serviceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'apollo.gateway',
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -323,7 +358,7 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              expect(traces[0].length).equal(3)
+              assert.strictEqual(traces[0].length, 3)
               assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
               assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
               assert.strictEqual(traces[0][0].error, 1)
@@ -331,12 +366,16 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
               assert.strictEqual(traces[0][1].error, 0)
 
-              assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
-              assert.strictEqual(traces[0][2].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][2].error, 1)
-              assert.strictEqual(traces[0][2].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][2].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][2].meta[ERROR_STACK], error.stack)
+              assertObjectContains(traces[0][2], {
+                name: 'apollo.gateway.plan',
+                service: expectedSchema.server.serviceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -358,11 +397,15 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
-              assert.strictEqual(traces[0][0].error, 1)
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.server.opName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                },
+              })
 
               assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
               assert.strictEqual(traces[0][1].error, 0)
@@ -377,18 +420,26 @@ describe('Plugin', () => {
               // in version 2.3.0, there is no recordExceptions method thus we can't ever attach an error to the
               // fetch span but instead the error will be propagated to the request span and be set there
               if (version > '2.3.0') {
-                assert.strictEqual(traces[0][3].error, 1)
-                assert.strictEqual(traces[0][3].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(traces[0][3].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(traces[0][3].meta[ERROR_STACK], error.stack)
+                assertObjectContains(traces[0][3], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                  },
+                })
               } else { assert.strictEqual(traces[0][3].error, 0) }
 
-              assert.strictEqual(traces[0][4].name, 'apollo.gateway.fetch')
-              assert.strictEqual(traces[0][4].service, expectedSchema.server.serviceName)
-              assert.strictEqual(traces[0][4].error, 1)
-              assert.strictEqual(traces[0][4].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][4].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][4].meta[ERROR_STACK], error.stack)
+              assertObjectContains(traces[0][4], {
+                name: 'apollo.gateway.fetch',
+                service: expectedSchema.server.serviceName,
+                error: 1,
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                },
+              })
 
               assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
               assert.strictEqual(traces[0][5].error, 0)
@@ -400,7 +451,7 @@ describe('Plugin', () => {
             localServiceList: fixtures,
             fetcher: () => {
               throw Error('Nooo')
-            }
+            },
           })
           gateway.load().then(resp => {
             return execute(resp.executor, source, variableValues, operationName)
@@ -457,14 +508,14 @@ describe('Plugin', () => {
           {
             selectSpan: (traces) => {
               return traces[0][0]
-            }
+            },
           }
         )
 
         describe('with configuration', () => {
-          before(() => {
-            return agent.load('apollo', { service: 'custom', source: true, signature: false })
-          })
+          before(() => agent.load('apollo', { service: 'custom', source: true, signature: false }))
+          before(() => setupFixtures())
+          before(() => setupApollo(version))
 
           it('should be configured with the correct values', done => {
             const operationName = 'MyQuery'

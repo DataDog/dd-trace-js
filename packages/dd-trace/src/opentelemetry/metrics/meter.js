@@ -1,10 +1,10 @@
 'use strict'
 
 const { VERSION: packageVersion } = require('../../../../../version')
-const {
-  Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter
-} = require('./instruments')
 const log = require('../../log')
+const {
+  Counter, UpDownCounter, Histogram, Gauge, ObservableGauge, ObservableCounter, ObservableUpDownCounter,
+} = require('./instruments')
 const { METRIC_TYPES } = require('./constants')
 
 /**
@@ -31,7 +31,7 @@ class Meter {
    * @param {string} [instrumentationScope.name] - Meter name (defaults to 'dd-trace-js')
    * @param {string} [instrumentationScope.version] - Meter version (defaults to tracer version)
    * @param {string} [instrumentationScope.schemaUrl] - Schema URL
-   * @param {Object} [instrumentationScope.attributes] - Attributes for the instrumentation scope
+   * @param {object} [instrumentationScope.attributes] - Attributes for the instrumentation scope
    */
   constructor (
     meterProvider,

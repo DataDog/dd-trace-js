@@ -24,7 +24,7 @@ describe('insecure cookie analyzer', () => {
     enabled: true,
     requestSampling: 100,
     maxConcurrentRequests: 1,
-    maxContextOperations: 1
+    maxContextOperations: 1,
   }
 
   prepareTestServerForIast('insecure cookie analyzer',

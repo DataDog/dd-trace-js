@@ -4,6 +4,7 @@ const fs = require('fs')
 const assert = require('node:assert/strict')
 const path = require('path')
 
+const sinon = require('sinon')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const {
@@ -12,12 +13,12 @@ const {
   SCHEMA_NAME,
   SCHEMA_OPERATION,
   SCHEMA_WEIGHT,
-  SCHEMA_TYPE
+  SCHEMA_TYPE,
 } = require('../../dd-trace/src/constants')
-const sinon = require('sinon')
-const { loadMessage } = require('./helpers')
 const { SchemaBuilder } = require('../../dd-trace/src/datastreams/schemas/schema_builder')
 const { NODE_MAJOR } = require('../../../version')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
+const { loadMessage } = require('./helpers')
 
 const BASIC_USER_SCHEMA_DEF = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'schemas/expected_user_schema.json'), 'utf8')
@@ -42,7 +43,7 @@ describe('Plugin', () => {
     let mockTime = 0
 
     // avsc version 5.0.0 currently does not support a nodeMajor version greater than major version 24
-    withVersions('avsc', ['avsc'], NODE_MAJOR >= 25 ? '>5.0.0' : undefined, (version) => {
+    withVersions('avsc', ['avsc'], NODE_MAJOR >= 25 ? '>5.0.0' : '*', (version) => {
       before(() => {
         tracer = require('../../dd-trace').init()
         // reset sampled schemas
@@ -61,6 +62,7 @@ describe('Plugin', () => {
           const cache = SchemaBuilder.getCache()
           cache.clear()
           return agent.load('avsc').then(() => {
+            temporaryWarningExceptions.add('SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()')
             avro = require(`../../../versions/avsc@${version}`).get()
           })
         })
@@ -106,7 +108,7 @@ describe('Plugin', () => {
               status: 'ACTIVE',
               profile_picture: Buffer.from('binarydata'),
               metadata: Buffer.from('metadata12345678'),
-              address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' }
+              address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' },
             })
             fs.writeFileSync(filePath, buf)
 
@@ -156,7 +158,7 @@ describe('Plugin', () => {
             status: 'ACTIVE',
             profile_picture: Buffer.from('binarydata'),
             metadata: Buffer.from('metadata12345678'),
-            address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' }
+            address: { street: '123 Main St', city: 'Metropolis', zipcode: '12345' },
           })
           fs.writeFileSync(filePath, buf)
 

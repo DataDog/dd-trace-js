@@ -9,11 +9,11 @@ const pathLine = {
   getNodeModulesPaths,
   getRelativePath,
   getNonDDCallSiteFrames,
-  ddBasePath // Exported only for test purposes
+  ddBasePath, // Exported only for test purposes
 }
 
 const EXCLUDED_PATHS = [
-  path.join(path.sep, 'node_modules', 'dc-polyfill')
+  path.join(path.sep, 'node_modules', 'dc-polyfill'),
 ]
 const EXCLUDED_PATH_PREFIXES = [
   'node:diagnostics_channel',
@@ -21,7 +21,8 @@ const EXCLUDED_PATH_PREFIXES = [
   'node:child_process',
   'child_process',
   'node:async_hooks',
-  'async_hooks'
+  'async_hooks',
+  'node:internal/async_local_storage',
 ]
 
 function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
@@ -38,7 +39,7 @@ function getNonDDCallSiteFrames (callSiteFrames, externallyExcludedPaths) {
       const callsiteLocation = {
         path: filepath,
         line: callsite.line,
-        column: callsite.column
+        column: callsite.column,
       }
       const { path: originalPath, line, column } = getOriginalPathAndLineFromSourceMap(callsiteLocation)
       callsite.path = filepath = originalPath
@@ -93,10 +94,10 @@ function isExcluded (callsite, externallyExcludedPaths) {
 function getNodeModulesPaths (...paths) {
   const nodeModulesPaths = []
 
-  paths.forEach(p => {
+  for (const p of paths) {
     const pathParts = p.split('/')
     nodeModulesPaths.push(path.join('node_modules', ...pathParts))
-  })
+  }
 
   return nodeModulesPaths
 }

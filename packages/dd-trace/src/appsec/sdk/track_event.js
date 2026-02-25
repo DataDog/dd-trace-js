@@ -1,13 +1,13 @@
 'use strict'
 
 const log = require('../../log')
-const { getRootSpan } = require('./utils')
-const { setUserTags } = require('./set_user')
 const waf = require('../waf')
 const { keepTrace } = require('../../priority_sampler')
 const addresses = require('../addresses')
 const { ASM } = require('../../standalone/product')
 const { incrementSdkEventMetric } = require('../telemetry')
+const { setUserTags } = require('./set_user')
+const { getRootSpan } = require('./utils')
 
 /**
  * @deprecated in favor of trackUserLoginSuccessV2
@@ -51,7 +51,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
     'usr.id': userId,
     'usr.login': userId,
     'usr.exists': exists ? 'true' : 'false',
-    ...metadata
+    ...metadata,
   }
 
   trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer))
@@ -94,7 +94,7 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
 
   metadata = {
     'usr.login': login,
-    ...metadata
+    ...metadata,
   }
 
   if (user) {
@@ -138,7 +138,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
   metadata = {
     'usr.login': login,
     'usr.exists': exists ? 'true' : 'false',
-    ...metadata
+    ...metadata,
   }
 
   trackEvent('users.login.failure', metadata, 'eventTrackingV2.trackUserLoginFailure', rootSpan)
@@ -149,7 +149,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
 function flattenFields (fields, depth = 0) {
   if (depth > 4) {
     return {
-      truncated: true
+      truncated: true,
     }
   }
 
@@ -183,7 +183,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
 
   const tags = {
     [`appsec.events.${eventName}.track`]: 'true',
-    [`_dd.appsec.events.${eventName}.sdk`]: 'true'
+    [`_dd.appsec.events.${eventName}.sdk`]: 'true',
   }
 
   if (fields) {
@@ -205,7 +205,7 @@ function trackEvent (eventName, fields, sdkMethodName, rootSpan) {
 
 function runWaf (eventName, user) {
   const persistent = {
-    [`server.business_logic.${eventName}`]: null
+    [`server.business_logic.${eventName}`]: null,
   }
 
   if (user?.id) {
@@ -226,5 +226,5 @@ module.exports = {
   trackUserLoginSuccessV2,
   trackUserLoginFailureV2,
   trackEvent,
-  runWaf
+  runWaf,
 }

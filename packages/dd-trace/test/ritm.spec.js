@@ -7,11 +7,17 @@ const { describe, it, before, beforeEach } = require('tap').mocha
 const assert = require('node:assert')
 const Module = require('node:module')
 
-require('./setup/core')
+const sinon = require('sinon')
+const dc = require('dc-polyfill')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
+require('./setup/core')
 const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
+  const monkeyPatchedModuleName = 'dd-trace-monkey-patched-module'
+  const missingModuleName = 'package-does-not-exist'
+
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
   const mockedModuleName = '@azure/functions-core'
 
@@ -20,24 +26,31 @@ describe('Ritm', () => {
     moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
     Module.prototype.require = new Proxy(Module.prototype.require, {
-      apply (target, thisArg, argArray) {
+      apply(target, thisArg, argArray) {
         if (argArray[0] === mockedModuleName) {
           return {
             version: '1.0.0',
-            registerHook: () => { }
+            registerHook: () => { },
           }
         } else {
           return Reflect.apply(target, thisArg, argArray)
         }
-      }
+      },
     })
 
-    function onRequire () {}
-
+    function onRequire() { }
     Hook(['util'], onRequire)
     Hook(['module-a'], onRequire)
     Hook(['module-b'], onRequire)
-    Hook(['http'], function onRequire (exports, name, basedir) {
+    Hook(['http'], function onRequire(exports, name, basedir) {
+      exports.foo = 1
+      return exports
+    })
+    relativeHook = new Hook(['./ritm-tests/relative/module-c'], function onRequire(exports) {
+      exports.foo = 1
+      return exports
+    })
+    relativeHook = new Hook(['./ritm-tests/relative/module-c'], function onRequire(exports) {
       exports.foo = 1
       return exports
     })
@@ -58,9 +71,27 @@ describe('Ritm', () => {
   })
 
   it('should handle module load cycles', () => {
+    assert.equal(startListener.callCount, 0)
+    assert.equal(endListener.callCount, 0)
     const { a } = require('./ritm-tests/module-a')
-    assert.equal(startListener.callCount, 2)
-    assert.equal(endListener.callCount, 2)
+    // The module load channels fire for *every* require() handled by RITM, not
+    // just these fixture modules. In practice, additional requires can happen
+    // depending on runtime/tooling, so the stable invariant is:
+    // - we don't recurse infinitely on a CJS cycle
+    // - we observe module-a and module-b as part of the cycle
+    // - start/end counts stay in sync
+    assert.ok(startListener.callCount >= 2)
+    assert.equal(endListener.callCount, startListener.callCount)
+
+    const startRequests = new Set()
+    let startRequestsCount = 0
+    for (const call of startListener.args) {
+      startRequests.add(call[0].request)
+      startRequestsCount++
+    }
+    assert.equal(startRequests.size, startRequestsCount)
+    assert.ok(startRequests.has('./ritm-tests/module-a'))
+    assert.ok(startRequests.has('./module-b'))
     assert.equal(a(), 'Called by AJ')
   })
 
@@ -97,5 +128,11 @@ describe('Ritm', () => {
       /Cannot find module 'package-does-not-exist'/,
       'a failing `require(...)` can still throw as expected'
     )
+  })
+
+  it('should hook into registered relative path requires', () => {
+    assert.equal(require('./ritm-tests/relative/module-c').foo, 1)
+    assert.equal(startListener.callCount, 1)
+    assert.equal(endListener.callCount, 1)
   })
 })

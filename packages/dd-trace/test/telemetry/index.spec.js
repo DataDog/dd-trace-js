@@ -1,21 +1,19 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, afterEach, before, after } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire').noPreserveCache()
 const http = require('node:http')
 const { once } = require('node:events')
 const os = require('node:os')
 
-require('../setup/core')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire').noPreserveCache()
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+require('../setup/core')
 const { storage } = require('../../../datadog-core')
 const tracerVersion = require('../../../../package.json').version
+const processTags = require('../../src/process-tags')
 
 const DEFAULT_HEARTBEAT_INTERVAL = 60000
 
@@ -31,11 +29,11 @@ describe('telemetry (proxy)', () => {
       stop () {},
       updateIntegrations () {},
       updateConfig () {},
-      appClosing () {}
+      appClosing () {},
     })
 
     proxy = proxyquire('../../src/telemetry', {
-      './telemetry': telemetry
+      './telemetry': telemetry,
     })
   })
 
@@ -99,24 +97,24 @@ describe('telemetry', () => {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
-      }
+        },
+      },
     })
 
     pluginsByName = {
       foo2: { _enabled: true },
-      bar2: { _enabled: false }
+      bar2: { _enabled: false },
     }
     /**
-     * @type {Object} CircularObject
+     * @type {object} CircularObject
      * @property {string} field
-     * @property {Object} child
+     * @property {object} child
      * @property {string} child.field
      * @property {CircularObject | null} child.parent
      */
     const circularObject = {
       child: { parent: null, field: 'child_value' },
-      field: 'parent_value'
+      field: 'parent_value',
     }
     circularObject.child.parent = circularObject
 
@@ -128,22 +126,22 @@ describe('telemetry', () => {
       version: '1.2.3-beta4',
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
+        'runtime-id': '1a2b3c',
       },
       circularObject,
       appsec: { enabled: true },
       profiling: { enabled: 'true' },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
-        service_2: 'remapped_service_2'
+        service_2: 'remapped_service_2',
       },
       installSignature: {
         id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
         type: 'k8s_single_step',
-        time: '1703188212'
-      }
+        time: '1703188212',
+      },
     }, {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
   })
 
@@ -156,13 +154,49 @@ describe('telemetry', () => {
     return testSeq(1, 'app-started', payload => {
       assert.deepStrictEqual(payload.products, {
         appsec: { enabled: true },
-        profiler: { version: tracerVersion, enabled: true }
+        profiler: { version: tracerVersion, enabled: true },
       })
       assert.deepStrictEqual(payload.install_signature, {
         install_id: '68e75c48-57ca-4a12-adfc-575c4b05fcbe',
         install_type: 'k8s_single_step',
-        install_time: '1703188212'
+        install_time: '1703188212',
       })
+    })
+  })
+
+  it('should include process_tags in telemetry application object', async () => {
+    // Wait for the app-started request
+    while (traceAgent.reqs.length < 1) {
+      await once(traceAgent, 'handled-req')
+    }
+    const req = traceAgent.reqs[0]
+
+    // Verify process_tags exists in application object
+    assert.ok(req.body.application, 'application object should exist')
+    assert.ok(req.body.application.process_tags, 'process_tags should exist in application object')
+    assert.strictEqual(typeof req.body.application.process_tags, 'object', 'process_tags should be an object')
+
+    // Verify specific process tag fields by name
+    const processTags = req.body.application.process_tags
+    assert.ok(Object.hasOwn(processTags, 'entrypoint.type'), 'should have entrypoint.type field')
+    assert.strictEqual(processTags['entrypoint.type'], 'script', 'entrypoint.type should be "script"')
+
+    assert.ok(Object.hasOwn(processTags, 'entrypoint.workdir'), 'should have entrypoint.workdir field')
+    assert.strictEqual(typeof processTags['entrypoint.workdir'], 'string', 'entrypoint.workdir should be a string')
+
+    assert.ok(Object.hasOwn(processTags, 'entrypoint.name'), 'should have entrypoint.name field')
+    assert.strictEqual(typeof processTags['entrypoint.name'], 'string', 'entrypoint.name should be a string')
+
+    assert.ok(Object.hasOwn(processTags, 'entrypoint.basedir'), 'should have entrypoint.basedir field')
+    assert.strictEqual(typeof processTags['entrypoint.basedir'], 'string', 'entrypoint.basedir should be a string')
+
+    // package.json.name should exist
+    assert.ok(Object.hasOwn(processTags, 'package.json.name'), 'should have package.json.name field')
+    assert.strictEqual(typeof processTags['package.json.name'], 'string', 'package.json.name should be a string')
+
+    // Verify no undefined values in process_tags
+    Object.entries(processTags).forEach(([key, value]) => {
+      assert.notStrictEqual(value, undefined, `process_tags.${key} should not be undefined`)
     })
   })
 
@@ -170,9 +204,9 @@ describe('telemetry', () => {
     return testSeq(2, 'app-integrations-change', payload => {
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
-        ]
+          { name: 'foo2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject },
+          { name: 'bar2', enabled: false, auto_enabled: true, process_tags: processTags.tagsObject },
+        ],
       })
     })
   })
@@ -184,8 +218,8 @@ describe('telemetry', () => {
     return testSeq(3, 'app-integrations-change', payload => {
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'baz2', enabled: true, auto_enabled: true }
-        ]
+          { name: 'baz2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject },
+        ],
       })
     })
   })
@@ -197,8 +231,8 @@ describe('telemetry', () => {
     return testSeq(4, 'app-integrations-change', payload => {
       assert.deepStrictEqual(payload, {
         integrations: [
-          { name: 'boo2', enabled: true, auto_enabled: true }
-        ]
+          { name: 'boo2', enabled: true, auto_enabled: true, process_tags: processTags.tagsObject },
+        ],
       })
     })
   })
@@ -215,12 +249,12 @@ describe('telemetry', () => {
     telemetry.stop()
 
     const server = http.createServer(() => {
-      expect.fail('server should not be called')
+      assert.fail('server should not be called')
     }).listen(0, () => {
       telemetry.start({
         telemetry: { enabled: false, heartbeatInterval: 60000 },
         hostname: 'localhost',
-        port: (/** @type {import('net').AddressInfo} */ (server.address())).port
+        port: (/** @type {import('net').AddressInfo} */ (server.address())).port,
       })
 
       setTimeout(() => {
@@ -234,15 +268,15 @@ describe('telemetry', () => {
     const sendDataStub = sinon.stub()
     const notEnabledTelemetry = proxyquire('../../src/telemetry/telemetry', {
       './send-data': {
-        sendData: sendDataStub
-      }
+        sendData: sendDataStub,
+      },
     })
     notEnabledTelemetry.start({
       telemetry: { enabled: false, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL },
       appsec: { enabled: false },
-      profiling: { enabled: false }
+      profiling: { enabled: false },
     }, {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
     notEnabledTelemetry.appClosing()
     assert.strictEqual(sendDataStub.called, false)
@@ -257,7 +291,7 @@ describe('telemetry app-heartbeat', () => {
 
   before(() => {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
   })
 
@@ -274,15 +308,15 @@ describe('telemetry app-heartbeat', () => {
         if (reqType === 'app-heartbeat') {
           beats++
         }
-      }
+      },
     }
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
-      './send-data': sendDataRequest
+      './send-data': sendDataRequest,
     })
 
     telemetry.start({
@@ -295,10 +329,10 @@ describe('telemetry app-heartbeat', () => {
       profiling: { enabled: true },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     }, {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
     clock.tick(HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 1)
@@ -316,7 +350,7 @@ describe('Telemetry extended heartbeat', () => {
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
   })
 
@@ -340,16 +374,16 @@ describe('Telemetry extended heartbeat', () => {
           beats++
           extendedHeartbeatRequest = reqType
         }
-      }
+      },
 
     }
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
-      './send-data': sendDataRequest
+      './send-data': sendDataRequest,
     })
 
     telemetry.start({
@@ -362,10 +396,10 @@ describe('Telemetry extended heartbeat', () => {
       profiling: { enabled: true },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     }, {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
     clock.tick(86400000)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
@@ -383,16 +417,16 @@ describe('Telemetry extended heartbeat', () => {
         if (reqType === 'app-extended-heartbeat') {
           configuration = payload.configuration
         }
-      }
+      },
     }
 
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
-      './send-data': sendDataRequest
+      './send-data': sendDataRequest,
     })
 
     const config = {
@@ -405,8 +439,8 @@ describe('Telemetry extended heartbeat', () => {
       profiling: { enabled: true },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     }
 
     telemetry.start(config, { _pluginsByName: pluginsByName })
@@ -415,25 +449,25 @@ describe('Telemetry extended heartbeat', () => {
     assert.deepStrictEqual(configuration, [])
 
     const changes = [
-      { name: 'test', value: true, origin: 'code', seq_id: 0 }
+      { name: 'test', value: true, origin: 'code', seq_id: 0 },
     ]
     telemetry.updateConfig(changes, config)
     clock.tick(86400000)
     assert.deepStrictEqual(configuration, changes)
 
     const updatedChanges = [
-      { name: 'test', value: false, origin: 'code', seq_id: 1 }
+      { name: 'test', value: false, origin: 'code', seq_id: 1 },
     ]
     telemetry.updateConfig(updatedChanges, config)
     clock.tick(86400000)
     assert.deepStrictEqual(configuration, updatedChanges)
 
     const changeNeedingNameRemapping = [
-      { name: 'sampleRate', value: 0, origin: 'code', seq_id: 2 }
+      { name: 'sampleRate', value: 0, origin: 'code', seq_id: 2 },
     ]
     const expectedConfigList = [
       updatedChanges[0],
-      { ...changeNeedingNameRemapping[0], name: 'DD_TRACE_SAMPLE_RATE' }
+      { ...changeNeedingNameRemapping[0], name: 'DD_TRACE_SAMPLE_RATE' },
     ]
     telemetry.updateConfig(changeNeedingNameRemapping, config)
     clock.tick(86400000)
@@ -449,12 +483,12 @@ describe('Telemetry extended heartbeat', () => {
             resource: '*abc',
             name: 'op-??',
             tags: { 'tag-a': 'ta-v*', 'tag-b': 'tb-v?', 'tag-c': 'tc-v' },
-            sample_rate: 0.5
-          }
+            sample_rate: 0.5,
+          },
         ],
         origin: 'code',
-        seq_id: 3
-      }
+        seq_id: 3,
+      },
     ]
     const expectedConfigListWithSamplingRules = expectedConfigList.concat([
       {
@@ -463,8 +497,8 @@ describe('Telemetry extended heartbeat', () => {
           '{"service":"svc*","resource":"*abc","name":"op-??",' +
           '"tags":{"tag-a":"ta-v*","tag-b":"tb-v?","tag-c":"tc-v"},"sample_rate":0.5}]',
         origin: 'code',
-        seq_id: 3
-      }
+        seq_id: 3,
+      },
     ])
     telemetry.updateConfig(samplingRule, config)
     clock.tick(86400000)
@@ -472,11 +506,11 @@ describe('Telemetry extended heartbeat', () => {
 
     const chainedChanges = expectedConfigListWithSamplingRules.concat([
       { name: 'test', value: true, origin: 'env', seq_id: 4 },
-      { name: 'test', value: false, origin: 'remote_config', seq_id: 5 }
+      { name: 'test', value: false, origin: 'remote_config', seq_id: 5 },
     ])
     const samplingRule2 = [
       { name: 'test', value: true, origin: 'env' },
-      { name: 'test', value: false, origin: 'remote_config' }
+      { name: 'test', value: false, origin: 'remote_config' },
     ]
 
     telemetry.updateConfig(samplingRule2, config)
@@ -501,11 +535,11 @@ describe('Telemetry retry', () => {
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
     pluginsByName = {
       foo2: { _enabled: true },
-      bar2: { _enabled: false }
+      bar2: { _enabled: false },
     }
   })
 
@@ -526,18 +560,18 @@ describe('Telemetry retry', () => {
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
           payload,
-          reqType: 'app-integrations-change'
+          reqType: 'app-integrations-change',
         })
-      }
+      },
 
     }
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
-      './send-data': sendDataError
+      './send-data': sendDataError,
     })
 
     telemetry.start({
@@ -550,10 +584,10 @@ describe('Telemetry retry', () => {
       profiling: { enabled: true },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     }, {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
 
     pluginsByName.boo3 = { _enabled: true }
@@ -563,8 +597,9 @@ describe('Telemetry retry', () => {
       integrations: [{
         name: 'boo3',
         enabled: true,
-        auto_enabled: true
-      }]
+        auto_enabled: true,
+        process_tags: processTags.tagsObject,
+      }],
     })
 
     pluginsByName.boo5 = { _enabled: true }
@@ -576,9 +611,10 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'boo5',
           enabled: true,
-          auto_enabled: true
-        }]
-      }
+          auto_enabled: true,
+          process_tags: processTags.tagsObject,
+        }],
+      },
 
     }, {
       request_type: 'app-integrations-change',
@@ -586,9 +622,10 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'boo3',
           enabled: true,
-          auto_enabled: true
-        }]
-      }
+          auto_enabled: true,
+          process_tags: processTags.tagsObject,
+        }],
+      },
 
     }]
     )
@@ -612,18 +649,18 @@ describe('Telemetry retry', () => {
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
           payload,
-          reqType
+          reqType,
         })
-      }
+      },
 
     }
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
-      './send-data': sendDataError
+      './send-data': sendDataError,
     })
 
     telemetry.start({
@@ -636,31 +673,33 @@ describe('Telemetry retry', () => {
       profiling: { enabled: true },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     }, {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
     // jump to next heartbeat request
     clock.tick(HEARTBEAT_INTERVAL)
     assert.strictEqual(capturedRequestType, 'message-batch')
     assert.deepStrictEqual(capturedPayload, [{
       request_type: 'app-heartbeat',
-      payload: {}
+      payload: {},
     }, {
       request_type: 'app-integrations-change',
       payload: {
         integrations: [{
           name: 'foo2',
           enabled: true,
-          auto_enabled: true
+          auto_enabled: true,
+          process_tags: processTags.tagsObject,
         },
         {
           name: 'bar2',
           enabled: false,
-          auto_enabled: true
-        }]
-      }
+          auto_enabled: true,
+          process_tags: processTags.tagsObject,
+        }],
+      },
 
     }]
     )
@@ -681,18 +720,18 @@ describe('Telemetry retry', () => {
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
           payload,
-          reqType: 'app-integrations-change'
+          reqType: 'app-integrations-change',
         })
-      }
+      },
 
     }
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
-      './send-data': sendDataError
+      './send-data': sendDataError,
     })
 
     telemetry.start({
@@ -705,10 +744,10 @@ describe('Telemetry retry', () => {
       profiling: { enabled: true },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     }, {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
     pluginsByName.foo1 = { _enabled: true }
     telemetry.updateIntegrations() // This sends an batch message and succeeds
@@ -721,8 +760,9 @@ describe('Telemetry retry', () => {
       integrations: [{
         name: 'zoo1',
         enabled: true,
-        auto_enabled: true
-      }]
+        auto_enabled: true,
+        process_tags: processTags.tagsObject,
+      }],
     })
   })
 
@@ -741,18 +781,18 @@ describe('Telemetry retry', () => {
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
           payload,
-          reqType
+          reqType,
         })
-      }
+      },
 
     }
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
-      './send-data': sendDataError
+      './send-data': sendDataError,
     })
 
     // Start function sends 2 messages app-started & app-integrations-change
@@ -766,10 +806,10 @@ describe('Telemetry retry', () => {
       profiling: { enabled: true },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     }, {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
 
     pluginsByName.foo1 = { _enabled: true }
@@ -785,9 +825,10 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'zoo1',
           enabled: true,
-          auto_enabled: true
-        }]
-      }
+          auto_enabled: true,
+          process_tags: processTags.tagsObject,
+        }],
+      },
 
     }, {
       request_type: 'app-integrations-change',
@@ -795,9 +836,10 @@ describe('Telemetry retry', () => {
         integrations: [{
           name: 'foo1',
           enabled: true,
-          auto_enabled: true
-        }]
-      }
+          auto_enabled: true,
+          process_tags: processTags.tagsObject,
+        }],
+      },
 
     }]
     )
@@ -823,18 +865,18 @@ describe('Telemetry retry', () => {
         // Simulate an HTTP error by calling the callback with an error
         cb(new Error('HTTP request error'), {
           payload,
-          reqType
+          reqType,
         })
-      }
+      },
 
     }
     telemetry = proxyquire('../../src/telemetry/telemetry', {
       '../exporters/common/docker': {
         id () {
           return 'test docker id'
-        }
+        },
       },
-      './send-data': sendDataError
+      './send-data': sendDataError,
     })
 
     // Start function sends 2 messages app-started & app-integrations-change
@@ -848,23 +890,34 @@ describe('Telemetry retry', () => {
       profiling: { enabled: true },
       env: 'preprod',
       tags: {
-        'runtime-id': '1a2b3c'
-      }
+        'runtime-id': '1a2b3c',
+      },
     },
     {
-      _pluginsByName: pluginsByName
+      _pluginsByName: pluginsByName,
     })
     pluginsByName.foo1 = { _enabled: true }
     telemetry.updateIntegrations() // This sends an batch message and fails
     // Skip forward a day
     clock.tick(86400000)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
-    expect(extendedHeartbeatPayload).to.haveOwnProperty('integrations')
-    expect(extendedHeartbeatPayload.integrations).to.deep.include({
-      integrations: [
-        { name: 'foo2', enabled: true, auto_enabled: true },
-        { name: 'bar2', enabled: false, auto_enabled: true }
-      ]
+    assertObjectContains(extendedHeartbeatPayload, {
+      integrations: [{
+        integrations: [
+          {
+            name: 'foo2',
+            enabled: true,
+            auto_enabled: true,
+            process_tags: processTags.tagsObject,
+          },
+          {
+            name: 'bar2',
+            enabled: false,
+            auto_enabled: true,
+            process_tags: processTags.tagsObject,
+          },
+        ],
+      }],
     })
   })
 })
@@ -881,25 +934,25 @@ describe('AVM OSS', () => {
       {
         scaValue: true,
         scaValueOrigin: 'env_var',
-        testDescription: 'should send when env var is true'
+        testDescription: 'should send when env var is true',
       },
       {
         scaValue: false,
         scaValueOrigin: 'env_var',
-        testDescription: 'should send when env var is false'
+        testDescription: 'should send when env var is false',
       },
       {
         scaValue: null,
         scaValueOrigin: 'default',
-        testDescription: 'should send null (default) when no env var is set'
-      }
+        testDescription: 'should send null (default) when no env var is set',
+      },
     ]
 
     suite.forEach(({ scaValue, scaValueOrigin, testDescription }) => {
       describe(testDescription, () => {
         before((done) => {
           clock = sinon.useFakeTimers({
-            toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+            toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
           })
 
           storage('legacy').run({ noop: true }, () => {
@@ -929,10 +982,10 @@ describe('AVM OSS', () => {
             version: '1.2.3-beta4',
             env: 'preprod',
             tags: {
-              'runtime-id': '1a2b3c'
+              'runtime-id': '1a2b3c',
             },
             appsec: { enabled: false },
-            profiling: { enabled: false }
+            profiling: { enabled: false },
           }
         })
 
@@ -953,7 +1006,7 @@ describe('AVM OSS', () => {
         it('in app-started message', () => {
           return testSeq(1, 'app-started', payload => {
             assert.deepStrictEqual(payload.configuration, [
-              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 }
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 },
             ])
           }, true)
         })
@@ -963,7 +1016,7 @@ describe('AVM OSS', () => {
           clock.tick(86400000)
           return testSeq(2, 'app-extended-heartbeat', payload => {
             assert.deepStrictEqual(payload.configuration, [
-              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 }
+              { name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin, seq_id: 0 },
             ])
           }, true)
         })
@@ -975,12 +1028,12 @@ describe('AVM OSS', () => {
     let telemetry
 
     const logSpy = {
-      warn: sinon.spy()
+      warn: sinon.spy(),
     }
 
     before(() => {
       telemetry = proxyquire('../../src/telemetry/telemetry', {
-        '../log': logSpy
+        '../log': logSpy,
       })
     })
 
@@ -993,7 +1046,7 @@ describe('AVM OSS', () => {
       telemetry.start(
         {
           telemetry: { enabled: false },
-          sca: { enabled: true }
+          sca: { enabled: true },
         }
       )
 
@@ -1012,12 +1065,12 @@ async function testSeq (seqId, reqType, validatePayload) {
   assertObjectContains(req.headers, {
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v2',
-    'dd-telemetry-request-type': reqType
+    'dd-telemetry-request-type': reqType,
   })
   const osName = os.type()
   let host = {
     hostname: os.hostname(),
-    os: osName
+    os: osName,
   }
   if (osName === 'Linux' || osName === 'Darwin') {
     host = {
@@ -1026,17 +1079,17 @@ async function testSeq (seqId, reqType, validatePayload) {
       architecture: os.arch(),
       kernel_version: os.version(),
       kernel_release: os.release(),
-      kernel_name: osName
+      kernel_name: osName,
     }
   } else if (osName === 'Windows_NT') {
     host = {
       hostname: os.hostname(),
       os: osName,
       os_version: os.version(),
-      architecture: os.arch()
+      architecture: os.arch(),
     }
   }
-  expect(req.body).to.deep.include({
+  assertObjectContains(req.body, {
     api_version: 'v2',
     naming_schema_version: '',
     request_type: reqType,
@@ -1048,11 +1101,11 @@ async function testSeq (seqId, reqType, validatePayload) {
       service_version: '1.2.3-beta4',
       tracer_version: tracerVersion,
       language_name: 'nodejs',
-      language_version: process.versions.node
+      language_version: process.versions.node,
     },
-    host
+    host,
   })
-  expect([1, 0, -1].includes(Math.floor(Date.now() / 1000) - req.body.tracer_time)).to.be.true
+  assertObjectContains([1, 0, -1], [Math.floor(Date.now() / 1000) - req.body.tracer_time])
 
   validatePayload(req.body.payload)
 }

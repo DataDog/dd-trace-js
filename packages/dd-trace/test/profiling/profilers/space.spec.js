@@ -2,8 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -16,18 +15,18 @@ describe('profilers/native/space', () => {
 
   beforeEach(() => {
     profile0 = {
-      encodeAsync: sinon.stub().returns(Promise.resolve('encoded'))
+      encodeAsync: sinon.stub().returns(Promise.resolve('encoded')),
     }
     pprof = {
       heap: {
         start: sinon.stub(),
         stop: sinon.stub(),
-        profile: sinon.stub().returns(profile0)
-      }
+        profile: sinon.stub().returns(profile0),
+      },
     }
 
     NativeSpaceProfiler = proxyquire('../../../src/profiling/profilers/space', {
-      '@datadog/pprof': pprof
+      '@datadog/pprof': pprof,
     })
   })
 
@@ -65,7 +64,7 @@ describe('profilers/native/space', () => {
     const profiler = new NativeSpaceProfiler()
 
     const info = profiler.getInfo()
-    expect(Object.keys(info)).to.be.empty
+    assert.strictEqual(Object.keys(info).length, 0)
   })
 
   it('should collect profiles from the pprof space profiler', () => {

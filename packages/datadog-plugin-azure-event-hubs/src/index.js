@@ -1,13 +1,13 @@
 'use strict'
 
-const ProducerPlugin = require('./producer')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const ProducerPlugin = require('./producer')
 
 class AzureEventHubsPlugin extends CompositePlugin {
   static get id () { return 'azure-event-hubs' }
   static get plugins () {
     return {
-      producer: ProducerPlugin
+      producer: ProducerPlugin,
     }
   }
 }

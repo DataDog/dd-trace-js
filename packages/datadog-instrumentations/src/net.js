@@ -2,8 +2,8 @@
 
 const { errorMonitor } = require('events')
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 const startICPCh = channel('apm:net:ipc:start')
 const finishICPCh = channel('apm:net:ipc:finish')
@@ -83,19 +83,19 @@ function getOptions (args) {
     case 'string':
       if (Number.isNaN(Number.parseFloat(args[0]))) {
         return {
-          path: args[0]
+          path: args[0],
         }
       }
     case 'number': // eslint-disable-line no-fallthrough
       return {
         port: args[0],
-        host: typeof args[1] === 'string' ? args[1] : 'localhost'
+        host: typeof args[1] === 'string' ? args[1] : 'localhost',
       }
   }
 }
 
 function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
-  const events = ['connect', errorMonitor, 'close', 'timeout']
+  const events = [errorMonitor, 'close', 'timeout']
 
   const wrapListener = function (error) {
     if (error) {
@@ -103,27 +103,35 @@ function setupListeners (socket, protocol, ctx, finishCh, errorCh) {
       errorCh.publish(ctx)
     }
     finishCh.runStores(ctx, () => {})
+    cleanupOtherListeners()
   }
 
-  const localListener = function () {
+  const localListener = function (error) {
     ctx.socket = socket
     connectionCh.publish(ctx)
+    if (error) {
+      ctx.error = error
+      errorCh.publish(ctx)
+    }
+    finishCh.runStores(ctx, () => {})
+    cleanupOtherListeners()
   }
 
-  const cleanupListener = function () {
+  const cleanupOtherListeners = function () {
     socket.removeListener('connect', localListener)
-    events.forEach(event => {
+    for (const event of events) {
       socket.removeListener(event, wrapListener)
-      socket.removeListener(event, cleanupListener)
-    })
+    }
   }
 
+  // TODO: Identify why the connect listener should remove the other listeners.
   if (protocol === 'tcp') {
     socket.once('connect', localListener)
+  } else {
+    events.push('connect')
   }
 
-  events.forEach(event => {
+  for (const event of events) {
     socket.once(event, wrapListener)
-    socket.once(event, cleanupListener)
-  })
+  }
 }

@@ -6,12 +6,14 @@ const runtimeMetrics = require('../../runtime_metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 const BaseWriter = require('../common/writer')
+const propagationHash = require('../../propagation-hash')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class AgentWriter extends BaseWriter {
-  constructor ({ prioritySampler, lookup, protocolVersion, headers, config = {} }) {
-    super(...arguments)
+  constructor (...args) {
+    super(...args)
+    const { prioritySampler, lookup, protocolVersion, headers, config = {} } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 
     this._prioritySampler = prioritySampler
@@ -26,7 +28,7 @@ class AgentWriter extends BaseWriter {
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     const { _headers, _lookup, _protocolVersion, _url } = this
-    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status) => {
+    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status, headers) => {
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -39,8 +41,6 @@ class AgentWriter extends BaseWriter {
         }
       }
 
-      startupLog({ agentError: err })
-
       if (err) {
         log.errorWithoutTelemetry('Error sending payload to the agent (status code: %s)', err.status, err)
         done()
@@ -48,6 +48,16 @@ class AgentWriter extends BaseWriter {
       }
 
       log.debug('Response from the agent: %s', res)
+
+      // Capture container tags hash from agent response headers
+      // The hash is sent by the agent only when Datadog-Container-ID is present in the request
+      // (Datadog-Container-ID is automatically injected by docker.inject() in exporters/common/request.js)
+      if (headers) {
+        const containerTagsHash = headers['Datadog-Container-Tags-Hash']
+        if (containerTagsHash) {
+          propagationHash.updateContainerTagsHash(containerTagsHash)
+        }
+      }
 
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
@@ -79,22 +89,22 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
       'X-Datadog-Trace-Count': String(count),
       'Datadog-Meta-Lang': 'nodejs',
       'Datadog-Meta-Lang-Version': process.version,
-      'Datadog-Meta-Lang-Interpreter': process.jsEngine || 'v8'
+      'Datadog-Meta-Lang-Interpreter': process.versions.bun ? 'JavaScriptCore' : 'v8',
     },
     lookup,
-    url
+    url,
   }
 
   log.debug('Request to the agent: %j', options)
 
-  request(data, options, (err, res, status) => {
+  request(data, options, (err, res, status, headers) => {
     if (needsStartupLog) {
       // Note that logging will only happen once, regardless of how many times this is called.
       startupLog({
-        agentError: status !== 404 && status !== 200 ? err : undefined
+        agentError: status !== 404 && status !== 200 ? err : undefined,
       })
     }
-    cb(err, res, status)
+    cb(err, res, status, headers)
   })
 }
 

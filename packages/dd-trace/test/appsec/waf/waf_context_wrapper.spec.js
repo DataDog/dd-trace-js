@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -16,7 +15,7 @@ const { assertObjectContains } = require('../../../../../integration-tests/helpe
 describe('WAFContextWrapper', () => {
   const knownAddresses = new Set([
     addresses.HTTP_INCOMING_QUERY,
-    addresses.HTTP_INCOMING_GRAPHQL_RESOLVER
+    addresses.HTTP_INCOMING_GRAPHQL_RESOLVER,
   ])
 
   beforeEach(() => {
@@ -32,15 +31,15 @@ describe('WAFContextWrapper', () => {
     const ddwafContext = {
       run: sinon.stub().returns({
         events: {},
-        attributes: {}
-      })
+        attributes: {},
+      }),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-      }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
@@ -52,21 +51,21 @@ describe('WAFContextWrapper', () => {
 
   it('Should send HTTP_INCOMING_QUERY twice if waf run fails', () => {
     const ddwafContext = {
-      run: sinon.stub().throws(new Error('test'))
+      run: sinon.stub().throws(new Error('test')),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-      }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
     wafContextWrapper.run(payload)
 
     sinon.assert.calledTwice(ddwafContext.run)
-    expect(ddwafContext.run).to.always.have.been.calledWithExactly(payload, 1000)
+    sinon.assert.calledWithExactly(ddwafContext.run, payload, 1000)
 
     const firstCall = Reporter.reportMetrics.getCall(0).args[0]
     assert.strictEqual(firstCall.errorCode, -127)
@@ -79,18 +78,18 @@ describe('WAFContextWrapper', () => {
     const ddwafContext = {
       run: sinon.stub().returns({
         events: {},
-        attributes: {}
-      })
+        attributes: {},
+      }),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
       },
       ephemeral: {
-        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' }
-      }
+        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' },
+      },
     }
 
     wafContextWrapper.run(payload)
@@ -101,26 +100,26 @@ describe('WAFContextWrapper', () => {
     sinon.assert.calledWithExactly(ddwafContext.run.secondCall, {
       ephemeral: {
         [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: {
-          anotherKey: 'anotherValue'
-        }
-      }
+          anotherKey: 'anotherValue',
+        },
+      },
     }, 1000)
     sinon.assert.calledTwice(Reporter.reportMetrics)
   })
 
   it('Should ignore run without known addresses', () => {
     const ddwafContext = {
-      run: sinon.stub()
+      run: sinon.stub(),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        'persistent-unknown-address': { key: 'value' }
+        'persistent-unknown-address': { key: 'value' },
       },
       ephemeral: {
-        'ephemeral-unknown-address': { key: 'value' }
-      }
+        'ephemeral-unknown-address': { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
@@ -130,16 +129,16 @@ describe('WAFContextWrapper', () => {
 
   it('should publish the payload in the dc channel', () => {
     const ddwafContext = {
-      run: sinon.stub().returns([])
+      run: sinon.stub().returns([]),
     }
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
       },
       ephemeral: {
-        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' }
-      }
+        [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: { anotherKey: 'anotherValue' },
+      },
     }
     const finishedCallback = sinon.stub()
 
@@ -147,20 +146,20 @@ describe('WAFContextWrapper', () => {
     wafContextWrapper.run(payload)
     wafRunFinished.unsubscribe(finishedCallback)
 
-    expect(finishedCallback).to.be.calledOnceWith({ payload })
+    sinon.assert.calledOnceWithMatch(finishedCallback, { payload })
   })
 
   it('should report error code when the waf run fails', () => {
     const ddwafContext = {
-      run: sinon.stub().returns({ errorCode: -2 })
+      run: sinon.stub().returns({ errorCode: -2 }),
     }
 
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-      }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
@@ -177,7 +176,7 @@ describe('WAFContextWrapper', () => {
       errorCode: -2,
       maxTruncatedString: null,
       maxTruncatedContainerSize: null,
-      maxTruncatedContainerDepth: null
+      maxTruncatedContainerDepth: null,
     })
   })
 
@@ -188,25 +187,25 @@ describe('WAFContextWrapper', () => {
         attributes: [],
         actions: {
           redirect_request: {
-            status_code: 301
-          }
+            status_code: 301,
+          },
         },
         duration: 123456,
         timeout: false,
         metrics: {
           maxTruncatedString: 5000,
           maxTruncatedContainerSize: 300,
-          maxTruncatedContainerDepth: 20
-        }
-      })
+          maxTruncatedContainerDepth: 20,
+        },
+      }),
     }
 
     const wafContextWrapper = new WAFContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
 
     const payload = {
       persistent: {
-        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-      }
+        [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+      },
     }
 
     wafContextWrapper.run(payload)
@@ -223,7 +222,7 @@ describe('WAFContextWrapper', () => {
       errorCode: null,
       maxTruncatedString: 5000,
       maxTruncatedContainerSize: 300,
-      maxTruncatedContainerDepth: 20
+      maxTruncatedContainerDepth: 20,
     })
   })
 
@@ -234,15 +233,15 @@ describe('WAFContextWrapper', () => {
 
     beforeEach(() => {
       log = {
-        warn: sinon.stub()
+        warn: sinon.stub(),
       }
 
       ddwafContext = {
-        run: sinon.stub()
+        run: sinon.stub(),
       }
 
       const ProxiedWafContextWrapper = proxyquire('../../../src/appsec/waf/waf_context_wrapper', {
-        '../../log': log
+        '../../log': log,
       })
 
       wafContextWrapper = new ProxiedWafContextWrapper(ddwafContext, 1000, '1.14.0', '1.8.0', knownAddresses)
@@ -257,8 +256,8 @@ describe('WAFContextWrapper', () => {
 
       const payload = {
         persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-        }
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+        },
       }
 
       wafContextWrapper.run(payload)
@@ -272,8 +271,8 @@ describe('WAFContextWrapper', () => {
 
       const payload = {
         persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-        }
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+        },
       }
 
       wafContextWrapper.run(payload)
@@ -289,8 +288,8 @@ describe('WAFContextWrapper', () => {
 
       const payload = {
         persistent: {
-          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' }
-        }
+          [addresses.HTTP_INCOMING_QUERY]: { key: 'value' },
+        },
       }
 
       const raspRule = { type: 'rule-type' }

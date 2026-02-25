@@ -1,11 +1,10 @@
 'use strict'
 
+const assert = require('node:assert')
 const axios = require('axios')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
-
-const assert = require('node:assert')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -30,7 +29,7 @@ withVersions('express-session', 'express-session', version => {
         resave: false,
         rolling: true,
         saveUninitialized: true,
-        genid: () => 'sid_123'
+        genid: () => 'sid_123',
       }))
 
       app.get('/', (req, res) => {

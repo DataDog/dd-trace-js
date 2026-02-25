@@ -7,8 +7,20 @@ const path = require('node:path')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
+let getExportsModulePromise
+
+const loadGetExportsModule = () => {
+  if (!getExportsModulePromise) {
+    getExportsModulePromise = import('import-in-the-middle/lib/get-exports.mjs')
+  }
+  return getExportsModulePromise
+}
+
 const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
-  ? require('import-in-the-middle/lib/get-exports.js')
+  ? async (srcUrl, context, getSource) => {
+    const mod = await loadGetExportsModule()
+    return mod.getExports(srcUrl, context, getSource)
+  }
   : getExportsImporting
 
 function isStarExportLine (line) {
@@ -47,18 +59,22 @@ function resolve (specifier, context) {
     specifier = fileURLToPath(specifier)
   }
 
-  const resolved = require.resolve(specifier, { conditions, paths: [fileURLToPath(context.parentURL)] })
+  const resolved = require.resolve(specifier, {
+    paths: [fileURLToPath(context.parentURL)],
+    // @ts-expect-error - Node.js 22+ unofficially supports a conditions option
+    conditions,
+  })
 
   return {
     url: pathToFileURL(resolved),
-    format: isESMFile(resolved) ? 'module' : 'commonjs'
+    format: isESMFile(resolved) ? 'module' : 'commonjs',
   }
 }
 
 function getSource (url, { format }) {
   return {
     source: fs.readFileSync(fileURLToPath(url), 'utf8'),
-    format
+    format,
   }
 }
 
@@ -67,12 +83,12 @@ function getSource (url, { format }) {
  *
  * @param {object} moduleData
  * @param {string} moduleData.path
- * @param {boolean} moduleData.internal
+ * @param {boolean} [moduleData.internal = false]
  * @param {object} moduleData.context
- * @param {boolean} moduleData.excludeDefault
+ * @param {boolean} [moduleData.excludeDefault = false]
  * @returns {Promise<Map>}
  */
-async function processModule ({ path, internal, context, excludeDefault }) {
+async function processModule ({ path, internal = false, context, excludeDefault = false }) {
   let exportNames, srcUrl
   if (internal) {
     // we can not read and parse of internal modules
@@ -132,7 +148,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
       const subSetters = await processModule({
         path: fileURLToPath(result.url),
         context: { ...context, format: result.format },
-        excludeDefault: true
+        excludeDefault: true,
       })
 
       for (const [name, setter] of subSetters.entries()) {
@@ -168,7 +184,7 @@ async function processModule ({ path, internal, context, excludeDefault }) {
  *
  * @param {string} fullPathToModule File to analize
  * @param {string} [modulePackageJsonPath] Path of the package.json
- * @param {Object} [packageJson] The content of the module package.json
+ * @param {object} [packageJson] The content of the module package.json
  * @returns {boolean}
  */
 function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
@@ -198,5 +214,5 @@ function isESMFile (fullPathToModule, modulePackageJsonPath, packageJson = {}) {
 
 module.exports = {
   processModule,
-  isESMFile
+  isESMFile,
 }

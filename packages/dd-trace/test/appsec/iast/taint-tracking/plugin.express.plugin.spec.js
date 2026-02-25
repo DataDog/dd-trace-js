@@ -1,9 +1,9 @@
 'use strict'
 
+const { URL } = require('url')
+const axios = require('axios')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const { withVersions } = require('../../../setup/mocha')
-const axios = require('axios')
-const { URL } = require('url')
 
 function noop () {}
 
@@ -14,7 +14,7 @@ describe('Taint tracking plugin sources express tests', () => {
         describe('tainted body', () => {
           function makePostRequest (done) {
             axios.post(`http://localhost:${config.port}/`, {
-              command: 'echo 1'
+              command: 'echo 1',
             }).catch(done)
           }
 
@@ -39,8 +39,8 @@ describe('Taint tracking plugin sources express tests', () => {
           function makeRequestWithHeader (done) {
             axios.get(`http://localhost:${config.port}/`, {
               headers: {
-                'x-iast-test-command': 'echo 1'
-              }
+                'x-iast-test-command': 'echo 1',
+              },
             }).catch(done)
           }
 
@@ -53,7 +53,7 @@ describe('Taint tracking plugin sources express tests', () => {
         describe('url parse taint tracking', () => {
           function makePostRequest (done) {
             axios.post(`http://localhost:${config.port}/`, {
-              url: 'http://www.datadoghq.com/'
+              url: 'http://www.datadoghq.com/',
             }).catch(done)
           }
 
@@ -71,7 +71,7 @@ describe('Taint tracking plugin sources express tests', () => {
               occurrences: 1,
               cb: noop,
               makeRequest: makePostRequest,
-              testDescription: 'should detect vulnerability when tainted is coming from url.parse'
+              testDescription: 'should detect vulnerability when tainted is coming from url.parse',
             })
 
           testThatRequestHasVulnerability(
@@ -87,7 +87,7 @@ describe('Taint tracking plugin sources express tests', () => {
               occurrences: 1,
               cb: noop,
               makeRequest: makePostRequest,
-              testDescription: 'should detect vulnerability when tainted is coming from new url.URL input'
+              testDescription: 'should detect vulnerability when tainted is coming from new url.URL input',
             })
 
           testThatRequestHasVulnerability(
@@ -103,7 +103,7 @@ describe('Taint tracking plugin sources express tests', () => {
               occurrences: 1,
               cb: noop,
               makeRequest: makePostRequest,
-              testDescription: 'should detect vulnerability when tainted is coming from new url.URL base'
+              testDescription: 'should detect vulnerability when tainted is coming from new url.URL base',
             })
 
           if (URL.parse) {
@@ -119,7 +119,7 @@ describe('Taint tracking plugin sources express tests', () => {
                 occurrences: 1,
                 cb: noop,
                 makeRequest: makePostRequest,
-                testDescription: 'should detect vulnerability when tainted is coming from url.URL.parse input'
+                testDescription: 'should detect vulnerability when tainted is coming from url.URL.parse input',
               })
 
             testThatRequestHasVulnerability(
@@ -134,7 +134,7 @@ describe('Taint tracking plugin sources express tests', () => {
                 occurrences: 1,
                 cb: noop,
                 makeRequest: makePostRequest,
-                testDescription: 'should detect vulnerability when tainted is coming from url.URL.parse base'
+                testDescription: 'should detect vulnerability when tainted is coming from url.URL.parse base',
               })
           }
         })

@@ -1,10 +1,11 @@
 'use strict'
 
-const constants = require('./constants')
 const tags = require('../../../ext/tags')
+const constants = require('./constants')
 const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
+const { TRACING_FIELD_NAME } = require('./process-tags')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -29,16 +30,16 @@ const map = {
   'operation.name': 'name',
   'service.name': 'service',
   'span.type': 'type',
-  'resource.name': 'resource'
+  'resource.name': 'resource',
 }
 
-function format (span, isChunkRoot) {
+function format (span, isFirstSpanInChunk = false, tagForFirstSpanInChunk = false) {
   const formatted = formatSpan(span)
 
   extractSpanLinks(formatted, span)
   extractSpanEvents(formatted, span)
   extractRootTags(formatted, span)
-  extractChunkTags(formatted, span, isChunkRoot)
+  extractChunkTags(formatted, span, isFirstSpanInChunk, tagForFirstSpanInChunk)
   extractTags(formatted, span)
 
   return formatted
@@ -59,7 +60,7 @@ function formatSpan (span) {
     metrics: {},
     start: Math.round(span._startTime * 1e6),
     duration: Math.round(span._duration * 1e6),
-    links: []
+    links: [],
   }
 }
 
@@ -78,7 +79,7 @@ function extractSpanLinks (formattedSpan, span) {
     const { context, attributes } = link
     const formattedLink = {
       trace_id: context.toTraceId(true),
-      span_id: context.toSpanId(true)
+      span_id: context.toSpanId(true),
     }
 
     if (attributes && Object.keys(attributes).length > 0) {
@@ -100,7 +101,7 @@ function extractSpanEvents (formattedSpan, span) {
     return {
       name: event.name,
       time_unix_nano: Math.round(event.startTime * 1e6),
-      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined
+      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined,
     }
   })
   formattedSpan.span_events = events
@@ -192,10 +193,14 @@ function extractRootTags (formattedSpan, span) {
   addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
 }
 
-function extractChunkTags (formattedSpan, span, isChunkRoot) {
+function extractChunkTags (formattedSpan, span, isFirstSpanInChunk, tagForFirstSpanInChunk) {
   const context = span.context()
 
-  if (!isChunkRoot) return
+  if (!isFirstSpanInChunk) return
+
+  if (tagForFirstSpanInChunk) {
+    addTag(formattedSpan.meta, formattedSpan.metrics, TRACING_FIELD_NAME, tagForFirstSpanInChunk)
+  }
 
   for (const [key, value] of Object.entries(context._trace.tags)) {
     addTag(formattedSpan.meta, formattedSpan.metrics, key, value)

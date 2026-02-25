@@ -8,17 +8,92 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
-      with:
-        node-version: ${{
+    # Resolve the version from the input alias so we can use it in cache keys.
+    - name: Resolve Node.js version
+      id: node-version
+      env:
+        NODE_VERSION: ${{
           inputs.version == 'eol' && '16' ||
           inputs.version == 'oldest' && '18' ||
           inputs.version == 'maintenance' && '20' ||
           inputs.version == 'active' && '22' ||
           inputs.version == 'latest' && (env.LATEST_VERSION || '24') ||
           inputs.version }}
-        check-latest: true
-        registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
-    - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2.0.2
+      shell: bash
+      run: echo "version=$NODE_VERSION" >> "$GITHUB_OUTPUT"
+
+    # Cache a tiny file containing the exact Node.js version resolved by a previous run.
+    # Key rotates every 20 minutes (epoch / 1200) so patches are picked up regularly.
+    # On cache hit, we pass the exact version to setup-node and skip the HTTP manifest lookup.
+    - name: Compute cache key
+      id: cache-key
+      shell: bash
+      run: echo "block=$(( $(date -u +%s) / 1200 ))" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+      id: node-version-cache
       with:
-        bun-version: "1.3.1"
+        path: /tmp/.node-resolved-version-${{ steps.node-version.outputs.version }}
+        key: node-resolved-${{ runner.os }}-${{ runner.arch }}-v${{ steps.node-version.outputs.version }}-${{ steps.cache-key.outputs.block }}
+        restore-keys: node-resolved-${{ runner.os }}-${{ runner.arch }}-v${{ steps.node-version.outputs.version }}-
+    - name: Read cached version
+      id: cached
+      shell: bash
+      run: |
+        if [ -f /tmp/.node-resolved-version-${{ steps.node-version.outputs.version }} ]; then
+          echo "version=$(cat /tmp/.node-resolved-version-${{ steps.node-version.outputs.version }})" >> "$GITHUB_OUTPUT"
+        fi
+
+    - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+      with:
+        # Use the exact cached version when available, otherwise fall back to the requested version.
+        node-version: ${{ steps.cached.outputs.version || steps.node-version.outputs.version }}
+        # Resolve the latest patch on master when no cached version exists.
+        check-latest: ${{ steps.cached.outputs.version == '' }}
+        registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
+
+    # Persist the resolved version so subsequent runs within this 20-minute window can reuse it.
+    - name: Save resolved version
+      if: steps.node-version-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: node -v | tr -d 'v' > /tmp/.node-resolved-version-${{ steps.node-version.outputs.version }}
+    # Avoid GitHub REST API tag lookups (api.github.com/.../git/refs/tags) which can hit installation rate limits
+    # in large orgs / high-parallelism workflows. Instead, use a direct release asset URL.
+    #
+    # Note: setup-bun's `bun-download-url` skips its own AVX2 detection, so we do a minimal check ourselves for
+    # Linux x64 (fallback to baseline build when AVX2 isn't present).
+    - id: bun-download-url
+      run: |
+        set -euo pipefail
+
+        BUN_VERSION="1.3.1"
+
+        case "${RUNNER_OS}:${RUNNER_ARCH}" in
+          Linux:X64)
+            ASSET="bun-linux-x64.zip"
+            if ! grep -qiE '(^|\\s)avx2(\\s|$)' /proc/cpuinfo; then
+              ASSET="bun-linux-x64-baseline.zip"
+            fi
+            ;;
+          Linux:ARM64)
+            ASSET="bun-linux-aarch64.zip"
+            ;;
+          macOS:X64)
+            ASSET="bun-darwin-x64.zip"
+            ;;
+          macOS:ARM64)
+            ASSET="bun-darwin-aarch64.zip"
+            ;;
+          Windows:X64)
+            ASSET="bun-windows-x64.zip"
+            ;;
+          *)
+            echo "Unsupported runner: ${RUNNER_OS}/${RUNNER_ARCH}" >&2
+            exit 1
+            ;;
+        esac
+
+        echo "url=https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/${ASSET}" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+      with:
+        bun-download-url: ${{ steps.bun-download-url.outputs.url }}

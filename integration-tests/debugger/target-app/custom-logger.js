@@ -1,12 +1,13 @@
 'use strict'
 
+// @ts-expect-error This code is running in a sandbox where dd-trace is available
 require('dd-trace').init({
   logger: {
     error: (...args) => console.log('[CUSTOM LOGGER][ERROR]:', ...args), // eslint-disable-line no-console
     warn: (...args) => console.log('[CUSTOM LOGGER][WARN]:', ...args), // eslint-disable-line no-console
     info: (...args) => console.log('[CUSTOM LOGGER][INFO]:', ...args), // eslint-disable-line no-console
-    debug: (...args) => console.log('[CUSTOM LOGGER][DEBUG]:', ...args) // eslint-disable-line no-console
-  }
+    debug: (...args) => console.log('[CUSTOM LOGGER][DEBUG]:', ...args), // eslint-disable-line no-console
+  },
 })
 
 const http = require('http')

@@ -1,8 +1,8 @@
 'use strict'
 
 const { errorMonitor } = require('events')
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
 
 const startChannel = channel('apm:fs:operation:start')
 const finishChannel = channel('apm:fs:operation:finish')
@@ -54,13 +54,13 @@ const paramsByMethod = {
   utimes: ['path', 'atime', 'mtime'],
   write: ['fd'],
   writeFile: ['file', 'data', 'options'],
-  writev: ['fd']
+  writev: ['fd'],
 }
 
 const watchMethods = {
   unwatchFile: ['path', 'listener'],
   watch: ['path', 'options', 'listener'],
-  watchFile: ['path', 'options', 'listener']
+  watchFile: ['path', 'options', 'listener'],
 }
 
 const paramsByFileHandleMethods = {
@@ -82,7 +82,7 @@ const paramsByFileHandleMethods = {
   utimes: ['atime', 'mtime'],
   write: ['buffer', 'offset', 'length', 'position'],
   writeFile: ['data', 'options'],
-  writev: ['buffers', 'position']
+  writev: ['buffers', 'position'],
 }
 addHook({ name: 'fs' }, fs => {
   const asyncMethods = Object.keys(paramsByMethod)
@@ -113,22 +113,22 @@ addHook({ name: 'fs' }, fs => {
   return fs
 })
 
-function isFirstMethodReturningFileHandle (original) {
+function isFirstMethodReturningFileHandle(original) {
   return !kHandle && original.name === 'open'
 }
-function wrapFileHandle (fh) {
+function wrapFileHandle(fh) {
   const fileHandlePrototype = getFileHandlePrototype(fh)
   const desc = Reflect.getOwnPropertyDescriptor(fileHandlePrototype, kHandle)
   if (!desc || !desc.get) {
     Reflect.defineProperty(fileHandlePrototype, kHandle, {
-      get () {
+      get() {
         return this[ddFhSym]
       },
-      set (h) {
+      set(h) {
         this[ddFhSym] = h
         wrap(this, 'close', createWrapFunction('filehandle.'))
       },
-      configurable: true
+      configurable: true,
     })
   }
   for (const name of Reflect.ownKeys(fileHandlePrototype)) {
@@ -139,17 +139,17 @@ function wrapFileHandle (fh) {
   }
 }
 
-function getFileHandlePrototype (fh) {
+function getFileHandlePrototype(fh) {
   if (!kHandle) {
     kHandle = Reflect.ownKeys(fh).find(key => typeof key === 'symbol' && key.toString().includes('kHandle'))
   }
   return Object.getPrototypeOf(fh)
 }
 
-function getSymbolName (sym) {
+function getSymbolName(sym) {
   return sym.description || sym.toString()
 }
-function initDirAsyncIteratorProperties (iterator) {
+function initDirAsyncIteratorProperties(iterator) {
   const keys = Reflect.ownKeys(iterator)
   for (const key of keys) {
     if (kDirReadPromisified && kDirClosePromisified) break
@@ -163,9 +163,9 @@ function initDirAsyncIteratorProperties (iterator) {
   }
 }
 
-function createWrapDirAsyncIterator () {
-  return function wrapDirAsyncIterator (asyncIterator) {
-    return function wrappedAsyncIterator () {
+function createWrapDirAsyncIterator() {
+  return function wrapDirAsyncIterator(asyncIterator) {
+    return function wrappedAsyncIterator() {
       if (!kDirReadPromisified || !kDirClosePromisified) {
         initDirAsyncIteratorProperties(this)
       }
@@ -176,10 +176,10 @@ function createWrapDirAsyncIterator () {
   }
 }
 
-function wrapCreateStream (original) {
+function wrapCreateStream(original) {
   const classes = {
     createReadStream: 'ReadStream',
-    createWriteStream: 'WriteStream'
+    createWriteStream: 'WriteStream',
   }
   const name = classes[original.name]
 
@@ -197,7 +197,7 @@ function wrapCreateStream (original) {
           onFinish()
         }
         const onFinish = () => {
-          finishChannel.runStores(ctx, () => {})
+          finishChannel.runStores(ctx, () => { })
           stream.removeListener('close', onFinish)
           stream.removeListener('end', onFinish)
           stream.removeListener('finish', onFinish)
@@ -213,21 +213,21 @@ function wrapCreateStream (original) {
       } catch (error) {
         ctx.error = error
         errorChannel.publish(ctx)
-        finishChannel.runStores(ctx, () => {})
+        finishChannel.runStores(ctx, () => { })
       }
     })
   }
 }
 
-function getMethodParamsRelationByPrefix (prefix) {
+function getMethodParamsRelationByPrefix(prefix) {
   if (prefix === 'filehandle.') {
     return paramsByFileHandleMethods
   }
   return paramsByMethod
 }
 
-function createWatchWrapFunction (override = '') {
-  return function wrapFunction (original) {
+function createWatchWrapFunction(override = '') {
+  return function wrapFunction(original) {
     const name = override || original.name
     const method = name
     const operation = name
@@ -237,12 +237,12 @@ function createWatchWrapFunction (override = '') {
       return startChannel.runStores(ctx, () => {
         try {
           const result = original.apply(this, arguments)
-          finishChannel.runStores(ctx, () => {})
+          finishChannel.runStores(ctx, () => { })
           return result
         } catch (error) {
           ctx.error = error
           errorChannel.publish(ctx)
-          finishChannel.runStores(ctx, () => {})
+          finishChannel.runStores(ctx, () => { })
           throw error
         }
       })
@@ -250,8 +250,8 @@ function createWatchWrapFunction (override = '') {
   }
 }
 
-function createWrapFunction (prefix = '', override = '') {
-  return function wrapFunction (original) {
+function createWrapFunction(prefix = '', override = '') {
+  return function wrapFunction(original) {
     const name = override || original.name
     const method = `${prefix}${name}`
     const operation = name.match(/^(.+?)(Sync)?(\.native)?$/)[1]
@@ -265,7 +265,7 @@ function createWrapFunction (prefix = '', override = '') {
       const abortController = new AbortController()
       const ctx = { ...getMessage(method, params, arguments, this), abortController }
 
-      const finish = function (error, cb = () => {}) {
+      const finish = function (error, cb = () => { }) {
         if (error !== null && typeof error === 'object') { // fs.exists receives a boolean
           ctx.error = error
           errorChannel.publish(ctx)
@@ -306,25 +306,25 @@ function createWrapFunction (prefix = '', override = '') {
                 if (isFirstMethodReturningFileHandle(original)) {
                   wrapFileHandle(value)
                 }
-                finishChannel.runStores(ctx, () => {})
+                finishChannel.runStores(ctx, () => { })
                 return value
               },
               error => {
                 ctx.error = error
                 errorChannel.publish(ctx)
-                finishChannel.runStores(ctx, () => {})
+                finishChannel.runStores(ctx, () => { })
                 throw error
               }
             )
           }
 
-          finishChannel.runStores(ctx, () => {})
+          finishChannel.runStores(ctx, () => { })
 
           return result
         } catch (error) {
           ctx.error = error
           errorChannel.publish(ctx)
-          finishChannel.runStores(ctx, () => {})
+          finishChannel.runStores(ctx, () => { })
           throw error
         }
       })
@@ -332,7 +332,7 @@ function createWrapFunction (prefix = '', override = '') {
   }
 }
 
-function getMessage (operation, params, args, self) {
+function getMessage(operation, params, args, self) {
   const metadata = {}
   if (params) {
     for (let i = 0; i < params.length; i++) {
@@ -355,13 +355,13 @@ function getMessage (operation, params, args, self) {
   return { operation, ...metadata }
 }
 
-function massWrap (target, methods, wrapper) {
+function massWrap(target, methods, wrapper) {
   for (const method of methods) {
     wrap(target, method, wrapper)
   }
 }
 
-function wrap (target, method, wrapper) {
+function wrap(target, method, wrapper) {
   try {
     shimmer.wrap(target, method, wrapper)
   } catch {

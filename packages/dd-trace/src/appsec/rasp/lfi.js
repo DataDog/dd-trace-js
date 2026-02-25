@@ -4,9 +4,9 @@ const { isAbsolute } = require('path')
 
 const { fsOperationStart, incomingHttpRequestStart, expressResponseRenderStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
-const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = require('./fs-plugin')
 const { FS_OPERATION_PATH } = require('../addresses')
 const waf = require('../waf')
+const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = require('./fs-plugin')
 const { RULE_TYPES, handleResult } = require('./utils')
 
 let config
@@ -63,14 +63,14 @@ function analyzeLfi (ctx) {
   const { req, fs, res } = store
   if (!req || !fs) return
 
-  getPaths(ctx, fs).forEach(path => {
+  for (const path of getPaths(ctx, fs)) {
     analyzeLfiPath(path, req, res, ctx.abortController)
-  })
+  }
 }
 
 function analyzeLfiPath (path, req, res, abortController) {
   const ephemeral = {
-    [FS_OPERATION_PATH]: path
+    [FS_OPERATION_PATH]: path,
   }
 
   const raspRule = { type: RULE_TYPES.LFI }
@@ -90,7 +90,7 @@ function getPaths (ctx, fs) {
     ctx.path,
     ctx.prefix,
     ctx.src,
-    ctx.target
+    ctx.target,
   ]
 
   return pathArguments
@@ -125,5 +125,5 @@ function shouldAnalyzeURLFile (path, fs) {
 
 module.exports = {
   enable,
-  disable
+  disable,
 }

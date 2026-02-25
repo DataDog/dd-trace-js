@@ -2,14 +2,12 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const nock = require('nock')
 
 require('../setup/core')
-
 const tracerLogger = require('../../src/log')
 
 describe('External Logger', () => {
@@ -22,8 +20,8 @@ describe('External Logger', () => {
 
     const { ExternalLogger } = proxyquire('../../src/external-logger/src', {
       '../../log': {
-        error: errorLog
-      }
+        error: errorLog,
+      },
     })
 
     externalLogger = new ExternalLogger({
@@ -32,7 +30,7 @@ describe('External Logger', () => {
       apiKey: 'API_KEY_PLACEHOLDER',
       interval: 10000,
       timeout: 5000,
-      limit: 10
+      limit: 10,
     })
   })
 
@@ -55,19 +53,19 @@ describe('External Logger', () => {
     const span = {
       service: 'openAi',
       trace_id: '000001000',
-      span_id: '9999991999'
+      span_id: '9999991999',
     }
     const tags = {
       env: 'external_logger',
       version: '1.2.3',
-      service: 'external'
+      service: 'external',
     }
     externalLogger.log({
       message: 'oh no, something is up',
       custom: 'field',
       attribute: 'funky',
       service: 'outer_space',
-      level: 'info'
+      level: 'info',
     }, span, tags)
 
     externalLogger.flush((err) => {
@@ -79,7 +77,7 @@ describe('External Logger', () => {
         assert.strictEqual(request[0].level, 'info')
         assert.strictEqual(request[0]['dd.trace_id'], '000001000')
         assert.strictEqual(request[0]['dd.span_id'], '9999991999')
-        expect(request[0].timestamp).to.be.greaterThanOrEqual(currentTime)
+        assert.ok(request[0].timestamp >= currentTime)
         assert.strictEqual(request[0].ddsource, 'logging_from_space')
         assert.strictEqual(request[0].ddtags, 'env:external_logger,version:1.2.3,service:external')
       } catch (e) {
@@ -112,7 +110,7 @@ describe('External Logger', () => {
 
     externalLogger.enqueue({})
     externalLogger.flush((err) => {
-      expect(err).to.be.an.instanceOf(Error)
+      assert.ok(err instanceof Error)
       assert.strictEqual(errorLog.getCall(0).args[0],
         'failed to send 1 logs, received response code 400'
       )
@@ -127,7 +125,7 @@ describe('External Logger', () => {
 
     externalLogger.enqueue({})
     externalLogger.flush((err) => {
-      expect(err).to.be.an.instanceOf(Error)
+      assert.ok(err instanceof Error)
       assert.strictEqual(errorLog.getCall(0).args[0],
         'failed to send 1 log(s), with error missing API key'
       )

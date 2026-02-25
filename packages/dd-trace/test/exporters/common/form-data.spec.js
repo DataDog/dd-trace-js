@@ -2,10 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('tap').mocha
+const { describe, it } = require('mocha')
 
 require('../../setup/core')
-
 const FormData = require('../../../src/exporters/common/form-data')
 
 async function streamToString (stream) {
@@ -28,7 +27,7 @@ describe('exporters/form-data', () => {
     const form = new FormData()
 
     assert.deepStrictEqual(form.getHeaders(), {
-      'Content-Type': 'multipart/form-data; boundary=' + form._boundary
+      'Content-Type': 'multipart/form-data; boundary=' + form._boundary,
     })
   })
 
@@ -46,7 +45,7 @@ describe('exporters/form-data', () => {
       '',
       value,
       `--${form._boundary}--`,
-      ''
+      '',
     ].join('\r\n'))
   })
 
@@ -66,7 +65,7 @@ describe('exporters/form-data', () => {
       '',
       file,
       `--${form._boundary}--`,
-      ''
+      '',
     ].join('\r\n'))
   })
 
@@ -76,7 +75,7 @@ describe('exporters/form-data', () => {
     const fields = [
       { key: 'foo', value: 'bar' },
       { key: 'baz', value: 'buz' },
-      { key: 'file', value: 'file', filename: 'file.txt' }
+      { key: 'file', value: 'file', filename: 'file.txt' },
     ]
 
     for (const { key, value, filename } of fields) {
@@ -98,7 +97,7 @@ describe('exporters/form-data', () => {
       '',
       fields[2].value,
       `--${form._boundary}--`,
-      ''
+      '',
     ].join('\r\n'))
   })
 })

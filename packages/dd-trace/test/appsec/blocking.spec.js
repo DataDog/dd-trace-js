@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -10,14 +9,14 @@ const sinon = require('sinon')
 describe('blocking', () => {
   const defaultBlockedTemplate = {
     html: 'block test',
-    json: '{ "block": true }'
+    json: '{ "block": true }',
   }
 
   const config = {
     appsec: {
       blockedTemplateHtml: 'htmlBodyéé',
-      blockedTemplateJson: 'jsonBody'
-    }
+      blockedTemplateJson: 'jsonBody',
+    },
   }
 
   let log, telemetry
@@ -26,17 +25,17 @@ describe('blocking', () => {
 
   beforeEach(() => {
     log = {
-      warn: sinon.stub()
+      warn: sinon.stub(),
     }
 
     telemetry = {
-      updateBlockFailureMetric: sinon.stub()
+      updateBlockFailureMetric: sinon.stub(),
     }
 
     const blocking = proxyquire('../../src/appsec/blocking', {
       '../log': log,
       './blocked_templates': defaultBlockedTemplate,
-      './telemetry': telemetry
+      './telemetry': telemetry,
     })
 
     block = blocking.block
@@ -45,7 +44,7 @@ describe('blocking', () => {
     setTemplates = blocking.setTemplates
 
     req = {
-      headers: {}
+      headers: {},
     }
 
     res = {
@@ -55,13 +54,13 @@ describe('blocking', () => {
       removeHeader: sinon.stub(),
       constructor: {
         prototype: {
-          end: sinon.stub()
-        }
-      }
+          end: sinon.stub(),
+        },
+      },
     }
 
     rootSpan = {
-      setTag: sinon.stub()
+      setTag: sinon.stub(),
     }
   })
 
@@ -75,12 +74,14 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan)
 
       assert.strictEqual(blocked, false)
-      expect(log.warn).to.have.been
-        .calledOnceWithExactly('[ASM] Cannot send blocking response when headers have already been sent')
+      sinon.assert.calledOnceWithExactly(
+        log.warn,
+        '[ASM] Cannot send blocking response when headers have already been sent'
+      )
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
       sinon.assert.notCalled(res.setHeader)
       sinon.assert.notCalled(res.constructor.prototype.end)
-      expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
     })
 
     it('should send blocking response with html type if present in the headers', () => {
@@ -91,7 +92,7 @@ describe('blocking', () => {
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'text/html; charset=utf-8',
-        'Content-Length': 12
+        'Content-Length': 12,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'htmlBodyéé')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -105,7 +106,7 @@ describe('blocking', () => {
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
-        'Content-Length': 8
+        'Content-Length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -118,7 +119,7 @@ describe('blocking', () => {
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
-        'Content-Length': 8
+        'Content-Length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -132,7 +133,7 @@ describe('blocking', () => {
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
-        'Content-Length': 8
+        'Content-Length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       assert.strictEqual(abortController.signal.aborted, true)
@@ -151,7 +152,7 @@ describe('blocking', () => {
       sinon.assert.calledWithExactly(res.removeHeader.secondCall, 'header2')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
-        'Content-Length': 8
+        'Content-Length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -177,7 +178,7 @@ describe('blocking', () => {
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.calledOnceWithExactly(res.writeHead, 403, {
         'Content-Type': 'application/json',
-        'Content-Length': 8
+        'Content-Length': 8,
       })
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'jsonBody')
       assert.strictEqual(abortController.signal.aborted, true)
@@ -218,7 +219,7 @@ describe('blocking', () => {
     it('should do nothing if no blocking delegation exists', () => {
       const blocked = callBlockDelegation(res)
 
-      expect(blocked).to.not.be.ok
+      assert.ok(!(blocked))
       sinon.assert.notCalled(log.warn)
       sinon.assert.notCalled(rootSpan.setTag)
       sinon.assert.notCalled(res.writeHead)
@@ -241,7 +242,7 @@ describe('blocking', () => {
 
       const result = callBlockDelegation(res)
 
-      expect(result).to.not.be.ok
+      assert.ok(!(result))
       sinon.assert.calledOnce(rootSpan.setTag)
       sinon.assert.calledOnce(res.writeHead)
       sinon.assert.calledOnce(res.constructor.prototype.end)
@@ -258,8 +259,8 @@ describe('blocking', () => {
     const config = {
       appsec: {
         blockedTemplateHtml: undefined,
-        blockedTemplateJson: undefined
-      }
+        blockedTemplateJson: undefined,
+      },
     }
 
     it('should block with default html template', () => {
@@ -286,14 +287,14 @@ describe('blocking', () => {
     const config = {
       appsec: {
         blockedTemplateHtml: undefined,
-        blockedTemplateJson: undefined
-      }
+        blockedTemplateJson: undefined,
+      },
     }
 
     it('should block with default html template and custom status', () => {
       const actionParameters = {
         status_code: 401,
-        type: 'auto'
+        type: 'auto',
       }
       req.headers.accept = 'text/html'
       setTemplates(config)
@@ -309,7 +310,7 @@ describe('blocking', () => {
       'when type is forced to json and accept is html', () => {
       const actionParameters = {
         status_code: 401,
-        type: 'json'
+        type: 'json',
       }
       req.headers.accept = 'text/html'
       setTemplates(config)
@@ -325,7 +326,7 @@ describe('blocking', () => {
       'when type is forced to html and accept is html', () => {
       const actionParameters = {
         status_code: 401,
-        type: 'html'
+        type: 'html',
       }
       req.headers.accept = 'text/html'
       setTemplates(config)
@@ -340,7 +341,7 @@ describe('blocking', () => {
     it('should block with default json template and custom status', () => {
       const actionParameters = {
         status_code: 401,
-        type: 'auto'
+        type: 'auto',
       }
       setTemplates(config)
 
@@ -355,7 +356,7 @@ describe('blocking', () => {
       'when type is forced to json and accept is not defined', () => {
       const actionParameters = {
         status_code: 401,
-        type: 'json'
+        type: 'json',
       }
       setTemplates(config)
 
@@ -370,7 +371,7 @@ describe('blocking', () => {
       'when type is forced to html and accept is not defined', () => {
       const actionParameters = {
         status_code: 401,
-        type: 'html'
+        type: 'html',
       }
       setTemplates(config)
 
@@ -384,7 +385,7 @@ describe('blocking', () => {
     it('should block with custom redirect', () => {
       const actionParameters = {
         status_code: 301,
-        location: '/you-have-been-blocked'
+        location: '/you-have-been-blocked',
       }
       setTemplates(config)
 
@@ -392,7 +393,7 @@ describe('blocking', () => {
 
       assert.strictEqual(blocked, true)
       sinon.assert.calledOnceWithExactly(res.writeHead, 301, {
-        Location: '/you-have-been-blocked'
+        Location: '/you-have-been-blocked',
       })
       sinon.assert.calledOnce(res.constructor.prototype.end)
     })
@@ -405,21 +406,21 @@ describe('waf actions', () => {
   it('get block_request as blocking action', () => {
     const blockRequestActionParameters = {
       status_code: 401,
-      type: 'html'
+      type: 'html',
     }
     const actions = {
-      block_request: blockRequestActionParameters
+      block_request: blockRequestActionParameters,
     }
     assert.deepStrictEqual(blocking.getBlockingAction(actions), blockRequestActionParameters)
   })
 
   it('get redirect_request as blocking action', () => {
     const redirectRequestActionParameters = {
-      status_code: 301
+      status_code: 301,
     }
 
     const actions = {
-      redirect_request: redirectRequestActionParameters
+      redirect_request: redirectRequestActionParameters,
     }
     assert.deepStrictEqual(blocking.getBlockingAction(actions), redirectRequestActionParameters)
   })
@@ -431,7 +432,7 @@ describe('waf actions', () => {
 
   it('get undefined when generate_stack action', () => {
     const actions = {
-      generate_stack: {}
+      generate_stack: {},
     }
     assert.strictEqual(blocking.getBlockingAction(actions), undefined)
   })

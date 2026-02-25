@@ -1,14 +1,17 @@
 'use strict'
 
 const assert = require('assert')
+const os = require('os')
 const { basename, join } = require('path')
 const { readFileSync } = require('fs')
 const { randomUUID } = require('crypto')
 
 const Axios = require('axios')
 
+const { assertObjectContains, assertUUID } = require('../helpers')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
+const { version } = require('../../package.json')
 
 const BREAKPOINT_TOKEN = '// BREAKPOINT'
 const pollInterval = 0.1
@@ -29,7 +32,7 @@ const pollInterval = 0.1
  */
 
 /**
- * @typedef {Object} BreakpointInfo
+ * @typedef {object} BreakpointInfo
  * @property {string} sourceFile
  * @property {string} deployedFile
  * @property {number} line
@@ -41,7 +44,7 @@ const pollInterval = 0.1
  *
  * @typedef {BreakpointInfo & {
  *   rcConfig: object|null,
- *   triggerBreakpoint: (url: string) => Promise<import('axios').AxiosResponse<unknown>>,
+ *   triggerBreakpoint: () => Promise<import('axios').AxiosResponse<unknown>>,
  *   generateRemoteConfig: (overrides?: object) => object,
  *   generateProbeConfig: BoundGenerateProbeConfigFn
  * }} EnrichedBreakpoint
@@ -51,7 +54,7 @@ const pollInterval = 0.1
  * The live‑debugger integration test harness returned by {@link setup}. Provides the spawned app process, fake agent,
  * axios client, and helpers to generate remote config and trigger breakpoints.
  *
- * @typedef {Object} DebuggerTestEnvironment
+ * @typedef {object} DebuggerTestEnvironment
  * @property {BreakpointInfo} breakpoint - Primary breakpoint metadata.
  * @property {EnrichedBreakpoint[]} breakpoints - All discovered breakpoints with helpers.
  * @property {import('axios').AxiosInstance} axios - HTTP client bound to the test app. Throws if accessed before
@@ -66,11 +69,17 @@ const pollInterval = 0.1
  *   once installed.
  * @property {(overrides?: object) => object} generateRemoteConfig - Generates RC for the primary breakpoint.
  * @property {BoundGenerateProbeConfigFn} generateProbeConfig - Generates probe config for the primary breakpoint.
+ * @property {() => Promise<object>} snapshotReceived - Waits for a snapshot to be received from the test app.
  */
 
 module.exports = {
+  assertBasicInputPayload,
   pollInterval,
-  setup
+  setup,
+  setupAssertionListeners,
+  testBasicInput,
+  testBasicInputWithoutDD,
+  testBasicInputWithoutRC,
 }
 
 /**
@@ -86,21 +95,22 @@ module.exports = {
  *   environment.
  * @param {(data: Buffer) => void} [options.stderrHandler] The function to handle the standard error output of the test
  *   environment.
+ * @param {object} [options.agentOptions] Optional configuration options to pass to the FakeAgent constructor.
  * @returns {DebuggerTestEnvironment} Test harness with agent, app process, axios client and breakpoint helpers.
  */
-function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandler, stderrHandler } = {}) {
+function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandler, stderrHandler, agentOptions } = {}) {
   let cwd, axios, appFile, agent, proc
 
   const breakpoints = getBreakpointInfo({
     deployedFile: testApp,
     sourceFile: testAppSource,
-    stackIndex: 1 // `1` to disregard the `setup` function
+    stackIndex: 1, // `1` to disregard the `setup` function
   }).map((breakpoint) => /** @type {EnrichedBreakpoint} */ ({
     rcConfig: null,
     triggerBreakpoint: triggerBreakpoint.bind(null, breakpoint.url),
     generateRemoteConfig: generateRemoteConfig.bind(null, breakpoint),
     generateProbeConfig: generateProbeConfig.bind(null, breakpoint),
-    ...breakpoint
+    ...breakpoint,
   }))
 
   /** @type {DebuggerTestEnvironment} */
@@ -129,7 +139,15 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     rcConfig: null,
     triggerBreakpoint: triggerBreakpoint.bind(null, breakpoints[0].url),
     generateRemoteConfig: generateRemoteConfig.bind(null, breakpoints[0]),
-    generateProbeConfig: generateProbeConfig.bind(null, breakpoints[0])
+    generateProbeConfig: generateProbeConfig.bind(null, breakpoints[0]),
+
+    snapshotReceived () {
+      return new Promise((/** @type {(value: object) => void} */ resolve) => {
+        t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot } }] }) => {
+          resolve(snapshot)
+        })
+      })
+    },
   }
 
   /**
@@ -168,7 +186,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     return {
       product: 'LIVE_DEBUGGING',
       id: `logProbe_${overrides.id}`,
-      config: generateProbeConfig(breakpoint, overrides)
+      config: generateProbeConfig(breakpoint, overrides),
     }
   }
 
@@ -186,7 +204,8 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
     // Allow specific access to each breakpoint
     t.breakpoints.forEach((breakpoint) => { breakpoint.rcConfig = generateRemoteConfig(breakpoint) })
 
-    agent = await new FakeAgent().start()
+    agent = await new FakeAgent(0, agentOptions).start()
+
     proc = await spawnProc(/** @type {string} */ (t.appFile), {
       cwd,
       env: {
@@ -195,9 +214,9 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
         DD_TRACE_AGENT_PORT: t.agent.port,
         DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
         DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: pollInterval,
-        ...env
+        ...env,
       },
-      silent: silent ?? false
+      silent: silent ?? false,
     }, stdioHandler, stderrHandler)
     axios = Axios.create({ baseURL: t.proc.url })
   })
@@ -213,7 +232,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
 /**
  * Get breakpoint information from a test file by scanning for BREAKPOINT_TOKEN markers.
  *
- * @param {Object} [options] - Options for finding breakpoints.
+ * @param {object} [options] - Options for finding breakpoints.
  * @param {string} [options.deployedFile] - The deployed file path. If not provided, will be inferred from the stack
  *   trace.
  * @param {string} [options.sourceFile] - The source file path. Defaults to `deployedFile` if not provided.
@@ -247,4 +266,157 @@ function getBreakpointInfo ({ deployedFile, sourceFile = deployedFile, stackInde
   }
 
   return result
+}
+
+/**
+ * Test helper for basic input messages with remote config and tracing.
+ *
+ * @param {DebuggerTestEnvironment} t - The test environment.
+ * @param {Function} done - The mocha done callback.
+ */
+function testBasicInput (t, done) {
+  t.triggerBreakpoint()
+  setupAssertionListeners(t, done)
+  t.agent.addRemoteConfig(t.rcConfig)
+}
+
+/**
+ * Test helper for basic input messages without remote config (e.g., from probe file).
+ *
+ * @param {DebuggerTestEnvironment} t - The test environment.
+ * @param {import('../../packages/dd-trace/test/debugger/devtools_client/utils').ProbeConfig} probe - The probe config.
+ * @param {Function} done - The mocha done callback.
+ */
+function testBasicInputWithoutRC (t, probe, done) {
+  t.triggerBreakpoint()
+  setupAssertionListeners(t, done, probe)
+}
+
+/**
+ * Setup assertion listeners for basic input tests with tracing integration.
+ *
+ * @param {DebuggerTestEnvironment} t - The test environment.
+ * @param {Function} done - The mocha done callback.
+ * @param {import('../../packages/dd-trace/test/debugger/devtools_client/utils').ProbeConfig} [probe] - Optional probe
+ *   config to use instead of t.rcConfig.config.
+ */
+function setupAssertionListeners (t, done, probe) {
+  let traceId, spanId, dd
+
+  const messageListener = ({ payload }) => {
+    const span = payload.find((arr) => arr[0].name === 'fastify.request')?.[0]
+    if (!span) return
+
+    traceId = span.trace_id.toString()
+    spanId = span.span_id.toString()
+
+    t.agent.removeListener('message', messageListener)
+
+    assertDD()
+  }
+
+  t.agent.on('message', messageListener)
+
+  t.agent.once('debugger-input', ({ payload }) => {
+    assertBasicInputPayload(t, payload, probe)
+
+    payload = payload[0]
+    assert.ok(typeof payload.dd === 'object' && payload.dd !== null)
+    assert.deepStrictEqual(['span_id', 'trace_id'], Object.keys(payload.dd).sort())
+    assert.strictEqual(typeof payload.dd.trace_id, 'string')
+    assert.strictEqual(typeof payload.dd.span_id, 'string')
+    assert.ok(payload.dd.trace_id.length > 0)
+    assert.ok(payload.dd.span_id.length > 0)
+    dd = payload.dd
+
+    assertDD()
+  })
+
+  function assertDD () {
+    if (!traceId || !spanId || !dd) return
+    assert.strictEqual(dd.trace_id, traceId)
+    assert.strictEqual(dd.span_id, spanId)
+    done()
+  }
+}
+
+/**
+ * Test helper for basic input messages without DD tracing integration.
+ *
+ * @param {DebuggerTestEnvironment} t - The test environment.
+ * @param {Function} done - The mocha done callback.
+ */
+function testBasicInputWithoutDD (t, done) {
+  t.triggerBreakpoint()
+
+  t.agent.on('debugger-input', ({ payload }) => {
+    assertBasicInputPayload(t, payload)
+    assert.ok(!('dd' in payload[0]))
+    done()
+  })
+
+  t.agent.addRemoteConfig(t.rcConfig)
+}
+
+/**
+ * Assert that the basic input payload structure and content is correct.
+ *
+ * @param {DebuggerTestEnvironment} t - The test environment.
+ * @param {Array<object>} payload - The debugger input payload.
+ * @param {import('../../packages/dd-trace/test/debugger/devtools_client/utils').ProbeConfig} [probe] - Optional probe
+ *   config to use instead of t.rcConfig.config.
+ */
+function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
+  assert.ok(Array.isArray(payload))
+  assert.strictEqual(payload.length, 1)
+  const data = payload[0]
+
+  const expected = {
+    ddsource: 'dd_debugger',
+    hostname: os.hostname(),
+    service: 'node',
+    message: 'Hello World!',
+    logger: {
+      name: t.breakpoint.deployedFile,
+      method: 'fooHandler',
+      version,
+      thread_name: 'MainThread',
+    },
+    debugger: {
+      snapshot: {
+        probe: {
+          id: probe.id,
+          version: 0,
+          location: { file: t.breakpoint.deployedFile, lines: [String(t.breakpoint.line)] },
+        },
+        language: 'javascript',
+      },
+    },
+  }
+
+  assertObjectContains(data, expected)
+
+  assert.match(data.logger.thread_id, /^pid:\d+$/)
+
+  assertUUID(data.debugger.snapshot.id)
+  assert.strictEqual(typeof data.debugger.snapshot.timestamp, 'number')
+  assert.ok(data.debugger.snapshot.timestamp > Date.now() - 1000 * 60)
+  assert.ok(data.debugger.snapshot.timestamp <= Date.now())
+
+  assert.ok(Array.isArray(data.debugger.snapshot.stack))
+  assert.ok(data.debugger.snapshot.stack.length > 0)
+  for (const frame of data.debugger.snapshot.stack) {
+    assert.ok(typeof frame === 'object' && frame !== null)
+    assert.deepStrictEqual(['columnNumber', 'fileName', 'function', 'lineNumber'], Object.keys(frame).sort())
+    assert.strictEqual(typeof frame.fileName, 'string')
+    assert.strictEqual(typeof frame.function, 'string')
+    assert.ok(frame.lineNumber > 0)
+    assert.ok(frame.columnNumber > 0)
+  }
+  const topFrame = data.debugger.snapshot.stack[0]
+  // path seems to be prefixed with `/private` on Mac
+  assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
+  assert.strictEqual(topFrame.function, 'fooHandler')
+  assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)
+  assert.strictEqual(topFrame.columnNumber, 3)
 }

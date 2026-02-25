@@ -2,7 +2,7 @@
 const request = require('../../../exporters/common/request')
 const log = require('../../../log')
 const { safeJSONStringify } = require('../../../exporters/common/util')
-const { getEnvironmentVariable } = require('../../../config-helper')
+const { getValueFromEnvSources } = require('../../../config/helper')
 
 const { CoverageCIVisibilityEncoder } = require('../../../encode/coverage-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
@@ -13,7 +13,7 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_BYTES,
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_ERRORS,
-  TELEMETRY_ENDPOINT_PAYLOAD_DROPPED
+  TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
 } = require('../../../ci-visibility/telemetry')
 
 class Writer extends BaseWriter {
@@ -29,11 +29,11 @@ class Writer extends BaseWriter {
       path: '/api/v2/citestcov',
       method: 'POST',
       headers: {
-        'dd-api-key': getEnvironmentVariable('DD_API_KEY'),
-        ...form.getHeaders()
+        'dd-api-key': getValueFromEnvSources('DD_API_KEY'),
+        ...form.getHeaders(),
       },
       timeout: 15_000,
-      url: this._url
+      url: this._url,
     }
 
     if (this._evpProxyPrefix) {
@@ -42,6 +42,7 @@ class Writer extends BaseWriter {
       options.headers['X-Datadog-EVP-Subdomain'] = 'citestcov-intake'
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Request to the intake: ${safeJSONStringify(options)}`)
 
     const startRequestTime = Date.now()

@@ -1,17 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const URL = require('url').URL
 
-const { expect } = require('chai')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, context } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
+const context = describe
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
-
-const URL = require('url').URL
 
 function describeWriter (protocolVersion) {
   let Writer
@@ -29,8 +27,8 @@ function describeWriter (protocolVersion) {
 
     response = JSON.stringify({
       rate_by_service: {
-        'service:hello,env:test': 1
-      }
+        'service:hello,env:test': 1,
+      },
     })
 
     request = sinon.stub().yieldsAsync(null, response, 200)
@@ -38,18 +36,18 @@ function describeWriter (protocolVersion) {
     encoder = {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns([])
+      makePayload: sinon.stub().returns([]),
     }
 
     url = new URL('http://localhost:8126')
 
     prioritySampler = {
-      update: sinon.spy()
+      update: sinon.spy(),
     }
 
     log = {
       error: sinon.spy(),
-      errorWithoutTelemetry: sinon.spy()
+      errorWithoutTelemetry: sinon.spy(),
     }
 
     const AgentEncoder = function () {
@@ -61,7 +59,7 @@ function describeWriter (protocolVersion) {
       '../../encode/0.4': { AgentEncoder },
       '../../encode/0.5': { AgentEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
-      '../../log': log
+      '../../log': log,
     })
     writer = new Writer({ url, prioritySampler, protocolVersion })
 
@@ -85,7 +83,7 @@ function describeWriter (protocolVersion) {
       encoder.makePayload.returns([Buffer.alloc(0)])
       writer.flush()
       assertObjectContains(request.getCall(0).args[1], {
-        url
+        url,
       })
     })
   })
@@ -126,9 +124,9 @@ function describeWriter (protocolVersion) {
             'Datadog-Meta-Lang-Version': process.version,
             'Datadog-Meta-Lang-Interpreter': 'v8',
             'Datadog-Meta-Tracer-Version': 'tracerVersion',
-            'X-Datadog-Trace-Count': '2'
+            'X-Datadog-Trace-Count': '2',
           },
-          lookup: undefined
+          lookup: undefined,
         })
         done()
       })
@@ -136,7 +134,7 @@ function describeWriter (protocolVersion) {
 
     it('should pass through headers', (done) => {
       const headers = {
-        'My-Header': 'bar'
+        'My-Header': 'bar',
       }
       writer = new Writer({ url, prioritySampler, protocolVersion, headers })
       encoder.count.returns(2)
@@ -149,7 +147,7 @@ function describeWriter (protocolVersion) {
           'Datadog-Meta-Lang-Version': process.version,
           'Datadog-Meta-Lang-Interpreter': 'v8',
           'Datadog-Meta-Tracer-Version': 'tracerVersion',
-          'X-Datadog-Trace-Count': '2'
+          'X-Datadog-Trace-Count': '2',
         })
         done()
       })
@@ -165,9 +163,12 @@ function describeWriter (protocolVersion) {
       writer.flush()
 
       setTimeout(() => {
-        expect(log.errorWithoutTelemetry)
-          .to.have.been.calledWith('Error sending payload to the agent (status code: %s)',
-            error.status, error)
+        sinon.assert.calledWith(
+          log.errorWithoutTelemetry,
+          'Error sending payload to the agent (status code: %s)',
+          error.status,
+          error
+        )
         done()
       })
     })
@@ -176,7 +177,7 @@ function describeWriter (protocolVersion) {
       encoder.count.returns(1)
       writer.flush(() => {
         sinon.assert.calledWith(prioritySampler.update, {
-          'service:hello,env:test': 1
+          'service:hello,env:test': 1,
         })
         done()
       })
@@ -193,7 +194,7 @@ function describeWriter (protocolVersion) {
         writer.flush()
         setImmediate(() => {
           assertObjectContains(request.getCall(0).args[1], {
-            url
+            url,
           })
         })
       })

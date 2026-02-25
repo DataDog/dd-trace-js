@@ -1,11 +1,13 @@
 'use strict'
 
-const dc = require('dc-polyfill')
 const zlib = require('zlib')
+const dc = require('dc-polyfill')
 
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
+const { keepTrace } = require('../priority_sampler')
+const { ASM } = require('../standalone/product')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
@@ -14,10 +16,8 @@ const {
   updateWafRequestsMetricTags,
   updateRaspRequestsMetricTags,
   updateRaspRuleSkippedMetricTags,
-  getRequestMetrics
+  getRequestMetrics,
 } = require('./telemetry')
-const { keepTrace } = require('../priority_sampler')
-const { ASM } = require('../standalone/product')
 const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
 
 const REQUEST_HEADER_TAG_PREFIX = 'http.request.headers.'
@@ -33,7 +33,7 @@ const config = {
   headersExtendedCollectionEnabled: false,
   maxHeadersCollected: 0,
   headersRedaction: false,
-  raspBodyCollection: false
+  raspBodyCollection: false,
 }
 
 const metricsQueue = new Map()
@@ -44,12 +44,12 @@ const extendedDataCollectionRequest = new WeakMap()
 const contentHeaderList = [
   'content-length',
   'content-encoding',
-  'content-language'
+  'content-language',
 ]
 
 const responseHeaderList = [
   ...contentHeaderList,
-  'content-type'
+  'content-type',
 ]
 
 const identificationHeaders = [
@@ -60,7 +60,7 @@ const identificationHeaders = [
   'x-appgw-trace-id',
   'x-sigsci-requestid',
   'x-sigsci-tags',
-  'akamai-user-risk'
+  'akamai-user-risk',
 ]
 
 const eventHeadersList = [
@@ -71,14 +71,14 @@ const eventHeadersList = [
   ...contentHeaderList,
   'host',
   'accept-encoding',
-  'accept-language'
+  'accept-language',
 ]
 
 const requestHeadersList = [
   'content-type',
   'user-agent',
   'accept',
-  ...identificationHeaders
+  ...identificationHeaders,
 ]
 
 const redactedHeadersList = [
@@ -89,7 +89,7 @@ const redactedHeadersList = [
   'authentication-info',
   'proxy-authentication-info',
   'cookie',
-  'set-cookie'
+  'set-cookie',
 ]
 
 // these request headers are always collected - it breaks the expected spec orders
@@ -251,7 +251,7 @@ function logWafDiagnosticMessage (product, rcConfigId, configKey, message, level
   telemetryLogCh.publish({
     message,
     level,
-    tags
+    tags,
   })
 }
 
@@ -340,7 +340,7 @@ function reportAttack ({ events: attackData, actions }) {
   const currentTags = rootSpan.context()._tags
 
   const newTags = {
-    'appsec.event': 'true'
+    'appsec.event': 'true',
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
@@ -546,10 +546,6 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
     reportRequestBody(rootSpan, requestBody)
   }
 
-  if (tags['appsec.event'] === 'true' && typeof req.route?.path === 'string') {
-    newTags['http.endpoint'] = req.route.path
-  }
-
   rootSpan.addTags(newTags)
 }
 
@@ -582,5 +578,5 @@ module.exports = {
   reportAttributes,
   finishRequest,
   mapHeaderAndTags,
-  truncateRequestBody
+  truncateRequestBody,
 }

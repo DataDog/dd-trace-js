@@ -1,10 +1,20 @@
 'use strict'
-const { createCoverageMap } = require('istanbul-lib-coverage')
 
-const { addHook, channel } = require('./helpers/instrument')
+const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
+const {
+  getCoveredFilenamesFromCoverage,
+  resetCoverage,
+  mergeCoverage,
+  fromCoverageMapToCoverage,
+  getTestSuitePath,
+  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  getIsFaultyEarlyFlakeDetection,
+} = require('../../dd-trace/src/plugins/util/test')
+const satisfies = require('../../../vendor/dist/semifies')
+const { addHook, channel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:cucumber:test:start')
 const testRetryCh = channel('ci:cucumber:test:retry')
@@ -33,17 +43,6 @@ const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
-
-const {
-  getCoveredFilenamesFromCoverage,
-  resetCoverage,
-  mergeCoverage,
-  fromCoverageMapToCoverage,
-  getTestSuitePath,
-  CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
-  getIsFaultyEarlyFlakeDetection
-} = require('../../dd-trace/src/plugins/util/test')
-const satisfies = require('semifies')
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
@@ -252,7 +251,7 @@ function wrapRun (pl, isLatestVersion, version) {
       testName: this.pickle.name,
       testFileAbsolutePath,
       testSourceLine,
-      isParallel: !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
+      isParallel: !!getEnvironmentVariable('CUCUMBER_WORKER_ID'),
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
@@ -354,6 +353,20 @@ function wrapRun (pl, isLatestVersion, version) {
           isEfdRetry = numRetries > 0
         }
 
+        // Check if all EFD retries failed
+        if (isEfdRetry && (isNew || isModified)) {
+          const statuses = lastStatusByPickleId.get(this.pickle.id)
+          if (statuses.length === earlyFlakeDetectionNumRetries + 1) {
+            const { fail } = statuses.reduce((acc, status) => {
+              acc[status]++
+              return acc
+            }, { pass: 0, fail: 0 })
+            if (fail === earlyFlakeDetectionNumRetries + 1) {
+              hasFailedAllRetries = true
+            }
+          }
+        }
+
         const attemptCtx = numAttemptToCtx.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
@@ -376,7 +389,7 @@ function wrapRun (pl, isLatestVersion, version) {
           isDisabled,
           isQuarantined,
           isModified,
-          ...attemptCtx.currentStore
+          ...attemptCtx.currentStore,
         })
       })
       return promise
@@ -588,7 +601,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      isParallel
+      isParallel,
     })
     eventDataCollector = null
     return success
@@ -624,7 +637,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         testFileAbsolutePath,
         isUnskippable,
         isForcedToRun,
-        itrCorrelationId
+        itrCorrelationId,
       })
     }
 
@@ -658,7 +671,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         modifiedFiles,
         stepIds,
         stepDefinitions: this.supportCodeLibrary.stepDefinitions,
-        setIsModified
+        setIsModified,
       })
       modifiedTestsByPickleId.set(pickle.id, isModified)
     }
@@ -732,7 +745,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
           suiteFile: testFileAbsolutePath,
-          testSuitePath
+          testSuitePath,
         })
         // We need to reset coverage to get a code coverage per suite
         // Before that, we preserve the original coverage
@@ -801,7 +814,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       if (!pickleResultByFile[testFileAbsolutePath]) {
         pickleResultByFile[testFileAbsolutePath] = []
         testSuiteStartCh.publish({
-          testFileAbsolutePath
+          testFileAbsolutePath,
         })
       }
     }
@@ -855,7 +868,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       if (finished.length === pickleByFile[testFileAbsolutePath].length) {
         testSuiteFinishCh.publish({
           status: getSuiteStatusFromTestStatuses(finished),
-          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd())
+          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd()),
         })
       }
     }
@@ -868,14 +881,14 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
 addHook({
   name: '@cucumber/cucumber',
   versions: ['7.0.0 - 7.2.1'],
-  file: 'lib/runtime/pickle_runner.js'
+  file: 'lib/runtime/pickle_runner.js',
 }, pickleHook)
 
 // Test start / finish for newer versions. The only hook executed in workers when in parallel mode
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0'],
-  file: 'lib/runtime/test_case_runner.js'
+  file: 'lib/runtime/test_case_runner.js',
 }, testCaseHook)
 
 // From 7.3.0 onwards, runPickle becomes runTestCase. Not executed in parallel mode.
@@ -886,7 +899,7 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.3.0 <11.0.0'],
-  file: 'lib/runtime/index.js'
+  file: 'lib/runtime/index.js',
 }, (runtimePackage, frameworkVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'runTestCase', runTestCase => getWrappedRunTestCase(runTestCase))
 
@@ -901,7 +914,7 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=7.0.0 <7.3.0'],
-  file: 'lib/runtime/index.js'
+  file: 'lib/runtime/index.js',
 }, (runtimePackage, frameworkVersion) => {
   shimmer.wrap(runtimePackage.default.prototype, 'runPickle', runPickle => getWrappedRunTestCase(runPickle))
   shimmer.wrap(runtimePackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion))
@@ -915,7 +928,7 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=8.0.0 <11.0.0'],
-  file: 'lib/runtime/parallel/coordinator.js'
+  file: 'lib/runtime/parallel/coordinator.js',
 }, (coordinatorPackage, frameworkVersion) => {
   shimmer.wrap(coordinatorPackage.default.prototype, 'start', start => getWrappedStart(start, frameworkVersion, true))
   shimmer.wrap(
@@ -933,7 +946,7 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
-  file: 'lib/runtime/worker.js'
+  file: 'lib/runtime/worker.js',
 }, (workerPackage) => {
   shimmer.wrap(
     workerPackage.Worker.prototype,
@@ -947,7 +960,7 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
-  file: 'lib/runtime/coordinator.js'
+  file: 'lib/runtime/coordinator.js',
 }, (coordinatorPackage, frameworkVersion) => {
   shimmer.wrap(
     coordinatorPackage.Coordinator.prototype,
@@ -961,7 +974,7 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
-  file: 'lib/formatter/helpers/event_data_collector.js'
+  file: 'lib/formatter/helpers/event_data_collector.js',
 }, (eventDataCollectorPackage) => {
   shimmer.wrap(eventDataCollectorPackage.default.prototype, 'parseEnvelope', parseEnvelope => function () {
     eventDataCollector = this
@@ -976,7 +989,7 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
-  file: 'lib/runtime/parallel/adapter.js'
+  file: 'lib/runtime/parallel/adapter.js',
 }, (adapterPackage) => {
   shimmer.wrap(
     adapterPackage.ChildProcessAdapter.prototype,
@@ -1014,7 +1027,7 @@ addHook({
 addHook({
   name: '@cucumber/cucumber',
   versions: ['>=11.0.0'],
-  file: 'lib/runtime/parallel/worker.js'
+  file: 'lib/runtime/parallel/worker.js',
 }, (workerPackage) => {
   shimmer.wrap(
     workerPackage.ChildProcessWorker.prototype,

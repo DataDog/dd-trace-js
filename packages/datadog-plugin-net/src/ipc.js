@@ -12,8 +12,8 @@ class NetIPCPlugin extends ClientPlugin {
       resource: ctx.options.path,
       kind: 'client',
       meta: {
-        'ipc.path': ctx.options.path
-      }
+        'ipc.path': ctx.options.path,
+      },
     }, ctx)
 
     return ctx.currentStore

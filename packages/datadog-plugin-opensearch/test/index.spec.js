@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -10,7 +9,6 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 describe('Plugin', () => {
   let opensearch
   let tracer
@@ -38,7 +36,7 @@ describe('Plugin', () => {
           opensearch = metaModule.get()
 
           client = new opensearch.Client({
-            node: 'http://127.0.0.1:9201'
+            node: 'http://127.0.0.1:9201',
           })
         })
 
@@ -49,14 +47,14 @@ describe('Plugin', () => {
         it('should sanitize the resource name', done => {
           agent
             .assertFirstTraceSpan({
-              resource: 'POST /logstash-?.?.?/_search'
+              resource: 'POST /logstash-?.?.?/_search',
             })
             .then(done)
             .catch(done)
 
           client.search({
             index: 'logstash-2000.01.01',
-            body: {}
+            body: {},
           })
         })
 
@@ -72,8 +70,8 @@ describe('Plugin', () => {
                 'opensearch.url': '/docs/_search',
                 'opensearch.body': '{"query":{"match_all":{}}}',
                 component: 'opensearch',
-                'out.host': '127.0.0.1'
-              }
+                'out.host': '127.0.0.1',
+              },
             })
             .then(done)
             .catch(done)
@@ -84,9 +82,9 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           })
         })
 
@@ -99,8 +97,9 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
               assert.strictEqual(traces[0][0].meta['opensearch.method'], 'POST')
               assert.strictEqual(traces[0][0].meta['opensearch.url'], '/_msearch')
-              expect(traces[0][0].meta).to.have.property(
-                'opensearch.body',
+              assert.ok('opensearch.body' in traces[0][0].meta)
+              assert.strictEqual(
+                traces[0][0].meta['opensearch.body'],
                 '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
               )
               assert.strictEqual(traces[0][0].meta['opensearch.params'], '{"size":100}')
@@ -116,23 +115,23 @@ describe('Plugin', () => {
               { index: 'docs' },
               {
                 query: {
-                  match_all: {}
-                }
+                  match_all: {},
+                },
               },
               { index: 'docs2' },
               {
                 query: {
-                  match_all: {}
-                }
-              }
-            ]
+                  match_all: {},
+                },
+              },
+            ],
           })
         })
 
         it('should skip tags for unavailable fields', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'opensearch.body'))
+              assert.ok(!('opensearch.body' in traces[0][0].meta))
             })
             .then(done)
             .catch(done)
@@ -192,13 +191,13 @@ describe('Plugin', () => {
         })
 
         it('should support aborting the query', () => {
-          expect(() => {
+          assert.doesNotThrow(() => {
             const promise = client.ping()
 
             if (promise.abort) {
               promise.abort()
             }
-          }).not.to.throw()
+          })
         })
 
         it('should work with userland promises', done => {
@@ -234,8 +233,8 @@ describe('Plugin', () => {
             hooks: {
               query: (span, params) => {
                 span.addTags({ 'opensearch.params': 'foo', 'opensearch.method': params.method })
-              }
-            }
+              },
+            },
           })
         })
 
@@ -246,7 +245,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           opensearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new opensearch.Client({
-            node: 'http://127.0.0.1:9201'
+            node: 'http://127.0.0.1:9201',
           })
         })
 
@@ -259,9 +258,9 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           }).catch(() => {
             // Ignore index_not_found_exception for peer service assertion
           }),
@@ -276,9 +275,9 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           })
 
           agent
@@ -288,8 +287,8 @@ describe('Plugin', () => {
               meta: {
                 'opensearch.params': 'foo',
                 'opensearch.method': 'POST',
-                component: 'opensearch'
-              }
+                component: 'opensearch',
+              },
             })
             .then(done)
             .catch(done)
@@ -304,12 +303,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'opensearch.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'opensearch.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })

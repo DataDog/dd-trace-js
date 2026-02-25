@@ -1,0 +1,106 @@
+[
+  {
+    "module": {
+      "name": "bullmq",
+      "versionRange": ">=5.66.0",
+      "filePath": "dist/cjs/classes/queue.js"
+    },
+    "functionQuery": {
+      "methodName": "add",
+      "className": "Queue",
+      "kind": "Async"
+    },
+    "channelName": "Queue_add"
+  },
+  {
+    "module": {
+      "name": "bullmq",
+      "versionRange": ">=5.66.0",
+      "filePath": "dist/cjs/classes/queue.js"
+    },
+    "functionQuery": {
+      "methodName": "addBulk",
+      "className": "Queue",
+      "kind": "Async"
+    },
+    "channelName": "Queue_addBulk"
+  },
+  {
+    "module": {
+      "name": "bullmq",
+      "versionRange": ">=5.66.0",
+      "filePath": "dist/cjs/classes/worker.js"
+    },
+    "functionQuery": {
+      "methodName": "callProcessJob",
+      "className": "Worker",
+      "kind": "Async"
+    },
+    "channelName": "Worker_callProcessJob"
+  },
+  {
+    "module": {
+      "name": "bullmq",
+      "versionRange": ">=5.66.0",
+      "filePath": "dist/cjs/classes/flow-producer.js"
+    },
+    "functionQuery": {
+      "methodName": "add",
+      "className": "FlowProducer",
+      "kind": "Async"
+    },
+    "channelName": "FlowProducer_add"
+  },
+  {
+    "module": {
+      "name": "bullmq",
+      "versionRange": ">=5.66.0",
+      "filePath": "dist/esm/classes/queue.js"
+    },
+    "functionQuery": {
+      "methodName": "add",
+      "className": "Queue",
+      "kind": "Async"
+    },
+    "channelName": "Queue_add"
+  },
+  {
+    "module": {
+      "name": "bullmq",
+      "versionRange": ">=5.66.0",
+      "filePath": "dist/esm/classes/queue.js"
+    },
+    "functionQuery": {
+      "methodName": "addBulk",
+      "className": "Queue",
+      "kind": "Async"
+    },
+    "channelName": "Queue_addBulk"
+  },
+  {
+    "module": {
+      "name": "bullmq",
+      "versionRange": ">=5.66.0",
+      "filePath": "dist/esm/classes/worker.js"
+    },
+    "functionQuery": {
+      "methodName": "callProcessJob",
+      "className": "Worker",
+      "kind": "Async"
+    },
+    "channelName": "Worker_callProcessJob"
+  },
+  {
+    "module": {
+      "name": "bullmq",
+      "versionRange": ">=5.66.0",
+      "filePath": "dist/esm/classes/flow-producer.js"
+    },
+    "functionQuery": {
+      "methodName": "add",
+      "className": "FlowProducer",
+      "kind": "Async"
+    },
+    "channelName": "FlowProducer_add"
+  }
+]

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const axios = require('axios')
-const { expect } = require('chai')
+
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -22,22 +22,22 @@ describe('set_user', () => {
 
     beforeEach(() => {
       rootSpan = {
-        setTag: sinon.stub()
+        setTag: sinon.stub(),
       }
       getRootSpan = sinon.stub().returns(rootSpan)
 
       log = {
-        warn: sinon.stub()
+        warn: sinon.stub(),
       }
 
       waf = {
-        run: sinon.stub()
+        run: sinon.stub(),
       }
 
       const setUserModule = proxyquire('../../../src/appsec/sdk/set_user', {
         './utils': { getRootSpan },
         '../../log': log,
-        '../waf': waf
+        '../waf': waf,
       })
 
       setUser = setUserModule.setUser
@@ -63,7 +63,7 @@ describe('set_user', () => {
         getRootSpan.returns(undefined)
 
         setUser(tracer, { id: 'user' })
-        expect(getRootSpan).to.be.calledOnceWithExactly(tracer)
+        sinon.assert.calledOnceWithExactly(getRootSpan, tracer)
         sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Root span not available in setUser')
         sinon.assert.notCalled(rootSpan.setTag)
         sinon.assert.notCalled(waf.run)
@@ -74,22 +74,22 @@ describe('set_user', () => {
           id: '123',
           email: 'a@b.c',
           custom: 'hello',
-          session_id: '133769'
+          session_id: '133769',
         }
 
         setUser(tracer, user)
         sinon.assert.notCalled(log.warn)
         assert.strictEqual(rootSpan.setTag.callCount, 5)
-        expect(rootSpan.setTag.getCall(0)).to.have.been.calledWithExactly('usr.id', '123')
-        expect(rootSpan.setTag.getCall(1)).to.have.been.calledWithExactly('usr.email', 'a@b.c')
-        expect(rootSpan.setTag.getCall(2)).to.have.been.calledWithExactly('usr.custom', 'hello')
-        expect(rootSpan.setTag.getCall(3)).to.have.been.calledWithExactly('usr.session_id', '133769')
-        expect(rootSpan.setTag.getCall(4)).to.have.been.calledWithExactly('_dd.appsec.user.collection_mode', 'sdk')
+        assert.strictEqual(rootSpan.setTag.getCall(0).calledWithExactly('usr.id', '123'), true)
+        assert.strictEqual(rootSpan.setTag.getCall(1).calledWithExactly('usr.email', 'a@b.c'), true)
+        assert.strictEqual(rootSpan.setTag.getCall(2).calledWithExactly('usr.custom', 'hello'), true)
+        assert.strictEqual(rootSpan.setTag.getCall(3).calledWithExactly('usr.session_id', '133769'), true)
+        assert.strictEqual(rootSpan.setTag.getCall(4).calledWithExactly('_dd.appsec.user.collection_mode', 'sdk'), true)
         sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             'usr.id': '123',
-            'usr.session_id': '133769'
-          }
+            'usr.session_id': '133769',
+          },
         })
       })
     })
@@ -99,8 +99,8 @@ describe('set_user', () => {
     const config = getConfigFresh({
       appsec: {
         enabled: true,
-        rules: path.join(__dirname, './user_blocking_rules.json')
-      }
+        rules: path.join(__dirname, './user_blocking_rules.json'),
+      },
     })
 
     let http
@@ -144,7 +144,7 @@ describe('set_user', () => {
             id: 'blockedUser',
             email: 'a@b.c',
             custom: 'hello',
-            session_id: '133769'
+            session_id: '133769',
           })
           res.end()
         }
@@ -155,7 +155,7 @@ describe('set_user', () => {
           assert.strictEqual(traces[0][0].meta['usr.session_id'], '133769')
           assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
           assert.strictEqual(traces[0][0].meta['appsec.event'], 'true')
-          assert.ok(!Object.hasOwn(traces[0][0].meta, 'appsec.blocked'))
+          assert.ok(!('appsec.blocked' in traces[0][0].meta))
           assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)
@@ -171,7 +171,7 @@ describe('set_user', () => {
           assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
           assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
           assert.strictEqual(traces[0][0].meta['appsec.event'], 'true')
-          assert.ok(!Object.hasOwn(traces[0][0].meta, 'appsec.blocked'))
+          assert.ok(!('appsec.blocked' in traces[0][0].meta))
           assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         }).then(done).catch(done)
         axios.get(`http://localhost:${port}/`)

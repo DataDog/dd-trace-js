@@ -1,13 +1,16 @@
 'use strict'
 
 const path = require('path')
+const fs = require('fs')
 const Module = require('module')
-const parse = require('module-details-from-path')
+
 const dc = require('dc-polyfill')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+
+const parse = require('../../../vendor/dist/module-details-from-path')
+const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
 const origRequire = Module.prototype.require
-
 // derived from require-in-the-middle@3 with tweaks
 
 module.exports = Hook
@@ -19,19 +22,19 @@ let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
-function stripNodePrefix (name) {
+function stripNodePrefix(name) {
   if (typeof name !== 'string') return name
   return name.startsWith('node:') ? name.slice(5) : name
 }
 
 const builtinModules = new Set(Module.builtinModules.map(stripNodePrefix))
 
-function isBuiltinModuleName (name) {
+function isBuiltinModuleName(name) {
   if (typeof name !== 'string') return false
   return builtinModules.has(stripNodePrefix(name))
 }
 
-function normalizeModuleName (name) {
+function normalizeModuleName(name) {
   if (typeof name !== 'string') return name
   const stripped = stripNodePrefix(name)
   return builtinModules.has(stripped) ? stripped : name
@@ -48,7 +51,7 @@ function normalizeModuleName (name) {
  * @param {string[]} modules list of modules to hook into
  * @param {Function} onrequire callback to be executed upon encountering module
  */
-function Hook (modules, options, onrequire) {
+function Hook(modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
   if (typeof options === 'function') {
     onrequire = options
@@ -116,7 +119,7 @@ function Hook (modules, options, onrequire) {
 
     const payload = {
       filename,
-      request
+      request,
     }
 
     if (moduleLoadStartChannel.hasSubscribers) {
@@ -139,40 +142,50 @@ function Hook (modules, options, onrequire) {
       name = moduleId
     } else {
       const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-      const hasLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER') !== undefined
+      const hasLambdaHandler = getValueFromEnvSources('DD_LAMBDA_HANDLER') !== undefined
       const segments = filename.split(path.sep)
       const filenameFromNodeModule = segments.includes('node_modules')
       // decide how to assign the stat
       // first case will only happen when patching an AWS Lambda Handler
       const stat = inAWSLambda && hasLambdaHandler && !filenameFromNodeModule ? { name: filename } : parse(filename)
-      if (!stat) return exports // abort if filename could not be parsed
-      name = stat.name
-      basedir = stat.basedir
 
-      hooks = moduleHooks[name]
-      if (!hooks) return exports // abort if module name isn't on whitelist
+      if (stat) {
+        name = stat.name
+        basedir = stat.basedir
 
-      // figure out if this is the main module file, or a file inside the module
-      // @ts-expect-error - Module._resolveLookupPaths is meant to be internal and is not typed
-      const paths = Module._resolveLookupPaths(name, this, true)
-      if (!paths) {
-        // abort if _resolveLookupPaths return null
-        return exports
-      }
+        hooks = moduleHooks[name]
+        if (!hooks) return exports // abort if module name isn't on whitelist
 
-      let res
-      try {
-        // @ts-expect-error - Module._findPath is meant to be internal and is not typed
-        res = Module._findPath(name, [basedir, ...paths])
-      } catch {
-        // case where the file specified in package.json "main" doesn't exist
-        // in this case, the file is treated as module-internal
-      }
+        // figure out if this is the main module file, or a file inside the module
+        // @ts-expect-error - Module._resolveLookupPaths is meant to be internal and is not typed
+        const paths = Module._resolveLookupPaths(name, this, true)
+        if (!paths) {
+          // abort if _resolveLookupPaths return null
+          return exports
+        }
 
-      if (!res || res !== filename) {
-        // this is a module-internal file
-        // use the module-relative path to the file, prefixed by original module name
-        name = name + path.sep + path.relative(basedir, filename)
+        let res
+        try {
+          // @ts-expect-error - Module._findPath is meant to be internal and is not typed
+          res = Module._findPath(name, [basedir, ...paths])
+        } catch {
+          // case where the file specified in package.json "main" doesn't exist
+          // in this case, the file is treated as module-internal
+        }
+
+        if (!res || res !== filename) {
+          // this is a module-internal file
+          // use the module-relative path to the file, prefixed by original module name
+          name = name + path.sep + path.relative(basedir, filename)
+        }
+      } else {
+        if (isRelativeRequire(request) && moduleHooks[request]) {
+          hooks = moduleHooks[request]
+          name = request
+          basedir = findProjectRoot(filename)
+        }
+
+        if (!hooks) return exports
       }
     }
 
@@ -199,4 +212,32 @@ Hook.reset = function () {
   patching = Object.create(null)
   cache = Object.create(null)
   moduleHooks = Object.create(null)
+}
+
+function findProjectRoot(startDir) {
+  let dir = startDir
+
+  while (!fs.existsSync(path.join(dir, 'package.json'))) {
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+
+  return dir
+}
+
+Hook.prototype.unhook = function () {
+  for (const mod of this.modules) {
+    const hooks = (moduleHooks[mod] || []).filter(hook => hook !== this.onrequire)
+
+    if (hooks.length > 0) {
+      moduleHooks[mod] = hooks
+    } else {
+      delete moduleHooks[mod]
+    }
+  }
+
+  if (Object.keys(moduleHooks).length === 0) {
+    Hook.reset()
+  }
 }

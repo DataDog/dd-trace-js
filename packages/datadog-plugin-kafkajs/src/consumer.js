@@ -46,7 +46,7 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       topic,
       type: 'kafka_commit',
       offset: Number(offset),
-      consumer_group: groupId
+      consumer_group: groupId,
     }
   }
 
@@ -57,12 +57,28 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
       'type',
       'partition',
       'offset',
-      'topic'
+      'topic',
     ]
     for (const commit of commitList.map(this.transformCommit)) {
       if (keys.some(key => !commit.hasOwnProperty(key))) continue
       this.tracer.setOffset(commit)
     }
+  }
+
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { topic, message, groupId, clusterId } = ctx.extractedArgs || ctx
+    const headers = convertToTextMap(message?.headers)
+    if (!headers) return
+
+    const { span } = ctx.currentStore
+    const payloadSize = getMessageSize(message)
+    this.tracer.decodeDataStreamsContext(headers)
+    const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
+    if (clusterId) {
+      edgeTags.push(`kafka_cluster_id:${clusterId}`)
+    }
+    this.tracer.setCheckpoint(edgeTags, span, payloadSize)
   }
 
   bindStart (ctx) {
@@ -81,23 +97,13 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
         component: this.constructor.id,
         'kafka.topic': topic,
         'kafka.cluster_id': clusterId,
-        [MESSAGING_DESTINATION_KEY]: topic
+        [MESSAGING_DESTINATION_KEY]: topic,
       },
       metrics: {
-        'kafka.partition': partition
-      }
+        'kafka.partition': partition,
+      },
     }, ctx)
     if (message?.offset) span.setTag('kafka.message.offset', message?.offset)
-
-    if (this.config.dsmEnabled && headers) {
-      const payloadSize = getMessageSize(message)
-      this.tracer.decodeDataStreamsContext(headers)
-      const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']
-      if (clusterId) {
-        edgeTags.push(`kafka_cluster_id:${clusterId}`)
-      }
-      this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-    }
 
     if (afterStartCh.hasSubscribers) {
       afterStartCh.publish({ topic, partition, message, groupId, currentStore: ctx.currentStore })

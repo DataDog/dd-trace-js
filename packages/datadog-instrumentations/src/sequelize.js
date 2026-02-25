@@ -1,11 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-
-const shimmer = require('../../datadog-shimmer')
 
 addHook({ name: 'sequelize', versions: ['>=4'], file: 'lib/sequelize.js' }, Sequelize => {
   const startCh = channel('datadog:sequelize:query:start')
@@ -24,13 +23,13 @@ addHook({ name: 'sequelize', versions: ['>=4'], file: 'lib/sequelize.js' }, Sequ
         dialect = this.dialect.name
       }
 
-      function onFinish (result) {
+      function onFinish(result) {
         const type = options?.type || 'RAW'
         if (type === 'RAW' && result?.length > 1) {
           result = result[0]
         }
 
-        finishCh.runStores({ result }, () => {})
+        finishCh.runStores({ result }, () => { })
       }
 
       return startCh.runStores({ sql, dialect }, () => {

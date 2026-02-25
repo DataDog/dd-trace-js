@@ -1,16 +1,17 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const axios = require('axios')
+const semver = require('semver')
 const {
   FakeAgent,
   sandboxCwd,
   useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const axios = require('axios')
-const semver = require('semver')
 
 describe('Plugin (ESM)', () => {
   describe('graphql (ESM)', () => {
@@ -32,8 +33,8 @@ describe('Plugin (ESM)', () => {
 
       it('should instrument GraphQL execution with ESM', async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
         })
 
@@ -41,7 +42,6 @@ describe('Plugin (ESM)', () => {
           sandboxCwd(),
           'esm-graphql-server.mjs',
           agent.port,
-          undefined,
           { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
         )
 
@@ -54,7 +54,7 @@ describe('Plugin (ESM)', () => {
 
         try {
           await axios.post(`${proc.url}/graphql`, {
-            query
+            query,
           })
         } catch (error) {
           // Server might not respond correctly, but we care about tracing
@@ -71,8 +71,8 @@ describe('Plugin (ESM)', () => {
       if (coercedVersion && semver.gte(coercedVersion, '15.0.0')) {
         it('should instrument GraphQL Yoga execution with ESM', async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
-            assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-            assert.isArray(payload)
+            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+            assert.ok(Array.isArray(payload))
             assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
           })
 
@@ -80,7 +80,6 @@ describe('Plugin (ESM)', () => {
             sandboxCwd(),
             'esm-graphql-yoga-server.mjs',
             agent.port,
-            undefined,
             { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
           )
 
@@ -93,7 +92,7 @@ describe('Plugin (ESM)', () => {
 
           try {
             await axios.post(`${proc.url}/graphql`, {
-              query
+              query,
             })
           } catch (error) {
             // Server might not respond correctly, but we care about tracing

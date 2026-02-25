@@ -1,10 +1,9 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../setup/core')
-
 const Scheduler = require('../../src/remote_config/scheduler')
 
 const INTERVAL = 5e3
@@ -16,7 +15,7 @@ describe('Scheduler', () => {
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
     stub = sinon.stub()
     scheduler = new Scheduler(stub, INTERVAL)

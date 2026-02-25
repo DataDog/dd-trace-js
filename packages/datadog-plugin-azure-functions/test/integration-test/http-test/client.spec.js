@@ -1,24 +1,22 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const { spawn } = require('child_process')
 const {
   FakeAgent,
   hookFile,
   sandboxCwd,
   useSandbox,
-  curlAndAssertMessage
+  curlAndAssertMessage,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { spawn } = require('child_process')
-const { assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../../version')
 
 describe('esm', () => {
   let agent
   let proc
 
-  // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
-  // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
-  withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
+  withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
@@ -42,23 +40,30 @@ describe('esm', () => {
     // to figure out a way of automating this.
     it('is instrumented', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
+        assert.ok(Array.isArray(payload[0]))
         assert.strictEqual(payload[0].length, 1)
-        assert.propertyVal(payload[0][0], 'name', 'azure.functions.invoke')
+
+        const span = payload[0][0]
+
+        assert.strictEqual(span.name, 'azure.functions.invoke')
+        assert.strictEqual(span.meta['_dd.integration'], 'azure-functions')
+        assert.strictEqual(span.meta.component, 'azure-functions')
+        assert.strictEqual(span.meta['http.route'], '/api/httptest')
+        assert.strictEqual(span.resource, 'GET /api/httptest')
       })
     }).timeout(60_000)
 
     it('propagates context to child http requests', async () => {
       const envArgs = {
-        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
@@ -78,7 +83,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {
     cwd,
-    env
+    env,
   }, stdioHandler)
 }
 

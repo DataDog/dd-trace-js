@@ -2,23 +2,18 @@
 
 const { builtinModules } = require('module')
 const path = require('path')
-
-const { channel } = require('dc-polyfill')
-const satisfies = require('semifies')
-
-const Hook = require('./hook')
+const satisfies = require('../../../../vendor/dist/semifies')
 const log = require('../../../dd-trace/src/log')
-const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
-const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
-const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
+const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
+const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
+const checkRequireCache = require('./check-require-cache')
+const Hook = require('./hook')
+const { isRelativeRequire } = require('./shared-utils')
+const rewriter = require('./rewriter')
 
-const envs = getEnvironmentVariables()
-
-const {
-  DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
-  DD_TRACE_DEBUG = ''
-} = envs
+const DD_TRACE_DISABLED_INSTRUMENTATIONS = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS') || ''
+const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG') || ''
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -44,6 +39,10 @@ if (!disabledInstrumentations.has('process')) {
 if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
   checkRequireCache.checkForRequiredModules()
   setImmediate(checkRequireCache.checkForPotentialConflicts)
+}
+
+for (const inst of disabledInstrumentations) {
+  rewriter.disable(inst)
 }
 
 /** @type {Map<string, object>} */
@@ -82,7 +81,7 @@ for (const name of names) {
   let hook = hooks[name]
 
   if (hook !== null && typeof hook === 'object') {
-    if (hook.serverless === false && isInServerlessEnvironment()) continue
+    if (hook.serverless === false && IS_SERVERLESS) continue
 
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
@@ -129,6 +128,8 @@ for (const name of names) {
       const fullFilename = filename(name, file)
 
       let matchesFile = moduleName === fullFilename
+
+      if (!matchesFile && isRelativeRequire(name)) matchesFile = true
 
       const fullFilePattern = filePattern && filename(name, filePattern)
       if (fullFilePattern) {
@@ -214,5 +215,5 @@ module.exports = {
   filename,
   pathSepExpr,
   loadChannel,
-  matchVersion
+  matchVersion,
 }

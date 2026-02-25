@@ -1,8 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('IAST - code_injection - integration', () => {
@@ -42,27 +43,27 @@ describe('IAST - code_injection - integration', () => {
             metric === 'instrumented.sink' &&
             tags[0] === 'vulnerability_type:code_injection'
         })
-        assert.isNotNull(instrumentedSink)
+        assert.notStrictEqual(instrumentedSink, null)
       }
     }, 'generate-metrics', 30_000, 2)
 
     const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
       assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-      assert.property(payload[0][0].meta, '_dd.iast.json')
+      assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
       const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
-      assert.isNotNull(vulnerabilitiesTrace)
+      assert.notStrictEqual(vulnerabilitiesTrace, null)
       const vulnerabilities = new Set()
 
       vulnerabilitiesTrace.vulnerabilities.forEach(v => {
         vulnerabilities.add(v.type)
       })
 
-      assert.isTrue(vulnerabilities.has('CODE_INJECTION'))
+      assert.strictEqual(vulnerabilities.has('CODE_INJECTION'), true)
     })
 
     await Promise.all([checkMessages, checkTelemetry])
 
-    assert.equal(iastTelemetryReceived, true)
+    assert.strictEqual(iastTelemetryReceived, true)
   }
 
   describe('SourceTextModule', () => {
@@ -73,9 +74,9 @@ describe('IAST - code_injection - integration', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
         },
-        execArgv: ['--experimental-vm-modules']
+        execArgv: ['--experimental-vm-modules'],
       })
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -93,8 +94,8 @@ describe('IAST - code_injection - integration', () => {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
-        }
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })

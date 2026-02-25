@@ -10,7 +10,7 @@ const {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  getRunTestsWrapper
+  getRunTestsWrapper,
 } = require('./utils')
 require('./common')
 
@@ -21,7 +21,7 @@ const config = {}
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/mocha.js'
+  file: 'lib/mocha.js',
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     if (this.options._ddIsKnownTestsEnabled) {
@@ -58,7 +58,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/runner.js'
+  file: 'lib/runner.js',
 }, function (Runner) {
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
@@ -67,7 +67,7 @@ addHook({
       return run.apply(this, arguments)
     }
     // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
-    this.on('end', () => {
+    this.once('end', () => {
       workerFinishCh.publish()
     })
     this.on('test', getOnTestHandler(false))
@@ -91,6 +91,6 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/runnable.js'
+  file: 'lib/runnable.js',
 }, runnableWrapper)
 // TODO: parallel mode does not support flaky test retries, so no library config is passed.

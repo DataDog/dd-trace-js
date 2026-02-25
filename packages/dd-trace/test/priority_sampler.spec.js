@@ -2,13 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-
 const ext = require('../../../ext')
 
 const {
@@ -19,7 +17,7 @@ const {
   SAMPLING_MECHANISM_REMOTE_USER,
   SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   DECISION_MAKER_KEY,
-  SAMPLING_MECHANISM_APPSEC
+  SAMPLING_MECHANISM_APPSEC,
 } = require('../src/constants')
 const { ASM } = require('../src/standalone/product')
 
@@ -45,24 +43,24 @@ describe('PrioritySampler', () => {
     context = {
       _tags: {
         'service.name': 'test',
-        'resource.name': 'resource'
+        'resource.name': 'resource',
       },
       _sampling: {},
       _trace: {
         started: [],
-        tags: {}
-      }
+        tags: {},
+      },
     }
 
     span = {
-      context: sinon.stub().returns(context)
+      context: sinon.stub().returns(context),
     }
 
     context._trace.started.push(span)
 
     sampler = {
       isSampled: sinon.stub(),
-      rate: sinon.stub().returns(0.5)
+      rate: sinon.stub().returns(0.5),
     }
     sampler.isSampled.onFirstCall().returns(true)
     sampler.isSampled.onSecondCall().returns(false)
@@ -70,21 +68,21 @@ describe('PrioritySampler', () => {
     Sampler = sinon.stub()
     Sampler.withArgs(0).returns({
       isSampled: sinon.stub().returns(false),
-      rate: sinon.stub().returns(0)
+      rate: sinon.stub().returns(0),
     })
     Sampler.withArgs(1).returns({
       isSampled: sinon.stub().returns(true),
-      rate: sinon.stub().returns(1)
+      rate: sinon.stub().returns(1),
     })
     Sampler.withArgs(0.5).returns(sampler)
 
     SamplingRule = proxyquire('../src/sampling_rule', {
-      './sampler': Sampler
+      './sampler': Sampler,
     })
 
     PrioritySampler = proxyquire('../src/priority_sampler', {
       './sampler': Sampler,
-      './sampling_rule': SamplingRule
+      './sampling_rule': SamplingRule,
     })
 
     prioritySampler = new PrioritySampler('test')
@@ -204,8 +202,8 @@ describe('PrioritySampler', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
           { sampleRate: 0, service: 'foo', resource: /res.*/ },
-          { sampleRate: 1, service: 'test', resource: /res.*/ }
-        ]
+          { sampleRate: 1, service: 'test', resource: /res.*/ },
+        ],
       })
       prioritySampler.sample(context)
 
@@ -216,8 +214,8 @@ describe('PrioritySampler', () => {
     it('should support a customer-defined remote configuration sampling', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
-          { sampleRate: 1, service: 'test', resource: /res.*/, provenance: 'customer' }
-        ]
+          { sampleRate: 1, service: 'test', resource: /res.*/, provenance: 'customer' },
+        ],
       })
       prioritySampler.sample(context)
 
@@ -228,8 +226,8 @@ describe('PrioritySampler', () => {
     it('should support a dynamic remote configuration sampling', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: [
-          { sampleRate: 0, service: 'test', resource: /res.*/, provenance: 'dynamic' }
-        ]
+          { sampleRate: 0, service: 'test', resource: /res.*/, provenance: 'dynamic' },
+        ],
       })
       prioritySampler.sample(context)
 
@@ -244,20 +242,22 @@ describe('PrioritySampler', () => {
       prioritySampler = new PrioritySampler('test', {
         rules: {
           name: 'test',
-          sampleRate: 0
-        }
+          sampleRate: 0,
+        },
       })
 
-      expect(prioritySampler.sample(context)).to.not.throw
+      // Should not throw
+      prioritySampler.sample(context)
       assert.strictEqual(context._sampling.priority, USER_REJECT)
     })
 
     it('should validate and ignore non-JSON sampling rules', () => {
       prioritySampler = new PrioritySampler('test', {
-        rules: 5
+        rules: 5,
       })
 
-      expect(prioritySampler.sample(context)).to.not.throw
+      // Should not throw
+      prioritySampler.sample(context)
       assert.strictEqual(context._sampling.priority, AUTO_KEEP)
     })
 
@@ -274,8 +274,8 @@ describe('PrioritySampler', () => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,
         rules: [
-          { sampleRate: 0, name: 'bar' }
-        ]
+          { sampleRate: 0, name: 'bar' },
+        ],
       })
       prioritySampler.sample(context)
 
@@ -286,7 +286,7 @@ describe('PrioritySampler', () => {
     it('should support a rate limit', () => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,
-        rateLimit: 1
+        rateLimit: 1,
       })
       prioritySampler.sample(context)
 
@@ -308,8 +308,8 @@ describe('PrioritySampler', () => {
         rules: [{
           service: 'test',
           sampleRate: 1,
-          rateLimit: 1000
-        }]
+          rateLimit: 1000,
+        }],
       })
       prioritySampler.sample(context)
 
@@ -327,7 +327,7 @@ describe('PrioritySampler', () => {
     it('should support disabling the rate limit', () => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 1,
-        rateLimit: -1
+        rateLimit: -1,
       })
       prioritySampler.sample(context)
 
@@ -350,18 +350,18 @@ describe('PrioritySampler', () => {
 
     it('should add metrics for rule sample rate', () => {
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0
+        sampleRate: 0,
       })
       prioritySampler.sample(span)
 
       assert.strictEqual(context._trace['_dd.rule_psr'], 0)
-      assert.ok(!Object.hasOwn(context._trace, '_dd.limit_psr'))
+      assert.ok(!('_dd.limit_psr' in context._trace))
     })
 
     it('should add metrics for rate limiter sample rate', () => {
       prioritySampler = new PrioritySampler('test', {
         sampleRate: 0.5,
-        rateLimit: 1
+        rateLimit: 1,
       })
       prioritySampler.sample(span)
 
@@ -424,12 +424,12 @@ describe('PrioritySampler', () => {
       rootContext = {
         ...context,
         _tags: {
-          ...context._tags
-        }
+          ...context._tags,
+        },
       }
 
       rootSpan = {
-        context: sinon.stub().returns(rootContext)
+        context: sinon.stub().returns(rootContext),
       }
 
       rootContext._trace.started.unshift(rootSpan)
@@ -437,7 +437,7 @@ describe('PrioritySampler', () => {
 
     it('should update the default rate', () => {
       prioritySampler.update({
-        'service:,env:': AUTO_REJECT
+        'service:,env:': AUTO_REJECT,
       })
 
       prioritySampler.sample(span)
@@ -451,7 +451,7 @@ describe('PrioritySampler', () => {
       context._tags[SERVICE_NAME] = 'bar'
 
       prioritySampler.update({
-        'service:foo,env:test': AUTO_REJECT
+        'service:foo,env:test': AUTO_REJECT,
       })
 
       prioritySampler.sample(span)
@@ -511,9 +511,9 @@ describe('PrioritySampler', () => {
 
       prioritySampler.setPriority(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
 
-      expect(context._sampling.priority).to.undefined
-      expect(context._sampling.mechanism).to.undefined
-      expect(context._trace.tags[DECISION_MAKER_KEY]).to.undefined
+      assert.strictEqual(context._sampling.priority, undefined)
+      assert.strictEqual(context._sampling.mechanism, undefined)
+      assert.strictEqual(context._trace.tags[DECISION_MAKER_KEY], undefined)
     })
   })
 
@@ -531,7 +531,7 @@ describe('PrioritySampler', () => {
 
       PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
 
-      expect(setPriority).to.be.calledOnceWithExactly(span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
+      sinon.assert.calledOnceWithExactly(setPriority, span, USER_KEEP, SAMPLING_MECHANISM_APPSEC)
     })
   })
 })

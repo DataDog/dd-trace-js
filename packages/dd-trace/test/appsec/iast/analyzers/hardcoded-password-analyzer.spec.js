@@ -1,17 +1,17 @@
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-
-const path = require('node:path')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
+const path = require('node:path')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('../../../plugins/agent')
 const { getConfigFresh } = require('../../../helpers/config')
-
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 const hardcodedPasswordAnalyzer = require('../../../../src/appsec/iast/analyzers/hardcoded-password-analyzer')
 const iast = require('../../../../src/appsec/iast')
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
@@ -27,7 +27,7 @@ const samples = [
   { ident: 'pass', value: 'm-ou4zr=vri2yl-0_ardsza7qbenvy3_2b1h8rsq2_n-.utj9nd3xyvqpg4xl37-nl0nkjwam1avbe9zl' },
   { ident: 'pwd', value: 'e8l=47jevvmz5=trchu6.uu3lwn0fb79bpt=fogw36r1srzb1o1w4f-nhihcni=kncnj9ubs0.2w2tey-b=u9f4-s5l_648p67hf4f2bccv6c4lr3mfcj8a77qv38dlzuhpyb=u' },
   { ident: 'pswd', value: '9rh_n.oooxynt-6._a7ho.2=v-gziqf3wz2vudn916jej_6xaq_1vczboi5rmt5_iuvxxf8oq.ghisjxum' },
-  { ident: 'passwd', value: 'vtecj=v6b7-qc1m-s6c=zidew-hw-=c-=4d83icy28-guc3g-vvrimsdf=jml.acy=q7sdwaxh_rl-okx1z48pihg=w4=tc4' }
+  { ident: 'passwd', value: 'vtecj=v6b7-qc1m-s6c=zidew-hw-=c-=4d83icy28-guc3g-vvrimsdf=jml.acy=q7sdwaxh_rl-okx1z48pihg=w4=tc4' },
 ]
 
 describe('Hardcoded Password Analyzer', () => {
@@ -56,9 +56,9 @@ describe('Hardcoded Password Analyzer', () => {
             locations: [{
               ident,
               line,
-              column
-            }]
-          }]
+              column,
+            }],
+          }],
         })
 
         sinon.assert.calledOnceWithExactly(report, { file: relFile, line, column, ident, data: ruleId })
@@ -66,17 +66,17 @@ describe('Hardcoded Password Analyzer', () => {
     })
 
     it('should not fail with a malformed secret', () => {
-      expect(() => hardcodedPasswordAnalyzer.analyze(undefined)).not.to.throw()
-      expect(() => hardcodedPasswordAnalyzer.analyze({ file: undefined })).not.to.throw()
-      expect(() => hardcodedPasswordAnalyzer.analyze({ file, literals: undefined })).not.to.throw()
-      expect(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: undefined }] })).not.to.throw()
-      expect(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: 'test' }] })).not.to.throw()
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze(undefined))
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file: undefined }))
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: undefined }))
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: undefined }] }))
+      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: 'test' }] }))
     })
 
     it('should not report secrets in line 0', () => {
       hardcodedPasswordAnalyzer.analyze({
         file,
-        literals: [{ value: 'test', line: 0 }]
+        literals: [{ value: 'test', line: 0 }],
       })
 
       sinon.assert.notCalled(report)
@@ -95,13 +95,18 @@ describe('Hardcoded Password Analyzer', () => {
           locations: [{
             ident,
             line,
-            column
-          }]
-        }]
+            column,
+          }],
+        }],
       })
 
       const evidence = { value: ident }
-      expect(reportEvidence).to.be.calledOnceWithExactly({ file: relFile, line, column, ident, data: ruleId }, undefined, evidence)
+      sinon.assert.calledOnceWithExactly(
+        reportEvidence,
+        { file: relFile, line, column, ident, data: ruleId },
+        undefined,
+        evidence
+      )
     })
   })
 
@@ -129,9 +134,9 @@ describe('Hardcoded Password Analyzer', () => {
           experimental: {
             iast: {
               enabled: true,
-              requestSampling: 100
-            }
-          }
+              requestSampling: 100,
+            },
+          },
         })
         iast.enable(config, tracer)
         rewriter = require('../../../../src/appsec/iast/taint-tracking/rewriter')
@@ -151,8 +156,12 @@ describe('Hardcoded Password Analyzer', () => {
       it('should detect vulnerability', (done) => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"HARDCODED_PASSWORD"')
-            expect(traces[0][0].meta['_dd.iast.json']).to.include('"evidence":{"value":"pswd"}')
+            assertObjectContains(
+              JSON.parse(traces[0][0].meta['_dd.iast.json']),
+              {
+                vulnerabilities: [{ evidence: { value: 'pswd' }, type: 'HARDCODED_PASSWORD' }],
+              }
+            )
           })
           .then(done)
           .catch(done)

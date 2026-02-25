@@ -3,10 +3,10 @@
 const assert = require('node:assert/strict')
 const {
   FakeAgent,
-  spawnPluginIntegrationTestProc,
+  spawnPluginIntegrationTestProcAndExpectExit,
   sandboxCwd,
   useSandbox,
-  varySandbox
+  varySandbox,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -33,10 +33,12 @@ describe('esm', () => {
     })
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProc(
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],
           agent.port,
+          undefined,
+          undefined,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
             assert.ok(Object.hasOwn(jsonObject, 'dd'))

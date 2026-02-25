@@ -21,7 +21,7 @@ const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/d
 // breakpoint is never exercised during the test, and the tracer therefore never emits the `EMITTING` event.
 //
 // This is only really an issue if Node.js is using the ESM loader, as this is really slow. If the application is
-// purely a CommonJS application, this race condtion will probably never be triggered.
+// purely a CommonJS application, this race condition will probably never be triggered.
 //
 // This test tries to trigger the race condition. However, it doesn't always happen, so it runs multiple times.
 describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
@@ -45,7 +45,7 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
         rcConfig = {
           product: 'LIVE_DEBUGGING',
           id: `logProbe_${randomUUID()}`,
-          config: generateProbeConfig({ sourceFile, line: 4 })
+          config: generateProbeConfig({ sourceFile, line: 4 }),
         }
         agent = await new FakeAgent().start()
         proc = undefined
@@ -70,15 +70,15 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
           const expectedPayloads = [{
             ddsource: 'dd_debugger',
             service: 're-evaluation-test',
-            debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } }
+            debugger: { diagnostics: { probeId, probeVersion: 0, status: 'RECEIVED' } },
           }, {
             ddsource: 'dd_debugger',
             service: 're-evaluation-test',
-            debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } }
+            debugger: { diagnostics: { probeId, probeVersion: 0, status: 'INSTALLED' } },
           }, {
             ddsource: 'dd_debugger',
             service: 're-evaluation-test',
-            debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } }
+            debugger: { diagnostics: { probeId, probeVersion: 0, status: 'EMITTING' } },
           }]
 
           agent.on('debugger-diagnostics', async ({ payload }) => {
@@ -114,8 +114,8 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
               DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS: '0',
               DD_TRACE_AGENT_PORT: agent.port,
               DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
-              DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1'
-            }
+              DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
+            },
           }).then(_proc => {
             assert(_proc, 'proc must be spawned successfully')
             proc = _proc

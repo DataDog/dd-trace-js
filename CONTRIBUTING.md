@@ -28,15 +28,26 @@ Sometimes new patterns or new ideas emerge which would be a substantial improvem
 
 ## Test everything
 
-It's very difficult to know if a change is valid unless there are tests to prove it. As an extension of that, it's also difficult to know the _use_ of that code is valid if the way it is integrated is not propertly tested. For this reason we generally favour integration tests over unit tests. If an API is expected to be used in different places or in different ways then it should generally include unit tests too for each unique scenario, however great care should be taken to ensure unit tests are actually testing the _logic_ and not just testing the _mocks_. It's a very common mistake to write a unit test that abstracts away the actual use of the interface so much that it doesn't actually test how that interface works in real-world scenarios. Remember to test how it handles failures, how it operates under heavy load, and how it impacts usability of what its purpose is.
+It's very difficult to know if a change is valid unless there are tests to prove it. As an extension of that, it's also difficult to know the _use_ of that code is valid if the way it is integrated is not properly tested. For this reason we generally favour integration tests over unit tests. If an API is expected to be used in different places or in different ways then it should generally include unit tests too for each unique scenario, however great care should be taken to ensure unit tests are actually testing the _logic_ and not just testing the _mocks_. It's a very common mistake to write a unit test that abstracts away the actual use of the interface so much that it doesn't actually test how that interface works in real-world scenarios. Remember to test how it handles failures, how it operates under heavy load, and how it impacts usability of what its purpose is.
 
 ## Don't forget benchmarks
 
-Observability products tend to have quite a bit of their behaviour running in app code hot paths. It's important we extensively benchmark anything we expect to have heavy use to ensure it performs well and we don't cause any significant regressions through future changes. Measuring once at the time of writing is insufficient--a graph with just one data point is not going to tell you much of anything.
+Observability products tend to have quite a bit of their behavior running in app code hot paths. It's important we extensively benchmark anything we expect to have heavy use to ensure it performs well and we don't cause any significant regressions through future changes. Measuring once at the time of writing is insufficient--a graph with just one data point is not going to tell you much of anything.
 
 ## Always consider backportability
 
-To reduce delta between release lines and make it easier for us to support older versions we try as much as possible to backport every change we can. We should be diligent about keeping breaking changes to a minimum and ensuring we don't use language or runtime features which are too new. This way we can generally be confident that a change can be backported.
+We always backport changes from `master` to older versions to avoid release lines drifting apart and to prevent merge conflicts. We should be diligent about keeping breaking changes to a minimum and ensuring we don't use language or runtime features which are too new. This way we can generally be confident that a change can be backported.
+
+**Breaking changes must be guarded by version checks** so they can land in `master` and be safely backported to older versions. Check the major version of the dd-trace package using the `version.js` module in the root of the project:
+
+```js
+const { DD_MAJOR } = require('./version')
+if (DD_MAJOR >= 6) {
+  // New behavior for v6+
+} else {
+  // Old behavior for v5 and earlier
+}
+```
 
 To reduce the surface area of a breaking change, the breaking aspects could be placed behind a flag which is disabled by default or isolated to a function. In the next major the change would then be just to change the default of the flag or to start or stop calling the isolated function. By isolating the breaking logic it also becomes easier to delete later when it's no longer relevant on any release line.
 
@@ -48,11 +59,11 @@ This library follows the semantic versioning standard, but there are some subtle
 
 ### semver-patch
 
-If the change is a bug or security fix, it should be labelled as semver-patch. These changes should generally not alter existing behaviour in any way other than to correct the specific issue.
+If the change is a bug or security fix, it should be labelled as semver-patch. These changes should generally not alter existing behavior in any way other than to correct the specific issue.
 
 ### semver-minor
 
-Any addition of new functionality should be labelled as semver-minor and should not change any existing behaviour either in how any existing API works or in changing the contents or value of any existing data being reported except in purely additive cases where all existing data retains its prior state. Such changes may include new configuration options which when used will change behaviour, or may include the addition of new data being captured such as a new instrumentation, but should not impact the current operating design of any existing features.
+Any addition of new functionality should be labelled as semver-minor and should not change any existing behavior either in how any existing API works or in changing the contents or value of any existing data being reported except in purely additive cases where all existing data retains its prior state. Such changes may include new configuration options which when used will change behavior, or may include the addition of new data being captured such as a new instrumentation, but should not impact the current operating design of any existing features.
 
 ### semver-major
 
@@ -70,6 +81,28 @@ We follow an all-green policy which means that for any PR to be merged _all_ tes
 
 Eventually we plan to look into putting these permission-required tests behind a label which team members can add to their PRs at creation to run the full CI and can add to outside contributor PRs to trigger the CI from their own user credentials. If the label is not present there will be another action which checks the label is present. Rather than showing a bunch of confusing failures to new contributors it would just show a single job failure which indicates an additional label is required, and we can name it in a way that makes it clear that it's not the responsibility of the outside contributor to add it. Something like `approve-full-ci` is one possible choice there.
 
+## Search before creating
+
+Always search the codebase first before creating new code to avoid duplicates. Check for existing utilities, helpers, or patterns that solve similar problems. Reuse existing code when possible rather than reinventing solutions.
+
+## Sign your commits
+
+All commits in a pull request must be signed. We require commit signing to ensure the authenticity and integrity of contributions to the project.
+
+**Datadog employees:** We recommend using the [sign-pull-request tool](https://datadoghq.atlassian.net/wiki/spaces/SECENG/pages/5371593157/Easily+sign+commits+with+sign-pull-request+tool) for easy signing of commits.
+
+You can also sign your commits manually using one of the following methods:
+
+- [Signing commits with GPG](https://docs.github.com/en/authentication/managing-commit-signature-verification/signing-commits)
+- [Signing commits with SSH](https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification#ssh-commit-signature-verification)
+- [Signing commits with 1Password](https://developer.1password.com/docs/ssh/git-commit-signing/)
+
+If you have already created commits without signing them, you can sign them retroactively by using an interactive rebase:
+
+```sh
+$ git rebase --exec 'git commit --amend --no-edit -n -S' -i <base-branch>
+```
+
 ## Development Requirements
 
 Since this project supports multiple Node.js versions, using a version manager
@@ -77,7 +110,7 @@ such as [nvm](https://github.com/creationix/nvm) is recommended. If you're
 unsure which version of Node.js to use, just use the latest version, which
 should always work.
 
-We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easist way to install yarn 1.x with with npm:
+We use [yarn](https://yarnpkg.com/) 1.x for its workspace functionality, so make sure to install that as well. The easiest way to install yarn 1.x with with npm:
 
 ```sh
 $ npm install -g yarn
@@ -89,28 +122,162 @@ To install dependencies once you have Node and yarn installed, run this in the p
 $ yarn
 ```
 
+## Coding Standards
+
+### File Naming and Import Conventions
+
+Use **kebab-case** for file names (e.g., `my-module.js`, not `myModule.js`).
+
+Organize imports in the following order (each group separated by an empty line):
+
+1. Node.js core modules first (sorted alphabetically) - always prefix with `node:`
+2. Third-party modules (sorted alphabetically)
+3. Internal imports (sorted by path proximity first - closest first - then alphabetically)
+
+Example:
+
+```js
+const fs = require('node:fs')
+const path = require('node:path')
+
+const express = require('express')
+const lodash = require('lodash')
+
+const { myConf } = require('./config')
+const { foo } = require('./helper')
+const log = require('../log')
+```
+
+### Node.js Version Compatibility
+
+Follow the ECMAScript standard and Node.js APIs supported by **Node.js 18.0.0**. Never use features or APIs only supported in newer versions unless explicitly required. If newer APIs are needed, guard them with version checks using the `version.js` module located in the root of the project:
+
+```js
+const { NODE_MAJOR } = require('./version')
+if (NODE_MAJOR >= 20) {
+  // Use Node.js 20+ API
+}
+```
+
+### Performance Considerations
+
+This tracer runs in application hot paths, so performance is critical:
+
+- **Avoid `async/await` and promises** in production code (they add overhead). Use callbacks or synchronous patterns instead. Async/await is acceptable in test files and worker threads.
+- **Minimize memory allocations** in frequently-called code paths
+- **Prefer imperative loops over functional array methods** (`for-of`, `for`, `while` instead of `map()`, `forEach()`, `filter()`) to avoid closure overhead and intermediate arrays
+- Avoid creating unnecessary objects, closures, or arrays
+- Reuse objects and buffers where possible
+
+Example of preferred loop style:
+
+```js
+// ❌ Avoid - creates closure overhead
+items.forEach(item => {
+  process(item)
+})
+
+// ✅ Prefer - no closure overhead
+for (const item of items) {
+  process(item)
+}
+
+// ❌ Avoid - loops over data multiple times, creates intermediate array, adds closure overhead
+const result = items
+  .filter(item => item.active)
+  .map(item => item.value)
+
+// ✅ Prefer - single loop, no intermediate array
+const result = []
+for (const item of items) {
+  if (item.active) {
+    result.push(item.value)
+  }
+}
+```
+
+### Error Handling
+
+The tracer should never crash user applications. Catch errors and log them with `log.error()` or `log.warn()` as appropriate. Resume normal operation if possible, or disable the plugin/subsystem if not.
+
+### Logging and Debugging
+
+Use the `log` module (located at `packages/dd-trace/src/log/index.js`) for all logging:
+
+```js
+const log = require('../log')
+
+log.debug('Debug message with value: %s', someValue)
+log.info('Info message')
+log.warn('Warning with data: %o', objectValue)
+log.error('Error reading file %s', filepath, err)
+```
+
+**Important:** Use printf-style formatting (`%s`, `%d`, `%o`) instead of template strings to avoid unnecessary string concatenation when logging is disabled.
+
+For expensive computations in the log message itself, use a callback function:
+
+```js
+// Callback is only executed if debug logging is enabled
+log.debug(() => `Processed data: ${expensive.computation()}`)
+```
+
+When logging errors, pass the error object as the last argument after the format string:
+
+```js
+log.error('Error processing request', err)
+// or with additional context:
+log.error('Error reading file %s', filename, err)
+```
+
+To enable debug logging when running tests or applications:
+
+```sh
+# Run application with debug logging
+DD_TRACE_DEBUG=true node your-app.js
+
+# Run a specific test suite with debug logging
+DD_TRACE_DEBUG=true yarn test:debugger
+```
+
+### JSDoc
+
+Document all APIs with TypeScript-compatible JSDoc to ensure proper types without using TypeScript. This enables type checking and IDE autocompletion while maintaining the JavaScript codebase. Use TypeScript type syntax in JSDoc annotations (e.g., `@param {string}`, `@returns {Promise<void>}`).
+
+Never use the type `any` - be specific.
+
+## Adding New Configuration Options
+
+To add a new configuration option:
+
+1. **Add the default value** in `packages/dd-trace/src/config/defaults.js`
+2. **Map the environment variable** in `packages/dd-trace/src/config/index.js` (add to destructuring in `#applyEnvironment()` method)
+3. **Add TypeScript definitions** in `index.d.ts`
+4. **Add to telemetry name mapping** (if applicable) in `packages/dd-trace/src/telemetry/telemetry.js`
+5. **Update supported configurations** in `packages/dd-trace/src/config/supported-configurations.json`
+6. **Document the option** in `docs/API.md` (for non-internal/experimental options)
+7. **Add tests** in `packages/dd-trace/test/config/index.spec.js`
+
+**Naming Convention:** Size/time-based config options should have unit suffixes (e.g., `timeoutMs`, `maxBytes`, `intervalSeconds`).
+
 ## Adding a Plugin
+
+Plugins are modular code components in `packages/datadog-plugin-*/` directories that integrate with specific third-party libraries and frameworks. They subscribe to diagnostic channels to receive instrumentation events and handle APM tracing logic, feature-specific logic, and more.
 
 To create a new plugin for a third-party package, follow these steps:
 
-1. `mkdir -p packages/datadog-plugin-<pluginname>/src`
-2. Copy an `index.js` file from another plugin to use as a starting point: `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<pluginname>/src`
-3. Edit index.js as appropriate for your new plugin
-4. `mkdir -p packages/datadog-plugin-<pluginname>/test`
-5. Create an packages/datadog-plugin-<pluginname>/test/index.spec.js file and add the necessary tests. See other plugin tests for inspiration to file structure.
+1. `mkdir -p packages/datadog-plugin-<plugin-name>/src`
+2. Copy an `index.js` file from another plugin to use as a starting point: `cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<plugin-name>/src`
+3. Edit index.js as appropriate for your plugin
+4. `mkdir -p packages/datadog-plugin-<plugin-name>/test`
+5. Create an packages/datadog-plugin-<plugin-name>/test/index.spec.js file and add the necessary tests. See other plugin tests for inspiration to file structure.
 6. Edit index.spec.js as appropriate for your new plugin
 7. Add entries to the following files for your new plugin:
   - `packages/dd-trace/src/plugins/index.js`
   - `index.d.ts`
   - `docs/test.ts`
   - `docs/API.md`
-  - `.github/workflows/apm-integrations.yml`
-
-### Adding a Plugin Test to CI
-
-The plugin tests run on pull requests in Github Actions. Each plugin test suite has its own Github job, so adding a new suite to CI
-requires adding a new job to the Github Actions config. The file containing these configs is `.github/workflows/apm-integrations.yml`.
-You can copypaste and modify an existing plugin job configuration in this file to create a new job config.
+  - `.github/workflows/apm-integrations.yml` (see [Adding a Plugin Test to CI](#adding-a-plugin-test-to-ci))
 
 ## Testing
 
@@ -118,6 +285,92 @@ You can copypaste and modify an existing plugin job configuration in this file t
 
 The `pg-native` package requires `pg_config` to be in your `$PATH` to be able to install.
 Please refer to [the "Install" section](https://github.com/brianc/node-postgres/tree/master/packages/pg-native#install) of the `pg-native` documentation for how to ensure your environment is configured correctly.
+
+### Running Individual Tests
+
+When developing, it's often faster to run individual test files rather than entire test suites.
+To target specific tests, use the `--grep` flag with mocha to match test names:
+
+```sh
+yarn test:debugger --grep "test name pattern"
+yarn test:appsec --grep "specific test"
+```
+
+**This project uses mocha for testing.**
+
+### Test Assertions
+
+Use the Node.js core `assert` library for assertions in tests. Import from `node:assert/strict` to ensure all assertions use strict equality without type coercion:
+
+```js
+const assert = require('node:assert/strict')
+
+assert.equal(actual, expected)
+assert.deepEqual(actualObject, expectedObject)
+```
+
+For asserting that an object contains certain properties (deeply), use `assertObjectContains` from `integration-tests/helpers/index.js`:
+
+```js
+const { assertObjectContains } = require('../helpers')
+
+// Assert an object contains specific properties (actual object can have more)
+assertObjectContains(response, {
+  status: 200,
+  body: { user: { name: 'Alice' } }
+})
+```
+
+This helper performs partial deep equality checking and provides better error messages than individual assertions.
+
+### Time-Based Testing
+
+**Never rely on actual time passing in unit tests.** Tests that use `setTimeout()`, `setInterval()`, or `Date.now()` should use [sinon's fake timers](https://sinonjs.org/releases/latest/fake-timers/) to mock time. This makes tests:
+- Run instantly instead of waiting for real time
+- Deterministic and reliable (no timing-related flakiness)
+- Easier to reason about
+
+Example:
+
+```js
+const sinon = require('sinon')
+
+describe('my test', () => {
+  let clock
+
+  beforeEach(() => {
+    clock = sinon.useFakeTimers()
+  })
+
+  afterEach(() => {
+    clock.restore()
+  })
+
+  it('should handle timeout', () => {
+    let called = false
+    setTimeout(() => { called = true }, 1000)
+
+    clock.tick(1000) // Instantly advance time by 1 second
+    assert.equal(called, true)
+  })
+})
+```
+
+Use `clock.tick(ms)` to advance time, `clock.restore()` to restore real timers, and `clock.reset()` to reset fake time to 0.
+
+### Test Coverage
+
+Coverage is measured with nyc. To check coverage for your changes, use the `:ci` variant of the test scripts:
+
+```sh
+# Run tests with coverage for specific components
+yarn test:debugger:ci
+yarn test:appsec:ci
+yarn test:llmobs:sdk:ci
+yarn test:lambda:ci
+```
+
+**Coverage Philosophy:** Given the nature of this library (instrumenting third-party code, hooking into runtime internals), unit tests can become overly complex when everything needs to be mocked. Integration tests that run in sandboxes don't count towards nyc's coverage metrics, so coverage numbers may look low even when code is well-tested. **Don't add redundant unit tests solely to improve coverage numbers.**
 
 ### Plugin Tests
 
@@ -176,7 +429,7 @@ details.
 When running integration tests, some packages are installed from npm into temporary sandboxes.
 If running locally without an internet connection,
 it's possible to use the environment variable `OFFLINE=true` to make `yarn` use the `--prefer-offline` flag,
-which will use the local yarn cache instead of fecthing packages from npm.
+which will use the local yarn cache instead of fetching packages from npm.
 
 ### Adding a Plugin Test to CI
 
@@ -198,7 +451,6 @@ $ yarn lint
 This also checks that the `LICENSE-3rdparty.csv` file is up-to-date, and checks
 dependencies for vulnerabilities.
 
-
 ### Benchmarks
 
 Our microbenchmarks live in `benchmark/sirun`. Each directory in there
@@ -212,6 +464,5 @@ most efficient algorithm. To run your benchmark, use:
 ```sh
 $ yarn bench
 ```
-
 
 [1]: https://docs.datadoghq.com/help

@@ -1,13 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 
 require('./setup/core')
 
 const {
   PAYLOAD_TAG_REQUEST_PREFIX,
-  PAYLOAD_TAG_RESPONSE_PREFIX
+  PAYLOAD_TAG_RESPONSE_PREFIX,
 } = require('../src/constants')
 const { tagsFromObject } = require('../src/payload-tagging/tagging')
 const { computeTags } = require('../src/payload-tagging')
@@ -39,14 +40,14 @@ describe('Payload tagger', () => {
           bar: {
             token: 'tokenpleaseredact',
             authorization: 'pleaseredact',
-            valid: 'valid'
+            valid: 'valid',
           },
           baz: {
             password: 'shouldgo',
             'x-authorization': 'shouldbegone',
-            data: 'shouldstay'
-          }
-        }
+            data: 'shouldstay',
+          },
+        },
       }
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, {
@@ -55,7 +56,7 @@ describe('Payload tagger', () => {
         'http.payload.foo.bar.valid': 'valid',
         'http.payload.foo.baz.password': 'redacted',
         'http.payload.foo.baz.x-authorization': 'redacted',
-        'http.payload.foo.baz.data': 'shouldstay'
+        'http.payload.foo.baz.data': 'shouldstay',
       })
     })
 
@@ -65,21 +66,21 @@ describe('Payload tagger', () => {
           authorization: {
             token: 'tokenpleaseredact',
             authorization: 'pleaseredact',
-            valid: 'valid'
+            valid: 'valid',
           },
           baz: {
             password: 'shouldgo',
             'x-authorization': 'shouldbegone',
-            data: 'shouldstay'
-          }
-        }
+            data: 'shouldstay',
+          },
+        },
       }
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, {
         'http.payload.foo.authorization': 'redacted',
         'http.payload.foo.baz.password': 'redacted',
         'http.payload.foo.baz.x-authorization': 'redacted',
-        'http.payload.foo.baz.data': 'shouldstay'
+        'http.payload.foo.baz.data': 'shouldstay',
       })
     })
   })
@@ -89,7 +90,7 @@ describe('Payload tagger', () => {
       const input = { 'foo.bar': { baz: 'quux' } }
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, {
-        'http.payload.foo\\.bar.baz': 'quux'
+        'http.payload.foo\\.bar.baz': 'quux',
       })
     })
   })
@@ -100,7 +101,7 @@ describe('Payload tagger', () => {
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, {
         'http.payload.foo': 'bar',
-        'http.payload.baz': 'null'
+        'http.payload.baz': 'null',
       })
     })
 
@@ -109,7 +110,7 @@ describe('Payload tagger', () => {
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, {
         'http.payload.foo': 'bar',
-        'http.payload.baz': 'undefined'
+        'http.payload.baz': 'undefined',
       })
     })
 
@@ -118,7 +119,7 @@ describe('Payload tagger', () => {
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, {
         'http.payload.foo': 'true',
-        'http.payload.bar': 'false'
+        'http.payload.bar': 'false',
       })
     })
 
@@ -133,7 +134,7 @@ describe('Payload tagger', () => {
         foo: { bar: { baz: 1, quux: 2 } },
         asimplestring: 'isastring',
         anullvalue: null,
-        anundefined: undefined
+        anundefined: undefined,
       }
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, {
@@ -141,7 +142,7 @@ describe('Payload tagger', () => {
         'http.payload.foo.bar.quux': '2',
         'http.payload.asimplestring': 'isastring',
         'http.payload.anullvalue': 'null',
-        'http.payload.anundefined': 'undefined'
+        'http.payload.anundefined': 'undefined',
       })
     })
 
@@ -151,13 +152,13 @@ describe('Payload tagger', () => {
       assert.deepStrictEqual(tags, {
         'http.payload.foo.bar.list.0': 'v0',
         'http.payload.foo.bar.list.1': 'v1',
-        'http.payload.foo.bar.list.2': 'v2'
+        'http.payload.foo.bar.list.2': 'v2',
       })
     })
 
     it('should not replace a real value at max depth', () => {
       const input = {
-        1: { 2: { 3: { 4: { 5: { 6: { 7: { 8: { 9: { 10: 11 } } } } } } } } }
+        1: { 2: { 3: { 4: { 5: { 6: { 7: { 8: { 9: { 10: 11 } } } } } } } } },
       }
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, { 'http.payload.1.2.3.4.5.6.7.8.9.10': '11' })
@@ -165,7 +166,7 @@ describe('Payload tagger', () => {
 
     it('should truncate paths beyond max depth', () => {
       const input = {
-        1: { 2: { 3: { 4: { 5: { 6: { 7: { 8: { 9: { 10: { 11: 'too much' } } } } } } } } } }
+        1: { 2: { 3: { 4: { 5: { 6: { 7: { 8: { 9: { 10: { 11: 'too much' } } } } } } } } } },
       }
       const tags = tagsFromObject(input, defaultOpts)
       assert.deepStrictEqual(tags, { 'http.payload.1.2.3.4.5.6.7.8.9.10': 'truncated' })
@@ -178,11 +179,11 @@ describe('Tagging orchestration', () => {
     const config = {
       request: ['$.request'],
       response: ['$.response'],
-      expand: []
+      expand: [],
     }
     const input = {
       request: 'foo',
-      response: 'bar'
+      response: 'bar',
     }
     const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_REQUEST_PREFIX })
     assert.strictEqual(tags[`${PAYLOAD_TAG_REQUEST_PREFIX}.request`], 'redacted')
@@ -193,11 +194,11 @@ describe('Tagging orchestration', () => {
     const config = {
       request: ['$.request'],
       response: ['$.response'],
-      expand: []
+      expand: [],
     }
     const input = {
       request: 'foo',
-      response: 'bar'
+      response: 'bar',
     }
     const tags = computeTags(config, input, { maxDepth: 10, prefix: PAYLOAD_TAG_RESPONSE_PREFIX })
     assert.strictEqual(tags[`${PAYLOAD_TAG_RESPONSE_PREFIX}.response`], 'redacted')
@@ -208,13 +209,13 @@ describe('Tagging orchestration', () => {
     const config = {
       request: [],
       response: [],
-      expand: ['$.request', '$.response', '$.invalid']
+      expand: ['$.request', '$.response', '$.invalid'],
     }
     const input = {
       request: '{ "foo": "bar" }',
       response: '{ "baz": "quux" }',
       invalid: '{ invalid JSON }',
-      untargeted: '{ "foo": "bar" }'
+      untargeted: '{ "foo": "bar" }',
     }
     const tags = computeTags(config, input, { maxDepth: 10, prefix: 'foo' })
     assert.strictEqual(tags['foo.request.foo'], 'bar')

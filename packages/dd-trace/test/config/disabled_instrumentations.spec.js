@@ -11,7 +11,7 @@ describe('config/instrumentations', () => {
   const httpRequest = require('http').request
   const expressHandle = require('express').application.handle
 
-  function getTracer () {
+  function getTracer() {
     const register = proxyquire.noPreserveCache()('../../../datadog-instrumentations/src/helpers/register', {})
     const instrumentations = proxyquire('../../../datadog-instrumentations/src/helpers/instrumentations', {
       './src/helpers/register': register

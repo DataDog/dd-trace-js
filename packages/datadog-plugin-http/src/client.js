@@ -1,5 +1,7 @@
 'use strict'
 
+const { URL } = require('url')
+
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
@@ -9,7 +11,6 @@ const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { URL } = require('url')
 
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -47,11 +48,11 @@ class HttpClientPlugin extends ClientPlugin {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'out.host': hostname
+        'out.host': hostname,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(options.port)
-      }
+        [CLIENT_PORT_KEY]: Number.parseInt(options.port),
+      },
     }, false)
 
     // TODO: Figure out a better way to do this for any span.
@@ -119,7 +120,7 @@ class HttpClientPlugin extends ClientPlugin {
       span.addTags({
         [ERROR_TYPE]: error.name,
         [ERROR_MESSAGE]: error.message || error.code,
-        [ERROR_STACK]: error.stack
+        [ERROR_STACK]: error.stack,
       })
     } else {
       // conditions for no error:
@@ -143,13 +144,13 @@ function addResponseHeaders (res, span, config) {
     ? Object.fromEntries(res.headers.entries())
     : res.headers
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const value = headers[key]
 
     if (value) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, value)
     }
-  })
+  }
 }
 
 function addRequestHeaders (req, span, config) {
@@ -157,13 +158,13 @@ function addRequestHeaders (req, span, config) {
     ? Object.fromEntries(req.headers.entries())
     : req.headers || req.getHeaders()
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const value = Array.isArray(headers[key]) ? headers[key].toString() : headers[key]
 
     if (value) {
       span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, value)
     }
-  })
+  }
 }
 
 function normalizeClientConfig (config) {
@@ -179,7 +180,7 @@ function normalizeClientConfig (config) {
     filter,
     propagationFilter,
     headers,
-    hooks
+    hooks,
   }
 }
 
@@ -213,7 +214,7 @@ function getHeaders (config) {
         ? [header, undefined]
         : [
             header.slice(0, separatorIndex).toLowerCase(),
-            header.slice(separatorIndex + 1)
+            header.slice(separatorIndex + 1),
           ]
       )
     }

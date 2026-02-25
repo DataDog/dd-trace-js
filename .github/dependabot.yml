@@ -4,7 +4,9 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
+
 updates:
+  # Regular github actions
   - package-ecosystem: "github-actions"
     directories:
       - "/"
@@ -14,7 +16,7 @@ updates:
     schedule:
       interval: "weekly"
     cooldown:
-      default-days: 1
+      default-days: 5
       exclude:
         - "@datadog/*"
     groups:
@@ -26,16 +28,20 @@ updates:
       - dependencies
       - github_actions
       - semver-patch
+
+  # Regular npm packages that fall into our supported ranges besides OTEL
   - package-ecosystem: "npm"
     directories:
       - "/"
+      - "/docs"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 100
     cooldown:
-      default-days: 1
+      default-days: 5
       exclude:
         - "@datadog/*"
+    versioning-strategy: "increase"
     labels:
       - dependabot
       - dependencies
@@ -50,22 +56,9 @@ updates:
       - dependency-name: "@datadog/pprof"
       - dependency-name: "@datadog/sketches-js"
       - dependency-name: "@datadog/wasm-js-rewriter"
+
       - dependency-name: "@types/node"
         # Update the types manually with new Node.js version support
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "jest-docblock"
-        # 30.0.0 onwards only supports Node.js 18.14.x and above
-        update-types: ["version-update:semver-major"]
-        # The path-to-regexp version has to be the same as used in express v4.
-        # Consider vendoring it instead.
-      - dependency-name: "path-to-regexp"
-      - dependency-name: "lru-cache"
-        # 11.0.0 onwards only supports Node.js 20 and above
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "limiter"
-        # 2.0.0 onwards breaks our tests. 3.0.0 works but it requires Node.js v16.
-        # That breaks cypress in our v5 release line. Update when v5 is EOL.
-        # Reverting this commit should suffice.
         update-types: ["version-update:semver-major"]
       - dependency-name: "glob"
         # 11.0.0 onwards only supports Node.js 20 and above
@@ -76,9 +69,10 @@ updates:
       - dependency-name: "@opentelemetry/resources"
         # 2.0.0 onwards only supports Node.js 18.19.0 and above
         update-types: ["version-update:semver-major"]
-      - dependency-name: "tap"
-        # Contain breaking changes that are incompatible with our test usage
-        update-types: ["version-update:semver-major"]
+        # @opentelemetry/api and @opentelemetry/api-logs have to be widened, not increased.
+        # Thus, we ignore them and update them manually.
+      - dependency-name: "@opentelemetry/api"
+      - dependency-name: "@opentelemetry/api-logs"
     groups:
       dev-minor-and-patch-dependencies:
         dependency-type: "development"
@@ -94,12 +88,61 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # Vendored dependencies
+  - package-ecosystem: "npm"
+    directories:
+      - "/vendor"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 100
+    cooldown:
+      default-days: 5
+    labels:
+      - dependabot
+      - dependencies
+      - javascript
+      - semver-patch
+    ignore:
+      - dependency-name: "jest-docblock"
+        # 30.0.0 onwards only supports Node.js 18.14.x and above
+        update-types: ["version-update:semver-major"]
+        # The path-to-regexp version has to be the same as used in express v4.
+      - dependency-name: "path-to-regexp"
+      - dependency-name: "lru-cache"
+        # 11.0.0 onwards only supports Node.js 20 and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "limiter"
+        # 2.0.0 onwards breaks our tests. 3.0.0 works but it requires Node.js v16.
+        # That breaks cypress in our v5 release line. Update when v5 is EOL.
+        # Reverting this commit should suffice.
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@opentelemetry/core"
+        # 2.0.0 onwards only supports Node.js 18.19.0 and above
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@opentelemetry/resources"
+        # 2.0.0 onwards only supports Node.js 18.19.0 and above
+        update-types: ["version-update:semver-major"]
+    groups:
+      vendor-minor-and-patch-dependencies:
+        dependency-type: "production"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Instrumented library support range
   - package-ecosystem: "npm"
     directories:
       - "/packages/dd-trace/test/plugins/versions"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 3
+      exclude:
+        - "@datadog/*"
     labels:
       - dependabot
       - dependencies
@@ -109,12 +152,20 @@ updates:
       test-versions:
         patterns:
           - "*"
+
+  # Esbuild integration test dependencies
   - package-ecosystem: "npm"
     directories:
       - "/integration-tests/esbuild"
+      - "/integration-tests/appsec/iast-esbuild-esm"
+      - "/integration-tests/appsec/iast-esbuild-cjs"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 3
+      exclude:
+        - "@datadog/*"
     labels:
       - dependabot
       - dependencies

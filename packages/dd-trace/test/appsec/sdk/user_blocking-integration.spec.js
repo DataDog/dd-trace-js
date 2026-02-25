@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const path = require('path')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const tracer = require('../../../../../index')
@@ -17,8 +16,8 @@ describe('user_blocking - Integration with the tracer', () => {
   const config = getConfigFresh({
     appsec: {
       enabled: true,
-      rules: path.join(__dirname, './user_blocking_rules.json')
-    }
+      rules: path.join(__dirname, './user_blocking_rules.json'),
+    },
   })
 
   let http
@@ -153,7 +152,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(ret, false)
       }
       agent.assertSomeTraces(traces => {
-        expect(traces[0][0].meta).to.not.have.property('appsec.blocked', 'true')
+        assert.ok(!('appsec.blocked' in traces[0][0].meta) || traces[0][0].meta['appsec.blocked'] !== 'true')
         assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         assert.strictEqual(traces[0][0].metrics['_dd.appsec.block.failed'], 1)
       }).then(done).catch(done)
@@ -166,16 +165,16 @@ describe('user_blocking - Integration with the tracer', () => {
           id: 'notblock',
           parameters: {
             location: '/notfound',
-            status_code: 404
-          }
+            status_code: 404,
+          },
         },
         {
           id: 'block',
           parameters: {
             location: '/redirected',
-            status_code: 302
-          }
-        }
+            status_code: 302,
+          },
+        },
       ])
       controller = (req, res) => {
         const ret = tracer.appsec.blockRequest(req, res)

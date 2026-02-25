@@ -47,7 +47,7 @@ esbuildVersions.forEach((version) => {
       const proc = await spawnProc(appFile, {
         cwd,
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         },
         stdio: 'pipe',
       })
@@ -58,7 +58,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'web.request')
         }, 2_500),
-        axios.get(proc.url)
+        axios.get(proc.url),
       ])
     })
 
@@ -70,7 +70,7 @@ esbuildVersions.forEach((version) => {
       const proc = await spawnProc(appFile, {
         cwd,
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         },
         stdio: 'pipe',
       })
@@ -81,7 +81,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'web.request')
         }, 2_500),
-        axios.get(proc.url)
+        axios.get(proc.url),
       ])
     })
 
@@ -93,7 +93,7 @@ esbuildVersions.forEach((version) => {
       const proc = await spawnProc(appFile, {
         cwd,
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         },
         stdio: 'pipe',
       })
@@ -104,7 +104,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'hono.request')
         }, 2_500),
-        axios.get(proc.url)
+        axios.get(proc.url),
       ])
     })
 
@@ -116,7 +116,7 @@ esbuildVersions.forEach((version) => {
       const proc = await spawnProc(appFile, {
         cwd,
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         },
         stdio: 'pipe',
       })
@@ -127,7 +127,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'hono.request')
         }, 2_500),
-        axios.get(proc.url)
+        axios.get(proc.url),
       ])
     })
   })

@@ -1,8 +1,8 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 const { channel, tracingChannel } = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
 
 const anthropicTracingChannel = tracingChannel('apm:anthropic:request')
 const onStreamedChunkCh = channel('apm:anthropic:request:chunk')
@@ -92,7 +92,7 @@ for (const extension of extensions) {
   addHook({
     name: '@anthropic-ai/sdk',
     file: `resources/messages.${extension}`,
-    versions: ['>=0.14.0 <0.33.0']
+    versions: ['>=0.14.0 <0.33.0'],
   }, exports => {
     const Messages = exports.Messages
 
@@ -104,7 +104,19 @@ for (const extension of extensions) {
   addHook({
     name: '@anthropic-ai/sdk',
     file: `resources/messages/messages.${extension}`,
-    versions: ['>=0.33.0']
+    versions: ['>=0.33.0'],
+  }, exports => {
+    const Messages = exports.Messages
+
+    shimmer.wrap(Messages.prototype, 'create', wrapCreate)
+
+    return exports
+  })
+
+  addHook({
+    name: '@anthropic-ai/sdk',
+    file: `resources/beta/messages/messages.${extension}`,
+    versions: ['>=0.33.0'],
   }, exports => {
     const Messages = exports.Messages
 

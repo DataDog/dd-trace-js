@@ -20,8 +20,8 @@ class ElasticsearchPlugin extends DatabasePlugin {
         [`${this.system}.url`]: params.path,
         [`${this.system}.method`]: params.method,
         [`${this.system}.body`]: body,
-        [`${this.system}.params`]: JSON.stringify(params.querystring || params.query)
-      }
+        [`${this.system}.params`]: JSON.stringify(params.querystring || params.query),
+      },
     }, ctx)
 
     return ctx.currentStore

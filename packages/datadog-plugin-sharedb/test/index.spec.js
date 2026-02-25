@@ -2,14 +2,12 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-
 describe('Plugin', () => {
   let ShareDB
 
@@ -90,18 +88,18 @@ describe('Plugin', () => {
           connection.createFetchQuery('some-collection', {
             randomValues: {
               property: 'query',
-              one: 1
-            }
+              one: 1,
+            },
           }, {}, function (err) {
             if (err) { throw err }
 
             agent.assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].service, 'test')
-              expect(traces[0][0])
-                .to
-                .have
-                .property('resource',
-                  'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}')
+              assert.ok('resource' in traces[0][0])
+              assert.strictEqual(
+                traces[0][0].resource,
+                'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}'
+              )
               assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
               assert.strictEqual(traces[0][0].meta.service, 'test')
               assert.strictEqual(traces[0][0].meta['sharedb.action'], 'query-fetch')
@@ -124,8 +122,8 @@ describe('Plugin', () => {
           backend.use('receive', receiveSpy)
           const message = {
             data: {
-              a: 'some-unsupported-action'
-            }
+              a: 'some-unsupported-action',
+            },
           }
 
           backend.trigger(backend.MIDDLEWARE_ACTIONS.receive, {}, message, function noop () {})
@@ -172,8 +170,8 @@ describe('Plugin', () => {
             service: 'test-sharedb',
             hooks: {
               receive: receiveHookSpy,
-              reply: replyHookSpy
-            }
+              reply: replyHookSpy,
+            },
           })
         })
 
@@ -225,8 +223,8 @@ describe('Plugin', () => {
           return agent.load('sharedb', {
             hooks: {
               receive: receiveHookSpy,
-              reply: replyHookSpy
-            }
+              reply: replyHookSpy,
+            },
           })
         })
 

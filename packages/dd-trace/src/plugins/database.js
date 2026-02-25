@@ -1,88 +1,94 @@
 'use strict'
 
-const StoragePlugin = require('./storage')
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
+const propagationHash = require('../propagation-hash')
+const StoragePlugin = require('./storage')
 
 class DatabasePlugin extends StoragePlugin {
   static operation = 'query'
   static peerServicePrecursors = ['db.name']
 
-  constructor (...args) {
-    super(...args)
-    this.serviceTags = {
-      dddbs: '',
-      encodedDddbs: '',
-      dde: '',
-      encodedDde: '',
-      ddps: '',
-      encodedDdps: '',
-      ddpv: '',
-      encodedDdpv: ''
-    }
-  }
-
-  encodingServiceTags (serviceTag, encodeATag, spanConfig) {
-    if (serviceTag !== spanConfig) {
-      this.serviceTags[serviceTag] = spanConfig
-      this.serviceTags[encodeATag] = encodeURIComponent(spanConfig)
-    }
-  }
-
-  createDBMPropagationCommentService (serviceName, span) {
-    this.encodingServiceTags('dddbs', 'encodedDddbs', serviceName)
-    this.encodingServiceTags('dde', 'encodedDde', this.tracer._env)
-    this.encodingServiceTags('ddps', 'encodedDdps', this.tracer._service)
-    this.encodingServiceTags('ddpv', 'encodedDdpv', this.tracer._version)
-    if (span.context()._tags['out.host']) {
-      this.encodingServiceTags('ddh', 'encodedDdh', span._spanContext._tags['out.host'])
-    }
-    if (span.context()._tags['db.name']) {
-      this.encodingServiceTags('dddb', 'encodedDddb', span._spanContext._tags['db.name'])
-    }
-
-    const { encodedDddb, encodedDddbs, encodedDde, encodedDdh, encodedDdps, encodedDdpv } = this.serviceTags
+  /**
+   * @param {string} serviceName
+   * @param {import('../../../..').Span} span
+   * @param {object} peerData
+   * @returns {string}
+   */
+  #createDBMPropagationCommentService (serviceName, span, peerData) {
+    const spanTags = span.context()._tags
+    const encodedDddb = encode(spanTags['db.name'])
+    const encodedDddbs = encode(serviceName)
+    const encodedDde = encode(this.tracer._env)
+    const encodedDdh = encode(spanTags['out.host'])
+    const encodedDdps = this.tracer._service ?? ''
+    const encodedDdpv = this.tracer._version
 
     let dbmComment = `dddb='${encodedDddb}',dddbs='${encodedDddbs}',dde='${encodedDde}',ddh='${encodedDdh}',` +
       `ddps='${encodedDdps}',ddpv='${encodedDdpv}'`
 
-    const peerData = this.getPeerService(span.context()._tags)
     if (peerData !== undefined && peerData[PEER_SERVICE_SOURCE_KEY] === PEER_SERVICE_KEY) {
-      this.encodingServiceTags('ddprs', 'encodedDdprs', peerData[PEER_SERVICE_KEY])
-
-      const { encodedDdprs } = this.serviceTags
-      dbmComment += `,ddprs='${encodedDdprs}'`
+      dbmComment += `,ddprs='${encode(peerData[PEER_SERVICE_KEY])}'`
     }
     return dbmComment
   }
 
-  getDbmServiceName (span, tracerService) {
+  /**
+   * @param {string} tracerService
+   * @param {object} peerData
+   * @returns {string}
+   */
+  #getDbmServiceName (tracerService, peerData) {
     if (this._tracerConfig.spanComputePeerService) {
-      const peerData = this.getPeerService(span.context()._tags)
       return this.getPeerServiceRemap(peerData)[PEER_SERVICE_KEY] || tracerService
     }
     return tracerService
   }
 
+  /**
+   * @param {import('../../../..').Span} span
+   * @param {string} serviceName
+   * @param {boolean} disableFullMode
+   */
   createDbmComment (span, serviceName, disableFullMode = false) {
     const mode = this.config.dbmPropagationMode
-    const dbmService = this.getDbmServiceName(span, serviceName)
 
     if (mode === 'disabled') {
       return null
     }
 
-    const servicePropagation = this.createDBMPropagationCommentService(dbmService, span)
+    const peerData = this.getPeerService(span.context()._tags)
+    const dbmService = this.#getDbmServiceName(serviceName, peerData)
+    const servicePropagation = this.#createDBMPropagationCommentService(dbmService, span, peerData)
+
+    let dbmComment = servicePropagation
+
+    // Add propagation hash if both process tags and SQL base hash injection are enabled
+    if (propagationHash.isEnabled() && this.config['dbm.injectSqlBaseHash']) {
+      const hashBase64 = propagationHash.getHashBase64()
+      if (hashBase64) {
+        dbmComment += `,ddsh='${hashBase64}'`
+        // Add hash to span meta as a tag
+        span.setTag('_dd.dbm.propagation_hash', hashBase64)
+      }
+    }
 
     if (disableFullMode || mode === 'service') {
-      return servicePropagation
+      return dbmComment
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       span._processor.sample(span)
       const traceparent = span._spanContext.toTraceparent()
-      return `${servicePropagation},traceparent='${traceparent}'`
+      return `${dbmComment},traceparent='${traceparent}'`
     }
   }
 
+  /**
+   * @param {import('../../../..').Span} span
+   * @param {string} query
+   * @param {string} serviceName
+   * @param {boolean} disableFullMode
+   * @returns {string}
+   */
   injectDbmQuery (span, query, serviceName, disableFullMode = false) {
     const dbmTraceComment = this.createDbmComment(span, serviceName, disableFullMode)
 
@@ -95,6 +101,10 @@ class DatabasePlugin extends StoragePlugin {
       : `/*${dbmTraceComment}*/ ${query}`
   }
 
+  /**
+   * @param {string} query
+   * @returns {string}
+   */
   maybeTruncate (query) {
     const maxLength = typeof this.config.truncate === 'number'
       ? this.config.truncate
@@ -107,5 +117,7 @@ class DatabasePlugin extends StoragePlugin {
     return query
   }
 }
+
+const encode = value => value ? encodeURIComponent(value) : ''
 
 module.exports = DatabasePlugin

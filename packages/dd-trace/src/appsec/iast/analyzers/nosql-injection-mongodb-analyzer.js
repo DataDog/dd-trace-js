@@ -1,16 +1,16 @@
 'use strict'
 
-const InjectionAnalyzer = require('./injection-analyzer')
 const { NOSQL_MONGODB_INJECTION } = require('../vulnerabilities')
 const { getRanges, addSecureMark } = require('../taint-tracking/operations')
 const { getNodeModulesPaths } = require('../path-line')
 const { storage } = require('../../../../../datadog-core')
 const { getIastContext } = require('../iast-context')
 const { HTTP_REQUEST_PARAMETER, HTTP_REQUEST_BODY } = require('../taint-tracking/source-types')
-
-const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
 const { NOSQL_MONGODB_INJECTION_MARK } = require('../taint-tracking/secure-marks')
 const { iterateObjectStrings } = require('../utils')
+const InjectionAnalyzer = require('./injection-analyzer')
+
+const EXCLUDED_PATHS_FROM_STACK = getNodeModulesPaths('mongodb', 'mongoose', 'mquery')
 
 const SAFE_OPERATORS = new Set(['$eq', '$gt', '$gte', '$in', '$lt', '$lte', '$ne', '$nin',
   '$exists', '$type', '$mod', '$bitsAllClear', '$bitsAllSet', '$bitsAnyClear', '$bitsAnySet'])
@@ -25,13 +25,12 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.configureSanitizers()
 
     // Anything that accesses the storage is context dependent
-    // eslint-disable-next-line unicorn/consistent-function-scoping
     const onStart = ({ filters }) => {
       const store = storage('legacy').getStore()
       if (store && !store.nosqlAnalyzed && filters?.length) {
-        filters.forEach(filter => {
+        for (const filter of filters) {
           this.analyze({ filter }, store)
-        })
+        }
       }
 
       return store
@@ -69,7 +68,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       const iastContext = getIastContext(store)
 
       if (iastContext) { // do nothing if we are not in an iast request
-        sanitizedProperties.forEach(key => {
+        for (const key of sanitizedProperties) {
           iterateObjectStrings(req[key], function (value, levelKeys) {
             if (typeof value === 'string') {
               let parentObj = req[key]
@@ -86,7 +85,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
               }
             }
           })
-        })
+        }
       }
     })
 
@@ -175,8 +174,8 @@ function iterateMongodbQueryStrings (target, fn, levelKeys = [], depth = 10, vis
 
     visited.add(target)
 
-    Object.keys(target).forEach((key) => {
-      if (SAFE_OPERATORS.has(key)) return
+    for (const key of Object.keys(target)) {
+      if (SAFE_OPERATORS.has(key)) continue
 
       const nextLevelKeys = [...levelKeys, key]
       const val = target[key]
@@ -186,7 +185,7 @@ function iterateMongodbQueryStrings (target, fn, levelKeys = [], depth = 10, vis
       } else if (depth > 0) {
         iterateMongodbQueryStrings(val, fn, nextLevelKeys, depth - 1, visited)
       }
-    })
+    }
   }
 }
 

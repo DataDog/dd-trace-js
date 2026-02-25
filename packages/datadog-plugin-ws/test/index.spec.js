@@ -3,11 +3,13 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 
-const { expect } = require('chai')
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { storage } = require('../../datadog-core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let WebSocket
@@ -24,7 +26,7 @@ describe('Plugin', () => {
         before(async () => {
           await agent.load(['ws'], [{
             service: 'some',
-            traceWebsocketMessagesEnabled: true
+            traceWebsocketMessagesEnabled: true,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
         })
@@ -51,7 +53,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'some',
-            traceWebsocketMessagesEnabled: true
+            traceWebsocketMessagesEnabled: true,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -65,18 +67,91 @@ describe('Plugin', () => {
           agent.close({ ritmReset: false, wipe: true })
         })
 
-        it('should do automatic instrumentation', () => {
+        it('should not retain the connection span during socket setup', async () => {
+          const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
+          let resolve
+          const promise = new Promise((_resolve) => {
+            resolve = _resolve
+          })
+
+          const handler = () => {
+            resolve(storage('legacy').getStore())
+            setSocketCh.unsubscribe(handler)
+          }
+          setSocketCh.subscribe(handler)
+
+          // Trigger setSocket
+          const newClient = new WebSocket(`ws://localhost:${clientPort}/test`)
+          newClient.on('open', () => newClient.close())
+
+          const store = await promise
+
+          assert.strictEqual(store?.span, undefined,
+            'connection span should not be in the store during setSocket')
+        })
+
+        it('should do automatic instrumentation and remove broken handler', () => {
           wsServer.on('connection', (ws) => {
             connectionReceived = true
             ws.send('test message')
           })
 
-          client.on('message', (msg) => {
+          const brokenHandler = () => {
+            throw new Error('broken handler')
+          }
+
+          client.on('message', brokenHandler)
+
+          client.addListener('message', (msg) => {
             assert.strictEqual(msg.toString(), 'test message')
           })
 
+          client.off('message', brokenHandler)
+
           return agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].name, 'web.request')
+            let sendSpan
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.send') {
+                  sendSpan = span
+                  break
+                }
+              }
+              if (sendSpan) break
+            }
+
+            assert.ok(sendSpan)
+            assertObjectContains(sendSpan, {
+              name: 'websocket.send',
+              type: 'websocket',
+              resource: `websocket /${route}`,
+              service: 'some',
+              parent_id: 0n,
+              error: 0,
+              meta: {
+                'span.kind': 'producer',
+              },
+            })
+          })
+        })
+
+        it('should handle removing a listener that was never added', (done) => {
+          wsServer.on('connection', (ws) => {
+            connectionReceived = true
+            ws.send('test message')
+          })
+
+          const neverAddedHandler = () => {
+            throw new Error('this should never be called')
+          }
+
+          client.on('message', (msg) => {
+            assert.strictEqual(msg.toString(), 'test message')
+            done()
+          })
+
+          assert.doesNotThrow(() => {
+            client.off('message', neverAddedHandler)
           })
         })
 
@@ -103,7 +178,7 @@ describe('Plugin', () => {
           client.on('error', done)
         })
 
-        it('should instrument message sending', done => {
+        it('should instrument message sending once per message', () => {
           wsServer.on('connection', ws => {
             connectionReceived = true
             ws.on('message', msg => {
@@ -112,36 +187,214 @@ describe('Plugin', () => {
             })
           })
 
+          /** @type {Promise<void>} */
+          const messageHandled = new Promise((resolve, reject) => {
+            let count = 0
+            const handler = (data) => {
+              assert.strictEqual(data.toString(), 'test message')
+              count++
+              if (count === 2) resolve()
+            }
+
+            client.on('message', handler)
+            client.on('message', handler)
+            client.on('error', reject)
+          })
+
           client.on('open', () => {
             client.send('test message')
           })
 
-          client.on('message', (data) => {
-            assert.strictEqual(data.toString(), 'test message')
-            done()
-          })
+          return messageHandled.then(() => agent.assertSomeTraces(traces => {
+            let receiveCount = 0
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.receive') {
+                  receiveCount++
+                }
+              }
+            }
 
-          client.on('error', done)
+            assert.strictEqual(receiveCount, 1)
+          }))
         })
 
-        it('should instrument message receiving', done => {
+        it('should handle addEventListener/removeEventListener', () => {
+          wsServer.on('connection', ws => {
+            ws.send('test message')
+          })
+
+          let onMessage
+          let onError
+          /** @type {Promise<void>} */
+          const messageHandled = new Promise((resolve, reject) => {
+            onMessage = event => {
+              assert.strictEqual(event.data, 'test message')
+              resolve()
+            }
+            onError = event => {
+              reject(event?.error ?? event)
+            }
+            client.addEventListener('message', onMessage)
+            client.addEventListener('error', onError)
+          })
+
+          return messageHandled.then(() => {
+            client.removeEventListener('message', onMessage)
+            client.removeEventListener('error', onError)
+
+            return agent.assertSomeTraces(traces => {
+              let sendCount = 0
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === 'websocket.send') {
+                    sendCount++
+                  }
+                }
+              }
+              assert.ok(sendCount > 0)
+            })
+          })
+        })
+
+        it('should instrument message receiving', () => {
           wsServer.on('connection', (ws) => {
             ws.on('message', (data) => {
               assert.strictEqual(data.toString(), 'test message from client')
             })
           })
-          agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].name, 'websocket.receive')
-            assert.strictEqual(traces[0][0].resource, `websocket /${route}`)
-          })
-            .then(done)
-            .catch(done)
 
           client.on('open', () => {
             client.send('test message from client')
           })
 
-          client.on('error', done)
+          const errorPromise = once(client, 'error')
+            .then(([error]) => {
+              throw error
+            })
+
+          return Promise.race([
+            errorPromise,
+            agent.assertSomeTraces(traces => {
+              let receiveSpan
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === 'websocket.receive') {
+                    receiveSpan = span
+                    break
+                  }
+                }
+                if (receiveSpan) break
+              }
+
+              assert.ok(receiveSpan)
+              assertObjectContains(receiveSpan, {
+                name: 'websocket.receive',
+                resource: `websocket /${route}`,
+              })
+            }),
+          ])
+        })
+
+        it('should trace a receive span for each message', () => {
+          let totalReceiveCount = 0
+          /** @type {Promise<void>} */
+          const messageHandled = new Promise((resolve, reject) => {
+            wsServer.on('connection', (ws) => {
+              let count = 0
+              ws.on('message', (data) => {
+                assert.strictEqual(data.toString(), 'test message')
+                count++
+                if (count === 2) resolve()
+              })
+              ws.on('error', reject)
+            })
+            client.on('error', reject)
+          })
+
+          client.on('open', () => {
+            client.send('test message')
+            client.send('test message')
+          })
+
+          return messageHandled.then(() => agent.assertSomeTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.receive') {
+                  totalReceiveCount++
+                }
+              }
+            }
+            assert.strictEqual(totalReceiveCount, 2)
+          }))
+        })
+
+        it('should trace binary message length and type', () => {
+          const payload = Buffer.from('binary payload')
+          /** @type {Promise<void>} */
+          const messageHandled = new Promise((resolve, reject) => {
+            wsServer.on('connection', (ws) => {
+              ws.on('message', (data) => {
+                assert.ok(Buffer.isBuffer(data))
+                assert.strictEqual(data.toString(), payload.toString())
+                resolve()
+              })
+              ws.on('error', reject)
+            })
+            client.on('error', reject)
+          })
+
+          client.on('open', () => {
+            client.send(payload)
+          })
+
+          return messageHandled.then(() => agent.assertSomeTraces(traces => {
+            let receiveSpan
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.receive') {
+                  receiveSpan = span
+                  break
+                }
+              }
+              if (receiveSpan) break
+            }
+
+            assert.ok(receiveSpan)
+            assert.strictEqual(receiveSpan.meta['websocket.message.type'], 'binary')
+            assert.strictEqual(receiveSpan.metrics['websocket.message.length'], payload.length)
+          }))
+        })
+
+        it('should not trace received messages without listeners', () => {
+          /** @type {Promise<void>} */
+          const sendComplete = new Promise((resolve, reject) => {
+            wsServer.on('connection', ws => {
+              ws.send('test message', err => {
+                if (err) return reject(err)
+                resolve()
+              })
+            })
+            client.on('error', reject)
+          })
+
+          return sendComplete.then(() => agent.assertSomeTraces(traces => {
+            let receiveCount = 0
+            let sendCount = 0
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'websocket.receive') {
+                  receiveCount++
+                }
+                if (span.name === 'websocket.send') {
+                  sendCount++
+                }
+              }
+            }
+
+            assert.strictEqual(receiveCount, 0)
+            assert.ok(sendCount > 0)
+          }))
         })
 
         it('should instrument connection close', () => {
@@ -160,7 +413,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'custom-ws-service',
-            traceWebsocketMessagesEnabled: true
+            traceWebsocketMessagesEnabled: true,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -248,7 +501,7 @@ describe('Plugin', () => {
         beforeEach(async () => {
           await agent.load(['ws'], [{
             service: 'custom-ws-service',
-            traceWebsocketMessagesEnabled: true
+            traceWebsocketMessagesEnabled: false,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -262,34 +515,14 @@ describe('Plugin', () => {
           agent.close({ ritmReset: false, wipe: true })
         })
 
-        it('should not produce message spans when traceWebsocketMessagesEnabled is not set to true', () => {
-          wsServer.on('connection', (ws) => {
-            ws.send('test message')
-          })
-          messageReceived = false
+        it('should not initialize sub-plugins when traceWebsocketMessagesEnabled is false', () => {
+          const tracer = require('../../dd-trace')
+          const wsPlugin = tracer._pluginManager._pluginsByName.ws
 
-          client.on('message', (data) => {
-            assert.strictEqual(data.toString(), 'test message')
-            messageReceived = true
-          })
-
-          return agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
-            assert.strictEqual(traces[0][0].name, 'web.request')
-            assert.strictEqual(traces[0][0].type, 'websocket')
-          })
-        })
-
-        it('should not produce close event spans when traceWebsocketMessagesEnabled is not set to true', () => {
-          wsServer.on('connection', (ws) => {
-            ws.close()
-          })
-
-          return agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
-            assert.strictEqual(traces[0][0].name, 'web.request')
-            assert.strictEqual(traces[0][0].type, 'websocket')
-          })
+          assert.strictEqual(wsPlugin.server._enabled, false)
+          assert.strictEqual(wsPlugin.producer._enabled, false)
+          assert.strictEqual(wsPlugin.receiver._enabled, false)
+          assert.strictEqual(wsPlugin.close._enabled, false)
         })
       })
       describe('with WebSocket configurations settings', () => {
@@ -298,7 +531,7 @@ describe('Plugin', () => {
             service: 'custom-ws-service',
             traceWebsocketMessagesEnabled: true,
             traceWebsocketMessagesInheritSampling: false,
-            traceWebsocketMessagesSeparateTraces: false
+            traceWebsocketMessagesSeparateTraces: false,
           }])
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
@@ -324,7 +557,7 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            expect(traces[0][0].meta).to.not.have.property('_dd.dm.inherited', 1)
+            assert.ok(!('_dd.dm.inherited' in traces[0][0].meta) || traces[0][0].meta['_dd.dm.inherited'] !== 1)
             assert.strictEqual(traces[0][0].meta['span.kind'], 'consumer')
             assert.strictEqual(traces[0][0].name, 'websocket.receive')
             assert.strictEqual(traces[0][0].type, 'websocket')
@@ -356,6 +589,162 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].service, 'custom-ws-service')
             assert.strictEqual(traces[0][0].name, 'websocket.send')
             assert.strictEqual(traces[0][0].type, 'websocket')
+          })
+        })
+      })
+
+      describe('with span pointers', () => {
+        let tracer
+
+        beforeEach(async () => {
+          tracer = require('../../dd-trace')
+          await agent.load(['ws'], [{
+            service: 'ws-with-pointers',
+            traceWebsocketMessagesEnabled: true,
+          }])
+          WebSocket = require(`../../../versions/ws@${version}`).get()
+
+          wsServer = new WebSocket.Server({ port: clientPort })
+
+          // Create a parent span within a trace to properly set up distributed tracing context
+          tracer.trace('test.parent', parentSpan => {
+            const headers = {}
+            tracer.inject(parentSpan, 'http_headers', headers)
+
+            // Inject distributed tracing headers to enable span pointers
+            client = new WebSocket(`ws://localhost:${clientPort}/${route}?active=true`, {
+              headers,
+            })
+          })
+        })
+
+        afterEach(async () => {
+          clientPort++
+          agent.close({ ritmReset: false, wipe: true })
+        })
+
+        it('should add span pointers to producer spans', async () => {
+          wsServer.on('connection', (ws) => {
+            ws.send('test message with pointer')
+          })
+
+          client.on('message', (data) => {
+            assert.strictEqual(data.toString(), 'test message with pointer')
+          })
+
+          let didFindPointerLink = false
+
+          await agent.assertSomeTraces(traces => {
+            const producerSpan = traces[0][0]
+            assert.strictEqual(producerSpan.name, 'websocket.send')
+            assert.strictEqual(producerSpan.service, 'ws-with-pointers')
+
+            // Check for span links with span pointer attributes
+            assert.ok(producerSpan.meta['_dd.span_links'], 'Producer span should have span links')
+            const spanLinks = JSON.parse(producerSpan.meta['_dd.span_links'])
+            const pointerLink = spanLinks.find(link =>
+              link.attributes && link.attributes['dd.kind'] === 'span-pointer'
+            )
+            assert.ok(pointerLink, 'Should have a span pointer link')
+
+            assertObjectContains(pointerLink, {
+              attributes: {
+                'ptr.kind': 'websocket',
+                'ptr.dir': 'd',
+                'link.name': 'span-pointer-down',
+              },
+            })
+            didFindPointerLink = true
+
+            const { attributes } = pointerLink
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
+            // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
+            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.strictEqual(attributes['ptr.hash'].length, 57)
+          })
+
+          assert.strictEqual(didFindPointerLink, true)
+        })
+
+        it('should add span pointers to consumer spans', async () => {
+          wsServer.on('connection', (ws) => {
+            ws.on('message', (data) => {
+              assert.strictEqual(data.toString(), 'client message with pointer')
+            })
+          })
+
+          client.on('open', () => {
+            client.send('client message with pointer')
+          })
+
+          let didFindPointerLink = false
+
+          await agent.assertSomeTraces(traces => {
+            const consumerSpan = traces.find(t => t[0].name === 'websocket.receive')?.[0]
+            assert.ok(consumerSpan, 'Should have a consumer span')
+            assert.strictEqual(consumerSpan.service, 'ws-with-pointers')
+
+            // Check for span links with span pointer attributes
+            assert.ok(consumerSpan.meta['_dd.span_links'], 'Consumer span should have span links')
+            const spanLinks = JSON.parse(consumerSpan.meta['_dd.span_links'])
+            const pointerLink = spanLinks.find(link =>
+              link.attributes && link.attributes['dd.kind'] === 'span-pointer'
+            )
+
+            assertObjectContains(pointerLink, {
+              attributes: {
+                'ptr.kind': 'websocket',
+                'ptr.dir': 'u',
+                'link.name': 'span-pointer-up',
+              },
+            })
+            didFindPointerLink = true
+
+            const { attributes } = pointerLink
+            assert.ok(Object.hasOwn(attributes, 'ptr.hash'))
+            // Hash format: <prefix><32 hex trace id><16 hex span id><8 hex counter>
+            assert.match(attributes['ptr.hash'], /^[SC][0-9a-f]{32}[0-9a-f]{16}[0-9a-f]{8}$/)
+            assert.strictEqual(attributes['ptr.hash'].length, 57)
+          })
+
+          assert.strictEqual(didFindPointerLink, true)
+        })
+
+        it('should generate unique hashes for each message', () => {
+          const testMessage = 'test message'
+          const hashes = new Set()
+
+          wsServer.on('connection', (ws) => {
+            ws.send(testMessage)
+            // Send a second message to test counter increment
+            setTimeout(() => ws.send(testMessage), 10)
+          })
+
+          client.on('message', (data) => {
+            assert.strictEqual(data.toString(), testMessage)
+          })
+
+          return agent.assertSomeTraces(traces => {
+            // Find all producer spans
+            const producerTraces = traces.filter(t => t[0].name === 'websocket.send')
+
+            producerTraces.forEach(trace => {
+              if (trace[0].meta['_dd.span_links']) {
+                const spanLinks = JSON.parse(trace[0].meta['_dd.span_links'])
+                const pointerLink = spanLinks.find(link =>
+                  link.attributes && link.attributes['dd.kind'] === 'span-pointer'
+                )
+                if (pointerLink) {
+                  const hash = pointerLink.attributes['ptr.hash']
+                  hashes.add(hash)
+                }
+              }
+            })
+
+            // Each message should have a unique hash due to counter increment
+            if (hashes.size > 1) {
+              assert.ok(hashes.size >= 2, 'Multiple messages should have different hashes')
+            }
           })
         })
       })

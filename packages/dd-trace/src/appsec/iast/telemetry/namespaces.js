@@ -2,8 +2,8 @@
 
 const log = require('../../../log')
 const { Namespace } = require('../../../telemetry/metrics')
-const { addMetricsToSpan } = require('./span-tags')
 const { IAST_TRACE_METRIC_PREFIX } = require('../tags')
+const { addMetricsToSpan } = require('./span-tags')
 
 const DD_IAST_METRICS_NAMESPACE = Symbol('_dd.iast.request.metrics.namespace')
 
@@ -45,7 +45,7 @@ function merge (namespace) {
 
       if (points?.length && type === 'count') {
         const gMetric = globalNamespace.getMetric(metricName, tags)
-        points.forEach(point => gMetric.inc(point[1]))
+        for (const point of points) gMetric.inc(point[1])
       }
     }
   }
@@ -108,5 +108,5 @@ module.exports = {
 
   DD_IAST_METRICS_NAMESPACE,
 
-  IastNamespace
+  IastNamespace,
 }

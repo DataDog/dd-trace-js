@@ -59,7 +59,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       resourceMetrics: [{
         resource: this.transformResource(),
         scopeMetrics: this.#transformScope(metrics),
-      }]
+      }],
     }
 
     return this.serializeToProtobuf(protoMetricsService, metricsData)
@@ -75,8 +75,8 @@ class OtlpTransformer extends OtlpTransformerBase {
     const metricsData = {
       resourceMetrics: [{
         resource: this.transformResource(),
-        scopeMetrics: this.#transformScope(metrics, true)
-      }]
+        scopeMetrics: this.#transformScope(metrics, true),
+      }],
     }
     return this.serializeToJson(metricsData)
   }
@@ -85,7 +85,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Creates scope metrics grouped by instrumentation scope.
    * @param {Iterable<AggregatedMetric>} metrics - Iterable of metrics to transform
    * @param {boolean} isJson - Whether to format for JSON output
-   * @returns {Array<Object>} Array of scope metric objects
+   * @returns {Array<object>} Array of scope metric objects
    *
    */
   #transformScope (metrics, isJson = false) {
@@ -100,7 +100,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       const scope = {
         name,
         version,
-        droppedAttributesCount: 0
+        droppedAttributesCount: 0,
       }
 
       if (attributes) {
@@ -113,7 +113,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       scopeMetrics.push({
         scope,
         schemaUrl,
-        metrics: metricsInScope.map(metric => this.#transformMetric(metric, isJson))
+        metrics: metricsInScope.map(metric => this.#transformMetric(metric, isJson)),
       })
     }
 
@@ -125,13 +125,13 @@ class OtlpTransformer extends OtlpTransformerBase {
    *
    * @param {AggregatedMetric} metric - The metric to transform
    * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
-   * @returns {Object} - The metric transformed to OTLP protobuf or JSON format
+   * @returns {object} - The metric transformed to OTLP protobuf or JSON format
    */
   #transformMetric (metric, isJson = false) {
     const result = {
       name: metric.name,
       description: metric.description || '',
-      unit: metric.unit || ''
+      unit: metric.unit || '',
     }
 
     const isCumulative = metric.temporality === TEMPORALITY.CUMULATIVE
@@ -146,7 +146,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       case METRIC_TYPES.HISTOGRAM:
         result.histogram = {
           dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformHistogramDataPoint(dp, isJson)),
-          aggregationTemporality: temporality
+          aggregationTemporality: temporality,
         }
         break
 
@@ -157,13 +157,13 @@ class OtlpTransformer extends OtlpTransformerBase {
         result.sum = {
           dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp, isJson)),
           aggregationTemporality: temporality,
-          isMonotonic: metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER
+          isMonotonic: metric.type === METRIC_TYPES.COUNTER || metric.type === METRIC_TYPES.OBSERVABLECOUNTER,
         }
         break
 
       case METRIC_TYPES.GAUGE:
         result.gauge = {
-          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp, isJson))
+          dataPoints: Array.from(metric.dataPointMap.values(), dp => this.#transformNumberDataPoint(dp, isJson)),
         }
         break
     }
@@ -176,7 +176,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    *
    * @param {HistogramDataPoint} dp - The histogram data point to transform
    * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
-   * @returns {Object} The histogram data point transformed to OTLP protobuf format
+   * @returns {object} The histogram data point transformed to OTLP protobuf format
    */
   #transformHistogramDataPoint (dp, isJson) {
     const attributes = isJson
@@ -192,7 +192,7 @@ class OtlpTransformer extends OtlpTransformerBase {
       bucketCounts: dp.bucketCounts || [],
       explicitBounds: dp.explicitBounds || [],
       min: dp.min,
-      max: dp.max
+      max: dp.max,
     }
 
     if (isJson) {
@@ -209,7 +209,7 @@ class OtlpTransformer extends OtlpTransformerBase {
    *
    * @param {NumberDataPoint} dataPoint - The number data point to transform
    * @param {boolean} isJson - Whether to output JSON format (vs protobuf)
-   * @returns {Object} The number data point transformed to OTLP protobuf format
+   * @returns {object} The number data point transformed to OTLP protobuf format
    */
   #transformNumberDataPoint (dataPoint, isJson) {
     const attributes = isJson
@@ -221,7 +221,7 @@ class OtlpTransformer extends OtlpTransformerBase {
 
     const result = {
       attributes,
-      timeUnixNano
+      timeUnixNano,
     }
 
     if (dataPoint.startTimeUnixNano) {

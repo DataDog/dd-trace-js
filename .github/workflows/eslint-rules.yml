@@ -3,11 +3,11 @@ name: ESLint Rules
 on:
   pull_request:
     paths:
-      - 'eslint-rules/**'
+      - "eslint-rules/**"
   push:
-    branches: [master]
+    branches: [master, mq-working-branch-master-*]
     paths:
-      - 'eslint-rules/**'
+      - "eslint-rules/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -17,7 +17,7 @@ jobs:
   eslint-rules:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run test:eslint-rules

@@ -1,6 +1,6 @@
 'use strict'
 
-const { LRUCache } = require('lru-cache')
+const { LRUCache } = require('../../../../../vendor/dist/lru-cache')
 const { fnv64 } = require('../fnv')
 const { Schema } = require('./schema')
 
@@ -98,38 +98,40 @@ class OpenApiComponents {
 // TODO: Add tests to verify this behavior. A couple of cases are not
 // covered by the existing tests.
 function toJSON (value) {
-  // eslint-disable-next-line eslint-rules/eslint-safe-typeof-object
-  if (typeof value === 'object') {
-    if (value === null) {
-      return 'null'
-    }
-    if (Array.isArray(value)) {
-      let result = '['
-      for (let i = 0; i < value.length; i++) {
-        if (value[i] !== null) {
-          if (i !== 0) {
-            result += ', '
-          }
-          result += value[i] === undefined ? 'null' : toJSON(value[i])
-        }
-      }
-      return `${result}]`
-    }
-    let result = '{'
-    for (const [key, objectValue] of Object.entries(value)) {
-      if (objectValue != null && typeof key === 'string') {
-        const converted = toJSON(objectValue)
-        if (converted !== undefined) {
-          if (result !== '{') {
-            result += ', '
-          }
-          result += `"${key}": ${converted}`
-        }
-      }
-    }
-    return `${result}}`
+  if (typeof value !== 'object') {
+    return JSON.stringify(value)
   }
-  return JSON.stringify(value)
+
+  if (value === null) {
+    return 'null'
+  }
+
+  if (Array.isArray(value)) {
+    let result = '['
+    for (let i = 0; i < value.length; i++) {
+      if (value[i] !== null) {
+        if (i !== 0) {
+          result += ', '
+        }
+        result += value[i] === undefined ? 'null' : toJSON(value[i])
+      }
+    }
+    return `${result}]`
+  }
+
+  let result = '{'
+  for (const [key, objectValue] of Object.entries(value)) {
+    if (objectValue != null && typeof key === 'string') {
+      const converted = toJSON(objectValue)
+      if (converted !== undefined) {
+        if (result !== '{') {
+          result += ', '
+        }
+        result += `"${key}": ${converted}`
+      }
+    }
+  }
+  return `${result}}`
 }
 
 module.exports = {

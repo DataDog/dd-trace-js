@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -27,15 +26,15 @@ describe('Kafka consumer plugin', () => {
 
     kafkaConsumerPlugin = proxyquire('../../../../../src/appsec/iast/taint-tracking/plugins/kafka', {
       '../../iast-plugin': {
-        SourceIastPlugin
+        SourceIastPlugin,
       },
       '../operations': {
         newTaintedObject,
-        newTaintedString
+        newTaintedString,
       },
       '../../iast-context': {
-        getIastContext
-      }
+        getIastContext,
+      },
     })
 
     kafkaConsumerPlugin.enable(true)
@@ -46,50 +45,50 @@ describe('Kafka consumer plugin', () => {
   afterEach(sinon.restore)
 
   it('should subscribe to dd-trace:kafkajs:consumer:afterStart channel', () => {
-    expect(addSub).to.be.calledOnceWith({
+    sinon.assert.calledOnceWithMatch(addSub, {
       channelName: 'dd-trace:kafkajs:consumer:afterStart',
-      tag: [KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE]
+      tag: [KAFKA_MESSAGE_KEY, KAFKA_MESSAGE_VALUE],
     })
   })
 
   it('should taint kafka message', () => {
     const message = {
       key: Buffer.from('key'),
-      value: Buffer.from('value')
+      value: Buffer.from('value'),
     }
 
     handler({ message })
 
-    expect(newTaintedObject).to.be.calledTwice
+    sinon.assert.calledTwice(newTaintedObject)
 
-    expect(newTaintedObject.firstCall).to.be.calledWith(iastContext, message.key, undefined, KAFKA_MESSAGE_KEY)
-    expect(newTaintedObject.secondCall).to.be.calledWith(iastContext, message.value, undefined, KAFKA_MESSAGE_VALUE)
+    sinon.assert.calledWith(newTaintedObject.firstCall, iastContext, message.key, undefined, KAFKA_MESSAGE_KEY)
+    sinon.assert.calledWith(newTaintedObject.secondCall, iastContext, message.value, undefined, KAFKA_MESSAGE_VALUE)
   })
 
   it('should taint key Buffer.toString method', () => {
     const message = {
       key: Buffer.from('keyToString'),
-      value: Buffer.from('valueToString')
+      value: Buffer.from('valueToString'),
     }
 
     handler({ message })
 
     const keyStr = message.key.toString()
 
-    expect(newTaintedString).to.be.calledOnceWith(iastContext, keyStr, undefined, KAFKA_MESSAGE_KEY)
+    sinon.assert.calledOnceWithExactly(newTaintedString, iastContext, keyStr, undefined, KAFKA_MESSAGE_KEY)
   })
 
   it('should taint value Buffer.toString method', () => {
     const message = {
       key: Buffer.from('keyToString'),
-      value: Buffer.from('valueToString')
+      value: Buffer.from('valueToString'),
     }
 
     handler({ message })
 
     const valueStr = message.value.toString()
 
-    expect(newTaintedString).to.be.calledOnceWith(iastContext, valueStr, undefined, KAFKA_MESSAGE_VALUE)
+    sinon.assert.calledOnceWithExactly(newTaintedString, iastContext, valueStr, undefined, KAFKA_MESSAGE_VALUE)
   })
 
   it('should not fail with an unknown kafka message', () => {
@@ -102,7 +101,7 @@ describe('Kafka consumer plugin', () => {
 
   it('should not fail with an unknown kafka message II', () => {
     const message = {
-      key: 'key'
+      key: 'key',
     }
 
     assert.doesNotThrow(() => {

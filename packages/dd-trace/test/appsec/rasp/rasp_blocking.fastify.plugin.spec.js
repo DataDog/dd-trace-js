@@ -1,14 +1,14 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const path = require('node:path')
+const Axios = require('axios')
+const { describe, it, afterEach, before, after } = require('mocha')
+const sinon = require('sinon')
 const agent = require('../../plugins/agent')
 const { getConfigFresh } = require('../../helpers/config')
 const appsec = require('../../../src/appsec')
-
-const Axios = require('axios')
-const { assert } = require('chai')
-const { describe, it, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
 
 const { withVersions } = require('../../setup/mocha')
 const { json: blockedJson } = require('../../../src/appsec/blocked_templates')
@@ -25,8 +25,8 @@ describe('RASP - fastify blocking', () => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       const fastify = require(`../../../../../versions/fastify@${version}`).get()
@@ -35,7 +35,7 @@ describe('RASP - fastify blocking', () => {
       hooks = {
         onSend: sinon.stub().resolves(),
         onResponse: sinon.stub().resolves(),
-        onError: sinon.stub().resolves()
+        onError: sinon.stub().resolves(),
       }
 
       for (const [k, v] of Object.entries(hooks)) {
@@ -50,7 +50,7 @@ describe('RASP - fastify blocking', () => {
         user: 'postgres',
         password: 'postgres',
         database: 'postgres',
-        application_name: 'test'
+        application_name: 'test',
       })
       const http = require('http')
 
@@ -87,7 +87,7 @@ describe('RASP - fastify blocking', () => {
       axios = Axios.create({
         baseURL: `http://localhost:${app.server.address().port}`,
         validateStatus: () => true,
-        responseType: 'text'
+        responseType: 'text',
       })
     })
 

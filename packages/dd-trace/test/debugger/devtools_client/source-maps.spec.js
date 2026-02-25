@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -14,7 +13,7 @@ const parsedSourceMap = {
   sourceRoot: '',
   sources: ['index.ts'],
   names: [],
-  mappings: ';AAAA,MAAM,UAAU,GAAG,IAAI,CAAC;AACxB,OAAO,CAAC,GAAG,CAAC,UAAU,CAAC,CAAC'
+  mappings: ';AAAA,MAAM,UAAU,GAAG,IAAI,CAAC;AACxB,OAAO,CAAC,GAAG,CAAC,UAAU,CAAC,CAAC',
 }
 const dir = '/foo'
 const sourceMapURL = 'index.map.js'
@@ -31,7 +30,7 @@ describe('source map utils', function () {
 
       const sourceMaps = proxyquire('../../../src/debugger/devtools_client/source-maps', {
         fs: { readFileSync },
-        'fs/promises': { readFile }
+        'fs/promises': { readFile },
       })
 
       loadSourceMap = sourceMaps.loadSourceMap
@@ -71,9 +70,9 @@ describe('source map utils', function () {
       })
 
       it('should throw if inline source map is invalid', function () {
-        expect(() => {
+        assert.throws(() => {
           loadSourceMapSync(dir, inlineSourceMap.slice(0, -10))
-        }).to.throw()
+        })
       })
 
       it('should return parsed source map', function () {
@@ -105,14 +104,14 @@ describe('source map utils', function () {
 
     function setup () {
       clock = sinon.useFakeTimers({
-        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
       })
       readFileSync = sinon.stub().returns(rawSourceMap)
       readFile = sinon.stub().resolves(rawSourceMap)
 
       const sourceMaps = proxyquire('../../../src/debugger/devtools_client/source-maps', {
         fs: { readFileSync },
-        'fs/promises': { readFile }
+        'fs/promises': { readFile },
       })
 
       loadSourceMap = sourceMaps.loadSourceMap

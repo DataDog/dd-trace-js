@@ -8,11 +8,11 @@ const sampleResponse = {
   statusCode: 200,
   body: JSON.stringify(
     {
-      message: 'hello!'
+      message: 'hello!',
     },
     null,
     2
-  )
+  ),
 }
 
 const handler = async (_event, _context) => {
@@ -65,11 +65,67 @@ const errorHandler = async (_event, _context) => {
   throw new CustomError('my error')
 }
 
+/**
+ * Lambda Authorizer handler - only receives event, no context.
+ * This is the signature used by API Gateway Lambda Authorizers.
+ */
+const authorizerHandler = async (event) => {
+  // Simulate a simple authorizer that returns an IAM policy
+  return {
+    principalId: 'user123',
+    policyDocument: {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Action: 'execute-api:Invoke',
+          Effect: 'Allow',
+          Resource: event.methodArn || '*',
+        },
+      ],
+    },
+  }
+}
+
+/**
+ * Synchronous Lambda Authorizer handler - only receives event, no context.
+ */
+const authorizerHandlerSync = (event) => {
+  return {
+    principalId: 'user123',
+    policyDocument: {
+      Version: '2012-10-17',
+      Statement: [
+        {
+          Action: 'execute-api:Invoke',
+          Effect: 'Allow',
+          Resource: event.methodArn || '*',
+        },
+      ],
+    },
+  }
+}
+
+/**
+ * Lambda Authorizer handler that throws an error.
+ */
+const authorizerErrorHandler = async (event) => {
+  class AuthorizationError extends Error {
+    constructor (message) {
+      super(message)
+      Object.defineProperty(this, 'name', { value: 'AuthorizationError' })
+    }
+  }
+  throw new AuthorizationError('Unauthorized')
+}
+
 module.exports = {
   finishSpansEarlyTimeoutHandler,
   handler,
   swappedArgsHandler,
   timeoutHandler,
   errorHandler,
-  callbackHandler
+  callbackHandler,
+  authorizerHandler,
+  authorizerHandlerSync,
+  authorizerErrorHandler,
 }

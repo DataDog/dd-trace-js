@@ -2,13 +2,16 @@
 
 process.setMaxListeners(50)
 
-require('../setup/core')
 const assert = require('assert')
 const http = require('http')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { format } = require('util')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
+
+require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
@@ -28,14 +31,17 @@ describe('OpenTelemetry Meter Provider', () => {
     }
     Object.assign(process.env, envOverrides)
 
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+
     const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
       './config': getConfigFresh,
+      './dogstatsd': dogstatsd,
     })
     const TracerProxy = proxyquire.noPreserveCache()('../../src', {
-      './proxy': proxy
+      './proxy': proxy,
     })
     const tracer = proxyquire.noPreserveCache()('../../', {
-      './src': TracerProxy
+      './src': TracerProxy,
     })
     tracer._initialized = false
     tracer.init()
@@ -53,14 +59,15 @@ describe('OpenTelemetry Meter Provider', () => {
 
     httpStub = sinon.stub(http, 'request').callsFake((options, callback) => {
       const baseMockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
-      const baseMockRes = { statusCode: 200, on: () => {}, setTimeout: () => {} }
+      const baseMockRes = { statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} }
 
       if (options.path && options.path.includes('/v1/metrics')) {
         capturedHeaders = options.headers
         const responseHandlers = {}
         const mockRes = {
           ...baseMockRes,
-          on: (event, handler) => { responseHandlers[event] = handler; return mockRes }
+          on: (event, handler) => { responseHandlers[event] = handler; return mockRes },
+          once: (event, handler) => { responseHandlers[event] = handler; return mockRes },
         }
 
         const mockReq = {
@@ -74,13 +81,13 @@ describe('OpenTelemetry Meter Provider', () => {
               ? JSON.parse(capturedPayload.toString())
               : protoMetricsService.toObject(protoMetricsService.decode(capturedPayload), {
                 longs: Number,
-                defaults: false
+                defaults: false,
               })
 
             validator(decoded, capturedHeaders)
             validatorCalled = true
             if (responseHandlers.end) responseHandlers.end()
-          }
+          },
         }
         callback(mockRes)
         return mockReq
@@ -405,7 +412,7 @@ describe('OpenTelemetry Meter Provider', () => {
         double: 3.14,
         bool: true,
         arr: [1, 2, 3],
-        obj: { nested: 'dropped' }
+        obj: { nested: 'dropped' },
       })
 
       setTimeout(() => {
@@ -633,6 +640,26 @@ describe('OpenTelemetry Meter Provider', () => {
 
       setTimeout(() => { validator(); done() }, 150)
     })
+
+    it('includes attributes in instrumentation scope', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const scopeMetrics = decoded.resourceMetrics[0].scopeMetrics[0]
+        assert.strictEqual(scopeMetrics.metrics.length, 2)
+        const scopeAttributes = scopeMetrics.scope.attributes
+        assert.strictEqual(scopeAttributes.length, 2)
+        const usernameAttr = scopeAttributes.find(a => a.key === 'username')
+        const idAttr = scopeAttributes.find(a => a.key === 'id')
+        assert.strictEqual(usernameAttr?.value.stringValue, 'test')
+        assert.strictEqual(idAttr?.value.intValue, 23)
+      })
+
+      setupTracer()
+      const meter = metrics.getMeter('app', '', { attributes: { username: 'test', id: 23 } })
+      meter.createCounter('num.monkies').add(1)
+      meter.createCounter('num.baboons').add(2)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
   })
 
   describe('Unimplemented Features', () => {
@@ -657,7 +684,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('uses default protobuf protocol', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: undefined,
-        OTEL_EXPORTER_OTLP_PROTOCOL: undefined
+        OTEL_EXPORTER_OTLP_PROTOCOL: undefined,
       })
       assert(meterProvider.reader)
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
@@ -671,7 +698,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('prioritizes metrics-specific protocol over generic protocol', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
-        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
       })
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/json')
     })
@@ -683,7 +710,7 @@ describe('OpenTelemetry Meter Provider', () => {
       assert.strictEqual(meterProvider.reader.exporter.transformer.protocol, 'http/protobuf')
       const expectedMsg = 'OTLP gRPC protocol is not supported for metrics. ' +
         'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.'
-      assert(warnSpy.calledWith(expectedMsg))
+      assert(warnSpy.getCalls().some(call => format(...call.args) === expectedMsg))
       warnSpy.restore()
     })
   })
@@ -691,7 +718,7 @@ describe('OpenTelemetry Meter Provider', () => {
   describe('Endpoint Configuration', () => {
     it('configures OTLP endpoint from environment variable', () => {
       const { meterProvider } = setupTracer({
-        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4321/v1/metrics'
+        OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4321/v1/metrics',
       })
       assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
       assert.strictEqual(meterProvider.reader.exporter.options.hostname, 'custom')
@@ -701,7 +728,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('prioritizes metrics-specific endpoint over generic endpoint', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4318/v1/metrics',
-        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://generic:4318/v1/metrics'
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://generic:4318/v1/metrics',
       })
       assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
       assert.strictEqual(meterProvider.reader.exporter.options.hostname, 'custom')
@@ -726,7 +753,7 @@ describe('OpenTelemetry Meter Provider', () => {
     it('prioritizes metrics-specific headers over generic OTLP headers', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_HEADERS: 'generic=value,shared=generic',
-        OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'metrics-specific=value,shared=metrics'
+        OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'metrics-specific=value,shared=metrics',
       })
       const exporter = meterProvider.reader.exporter
       assert.strictEqual(exporter.options.headers['metrics-specific'], 'value')
@@ -781,13 +808,13 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_METRIC_EXPORT_TIMEOUT: '0',
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '0',
       }, false)
-      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_SCHEDULE_DELAY/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_METRIC_EXPORT_INTERVAL/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_BSP_MAX_QUEUE_SIZE/)))
-      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_EXPORTER_OTLP_TIMEOUT/)))
-      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_METRIC_EXPORT_TIMEOUT/)))
-      assert(!warnSpy.calledWith(sinon.match(/Invalid value 0 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
+      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
+      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
+      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
+      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
     })
 
     it('rejects negative values for all configs', () => {
@@ -799,16 +826,16 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_METRIC_EXPORT_INTERVAL: '-1',
         OTEL_BSP_SCHEDULE_DELAY: '-1',
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '-1',
-        OTEL_BSP_MAX_QUEUE_SIZE: '-1'
+        OTEL_BSP_MAX_QUEUE_SIZE: '-1',
       }, false)
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_METRIC_EXPORT_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_METRIC_EXPORT_INTERVAL/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_SCHEDULE_DELAY/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value -1 for OTEL_BSP_MAX_QUEUE_SIZE/)))
+      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
     })
 
     it('rejects values that are not numbers for all configs', () => {
@@ -820,25 +847,31 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_METRIC_EXPORT_INTERVAL: 'python!',
         OTEL_BSP_SCHEDULE_DELAY: 'NaN',
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 'abc',
-        OTEL_BSP_MAX_QUEUE_SIZE: 'xyz'
+        OTEL_BSP_MAX_QUEUE_SIZE: 'xyz',
       }, false)
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_METRIC_EXPORT_TIMEOUT/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_METRIC_EXPORT_INTERVAL/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_SCHEDULE_DELAY/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/)))
-      assert(warnSpy.calledWith(sinon.match(/Invalid value NaN for OTEL_BSP_MAX_QUEUE_SIZE/)))
+      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
+      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
     })
   })
 
   describe('Initialization', () => {
-    it('does not initialize when OTEL metrics are disabled', () => {
+    it('does not initialize when OTEL metrics configuration is unset', () => {
       const { meterProvider } = setupTracer({ DD_METRICS_OTEL_ENABLED: undefined })
       const { MeterProvider } = require('../../src/opentelemetry/metrics')
 
-      // Should return no-op provider when disabled, not our custom MeterProvider
+      assert.strictEqual(meterProvider instanceof MeterProvider, false)
+    })
+
+    it('does not initialize when OTEL metrics are explicitly disabled', () => {
+      const { meterProvider } = setupTracer({ DD_METRICS_OTEL_ENABLED: 'false' })
+      const { MeterProvider } = require('../../src/opentelemetry/metrics')
+
       assert.strictEqual(meterProvider instanceof MeterProvider, false)
     })
 
@@ -859,9 +892,10 @@ describe('OpenTelemetry Meter Provider', () => {
       obsGauge.addCallback(() => {})
       obsGauge.addCallback('not a function')
       provider.reader.forceFlush()
-      assert(warnSpy.calledWith('PeriodicMetricReader is shutdown. 4 measurement(s) were dropped'))
+      assert(warnSpy.getCalls().some(call =>
+        format(...call.args) === 'PeriodicMetricReader is shutdown. 4 measurement(s) were dropped'))
       provider.reader.shutdown()
-      assert(warnSpy.calledWith('PeriodicMetricReader is already shutdown'))
+      assert(warnSpy.getCalls().some(call => format(...call.args) === 'PeriodicMetricReader is already shutdown'))
       warnSpy.restore()
     })
   })
@@ -876,7 +910,7 @@ describe('OpenTelemetry Meter Provider', () => {
       const validator = mockOtlpExport((metrics) => {
         assert.strictEqual(countMetrics(metrics), 3)
         assert(warnSpy.getCalls().some(call =>
-          call.args[0].includes('Metric queue exceeded limit (max: 3)')
+          format(...call.args).includes('Metric queue exceeded limit (max: 3)')
         ))
       })
 
@@ -900,7 +934,7 @@ describe('OpenTelemetry Meter Provider', () => {
       const validator = mockOtlpExport((metrics) => {
         if (++callCount === 1) {
           assert.strictEqual(countMetrics(metrics), 3)
-          assert(warnSpy.getCalls().some(call => call.args[0].includes('Metric queue exceeded limit')))
+          assert(warnSpy.getCalls().some(call => format(...call.args).includes('Metric queue exceeded limit')))
         }
       })
 
@@ -925,7 +959,7 @@ describe('OpenTelemetry Meter Provider', () => {
         if (!firstExport) return
         firstExport = false
         assert.strictEqual(countMetrics(metrics), 3)
-        assert(warnSpy.getCalls().some(call => call.args[0].includes('Metric queue exceeded limit')))
+        assert(warnSpy.getCalls().some(call => format(...call.args).includes('Metric queue exceeded limit')))
       })
 
       setupTracer(
@@ -958,11 +992,12 @@ describe('OpenTelemetry Meter Provider', () => {
         const counter1Metric = exportedMetrics.find(m => m.name === 'counter.sync')
         assert(counter1Metric, 'counter.sync should be exported')
         assert.strictEqual(counter1Metric.sum.dataPoints.length, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE)
-        assert(warnSpy.getCalls().some(call =>
-          call.args[0].includes('Metric queue exceeded limit') &&
-          call.args[0].includes(`max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}`) &&
-          call.args[0].includes('Dropping 2 measurements')
-        ))
+        assert(warnSpy.getCalls().some(call => {
+          const formatted = format(...call.args)
+          return formatted.includes('Metric queue exceeded limit') &&
+            formatted.includes(`max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}`) &&
+            formatted.includes('Dropping 2 measurements')
+        }))
       })
 
       setupTracer({ DD_METRICS_OTEL_ENABLED: 'true', OTEL_METRIC_EXPORT_INTERVAL: '30000' }, false)
@@ -993,16 +1028,18 @@ describe('OpenTelemetry Meter Provider', () => {
         requestCount++
         assert(options.headers['Content-Length'] > 0)
 
+        const handler = (event, handler) => {
+          handlers[event] = handler
+          return mockReq
+        }
         const handlers = {}
         const mockReq = {
           write: sinon.stub(),
           end: sinon.stub(),
-          on: (event, handler) => {
-            handlers[event] = handler
-            return mockReq
-          },
+          on: handler,
+          once: handler,
           destroy: sinon.stub(),
-          setTimeout: sinon.stub()
+          setTimeout: sinon.stub(),
         }
 
         if (requestCount === 1) {

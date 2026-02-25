@@ -2,13 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
 
 require('../setup/core')
-
 const ContextManager = require('../../src/opentelemetry/context_manager')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const tracer = require('../../').init()
@@ -18,6 +16,12 @@ function makeSpan (...args) {
   tracerProvider.register()
   const tracer = tracerProvider.getTracer()
   return tracer.startSpan(...args)
+}
+
+function getTracer () {
+  const tracerProvider = new TracerProvider()
+  tracerProvider.register()
+  return tracerProvider.getTracer()
 }
 
 describe('OTel Context Manager', () => {
@@ -31,7 +35,7 @@ describe('OTel Context Manager', () => {
       getSomeValue: async () => {
         await new Promise(resolve => setTimeout(resolve, 100))
         return { name: 'Dummy Name' }
-      }
+      },
     }
   })
 
@@ -65,7 +69,7 @@ describe('OTel Context Manager', () => {
 
   it('should return root context', () => {
     const ctx = api.context.active()
-    expect(ctx).to.be.an.instanceof(ROOT_CONTEXT.constructor)
+    assert.ok(ctx instanceof ROOT_CONTEXT.constructor)
   })
 
   it('should set active context', () => {
@@ -107,7 +111,7 @@ describe('OTel Context Manager', () => {
 
     const ctx2 = ctx.setValue(key, 'context 2')
     assert.strictEqual(ctx.getValue(key), undefined)
-    expect(ctx).to.be.an.instanceof(ROOT_CONTEXT.constructor)
+    assert.ok(ctx instanceof ROOT_CONTEXT.constructor)
     assert.strictEqual(ctx2.getValue(key), 'context 2')
 
     const ret = api.context.with(ctx2, () => {
@@ -130,7 +134,7 @@ describe('OTel Context Manager', () => {
 
   it('should propagate baggage from an otel span to a datadog span', () => {
     const entries = {
-      foo: { value: 'bar' }
+      foo: { value: 'bar' },
     }
     const baggage = propagation.createBaggage(entries)
     const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
@@ -165,11 +169,9 @@ describe('OTel Context Manager', () => {
       baggages = baggages.setEntry('key2', { value: 'otel2' })
       contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
     })
-    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal({ key1: 'dd1' })
+    assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key1: 'dd1' })
     api.context.with(contextWithUpdatedBaggages, () => {
-      expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-        { key1: 'otel1', key2: 'otel2' }
-      )
+      assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key1: 'otel1', key2: 'otel2' })
       ddSpan.setBaggageItem('key2', 'dd2')
       assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(),
         [['key1', { value: 'otel1' }], ['key2', { value: 'dd2' }]]
@@ -187,15 +189,20 @@ describe('OTel Context Manager', () => {
       baggages = baggages.removeEntry('key1')
       contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
     })
-    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-      { key1: 'dd1', key2: 'dd2' }
-    )
+    assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key1: 'dd1', key2: 'dd2' })
     api.context.with(contextWithUpdatedBaggages, () => {
-      expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-        { key2: 'dd2' }
-      )
+      assert.deepStrictEqual(JSON.parse(ddSpan.getAllBaggageItems()), { key2: 'dd2' })
       ddSpan.removeBaggageItem('key2')
       assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(), [])
+    })
+  })
+
+  it('should return active span', () => {
+    const otelTracer = getTracer()
+    otelTracer.startActiveSpan('otel', (span) => {
+      const activeSpan = trace.getActiveSpan()
+      assert.strictEqual(activeSpan, span)
+      span.end()
     })
   })
 })

@@ -5,10 +5,9 @@ const os = require('node:os')
 const path = require('node:path')
 const util = require('node:util')
 
-const { expect } = require('chai')
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const realFS = Object.assign({}, require('node:fs'))
+const realFS = { ...require('node:fs') }
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
@@ -44,7 +43,7 @@ describe('Plugin', () => {
                 data.forEach((arr) => {
                   arr.forEach((trace) => {
                     if (trace.name === 'fs.operation') {
-                      expect.fail('should not have been any fs traces')
+                      assert.fail('should not have been any fs traces')
                     }
                   })
                 })
@@ -98,7 +97,7 @@ describe('Plugin', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
           agent.assertSomeTraces(() => {
-            expect.fail('should not have been any traces')
+            assert.fail('should not have been any traces')
           }).catch(done)
 
           setTimeout(done, 1500) // allow enough time to ensure no traces happened
@@ -136,8 +135,8 @@ describe('Plugin', () => {
             resource: 'open',
             meta: {
               'file.flag': 'r',
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           fs.open(__filename, (err, _fd) => {
@@ -162,8 +161,8 @@ describe('Plugin', () => {
             resource: 'open',
             meta: {
               'file.flag': 'r',
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           fs.open(__filename, (err, _fd) => {
@@ -177,8 +176,8 @@ describe('Plugin', () => {
             resource: 'open',
             meta: {
               'file.flag': 'r+',
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           fs.open(__filename, 'r+', (err, _fd) => {
@@ -195,8 +194,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'file.flag': 'r',
-                'file.path': filename
-              }
+                'file.path': filename,
+              },
             })
           })
         })
@@ -218,8 +217,8 @@ describe('Plugin', () => {
               resource: 'promises.open',
               meta: {
                 'file.flag': 'r',
-                'file.path': __filename
-              }
+                'file.path': __filename,
+              },
             })
 
             fs.promises.open(__filename).then(_fd => {
@@ -232,8 +231,8 @@ describe('Plugin', () => {
               resource: 'promises.open',
               meta: {
                 'file.flag': 'r+',
-                'file.path': __filename
-              }
+                'file.path': __filename,
+              },
             })
 
             fs.promises.open(__filename, 'r+').then(_fd => {
@@ -249,8 +248,8 @@ describe('Plugin', () => {
                 error: 0,
                 meta: {
                   'file.flag': 'r',
-                  'file.path': filename
-                }
+                  'file.path': filename,
+                },
               })
             })
           })
@@ -272,8 +271,8 @@ describe('Plugin', () => {
             resource: 'openSync',
             meta: {
               'file.flag': 'r',
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           fd = fs.openSync(__filename)
@@ -284,8 +283,8 @@ describe('Plugin', () => {
             resource: 'openSync',
             meta: {
               'file.flag': 'r+',
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           fd = fs.openSync(__filename, 'r+')
@@ -301,8 +300,8 @@ describe('Plugin', () => {
               error: 0,
               meta: {
                 'file.flag': 'r',
-                'file.path': filename
-              }
+                'file.path': filename,
+              },
             })
           }
         })
@@ -314,8 +313,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': fd.toString()
-            }
+              'file.descriptor': fd.toString(),
+            },
           })
 
           tested(fs, [fd], done)
@@ -331,8 +330,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.flag': 'r',
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           tested(fs, [__filename], done)
@@ -343,8 +342,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.flag': 'r+',
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           tested(fs, [__filename, { flag: 'r+' }], done)
@@ -355,8 +354,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.flag': 'r',
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           tested(fs, [__filename, 'utf8'], done)
@@ -382,8 +381,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.flag': 'w',
-              'file.path': filename
-            }
+              'file.path': filename,
+            },
           })
 
           tested(fs, [filename, 'test'], done)
@@ -394,8 +393,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.flag': 'w+',
-              'file.path': filename
-            }
+              'file.path': filename,
+            },
           })
 
           tested(fs, [filename, 'test', { flag: 'w+' }], done)
@@ -421,8 +420,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.flag': 'a',
-              'file.path': filename
-            }
+              'file.path': filename,
+            },
           })
 
           tested(fs, [filename, 'test'], done)
@@ -433,8 +432,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.flag': 'a+',
-              'file.path': filename
-            }
+              'file.path': filename,
+            },
           })
 
           tested(fs, [filename, 'test', { flag: 'a+' }], done)
@@ -449,8 +448,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           tested(fs, [__filename], done)
@@ -473,8 +472,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.src': __filename,
-              'file.dest': dest
-            }
+              'file.dest': dest,
+            },
           })
 
           tested(fs, [__filename, dest], done)
@@ -489,8 +488,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           tested(fs, [__filename], done)
@@ -505,8 +504,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
 
           tested(fs, [__filename], done)
@@ -521,8 +520,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': '1'
-            }
+              'file.descriptor': '1',
+            },
           })
 
           tested(fs, [1], done)
@@ -537,8 +536,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': __dirname
-            }
+              'file.path': __dirname,
+            },
           })
 
           tested(fs, [__dirname], done)
@@ -553,8 +552,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': __dirname
-            }
+              'file.path': __dirname,
+            },
           })
 
           tested(fs, [__dirname], (err, dir) => {
@@ -580,8 +579,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': fd.toString()
-            }
+              'file.descriptor': fd.toString(),
+            },
           })
           tested(fs, [fd, Buffer.alloc(5), 0, 5, 0], done)
         })
@@ -614,8 +613,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': fd.toString()
-            }
+              'file.descriptor': fd.toString(),
+            },
           })
           tested(fs, [fd, Buffer.from('hello'), 0, 5, 0], done)
         })
@@ -648,8 +647,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': fd.toString()
-            }
+              'file.descriptor': fd.toString(),
+            },
           })
           tested(fs, [fd, [Buffer.from('hello')], 0], done)
         })
@@ -672,8 +671,8 @@ describe('Plugin', () => {
             resource: 'ReadStream',
             meta: {
               'file.path': __filename,
-              'file.flag': 'r'
-            }
+              'file.flag': 'r',
+            },
           })
           const stream = fs.createReadStream(__filename)
           assert.strictEqual(stream.listenerCount('error'), 0)
@@ -686,8 +685,8 @@ describe('Plugin', () => {
             resource: 'ReadStream',
             meta: {
               'file.path': __filename,
-              'file.flag': 'r+'
-            }
+              'file.flag': 'r+',
+            },
           })
           fs.createReadStream(__filename, { flags: 'r+' }).on('error', done).destroy()
         })
@@ -697,8 +696,8 @@ describe('Plugin', () => {
             resource: 'ReadStream',
             meta: {
               'file.path': __filename,
-              'file.flag': 'r+'
-            }
+              'file.flag': 'r+',
+            },
           })
           fs.createReadStream(__filename, { flags: 'r+' }).on('error', done).resume()
         })
@@ -727,8 +726,8 @@ describe('Plugin', () => {
             resource: 'WriteStream',
             meta: {
               'file.path': filename,
-              'file.flag': 'w'
-            }
+              'file.flag': 'w',
+            },
           })
 
           fs.createWriteStream(filename).on('error', done).end()
@@ -739,8 +738,8 @@ describe('Plugin', () => {
             resource: 'WriteStream',
             meta: {
               'file.path': filename,
-              'file.flag': 'w'
-            }
+              'file.flag': 'w',
+            },
           })
 
           fs.createWriteStream(filename).on('error', done).destroy()
@@ -751,8 +750,8 @@ describe('Plugin', () => {
             resource: 'WriteStream',
             meta: {
               'file.path': filename,
-              'file.flag': 'w+'
-            }
+              'file.flag': 'w+',
+            },
           })
 
           fs.createWriteStream(filename, { flags: 'w+' }).on('error', done).end()
@@ -776,8 +775,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.path': __filename,
-              'file.mode': mode.toString(8)
-            }
+              'file.mode': mode.toString(8),
+            },
           })
 
           tested(fs, [__filename, mode], done)
@@ -799,8 +798,8 @@ describe('Plugin', () => {
               resource,
               meta: {
                 'file.path': __filename,
-                'file.mode': mode.toString(8)
-              }
+                'file.mode': mode.toString(8),
+              },
             })
 
             tested(fs, [__filename, mode], done)
@@ -827,8 +826,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.descriptor': fd.toString(),
-              'file.mode': mode.toString(8)
-            }
+              'file.mode': mode.toString(8),
+            },
           })
 
           tested(fs, [fd, mode], done)
@@ -853,8 +852,8 @@ describe('Plugin', () => {
             meta: {
               'file.path': __filename,
               'file.uid': uid.toString(),
-              'file.gid': gid.toString()
-            }
+              'file.gid': gid.toString(),
+            },
           })
 
           tested(fs, [__filename, uid, gid], done)
@@ -880,8 +879,8 @@ describe('Plugin', () => {
               meta: {
                 'file.path': __filename,
                 'file.uid': uid.toString(),
-                'file.gid': gid.toString()
-              }
+                'file.gid': gid.toString(),
+              },
             })
 
             tested(fs, [__filename, uid, gid], done)
@@ -912,8 +911,8 @@ describe('Plugin', () => {
             meta: {
               'file.descriptor': fd.toString(),
               'file.uid': uid.toString(),
-              'file.gid': gid.toString()
-            }
+              'file.gid': gid.toString(),
+            },
           })
 
           tested(fs, [fd, uid, gid], done)
@@ -928,8 +927,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
           tested(fs, [__filename], done)
         })
@@ -944,8 +943,8 @@ describe('Plugin', () => {
             expectOneSpan(agent, done, {
               resource,
               meta: {
-                'file.path': __filename
-              }
+                'file.path': __filename,
+              },
             })
             tested(fs, [__filename], done)
           })
@@ -969,8 +968,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': link
-            }
+              'file.path': link,
+            },
           })
           tested(fs, [link], done)
         })
@@ -995,8 +994,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': link
-            }
+              'file.path': link,
+            },
           })
           tested(fs, [link], done)
         })
@@ -1021,8 +1020,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.src': __filename,
-              'file.dest': link
-            }
+              'file.dest': link,
+            },
           })
           tested(fs, [__filename, link], done)
         })
@@ -1053,8 +1052,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.src': sourceFile,
-              'file.dest': link
-            }
+              'file.dest': link,
+            },
           })
           tested(fs, [sourceFile, link], done)
         })
@@ -1079,8 +1078,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': dir
-            }
+              'file.path': dir,
+            },
           })
           tested(fs, [dir], done)
         })
@@ -1108,8 +1107,8 @@ describe('Plugin', () => {
             resource,
             meta: {
               'file.src': src,
-              'file.dest': dest
-            }
+              'file.dest': dest,
+            },
           })
           tested(fs, [src, dest], done)
         })
@@ -1134,8 +1133,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': fd.toString()
-            }
+              'file.descriptor': fd.toString(),
+            },
           })
           tested(fs, [fd], done)
         })
@@ -1160,8 +1159,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': fd.toString()
-            }
+              'file.descriptor': fd.toString(),
+            },
           })
           tested(fs, [fd], done)
         })
@@ -1185,8 +1184,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': dir
-            }
+              'file.path': dir,
+            },
           })
           tested(fs, [dir], done)
         })
@@ -1209,8 +1208,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': filename
-            }
+              'file.path': filename,
+            },
           })
           tested(fs, [filename, 5], done)
         })
@@ -1236,8 +1235,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': fd.toString()
-            }
+              'file.descriptor': fd.toString(),
+            },
           })
           tested(fs, [fd, 5], done)
         })
@@ -1260,8 +1259,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.path': filename
-            }
+              'file.path': filename,
+            },
           })
           tested(fs, [filename, Date.now(), Date.now()], done)
         })
@@ -1287,8 +1286,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource,
             meta: {
-              'file.descriptor': fd.toString()
-            }
+              'file.descriptor': fd.toString(),
+            },
           })
           tested(fs, [fd, Date.now(), Date.now()], done)
         })
@@ -1311,8 +1310,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource: 'mkdtemp',
             meta: {
-              'file.path': inputDir
-            }
+              'file.path': inputDir,
+            },
           })
           fs.mkdtemp(inputDir, (err, result) => {
             if (err) {
@@ -1343,8 +1342,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource: 'mkdtempSync',
             meta: {
-              'file.path': inputDir
-            }
+              'file.path': inputDir,
+            },
           })
           tmpdir = fs.mkdtempSync(inputDir)
         })
@@ -1364,8 +1363,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource: 'exists',
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
           // eslint-disable-next-line n/no-deprecated-api
           fs.exists(__filename, () => {})
@@ -1384,8 +1383,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource: 'watchFile',
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
           const listener = () => {}
           const watcher = fs.watchFile(__filename, listener)
@@ -1399,8 +1398,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource: 'unwatchFile',
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
           const listener = () => {}
           const watcher = fs.watchFile(__filename, listener)
@@ -1414,8 +1413,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource: 'watch',
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
           const listener = () => {}
           const watcher = fs.watch(__filename, listener)
@@ -1428,8 +1427,8 @@ describe('Plugin', () => {
           expectOneSpan(agent, done, {
             resource: 'existsSync',
             meta: {
-              'file.path': __filename
-            }
+              'file.path': __filename,
+            },
           })
           fs.existsSync(__filename)
         })
@@ -1468,8 +1467,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'dir.close',
                 meta: {
-                  'file.path': dirname
-                }
+                  'file.path': dirname,
+                },
               })
               dir.close().catch(done)
             })
@@ -1489,8 +1488,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'dir.close',
                 meta: {
-                  'file.path': dirname
-                }
+                  'file.path': dirname,
+                },
               })
               dir.close(err => err && done(err))
             })
@@ -1509,8 +1508,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'dir.closeSync',
                 meta: {
-                  'file.path': dirname
-                }
+                  'file.path': dirname,
+                },
               })
               dir.closeSync()
             })
@@ -1531,8 +1530,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'dir.read',
                 meta: {
-                  'file.path': dirname
-                }
+                  'file.path': dirname,
+                },
               })
               dir.read().catch(done)
             })
@@ -1551,8 +1550,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'dir.read',
                 meta: {
-                  'file.path': dirname
-                }
+                  'file.path': dirname,
+                },
               })
               dir.read(err => err && done(err))
             })
@@ -1571,8 +1570,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'dir.readSync',
                 meta: {
-                  'file.path': dirname
-                }
+                  'file.path': dirname,
+                },
               })
               dir.readSync()
             })
@@ -1596,8 +1595,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'dir.read',
                 meta: {
-                  'file.path': dirname
-                }
+                  'file.path': dirname,
+                },
               })
               ;(async () => {
                 const iterator = dir[Symbol.asyncIterator]()
@@ -1609,8 +1608,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'dir.close',
                 meta: {
-                  'file.path': dirname
-                }
+                  'file.path': dirname,
+                },
               })
               ;(async () => {
                 const iterator = dir[Symbol.asyncIterator]()
@@ -1644,8 +1643,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.appendFile',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.appendFile('some more data').catch(done)
             })
@@ -1660,8 +1659,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.writeFile',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.writeFile('some more data').catch(done)
             })
@@ -1676,8 +1675,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.readFile',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.readFile().catch(done)
             })
@@ -1692,8 +1691,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.write',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.write('some more data').catch(done)
             })
@@ -1708,8 +1707,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.writev',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.writev([Buffer.from('some more data')]).catch(done)
             })
@@ -1724,8 +1723,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.read',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.read(Buffer.alloc(5), 0, 5, 0).catch(done)
             })
@@ -1747,8 +1746,8 @@ describe('Plugin', () => {
                 resource: 'filehandle.chmod',
                 meta: {
                   'file.descriptor': filehandle.fd.toString(),
-                  'file.mode': mode.toString(8)
-                }
+                  'file.mode': mode.toString(8),
+                },
               })
               filehandle.chmod(mode).catch(done)
             })
@@ -1774,8 +1773,8 @@ describe('Plugin', () => {
                 meta: {
                   'file.descriptor': filehandle.fd.toString(),
                   'file.uid': uid.toString(),
-                  'file.gid': gid.toString()
-                }
+                  'file.gid': gid.toString(),
+                },
               })
               filehandle.chown(uid, gid).catch(done)
             })
@@ -1790,8 +1789,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.stat',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.stat().catch(done)
             })
@@ -1806,8 +1805,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.sync',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.sync().catch(done)
             })
@@ -1822,8 +1821,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.datasync',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.datasync().catch(done)
             })
@@ -1838,8 +1837,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.truncate',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.truncate(5).catch(done)
             })
@@ -1854,8 +1853,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.utimes',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.utimes(Date.now(), Date.now()).catch(done)
             })
@@ -1870,8 +1869,8 @@ describe('Plugin', () => {
               expectOneSpan(agent, done, {
                 resource: 'filehandle.close',
                 meta: {
-                  'file.descriptor': filehandle.fd.toString()
-                }
+                  'file.descriptor': filehandle.fd.toString(),
+                },
               })
               filehandle.close().catch(done)
             })
@@ -1938,12 +1937,13 @@ describe('Plugin', () => {
 })
 
 function mkExpected (props) {
-  const meta = Object.assign({ component: 'fs', 'span.kind': 'internal' }, props.meta)
-  const expected = Object.assign({
+  const meta = { component: 'fs', 'span.kind': 'internal', ...props.meta }
+  const expected = {
     name: 'fs.operation',
     error: 0,
-    service: 'test'
-  }, props)
+    service: 'test',
+    ...props,
+  }
   expected.meta = meta
   return expected
 }
@@ -1962,7 +1962,7 @@ function testHandleErrors (fs, name, tested, args, agent) {
     tested(fs, args, null, err => {
       expectOneSpan(agent, done, {
         resource: name,
-        error: 0
+        error: 0,
       })
     })
   })

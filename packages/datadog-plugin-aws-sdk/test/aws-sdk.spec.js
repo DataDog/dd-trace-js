@@ -8,8 +8,8 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup, sort } = require('./spec_helpers')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { setup, sort } = require('./spec_helpers')
 
 describe('Plugin', () => {
   // TODO: use the Request class directly for generic tests
@@ -37,7 +37,7 @@ describe('Plugin', () => {
             assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test-aws-s3'
+              service: 'test-aws-s3',
             })
 
             assertObjectContains(span.meta, {
@@ -47,7 +47,7 @@ describe('Plugin', () => {
               'aws.partition': 'aws',
               'aws.service': 'S3',
               aws_service: 'S3',
-              'aws.operation': 'listBuckets'
+              'aws.operation': 'listBuckets',
             })
           }).then(done, done)
 
@@ -61,7 +61,7 @@ describe('Plugin', () => {
             assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test-aws-s3'
+              service: 'test-aws-s3',
             })
           }).then(done, done)
 
@@ -105,7 +105,7 @@ describe('Plugin', () => {
             assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test-aws-s3'
+              service: 'test-aws-s3',
             })
 
             assertObjectContains(span.meta, {
@@ -115,7 +115,7 @@ describe('Plugin', () => {
               'aws.partition': 'aws',
               'aws.service': 'S3',
               aws_service: 'S3',
-              'aws.operation': 'listBuckets'
+              'aws.operation': 'listBuckets',
             })
           }).then(done, done)
 
@@ -131,14 +131,14 @@ describe('Plugin', () => {
             assertObjectContains(span, {
               name: 'aws.request',
               resource: 'completeMultipartUpload my-bucket',
-              service: 'test-aws-s3'
+              service: 'test-aws-s3',
             })
 
             assertObjectContains(span.meta, {
               [ERROR_TYPE]: error.name,
               [ERROR_MESSAGE]: error.message,
               [ERROR_STACK]: error.stack,
-              component: 'aws-sdk'
+              component: 'aws-sdk',
             })
             if (semver.intersects(version, '>=2.3.4')) {
               assert.match(span.meta['aws.response.request_id'], /[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
@@ -148,7 +148,7 @@ describe('Plugin', () => {
           s3.completeMultipartUpload({
             Bucket: 'my-bucket',
             Key: 'my-key',
-            UploadId: 'my-upload-id'
+            UploadId: 'my-upload-id',
           }, e => {
             error = e
           })
@@ -162,7 +162,7 @@ describe('Plugin', () => {
               assertObjectContains(span, {
                 name: 'aws.request',
                 resource: 'listBuckets',
-                service: 'test-aws-s3'
+                service: 'test-aws-s3',
               })
             }).then(done, done)
 
@@ -176,7 +176,7 @@ describe('Plugin', () => {
               assertObjectContains(span, {
                 name: 'aws.request',
                 resource: 'listBuckets',
-                service: 'test-aws-s3'
+                service: 'test-aws-s3',
               })
             }).then(done, done)
 
@@ -192,7 +192,7 @@ describe('Plugin', () => {
               assertObjectContains(span, {
                 name: 'aws.request',
                 resource: 'listBuckets',
-                service: 'test-aws-s3'
+                service: 'test-aws-s3',
               })
             }).then(done, done)
 
@@ -220,7 +220,7 @@ describe('Plugin', () => {
             { region: 'us-east-1', partition: 'aws' },
             { region: 'eu-west-1', partition: 'aws' },
             { region: 'cn-north-1', partition: 'aws-cn' },
-            { region: 'us-gov-west-1', partition: 'aws-us-gov' }
+            { region: 'us-gov-west-1', partition: 'aws-us-gov' },
           ]
 
           let completed = 0
@@ -230,7 +230,7 @@ describe('Plugin', () => {
             const regionalS3 = new AWS.S3({
               endpoint: 'http://127.0.0.1:4566',
               region,
-              s3ForcePathStyle: true
+              s3ForcePathStyle: true,
             })
 
             agent.assertSomeTraces(traces => {
@@ -239,7 +239,7 @@ describe('Plugin', () => {
               assertObjectContains(span.meta, {
                 'aws.region': region,
                 region,
-                'aws.partition': partition
+                'aws.partition': partition,
               })
 
               if (++completed === total) {
@@ -260,10 +260,10 @@ describe('Plugin', () => {
               request (span, response) {
                 span.setTag('hook.operation', response.request.operation)
                 span.addTags({
-                  error: 0
+                  error: 0,
                 })
-              }
-            }
+              },
+            },
           }, { server: false }])
         })
 
@@ -283,12 +283,14 @@ describe('Plugin', () => {
             assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test'
+              service: 'test',
             })
-            assert.strictEqual(span.error, 0)
-            assertObjectContains(span.meta, {
-              'hook.operation': 'listBuckets',
-              component: 'aws-sdk'
+            assertObjectContains(span, {
+              error: 0,
+              meta: {
+                'hook.operation': 'listBuckets',
+                component: 'aws-sdk',
+              },
             })
           }).then(done, done)
 
@@ -300,7 +302,7 @@ describe('Plugin', () => {
         before(() => {
           return agent.load(['aws-sdk', 'http'], [{
             service: 'test',
-            s3: false
+            s3: false,
           }, { server: false }])
         })
 
@@ -326,7 +328,7 @@ describe('Plugin', () => {
             assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listBuckets',
-              service: 'test'
+              service: 'test',
             })
 
             total++
@@ -338,7 +340,7 @@ describe('Plugin', () => {
             assertObjectContains(span, {
               name: 'aws.request',
               resource: 'listQueues',
-              service: 'test'
+              service: 'test',
             })
 
             total++
@@ -364,12 +366,12 @@ describe('Plugin', () => {
             service: 'test',
             batchPropagationEnabled: true,
             kinesis: {
-              batchPropagationEnabled: false
+              batchPropagationEnabled: false,
             },
             sns: false,
             sqs: {
-              batchPropagationEnabled: false
-            }
+              batchPropagationEnabled: false,
+            },
           }])
         })
 

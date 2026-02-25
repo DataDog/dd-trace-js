@@ -2,13 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('tap').mocha
+const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 
 require('../setup/core')
-
 const TracingPlugin = require('../../src/plugins/tracing')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
@@ -19,8 +17,8 @@ describe('TracingPlugin', () => {
       const startSpanSpy = sinon.spy()
       const plugin = new TracingPlugin({
         _tracer: {
-          startSpan: startSpanSpy
-        }
+          startSpan: startSpanSpy,
+        },
       })
       plugin.configure({})
 
@@ -29,7 +27,7 @@ describe('TracingPlugin', () => {
       sinon.assert.calledWith(startSpanSpy,
         'Test span',
         sinon.match({
-          childOf: 'some parent span'
+          childOf: 'some parent span',
         })
       )
     })
@@ -46,7 +44,7 @@ describe('common Plugin behaviour', () => {
 
     start () {
       return this.startSpan('common.operation', {
-        service: this.config.service || this._tracerConfig.service
+        service: this.config.service || this._tracerConfig.service,
       }, true)
     }
   }
@@ -56,7 +54,7 @@ describe('common Plugin behaviour', () => {
     static operation = 'dothings'
     start () {
       return this.startSpan('common.operation', {
-        service: this.config.service || `${this.tracer._service}-suffix`
+        service: this.config.service || `${this.tracer._service}-suffix`,
       }, true)
     }
   }
@@ -120,7 +118,7 @@ describe('common Plugin behaviour', () => {
         done, 'commonPlugin', {},
         span => {
           assert.strictEqual(span.service, 'test')
-          expect(span.meta).to.not.have.property('_dd.base_service', 'test')
+          assert.ok(!('_dd.base_service' in span.meta) || span.meta['_dd.base_service'] !== 'test')
         }
       )
     })

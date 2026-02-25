@@ -1,8 +1,8 @@
 'use strict'
 
 const dc = require('dc-polyfill')
-const logCollector = require('./log-collector')
 const { sendData } = require('../send-data')
+const logCollector = require('./log-collector')
 
 const telemetryLog = dc.channel('datadog:telemetry:log')
 const errorLog = dc.channel('datadog:log:error')
@@ -43,7 +43,7 @@ function onErrorLog (msg) {
     count: 1,
 
     // existing log.error(err) without message will be reported as 'Generic Error'
-    message: message ?? 'Generic Error'
+    message: message ?? 'Generic Error',
   }
 
   if (cause) {
@@ -86,5 +86,5 @@ function send (config, application, host) {
 module.exports = {
   start,
   stop,
-  send
+  send,
 }

@@ -1,6 +1,16 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
+const {
+  WEBSOCKET_PTR_KIND,
+  SPAN_POINTER_DIRECTION,
+  SPAN_POINTER_DIRECTION_NAME,
+} = require('../../dd-trace/src/constants')
+const {
+  incrementWebSocketCounter,
+  buildWebSocketSpanPointerHash,
+  hasDistributedTracingContext,
+} = require('./util')
 
 class WSReceiverPlugin extends TracingPlugin {
   static get id () { return 'ws' }
@@ -10,16 +20,14 @@ class WSReceiverPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const {
-      traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
-      traceWebsocketMessagesSeparateTraces
+      traceWebsocketMessagesSeparateTraces,
     } = this.config
-    if (!traceWebsocketMessagesEnabled) return
 
     const { byteLength, socket, binary } = ctx
     if (!socket.spanContext) return
 
-    const spanTags = socket.spanContext.spanTags
+    const spanTags = socket.spanTags
     const path = spanTags['resource.name'].split(' ')[1]
     const opCode = binary ? 'binary' : 'text'
 
@@ -35,7 +43,7 @@ class WSReceiverPlugin extends TracingPlugin {
       },
       metrics: {
         'websocket.message.length': byteLength,
-      }
+      },
 
     }, ctx)
 
@@ -61,9 +69,36 @@ class WSReceiverPlugin extends TracingPlugin {
     if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
 
     if (ctx.socket.spanContext) {
+      const linkAttributes = { 'dd.kind': 'executed_by' }
+
+      // Add span pointer for context propagation
+      if (this.config.traceWebsocketMessagesEnabled && ctx.socket.spanContext) {
+        const handshakeContext = ctx.socket.spanContext
+
+        // Only add span pointers if distributed tracing is enabled and handshake has distributed context
+        if (hasDistributedTracingContext(handshakeContext, ctx.socket)) {
+          const counter = incrementWebSocketCounter(ctx.socket, 'receiveCounter')
+
+          const ptrHash = buildWebSocketSpanPointerHash(
+            handshakeContext._traceId,
+            handshakeContext._spanId,
+            counter,
+            true, // isServer
+            true // isIncoming
+          )
+
+          // Add span pointer attributes to link
+          linkAttributes['link.name'] = SPAN_POINTER_DIRECTION_NAME.UPSTREAM
+          linkAttributes['dd.kind'] = 'span-pointer'
+          linkAttributes['ptr.kind'] = WEBSOCKET_PTR_KIND
+          linkAttributes['ptr.dir'] = SPAN_POINTER_DIRECTION.UPSTREAM
+          linkAttributes['ptr.hash'] = ptrHash
+        }
+      }
+
       ctx.span.addLink({
         context: ctx.socket.spanContext,
-        attributes: { 'dd.kind': 'executed_by' },
+        attributes: linkAttributes,
       })
     }
 

@@ -1,7 +1,6 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const serverless = require('../../dd-trace/src/plugins/util/serverless')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 const triggerMap = {
@@ -26,19 +25,51 @@ class AzureFunctionsPlugin extends TracingPlugin {
   bindStart (ctx) {
     const meta = getMetaForTrigger(ctx)
     const triggerType = triggerMap[ctx.methodName]
+    const isHttpTrigger = triggerType === 'Http'
     const isMessagingService = (triggerType === 'ServiceBus' || triggerType === 'EventHubs')
-    const childOf = isMessagingService ? null : extractTraceContext(this._tracer, ctx)
-    const span = this.startSpan(this.operationName(), {
-      childOf,
-      service: this.serviceName(),
-      type: 'serverless',
-      meta,
-    }, ctx)
 
-    if (isMessagingService) {
-      setSpanLinks(triggerType, this.tracer, span, ctx)
+    let span
+
+    if (isHttpTrigger) {
+      const { httpRequest } = ctx
+      const path = (new URL(httpRequest.url)).pathname
+      const req = {
+        method: httpRequest.method,
+        headers: Object.fromEntries(httpRequest.headers),
+        url: path,
+      }
+      // Patch the request to create web context
+      const webContext = web.patch(req)
+      webContext.config = this.config
+      webContext.tracer = this.tracer
+      webContext.paths = [path]
+      // Creates a standard span and an inferred proxy span if headers are present
+      span = web.startServerlessSpanWithInferredProxy(
+        this.tracer,
+        this.config,
+        this.operationName(),
+        req,
+        ctx
+      )
+
+      span._integrationName = 'azure-functions'
+      span.context()._tags.component = 'azure-functions'
+      span.addTags(meta)
+      webContext.span = span
+      webContext.azureFunctionCtx = ctx
+      ctx.webContext = webContext
+    } else {
+      // For non-HTTP triggers, use standard flow
+      span = this.startSpan(this.operationName(), {
+        service: this.serviceName(),
+        type: 'serverless',
+        meta,
+      }, ctx)
+
+      if (isMessagingService) {
+        setSpanLinks(triggerType, this.tracer, span, ctx)
+      }
     }
-
     ctx.span = span
     return ctx.currentStore
   }
@@ -48,24 +79,16 @@ class AzureFunctionsPlugin extends TracingPlugin {
     ctx.currentStore.span.setTag('error.message', ctx.error)
   }
 
-  asyncEnd (ctx) {
-    const { httpRequest, methodName, result = {} } = ctx
-    if (triggerMap[methodName] === 'Http') {
-      // If the method is an HTTP trigger, we need to patch the request and finish the span
-      const path = (new URL(httpRequest.url)).pathname
-      const req = {
-        method: httpRequest.method,
-        headers: Object.fromEntries(httpRequest.headers),
-        url: path
-      }
-      const context = web.patch(req)
-      context.config = this.config
-      context.paths = [path]
-      context.res = { statusCode: result.status }
-      context.span = ctx.currentStore.span
+  asyncStart (ctx) {
+    const { methodName, result = {}, webContext } = ctx
+    const triggerType = triggerMap[methodName]
 
-      serverless.finishSpan(context)
-    // Fallback for other trigger types
+    // For HTTP triggers, use web utilities to finish all spans (including inferred proxy)
+    if (triggerType === 'Http') {
+      if (webContext) {
+        webContext.res = { statusCode: result.status }
+        web.finishAll(webContext, 'serverless')
+      }
     } else {
       super.finish()
     }
@@ -79,7 +102,8 @@ class AzureFunctionsPlugin extends TracingPlugin {
 function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
   let meta = {
     'aas.function.name': functionName,
-    'aas.function.trigger': mapTriggerTag(methodName)
+    'aas.function.trigger': mapTriggerTag(methodName),
+    'span.type': 'serverless',
   }
 
   if (triggerMap[methodName] === 'ServiceBus') {
@@ -91,7 +115,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'messaging.system': 'servicebus',
       'messaging.destination.name': triggerEntity,
       'resource.name': `ServiceBus ${functionName}`,
-      'span.kind': 'consumer'
+      'span.kind': 'consumer',
     }
   } else if (triggerMap[methodName] === 'EventHubs') {
     const partitionContext = invocationContext.triggerMetadata.triggerPartitionContext
@@ -101,7 +125,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'messaging.operation': 'receive',
       'messaging.system': 'eventhubs',
       'resource.name': `EventHubs ${functionName}`,
-      'span.kind': 'consumer'
+      'span.kind': 'consumer',
     }
   }
 
@@ -110,15 +134,6 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
 
 function mapTriggerTag (methodName) {
   return triggerMap[methodName] || 'Unknown'
-}
-
-function extractTraceContext (tracer, ctx) {
-  switch (String(triggerMap[ctx.methodName])) {
-    case 'Http':
-      return tracer.extract('http_headers', Object.fromEntries(ctx.httpRequest.headers))
-    default:
-      null
-  }
 }
 
 // message & messages & batch with cardinality of 1 == applicationProperties
@@ -145,7 +160,9 @@ function setSpanLinks (triggerType, tracer, span, ctx) {
   }
 
   if (cardinality === 'many' && propertiesArray?.length > 0) {
-    propertiesArray.forEach(addLinkFromProperties)
+    for (const prop of propertiesArray) {
+      addLinkFromProperties(prop)
+    }
   } else if (cardinality === 'one') {
     addLinkFromProperties(properties)
   }

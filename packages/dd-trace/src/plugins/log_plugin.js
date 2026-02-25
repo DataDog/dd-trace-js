@@ -1,8 +1,8 @@
 'use strict'
 
 const { LOG } = require('../../../../ext/formats')
-const Plugin = require('./plugin')
 const { storage } = require('../../../datadog-core')
+const Plugin = require('./plugin')
 
 function messageProxy (message, holder) {
   return new Proxy(message, {
@@ -22,7 +22,7 @@ function messageProxy (message, holder) {
     },
     getOwnPropertyDescriptor (target, p) {
       return Reflect.getOwnPropertyDescriptor(shouldOverride(target, p) ? holder : target, p)
-    }
+    },
   })
 }
 
@@ -48,7 +48,7 @@ module.exports = class LogPlugin extends Plugin {
   configure (config) {
     return super.configure({
       ...config,
-      enabled: config.enabled && (config.logInjection || config.ciVisAgentlessLogSubmissionEnabled)
+      enabled: config.enabled && (config.logInjection || config.ciVisAgentlessLogSubmissionEnabled),
     })
   }
 }

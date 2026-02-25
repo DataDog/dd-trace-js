@@ -3,14 +3,14 @@
 /** @type {typeof import('node:diagnostics_channel')} */
 const dc = require('dc-polyfill')
 
+const log = require('../../../dd-trace/src/log')
 const {
   filename,
   loadChannel,
-  matchVersion
+  matchVersion,
 } = require('./register.js')
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
-const log = require('../../../dd-trace/src/log')
 
 const CHANNEL = 'dd-trace:bundler:load'
 

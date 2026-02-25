@@ -1,24 +1,24 @@
 'use strict'
 
-const vulnerabilityReporter = require('./vulnerability-reporter')
-const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
+const dc = require('dc-polyfill')
 const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
+const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
+const { incomingHttpRequestStart, incomingHttpRequestEnd, responseWriteHead } = require('../channels')
+const vulnerabilityReporter = require('./vulnerability-reporter')
+const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const overheadController = require('./overhead-controller')
-const dc = require('dc-polyfill')
 const iastContextFunctions = require('./iast-context')
 const {
   enableTaintTracking,
   disableTaintTracking,
   createTransaction,
   removeTransaction,
-  taintTrackingPlugin
+  taintTrackingPlugin,
 } = require('./taint-tracking')
 const { IAST_ENABLED_TAG_KEY } = require('./tags')
 const iastTelemetry = require('./telemetry')
-const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
 const securityControls = require('./security-controls')
-const { incomingHttpRequestStart, incomingHttpRequestEnd, responseWriteHead } = require('../channels')
 
 const collectedResponseHeaders = new WeakMap()
 
@@ -78,7 +78,7 @@ function onIncomingHttpRequestStart (data) {
         }
         if (rootSpan.addTags) {
           rootSpan.addTags({
-            [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0
+            [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0,
           })
         }
       }

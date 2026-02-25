@@ -1,15 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+const { Writable } = require('node:stream')
+
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
-const { Writable } = require('node:stream')
-
-const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
 const { NODE_MAJOR } = require('../../../version')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let logger
@@ -41,12 +42,14 @@ describe('Plugin', () => {
           if (semver.intersects(version, '>=8') && options.prettyPrint) {
             delete options.prettyPrint // deprecated
 
+            // pino-pretty uses `on-exit-leak-free` and that adds a listener to process.
+            process.setMaxListeners(process.getMaxListeners() + 1)
             const pretty = require('../../../versions/pino-pretty@8.0.0').get()
 
             stream = pretty().pipe(stream)
           }
 
-          logger = pino && pino(options, stream)
+          logger = pino(options, stream)
         }
 
         describe('without configuration', () => {
@@ -66,12 +69,13 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               logger.info('message')
 
-              expect(stream.write).to.have.been.called
+              sinon.assert.called(stream.write)
 
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-              expect(record).to.have.property('dd')
-              expect(record).to.have.deep.property('msg', 'message')
+              assert.ok('dd' in record)
+              assert.ok('msg' in record)
+              assert.deepStrictEqual(record.msg, 'message')
             })
           })
 
@@ -82,13 +86,13 @@ describe('Plugin', () => {
               tracer.scope().activate(span, () => {
                 logger.info('message')
 
-                expect(stream.write).to.have.been.called
+                sinon.assert.called(stream.write)
 
                 const record = stream.write.firstCall.args[0].toString()
 
-                expect(record).to.include('trace_id')
-                expect(record).to.include('span_id')
-                expect(record).to.include('message')
+                assert.match(record, new RegExp(`trace_id\\W+?${span.context().toTraceId(true)}`))
+                assert.match(record, new RegExp(`span_id\\W+?${span.context().toSpanId()}`))
+                assert.match(record, /message/)
               })
             })
           }
@@ -111,16 +115,17 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               logger.info('message')
 
-              expect(stream.write).to.have.been.called
+              sinon.assert.called(stream.write)
 
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-              expect(record.dd).to.deep.include({
+              assertObjectContains(record.dd, {
                 trace_id: span.context().toTraceId(true),
-                span_id: span.context().toSpanId()
+                span_id: span.context().toSpanId(),
               })
 
-              expect(record).to.have.deep.property('msg', 'message')
+              assert.ok('msg' in record)
+              assert.deepStrictEqual(record.msg, 'message')
             })
           })
 
@@ -133,15 +138,21 @@ describe('Plugin', () => {
               const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
               if (record.err) { // pino >=7
-                expect(record.err).to.have.property('message', error.message)
-                expect(record.err).to.have.property('type', 'Error')
-                expect(record.err).to.have.property('stack', error.stack)
+                assert.ok('message' in record.err)
+                assert.strictEqual(record.err.message, error.message)
+                assert.ok('type' in record.err)
+                assert.strictEqual(record.err.type, 'Error')
+                assert.ok('stack' in record.err)
+                assert.strictEqual(record.err.stack, error.stack)
               } else { // pino <7
-                expect(record).to.have.property('msg', error.message)
+                assert.ok('msg' in record)
+                assert.strictEqual(record.msg, error.message)
                 // ** TODO ** add this back once we fix it
                 if (NODE_MAJOR < 21) {
-                  expect(record).to.have.property('type', 'Error')
-                  expect(record).to.have.property('stack', error.stack)
+                  assert.ok('type' in record)
+                  assert.strictEqual(record.type, 'Error')
+                  assert.ok('stack' in record)
+                  assert.strictEqual(record.stack, error.stack)
                 }
               }
             })
@@ -150,26 +161,27 @@ describe('Plugin', () => {
           it('should not alter the original record', () => {
             tracer.scope().activate(span, () => {
               const record = {
-                foo: 'bar'
+                foo: 'bar',
               }
 
               logger.info(record)
 
-              expect(record).to.not.have.property('dd')
+              assert.ok(!('dd' in record))
             })
           })
 
           it('should not inject trace_id or span_id without an active span', () => {
             logger.info('message')
 
-            expect(stream.write).to.have.been.called
+            sinon.assert.called(stream.write)
 
             const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-            expect(record).to.have.property('dd')
-            expect(record.dd).to.not.have.property('trace_id')
-            expect(record.dd).to.not.have.property('span_id')
-            expect(record).to.have.deep.property('msg', 'message')
+            assert.ok('dd' in record)
+            assert.ok(!('trace_id' in record.dd))
+            assert.ok(!('span_id' in record.dd))
+            assert.ok('msg' in record)
+            assert.deepStrictEqual(record.msg, 'message')
           })
 
           if (semver.intersects(version, '>=5.14.0')) {
@@ -183,24 +195,26 @@ describe('Plugin', () => {
               tracer.scope().activate(span, () => {
                 logger.info('message')
 
-                expect(opts.mixin).to.have.been.called
+                sinon.assert.called(opts.mixin)
 
-                expect(stream.write).to.have.been.called
+                sinon.assert.called(stream.write)
 
                 const record = JSON.parse(stream.write.firstCall.args[0].toString())
 
-                expect(record.dd).to.deep.include({
+                assertObjectContains(record.dd, {
                   trace_id: span.context().toTraceId(true),
-                  span_id: span.context().toSpanId()
+                  span_id: span.context().toSpanId(),
                 })
 
-                expect(record).to.have.deep.property('msg', 'message')
-                expect(record).to.have.deep.property('addedMixin', true)
+                assert.ok('msg' in record)
+                assert.deepStrictEqual(record.msg, 'message')
+                assert.ok('addedMixin' in record)
+                assert.deepStrictEqual(record.addedMixin, true)
               })
             })
           }
 
-          // TODO: test with a version matrix against pino. externals.json doesn't allow that
+          // TODO: test with a version matrix against pino. externals.js doesn't allow that
           //       and we cannot control the version of pino-pretty internally required by pino
           if (semver.intersects(version, '>=5')) {
             it('should add the trace identifiers to logger instances with pretty print', () => {
@@ -209,14 +223,14 @@ describe('Plugin', () => {
               tracer.scope().activate(span, () => {
                 logger.info('message')
 
-                expect(stream.write).to.have.been.called
+                sinon.assert.called(stream.write)
 
                 const record = stream.write.firstCall.args[0].toString()
 
-                expect(record).to.match(new RegExp(`trace_id\\W+?${span.context().toTraceId(true)}`))
-                expect(record).to.match(new RegExp(`span_id\\W+?${span.context().toSpanId()}`))
+                assert.match(record, new RegExp(`trace_id\\W+?${span.context().toTraceId(true)}`))
+                assert.match(record, new RegExp(`span_id\\W+?${span.context().toSpanId()}`))
 
-                expect(record).to.include('message')
+                assert.match(record, /message/)
               })
             })
           }

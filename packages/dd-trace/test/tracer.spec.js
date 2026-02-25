@@ -2,14 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
-
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
 const getConfig = require('../src/config')
@@ -66,17 +63,17 @@ describe('Tracer', () => {
         resource: 'resource',
         type: 'type',
         tags: {
-          foo: 'bar'
-        }
+          foo: 'bar',
+        },
       }
 
       tracer.trace('name', options, span => {
         assert.ok(span instanceof Span)
-        expect(span.context()._tags).to.include(options.tags)
+        assertObjectContains(span.context()._tags, options.tags)
         assertObjectContains(span.context()._tags, {
           [SERVICE_NAME]: 'service',
           [RESOURCE_NAME]: 'resource',
-          [SPAN_TYPE]: 'type'
+          [SPAN_TYPE]: 'type',
         })
       })
     })
@@ -93,14 +90,14 @@ describe('Tracer', () => {
         tracer.trace('name', {}, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
         assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
-        assert.ok(!Object.hasOwn(trace.meta, BASE_SERVICE))
+        assert.ok(!(BASE_SERVICE in trace.meta))
       })
 
       it('should not be set when tracer.trace service matched configured service', () => {
         tracer.trace('name', { service: 'service' }, () => {})
         const trace = tracer._exporter.export.getCall(0).args[0][0]
         assert.strictEqual(trace[EXPORT_SERVICE_NAME], 'service')
-        assert.ok(!Object.hasOwn(trace.meta, BASE_SERVICE))
+        assert.ok(!(BASE_SERVICE in trace.meta))
       })
     })
 
@@ -164,7 +161,7 @@ describe('Tracer', () => {
         assertObjectContains(tags, {
           [ERROR_TYPE]: e.name,
           [ERROR_MESSAGE]: e.message,
-          [ERROR_STACK]: e.stack
+          [ERROR_STACK]: e.stack,
         })
       }
     })
@@ -206,7 +203,7 @@ describe('Tracer', () => {
         assertObjectContains(tags, {
           [ERROR_TYPE]: error.name,
           [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack
+          [ERROR_STACK]: error.stack,
         })
       })
     })
@@ -253,7 +250,7 @@ describe('Tracer', () => {
             assertObjectContains(tags, {
               [ERROR_TYPE]: e.name,
               [ERROR_MESSAGE]: e.message,
-              [ERROR_STACK]: e.stack
+              [ERROR_STACK]: e.stack,
             })
             done()
           })
@@ -370,7 +367,7 @@ describe('Tracer', () => {
       fn('hello', 'goodbye')
 
       sinon.assert.calledWith(tracer.trace, 'name', {
-        tags: { sometag: 'somevalue' }
+        tags: { sometag: 'somevalue' },
       })
     })
 
@@ -394,13 +391,13 @@ describe('Tracer', () => {
       fn.call(it, 'hello', 'goodbye')
 
       sinon.assert.calledWith(tracer.trace, 'name', {
-        tags: { sometag: 'somevalue', invocations: 1 }
+        tags: { sometag: 'somevalue', invocations: 1 },
       })
 
       fn.call(it, 'hello', 'goodbye')
 
       sinon.assert.calledWith(tracer.trace, 'name', {
-        tags: { sometag: 'somevalue', invocations: 2 }
+        tags: { sometag: 'somevalue', invocations: 2 },
       })
     })
   })

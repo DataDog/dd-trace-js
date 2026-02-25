@@ -2,12 +2,10 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('./setup/core')
-
 const id = require('../src/id')
 const SpanContext = require('../src/opentracing/span_context')
 
@@ -23,7 +21,7 @@ function createDummySpans () {
     'custom_service_span_2',
     'renamed_operation',
     'tagged_operation',
-    'resource_named_operation'
+    'resource_named_operation',
   ]
 
   const ids = [
@@ -37,7 +35,7 @@ function createDummySpans () {
     id('0234567812345678'),
     id('0234567812345679'),
     id('0234567812345680'),
-    id('0234567812345681')
+    id('0234567812345681'),
   ]
 
   const spans = []
@@ -50,10 +48,10 @@ function createDummySpans () {
       _spanId: id,
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
       },
       _name: operation,
-      _tags: {}
+      _tags: {},
     }
 
     // Give first span a custom service name
@@ -78,9 +76,9 @@ function createDummySpans () {
     const span = {
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: operation
+      _name: operation,
     }
 
     spanContexts.push(spanContext)
@@ -110,7 +108,7 @@ describe('sampling rule', () => {
     it('should match with exact strings', () => {
       rule = new SamplingRule({
         service: 'test',
-        name: 'operation'
+        name: 'operation',
       })
 
       assert.strictEqual(rule.match(spans[0]), true)
@@ -129,12 +127,12 @@ describe('sampling rule', () => {
     it('should match with case-insensitive strings', () => {
       const lowerCaseRule = new SamplingRule({
         service: 'test',
-        name: 'operation'
+        name: 'operation',
       })
 
       const mixedCaseRule = new SamplingRule({
         service: 'teSt',
-        name: 'oPeration'
+        name: 'oPeration',
       })
 
       assert.strictEqual(lowerCaseRule.match(spans[0]), mixedCaseRule.match(spans[0]))
@@ -153,7 +151,7 @@ describe('sampling rule', () => {
     it('should match with regexp', () => {
       rule = new SamplingRule({
         service: /test/,
-        name: /op.*/
+        name: /op.*/,
       })
 
       assert.strictEqual(rule.match(spans[0]), true)
@@ -172,7 +170,7 @@ describe('sampling rule', () => {
     it('should match with postfix glob', () => {
       rule = new SamplingRule({
         service: 'test',
-        name: 'op*'
+        name: 'op*',
       })
 
       assert.strictEqual(rule.match(spans[0]), true)
@@ -191,7 +189,7 @@ describe('sampling rule', () => {
     it('should match with prefix glob', () => {
       rule = new SamplingRule({
         service: 'test',
-        name: '*operation'
+        name: '*operation',
       })
 
       assert.strictEqual(rule.match(spans[0]), true)
@@ -210,7 +208,7 @@ describe('sampling rule', () => {
     it('should match with single character any matcher', () => {
       rule = new SamplingRule({
         service: 'test',
-        name: 'o?eration'
+        name: 'o?eration',
       })
 
       assert.strictEqual(rule.match(spans[0]), true)
@@ -228,7 +226,7 @@ describe('sampling rule', () => {
 
     it('should consider missing service as match-all for service name', () => {
       rule = new SamplingRule({
-        name: 'sub_second_operation_*'
+        name: 'sub_second_operation_*',
       })
 
       assert.strictEqual(rule.match(spans[0]), false)
@@ -247,7 +245,7 @@ describe('sampling rule', () => {
 
     it('should consider missing name as match-all for span name', () => {
       rule = new SamplingRule({
-        service: 'test'
+        service: 'test',
       })
 
       assert.strictEqual(rule.match(spans[0]), true)
@@ -266,7 +264,7 @@ describe('sampling rule', () => {
 
     it('should use span service name tags where present', () => {
       rule = new SamplingRule({
-        service: 'span-service'
+        service: 'span-service',
       })
 
       assert.strictEqual(rule.match(spans[0]), false)
@@ -285,7 +283,7 @@ describe('sampling rule', () => {
     it('should match renamed spans', () => {
       rule = new SamplingRule({
         service: 'test',
-        name: 'renamed'
+        name: 'renamed',
       })
 
       assert.strictEqual(rule.match(spans[0]), false)
@@ -305,8 +303,8 @@ describe('sampling rule', () => {
       rule = new SamplingRule({
         tags: {
           tagged: 'yup',
-          and: 'this'
-        }
+          and: 'this',
+        },
       })
 
       assert.strictEqual(rule.match(spans[0]), false)
@@ -324,7 +322,7 @@ describe('sampling rule', () => {
 
     it('should match resource name', () => {
       rule = new SamplingRule({
-        resource: 'named'
+        resource: 'named',
       })
 
       assert.strictEqual(rule.match(spans[0]), false)
@@ -355,10 +353,10 @@ describe('sampling rule', () => {
         service: 'test',
         name: 'operation',
         sampleRate: 1.0,
-        maxPerSecond: 1
+        maxPerSecond: 1,
       })
 
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
     })
 
     it('should not sample on non-allowed sample rate', () => {
@@ -366,10 +364,10 @@ describe('sampling rule', () => {
         service: 'test',
         name: 'operation',
         sampleRate: 0.3,
-        maxPerSecond: 1
+        maxPerSecond: 1,
       })
 
-      expect(rule.sample(new SpanContext({ traceId: id('6148299799767393280', 10) }))).to.equal(false)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id('6148299799767393280', 10) })), false)
     })
   })
 
@@ -378,7 +376,7 @@ describe('sampling rule', () => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
-        sampleRate: 1.0
+        sampleRate: 1.0,
       })
 
       assert.strictEqual(rule._limiter, undefined)
@@ -390,7 +388,7 @@ describe('sampling rule', () => {
         service: 'test',
         name: 'operation',
         sampleRate: 1.0,
-        maxPerSecond: 123
+        maxPerSecond: 123,
       })
 
       assert.notStrictEqual(rule._limiter, undefined)
@@ -402,7 +400,7 @@ describe('sampling rule', () => {
         service: 'test',
         name: 'operation',
         sampleRate: 1.0,
-        maxPerSecond: 1
+        maxPerSecond: 1,
       })
 
       const spanContext = new SpanContext({ traceId: id('2986627970102095326', 10) })
@@ -415,11 +413,11 @@ describe('sampling rule', () => {
       rule = new SamplingRule({
         service: 'test',
         name: 'operation',
-        sampleRate: 1.0
+        sampleRate: 1.0,
       })
 
       for (let i = 0; i < 1e3; i++) {
-        expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+        assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
       }
     })
 
@@ -428,17 +426,17 @@ describe('sampling rule', () => {
         service: 'test',
         name: 'operation',
         sampleRate: 1.0,
-        maxPerSecond: 1
+        maxPerSecond: 1,
       })
 
       const clock = sinon.useFakeTimers({
         now: new Date(),
-        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime']
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime'],
       })
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(false)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), false)
       clock.tick(1000)
-      expect(rule.sample(new SpanContext({ traceId: id() }))).to.equal(true)
+      assert.strictEqual(rule.sample(new SpanContext({ traceId: id() })), true)
     })
   })
 })

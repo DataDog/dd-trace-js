@@ -2,11 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 
 require('../../setup/core')
-
 const makeUtilities = require('../../../src/plugins/util/llm')
 const SpanContext = require('../../../src/opentracing/span_context')
 const id = require('../../../src/id')
@@ -37,7 +35,7 @@ describe('llm utils', () => {
     })
 
     it('should always sample prompt completion', () => {
-      expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id() }))).to.be.true
+      assert.strictEqual(utils.isPromptCompletionSampled(new SpanContext({ traceId: id() })), true)
     })
   })
 
@@ -46,8 +44,8 @@ describe('llm utils', () => {
       utils = makeUtilities('langchain', {
         langchain: {
           spanCharLimit: 100,
-          spanPromptCompletionSampleRate: 0.6
-        }
+          spanPromptCompletionSampleRate: 0.6,
+        },
       })
     })
 
@@ -58,11 +56,18 @@ describe('llm utils', () => {
 
     describe('with sampling rate 0.6', () => {
       it('should not sample prompt completion', () => {
-        expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('8081965455359722133', 10) }))).to.be.false
+        assert.strictEqual(
+          utils.isPromptCompletionSampled(new SpanContext({ traceId: id('8081965455359722133', 10) })),
+          false,
+          'should not sample prompt completion'
+        )
       })
 
       it('should sample prompt completion', () => {
-        expect(utils.isPromptCompletionSampled(new SpanContext({ traceId: id('5533085789307409170', 10) }))).to.be.true
+        assert.strictEqual(
+          utils.isPromptCompletionSampled(new SpanContext({ traceId: id('5533085789307409170', 10) })), true,
+          'should sample prompt completion'
+        )
       })
     })
   })
