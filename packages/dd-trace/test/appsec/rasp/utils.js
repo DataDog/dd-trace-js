@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const { getWebSpan } = require('../utils')
 
-function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
+function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true, timeoutMs) {
   return agent.assertSomeTraces((traces) => {
     const span = getWebSpan(traces)
     assert.ok(!('_dd.appsec.json' in span.meta))
@@ -11,7 +11,7 @@ function checkRaspExecutedAndNotThreat (agent, checkRuleEval = true) {
     if (checkRuleEval) {
       assert.strictEqual(span.metrics['_dd.appsec.rasp.rule.eval'], 1)
     }
-  })
+  }, { timeoutMs })
 }
 
 function checkRaspExecutedAndHasThreat (agent, ruleId, ruleEvalCount = 1) {
