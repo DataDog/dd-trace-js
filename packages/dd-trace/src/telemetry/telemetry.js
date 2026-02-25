@@ -59,6 +59,7 @@ const telemetryLogger = require('./logs')
  * @typedef {{
  *   telemetry: {
  *     enabled: boolean,
+ *     extendedHeartbeatInterval: number,
  *     heartbeatInterval: number,
  *     debug?: boolean,
  *     dependencyCollection?: boolean,
@@ -347,7 +348,7 @@ function extendedHeartbeat (config) {
       heartbeatFailedDependencies = []
     }
     sendData(config, application, host, 'app-extended-heartbeat', appPayload)
-  }, 1000 * 60 * 60 * 24).unref()
+  }, config.telemetry.extendedHeartbeatInterval).unref()
 }
 
 /**

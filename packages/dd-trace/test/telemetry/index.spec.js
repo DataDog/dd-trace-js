@@ -357,7 +357,6 @@ describe('Telemetry extended heartbeat', () => {
   afterEach(() => {
     clock.restore()
     telemetry.stop()
-    traceAgent.close()
   })
 
   it('should be sent every 24 hours', (done) => {
@@ -387,7 +386,7 @@ describe('Telemetry extended heartbeat', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: 86400000 },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -405,6 +404,56 @@ describe('Telemetry extended heartbeat', () => {
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
     assert.strictEqual(beats, 1)
     clock.tick(86400000)
+    assert.strictEqual(beats, 2)
+    done()
+  })
+
+  it('should respect configured extendedHeartbeatInterval', (done) => {
+    const CUSTOM_EXTENDED_HEARTBEAT_INTERVAL = 3600000
+    let beats = 0
+    const sendDataRequest = {
+      sendData: (config, application, host, reqType, payload, cb = () => {}) => {
+        if (reqType === 'app-started') {
+          cb()
+          return
+        }
+
+        if (reqType === 'app-extended-heartbeat') {
+          beats++
+        }
+      },
+    }
+    telemetry = proxyquire('../../src/telemetry/telemetry', {
+      '../exporters/common/docker': {
+        id () {
+          return 'test docker id'
+        },
+      },
+      './send-data': sendDataRequest,
+    })
+
+    telemetry.start({
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: CUSTOM_EXTENDED_HEARTBEAT_INTERVAL,
+      },
+      hostname: 'localhost',
+      port: 0,
+      service: 'test service',
+      version: '1.2.3-beta4',
+      appsec: { enabled: true },
+      profiling: { enabled: true },
+      env: 'preprod',
+      tags: {
+        'runtime-id': '1a2b3c',
+      },
+    }, {
+      _pluginsByName: pluginsByName,
+    })
+    clock.tick(CUSTOM_EXTENDED_HEARTBEAT_INTERVAL)
+    assert.strictEqual(beats, 1)
+    clock.tick(CUSTOM_EXTENDED_HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 2)
     done()
   })
@@ -430,7 +479,7 @@ describe('Telemetry extended heartbeat', () => {
     })
 
     const config = {
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL },
+      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: 86400000 },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
