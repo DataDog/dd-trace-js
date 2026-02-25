@@ -25,6 +25,7 @@ const executeErrorCh = channel('apm:graphql:execute:error')
 // resolve channels
 const startResolveCh = channel('apm:graphql:resolve:start')
 const finishResolveCh = channel('apm:graphql:resolve:finish')
+const finalizeResolveCh = channel('apm:graphql:resolve:finalize')
 const resolveErrorCh = channel('apm:graphql:resolve:error')
 
 // parse channels
@@ -175,7 +176,7 @@ function wrapExecute (execute) {
         contexts.set(contextValue, ctx)
 
         return callInAsyncScope(exe, this, arguments, ctx.abortController.signal, (err, res) => {
-          if (ctx.finalizations.length) {
+          if (finalizeResolveCh.hasSubscribers && ctx.finalizations.length) {
             finalizeResolvers(ctx.finalizations)
           }
 
@@ -318,7 +319,7 @@ function wrapFieldType (field) {
 
 function finalizeResolvers (contexts) {
   for (const fieldCtx of contexts) {
-    fieldCtx.finalize()
+    finalizeResolveCh.publish(fieldCtx)
   }
 }
 

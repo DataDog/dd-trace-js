@@ -114,6 +114,10 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
     this.shouldInstrument = _field => false
+
+    this.addTraceSub('finalize', field => {
+      field.finalize()
+    })
   }
 
   configure (config) {
