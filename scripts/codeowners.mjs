@@ -9,10 +9,7 @@ const filePaths = await getFilePaths(dir, strategy)
 const files = await getOwnership('CODEOWNERS', filePaths)
 
 const unloved = files.filter(f => f.owners.length === 0)
-const unlovedSpecs = unloved.filter(f => (
-  // f.path.startsWith('integration-tests') && f.path.endsWith('.js') ||
-  f.path.endsWith('.spec.js')
-))
+const unlovedSpecs = unloved.filter(f => f.path.endsWith('.spec.js'))
 
 if (unlovedSpecs.length > 0) {
   const list = unlovedSpecs.map(u => u.path).join('\n')
