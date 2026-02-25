@@ -79,6 +79,8 @@ class CheckpointRegistry {
     /** @type {Map<string, number>} */
     this._nameToId = new Map()
     this._nextId = 1
+    /** @type {Buffer | null} Cached result of encodedKeys; invalidated when a new name is added. */
+    this._encodedKeysCache = null
   }
 
   /**
@@ -93,15 +95,18 @@ class CheckpointRegistry {
     if (this._nextId > 254) return
     const id = this._nextId++
     this._nameToId.set(name, id)
+    this._encodedKeysCache = null
     return id
   }
 
   /**
    * Returns a Buffer encoding all registered names as [id uint8][nameLen uint8][name bytes].
    * Names are truncated to 255 UTF-8 bytes.
+   * Result is cached and only recomputed when new names are registered.
    * @returns {Buffer}
    */
   get encodedKeys () {
+    if (this._encodedKeysCache !== null) return this._encodedKeysCache
     const chunks = []
     for (const [name, id] of this._nameToId) {
       const nameBytes = Buffer.from(name, 'utf8').subarray(0, 255)
@@ -111,7 +116,8 @@ class CheckpointRegistry {
       nameBytes.copy(entry, 2)
       chunks.push(entry)
     }
-    return chunks.length > 0 ? Buffer.concat(chunks) : Buffer.alloc(0)
+    this._encodedKeysCache = chunks.length > 0 ? Buffer.concat(chunks) : Buffer.alloc(0)
+    return this._encodedKeysCache
   }
 }
 
@@ -119,8 +125,8 @@ class StatsBucket {
   constructor () {
     this._checkpoints = new Map()
     this._backlogs = new Map()
-    /** @type {Buffer | null} */
-    this._transactions = null
+    /** @type {Buffer[]} Accumulated transaction byte chunks, concatenated lazily. */
+    this._transactionChunks = []
   }
 
   get checkpoints () {
@@ -129,6 +135,16 @@ class StatsBucket {
 
   get backlogs () {
     return this._backlogs
+  }
+
+  /**
+   * Returns the concatenated transaction bytes, or null if no transactions have been added.
+   * Concatenation is deferred to read time to avoid O(N²) copies during accumulation.
+   * @returns {Buffer | null}
+   */
+  get transactions () {
+    if (this._transactionChunks.length === 0) return null
+    return Buffer.concat(this._transactionChunks)
   }
 
   forCheckpoint ({ hash, parentHash, edgeTags }) {
@@ -146,9 +162,7 @@ class StatsBucket {
    * @param {Buffer} bytes
    */
   addTransaction (bytes) {
-    this._transactions = this._transactions === null
-      ? bytes
-      : Buffer.concat([this._transactions, bytes])
+    this._transactionChunks.push(bytes)
   }
 
   /**
@@ -410,8 +424,9 @@ class DataStreamsProcessor {
         Backlogs: backlogs,
       }
 
-      if (bucket._transactions !== null) {
-        serializedBucket.Transactions = bucket._transactions
+      const transactions = bucket.transactions
+      if (transactions !== null) {
+        serializedBucket.Transactions = transactions
         serializedBucket.TransactionCheckpointIds = registrySnapshot
       }
 

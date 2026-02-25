@@ -461,13 +461,13 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     processor.trackTransaction('tx-001', 'ingested')
     assert.strictEqual(processor.buckets.size, 1)
     const bucket = processor.buckets.values().next().value
-    assert.ok(bucket._transactions !== null)
+    assert.ok(bucket.transactions !== null)
   })
 
   it('encodes correct binary wire format', () => {
     processor.trackTransaction('tx-001', 'ingested')
     const bucket = processor.buckets.values().next().value
-    const txBytes = bucket._transactions
+    const txBytes = bucket.transactions
 
     // [checkpointId=1 uint8][timestamp int64 BE 8 bytes][idLen=6 uint8]['tx-001' 6 bytes]
     assert.strictEqual(txBytes.readUInt8(0), 1) // checkpointId
@@ -484,7 +484,7 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     const longId = 'x'.repeat(300)
     processor.trackTransaction(longId, 'ingested')
     const bucket = processor.buckets.values().next().value
-    const txBytes = bucket._transactions
+    const txBytes = bucket.transactions
     // [1 byte id][8 byte ts][1 byte len][255 bytes id] = 265 total
     assert.strictEqual(txBytes.length, 265)
     assert.strictEqual(txBytes.readUInt8(9), 255)
@@ -506,7 +506,7 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     processor.trackTransaction('tx-001', 'ingested')
     processor.trackTransaction('tx-002', 'ingested')
     const bucket = processor.buckets.values().next().value
-    const txBytes = bucket._transactions
+    const txBytes = bucket.transactions
     // Each entry: [1 id][8 ts][1 len][6 id bytes] = 16 bytes → total 32
     assert.strictEqual(txBytes.length, 32)
   })
