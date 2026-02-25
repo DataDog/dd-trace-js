@@ -2,14 +2,13 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 const parseFinishedChannel = channel('datadog:url:parse:finish')
 const urlGetterChannel = channel('datadog:url:getter:finish')
 const instrumentedGetters = ['host', 'origin', 'hostname']
 
 addHook({ name: 'url' }, function (url) {
   shimmer.wrap(url, 'parse', (parse) => {
-    return function wrappedParse(input) {
+    return function wrappedParse (input) {
       const parsedValue = parse.apply(this, arguments)
       if (!parseFinishedChannel.hasSubscribers) return parsedValue
 
@@ -26,7 +25,7 @@ addHook({ name: 'url' }, function (url) {
   const URLPrototype = url.URL.prototype.constructor.prototype
   for (const property of instrumentedGetters) {
     shimmer.wrap(URLPrototype, property, function (originalGet) {
-      return function get() {
+      return function get () {
         const result = originalGet.call(this)
         if (!urlGetterChannel.hasSubscribers) return result
 
@@ -40,7 +39,7 @@ addHook({ name: 'url' }, function (url) {
 
   shimmer.wrap(url, 'URL', (URL) => {
     return class extends URL {
-      constructor(input, base) {
+      constructor (input, base) {
         super(...arguments)
 
         if (!parseFinishedChannel.hasSubscribers) return
@@ -53,7 +52,7 @@ addHook({ name: 'url' }, function (url) {
         })
       }
 
-      static [Symbol.hasInstance](instance) {
+      static [Symbol.hasInstance] (instance) {
         return instance instanceof URL
       }
     }
@@ -61,7 +60,7 @@ addHook({ name: 'url' }, function (url) {
 
   if (url.URL.parse) {
     shimmer.wrap(url.URL, 'parse', (parse) => {
-      return function wrappedParse(input, base) {
+      return function wrappedParse (input, base) {
         const parsedValue = parse.apply(this, arguments)
         if (!parseFinishedChannel.hasSubscribers) return parsedValue
 

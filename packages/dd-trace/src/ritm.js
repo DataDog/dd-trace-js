@@ -22,19 +22,19 @@ let patchedRequire = null
 const moduleLoadStartChannel = dc.channel('dd-trace:moduleLoadStart')
 const moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
-function stripNodePrefix(name) {
+function stripNodePrefix (name) {
   if (typeof name !== 'string') return name
   return name.startsWith('node:') ? name.slice(5) : name
 }
 
 const builtinModules = new Set(Module.builtinModules.map(stripNodePrefix))
 
-function isBuiltinModuleName(name) {
+function isBuiltinModuleName (name) {
   if (typeof name !== 'string') return false
   return builtinModules.has(stripNodePrefix(name))
 }
 
-function normalizeModuleName(name) {
+function normalizeModuleName (name) {
   if (typeof name !== 'string') return name
   const stripped = stripNodePrefix(name)
   return builtinModules.has(stripped) ? stripped : name
@@ -51,7 +51,7 @@ function normalizeModuleName(name) {
  * @param {string[]} modules list of modules to hook into
  * @param {Function} onrequire callback to be executed upon encountering module
  */
-function Hook(modules, options, onrequire) {
+function Hook (modules, options, onrequire) {
   if (!(this instanceof Hook)) return new Hook(modules, options, onrequire)
   if (typeof options === 'function') {
     onrequire = options
@@ -214,7 +214,7 @@ Hook.reset = function () {
   moduleHooks = Object.create(null)
 }
 
-function findProjectRoot(startDir) {
+function findProjectRoot (startDir) {
   let dir = startDir
 
   while (!fs.existsSync(path.join(dir, 'package.json'))) {

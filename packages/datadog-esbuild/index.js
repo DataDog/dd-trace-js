@@ -2,7 +2,6 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
-const RAW_BUILTINS = require('node:module').builtinModules
 const path = require('node:path')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 
@@ -25,13 +24,13 @@ for (const hook of Object.values(hooks)) {
   }
 }
 
-function moduleOfInterestKey(name, file) {
+function moduleOfInterestKey (name, file) {
   return file ? `${name}/${file}` : name
 }
 
 const builtinModules = new Set(require('module').builtinModules)
 
-function addModuleOfInterest(name, file) {
+function addModuleOfInterest (name, file) {
   if (!name) return
 
   modulesOfInterest.add(moduleOfInterestKey(name, file))
@@ -63,7 +62,7 @@ const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' ||
 
 module.exports.name = 'datadog-esbuild'
 
-function isESMBuild(build) {
+function isESMBuild (build) {
   // check toLowerCase? to be safe if unexpected object is there instead of a string
   const format = build.initialOptions.format?.toLowerCase?.()
   const outputFile = build.initialOptions.outfile?.toLowerCase?.()
@@ -71,7 +70,7 @@ function isESMBuild(build) {
   return format === 'esm' || outputFile?.endsWith('.mjs') || outExtension === '.mjs'
 }
 
-function getGitMetadata() {
+function getGitMetadata () {
   /**
    * @type {object}
    * @property {string | null} repositoryURL
@@ -393,7 +392,7 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
 }
 
 // @see https://github.com/nodejs/node/issues/47000
-function dotFriendlyResolve(path, directory, usesImportStatement) {
+function dotFriendlyResolve (path, directory, usesImportStatement) {
   if (path === '.') {
     path = './'
   } else if (path === '..') {

@@ -2,7 +2,6 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 const runScriptStartChannel = channel('datadog:vm:run-script:start')
 const sourceTextModuleStartChannel = channel('datadog:vm:source-text-module:start')
 

@@ -1,23 +1,16 @@
 'use strict'
 
-const sinon = require('sinon')
-const dc = require('dc-polyfill')
-const { describe, it, before, beforeEach } = require('tap').mocha
-
 const assert = require('node:assert')
 const Module = require('node:module')
 
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
-const { describe, it, before, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach } = require('mocha')
 
 require('./setup/core')
 const Hook = require('../src/ritm')
 
 describe('Ritm', () => {
-  const monkeyPatchedModuleName = 'dd-trace-monkey-patched-module'
-  const missingModuleName = 'package-does-not-exist'
-
   let moduleLoadStartChannel, moduleLoadEndChannel, startListener, endListener
   const mockedModuleName = '@azure/functions-core'
 
@@ -26,7 +19,7 @@ describe('Ritm', () => {
     moduleLoadEndChannel = dc.channel('dd-trace:moduleLoadEnd')
 
     Module.prototype.require = new Proxy(Module.prototype.require, {
-      apply(target, thisArg, argArray) {
+      apply (target, thisArg, argArray) {
         if (argArray[0] === mockedModuleName) {
           return {
             version: '1.0.0',
@@ -38,19 +31,15 @@ describe('Ritm', () => {
       },
     })
 
-    function onRequire() { }
+    function onRequire () { }
     Hook(['util'], onRequire)
     Hook(['module-a'], onRequire)
     Hook(['module-b'], onRequire)
-    Hook(['http'], function onRequire(exports, name, basedir) {
+    Hook(['http'], function onRequire (exports, name, basedir) {
       exports.foo = 1
       return exports
     })
-    relativeHook = new Hook(['./ritm-tests/relative/module-c'], function onRequire(exports) {
-      exports.foo = 1
-      return exports
-    })
-    relativeHook = new Hook(['./ritm-tests/relative/module-c'], function onRequire(exports) {
+    Hook(['./ritm-tests/relative/module-c'], function onRequire (exports) {
       exports.foo = 1
       return exports
     })

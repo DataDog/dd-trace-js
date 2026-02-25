@@ -3,7 +3,7 @@
 const assert = require('node:assert')
 
 const proxyquire = require('proxyquire')
-const { describe, it } = require('tap').mocha
+const { describe, it } = require('mocha')
 
 require('../setup/core')
 
@@ -11,22 +11,22 @@ describe('config/instrumentations', () => {
   const httpRequest = require('http').request
   const expressHandle = require('express').application.handle
 
-  function getTracer() {
+  function getTracer () {
     const register = proxyquire.noPreserveCache()('../../../datadog-instrumentations/src/helpers/register', {})
     const instrumentations = proxyquire('../../../datadog-instrumentations/src/helpers/instrumentations', {
-      './src/helpers/register': register
+      './src/helpers/register': register,
     })
     const pluginManager = proxyquire('../../src/plugin_manager', {
-      '../../datadog-instrumentations': instrumentations
+      '../../datadog-instrumentations': instrumentations,
     })
     const proxy = proxyquire('../../src/proxy', {
-      './plugin_manager': pluginManager
+      './plugin_manager': pluginManager,
     })
     const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy
+      './proxy': proxy,
     })
     return proxyquire('../../', {
-      './src': TracerProxy
+      './src': TracerProxy,
     })
   }
 

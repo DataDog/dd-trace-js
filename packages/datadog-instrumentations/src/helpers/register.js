@@ -2,6 +2,7 @@
 
 const { builtinModules } = require('module')
 const path = require('path')
+const { channel } = require('dc-polyfill')
 const satisfies = require('../../../../vendor/dist/semifies')
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
@@ -124,7 +125,7 @@ for (const name of names) {
         }
       }
 
-      hook[HOOK_SYMBOL] ??= new WeakSet()
+      // hook[HOOK_SYMBOL] ??= new WeakSet()
       const fullFilename = filename(name, file)
 
       let matchesFile = moduleName === fullFilename
@@ -139,26 +140,26 @@ for (const name of names) {
       }
 
       if (matchesFile && matchVersion(moduleVersion, versions)) {
-        if (hook[HOOK_SYMBOL].has(moduleExports)) {
-          return moduleExports
-        }
+        // if (hook[HOOK_SYMBOL].has(moduleExports)) {
+        //   return moduleExports
+        // }
         // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
         instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
         try {
           loadChannel.publish({ name })
 
           moduleExports = hook(moduleExports, moduleVersion) ?? moduleExports
-          hook[HOOK_SYMBOL].add(moduleExports)
+          // hook[HOOK_SYMBOL].add(moduleExports)
         } catch (error) {
           log.info('Error during ddtrace instrumentation of application, aborting.', error)
           telemetry('error', [
             `error_type:${error.constructor.name}`,
             `integration:${name}`,
-            `integration_version:${moduleVersion}`
+            `integration_version:${moduleVersion}`,
           ], {
             result: 'error',
             result_class: 'internal_error',
-            result_reason: `Error during instrumentation of ${name}@${moduleVersion}: ${error.message}`
+            result_reason: `Error during instrumentation of ${name}@${moduleVersion}: ${error.message}`,
           })
         }
       }
@@ -168,10 +169,7 @@ for (const name of names) {
   })
 }
 
-// Used in case the process exits before the timeout is triggered.
-process.on('beforeExit', () => {
-  logAbortedIntegrations()
-})
+globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(logAbortedIntegrations)
 
 function logAbortedIntegrations () {
   for (const [nameVersion, success] of instrumentedIntegrationsSuccess) {
@@ -180,11 +178,11 @@ function logAbortedIntegrations () {
       const [name, version] = nameVersion.split('@')
       telemetry('abort.integration', [
         `integration:${name}`,
-        `integration_version:${version}`
+        `integration_version:${version}`,
       ], {
         result: 'abort',
         result_class: 'incompatible_library',
-        result_reason: `Incompatible integration version: ${name}@${version}`
+        result_reason: `Incompatible integration version: ${name}@${version}`,
       })
       log.info('Found incompatible integration version: %s', nameVersion)
       alreadyLoggedIncompatibleIntegrations.add(nameVersion)
