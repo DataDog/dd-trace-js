@@ -187,7 +187,7 @@ function wrapExecute (execute) {
             executeErrorCh.publish(ctx)
           }
 
-          ctx.res = res
+          ctx.result = res
           finishExecuteCh.publish(ctx)
         })
       })
@@ -220,7 +220,7 @@ function wrapResolve (resolve) {
         field.error = err
         resolveErrorCh.publish(field)
       }
-      field.res = res
+      field.result = res
       finishResolveCh.publish(field)
     })
   }
@@ -266,7 +266,7 @@ function createField (rootCtx, info, args) {
     info,
     args,
     error: null,
-    res: null,
+    result: null,
     parentField,
     depth: parentField ? parentField.depth + 1 : 1,
     finalize: null, // sometimes populated by GraphQLResolvePlugin in `resolve:start` handler

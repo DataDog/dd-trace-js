@@ -2068,7 +2068,7 @@ declare namespace tracer {
       /** The error thrown by the resolver, if any */
       error: null | Error;
       /** The result returned by the resolver, if any */
-      res: unknown;
+      result: unknown;
       /** The field context from the resolver of the parent field (a level up on the path) */
       parentField: FieldContext | null;
       /** The nesting depth of the field in the query */
@@ -2150,7 +2150,7 @@ declare namespace tracer {
        * @default {}
        */
       hooks?: {
-        execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
+        execute?: (span?: Span, args?: ExecutionArgs, result?: any) => void;
         validate?: (span?: Span, document?: any, errors?: any) => void;
         parse?: (span?: Span, source?: any, document?: any) => void;
         resolve?: (span?: Span, field: FieldContext) => void;

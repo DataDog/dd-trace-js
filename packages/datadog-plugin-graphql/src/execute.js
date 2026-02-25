@@ -37,11 +37,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
   }
 
   finish (ctx) {
-    const { res, args } = ctx
+    const { result, args } = ctx
     const span = ctx?.currentStore?.span || this.activeSpan
-    this.config.hooks.execute(span, args, res)
-    if (res?.errors) {
-      for (const err of res.errors) {
+    this.config.hooks.execute(span, args, result)
+    if (result?.errors) {
+      for (const err of result.errors) {
         extractErrorIntoSpanEvent(this._tracerConfig, span, err)
       }
     }
