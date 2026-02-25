@@ -494,7 +494,6 @@ describe('Plugin', () => {
           }],
         }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        metadata: {},
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -538,7 +537,6 @@ describe('Plugin', () => {
         ],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        metadata: {},
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -648,7 +646,6 @@ describe('Plugin', () => {
           }],
         }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        metadata: {},
         tags: { ml_app: 'test', integration: 'ai' },
       })
 
@@ -699,7 +696,6 @@ describe('Plugin', () => {
         ],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
-        metadata: {},
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })

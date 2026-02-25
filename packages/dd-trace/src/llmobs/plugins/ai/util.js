@@ -11,6 +11,8 @@ const MODEL_METADATA_KEYS = new Set([
 ])
 
 const VERCEL_AI_TELEMETRY_METADATA_PREFIX = 'ai.telemetry.metadata.'
+const VERCEL_AI_MODEL_METADATA_PREFIX = 'gen_ai.request.'
+const VERCEL_AI_GENERATION_METADATA_PREFIX = 'ai.settings.'
 
 /**
  * @typedef {import('../../../opentracing/span')} Span
@@ -109,17 +111,28 @@ function getJsonStringValue (str, defaultValue) {
 
 /**
  * Get the model metadata from the span tags (top_p, top_k, temperature, etc.)
+ * Additionally, set telemetry metadata from manual telemetry tags.
  * @param {SpanTags} tags
  * @returns {Record<string, unknown> | null}
  */
 function getModelMetadata (tags) {
   /** @type {Record<string, unknown>} */
   const modelMetadata = {}
-  for (const metadata of MODEL_METADATA_KEYS) {
-    const metadataTagKey = `gen_ai.request.${metadata}`
-    const metadataValue = tags[metadataTagKey]
-    if (metadataValue) {
-      modelMetadata[metadata] = metadataValue
+  for (const tag of Object.keys(tags)) {
+    const isModelMetadata = tag.startsWith(VERCEL_AI_MODEL_METADATA_PREFIX)
+    const isTelemetryMetadata = tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)
+    if (!isModelMetadata && !isTelemetryMetadata) continue
+
+    if (isModelMetadata) {
+      const metadataKey = tag.split('.').pop()
+      if (metadataKey && MODEL_METADATA_KEYS.has(metadataKey)) {
+        modelMetadata[metadataKey] = tags[tag]
+      }
+    } else if (isTelemetryMetadata) {
+      const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
+      if (metadataKey) {
+        modelMetadata[metadataKey] = tags[tag]
+      }
     }
   }
 
@@ -128,6 +141,7 @@ function getModelMetadata (tags) {
 
 /**
  * Get the generation metadata from the span tags (maxSteps, maxRetries, etc.)
+ * Additionally, set telemetry metadata from manual telemetry tags.
  * @param {SpanTags} tags
  * @returns {Record<string, unknown> | null}
  */
@@ -136,14 +150,23 @@ function getGenerationMetadata (tags) {
   const metadata = {}
 
   for (const tag of Object.keys(tags)) {
-    if (!tag.startsWith('ai.settings')) continue
+    const isGenerationMetadata = tag.startsWith(VERCEL_AI_GENERATION_METADATA_PREFIX)
+    const isTelemetryMetadata = tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)
+    if (!isGenerationMetadata && !isTelemetryMetadata) continue
 
-    const settingKey = tag.split('.').pop()
-    const transformedKey = settingKey.replaceAll(/[A-Z]/g, letter => '_' + letter.toLowerCase())
-    if (MODEL_METADATA_KEYS.has(transformedKey)) continue
+    if (isGenerationMetadata) {
+      const settingKey = tag.split('.').pop()
+      const transformedKey = settingKey.replaceAll(/[A-Z]/g, letter => '_' + letter.toLowerCase())
+      if (MODEL_METADATA_KEYS.has(transformedKey)) continue
 
-    const settingValue = tags[tag]
-    metadata[settingKey] = settingValue
+      const settingValue = tags[tag]
+      metadata[settingKey] = settingValue
+    } else if (isTelemetryMetadata) {
+      const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
+      if (metadataKey) {
+        metadata[metadataKey] = tags[tag]
+      }
+    }
   }
 
   return Object.keys(metadata).length ? metadata : null
@@ -224,7 +247,7 @@ function getTelemetryMetadata (tags) {
     }
   }
 
-  return metadata
+  return Object.keys(metadata).length ? metadata : null
 }
 
 module.exports = {
