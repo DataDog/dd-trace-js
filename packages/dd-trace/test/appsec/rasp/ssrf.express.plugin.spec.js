@@ -80,9 +80,8 @@ describe('RASP - ssrf', () => {
             const module = require(protocol)
 
             app = (req, res) => {
-              console.time('request')
-              const clientRequest = module.get(`${protocol}://${req.query.host}`, function () {
-                console.timeEnd('request')
+              const clientRequest = module.get(`${protocol}://${req.query.host}`, function (incomingResponse) {
+                incomingResponse.resume()
                 res.end('end')
               })
 
