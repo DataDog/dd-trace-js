@@ -57,17 +57,19 @@ describe('RASP - ssrf', () => {
 
     describe('ssrf', () => {
       async function testBlockingRequest () {
-        try {
-          await axios.get('/?host=localhost/ifconfig.pro')
-        } catch (e) {
+        const assertPromise = checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
+        const blockingRequestPromise = axios.get('/?host=localhost/ifconfig.pro').then(() => {
+          assert.fail('Request should be blocked')
+        }).catch(e => {
           if (!e.response) {
             throw e
           }
+        })
 
-          return checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
-        }
-
-        assert.fail('Request should be blocked')
+        await Promise.all([
+          blockingRequestPromise,
+          assertPromise,
+        ])
       }
 
       ['http', 'https'].forEach(protocol => {
