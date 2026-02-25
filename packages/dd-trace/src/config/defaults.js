@@ -195,7 +195,8 @@ module.exports = {
   'telemetry.debug': false,
   'telemetry.dependencyCollection': true,
   'telemetry.enabled': true,
-  'telemetry.heartbeatInterval': 60_000,
+  'telemetry.extendedHeartbeatInterval': 86_400_000, // Internal: for testing only
+  'telemetry.heartbeatInterval': 60_000, // Internal: for testing only
   'telemetry.logCollection': true,
   'telemetry.metrics': true,
   traceEnabled: true,
