@@ -26,7 +26,7 @@ const disabledInstrumentations = new Set(
 )
 
 const loadChannel = channel('dd-trace:instrumentation:load')
-const HOOK_SYMBOL = Symbol('hookExportsSet')
+// const HOOK_SYMBOL = Symbol('hookExportsSet')
 
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
@@ -169,7 +169,7 @@ for (const name of names) {
   })
 }
 
-globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(logAbortedIntegrations)
+globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers.add(logAbortedIntegrations)
 
 function logAbortedIntegrations () {
   for (const [nameVersion, success] of instrumentedIntegrationsSuccess) {
