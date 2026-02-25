@@ -3,7 +3,7 @@ name: AppSec
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, mq-working-branch-master-*]
   schedule:
     - cron: 0 4 * * *
   workflow_dispatch:
