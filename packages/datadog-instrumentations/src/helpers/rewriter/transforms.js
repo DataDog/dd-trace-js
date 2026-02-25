@@ -1,6 +1,6 @@
 'use strict'
 
-const { parse, query } = require('./compiler')
+const { parse, query, traverse } = require('./compiler')
 
 const tracingChannelPredicate = (node) => (
   node.specifiers?.[0]?.local?.name === 'tr_ch_apm_tracingChannel' ||
@@ -35,7 +35,9 @@ const transforms = module.exports = {
     node.body.splice(index + 1, 0, parse(code).body[0])
   },
 
+  traceAsyncIterator: traceAny,
   traceCallback: traceAny,
+  traceIterator: traceAny,
   tracePromise: traceAny,
   traceSync: traceAny,
 }
@@ -51,18 +53,25 @@ function traceAny (state, node, _parent, ancestry) {
 }
 
 function traceFunction (state, node, program) {
-  const { operator } = state
-
   transforms.tracingChannelDeclaration(state, program)
 
   node.body = wrap(state, {
-    type: 'ArrowFunctionExpression',
+    type: 'FunctionExpression',
     params: node.params,
     body: node.body,
-    async: operator === 'tracePromise',
+    async: node.async,
     expression: false,
-    generator: false,
-  })
+    generator: node.generator,
+  }, program)
+
+  // The original function no longer contains any calls to `await` or `yield` as
+  // the function body is copied to the internal wrapped function, so we set
+  // these to false to avoid altering the return value of the wrapper. The old
+  // values are instead copied to the new AST node above.
+  node.generator = false
+  node.async = false
+
+  wrapSuper(state, node)
 }
 
 function traceInstanceMethod (state, node, program) {
@@ -100,15 +109,19 @@ function traceInstanceMethod (state, node, program) {
   const fn = ctorBody[1].expression.right
 
   fn.async = operator === 'tracePromise'
-  fn.body = wrap(state, { type: 'Identifier', name: `__apm$${methodName}` })
+  fn.body = wrap(state, { type: 'Identifier', name: `__apm$${methodName}` }, program)
+
+  wrapSuper(state, fn)
 
   ctor.value.body.body.push(...ctorBody)
 }
 
-function wrap (state, node) {
+function wrap (state, node, program) {
   const { channelName, operator } = state
 
+  if (operator === 'traceAsyncIterator') return wrapIterator(state, node, program)
   if (operator === 'traceCallback') return wrapCallback(state, node)
+  if (operator === 'traceIterator') return wrapIterator(state, node, program)
 
   const async = operator === 'tracePromise' ? 'async' : ''
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
@@ -131,6 +144,55 @@ function wrap (state, node) {
   query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
 
   return wrapper
+}
+
+function wrapSuper (_state, node) {
+  const members = new Set()
+
+  traverse(
+    node.body,
+    '[object.type=Super]',
+    (node, parent) => {
+      const { name } = node.property
+
+      let child
+
+      if (parent.callee) {
+        // This is needed because for generator functions we have to move the
+        // original function to a nested wrapped function, but we can't use an
+        // arrow function because arrow function cannot be generator functions,
+        // and `super` cannot be called from a nested function, so we have to
+        // rewrite any `super` call to not use the keyword.
+        const { expression } = parse(`__apm$super['${name}'].call(this)`).body[0]
+
+        parent.callee = child = expression.callee
+        parent.arguments.unshift(...expression.arguments)
+      } else {
+        parent.expression = child = parse(`__apm$super['${name}']`).body[0]
+      }
+
+      child.computed = parent.callee.computed
+      child.optional = parent.callee.optional
+
+      members.add(name)
+    }
+  )
+
+  for (const name of members) {
+    const member = parse(`
+      class Wrapper {
+        wrapper () {
+          __apm$super['${name}'] = super['${name}']
+        }
+      }
+    `).body[0].body.body[0].value.body.body[0]
+
+    node.body.body.unshift(member)
+  }
+
+  if (members.size > 0) {
+    node.body.body.unshift(parse('const __apm$super = {}').body[0])
+  }
 }
 
 function wrapCallback (state, node) {
@@ -186,6 +248,70 @@ function wrapCallback (state, node) {
           ${channelVariable}.end.publish(__apm$ctx);
         }
       });
+    }
+  `).body[0].body // Extract only block statement of function body.
+
+  // Replace the right-hand side assignment of `const __apm$wrapped = () => {}`.
+  query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
+
+  return wrapper
+}
+
+function wrapIterator (state, node, program) {
+  const { channelName, operator } = state
+  const baseChannel = channelName.replaceAll(':', '_')
+  const channelVariable = 'tr_ch_apm$' + baseChannel
+  const nextChannel = baseChannel + '_next'
+  const traceMethod = operator === 'traceAsyncIterator' ? 'tracePromise' : 'traceSync'
+  const traceNext = `tr_ch_apm$${nextChannel}.${traceMethod}`
+
+  transforms.tracingChannelDeclaration({ ...state, channelName: nextChannel }, program)
+
+  const wrapper = parse(`
+    function wrapper () {
+      const __apm$traced = () => {
+        const __apm$wrapped = () => {};
+        return __apm$wrapped.apply(this, arguments);
+      };
+
+      if (!${channelVariable}.start.hasSubscribers) return __apm$traced();
+
+      {
+        const wrap = iter => {
+          const { next: iterNext, return: iterReturn, throw: iterThrow } = iter;
+
+          iter.next = (...args) => ${traceNext}(iterNext, ctx, iter, ...args);
+          iter.return = (...args) => ${traceNext}(iterReturn, ctx, iter, ...args);
+          iter.throw = (...args) => ${traceNext}(iterThrow, ctx, iter, ...args);
+
+          return iter;
+        };
+        const ctx = {
+          arguments,
+          self: this,
+          moduleVersion: "1.0.0"
+        };
+        const iter = ${channelVariable}.traceSync(__apm$traced, ctx);
+
+        if (typeof iter.then !== 'function') return wrap(iter);
+
+        return iter.then(result => {
+          ctx.result = result;
+
+          ${channelVariable}.asyncStart.publish(ctx);
+          ${channelVariable}.asyncEnd.publish(ctx);
+
+          return wrap(result);
+        }, err => {
+          ctx.error = err;
+
+          ${channelVariable}.error.publish(ctx);
+          ${channelVariable}.asyncStart.publish(ctx);
+          ${channelVariable}.asyncEnd.publish(ctx);
+
+          return Promise.reject(err);
+        });
+      };
     }
   `).body[0].body // Extract only block statement of function body.
 

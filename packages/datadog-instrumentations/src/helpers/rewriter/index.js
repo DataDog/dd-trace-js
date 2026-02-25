@@ -29,6 +29,7 @@ Orchestrion-JS that will need to be backported:
   is not a function. We'll see over time if something like this is needed to be
   backported or if it can be replaced by simpler queries.
 - Supports replacing methods of child class instances in the base constructor.
+- Supports tracing iterator (sync/async) returning functions (sync/async).
 */
 
 const { readFileSync } = require('fs')
@@ -36,7 +37,7 @@ const { join } = require('path')
 const semifies = require('../../../../../vendor/dist/semifies')
 const log = require('../../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../../dd-trace/src/config/helper')
-const transforms = require('./transforms')
+const { transform } = require('./transformer')
 const { generate, parse, traverse } = require('./compiler')
 const instrumentations = require('./instrumentations')
 
@@ -61,19 +62,15 @@ function rewrite (content, filename, format) {
 
     for (const inst of instrumentations) {
       const { astQuery, functionQuery = {}, module: { name, versionRange, filePath } } = inst
-      const { kind } = functionQuery
-      const operator = kind === 'Async' ? 'tracePromise' : kind === 'Callback' ? 'traceCallback' : 'traceSync'
-      const transform = transforms[operator]
 
       if (disabled.has(name)) continue
       if (!filename.endsWith(`${name}/${filePath}`)) continue
-      if (!transform) continue
       if (!satisfies(filename, filePath, versionRange)) continue
 
       ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
 
       const query = astQuery || fromFunctionQuery(functionQuery)
-      const state = { ...inst, format, functionQuery, operator }
+      const state = { ...inst, format, functionQuery }
 
       traverse(ast, query, (...args) => transform(state, ...args))
     }
