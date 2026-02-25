@@ -677,7 +677,7 @@
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS": [
@@ -1641,7 +1641,7 @@
           "spanSamplingRules",
           "sampler.spanSamplingRules"
         ],
-        "default": "[]"
+        "default": ""
       }
     ],
     "DD_SPAN_SAMPLING_RULES_FILE": [
