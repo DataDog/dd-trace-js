@@ -182,6 +182,7 @@ class JestPlugin extends CiPlugin {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
@@ -208,6 +209,7 @@ class JestPlugin extends CiPlugin {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
         _ddTestModuleId: testModuleId,
+        _ddRequestErrorTags: requestErrorTags,
         _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
         _ddUnskippable,
@@ -219,7 +221,11 @@ class JestPlugin extends CiPlugin {
         'x-datadog-parent-id': testModuleId,
       })
 
-      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
+        // requestErrorTags from test env options may be undefined
+        ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
+      }
 
       if (_ddUnskippable) {
         const unskippableSuites = this.getUnskippableSuites(_ddUnskippable)
