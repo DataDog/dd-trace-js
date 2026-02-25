@@ -146,7 +146,7 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_m
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
 
-// Test optimization request error tags (hidden; for UI to show which requests failed and error class)
+// Library configuration request error tag
 const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
 
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
@@ -206,29 +206,20 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
 
-const REQUEST_ERROR_TAG_PREFIX = '_dd.ci.'
-const REQUEST_ERROR_TAG_SUFFIX = '_error'
-
 /**
  * Returns request error tags from a test session span for propagation to child events.
- * Only includes tags that match _dd.ci.*_error (hidden tags set when test-optimization requests fail).
  * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
  * @returns {Record<string, string>}
  */
 function getSessionRequestErrorTags (sessionSpan) {
   const tags = sessionSpan?.context()._tags
   if (!tags || typeof tags !== 'object') return {}
-  const result = {}
-  for (const key of Object.keys(tags)) {
-    if (
-      key.startsWith(REQUEST_ERROR_TAG_PREFIX) &&
-      key.endsWith(REQUEST_ERROR_TAG_SUFFIX) &&
-      typeof tags[key] === 'string'
-    ) {
-      result[key] = tags[key]
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR] === 'true') {
+    return {
+      [DD_CI_LIBRARY_CONFIGURATION_ERROR]: 'true',
     }
   }
-  return result
+  return {}
 }
 
 module.exports = {
