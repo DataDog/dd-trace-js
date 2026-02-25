@@ -37,11 +37,6 @@ function parseDefaultByType (raw, type) {
     }
     case 'array': {
       if (raw.length === 0) return []
-      let parsedAsJson
-      try {
-        parsedAsJson = JSON.parse(raw)
-      } catch {}
-      if (Array.isArray(parsedAsJson)) return parsedAsJson
       // TODO: Make the parsing a helper that is reused.
       return raw.split(',').map(item => {
         const colonIndex = item.indexOf(':')
@@ -55,14 +50,6 @@ function parseDefaultByType (raw, type) {
     }
     case 'map': {
       if (raw.length === 0) return {}
-      let parsedAsJson
-      try {
-        parsedAsJson = JSON.parse(raw)
-      } catch {}
-      if (parsedAsJson && typeof parsedAsJson === 'object') {
-        return parsedAsJson
-      }
-
       // TODO: Make the parsing a helper that is reused.
       /** @type {Record<string, string>} */
       const entries = {}
@@ -137,6 +124,9 @@ const defaultsWithConditionalRuntimeBehavior = {
   // TODO: These are not conditional, they would just be of type number.
   'dogstatsd.port': '8125',
   port: '8126',
+  // Override due to expecting numbers, not strings. TODO: Replace later.
+  'grpc.client.error.statuses': [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
+  'grpc.server.error.statuses': [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
 }
 
 /** @type {Record<string, unknown>} */
