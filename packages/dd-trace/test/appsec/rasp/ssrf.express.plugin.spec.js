@@ -74,8 +74,7 @@ describe('RASP - ssrf', () => {
 
       ['http', 'https'].forEach(protocol => {
         describe(`Test using ${protocol}`, () => {
-          it('Should not detect threat', async function () {
-            this.timeout(10_000)
+          it('Should not detect threat', async () => {
             // Hack to enforce the module to be loaded once before the actual request
             const module = require(protocol)
 
@@ -140,8 +139,7 @@ describe('RASP - ssrf', () => {
             axiosToTest.get('http://preloadaxios', { timeout: 10 }).catch(noop).then(done)
           })
 
-          it('Should not detect threat', async function () {
-            this.timeout(10_000)
+          it('Should not detect threat', async () => {
             app = (req, res) => {
               axiosToTest.get(`https://${req.query.host}`)
                 .catch(noop) // swallow network error
@@ -195,8 +193,7 @@ describe('RASP - ssrf', () => {
             requestToTest = require(`../../../../../versions/request@${requestVersion}`).get()
           })
 
-          it('Should not detect threat', async function () {
-            this.timeout(10_000)
+          it('Should not detect threat', async () => {
             app = (req, res) => {
               requestToTest.get(`https://${req.query.host}`).on('response', () => {
                 res.end('end')
