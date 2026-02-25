@@ -66,9 +66,10 @@ describe('IAST - overhead-controller - integration', () => {
         })
       }, 1000, 1, true)
 
-      await axios.request(path, { method })
-
-      await assertPromise
+      await Promise.all([
+        axios.request(path, { method }),
+        assertPromise,
+      ])
     }
 
     async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {
@@ -78,8 +79,10 @@ describe('IAST - overhead-controller - integration', () => {
         assert.ok(!('_dd.iast.json' in payload[0][0].meta))
       }, 1000, 1, true)
 
-      await axios.request(path, { method })
-      await assertPromise
+      await Promise.all([
+        axios.request(path, { method }),
+        assertPromise,
+      ])
     }
 
     it('should report vulnerability only in the first request', async () => {
