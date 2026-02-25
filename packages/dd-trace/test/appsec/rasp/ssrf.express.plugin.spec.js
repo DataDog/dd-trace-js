@@ -11,7 +11,6 @@ const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
-const log = require('../../../src/log')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 function noop () {}
@@ -49,13 +48,6 @@ describe('RASP - ssrf', () => {
         done()
       })
     })
-    // beforeEach(() => {
-    //   log.toggle(true, 'debug')
-    // })
-
-    // afterEach(() => {
-    //   log.toggle(false, 'debug')
-    // })
 
     after(() => {
       appsec.disable()
@@ -93,9 +85,8 @@ describe('RASP - ssrf', () => {
               clientRequest.on('error', noop)
             }
 
-            const assertPromise = checkRaspExecutedAndNotThreat(agent, true, 9_000)
             await Promise.all([
-              assertPromise,
+              checkRaspExecutedAndNotThreat(agent, true, 9_000),
               axios.get('/?host=www.datadoghq.com'),
             ])
           })
@@ -146,17 +137,17 @@ describe('RASP - ssrf', () => {
             axiosToTest.get('http://preloadaxios', { timeout: 10 }).catch(noop).then(done)
           })
 
-          it('Should not detect threat', async () => {
+          it('Should not detect threat', async function () {
+            this.timeout(10_000)
             app = (req, res) => {
               axiosToTest.get(`https://${req.query.host}`)
                 .catch(noop) // swallow network error
                 .then(() => res.end('end'))
             }
 
-            const assertPromise = checkRaspExecutedAndNotThreat(agent)
             await Promise.all([
               axios.get('/?host=www.datadoghq.com'),
-              assertPromise,
+              checkRaspExecutedAndNotThreat(agent, true, 9_000),
             ])
           })
 
@@ -201,7 +192,8 @@ describe('RASP - ssrf', () => {
             requestToTest = require(`../../../../../versions/request@${requestVersion}`).get()
           })
 
-          it('Should not detect threat', async () => {
+          it('Should not detect threat', async function () {
+            this.timeout(10_000)
             app = (req, res) => {
               requestToTest.get(`https://${req.query.host}`).on('response', () => {
                 res.end('end')
@@ -209,8 +201,10 @@ describe('RASP - ssrf', () => {
             }
 
             axios.get('/?host=www.datadoghq.com')
-
-            return checkRaspExecutedAndNotThreat(agent)
+            await Promise.all([
+              axios.get('/?host=www.datadoghq.com'),
+              checkRaspExecutedAndNotThreat(agent, true, 9_000),
+            ])
           })
 
           it('Should detect threat doing a GET request', async () => {
