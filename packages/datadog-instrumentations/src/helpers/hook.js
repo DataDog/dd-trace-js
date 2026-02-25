@@ -1,5 +1,7 @@
 'use strict'
+
 const path = require('path')
+
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
 const log = require('../../../dd-trace/src/log')
@@ -7,12 +9,14 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 
 /**
  * @param {string} moduleBaseDir
+ * @param {string} moduleName
  * @returns {string|undefined}
  */
-function getVersion (moduleBaseDir) {
+function getVersion (moduleBaseDir, moduleName) {
   if (moduleBaseDir) {
     return requirePackageJson(moduleBaseDir, /** @type {import('module').Module} */ (module)).version
   }
+
   return process.version
 }
 
@@ -64,7 +68,7 @@ function Hook (modules, hookOptions, onrequire) {
     }
 
     try {
-      moduleVersion ||= getVersion(moduleBaseDir)
+      moduleVersion ||= getVersion(moduleBaseDir, moduleName)
     } catch (error) {
       log.error('Error getting version for "%s": %s', moduleName, error.message, error)
       return
