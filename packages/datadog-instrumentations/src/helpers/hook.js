@@ -2,6 +2,19 @@
 const path = require('path')
 const iitm = require('../../../dd-trace/src/iitm')
 const ritm = require('../../../dd-trace/src/ritm')
+const log = require('../../../dd-trace/src/log')
+const requirePackageJson = require('../../../dd-trace/src/require-package-json')
+
+/**
+ * @param {string} moduleBaseDir
+ * @returns {string|undefined}
+ */
+function getVersion (moduleBaseDir) {
+  if (moduleBaseDir) {
+    return requirePackageJson(moduleBaseDir, /** @type {import('module').Module} */ (module)).version
+  }
+  return process.version
+}
 
 /**
  * This is called for every package/internal-module that dd-trace supports instrumentation for
@@ -27,6 +40,13 @@ function Hook (modules, hookOptions, onrequire) {
     const filename = path.join(...parts)
 
     let defaultWrapResult
+
+    try {
+      moduleVersion ||= getVersion(moduleBaseDir)
+    } catch (error) {
+      log.error('Error getting version for "%s": %s', moduleName, error.message, error)
+      return
+    }
 
     const wrappedOnrequire = (moduleExports, ...args) => {
       if (this._patched[filename] && patched.has(moduleExports)) {
@@ -64,12 +84,6 @@ function Hook (modules, hookOptions, onrequire) {
   this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
     return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
   })
-}
-
-Hook.prototype.unhook = function () {
-  this._ritmHook.unhook()
-  this._iitmHook.unhook()
-  this._patched = Object.create(null)
 }
 
 module.exports = Hook

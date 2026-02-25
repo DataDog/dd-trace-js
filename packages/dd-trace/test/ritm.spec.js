@@ -45,7 +45,7 @@ describe('Ritm', () => {
     utilHook = Hook('util')
     aHook = Hook('module-a')
     bHook = Hook('module-b')
-    httpHook = new Hook(['http'], function onRequire (exports, name, basedir) {
+    httpHook = new Hook(['node:http'], function onRequire (exports, name, basedir) {
       exports.foo = 1
       return exports
     })
@@ -55,18 +55,10 @@ describe('Ritm', () => {
     })
   })
 
-  afterEach(() => {
-    utilHook.unhook()
-    aHook.unhook()
-    bHook.unhook()
-    httpHook.unhook()
-    relativeHook.unhook()
-  })
-
   it('should shim util', () => {
     assert.equal(startListener.callCount, 0)
     assert.equal(endListener.callCount, 0)
-    require('util')
+    require('node:util')
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
   })
@@ -115,7 +107,7 @@ describe('Ritm', () => {
   })
 
   it('should fall back to monkey patched module', () => {
-    const http = /** @type {{ foo?: number }} */ (require('http'))
+    const http = /** @type {{ foo?: number }} */ (require('node:http'))
     assert.equal(http.foo, 1, 'normal hooking still works')
 
     const monkeyPatchedModule = require(monkeyPatchedModuleName)

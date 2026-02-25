@@ -22,45 +22,72 @@ if (!dc.unsubscribe) {
   dc.unsubscribe = (channel, cb) => {
     if (dc.channel(channel).hasSubscribers) {
       dc.channel(channel).unsubscribe(cb)
+      return true
     }
+    return false
   }
 }
 
-function doHook (payload) {
-  const hook = hooks[payload.package]
+/**
+ * @param {string} name
+ */
+function doHook (name) {
+  const hook = hooks[name] ?? hooks[`node:${name}`]
   if (!hook) {
-    log.error('esbuild-wrapped %s missing in list of hooks', payload.package)
+    log.error('esbuild-wrapped %s missing in list of hooks', name)
     return
   }
 
   const hookFn = hook.fn ?? hook
   if (typeof hookFn !== 'function') {
-    log.error('esbuild-wrapped hook %s is not a function', payload.package)
+    log.error('esbuild-wrapped hook %s is not a function', name)
     return
   }
 
   try {
     hookFn()
   } catch {
-    log.error('esbuild-wrapped %s hook failed', payload.package)
+    log.error('esbuild-wrapped %s hook failed', name)
   }
 }
 
-dc.subscribe(CHANNEL, (payload) => {
-  doHook(payload)
+/** @type {Set<string>} */
+const instrumentedNodeModules = new Set()
 
-  if (!instrumentations[payload.package]) {
-    log.error('esbuild-wrapped %s missing in list of instrumentations', payload.package)
+dc.subscribe(CHANNEL, (message) => {
+  const payload = /** @type {{ package: string, module: unknown, version: string, path: string }} */ (message)
+  const name = payload.package
+
+  const isPrefixedWithNode = name.startsWith('node:')
+
+  const isNodeModule = isPrefixedWithNode || !hooks[name]
+
+  if (isNodeModule) {
+    const nodeName = isPrefixedWithNode ? name.slice(5) : name
+    // Used for node: prefixed modules to prevent double instrumentation.
+    if (instrumentedNodeModules.has(nodeName)) {
+      return
+    }
+    instrumentedNodeModules.add(nodeName)
+  }
+
+  doHook(name)
+
+  const instrumentation = instrumentations[name] ?? instrumentations[`node:${name}`]
+
+  if (!instrumentation) {
+    log.error('esbuild-wrapped %s missing in list of instrumentations', name)
     return
   }
 
-  for (const { name, file, versions, hook } of instrumentations[payload.package]) {
-    if (payload.path !== filename(name, file)) continue
-    if (!matchVersion(payload.version, versions)) continue
+  for (const { file, versions, hook } of instrumentation) {
+    if (payload.path !== filename(name, file) || !matchVersion(payload.version, versions)) {
+      continue
+    }
 
     try {
       loadChannel.publish({ name, version: payload.version, file })
-      payload.module = hook(payload.module, payload.version)
+      payload.module = hook(payload.module, payload.version) ?? payload.module
     } catch (e) {
       log.error('Error executing bundler hook', e)
     }

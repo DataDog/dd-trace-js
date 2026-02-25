@@ -1,9 +1,11 @@
 'use strict'
 
+const { builtinModules } = require('module')
 const path = require('path')
+
 const { channel } = require('dc-polyfill')
 const satisfies = require('../../../../vendor/dist/semifies')
-const requirePackageJson = require('../../../dd-trace/src/require-package-json')
+
 const log = require('../../../dd-trace/src/log')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
 const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
@@ -26,6 +28,7 @@ const disabledInstrumentations = new Set(
 )
 
 const loadChannel = channel('dd-trace:instrumentation:load')
+const HOOK_SYMBOL = Symbol('hookExportsSet')
 
 // Globals
 if (!disabledInstrumentations.has('fetch')) {
@@ -36,27 +39,49 @@ if (!disabledInstrumentations.has('process')) {
   require('../process')
 }
 
-const HOOK_SYMBOL = Symbol('hookExportsSet')
-
 if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
   checkRequireCache.checkForRequiredModules()
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
-const seenCombo = new Set()
-const allInstrumentations = {}
+/** @type {Map<string, object>} */
+const instrumentedNodeModules = new Map()
+/** @type {Map<string, boolean>} */
+const instrumentedIntegrationsSuccess = new Map()
+/** @type {Set<string>} */
+const alreadyLoggedIncompatibleIntegrations = new Set()
+
+// Always disable prefixed and unprefixed node modules if one is disabled.
+if (disabledInstrumentations.size) {
+  const builtinsSet = new Set(builtinModules)
+  for (const name of disabledInstrumentations) {
+    const hasPrefix = name.startsWith('node:')
+    if (hasPrefix || builtinsSet.has(name)) {
+      if (hasPrefix) {
+        const unprefixedName = name.slice(5)
+        if (!disabledInstrumentations.has(unprefixedName)) {
+          disabledInstrumentations.add(unprefixedName)
+        }
+      } else if (!disabledInstrumentations.has(`node:${name}`)) {
+        disabledInstrumentations.add(`node:${name}`)
+      }
+    }
+  }
+  builtinsSet.clear()
+}
 
 for (const inst of disabledInstrumentations) {
   rewriter.disable(inst)
 }
 
-// TODO: make this more efficient
-for (const packageName of names) {
-  if (disabledInstrumentations.has(packageName)) continue
+let timeout
+
+for (const name of names) {
+  if (disabledInstrumentations.has(name)) continue
 
   const hookOptions = {}
 
-  let hook = hooks[packageName]
+  let hook = hooks[name]
 
   if (hook !== null && typeof hook === 'object') {
     if (hook.serverless === false && IS_SERVERLESS) continue
@@ -65,123 +90,80 @@ for (const packageName of names) {
     hook = hook.fn
   }
 
-  // get the instrumentation file name to save all hooked versions
-  const instrumentationFileName = parseHookInstrumentationFileName(packageName)
-
-  Hook([packageName], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
-    moduleName = moduleName.replace(pathSepExpr, '/')
+  Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
+    if (timeout === undefined) {
+      // Delay the logging of aborted integrations to handle async loading graphs.
+      timeout = setTimeout(() => {
+        logAbortedIntegrations()
+      }, 100).unref()
+    } else {
+      timeout.refresh()
+    }
+    // All loaded versions are first expected to fail instrumentation.
+    if (!instrumentedIntegrationsSuccess.has(`${name}@${moduleVersion}`)) {
+      instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, false)
+    }
 
     // This executes the integration file thus adding its entries to `instrumentations`
     hook()
 
-    if (!instrumentations[packageName]) {
+    if (!instrumentations[name] || moduleExports === instrumentedNodeModules.get(name)) {
       return moduleExports
     }
 
-    const namesAndSuccesses = {}
-    for (const { name, file, versions, hook, filePattern, patchDefault } of instrumentations[packageName]) {
-      if (patchDefault === false && !moduleExports.default && isIitm) {
-        return moduleExports
-      } else if (patchDefault === true && moduleExports.default && isIitm) {
-        moduleExports = moduleExports.default
+    // Used for node: prefixed modules to prevent double instrumentation.
+    if (moduleBaseDir) {
+      moduleName = moduleName.replace(pathSepExpr, '/')
+    } else {
+      instrumentedNodeModules.set(name, moduleExports)
+    }
+
+    for (const { file, versions, hook, filePattern, patchDefault } of instrumentations[name]) {
+      if (isIitm && patchDefault === !!moduleExports.default) {
+        if (patchDefault) {
+          moduleExports = moduleExports.default
+        } else {
+          return moduleExports
+        }
       }
 
-      let fullFilePattern = filePattern
-      const fullFilename = filename(name, file)
-      if (fullFilePattern) {
-        fullFilePattern = filename(name, fullFilePattern)
-      }
-
-      // Create a WeakSet associated with the hook function so that patches on the same moduleExport only happens once
-      // for example by instrumenting both dns and node:dns double the spans would be created
-      // since they both patch the same moduleExport, this WeakSet is used to mitigate that
-      // TODO(BridgeAR): Instead of using a WeakSet here, why not just use aliases for the hook in register?
-      // That way it would also not be duplicated. The actual name being used has to be identified else wise.
-      // Maybe it is also not important to know what name was actually used?
       hook[HOOK_SYMBOL] ??= new WeakSet()
+      const fullFilename = filename(name, file)
+
       let matchesFile = moduleName === fullFilename
 
       if (!matchesFile && isRelativeRequire(name)) matchesFile = true
 
+      const fullFilePattern = filePattern && filename(name, filePattern)
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
         // so our instrumentation has to include a '.*' to match them for more than a single version.
-        matchesFile = matchesFile || new RegExp(fullFilePattern).test(moduleName)
+        matchesFile ||= new RegExp(fullFilePattern).test(moduleName)
       }
 
-      if (matchesFile) {
-        let version = moduleVersion
+      if (matchesFile && matchVersion(moduleVersion, versions)) {
+        if (hook[HOOK_SYMBOL].has(moduleExports)) {
+          return moduleExports
+        }
+        // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
+        instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
         try {
-          version = version || getVersion(moduleBaseDir)
-          allInstrumentations[instrumentationFileName] = allInstrumentations[instrumentationFileName] || false
-        } catch (e) {
-          log.error('Error getting version for "%s": %s', name, e.message, e)
-          continue
+          loadChannel.publish({ name })
+
+          moduleExports = hook(moduleExports, moduleVersion) ?? moduleExports
+          hook[HOOK_SYMBOL].add(moduleExports)
+        } catch (error) {
+          log.info('Error during ddtrace instrumentation of application, aborting.', error)
+          telemetry('error', [
+            `error_type:${error.constructor.name}`,
+            `integration:${name}`,
+            `integration_version:${moduleVersion}`
+          ], {
+            result: 'error',
+            result_class: 'internal_error',
+            result_reason: `Error during instrumentation of ${name}@${moduleVersion}: ${error.message}`
+          })
         }
-        if (namesAndSuccesses[`${name}@${version}`] === undefined && !file) {
-          // TODO If `file` is present, we might elsewhere instrument the result of the module
-          // for a version range that actually matches, so we can't assume that we're _not_
-          // going to instrument that. However, the way the data model around instrumentation
-          // works, we can't know either way just yet, so to avoid false positives, we'll just
-          // ignore this if there is a `file` in the hook. The thing to do here is rework
-          // everything so that we can be sure that there are _no_ instrumentations that it
-          // could match.
-          namesAndSuccesses[`${name}@${version}`] = false
-        }
-
-        if (matchVersion(version, versions)) {
-          allInstrumentations[instrumentationFileName] = true
-
-          // Check if the hook already has a set moduleExport
-          if (hook[HOOK_SYMBOL].has(moduleExports)) {
-            namesAndSuccesses[`${name}@${version}`] = true
-            return moduleExports
-          }
-
-          try {
-            loadChannel.publish({ name, version, file })
-            // Send the name and version of the module back to the callback because now addHook
-            // takes in an array of names so by passing the name the callback will know which module name is being used
-            // TODO(BridgeAR): This is only true in case the name is identical
-            // in all loads. If they deviate, the deviating name would not be
-            // picked up due to the unification. Check what modules actually use the name.
-            // TODO(BridgeAR): Only replace moduleExports if the hook returns a new value.
-            // This allows to reduce the instrumentation code (no return needed).
-
-            moduleExports = hook(moduleExports, version, name, isIitm) ?? moduleExports
-            // Set the moduleExports in the hooks WeakSet
-            hook[HOOK_SYMBOL].add(moduleExports)
-          } catch (e) {
-            log.info('Error during ddtrace instrumentation of application, aborting.', e)
-            telemetry('error', [
-              `error_type:${e.constructor.name}`,
-              `integration:${name}`,
-              `integration_version:${version}`,
-            ], {
-              result: 'error',
-              result_class: 'internal_error',
-              result_reason: `Error during instrumentation of ${name}@${version}: ${e.message}`,
-            })
-          }
-          namesAndSuccesses[`${name}@${version}`] = true
-        }
-      }
-    }
-    for (const nameVersion of Object.keys(namesAndSuccesses)) {
-      const [name, version] = nameVersion.split('@')
-      const success = namesAndSuccesses[nameVersion]
-      // we check allVersions to see if any version of the integration was successfully instrumented
-      if (!success && !seenCombo.has(nameVersion) && !allInstrumentations[instrumentationFileName]) {
-        telemetry('abort.integration', [
-          `integration:${name}`,
-          `integration_version:${version}`,
-        ], {
-          result: 'abort',
-          result_class: 'incompatible_library',
-          result_reason: `Incompatible integration version: ${name}@${version}`,
-        })
-        log.info('Found incompatible integration version: %s', nameVersion)
-        seenCombo.add(nameVersion)
       }
     }
 
@@ -189,49 +171,47 @@ for (const packageName of names) {
   })
 }
 
+// Used in case the process exits before the timeout is triggered.
+process.on('beforeExit', () => {
+  logAbortedIntegrations()
+})
+
+function logAbortedIntegrations () {
+  for (const [nameVersion, success] of instrumentedIntegrationsSuccess) {
+    // Only ever log a single version of an integration, even if it is loaded later.
+    if (!success && !alreadyLoggedIncompatibleIntegrations.has(nameVersion)) {
+      const [name, version] = nameVersion.split('@')
+      telemetry('abort.integration', [
+        `integration:${name}`,
+        `integration_version:${version}`
+      ], {
+        result: 'abort',
+        result_class: 'incompatible_library',
+        result_reason: `Incompatible integration version: ${name}@${version}`
+      })
+      log.info('Found incompatible integration version: %s', nameVersion)
+      alreadyLoggedIncompatibleIntegrations.add(nameVersion)
+    }
+  }
+  // Clear the map to avoid reporting the same integration version again.
+  instrumentedIntegrationsSuccess.clear()
+}
+
+/**
+ * @param {string|undefined} version
+ * @param {string[]|undefined} ranges
+ */
 function matchVersion (version, ranges) {
   return !version || !ranges || ranges.some(range => satisfies(version, range))
 }
 
-function getVersion (moduleBaseDir) {
-  if (moduleBaseDir) {
-    return requirePackageJson(moduleBaseDir, module).version
-  }
-}
-
+/**
+ * @param {string} name
+ * @param {string} [file]
+ * @returns {string}
+ */
 function filename (name, file) {
-  return [name, file].filter(Boolean).join('/')
-}
-
-// This function captures the instrumentation file name for a given package by parsing the hook require
-// function given the module name. It is used to ensure that instrumentations such as redis
-// that have several different modules being hooked, ie: 'redis' main package, and @redis/client submodule
-// return a consistent instrumentation name. This is used later to ensure that at least some portion of
-// the integration was successfully instrumented. Prevents incorrect `Found incompatible integration version: ` messages
-// Example:
-//                  redis -> "() => require('../redis')" -> redis
-//          @redis/client -> "() => require('../redis')" -> redis
-//
-function parseHookInstrumentationFileName (packageName) {
-  let hook = hooks[packageName]
-  if (hook.fn) {
-    hook = hook.fn
-  }
-  const hookString = hook.toString()
-  const regex = /require\('([^']*)'\)/
-  const match = hookString.match(regex)
-
-  // try to capture the hook require file location.
-  if (match && match[1]) {
-    let moduleName = match[1]
-    // Remove leading '../' if present
-    if (moduleName.startsWith('../')) {
-      moduleName = moduleName.slice(3)
-    }
-    return moduleName
-  }
-
-  return null
+  return file ? `${name}/${file}` : name
 }
 
 module.exports = {

@@ -16,9 +16,8 @@ const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
 const responseFinishChannel = channel('apm:http:client:response:finish')
 
-const names = ['http', 'https', 'node:http', 'node:https']
-
-addHook({ name: names }, hookFn)
+addHook({ name: 'http' }, hookFn)
+addHook({ name: 'https' }, hookFn)
 
 function hookFn (http) {
   patch(http, 'request')

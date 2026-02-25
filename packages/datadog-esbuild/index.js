@@ -2,7 +2,6 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
-const RAW_BUILTINS = require('node:module').builtinModules
 const path = require('node:path')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 
@@ -25,15 +24,27 @@ for (const hook of Object.values(hooks)) {
   }
 }
 
+function moduleOfInterestKey (name, file) {
+  return file ? `${name}/${file}` : name
+}
+
+const builtinModules = new Set(require('node:module').builtinModules)
+
+function addModuleOfInterest (name, file) {
+  if (!name) return
+
+  modulesOfInterest.add(moduleOfInterestKey(name, file))
+
+  if (builtinModules.has(name)) {
+    modulesOfInterest.add(moduleOfInterestKey(`node:${name}`, file))
+  }
+}
+
 const modulesOfInterest = new Set()
 
-for (const instrumentation of Object.values(instrumentations)) {
+for (const [name, instrumentation] of Object.entries(instrumentations)) {
   for (const entry of instrumentation) {
-    if (entry.file) {
-      modulesOfInterest.add(`${entry.name}/${entry.file}`) // e.g. "redis/my/file.js"
-    } else {
-      modulesOfInterest.add(entry.name) // e.g. "redis"
-    }
+    addModuleOfInterest(name, entry.file)
   }
 }
 
@@ -41,7 +52,7 @@ const CHANNEL = 'dd-trace:bundler:load'
 
 const builtins = new Set()
 
-for (const builtin of RAW_BUILTINS) {
+for (const builtin of builtinModules) {
   builtins.add(builtin)
   builtins.add(`node:${builtin}`)
 }
