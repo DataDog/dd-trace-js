@@ -9,7 +9,6 @@ const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 
 /**
  * @param {string} moduleBaseDir
- * @param {string} moduleName
  * @returns {string|undefined}
  */
 function getVersion (moduleBaseDir) {
