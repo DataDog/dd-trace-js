@@ -618,13 +618,16 @@ versions.forEach((version) => {
           playwright: {},
         })
 
+        // Request module waits before retrying; browser runs are slow — need longer gather timeout
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
             assert.strictEqual(tests.length, 7)
-            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testSessionEnd = events.find(event => event.type === 'test_session_end')
+            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+            const testSession = testSessionEnd.content
             assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
@@ -632,7 +635,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, 120000)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',

@@ -1303,11 +1303,14 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setKnownTests({
             cucumber: {},
           })
+          // Request module waits before retrying — need longer gather timeout
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
-              const testSession = events.find(event => event.type === 'test_session_end').content
+              const testSessionEnd = events.find(event => event.type === 'test_session_end')
+              assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+              const testSession = testSessionEnd.content
               assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -1316,7 +1319,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 test.meta[TEST_IS_NEW] === 'true'
               )
               assert.strictEqual(newTests.length, 0)
-            })
+            }, 60000)
 
           childProcess = exec(
             runTestsCommand,
@@ -2733,15 +2736,18 @@ describe(`cucumber@${version} commonJS`, () => {
       })
       receiver.setTestManagementTestsResponseCode(500)
 
+      // Request module waits before retrying — need longer gather timeout
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEnd = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+          const testSession = testSessionEnd.content
           assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
-        })
+        }, 60000)
 
       childProcess = exec(
         './node_modules/.bin/cucumber-js ci-visibility/features-test-management/attempt-to-fix.feature',
