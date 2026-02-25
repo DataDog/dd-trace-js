@@ -3,8 +3,7 @@ name: Test Optimization
 on:
   pull_request:
   push:
-    branches:
-      - master
+    branches: [master, mq-working-branch-master-*]
   schedule:
     - cron: 0 4 * * *
 
@@ -48,12 +47,12 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - name: Get latest Playwright version
+      - name: Get Playwright version from versions package.json
         id: playwright-version
         run: |
-          PLAYWRIGHT_VERSION=$(npm view @playwright/test version)
+          PLAYWRIGHT_VERSION=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies['@playwright/test']")
           echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
-          echo "Latest Playwright version: $PLAYWRIGHT_VERSION"
+          echo "Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:

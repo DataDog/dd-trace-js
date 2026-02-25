@@ -37,16 +37,20 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    * @param {ProducerResponseItem} response
    * @returns {ProducerBacklog}
    */
-  transformProduceResponse (response) {
+  transformProduceResponse (response, clusterId) {
     // In produce protocol >=v3, the offset key changes from `offset` to `baseOffset`
     const { topicName: topic, partition, offset, baseOffset } = response
     const offsetAsLong = offset || baseOffset
-    return {
+    const backlog = {
       type: 'kafka_produce',
       partition,
       offset: offsetAsLong ? Number(offsetAsLong) : undefined,
       topic,
     }
+    if (clusterId) {
+      backlog.kafka_cluster_id = clusterId
+    }
+    return backlog
   }
 
   /**
@@ -56,6 +60,7 @@ class KafkajsProducerPlugin extends ProducerPlugin {
    */
   commit (ctx) {
     const commitList = ctx.result
+    const clusterId = ctx.clusterId
 
     if (!this.config.dsmEnabled) return
     if (!commitList || !Array.isArray(commitList)) return
@@ -65,9 +70,30 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       'offset',
       'topic',
     ]
-    for (const commit of commitList.map(this.transformProduceResponse)) {
+    for (const commit of commitList.map(r => this.transformProduceResponse(r, clusterId))) {
       if (keys.some(key => !commit.hasOwnProperty(key))) continue
       this.tracer.setOffset(commit)
+    }
+  }
+
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { topic, messages, clusterId, disableHeaderInjection, currentStore: { span } } = ctx
+
+    for (const message of messages) {
+      if (message !== null && typeof message === 'object') {
+        const payloadSize = getMessageSize(message)
+        const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
+
+        if (clusterId) {
+          edgeTags.push(`kafka_cluster_id:${clusterId}`)
+        }
+
+        const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+        if (!disableHeaderInjection) {
+          DsmPathwayCodec.encode(dataStreamsContext, message.headers)
+        }
+      }
     }
   }
 
@@ -89,25 +115,10 @@ class KafkajsProducerPlugin extends ProducerPlugin {
       span.setTag(BOOTSTRAP_SERVERS_KEY, bootstrapServers)
     }
     for (const message of messages) {
-      if (message !== null && typeof message === 'object') {
-        // message headers are not supported for kafka broker versions <0.11
-        if (!disableHeaderInjection) {
-          message.headers ??= {}
-          this.tracer.inject(span, 'text_map', message.headers)
-        }
-        if (this.config.dsmEnabled) {
-          const payloadSize = getMessageSize(message)
-          const edgeTags = ['direction:out', `topic:${topic}`, 'type:kafka']
-
-          if (clusterId) {
-            edgeTags.push(`kafka_cluster_id:${clusterId}`)
-          }
-
-          const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-          if (!disableHeaderInjection) {
-            DsmPathwayCodec.encode(dataStreamsContext, message.headers)
-          }
-        }
+      // message headers are not supported for kafka broker versions <0.11
+      if (message !== null && typeof message === 'object' && !disableHeaderInjection) {
+        message.headers ??= {}
+        this.tracer.inject(span, 'text_map', message.headers)
       }
     }
 

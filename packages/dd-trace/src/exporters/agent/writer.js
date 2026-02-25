@@ -1,13 +1,12 @@
 'use strict'
 
-const { inspect } = require('util')
-
 const request = require('../common/request')
 const { startupLog } = require('../../startup-log')
 const runtimeMetrics = require('../../runtime_metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
 const BaseWriter = require('../common/writer')
+const propagationHash = require('../../propagation-hash')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
@@ -29,10 +28,7 @@ class AgentWriter extends BaseWriter {
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     const { _headers, _lookup, _protocolVersion, _url } = this
-    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, (err, res, status) => {
-      // Note that logging will only happen once, regardless of how many times this is called.
-      startupLog(status !== 404 && status !== 200 ? { status, message: err?.message ?? inspect(err) } : undefined)
-
+    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status, headers) => {
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -53,6 +49,16 @@ class AgentWriter extends BaseWriter {
 
       log.debug('Response from the agent: %s', res)
 
+      // Capture container tags hash from agent response headers
+      // The hash is sent by the agent only when Datadog-Container-ID is present in the request
+      // (Datadog-Container-ID is automatically injected by docker.inject() in exporters/common/request.js)
+      if (headers) {
+        const containerTagsHash = headers['Datadog-Container-Tags-Hash']
+        if (containerTagsHash) {
+          propagationHash.updateContainerTagsHash(containerTagsHash)
+        }
+      }
+
       try {
         this._prioritySampler.update(JSON.parse(res).rate_by_service)
       } catch (e) {
@@ -72,7 +78,7 @@ function getEncoder (protocolVersion) {
     : require('../../encode/0.4').AgentEncoder
 }
 
-function makeRequest (version, data, count, url, headers, lookup, cb) {
+function makeRequest (version, data, count, url, headers, lookup, needsStartupLog, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
@@ -91,7 +97,15 @@ function makeRequest (version, data, count, url, headers, lookup, cb) {
 
   log.debug('Request to the agent: %j', options)
 
-  request(data, options, cb)
+  request(data, options, (err, res, status, headers) => {
+    if (needsStartupLog) {
+      // Note that logging will only happen once, regardless of how many times this is called.
+      startupLog({
+        agentError: status !== 404 && status !== 200 ? err : undefined,
+      })
+    }
+    cb(err, res, status, headers)
+  })
 }
 
 module.exports = AgentWriter
