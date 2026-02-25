@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../../../../dd-trace/src/log')
+
 // eslint-disable-next-line camelcase, no-undef
 const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
 
@@ -19,7 +21,9 @@ const compiler = module.exports = {
 
         return program
       }
-    } catch {
+    } catch (e) {
+      log.error(e)
+
       // Fallback for when OXC is not available.
       const meriyah = require('../../../../../vendor/dist/meriyah')
 
