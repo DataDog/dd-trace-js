@@ -84,7 +84,7 @@ function addNpmProdDeps (deps, cwd) {
 function collectDependencies (deps, obj) {
   if (!obj.dependencies) return
 
-  for (const dep in obj.dependencies) {
+  for (const dep of Object.keys(obj.dependencies)) {
     const resolved = obj.dependencies[dep].resolved
 
     if (!resolved) continue
