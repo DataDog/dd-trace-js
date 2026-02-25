@@ -1,12 +1,15 @@
 'use strict'
 
 const compiler = module.exports = {
-  parse: (filename, sourceText, options) => {
+  parse: (sourceText, options) => {
     try {
       const oxc = require('oxc-parser')
 
       compiler.parse = (sourceText, options) => {
-        const { program, errors } = oxc.parseSync('index.js', sourceText, options)
+        const { program, errors } = oxc.parseSync('index.js', sourceText, {
+          ...options,
+          preserveParens: false,
+        })
 
         if (errors?.length > 0) throw errors[0]
 
@@ -25,7 +28,7 @@ const compiler = module.exports = {
       }
     }
 
-    return compiler.parse(filename, sourceText, options)
+    return compiler.parse(sourceText, options)
   },
 
   generate: (...args) => {

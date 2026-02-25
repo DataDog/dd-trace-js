@@ -143,7 +143,7 @@
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",
-    "oxc-parser": "^0.115.0"
+    "oxc-parser": "^0.72.3"
   },
   "devDependencies": {
     "@babel/helpers": "^7.28.6",

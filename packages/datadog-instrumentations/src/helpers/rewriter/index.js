@@ -55,6 +55,8 @@ let SourceMapGenerator
 function rewrite (content, filename, format) {
   if (!content) return content
 
+  const sourceType = format === 'module' ? 'module' : 'script'
+
   try {
     let ast
 
@@ -67,7 +69,7 @@ function rewrite (content, filename, format) {
       if (!filename.endsWith(`${name}/${filePath}`)) continue
       if (!satisfies(filename, filePath, versionRange)) continue
 
-      ast ??= parse(content.toString(), { range: true, sourceType: format })
+      ast ??= parse(content.toString(), { range: true, sourceType })
 
       const query = astQuery || fromFunctionQuery(functionQuery)
       const state = { ...inst, format, functionQuery }
