@@ -20,7 +20,6 @@ const rrtypes = {
 const rrtypeMap = new WeakMap()
 
 addHook({ name: 'dns' }, dns => {
-  console.log('dns: ', dns.lookup.toString())
   shimmer.wrap(dns, 'lookup', fn => wrap('apm:dns:lookup', fn, 2))
   shimmer.wrap(dns, 'lookupService', fn => wrap('apm:dns:lookup_service', fn, 2))
   shimmer.wrap(dns, 'resolve', fn => wrap('apm:dns:resolve', fn, 2))
