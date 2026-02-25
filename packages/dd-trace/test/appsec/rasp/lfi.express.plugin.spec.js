@@ -16,7 +16,7 @@ const { withVersions } = require('../../setup/mocha')
 const { getConfigFresh } = require('../../helpers/config')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
-describe.only('RASP - lfi', () => {
+describe('RASP - lfi', () => {
   let axios
 
   async function testBlockingRequest (url = '/?file=/test.file', config = undefined, ruleEvalCount = 1) {
