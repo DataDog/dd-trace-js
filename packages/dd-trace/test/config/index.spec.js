@@ -573,7 +573,7 @@ describe('Config', () => {
       { name: 'spanAttributeSchema', value: 'v0', origin: 'default' },
       { name: 'spanComputePeerService', value: false, origin: 'calculated' },
       { name: 'spanRemoveIntegrationFromService', value: false, origin: 'default' },
-      { name: 'startupLogs', value: false, origin: 'default' },
+      { name: 'startupLogs', value: true, origin: 'default' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
