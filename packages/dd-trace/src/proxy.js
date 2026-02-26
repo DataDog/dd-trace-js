@@ -227,6 +227,11 @@ class Tracer extends NoopProxy {
         initializeOpenTelemetryMetrics(config)
       }
 
+      if (config.otelTracesEnabled) {
+        const { initializeOtlpTraceExport } = require('./opentelemetry/trace')
+        initializeOtlpTraceExport(config, this._tracer)
+      }
+
       if (config.isTestDynamicInstrumentationEnabled) {
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily

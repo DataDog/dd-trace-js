@@ -152,6 +152,12 @@ module.exports = {
   otelMetricsHeaders: '',
   otelMetricsProtocol: 'http/protobuf',
   otelMetricsTimeout: 10_000,
+  otelTracesEnabled: false,
+  otelTracesSampler: 'parentbased_always_on',
+  otelTracesUrl: undefined, // Will be computed using agent host
+  otelTracesHeaders: '',
+  otelTracesProtocol: 'http/json',
+  otelTracesTimeout: 10_000,
   otelMetricsExportTimeout: 7500,
   otelMetricsExportInterval: 10_000,
   otelMetricsTemporalityPreference: 'DELTA', // DELTA, CUMULATIVE, or LOWMEMORY

@@ -47,7 +47,7 @@ const OTEL_DD_ENV_MAPPING = new Map([
 const VALID_PROPAGATION_STYLES = new Set(['datadog', 'tracecontext', 'b3', 'b3 single header', 'none'])
 const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'ignore'])
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
-const DEFAULT_OTLP_PORT = 4318
+const DEFAULT_OTLP_HTTP_PORT = 4318
 const RUNTIME_ID = uuid()
 const NAMING_VERSIONS = new Set(['v0', 'v1'])
 const DEFAULT_NAMING_VERSION = 'v0'
@@ -422,6 +422,11 @@ class Config {
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS,
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL,
+      OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
+      OTEL_TRACES_EXPORTER,
       OTEL_METRIC_EXPORT_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
@@ -496,6 +501,21 @@ class Config {
         setString(target, 'otelMetricsTemporalityPreference', temporalityPref)
       }
     }
+    if (OTEL_TRACES_EXPORTER) {
+      setBoolean(target, 'otelTracesEnabled', OTEL_TRACES_EXPORTER.toLowerCase() === 'otlp')
+    }
+    if (OTEL_TRACES_SAMPLER) {
+      setString(target, 'otelTracesSampler', OTEL_TRACES_SAMPLER.toLowerCase())
+    }
+    // Set OpenTelemetry traces configuration with specific _TRACES_ vars
+    // taking precedence over generic _EXPORTERS_ vars
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+      setString(target, 'otelTracesUrl', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || target.otelUrl)
+    }
+    setString(target, 'otelTracesHeaders', OTEL_EXPORTER_OTLP_TRACES_HEADERS || target.otelHeaders)
+    setString(target, 'otelTracesProtocol', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || target.otelProtocol)
+    const otelTracesTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TRACES_TIMEOUT, 'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT')
+    target.otelTracesTimeout = otelTracesTimeout === undefined ? target.otelTimeout : otelTracesTimeout
     setBoolean(
       target,
       'apmTracingEnabled',
@@ -1129,9 +1149,10 @@ class Config {
 
     // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent
     const agentHostname = this.#getHostname()
-    calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
-    calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
-    calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}`
+    calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}/v1/metrics`
+    calc.otelTracesUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}/v1/traces`
+    calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_HTTP_PORT}`
 
     setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(getEnv('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED')))
@@ -1345,7 +1366,6 @@ function isInvalidOtelEnvironmentVariable (envVar, value) {
       return Number.isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false'
-    case 'OTEL_TRACES_EXPORTER':
     case 'OTEL_METRICS_EXPORTER':
     case 'OTEL_LOGS_EXPORTER':
       return value.toLowerCase() !== 'none'

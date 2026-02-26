@@ -1,5 +1,6 @@
 'use strict'
 
+const { AUTO_KEEP } = require('../../../ext/priority')
 const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
@@ -16,6 +17,7 @@ class SpanProcessor {
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
+    this._dropUnsampled = config.otelTracesEnabled === true
 
     // TODO: This should already have been calculated in `config.js`.
     if (config.stats?.enabled && !config.appsec?.standalone?.enabled) {
@@ -52,6 +54,19 @@ class SpanProcessor {
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this.sample(span)
+
+      // With OTLP export there is no agent to apply sampling, so drop
+      // rejected traces here to avoid sending unsampled data.
+      if (this._dropUnsampled && spanContext._sampling.priority < AUTO_KEEP) {
+        for (const span of started) {
+          if (span._duration === undefined) {
+            active.push(span)
+          }
+        }
+        this._erase(trace, active)
+        return
+      }
+
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true
