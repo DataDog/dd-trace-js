@@ -8,13 +8,13 @@ These benchmarks rely on [sirun](https://github.com/DataDog/sirun/) for executio
 
 First, install sirun:
 
-```sh  
+```sh
 cargo install --git https://github.com/DataDog/sirun.git --branch main
 ```
 
 Then, get into one of the directories alongside this file, and run the following:
 
-```sh  
+```sh
 node ../run-all-variants.js
 ```
 
