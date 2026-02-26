@@ -200,7 +200,6 @@ describe('RASP - ssrf', () => {
               })
             }
 
-            axios.get('/?host=www.datadoghq.com')
             await Promise.all([
               axios.get('/?host=www.datadoghq.com'),
               checkRaspExecutedAndNotThreat(agent, true, 9_000),
