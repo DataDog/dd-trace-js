@@ -2,8 +2,25 @@
 
 /* eslint-disable eslint-rules/eslint-process-env */
 
+/**
+ * @typedef {object} SupportedConfigurationEntry
+ * @property {string} implementation
+ * @property {string} type
+ * @property {string|number|boolean|null|object|unknown[]} default
+ * @property {string[]} [aliases]
+ * @property {string[]} [configurationNames]
+ * @property {string|boolean} [deprecated]
+ */
+
+/**
+ * @typedef {object} SupportedConfigurationsJson
+ * @property {Record<`DD_${string}` | `OTEL_${string}`, SupportedConfigurationEntry[]>} supportedConfigurations
+ */
+
 const { deprecate } = require('util')
-const { supportedConfigurations, aliases, deprecations } = require('./supported-configurations.json')
+const {
+  supportedConfigurations,
+} = /** @type {SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
 /**
  * Types for environment variable handling.
@@ -11,6 +28,31 @@ const { supportedConfigurations, aliases, deprecations } = require('./supported-
  * @typedef {keyof typeof supportedConfigurations} SupportedEnvKey
  * @typedef {Partial<typeof process.env> & Partial<Record<SupportedEnvKey, string|undefined>>} TracerEnv
  */
+
+// Backwards-compatible views for old helper logic:
+// - `aliases`: Record<canonicalEnvVar, string[]>
+// - `deprecations`: Record<deprecatedEnvVar, string> (message suffix)
+const aliases = {}
+const deprecations = {}
+
+for (const [canonical, configuration] of Object.entries(supportedConfigurations)) {
+  for (const implementation of configuration) {
+    if (implementation.deprecated) {
+      deprecations[canonical] = implementation.deprecated
+      // Deprecated entries with an alias may not be listed in the supported configurations map
+      if (implementation.aliases) {
+        delete supportedConfigurations[canonical]
+        continue
+      }
+    }
+    if (Array.isArray(implementation.aliases)) {
+      for (const alias of implementation.aliases) {
+        aliases[canonical] ??= new Set()
+        aliases[canonical].add(alias)
+      }
+    }
+  }
+}
 
 const aliasToCanonical = {}
 for (const canonical of Object.keys(aliases)) {
