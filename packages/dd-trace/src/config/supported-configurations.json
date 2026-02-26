@@ -514,9 +514,9 @@
     ],
     "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "int",
-        "default": "1000"
+        "default": "500"
       }
     ],
     "DD_CIVISIBILITY_TEST_COMMAND": [
@@ -672,7 +672,7 @@
     ],
     "DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "array",
         "configurationNames": [
           "dynamicInstrumentation.redactionExcludedIdentifiers"
@@ -1635,13 +1635,13 @@
     ],
     "DD_SPAN_SAMPLING_RULES": [
       {
-        "implementation": "A",
+        "implementation": "C",
         "type": "array",
         "configurationNames": [
           "spanSamplingRules",
           "sampler.spanSamplingRules"
         ],
-        "default": ""
+        "default": null
       }
     ],
     "DD_SPAN_SAMPLING_RULES_FILE": [

@@ -2381,7 +2381,7 @@ describe('Config', () => {
       ],
     })
     assert.deepStrictEqual(config.sampler, {
-      spanSamplingRules: [],
+      spanSamplingRules: undefined,
       rateLimit: 100,
       rules: [
         {

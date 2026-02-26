@@ -17,7 +17,7 @@ if (window.DD_RUM && window.DD_RUM.stopSession) {
 const IS_RUM_ACTIVE_SCRIPT = 'return !!window.DD_RUM'
 
 const DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS =
-Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000
+Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
 const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
 
 // TODO: can we increase the supported version range?
