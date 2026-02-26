@@ -12,11 +12,14 @@ const context = describe
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
-const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../../src/constants')
+const defaults = require('../../src/config/defaults')
 const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/config/helper')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+
+const GRPC_CLIENT_ERROR_STATUSES = defaults['grpc.client.error.statuses']
+const GRPC_SERVER_ERROR_STATUSES = defaults['grpc.server.error.statuses']
 
 describe('Config', () => {
   let getConfig
@@ -52,7 +55,10 @@ describe('Config', () => {
 
     // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
     getConfig = (options) => {
-      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {})
+      const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
+        './supported-configurations.json': supportedConfigurations,
+      })
       const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
       return proxyquire.noPreserveCache()('../../src/config', {
         './defaults': configDefaults,
@@ -331,7 +337,7 @@ describe('Config', () => {
         },
         rateLimit: 100,
         sca: {
-          enabled: null,
+          enabled: undefined,
         },
         stackTrace: {
           enabled: true,
@@ -341,7 +347,7 @@ describe('Config', () => {
         wafTimeout: 5e3,
       },
       clientIpEnabled: false,
-      clientIpHeader: null,
+      clientIpHeader: undefined,
       codeOriginForSpans: {
         enabled: true,
         experimental: {
@@ -372,7 +378,7 @@ describe('Config', () => {
           timeout: 10_000,
           maxContentSize: 512 * 1024,
         },
-        exporter: undefined,
+        exporter: '',
         enableGetRumData: false,
       },
       flushInterval: 2000,
@@ -385,18 +391,18 @@ describe('Config', () => {
       iast: {
         enabled: false,
         redactionEnabled: true,
-        redactionNamePattern: null,
-        redactionValuePattern: null,
+        redactionNamePattern: defaults['iast.redactionNamePattern'],
+        redactionValuePattern: defaults['iast.redactionValuePattern'],
         telemetryVerbosity: 'INFORMATION',
         stackTrace: {
           enabled: true,
         },
       },
-      injectForce: null,
+      injectForce: false,
       installSignature: {
-        id: null,
-        time: null,
-        type: null,
+        id: undefined,
+        time: undefined,
+        type: undefined,
       },
       instrumentationSource: 'manual',
       instrumentation_config_id: undefined,
@@ -480,15 +486,15 @@ describe('Config', () => {
       { name: 'appsec.rasp.enabled', value: true, origin: 'default' },
       { name: 'appsec.rateLimit', value: 100, origin: 'default' },
       { name: 'appsec.rules', value: undefined, origin: 'default' },
-      { name: 'appsec.sca.enabled', value: null, origin: 'default' },
+      { name: 'appsec.sca.enabled', value: undefined, origin: 'default' },
       { name: 'appsec.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'appsec.stackTrace.maxDepth', value: 32, origin: 'default' },
       { name: 'appsec.stackTrace.maxStackTraces', value: 2, origin: 'default' },
       { name: 'appsec.wafTimeout', value: 5e3, origin: 'default' },
       { name: 'ciVisAgentlessLogSubmissionEnabled', value: false, origin: 'default' },
-      { name: 'ciVisibilityTestSessionName', value: '', origin: 'default' },
+      { name: 'ciVisibilityTestSessionName', value: undefined, origin: 'default' },
       { name: 'clientIpEnabled', value: false, origin: 'default' },
-      { name: 'clientIpHeader', value: null, origin: 'default' },
+      { name: 'clientIpHeader', value: undefined, origin: 'default' },
       { name: 'codeOriginForSpans.enabled', value: true, origin: 'default' },
       { name: 'codeOriginForSpans.experimental.exit_spans.enabled', value: false, origin: 'default' },
       { name: 'dbmPropagationMode', value: 'disabled', origin: 'default' },
@@ -507,7 +513,7 @@ describe('Config', () => {
       { name: 'experimental.aiguard.maxMessagesLength', value: 16, origin: 'default' },
       { name: 'experimental.aiguard.timeout', value: 10_000, origin: 'default' },
       { name: 'experimental.enableGetRumData', value: false, origin: 'default' },
-      { name: 'experimental.exporter', value: undefined, origin: 'default' },
+      { name: 'experimental.exporter', value: '', origin: 'default' },
       { name: 'flakyTestRetriesCount', value: 5, origin: 'default' },
       { name: 'flushInterval', value: 2000, origin: 'default' },
       { name: 'flushMinSpans', value: 1000, origin: 'default' },
@@ -520,18 +526,18 @@ describe('Config', () => {
       { name: 'iast.maxConcurrentRequests', value: 2, origin: 'default' },
       { name: 'iast.maxContextOperations', value: 2, origin: 'default' },
       { name: 'iast.redactionEnabled', value: true, origin: 'default' },
-      { name: 'iast.redactionNamePattern', value: null, origin: 'default' },
-      { name: 'iast.redactionValuePattern', value: null, origin: 'default' },
+      { name: 'iast.redactionNamePattern', value: defaults['iast.redactionNamePattern'], origin: 'default' },
+      { name: 'iast.redactionValuePattern', value: defaults['iast.redactionValuePattern'], origin: 'default' },
       { name: 'iast.requestSampling', value: 30, origin: 'default' },
-      { name: 'iast.securityControlsConfiguration', value: null, origin: 'default' },
+      { name: 'iast.securityControlsConfiguration', value: undefined, origin: 'default' },
       { name: 'iast.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
-      { name: 'injectForce', value: null, origin: 'default' },
+      { name: 'injectForce', value: false, origin: 'default' },
       { name: 'injectionEnabled', value: [], origin: 'default' },
       { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
-      { name: 'isEarlyFlakeDetectionEnabled', value: false, origin: 'default' },
-      { name: 'isFlakyTestRetriesEnabled', value: false, origin: 'default' },
+      { name: 'isEarlyFlakeDetectionEnabled', value: true, origin: 'default' },
+      { name: 'isFlakyTestRetriesEnabled', value: true, origin: 'default' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },
       { name: 'isGitUploadEnabled', value: false, origin: 'default' },
       { name: 'isIntelligentTestRunnerEnabled', value: false, origin: 'default' },
@@ -540,7 +546,7 @@ describe('Config', () => {
       { name: 'langchain.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
       { name: 'llmobs.agentlessEnabled', value: undefined, origin: 'default' },
       { name: 'llmobs.mlApp', value: undefined, origin: 'default' },
-      { name: 'isTestDynamicInstrumentationEnabled', value: false, origin: 'default' },
+      { name: 'isTestDynamicInstrumentationEnabled', value: true, origin: 'default' },
       { name: 'logInjection', value: true, origin: 'default' },
       { name: 'lookup', value: undefined, origin: 'default' },
       { name: 'middlewareTracingEnabled', value: true, origin: 'default' },
@@ -549,14 +555,13 @@ describe('Config', () => {
       { name: 'peerServiceMapping', value: {}, origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'port', value: '8126', origin: 'default' },
-      { name: 'profiling.enabled', value: undefined, origin: 'default' },
+      { name: 'profiling.enabled', value: false, origin: 'default' },
       { name: 'profiling.exporters', value: 'agent', origin: 'default' },
       { name: 'profiling.sourceMap', value: true, origin: 'default' },
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
       {
         name: 'queryStringObfuscation',
-        // eslint-disable-next-line @stylistic/max-len
-        value: '(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}',
+        value: config.queryStringObfuscation,
         origin: 'default',
       },
       { name: 'remoteConfig.enabled', value: true, origin: 'default' },
@@ -579,14 +584,14 @@ describe('Config', () => {
       { name: 'telemetry.debug', value: false, origin: 'default' },
       { name: 'telemetry.dependencyCollection', value: true, origin: 'default' },
       { name: 'telemetry.enabled', value: true, origin: 'default' },
-      { name: 'telemetry.heartbeatInterval', value: 60000, origin: 'default' },
+      { name: 'telemetry.heartbeatInterval', value: 60, origin: 'default' },
       { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
       { name: 'traceEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
-      { name: 'url', value: undefined, origin: 'default' },
+      { name: 'url', value: '', origin: 'default' },
       { name: 'version', value: '', origin: 'default' },
       { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
@@ -2084,7 +2089,7 @@ describe('Config', () => {
       rateLimit: 42,
       rules: undefined,
       sca: {
-        enabled: null,
+        enabled: undefined,
       },
       stackTrace: {
         enabled: true,
@@ -2104,7 +2109,7 @@ describe('Config', () => {
       redactionNamePattern: 'REDACTION_NAME_PATTERN',
       redactionValuePattern: 'REDACTION_VALUE_PATTERN',
       requestSampling: 15,
-      securityControlsConfiguration: null,
+      securityControlsConfiguration: undefined,
       stackTrace: {
         enabled: false,
       },
@@ -2376,7 +2381,7 @@ describe('Config', () => {
       ],
     })
     assert.deepStrictEqual(config.sampler, {
-      spanSamplingRules: [],
+      spanSamplingRules: undefined,
       rateLimit: 100,
       rules: [
         {
@@ -2490,7 +2495,7 @@ describe('Config', () => {
       it('should not be used', () => {
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
     })
 
@@ -2504,7 +2509,7 @@ describe('Config', () => {
 
         if (os.type() === 'Windows_NT') {
           assert.strictEqual(existsSyncParam, undefined)
-          assert.strictEqual(config.url, undefined)
+          assert.strictEqual(config.url, '')
         } else {
           assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
           assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
@@ -2538,13 +2543,13 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
 
       it('should not be used when options.port provided', () => {
         const config = getConfig({ port: 12345 })
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
 
       it('should not be used when DD_TRACE_AGENT_HOSTNAME provided', () => {
@@ -2552,7 +2557,7 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
 
       it('should not be used when DD_AGENT_HOST provided', () => {
@@ -2560,13 +2565,13 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
 
       it('should not be used when options.hostname provided', () => {
         const config = getConfig({ hostname: 'example.com' })
 
-        assert.strictEqual(config.url, undefined)
+        assert.strictEqual(config.url, '')
       })
     })
   })
@@ -3290,7 +3295,7 @@ apm_configuration_default:
 
     // Regression test for fields that were previously set directly from environment variables
     // before they were supported by stable config as well.
-    it('should support legacy direct-set fields through all stableconfig and env var sources', () => {
+    it('should support legacy direct-set fields through all stable config and env var sources', () => {
       // Test 1: Local stable config should work
       fs.writeFileSync(
         localConfigPath,
