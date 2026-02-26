@@ -17,8 +17,12 @@ module.exports = {
  * @typedef {object} CaptureExpression
  * @property {string} name - The name of the expression (used as key in snapshot)
  * @property {object} expr - The expression AST to evaluate
- * @property {{ maxReferenceDepth?: number, maxCollectionSize?: number, maxFieldCount?: number, maxLength?: number }}
- *   [capture] - Optional per-expression capture limits
+ * @property {{
+ *   maxReferenceDepth?: number,
+ *   maxCollectionSize?: number,
+ *   maxFieldCount?: number,
+ *   maxLength?: number
+ * }} [capture] - Optional per-expression capture limits
  */
 
 /**
