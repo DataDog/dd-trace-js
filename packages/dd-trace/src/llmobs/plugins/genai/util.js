@@ -114,7 +114,7 @@ function extractMetrics (response) {
   }
 
   const totalTokens = tokenUsage.totalTokenCount ||
-                     (tokenUsage.promptTokenCount || 0) + (tokenUsage.candidatesTokenCount || 0)
+    (tokenUsage.promptTokenCount || 0) + (tokenUsage.candidatesTokenCount || 0)
   if (totalTokens) {
     metrics.totalTokens = totalTokens
   }
@@ -394,8 +394,8 @@ function formatStreamingOutput (response) {
 
     // Skip special cases in streaming (handle them as non-streaming)
     if (content.parts.some(part => part.functionCall ||
-                                   part.executableCode ||
-                                   part.codeExecutionResult)) {
+      part.executableCode ||
+      part.codeExecutionResult)) {
       messages.push(...formatNonStreamingCandidate(candidate))
       continue
     }
