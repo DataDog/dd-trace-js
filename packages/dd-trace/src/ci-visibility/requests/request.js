@@ -25,14 +25,17 @@ function getRetryDelay () {
 
 /**
  * Determines if a network error is retriable (transient failures only).
- * ENOTFOUND and ECONNREFUSED are excluded as they are usually not transient.
+ * ECONNREFUSED is retried because it can be transient (service starting up,
+ * restarts, rolling deploys, k8s pod/readiness transitions). ENOTFOUND is
+ * excluded as it indicates DNS failure or wrong host and is usually not transient.
  *
  * @param {Error} err - The error to check
  * @returns {boolean}
  */
 function isRetriableNetworkError (err) {
   if (!err.code) return false
-  return err.code === 'ECONNRESET' ||
+  return err.code === 'ECONNREFUSED' ||
+    err.code === 'ECONNRESET' ||
     err.code === 'ETIMEDOUT' ||
     err.code === 'EPIPE'
 }
@@ -96,6 +99,12 @@ function request (data, options, callback) {
   const makeRequest = () => {
     storage('legacy').run({ noop: true }, () => {
       const req = client.request(opts, (res) => {
+        // Capture non-2xx status code as soon as we see it so telemetry preserves it if the retry
+        // fails with a network error (no HTTP response) before 'end' fires
+        if (res.statusCode >= 400 && firstStatusCode === null) {
+          firstStatusCode = res.statusCode
+        }
+
         const chunks = []
 
         res.setTimeout(timeout)
@@ -142,10 +151,6 @@ function request (data, options, callback) {
                 Number.isFinite(waitMs) ? waitMs : 'N/A', RATE_LIMIT_MAX_WAIT_MS)
             }
           } else if (res.statusCode >= 500 && !hasRetried) {
-            // Track original status code for telemetry
-            if (firstStatusCode === null) {
-              firstStatusCode = res.statusCode
-            }
             try {
               if (req.socket) req.socket.destroy()
             } catch {
