@@ -126,7 +126,7 @@ benchmark-serverless:
         "https://bti-ci-api.us1.ddbuild.io/internal/ci/gitlab/token?owner=DataDog&repository=dd-trace-js")
     - echo "here"
     - GITLAB_TOKEN=$(echo "$BTI_RESPONSE" | jq -r '.token // empty') 
-    - git clone https://gitlab-ci-token:${GITLAB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
+    - git clone https://serverless-tools:${GITLAB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
     - ./ci/check_trigger_status.sh
 
 benchmark-serverless-trigger:
