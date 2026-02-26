@@ -39,7 +39,7 @@ class CookieAnalyzer extends Analyzer {
   }
 
   _checkOCE (context, value) {
-    if (value && value.location) {
+    if (value?.location) {
       return true
     }
     return super._checkOCE(context, value)
