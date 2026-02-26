@@ -41,7 +41,7 @@ class AzureDurableFunctionsPlugin extends TracingPlugin {
     super.finish(ctx)
   }
 
-  asyncEnd (ctx) {
+  asyncStart (ctx) {
     super.finish(ctx)
   }
 }
