@@ -79,7 +79,9 @@ class CheckpointRegistry {
     /** @type {Map<string, number>} */
     this._nameToId = new Map()
     this._nextId = 1
-    /** @type {Buffer | null} Cached result of encodedKeys; invalidated when a new name is added. */
+    /** @type {Buffer[]} Pre-built [id uint8][nameLen uint8][name bytes] entries, one per registered name. */
+    this._entryBuffers = []
+    /** @type {Buffer | null} Cached concat of _entryBuffers; reset when a new name is added. */
     this._encodedKeysCache = null
   }
 
@@ -95,6 +97,15 @@ class CheckpointRegistry {
     if (this._nextId > 254) return
     const id = this._nextId++
     this._nameToId.set(name, id)
+    // Build the wire entry now with a bounded write so long names never materialise
+    // their full UTF-8 encoding — buf.write() stops at the supplied byte limit.
+    const nameBuf = Buffer.allocUnsafe(255)
+    const nameByteLen = nameBuf.write(name, 0, 255, 'utf8')
+    const entry = Buffer.allocUnsafe(2 + nameByteLen)
+    entry.writeUInt8(id, 0)
+    entry.writeUInt8(nameByteLen, 1)
+    nameBuf.copy(entry, 2, 0, nameByteLen)
+    this._entryBuffers.push(entry)
     this._encodedKeysCache = null
     return id
   }
@@ -107,16 +118,9 @@ class CheckpointRegistry {
    */
   get encodedKeys () {
     if (this._encodedKeysCache !== null) return this._encodedKeysCache
-    const chunks = []
-    for (const [name, id] of this._nameToId) {
-      const nameBytes = Buffer.from(name, 'utf8').subarray(0, 255)
-      const entry = Buffer.alloc(2 + nameBytes.length)
-      entry.writeUInt8(id, 0)
-      entry.writeUInt8(nameBytes.length, 1)
-      nameBytes.copy(entry, 2)
-      chunks.push(entry)
-    }
-    this._encodedKeysCache = chunks.length > 0 ? Buffer.concat(chunks) : Buffer.alloc(0)
+    this._encodedKeysCache = this._entryBuffers.length > 0
+      ? Buffer.concat(this._entryBuffers)
+      : Buffer.alloc(0)
     return this._encodedKeysCache
   }
 }
