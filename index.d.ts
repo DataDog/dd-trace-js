@@ -2210,24 +2210,24 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
-   interface google_cloud_vertexai extends Integration {}
+    interface google_cloud_vertexai extends Integration {}
 
-   /**
+    /**
     * This plugin automatically instruments the
     * [@google-genai](https://github.com/googleapis/js-genai) module.
     */
-   interface google_genai extends Integration {}
+    interface google_genai extends Integration {}
 
-   /** @hidden */
-   interface ExecutionArgs {
-     schema: any,
-     document: any,
-     rootValue?: any,
-     contextValue?: any,
-     variableValues?: any,
-     operationName?: string,
-     fieldResolver?: any,
-     typeResolver?: any,
+    /** @hidden */
+    interface ExecutionArgs {
+      schema: any,
+      document: any,
+      rootValue?: any,
+      contextValue?: any,
+      variableValues?: any,
+      operationName?: string,
+      fieldResolver?: any,
+      typeResolver?: any,
     }
 
     /**

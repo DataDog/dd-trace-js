@@ -2241,24 +2241,24 @@ versions.forEach((version) => {
           path.join(cwd, 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js'),
           `const { test, expect } = require('@playwright/test')
 
-           test.beforeEach(async ({ page }) => {
-             await page.goto(process.env.PW_BASE_URL)
-           })
+          test.beforeEach(async ({ page }) => {
+            await page.goto(process.env.PW_BASE_URL)
+          })
 
-           test.describe('impacted test', () => {
-             test('should be impacted', async ({ page }) => {
-               await expect(page.locator('.hello-world')).toHaveText([
-                 'Hello Worldd'
-               ])
-             })
-           })
-           test.describe('impacted test 2', () => {
-             test('should be impacted 2', async ({ page }) => {
-               await expect(page.locator('.hello-world')).toHaveText([
-                 'Hello World'
-               ])
-             })
-           })`
+          test.describe('impacted test', () => {
+            test('should be impacted', async ({ page }) => {
+              await expect(page.locator('.hello-world')).toHaveText([
+                'Hello Worldd'
+              ])
+            })
+          })
+          test.describe('impacted test 2', () => {
+            test('should be impacted 2', async ({ page }) => {
+              await expect(page.locator('.hello-world')).toHaveText([
+                'Hello World'
+              ])
+            })
+          })`
         )
         execSync('git add ci-visibility/playwright-tests-impacted-tests/impacted-test.js', { cwd, stdio: 'ignore' })
         execSync('git commit -m "modify impacted-test.js" --no-verify', { cwd, stdio: 'ignore' })

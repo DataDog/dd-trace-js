@@ -790,8 +790,8 @@ class Config {
         OTEL_PROPAGATORS !== undefined) {
       // At least one var is defined, calculate value using truthy logic
       const useDdStyle = DD_TRACE_PROPAGATION_STYLE ||
-                         DD_TRACE_PROPAGATION_STYLE_INJECT ||
-                         DD_TRACE_PROPAGATION_STYLE_EXTRACT
+        DD_TRACE_PROPAGATION_STYLE_INJECT ||
+        DD_TRACE_PROPAGATION_STYLE_EXTRACT
       setBoolean(target, 'tracePropagationStyle.otelPropagators',
         useDdStyle ? false : !!OTEL_PROPAGATORS)
 

@@ -963,7 +963,7 @@ function getFormattedError (error, repositoryRoot) {
 
 function isTiaSupported (testFramework, isParallel) {
   return !(UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework) ||
-           (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)))
+    (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)))
 }
 
 function isEarlyFlakeDetectionSupported (testFramework, frameworkVersion) {
