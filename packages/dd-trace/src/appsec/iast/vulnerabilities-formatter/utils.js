@@ -1,7 +1,8 @@
 'use strict'
 
 const crypto = require('crypto')
-const { DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./evidence-redaction/sensitive-regex')
+
+const defaults = require('../../../config/defaults')
 
 const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')
 const STRINGIFY_SENSITIVE_KEY = STRINGIFY_RANGE_KEY + 'SENSITIVE'
@@ -11,7 +12,7 @@ const STRINGIFY_SENSITIVE_NOT_STRING_KEY = STRINGIFY_SENSITIVE_KEY + 'NOTSTRING'
 const KEYS_REGEX_WITH_SENSITIVE_RANGES = new RegExp(String.raw`(?:"(${STRINGIFY_RANGE_KEY}_\d+_))|(?:"(${STRINGIFY_SENSITIVE_KEY}_\d+_(\d+)_))|("${STRINGIFY_SENSITIVE_NOT_STRING_KEY}_\d+_([\s0-9.a-zA-Z]*)")`, 'gm')
 const KEYS_REGEX_WITHOUT_SENSITIVE_RANGES = new RegExp(String.raw`"(${STRINGIFY_RANGE_KEY}_\d+_)`, 'gm')
 
-const sensitiveValueRegex = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
+const sensitiveValueRegex = new RegExp(/** @type {string} */ (defaults['iast.redactionValuePattern']), 'gmi')
 
 function iterateObject (target, fn, levelKeys = [], depth = 10, visited = new Set()) {
   for (const key of Object.keys(target)) {

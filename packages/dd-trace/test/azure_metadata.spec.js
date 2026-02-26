@@ -11,7 +11,6 @@ const { getAzureAppMetadata, getAzureTagsFromMetadata, getAzureFunctionMetadata 
 describe('Azure metadata', () => {
   const AZURE_ENV_KEYS = [
     'COMPUTERNAME',
-    'DD_AAS_DOTNET_EXTENSION_VERSION',
     'DD_AZURE_RESOURCE_GROUP',
     'FUNCTIONS_EXTENSION_VERSION',
     'FUNCTIONS_WORKER_RUNTIME',
@@ -57,9 +56,7 @@ describe('Azure metadata', () => {
     process.env.WEBSITE_SITE_NAME = 'website_name'
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+resource_group-regionwebspace'
     process.env.WEBSITE_INSTANCE_ID = 'instance_id'
-    process.env.DD_AAS_DOTNET_EXTENSION_VERSION = '1.0'
     const expected = {
-      extensionVersion: '1.0',
       instanceID: 'instance_id',
       instanceName: 'boaty_mcboatface',
       operatingSystem: os.platform(),
@@ -84,9 +81,7 @@ describe('Azure metadata', () => {
     process.env.FUNCTIONS_EXTENSION_VERSION = '20'
     process.env.FUNCTIONS_WORKER_RUNTIME = 'node'
     process.env.FUNCTIONS_WORKER_RUNTIME_VERSION = '14'
-    process.env.DD_AAS_DOTNET_EXTENSION_VERSION = '1.0'
     const expected = {
-      extensionVersion: '1.0',
       functionRuntimeVersion: '20',
       instanceID: 'instance_id',
       instanceName: 'boaty_mcboatface',
@@ -109,9 +104,7 @@ describe('Azure metadata', () => {
     process.env.WEBSITE_SITE_NAME = 'website_name'
     process.env.WEBSITE_OWNER_NAME = 'subscription_id+resource_group-regionwebspace'
     process.env.WEBSITE_INSTANCE_ID = 'instance_id'
-    process.env.DD_AAS_DOTNET_EXTENSION_VERSION = '1.0'
     const expected = {
-      'aas.environment.extension_version': '1.0',
       'aas.environment.instance_id': 'instance_id',
       'aas.environment.instance_name': 'boaty_mcboatface',
       'aas.environment.os': os.platform(),

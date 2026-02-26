@@ -17,6 +17,7 @@ function exporterFromURL (url) {
   if (url.protocol === 'file:') {
     return new FileExporter({ pprofPrefix: fileURLToPath(url) })
   }
+  // TODO: Why is DD_INJECTION_ENABLED a comma separated list?
   const injectionEnabled = (getValueFromEnvSources('DD_INJECTION_ENABLED') ?? '').split(',')
   const libraryInjected = injectionEnabled.length > 0
   const profilingEnabled = (getValueFromEnvSources('DD_PROFILING_ENABLED') ?? '').toLowerCase()
