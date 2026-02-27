@@ -417,7 +417,7 @@ function convertSpanEventAttributeValues (key, value, depth = 0) {
     }
   } else {
     memoizedLogDebug(key, 'Encountered unsupported data type for span event v0.4 encoding, key: ' +
-       `${key}: with value: ${typeof value}. Skipping encoding of pair.`
+      `${key}: with value: ${typeof value}. Skipping encoding of pair.`
     )
   }
 }

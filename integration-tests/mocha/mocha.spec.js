@@ -4382,15 +4382,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       fs.writeFileSync(
         path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
         `const assert = require('assert')
-         describe('impacted tests', () => {
-           it('can pass normally', () => {
-             assert.strictEqual(2 + 2, 3)
-           })
+        describe('impacted tests', () => {
+          it('can pass normally', () => {
+            assert.strictEqual(2 + 2, 3)
+          })
 
-           it('can fail', () => {
-             assert.strictEqual(1 + 2, 4)
-           })
-         })`
+          it('can fail', () => {
+            assert.strictEqual(1 + 2, 4)
+          })
+        })`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
       execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })

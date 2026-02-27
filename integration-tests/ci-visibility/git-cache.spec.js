@@ -16,9 +16,9 @@ function removeGitFromPath () {
     .split(path.delimiter)
     .filter(dir => {
       return !dir.includes('git') &&
-             !dir.includes('Git') &&
-             !dir.includes('usr/bin') &&
-             !dir.includes('bin')
+        !dir.includes('Git') &&
+        !dir.includes('usr/bin') &&
+        !dir.includes('bin')
     })
     .join(path.delimiter)
 }

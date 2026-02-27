@@ -2112,11 +2112,11 @@ versions.forEach((version) => {
         fs.writeFileSync(
           path.join(cwd, 'ci-visibility/vitest-tests/impacted-test.mjs'),
           `import { describe, test, expect } from 'vitest'
-           describe('impacted test', () => {
-             test('can impacted test', () => {
-               assert.strictEqual(1 + 2, 4)
-             })
-           })`
+          describe('impacted test', () => {
+            test('can impacted test', () => {
+              assert.strictEqual(1 + 2, 4)
+            })
+          })`
         )
         execSync('git add ci-visibility/vitest-tests/impacted-test.mjs', { cwd, stdio: 'ignore' })
         execSync('git commit -m "modify impacted-test.mjs"', { cwd, stdio: 'ignore' })

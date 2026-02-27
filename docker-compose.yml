@@ -12,7 +12,7 @@ services:
   azureeventhubsemulator:
     image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
     volumes:
-       - "./packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
+      - "./packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
     ports:
       - "127.0.0.1:5673:5672"
       - "127.0.0.1:9092:9092"
@@ -23,7 +23,7 @@ services:
   azureservicebusemulator:
     image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
     volumes:
-       - "./packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
+      - "./packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:5300:5300"
@@ -76,7 +76,7 @@ services:
     platform: linux/amd64
     command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
-       - "127.0.0.1:27017:27017"
+      - "127.0.0.1:27017:27017"
   mongo-prisma:
     image: prismagraphql/mongo-single-replica:4.4.3-bionic
     platform: linux/amd64

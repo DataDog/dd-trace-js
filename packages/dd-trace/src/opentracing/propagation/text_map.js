@@ -316,8 +316,8 @@ class TextMapPropagator {
 
   _hasTraceIdConflict (w3cSpanContext, firstSpanContext) {
     return w3cSpanContext !== null &&
-           firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
-           firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()
+      firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
+      firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()
   }
 
   _hasParentIdInTags (spanContext) {

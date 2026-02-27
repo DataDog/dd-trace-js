@@ -135,9 +135,9 @@ For `Callback` kind, use the `index` field to specify which argument is the call
 
 1. Install the package: `npm install <package>`
 2. Search for the method definition:
-   ```bash
-   grep -r "methodName" node_modules/<package>/
-   ```
+  ```bash
+  grep -r "methodName" node_modules/<package>/
+  ```
 3. Use the path relative to the package root
 
 **IMPORTANT: Patch both CJS and ESM code paths.** Many libraries duplicate their classes across separate CJS and ESM builds (e.g., `dist/cjs/client.js` and `dist/esm/client.js`). Each file path needs its own entry in the instrumentations array with the same `functionQuery` and `channelName`. If only one is patched, the instrumentation will silently fail for the other module format.

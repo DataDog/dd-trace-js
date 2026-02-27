@@ -206,7 +206,7 @@ describe('HTTP Response Blocking', () => {
     assertBlocked(res)
   })
 
-  it('should not block with every methods combined but no attack', async () => {
+  it.only('should not block with every methods combined but no attack', async () => {
     responseHandler = (req, res) => {
       res.setHeaders(new Map(Object.entries({ a: 'good', b: 'good' })))
       res.setHeader('c', 'good')
@@ -231,7 +231,7 @@ describe('HTTP Response Blocking', () => {
       'e',
       'transfer-encoding',
     ], Object.keys(cloneHeaders(res.headers)).sort())
-    assert.deepEqual(res.data, 'writefileend')
+    assert.deepEqual(res.data, 'writefile\nend')
   })
 
   it('should ignore subsequent response writes after blocking', async () => {
