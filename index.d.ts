@@ -2218,16 +2218,42 @@ declare namespace tracer {
     */
    interface google_genai extends Integration {}
 
-   /** @hidden */
-   interface ExecutionArgs {
-     schema: any,
-     document: any,
-     rootValue?: any,
-     contextValue?: any,
-     variableValues?: any,
-     operationName?: string,
-     fieldResolver?: any,
-     typeResolver?: any,
+    /** @hidden - the `graphql.ExecutionArgs` passed to the `execute` call */
+    interface ExecutionArgs {
+      schema: any,
+      document: any,
+      rootValue?: any,
+      contextValue?: any,
+      variableValues?: any,
+      operationName?: string,
+      fieldResolver?: any,
+      typeResolver?: any,
+    }
+
+    interface OperationContext {
+      /** The `graphql.OperationDefinitionNode` */
+      operation: any;
+      /** the `graphql.ExecutionArgs` passed to the `execute` call */
+      args: ExecutionArgs;
+      /** The string that was parsed into the `.args.document`, if any */
+      docSource: string | undefined;
+    }
+
+    interface FieldContext {
+      /** The `graphql.GraphQLResolveInfo` for the resolver call */
+      info: any;
+      /** The arguments passed to the resolver */
+      args: any;
+      /** The error thrown by the resolver, if any */
+      error: null | Error;
+      /** The result returned by the resolver, if any */
+      result: unknown;
+      /** The field context from the resolver of the parent field (a level up on the path) */
+      parentField: FieldContext | null;
+      /** The nesting depth of the field in the query */
+      depth: number;
+      /** The context of the `execute` call */
+      rootCtx: OperationContext;
     }
 
     /**
@@ -2278,7 +2304,7 @@ declare namespace tracer {
        * the key/value pairs to record. For example, using
        * `variables => variables` would record all variables.
        */
-      variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
+      variables?: string[] | ((variableValues: Record<string, any>, context: ExecutionArgs & Pick<OperationContext, 'operation'>) => Record<string, any> | undefined);
 
       /**
        * Whether to collapse list items into a single element. (i.e. single
@@ -2305,9 +2331,10 @@ declare namespace tracer {
        * @default {}
        */
       hooks?: {
-        execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
+        execute?: (span?: Span, args?: ExecutionArgs, result?: any) => void;
         validate?: (span?: Span, document?: any, errors?: any) => void;
         parse?: (span?: Span, source?: any, document?: any) => void;
+        resolve?: (span?: Span, field: FieldContext) => void;
       }
     }
 

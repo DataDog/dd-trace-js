@@ -42,7 +42,7 @@ function validateConfig (config) {
 function getDepth (config) {
   if (typeof config.depth === 'number') {
     return config.depth
-  } else if (config.hasOwnProperty('depth')) {
+  } else if (config.depth !== undefined) {
     log.error('Expected `depth` to be a integer.')
   }
   return -1
@@ -53,20 +53,22 @@ function getVariablesFilter (config) {
     return config.variables
   } else if (Array.isArray(config.variables)) {
     return variables => pick(variables, config.variables)
-  } else if (config.hasOwnProperty('variables')) {
+  } else if (config.variables !== undefined) {
     log.error('Expected `variables` to be an array or function.')
   }
-  return null
+  return noop
 }
 
 const noop = () => {}
 
+// FIXME: should not be necessary given `TracingPlugin.configure` already does this defaulting
 function getHooks ({ hooks }) {
   const execute = hooks?.execute ?? noop
   const parse = hooks?.parse ?? noop
   const validate = hooks?.validate ?? noop
+  const resolve = hooks?.resolve ?? noop
 
-  return { execute, parse, validate }
+  return { execute, parse, validate, resolve }
 }
 
 module.exports = GraphQLPlugin

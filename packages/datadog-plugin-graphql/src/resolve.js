@@ -3,126 +3,152 @@
 const dc = require('dc-polyfill')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-const collapsedPathSym = Symbol('collapsedPaths')
-
 class GraphQLResolvePlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'resolve'
 
-  start (fieldCtx) {
-    const { info, rootCtx, args } = fieldCtx
+  bindStart (field) {
+    const { info, rootCtx, args, parentField } = field
+    // FIXME - https://github.com/DataDog/dd-trace-js/issues/7468
+    if (this.config.collapse) field.depth += getListLevel(info.path)
+    if (!this.shouldInstrument(field)) return rootCtx.currentStore // run in execute scope
 
-    const path = getPath(info, this.config)
-
-    // we need to get the parent span to the field if it exists for correct span parenting
-    // of nested fields
-    const parentField = getParentField(rootCtx, pathToArray(info && info.path))
-    const childOf = parentField?.ctx?.currentStore?.span
-
-    fieldCtx.parent = parentField
-
-    if (!shouldInstrument(this.config, path)) return
-    const computedPathString = path.join('.')
+    let childOf, path, ctx
 
     if (this.config.collapse) {
-      if (rootCtx.fields[computedPathString]) return
-
-      if (!rootCtx[collapsedPathSym]) {
-        rootCtx[collapsedPathSym] = {}
-      } else if (rootCtx[collapsedPathSym][computedPathString]) {
-        return
+      const parent = parentField?.shared
+      const sharedContexts = parentField
+        ? parent.collapsedChildren
+        : (rootCtx.toplevelCollapsed ??= {})
+      ctx = sharedContexts[info.fieldName]
+      if (ctx) {
+        // Add reference to the shared context object,
+        // for the `finish` subscription to store the `.finishTime` on
+        // and for children resolvers to find `.collapsedChildren`.
+        field.shared = ctx
+        return ctx.currentStore // re-enter the scope with the existing span
       }
-
-      rootCtx[collapsedPathSym][computedPathString] = true
+      childOf = parent ? parent.currentStore?.span : undefined
+      path = collapsePath(pathToArray(info.path))
+      // create shared context
+      ctx = sharedContexts[info.fieldName] = {
+        fieldName: info.fieldName,
+        path,
+        parent,
+        finishTime: 0,
+        collapsedChildren: {}, // slightly pointless on leaf fields?
+        // more to be added by `startSpan`
+      }
+      field.shared = ctx
+      // make `field.finalize()` be called before operation execution ends:
+      field.finalize = finalizeCollapsedField
+    } else {
+      childOf = parentField ? parentField.currentStore?.span : undefined
+      path = pathToArray(info.path)
+      ctx = field
     }
 
-    const document = rootCtx.source
-    const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
-    const loc = this.config.source && document && fieldNode && fieldNode.loc
-    const source = loc && document.slice(loc.start, loc.end)
+    const docSource = rootCtx.docSource
+    const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field') // FIXME: https://github.com/graphql/graphql-js/issues/605#issuecomment-266160864
+    const loc = this.config.source && docSource && fieldNode && fieldNode.loc
+    const source = loc && docSource.slice(loc.start, loc.end)
 
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
       resource: `${info.fieldName}:${info.returnType}`,
-      childOf,
+      childOf, // span used by parent field (if it exists) for correct span parenting of nested fields
       type: 'graphql',
       meta: {
         'graphql.field.name': info.fieldName,
-        'graphql.field.path': computedPathString,
+        'graphql.field.path': path.join('.'),
         'graphql.field.type': info.returnType.name,
         'graphql.source': source,
       },
-    }, fieldCtx)
+    }, ctx)
 
-    if (fieldNode && this.config.variables && fieldNode.arguments) {
-      const variables = this.config.variables(info.variableValues)
-
-      for (const arg of fieldNode.arguments) {
-        if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
-          const name = arg.value.name.value
-          span.setTag(`graphql.variables.${name}`, variables[name])
+    const variables = rootCtx.filteredVariables
+    if (variables && fieldNode?.arguments) {
+      for (const { value: argValue } of fieldNode.arguments) {
+        if (argValue.kind === 'Variable') {
+          const varName = argValue.name.value
+          if (variables[varName] != null) {
+            span.setTag(`graphql.variables.${varName}`, variables[varName])
+          }
         }
       }
     }
 
     if (this.resolverStartCh.hasSubscribers) {
-      this.resolverStartCh.publish({ ctx: rootCtx, resolverInfo: getResolverInfo(info, args) })
+      this.resolverStartCh.publish({
+        abortController: rootCtx.abortController,
+        resolverInfo: getResolverInfo(info, args),
+      })
     }
 
-    return fieldCtx.currentStore
+    return ctx.currentStore
+  }
+
+  finish (field) {
+    if (!this.shouldInstrument(field)) return
+
+    if (this.config.collapse) {
+      const fieldCtx = field.shared
+      const span = fieldCtx.currentStore?.span
+      if (field.error) {
+        fieldCtx.error ??= field.error
+        // TODO: use `extractErrorIntoSpanEvent`
+      }
+      fieldCtx.finishTime = span._getTime ? span._getTime() : 0
+      this.config.hooks.resolve(span, field)
+    } else {
+      const span = field.currentStore?.span
+      this.config.hooks.resolve(span, field)
+      span?.finish()
+    }
   }
 
   constructor (...args) {
     super(...args)
 
-    this.addTraceSub('updateField', (ctx) => {
-      const { field, info, error } = ctx
-
-      const path = getPath(info, this.config)
-
-      if (!shouldInstrument(this.config, path)) return
-
-      const span = ctx?.currentStore?.span || this.activeSpan
-      field.finishTime = span._getTime ? span._getTime() : 0
-      field.error = field.error || error
-    })
-
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
+    this.shouldInstrument = _field => false
+
+    this.addTraceSub('finalize', field => {
+      field.finalize()
+    })
   }
 
   configure (config) {
     // this will disable resolve subscribers if `config.depth` is set to 0
     super.configure(config.depth === 0 ? false : config)
-  }
 
-  finish (ctx) {
-    const { finishTime } = ctx
-
-    const span = ctx?.currentStore?.span || this.activeSpan
-    span.finish(finishTime)
-
-    return ctx.parentStore
+    this.shouldInstrument = config.depth < 0
+      ? _field => true
+      : field => config.depth >= field.depth
   }
 }
 
 // helpers
 
-function shouldInstrument (config, path) {
-  let depth = 0
-  for (const item of path) {
-    if (typeof item === 'string') {
-      depth += 1
-    }
+/** The method that is put as `.finalize` on a field when a shared context is created */
+function finalizeCollapsedField () {
+  const { shared } = this
+  const span = shared.currentStore?.span
+  if (shared.error) { // an error from any of the fields (that failed first)
+    span.setTag('error', shared.error) // like `TracingPlugin.prototype.error(shared)`
   }
-
-  return config.depth < 0 || config.depth >= depth
+  span?.finish(shared.finishTime)
 }
 
-function getPath (info, config) {
-  const responsePathAsArray = config.collapse
-    ? withCollapse(pathToArray)
-    : pathToArray
-  return responsePathAsArray(info && info.path)
+/** Count `*` chars in front of last path segment for a collapsed path */
+function getListLevel (path) {
+  let lvl = 0
+  let curr = path.prev
+  while (curr && typeof curr.key === 'number') {
+    lvl++
+    curr = curr.prev
+  }
+  return lvl
 }
 
 function pathToArray (path) {
@@ -135,11 +161,8 @@ function pathToArray (path) {
   return flattened.reverse()
 }
 
-function withCollapse (responsePathAsArray) {
-  return function () {
-    return responsePathAsArray.apply(this, arguments)
-      .map(segment => typeof segment === 'number' ? '*' : segment)
-  }
+function collapsePath (pathArray) {
+  return pathArray.map(segment => typeof segment === 'number' ? '*' : segment)
 }
 
 function getResolverInfo (info, args) {
@@ -171,21 +194,6 @@ function getResolverInfo (info, args) {
   }
 
   return resolverInfo
-}
-
-function getParentField (parentCtx, path) {
-  for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(parentCtx, path.slice(0, i))
-    if (field) {
-      return field
-    }
-  }
-
-  return null
-}
-
-function getField (parentCtx, path) {
-  return parentCtx.fields[path.join('.')]
 }
 
 module.exports = GraphQLResolvePlugin

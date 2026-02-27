@@ -25,7 +25,7 @@ const executeErrorCh = channel('apm:graphql:execute:error')
 // resolve channels
 const startResolveCh = channel('apm:graphql:resolve:start')
 const finishResolveCh = channel('apm:graphql:resolve:finish')
-const updateFieldCh = channel('apm:graphql:resolve:updateField')
+const finalizeResolveCh = channel('apm:graphql:resolve:finalize')
 const resolveErrorCh = channel('apm:graphql:resolve:error')
 
 // parse channels
@@ -37,13 +37,6 @@ const parseErrorCh = channel('apm:graphql:parser:error')
 const validateStartCh = channel('apm:graphql:validate:start')
 const validateFinishCh = channel('apm:graphql:validate:finish')
 const validateErrorCh = channel('apm:graphql:validate:error')
-
-class AbortError extends Error {
-  constructor (message) {
-    super(message)
-    this.name = 'AbortError'
-  }
-}
 
 const types = new Set(['query', 'mutation', 'subscription'])
 
@@ -156,9 +149,8 @@ function wrapExecute (execute) {
       }
 
       const args = normalizeArgs(arguments, defaultFieldResolver)
-      const schema = args.schema
-      const document = args.document
-      const source = documentSources.get(document)
+      const { schema, document } = args
+      const docSource = documentSources.get(document)
       const contextValue = args.contextValue
       const operation = getOperation(document, args.operationName)
 
@@ -169,10 +161,11 @@ function wrapExecute (execute) {
       const ctx = {
         operation,
         args,
-        docSource: documentSources.get(document),
-        source,
-        fields: {},
-        abortController: new AbortController(),
+        docSource,
+        fields: new WeakMap(), // fields keyed by their Path object
+        finalizations: [], // fields whose `.finalize()` method needs to be invoked before finishing execution
+        abortController: new AbortController(), // allow startExecuteCh/startResolveCh subscribers to block execution
+        // filteredVariables - sometimes populated by GraphQLExecutePlugin
       }
 
       return startExecuteCh.runStores(ctx, () => {
@@ -183,8 +176,10 @@ function wrapExecute (execute) {
 
         contexts.set(contextValue, ctx)
 
-        return callInAsyncScope(exe, this, arguments, ctx.abortController, (err, res) => {
-          if (finishResolveCh.hasSubscribers) finishResolvers(ctx)
+        return callInAsyncScope(exe, this, arguments, ctx.abortController.signal, (err, res) => {
+          if (finalizeResolveCh.hasSubscribers && ctx.finalizations.length) {
+            finalizeResolvers(ctx.finalizations)
+          }
 
           const error = err || (res && res.errors && res.errors[0])
 
@@ -193,7 +188,7 @@ function wrapExecute (execute) {
             executeErrorCh.publish(ctx)
           }
 
-          ctx.res = res
+          ctx.result = res
           finishExecuteCh.publish(ctx)
         })
       })
@@ -211,13 +206,23 @@ function wrapResolve (resolve) {
 
     if (!ctx) return resolve.apply(this, arguments)
 
-    const field = assertField(ctx, info, args)
+    const field = createField(ctx, info, args)
+    ctx.fields.set(info.path, field)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
-      field.ctx.error = err
-      field.ctx.info = info
-      field.ctx.field = field
-      updateFieldCh.publish(field.ctx)
+    return startResolveCh.runStores(field, () => {
+      if (field.finalize) {
+        // register for `.finalize()` invocation before execution finishes
+        ctx.finalizations.push(field)
+      }
+
+      return callInAsyncScope(resolve, this, arguments, ctx.abortController.signal, (err, res) => {
+        if (err) {
+          field.error = err
+          resolveErrorCh.publish(field)
+        }
+        field.result = res
+        finishResolveCh.publish(field)
+      })
     })
   }
 
@@ -226,16 +231,15 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function callInAsyncScope (fn, thisArg, args, abortController, cb) {
-  cb = cb || (() => {})
-
-  if (abortController?.signal.aborted) {
+function callInAsyncScope (fn, thisArg, args, abortSignal, cb) {
+  if (abortSignal.aborted) {
     cb(null, null)
-    throw new AbortError('Aborted')
+    throw abortSignal.reason
   }
 
+  let result
   try {
-    const result = fn.apply(thisArg, args)
+    result = fn.apply(thisArg, args)
     if (result && typeof result.then === 'function') {
       return result.then(
         res => {
@@ -248,44 +252,38 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
         }
       )
     }
-    cb(null, result)
-    return result
   } catch (err) {
     cb(err)
     throw err
+  } // else
+  cb(null, result)
+  return result
+}
+
+function createField (rootCtx, info, args) {
+  const parentField = getParentField(rootCtx, info.path)
+  return {
+    rootCtx,
+    info,
+    args,
+    error: null,
+    result: null,
+    parentField,
+    depth: parentField ? parentField.depth + 1 : 1,
+    finalize: null, // sometimes populated by GraphQLResolvePlugin in `resolve:start` handler
+    finishTime: 0, // populated by GraphQLResolvePlugin in `resolve:updateField` handler
+    // currentStore, parentStore - sometimes populated by GraphQLResolvePlugin.startSpan in `resolve:start` handler
   }
 }
 
-function pathToArray (path) {
-  const flattened = []
-  let curr = path
-  while (curr) {
-    flattened.push(curr.key)
+function getParentField (rootCtx, path) {
+  let curr = path.prev
+  // Skip segments in (nested) lists
+  // Could also be done by `while (!rootCtx.fields.has(curr))`
+  while (curr && typeof curr.key === 'number') {
     curr = curr.prev
   }
-  return flattened.reverse()
-}
-
-function assertField (rootCtx, info, args) {
-  const pathInfo = info && info.path
-
-  const path = pathToArray(pathInfo)
-
-  const pathString = path.join('.')
-  const fields = rootCtx.fields
-
-  let field = fields[pathString]
-
-  if (!field) {
-    const fieldCtx = { info, rootCtx, args }
-    startResolveCh.publish(fieldCtx)
-    field = fields[pathString] = {
-      error: null,
-      ctx: fieldCtx,
-    }
-  }
-
-  return field
+  return rootCtx.fields.get(curr) ?? null
 }
 
 function wrapFields (type) {
@@ -320,16 +318,9 @@ function wrapFieldType (field) {
   wrapFields(unwrappedType)
 }
 
-function finishResolvers ({ fields }) {
-  for (const key of Object.keys(fields).reverse()) {
-    const field = fields[key]
-    field.ctx.finishTime = field.finishTime
-    field.ctx.field = field
-    if (field.error) {
-      field.ctx.error = field.error
-      resolveErrorCh.publish(field.ctx)
-    }
-    finishResolveCh.publish(field.ctx)
+function finalizeResolvers (contexts) {
+  for (const fieldCtx of contexts) {
+    finalizeResolveCh.publish(fieldCtx)
   }
 }
 
