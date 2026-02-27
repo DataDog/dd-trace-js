@@ -13,7 +13,6 @@ describe('AgentlessExporter', () => {
   let Exporter
   let exporter
   let writer
-  let clock
   let initialHandlersSize
 
   beforeEach(() => {
@@ -33,12 +32,9 @@ describe('AgentlessExporter', () => {
 
     // Track the initial size of beforeExitHandlers to check additions
     initialHandlersSize = globalThis[Symbol.for('dd-trace')].beforeExitHandlers.size
-
-    clock = sinon.useFakeTimers()
   })
 
   afterEach(() => {
-    clock.restore()
     sinon.restore()
     // Clean up any handlers added by tests
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.clear()
@@ -46,7 +42,7 @@ describe('AgentlessExporter', () => {
 
   describe('constructor', () => {
     it('should construct intake URL from site', () => {
-      exporter = new Exporter({ site: 'datadoghq.eu', flushInterval: 2000 })
+      exporter = new Exporter({ site: 'datadoghq.eu' })
 
       const expectedUrl = new URL('https://public-trace-http-intake.logs.datadoghq.eu')
       sinon.assert.match(exporter._url.href, expectedUrl.href)
@@ -54,19 +50,19 @@ describe('AgentlessExporter', () => {
 
     it('should use provided URL', () => {
       const customUrl = 'https://custom-intake.example.com'
-      exporter = new Exporter({ url: customUrl, site: 'datadoghq.com', flushInterval: 2000 })
+      exporter = new Exporter({ url: customUrl, site: 'datadoghq.com' })
 
       sinon.assert.match(exporter._url.href, customUrl)
     })
 
     it('should default to datadoghq.com site', () => {
-      exporter = new Exporter({ flushInterval: 2000 })
+      exporter = new Exporter({})
 
       sinon.assert.match(exporter._url.hostname, 'public-trace-http-intake.logs.datadoghq.com')
     })
 
     it('should register beforeExit handler', () => {
-      exporter = new Exporter({ flushInterval: 2000 })
+      exporter = new Exporter({})
 
       // Should have added one handler
       sinon.assert.match(
@@ -74,90 +70,55 @@ describe('AgentlessExporter', () => {
         initialHandlersSize + 1
       )
     })
+
+    it('should handle invalid URL gracefully', () => {
+      const log = { error: sinon.spy() }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': function () { return writer },
+        '../../log': log,
+      })
+
+      exporter = new Exporter({ url: 'not-a-valid-url' })
+
+      sinon.assert.calledOnce(log.error)
+      assert.strictEqual(exporter._url, null)
+    })
   })
 
   describe('export', () => {
     beforeEach(() => {
-      exporter = new Exporter({ flushInterval: 2000 })
+      exporter = new Exporter({})
     })
 
-    it('should append spans to writer', () => {
+    it('should append spans to writer and flush immediately', () => {
       const spans = [{ name: 'test' }]
       exporter.export(spans)
 
       sinon.assert.calledWith(writer.append, spans)
-    })
-
-    it('should flush immediately when flushInterval is 0', () => {
-      exporter = new Exporter({ flushInterval: 0 })
-      const spans = [{ name: 'test' }]
-
-      exporter.export(spans)
-
-      sinon.assert.called(writer.flush)
-    })
-
-    it('should schedule flush when flushInterval > 0', () => {
-      const spans = [{ name: 'test' }]
-
-      exporter.export(spans)
-
-      sinon.assert.notCalled(writer.flush)
-
-      clock.tick(2000)
-
-      sinon.assert.called(writer.flush)
-    })
-
-    it('should not schedule multiple flushes', () => {
-      const spans = [{ name: 'test' }]
-
-      exporter.export(spans)
-      exporter.export(spans)
-      exporter.export(spans)
-
-      clock.tick(2000)
-
       sinon.assert.calledOnce(writer.flush)
     })
 
-    it('should allow scheduling flush again after previous completes', () => {
+    it('should flush after each export', () => {
       const spans = [{ name: 'test' }]
 
       exporter.export(spans)
-      clock.tick(2000)
-
-      sinon.assert.calledOnce(writer.flush)
-
       exporter.export(spans)
-      clock.tick(2000)
+      exporter.export(spans)
 
-      sinon.assert.calledTwice(writer.flush)
+      sinon.assert.calledThrice(writer.flush)
     })
   })
 
   describe('flush', () => {
     beforeEach(() => {
-      exporter = new Exporter({ flushInterval: 2000 })
+      exporter = new Exporter({})
     })
 
-    it('should flush writer immediately', () => {
+    it('should flush writer', () => {
       exporter.flush()
 
       sinon.assert.called(writer.flush)
-    })
-
-    it('should cancel pending scheduled flush', () => {
-      const spans = [{ name: 'test' }]
-      exporter.export(spans)
-
-      exporter.flush()
-
-      sinon.assert.calledOnce(writer.flush)
-
-      clock.tick(2000)
-
-      sinon.assert.calledOnce(writer.flush) // still only called once
     })
 
     it('should call callback when done', (done) => {
@@ -179,13 +140,14 @@ describe('AgentlessExporter', () => {
         '../../log': log,
       })
 
-      exporter = new Exporter({ flushInterval: 2000 })
+      exporter = new Exporter({})
     })
 
     it('should update URL on exporter and writer', () => {
       const newUrl = 'https://new-intake.example.com'
-      exporter.setUrl(newUrl)
+      const result = exporter.setUrl(newUrl)
 
+      assert.strictEqual(result, true)
       sinon.assert.called(writer.setUrl)
     })
 
@@ -196,10 +158,11 @@ describe('AgentlessExporter', () => {
       sinon.assert.match(exporter._url.href, newUrl)
     })
 
-    it('should log error and keep previous URL when URL is invalid', () => {
+    it('should return false and log error when URL is invalid', () => {
       const originalUrl = exporter._url.href
-      exporter.setUrl('not-a-valid-url')
+      const result = exporter.setUrl('not-a-valid-url')
 
+      assert.strictEqual(result, false)
       sinon.assert.calledOnce(log.error)
       const call = log.error.getCall(0)
       assert.ok(call.args[0].includes('Invalid URL'))
