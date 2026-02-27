@@ -2166,7 +2166,7 @@
     ],
     "DD_TRACE_AZURE_DURABLE_FUNCTIONS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
