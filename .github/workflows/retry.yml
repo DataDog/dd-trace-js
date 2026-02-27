@@ -5,6 +5,7 @@ on:
     branches:
       - dependabot/**
       - master
+      - mq-working-branch-master-*
       - v[0-9]+.[0-9]+.[0-9]+-proposal
       - v[0-9]+.x
     types:

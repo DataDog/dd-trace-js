@@ -1036,6 +1036,17 @@ addHook({
             }
           }
 
+          // Check if all EFD retries failed
+          const providedContext = getProvidedContext()
+          if (providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))) {
+            const statuses = taskToStatuses.get(task)
+            // statuses only includes repetitions (not the initial run), so we check against numRepeats (not +1)
+            if (statuses && statuses.length === providedContext.numRepeats &&
+              statuses.every(status => status === 'fail')) {
+              hasFailedAllRetries = true
+            }
+          }
+
           if (testCtx) {
             const isRetry = task.result?.retryCount > 0
             // `duration` is the duration of all the retries, so it can't be used if there are retries

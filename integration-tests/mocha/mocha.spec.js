@@ -69,6 +69,7 @@ const {
   TEST_FRAMEWORK_VERSION,
   LIBRARY_VERSION,
   TEST_PARAMETERS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const {
@@ -2028,6 +2029,26 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
+  context('error tags', () => {
+    it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
+      receiver.setSettingsResponseCode(404)
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+          const testEvent = events.find(event => event.type === 'test')
+          assert.ok(testEvent, 'should have test event')
+          assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+        })
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      await Promise.all([eventsPromise, once(childProcess, 'exit')])
+    })
+  })
+
   context('early flake detection', () => {
     it('retries new tests', (done) => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
@@ -2093,6 +2114,77 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             TESTS_TO_RUN: JSON.stringify([
               './test/ci-visibility-test.js',
               './test/ci-visibility-test-2.js',
+            ]),
+          },
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
+      // fail-test.js will be considered new and will always fail
+      receiver.setKnownTests({
+        mocha: {},
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const failTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/fail-test.js'
+          )
+
+          // Should have 1 initial attempt + NUM_RETRIES_EFD retries
+          assert.strictEqual(failTests.length, NUM_RETRIES_EFD + 1)
+
+          // All attempts should be marked as new
+          failTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          })
+
+          // Check retries
+          const retriedTests = failTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          })
+
+          // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
+          const lastRetry = failTests[failTests.length - 1]
+          assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+          // Earlier attempts should not have the flag
+          for (let i = 0; i < failTests.length - 1; i++) {
+            assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in failTests[i].meta))
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './test/fail-test.js',
             ]),
           },
         }

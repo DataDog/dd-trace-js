@@ -181,7 +181,7 @@ describe('PoissonProcessSamplingFilter', () => {
     const initialCount = filter.samplingInstantCount
     for (let i = 0; i < 5; i++) {
       nowValue += 20
-      const event = { startTime: 0, duration: filter.nextSamplingInstant - 0 }
+      const event = { startTime: 0, duration: filter.nextSamplingInstant }
       filter.filter(event)
     }
     assert.ok(filter.samplingInstantCount > initialCount)

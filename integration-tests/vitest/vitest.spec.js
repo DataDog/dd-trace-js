@@ -58,6 +58,7 @@ const {
   TEST_IS_TEST_FRAMEWORK_WORKER,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
@@ -239,6 +240,29 @@ versions.forEach((version) => {
             })
           }),
         ])
+      })
+    })
+
+    context('error tags', () => {
+      it('tags session and children with _dd.ci.library_configuration_error when settings fails', async () => {
+        receiver.setSettingsResponseCode(404)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+          })
+        childProcess = exec('./node_modules/.bin/vitest run', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          },
+        })
+        await Promise.all([eventsPromise, once(childProcess, 'exit')])
       })
     })
 
@@ -713,6 +737,28 @@ versions.forEach((version) => {
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+
+            // Check that TEST_HAS_FAILED_ALL_RETRIES is set for tests that fail all EFD attempts
+            const alwaysFailTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'early flake detection can retry tests that always pass'
+            )
+            assert.strictEqual(alwaysFailTests.length, 4) // 1 initial + 3 retries
+            // The last execution should have TEST_HAS_FAILED_ALL_RETRIES set
+            const testsWithFlag = alwaysFailTests.filter(test =>
+              test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+            )
+            assert.strictEqual(
+              testsWithFlag.length,
+              1,
+              'Exactly one test should have TEST_HAS_FAILED_ALL_RETRIES set'
+            )
+            // It should be the last one
+            const lastAttempt = alwaysFailTests[alwaysFailTests.length - 1]
+            assert.strictEqual(
+              lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES],
+              'true',
+              'Last attempt should have the flag'
+            )
           })
 
         childProcess = exec(

@@ -1,15 +1,12 @@
 'use strict'
 
 const pkg = require('../pkg')
-const { GRPC_CLIENT_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES } = require('../constants')
+const { isFalse, isTrue } = require('../util')
 const { getEnvironmentVariable: getEnv } = require('./helper')
 
-// eslint-disable-next-line @stylistic/max-len
-const qsRegex = String.raw`(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\s|%20)*(?:=|%3D)[^&]+|(?:"|%22)(?:\s|%20)*(?::|%3A)(?:\s|%20)*(?:"|%22)(?:%2[^2]|%[^2]|[^"%])+(?:"|%22))|bearer(?:\s|%20)+[a-z0-9\._\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\w=-]|%3D)+\.ey[I-L](?:[\w=-]|%3D)+(?:\.(?:[\w.+\/=-]|%3D|%2F|%2B)+)?|[\-]{5}BEGIN(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY[\-]{5}[^\-]+[\-]{5}END(?:[a-z\s]|%20)+PRIVATE(?:\s|%20)KEY|ssh-rsa(?:\s|%20)*(?:[a-z0-9\/\.+]|%2F|%5C|%2B){100,}`
-// eslint-disable-next-line @stylistic/max-len
-const defaultWafObfuscatorKeyRegex = String.raw`(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\.net[_-]sessionid|sid|jwt`
-// eslint-disable-next-line @stylistic/max-len
-const defaultWafObfuscatorValueRegex = String.raw`(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\.net(?:[_-]|-)sessionid|sid|jwt)(?:\s*=([^;&]+)|"\s*:\s*("[^"]+"|\d+))|bearer\s+([a-z0-9\._\-]+)|token\s*:\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\w=-]+\.(ey[I-L][\w=-]+(?:\.[\w.+\/=-]+)?)|[\-]{5}BEGIN[a-z\s]+PRIVATE\sKEY[\-]{5}([^\-]+)[\-]{5}END[a-z\s]+PRIVATE\sKEY|ssh-rsa\s*([a-z0-9\/\.+]{100,})`
+const {
+  supportedConfigurations,
+} = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
 
 const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
   getEnv('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
@@ -18,204 +15,160 @@ const service = getEnv('AWS_LAMBDA_FUNCTION_NAME') ||
   pkg.name ||
   'node'
 
-module.exports = {
-  apiKey: undefined,
-  appKey: undefined,
-  apmTracingEnabled: true,
-  'appsec.apiSecurity.enabled': true,
-  'appsec.apiSecurity.sampleDelay': 30,
-  'appsec.apiSecurity.endpointCollectionEnabled': true,
-  'appsec.apiSecurity.endpointCollectionMessageLimit': 300,
-  'appsec.blockedTemplateGraphql': undefined,
-  'appsec.blockedTemplateHtml': undefined,
-  'appsec.blockedTemplateJson': undefined,
-  'appsec.enabled': undefined,
-  'appsec.eventTracking.mode': 'identification',
-  // TODO appsec.extendedHeadersCollection is deprecated, to delete in a major
-  'appsec.extendedHeadersCollection.enabled': false,
-  'appsec.extendedHeadersCollection.redaction': true,
-  'appsec.extendedHeadersCollection.maxHeaders': 50,
-  'appsec.obfuscatorKeyRegex': defaultWafObfuscatorKeyRegex,
-  'appsec.obfuscatorValueRegex': defaultWafObfuscatorValueRegex,
-  'appsec.rasp.enabled': true,
-  // TODO Deprecated, to delete in a major
-  'appsec.rasp.bodyCollection': false,
-  'appsec.rateLimit': 100,
-  'appsec.rules': undefined,
-  'appsec.sca.enabled': null,
-  'appsec.stackTrace.enabled': true,
-  'appsec.stackTrace.maxDepth': 32,
-  'appsec.stackTrace.maxStackTraces': 2,
-  'appsec.wafTimeout': 5e3, // µs
-  baggageMaxBytes: 8192,
-  baggageMaxItems: 64,
-  baggageTagKeys: 'user.id,session.id,account.id',
-  clientIpEnabled: false,
-  clientIpHeader: null,
+/**
+ * @param {string|null} raw
+ * @param {string} type
+ * @returns {string|number|boolean|Record<string, string>|unknown[]|undefined}
+ */
+function parseDefaultByType (raw, type) {
+  if (raw === null) {
+    return
+  }
+
+  switch (type) {
+    case 'boolean':
+      if (isTrue(raw)) return true
+      if (isFalse(raw)) return false
+      // TODO: What should we do with these?
+      return
+    case 'int':
+    case 'decimal': {
+      return Number(raw)
+    }
+    case 'array': {
+      if (!raw || raw.length === 0) return []
+      // TODO: Make the parsing a helper that is reused.
+      return raw.split(',').map(item => {
+        const colonIndex = item.indexOf(':')
+        if (colonIndex === -1) {
+          return item.trim()
+        }
+        const key = item.slice(0, colonIndex).trim()
+        const value = item.slice(colonIndex + 1).trim()
+        return `${key}:${value}`
+      })
+    }
+    case 'map': {
+      if (!raw || raw.length === 0) return {}
+      // TODO: Make the parsing a helper that is reused.
+      /** @type {Record<string, string>} */
+      const entries = {}
+      for (const item of raw.split(',')) {
+        const colonIndex = item.indexOf(':')
+        if (colonIndex === -1) {
+          const key = item.trim()
+          if (key.length > 0) {
+            entries[key] = ''
+          }
+          continue
+        }
+        const key = item.slice(0, colonIndex).trim()
+        const value = item.slice(colonIndex + 1).trim()
+        if (key.length > 0) {
+          entries[key] = value
+        }
+      }
+      return entries
+    }
+    default:
+      return raw
+  }
+}
+
+/** @type {Record<string, unknown>} */
+const metadataDefaults = {}
+for (const entries of Object.values(supportedConfigurations)) {
+  for (const entry of entries) {
+    // TODO: Replace $dynamic with method names that would be called and that
+    // are also called when the user passes through the value. That way the
+    // handling is unified and methods can be declared as default.
+    // The name of that method should be expressive for users.
+    // TODO: Add handling for all environment variable names. They should not
+    // need a configuration name for being listed with their default.
+    if (!Array.isArray(entry.configurationNames)) {
+      continue
+    }
+
+    const parsedValue = parseDefaultByType(entry.default, entry.type)
+    for (const configurationName of entry.configurationNames) {
+      metadataDefaults[configurationName] = entry.default === null ? undefined : parsedValue
+    }
+  }
+}
+
+// Defaults required by JS config merge/applyCalculated that are not represented in supported-configurations.
+const defaultsWithoutSupportedConfigurationEntry = {
+  'cloudPayloadTagging.rules': [],
   'cloudPayloadTagging.requestsEnabled': false,
   'cloudPayloadTagging.responsesEnabled': false,
-  'cloudPayloadTagging.maxDepth': 10,
-  'cloudPayloadTagging.rules': [],
-  'crashtracking.enabled': true,
-  'codeOriginForSpans.enabled': true,
-  'codeOriginForSpans.experimental.exit_spans.enabled': false,
-  dbmPropagationMode: 'disabled',
-  'dogstatsd.hostname': '127.0.0.1',
-  'dogstatsd.port': '8125',
-  dsmEnabled: false,
-  'dynamicInstrumentation.captureTimeoutMs': 15,
-  'dynamicInstrumentation.enabled': false,
-  'dynamicInstrumentation.probeFile': undefined,
-  'dynamicInstrumentation.redactedIdentifiers': [],
-  'dynamicInstrumentation.redactionExcludedIdentifiers': [],
-  'dynamicInstrumentation.uploadIntervalSeconds': 1,
-  env: undefined,
-  'experimental.aiguard.enabled': false,
-  'experimental.aiguard.endpoint': undefined,
-  'experimental.aiguard.maxMessagesLength': 16,
-  'experimental.aiguard.maxContentSize': 512 * 1024,
-  'experimental.aiguard.timeout': 10_000, // ms
-  'experimental.enableGetRumData': false,
-  'experimental.exporter': undefined,
-  'experimental.flaggingProvider.enabled': false,
-  'experimental.flaggingProvider.initializationTimeoutMs': 30_000,
-  flushInterval: 2000,
-  flushMinSpans: 1000,
-  gitMetadataEnabled: true,
-  graphqlErrorExtensions: [],
-  'grpc.client.error.statuses': GRPC_CLIENT_ERROR_STATUSES,
-  'grpc.server.error.statuses': GRPC_SERVER_ERROR_STATUSES,
-  headerTags: [],
-  'heapSnapshot.count': 0,
-  'heapSnapshot.destination': '',
-  'heapSnapshot.interval': 3600,
-  hostname: '127.0.0.1',
-  'iast.dbRowsToTaint': 1,
-  'iast.deduplicationEnabled': true,
-  'iast.enabled': false,
-  'iast.maxConcurrentRequests': 2,
-  'iast.maxContextOperations': 2,
-  'iast.redactionEnabled': true,
-  'iast.redactionNamePattern': null,
-  'iast.redactionValuePattern': null,
-  'iast.requestSampling': 30,
-  'iast.securityControlsConfiguration': null,
-  'iast.telemetryVerbosity': 'INFORMATION',
-  'iast.stackTrace.enabled': true,
-  injectionEnabled: [],
-  'installSignature.id': null,
-  'installSignature.time': null,
-  'installSignature.type': null,
-  instrumentationSource: 'manual',
-  injectForce: null,
   isAzureFunction: false,
   isCiVisibility: false,
-  isEarlyFlakeDetectionEnabled: false,
-  isFlakyTestRetriesEnabled: false,
-  flakyTestRetriesCount: 5,
   isGCPFunction: false,
-  isGCPPubSubPushSubscriptionEnabled: true,
+  instrumentationSource: 'manual',
+  isServiceUserProvided: false,
+  lookup: undefined,
+  plugins: true,
+}
+
+// These values are documented in supported-configurations as CI Visibility
+// defaults. Keep startup baseline false and let #applyCalculated() switch them
+// when CI Visibility is active.
+// TODO: These entries should be removed. They are off by default
+// because they rely on other configs.
+const defaultsWithConditionalRuntimeBehavior = {
   isGitUploadEnabled: false,
+  isImpactedTestsEnabled: false,
   isIntelligentTestRunnerEnabled: false,
   isManualApiEnabled: false,
-  'langchain.spanCharLimit': 128,
-  'langchain.spanPromptCompletionSampleRate': 1,
-  'llmobs.agentlessEnabled': undefined,
-  'llmobs.enabled': false,
-  'llmobs.mlApp': undefined,
-  ciVisibilityTestSessionName: '',
-  ciVisAgentlessLogSubmissionEnabled: false,
-  legacyBaggageEnabled: true,
-  isTestDynamicInstrumentationEnabled: false,
-  isServiceUserProvided: false,
-  testManagementAttemptToFixRetries: 20,
   isTestManagementEnabled: false,
-  isImpactedTestsEnabled: false,
-  logInjection: true,
-  otelLogsEnabled: false,
-  otelUrl: undefined,
-  otelLogsUrl: undefined, // Will be computed using agent host
-  otelHeaders: undefined,
-  otelLogsHeaders: '',
-  otelProtocol: 'http/protobuf',
-  otelLogsProtocol: 'http/protobuf',
-  otelLogsTimeout: 10_000,
-  otelTimeout: 10_000,
-  otelBatchTimeout: 5000,
-  otelMaxExportBatchSize: 512,
-  otelMaxQueueSize: 2048,
-  otelMetricsEnabled: false,
-  otelMetricsUrl: undefined, // Will be computed using agent host
-  otelMetricsHeaders: '',
-  otelMetricsProtocol: 'http/protobuf',
-  otelMetricsTimeout: 10_000,
-  otelMetricsExportTimeout: 7500,
-  otelMetricsExportInterval: 10_000,
-  otelMetricsTemporalityPreference: 'DELTA', // DELTA, CUMULATIVE, or LOWMEMORY
-  lookup: undefined,
-  inferredProxyServicesEnabled: false,
-  memcachedCommandEnabled: false,
-  middlewareTracingEnabled: true,
-  openAiLogsEnabled: false,
-  'openai.spanCharLimit': 128,
-  peerServiceMapping: {},
-  plugins: true,
+  // TODO: These are not conditional, they would just be of type number.
+  'dogstatsd.port': '8125',
   port: '8126',
-  'profiling.enabled': undefined,
-  'propagateProcessTags.enabled': undefined,
-  'profiling.exporters': 'agent',
-  'profiling.sourceMap': true,
-  'profiling.longLivedThreshold': undefined,
-  protocolVersion: '0.4',
-  queryStringObfuscation: qsRegex,
-  'remoteConfig.enabled': true,
-  'remoteConfig.pollInterval': 5, // seconds
-  reportHostname: false,
-  resourceRenamingEnabled: false,
-  'runtimeMetrics.enabled': false,
-  'runtimeMetrics.eventLoop': true,
-  'runtimeMetrics.gc': true,
-  runtimeMetricsRuntimeId: false,
-  sampleRate: undefined,
-  'sampler.rateLimit': 100,
-  'sampler.rules': [],
-  'sampler.spanSamplingRules': [],
-  scope: undefined,
-  service,
-  serviceMapping: {},
-  site: 'datadoghq.com',
-  spanAttributeSchema: 'v0',
-  spanComputePeerService: false,
-  spanLeakDebug: 0,
-  spanRemoveIntegrationFromService: false,
-  startupLogs: false,
-  'stats.enabled': false,
-  tags: {},
-  tagsHeaderMaxLength: 512,
-  'telemetry.debug': false,
-  'telemetry.dependencyCollection': true,
-  'telemetry.enabled': true,
-  'telemetry.heartbeatInterval': 60_000,
-  'telemetry.logCollection': true,
-  'telemetry.metrics': true,
-  traceEnabled: true,
-  traceId128BitGenerationEnabled: true,
-  traceId128BitLoggingEnabled: true,
-  tracePropagationExtractFirst: false,
-  tracePropagationBehaviorExtract: 'continue',
-  'tracePropagationStyle.inject': ['datadog', 'tracecontext', 'baggage'],
-  'tracePropagationStyle.extract': ['datadog', 'tracecontext', 'baggage'],
-  'tracePropagationStyle.otelPropagators': false,
-  traceWebsocketMessagesEnabled: true,
-  traceWebsocketMessagesInheritSampling: true,
-  traceWebsocketMessagesSeparateTraces: true,
-  tracing: true,
-  url: undefined,
-  version: pkg.version,
-  instrumentation_config_id: undefined,
-  'vertexai.spanCharLimit': 128,
-  'vertexai.spanPromptCompletionSampleRate': 1,
-  'trace.aws.addSpanPointers': true,
-  'trace.dynamoDb.tablePrimaryKeys': undefined,
-  'trace.nativeSpanEvents': false,
+  // Override due to expecting numbers, not strings. TODO: Replace later.
+  'grpc.client.error.statuses': [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+  ],
+  'grpc.server.error.statuses': [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+  ],
 }
+
+/** @type {Record<string, unknown>} */
+const defaults = {
+  ...defaultsWithoutSupportedConfigurationEntry,
+  ...metadataDefaults,
+  ...defaultsWithConditionalRuntimeBehavior,
+  service,
+  version: pkg.version,
+}
+
+module.exports = defaults

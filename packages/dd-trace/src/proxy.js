@@ -102,6 +102,10 @@ class Tracer extends NoopProxy {
     try {
       const config = getConfig(options) // TODO: support dynamic code config
 
+      // Configure propagation hash manager for process tags + container tags
+      const propagationHash = require('./propagation-hash')
+      propagationHash.configure(config)
+
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
       }

@@ -41,7 +41,7 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
-const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000
+const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
 
 let applyRepeatEachIndex = null
 
@@ -394,6 +394,14 @@ function testEndHandler ({
     } else if (testStatuses.every(status => status === 'pass')) {
       test._ddHasPassedAttemptToFixRetries = true
     }
+  }
+
+  // Check if all EFD retries failed
+  if (testStatuses.length === earlyFlakeDetectionNumRetries + 1 &&
+    (test._ddIsNew || test._ddIsModified) &&
+    test._ddIsEfdRetry &&
+    testStatuses.every(status => status === 'fail')) {
+    test._ddHasFailedAllRetries = true
   }
 
   // this handles tests that do not go through the worker process (because they're skipped)

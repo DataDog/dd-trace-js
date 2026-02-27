@@ -53,6 +53,7 @@ const {
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
   DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -133,6 +134,34 @@ versions.forEach((version) => {
 
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
+        it('tags session and children with _dd.ci.library_configuration_error when settings fail 4xx', async () => {
+          const envVars = reportMethod === 'agentless'
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
+          receiver.setSettingsResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+              const testEvent = events.find(event => event.type === 'test')
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+            })
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...envVars,
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TEST_SESSION_NAME: 'my-test-session',
+              },
+            }
+          )
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
         it('can run and report tests', (done) => {
           const envVars = reportMethod === 'agentless'
             ? getCiVisAgentlessConfig(receiver.port)
@@ -879,6 +908,16 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
+
+              // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
+              const lastRetry = newTests[newTests.length - 1]
+              assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+              // Earlier attempts should not have the flag
+              for (let i = 0; i < newTests.length - 1; i++) {
+                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
+              }
+
               // --retries works normally for old flaky tests
               const oldFlakyTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
@@ -951,6 +990,16 @@ versions.forEach((version) => {
                 assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
               })
+
+              // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
+              const lastRetry = newTests[newTests.length - 1]
+              assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+              // Earlier attempts should not have the flag
+              for (let i = 0; i < newTests.length - 1; i++) {
+                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
+              }
+
               // ATR works normally for old flaky tests
               const oldFlakyTests = tests.filter(
                 test => test.meta[TEST_NAME] === 'playwright should retry old flaky tests'
