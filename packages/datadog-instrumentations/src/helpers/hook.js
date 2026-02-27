@@ -26,11 +26,21 @@ function Hook (modules, hookOptions, onrequire) {
     const parts = [moduleBaseDir, moduleName].filter(Boolean)
     const filename = path.join(...parts)
 
-    if (this._patched[filename] && patched.has(moduleExports)) {
-      return patched.get(moduleExports)
-    }
-
     let defaultWrapResult
+
+    const wrappedOnrequire = (moduleExports, ...args) => {
+      if (this._patched[filename] && patched.has(moduleExports)) {
+        return patched.get(moduleExports)
+      }
+
+      const result = onrequire(moduleExports, ...args)
+      if (result && (typeof result === 'object' || typeof result === 'function')) {
+        patched.set(moduleExports, result)
+        patched.set(result, result)
+      }
+
+      return result
+    }
 
     if (
       isIitm &&
@@ -38,19 +48,15 @@ function Hook (modules, hookOptions, onrequire) {
       (typeof moduleExports.default === 'object' ||
       typeof moduleExports.default === 'function')
     ) {
-      defaultWrapResult = onrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
+      defaultWrapResult = wrappedOnrequire(moduleExports.default, moduleName, moduleBaseDir, moduleVersion, isIitm)
     }
 
-    const newExports = onrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
+    const newExports = wrappedOnrequire(moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm)
 
     if (defaultWrapResult) newExports.default = defaultWrapResult
 
     this._patched[filename] = true
-    if (newExports &&
-      (typeof newExports === 'object' ||
-      typeof newExports === 'function')) {
-      patched.set(moduleExports, newExports)
-    }
+
     return newExports
   }
 
