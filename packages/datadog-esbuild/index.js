@@ -125,6 +125,34 @@ ${build.initialOptions.banner.js}`
     build.initialOptions.external.push('@openfeature/core')
   }
 
+  try {
+    require.resolve('@opentelemetry/api')
+  } catch {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@opentelemetry/api')
+  }
+
+  try {
+    require.resolve('@opentelemetry/api-logs')
+  } catch {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@opentelemetry/api-logs')
+  }
+
+  try {
+    require.resolve('@opentelemetry/core')
+  } catch {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@opentelemetry/core')
+  }
+
+  try {
+    require.resolve('@opentelemetry/resources')
+  } catch {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@opentelemetry/resources')
+  }
+
   const esmBuild = isESMBuild(build)
   if (
     esmBuild &&
