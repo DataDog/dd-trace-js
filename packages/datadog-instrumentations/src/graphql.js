@@ -165,6 +165,7 @@ function wrapExecute (execute) {
         fields: new WeakMap(), // fields keyed by their Path object
         finalizations: [], // fields whose `.finalize()` method needs to be invoked before finishing execution
         abortController: new AbortController(), // allow startExecuteCh/startResolveCh subscribers to block execution
+        // filteredVariables - sometimes populated by GraphQLExecutePlugin
       }
 
       return startExecuteCh.runStores(ctx, () => {

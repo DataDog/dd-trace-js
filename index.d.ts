@@ -2060,6 +2060,15 @@ declare namespace tracer {
       typeResolver?: any,
     }
 
+    interface OperationContext {
+      /** The `graphql.OperationDefinitionNode` */
+      operation: any;
+      /** the `graphql.ExecutionArgs` passed to the `execute` call */
+      args: ExecutionArgs;
+      /** The string that was parsed into the `.args.document`, if any */
+      docSource: string | undefined;
+    }
+
     interface FieldContext {
       /** The `graphql.GraphQLResolveInfo` for the resolver call */
       info: any;
@@ -2073,6 +2082,8 @@ declare namespace tracer {
       parentField: FieldContext | null;
       /** The nesting depth of the field in the query */
       depth: number;
+      /** The context of the `execute` call */
+      rootCtx: OperationContext;
     }
 
     /**
@@ -2123,7 +2134,7 @@ declare namespace tracer {
        * the key/value pairs to record. For example, using
        * `variables => variables` would record all variables.
        */
-      variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
+      variables?: string[] | ((variableValues: Record<string, any>, context: ExecutionArgs & Pick<OperationContext, 'operation'>) => Record<string, any> | undefined);
 
       /**
        * Whether to collapse list items into a single element. (i.e. single

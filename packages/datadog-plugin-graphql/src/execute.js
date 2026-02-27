@@ -31,7 +31,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
       },
     }, ctx)
 
-    addVariableTags(this.config, span, args.variableValues)
+    ctx.filteredVariables = args.variableValues && this.config.variables(args.variableValues, { ...args, operation })
+
+    addVariableTags(span, ctx.filteredVariables)
 
     return ctx.currentStore
   }
@@ -51,16 +53,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
 // span-related
 
-function addVariableTags (config, span, variableValues) {
+function addVariableTags (span, variableValues) {
+  if (!variableValues) return
+
   const tags = {}
-
-  if (variableValues && config.variables) {
-    const variables = config.variables(variableValues)
-    for (const param in variables) {
-      tags[`graphql.variables.${param}`] = variables[param]
-    }
+  for (const param in variableValues) {
+    tags[`graphql.variables.${param}`] = variableValues[param]
   }
-
   span.addTags(tags)
 }
 

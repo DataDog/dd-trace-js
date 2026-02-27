@@ -66,9 +66,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
       },
     }, ctx)
 
-    if (fieldNode && this.config.variables && fieldNode.arguments) {
-      const variables = this.config.variables(info.variableValues)
-
+    const variables = rootCtx.filteredVariables
+    if (variables && fieldNode?.arguments) {
       for (const { value: argValue } of fieldNode.arguments) {
         if (argValue.kind === 'Variable') {
           const varName = argValue.name.value
