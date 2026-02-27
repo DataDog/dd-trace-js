@@ -25,6 +25,14 @@
         "default": null
       }
     ],
+    "_DD_APM_TRACING_AGENTLESS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "description": "Experimental: Enable agentless APM span intake. When enabled, spans are sent directly to Datadog intake without an agent."
+      }
+    ],
     "DD_AGENT_HOST": [
       {
         "implementation": "E",
