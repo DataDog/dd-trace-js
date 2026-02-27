@@ -88,7 +88,7 @@ describe('RASP - ssrf', () => {
             }
 
             await Promise.all([
-              checkRaspExecutedAndNotThreat(agent, true, 9_000),
+              checkRaspExecutedAndNotThreat(agent),
               axios.get('/?host=www.datadoghq.com'),
             ])
           })
@@ -148,7 +148,7 @@ describe('RASP - ssrf', () => {
 
             await Promise.all([
               axios.get('/?host=www.datadoghq.com'),
-              checkRaspExecutedAndNotThreat(agent, true, 9_000),
+              checkRaspExecutedAndNotThreat(agent),
             ])
           })
 
@@ -202,7 +202,7 @@ describe('RASP - ssrf', () => {
 
             await Promise.all([
               axios.get('/?host=www.datadoghq.com'),
-              checkRaspExecutedAndNotThreat(agent, true, 9_000),
+              checkRaspExecutedAndNotThreat(agent),
             ])
           })
 
