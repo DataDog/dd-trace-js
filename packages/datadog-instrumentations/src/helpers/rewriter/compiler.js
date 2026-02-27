@@ -1,33 +1,67 @@
 'use strict'
 
-let meriyah
-let astring
-let esquery
+const log = require('../../../../dd-trace/src/log')
 
-module.exports = {
-  parse: (...args) => {
-    meriyah ??= require('../../../../../vendor/dist/meriyah')
+// eslint-disable-next-line camelcase, no-undef
+const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
 
-    return meriyah.parse(...args)
+const compiler = module.exports = {
+  parse: (sourceText, options) => {
+    try {
+      // TODO: Figure out ESBuild `createRequire` issue and remove this hack.
+      const oxc = runtimeRequire(['oxc', 'parser'].join('-'))
+
+      compiler.parse = (sourceText, options) => {
+        const { program, errors } = oxc.parseSync('index.js', sourceText, {
+          ...options,
+          preserveParens: false,
+        })
+
+        if (errors?.length > 0) throw errors[0]
+
+        return program
+      }
+    } catch (e) {
+      log.error(e)
+
+      // Fallback for when OXC is not available.
+      const meriyah = require('../../../../../vendor/dist/meriyah')
+
+      compiler.parse = (sourceText, { range, sourceType } = {}) => {
+        return meriyah.parse(sourceText.toString(), {
+          loc: range,
+          ranges: range,
+          module: sourceType === 'module',
+        })
+      }
+    }
+
+    return compiler.parse(sourceText, options)
   },
 
   generate: (...args) => {
-    astring ??= require('../../../../../vendor/dist/astring')
+    const astring = require('../../../../../vendor/dist/astring')
 
-    return astring.generate(...args)
+    compiler.generate = astring.generate
+
+    return compiler.generate(...args)
   },
 
   traverse: (ast, query, visitor) => {
-    esquery ??= require('../../../../../vendor/dist/esquery').default
+    const esquery = require('../../../../../vendor/dist/esquery').default
 
-    const selector = esquery.parse(query)
+    compiler.traverse = (ast, query, visitor) => {
+      return esquery.traverse(ast, esquery.parse(query), visitor)
+    }
 
-    return esquery.traverse(ast, selector, visitor)
+    return compiler.traverse(ast, query, visitor)
   },
 
   query: (ast, query) => {
-    esquery ??= require('../../../../../vendor/dist/esquery').default
+    const esquery = require('../../../../../vendor/dist/esquery').default
 
-    return esquery.query(ast, query)
+    compiler.query = esquery.query
+
+    return compiler.query(ast, query)
   },
 }
