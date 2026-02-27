@@ -42,6 +42,7 @@
 /packages/datadog-instrumentations/src/playwright.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/vitest.js @DataDog/ci-app-libraries
 
+/integration-tests/bun/ @DataDog/dd-trace-js
 /integration-tests/ci-visibility/ @DataDog/ci-app-libraries
 /integration-tests/cucumber/ @DataDog/ci-app-libraries
 /integration-tests/cypress/ @DataDog/ci-app-libraries
