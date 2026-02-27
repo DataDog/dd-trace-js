@@ -13,7 +13,6 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 function formatSpan (span) {
   span = normalizeSpan(truncateSpan(span, false))
 
-  // Convert span events to JSON-compatible format if present
   if (span.span_events) {
     span.meta.events = JSON.stringify(span.span_events)
     delete span.span_events
@@ -36,7 +35,7 @@ function spanToJSON (span) {
     resource: span.resource,
     service: span.service,
     error: span.error,
-    start: span.start,
+    start: Math.floor(span.start / 1e9),
     duration: span.duration,
     meta: span.meta,
     metrics: span.metrics,
@@ -103,7 +102,6 @@ class AgentlessJSONEncoder {
       }
     }
 
-    // Check if we've exceeded the soft limit
     const estimatedSize = this._estimateSize()
     if (estimatedSize > this._limit) {
       log.debug('Buffer went over soft limit, flushing')
@@ -112,29 +110,46 @@ class AgentlessJSONEncoder {
   }
 
   /**
-   * Creates the final JSON payload.
-   * @returns {Buffer} The JSON payload as a buffer (empty buffer on encoding failure)
+   * Creates the final JSON payloads - one per trace.
+   *
+   * IMPORTANT: The intake only accepts one trace per request. Multiple spans are allowed
+   * but they must all share the same trace_id. Requests containing spans with different
+   * trace_ids return HTTP 200 but silently drop all spans. This was confirmed through
+   * extensive testing - same trace_id batches work, mixed trace_id batches are dropped.
+   * We group spans by trace_id and send each trace as a separate request. -- bengl
+   *
+   * @returns {Buffer[]} Array of JSON payloads as buffers (one trace each)
    */
   makePayload () {
-    const spanCount = this._spanCount
+    const payloads = []
 
-    try {
-      const payload = JSON.stringify({ spans: this._spans })
-      const buffer = Buffer.from(payload, 'utf8')
-
-      this._reset()
-
-      return buffer
-    } catch (err) {
-      log.error(
-        'Failed to encode %d spans as JSON. Spans will be dropped. Error: %s\n%s',
-        spanCount,
-        err.message,
-        err.stack
-      )
-      this._reset()
-      return Buffer.alloc(0)
+    // Group spans by trace_id
+    const traceMap = new Map()
+    for (const span of this._spans) {
+      const traceId = span.trace_id
+      if (!traceMap.has(traceId)) {
+        traceMap.set(traceId, [])
+      }
+      traceMap.get(traceId).push(span)
     }
+
+    // Create one payload per trace
+    for (const [traceId, spans] of traceMap) {
+      try {
+        const payload = JSON.stringify({ spans })
+        payloads.push(Buffer.from(payload, 'utf8'))
+      } catch (err) {
+        log.error(
+          'Failed to encode trace as JSON (trace_id: %s, spans: %d). Trace will be dropped. Error: %s',
+          traceId,
+          spans.length,
+          err.message
+        )
+      }
+    }
+
+    this._reset()
+    return payloads
   }
 
   /**
