@@ -128,12 +128,15 @@ class CucumberPlugin extends CiPlugin {
       const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
 
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuitePath,
-        'cucumber'
-      )
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuitePath,
+          'cucumber'
+        ),
+        ...this.getSessionRequestErrorTags(),
+      }
       if (isUnskippable) {
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
