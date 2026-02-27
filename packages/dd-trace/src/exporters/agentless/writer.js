@@ -26,7 +26,6 @@ class AgentlessWriter extends BaseWriter {
     this.#site = site
     this._encoder = new AgentlessJSONEncoder(this)
 
-    // Construct the intake URL if not provided
     if (!url) {
       try {
         this._url = new URL(`https://public-trace-http-intake.logs.${site}`)
@@ -40,7 +39,6 @@ class AgentlessWriter extends BaseWriter {
       }
     }
 
-    // Check API key at startup and log once if missing
     if (!getValueFromEnvSources('DD_API_KEY')) {
       this.#apiKeyMissing = true
       log.error(
@@ -51,13 +49,52 @@ class AgentlessWriter extends BaseWriter {
   }
 
   /**
+   * Flushes all pending spans, sending one request per trace sequentially.
+   *
+   * Traces are sent sequentially (not in parallel) to avoid hitting the max concurrent
+   * request limit (8) in the common request module, which silently drops excess requests.
+   * Combined with the one-trace-per-request limitation of the intake (see encoder comment),
+   * this ensures all traces are sent reliably. -- bengl
+   *
+   * @param {function} [done] - Callback when all sends complete
+   */
+  flush (done = () => {}) {
+    const count = this._encoder.count()
+
+    if (count === 0) {
+      done()
+      return
+    }
+
+    const payloads = this._encoder.makePayload()
+
+    if (payloads.length === 0) {
+      done()
+      return
+    }
+
+    let index = 0
+
+    const sendNext = () => {
+      if (index >= payloads.length) {
+        done()
+        return
+      }
+
+      const payload = payloads[index++]
+      this._sendPayload(payload, 1, sendNext)
+    }
+
+    sendNext()
+  }
+
+  /**
    * Sends the encoded payload to the intake endpoint.
    * @param {Buffer} data - The encoded JSON payload
    * @param {number} count - Number of spans in the payload
    * @param {function} done - Callback when complete
    */
   _sendPayload (data, count, done) {
-    // Skip sending if payload is empty (encoding failed) or URL is invalid
     if (!data || data.length === 0) {
       log.debug('Skipping send of empty payload')
       done()
@@ -70,10 +107,8 @@ class AgentlessWriter extends BaseWriter {
       return
     }
 
-    // Get API key - re-check if it was missing at startup (may have been set since)
     const apiKey = getValueFromEnvSources('DD_API_KEY')
     if (!apiKey) {
-      // Only log debug since we already logged error at startup
       if (!this.#apiKeyMissing) {
         this.#apiKeyMissing = true
         log.error(

@@ -19,7 +19,6 @@ class AgentlessExporter {
     this._config = config
     const { site = 'datadoghq.com', url } = config
 
-    // Use provided URL or construct intake URL from site
     this._url = url ? new URL(url) : new URL(`https://public-trace-http-intake.logs.${site}`)
 
     this._writer = new Writer({
