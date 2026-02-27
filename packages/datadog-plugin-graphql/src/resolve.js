@@ -7,11 +7,11 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'resolve'
 
-  start (field) {
+  bindStart (field) {
     const { info, rootCtx, args, parentField } = field
     // FIXME - https://github.com/DataDog/dd-trace-js/issues/7468
     if (this.config.collapse) field.depth += getListLevel(info.path)
-    if (!this.shouldInstrument(field)) return
+    if (!this.shouldInstrument(field)) return rootCtx.currentStore // run in execute scope
 
     let childOf, path, ctx
 
@@ -26,8 +26,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
         // for the `finish` subscription to store the `.finishTime` on
         // and for children resolvers to find `.collapsedChildren`.
         field.shared = ctx
-        this.enter(ctx.currentStore.span) // TODO: test this!
-        return
+        return ctx.currentStore // re-enter the scope with the existing span
       }
       childOf = parent ? parent.currentStore?.span : undefined
       path = collapsePath(pathToArray(info.path))
@@ -87,7 +86,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
       })
     }
 
-    // return ctx.currentStore // seems unused? This is not `bindStart`!
+    return ctx.currentStore
   }
 
   finish (field) {

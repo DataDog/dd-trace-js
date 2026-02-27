@@ -800,6 +800,47 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, rootValue }).catch(done)
         })
 
+        it('should run resolver code in the respective (shared) resolver scope', () => {
+          const schema = graphql.buildSchema(`
+            type Human {
+              name: String
+            }
+            type Query {
+              friends: [Human!]
+            }
+          `)
+          const source = `query {
+            friends {
+              name
+            }
+          }`
+          const rootValue = {
+            friends () {
+              const span = tracer.scope().active()
+              assert.strictEqual(span.context()._name, 'graphql.resolve')
+              assert.strictEqual(span.context()._tags['resource.name'], 'friends:[Human!]')
+
+              return ['alice', 'bob'].map(name => ({
+                name () {
+                  const span = tracer.scope().active()
+                  assert.strictEqual(span.context()._name, 'graphql.resolve')
+                  assert.strictEqual(span.context()._tags['resource.name'], 'name:String')
+                  assert.strictEqual(span.context()._tags['graphql.field.path'], 'friends.*.name')
+                  return name
+                },
+              }))
+            },
+          }
+          return graphql.graphql({ schema, rootValue, source }).then(result => {
+            assert.ifError(result.errors)
+            assert.deepStrictEqual(result.data.friends, [
+              { __proto__: null, name: 'alice' },
+              { __proto__: null, name: 'bob' },
+            ])
+            assert.strictEqual(tracer.scope().active(), null)
+          })
+        })
+
         it('should run returned promise in the parent context', () => {
           const schema = graphql.buildSchema(`
             type Query {
@@ -1571,6 +1612,46 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source }).catch(done)
         })
+
+        it('should run resolver code in the respective scope', () => {
+          const schema = graphql.buildSchema(`
+            type Human {
+              name: String
+            }
+            type Query {
+              friends: [Human!]
+            }
+          `)
+          const source = `query {
+            friends {
+              name
+            }
+          }`
+          const rootValue = {
+            friends () {
+              const span = tracer.scope().active()
+              assert.strictEqual(span.context()._name, 'graphql.resolve')
+              assert.strictEqual(span.context()._tags['resource.name'], 'friends:[Human!]')
+
+              return ['alice', 'bob'].map((name, i) => ({
+                name () {
+                  // this field resolver is not instrumented because (in the given query) it has a depth >= 2
+                  const span = tracer.scope().active()
+                  assert.strictEqual(span.context()._name, 'graphql.execute')
+                  return name
+                },
+              }))
+            },
+          }
+          return graphql.graphql({ schema, rootValue, source }).then(result => {
+            assert.ifError(result.errors)
+            assert.deepStrictEqual(result.data.friends, [
+              { __proto__: null, name: 'alice' },
+              { __proto__: null, name: 'bob' },
+            ])
+            assert.strictEqual(tracer.scope().active(), null)
+          })
+        })
       })
 
       describe('with collapsing disabled', () => {
@@ -1624,6 +1705,47 @@ describe('Plugin', () => {
             .catch(done)
 
           graphql.graphql({ schema, source }).catch(done)
+        })
+
+        it('should run resolver code in the respective resolver scope', () => {
+          const schema = graphql.buildSchema(`
+            type Human {
+              name: String
+            }
+            type Query {
+              friends: [Human!]
+            }
+          `)
+          const source = `query {
+            friends {
+              name
+            }
+          }`
+          const rootValue = {
+            friends () {
+              const span = tracer.scope().active()
+              assert.strictEqual(span.context()._name, 'graphql.resolve')
+              assert.strictEqual(span.context()._tags['resource.name'], 'friends:[Human!]')
+
+              return ['alice', 'bob'].map((name, i) => ({
+                name () {
+                  const span = tracer.scope().active()
+                  assert.strictEqual(span.context()._name, 'graphql.resolve')
+                  assert.strictEqual(span.context()._tags['resource.name'], 'name:String')
+                  assert.strictEqual(span.context()._tags['graphql.field.path'], `friends.${i}.name`)
+                  return name
+                },
+              }))
+            },
+          }
+          return graphql.graphql({ schema, rootValue, source }).then(result => {
+            assert.ifError(result.errors)
+            assert.deepStrictEqual(result.data.friends, [
+              { __proto__: null, name: 'alice' },
+              { __proto__: null, name: 'bob' },
+            ])
+            assert.strictEqual(tracer.scope().active(), null)
+          })
         })
       })
 

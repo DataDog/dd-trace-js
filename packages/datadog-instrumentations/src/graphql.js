@@ -208,20 +208,20 @@ function wrapResolve (resolve) {
     const field = createField(ctx, info, args)
     ctx.fields.set(info.path, field)
 
-    startResolveCh.publish(field)
-
-    if (field.finalize) {
-      // register for `.finalize()` invocation before execution finishes
-      ctx.finalizations.push(field)
-    }
-
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController.signal, (err, res) => {
-      if (err) {
-        field.error = err
-        resolveErrorCh.publish(field)
+    return startResolveCh.runStores(field, () => {
+      if (field.finalize) {
+        // register for `.finalize()` invocation before execution finishes
+        ctx.finalizations.push(field)
       }
-      field.result = res
-      finishResolveCh.publish(field)
+
+      return callInAsyncScope(resolve, this, arguments, ctx.abortController.signal, (err, res) => {
+        if (err) {
+          field.error = err
+          resolveErrorCh.publish(field)
+        }
+        field.result = res
+        finishResolveCh.publish(field)
+      })
     })
   }
 

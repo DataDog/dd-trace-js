@@ -46,8 +46,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
     super.finish(ctx)
-
-    // return ctx.parentStore
   }
 }
 
