@@ -11,9 +11,12 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK, GRPC_CLIENT_ERROR_STATUSES } = require('../../dd-trace/src/constants')
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const defaults = require('../../dd-trace/src/config/defaults')
 const { NODE_MAJOR } = require('../../../version')
 const getService = require('./service')
+
+const GRPC_CLIENT_ERROR_STATUSES = defaults['grpc.client.error.statuses']
 
 const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 

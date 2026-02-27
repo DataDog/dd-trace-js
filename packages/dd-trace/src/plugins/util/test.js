@@ -145,6 +145,10 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.tes
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
+
+// Library configuration request error tag
+const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
+
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
@@ -201,6 +205,22 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
+
+/**
+ * Returns request error tags from a test session span for propagation to child events.
+ * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @returns {Record<string, string>}
+ */
+function getSessionRequestErrorTags (sessionSpan) {
+  const tags = sessionSpan?.context()._tags
+  if (!tags || typeof tags !== 'object') return {}
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR] === 'true') {
+    return {
+      [DD_CI_LIBRARY_CONFIGURATION_ERROR]: 'true',
+    }
+  }
+  return {}
+}
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -308,6 +328,8 @@ module.exports = {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
+  getSessionRequestErrorTags,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,

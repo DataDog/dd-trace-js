@@ -150,6 +150,7 @@ interface Tracer extends opentracing.Tracer {
    * Extends DatadogNodeServerProvider with Remote Config integration for dynamic flag configuration.
    * Enable with DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED=true.
    *
+   * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
    * @beta This feature is in preview and not ready for production use
    */
   openfeature: tracer.OpenFeatureProvider;
@@ -470,6 +471,8 @@ declare namespace tracer {
     /**
      * Used to disable APM Tracing when using standalone products
      * @default true
+     * @env DD_APM_TRACING_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     apmTracingEnabled?: boolean
 
@@ -477,46 +480,62 @@ declare namespace tracer {
      * Whether to enable trace ID injection in log records to be able to correlate
      * traces with logs.
      * @default false
+     * @env DD_LOGS_INJECTION
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     logInjection?: boolean,
 
     /**
      * Whether to enable startup logs.
-     * @default true
+     * @default false
+     * @env DD_TRACE_STARTUP_LOGS
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     startupLogs?: boolean,
 
     /**
      * The service name to be used for this program. If not set, the service name
      * will attempted to be inferred from package.json
+     * @env DD_SERVICE, OTEL_SERVICE_NAME
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     service?: string;
 
     /**
      * Provide service name mappings for each plugin.
+     * @env DD_SERVICE_MAPPING
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     serviceMapping?: { [key: string]: string };
 
     /**
      * The url of the trace agent that the tracer will submit to.
      * Takes priority over hostname and port, if set.
+     * @env DD_TRACE_AGENT_URL
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     url?: string;
 
     /**
      * The address of the trace agent that the tracer will submit to.
      * @default '127.0.0.1'
+     * @env DD_AGENT_HOST
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     hostname?: string;
 
     /**
      * The port of the trace agent that the tracer will submit to.
      * @default 8126
+     * @env DD_TRACE_AGENT_PORT
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     port?: number | string;
 
     /**
      * Whether to enable profiling.
+     * @env DD_PROFILING_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     profiling?: boolean
 
@@ -526,29 +545,39 @@ declare namespace tracer {
     dogstatsd?: {
       /**
        * The hostname of the Dogstatsd agent that the metrics will submitted to.
+       * @env DD_DOGSTATSD_HOST
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       hostname?: string
 
       /**
        * The port of the Dogstatsd agent that the metrics will submitted to.
        * @default 8125
+       * @env DD_DOGSTATSD_PORT
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       port?: number
     };
 
     /**
      * Set an application’s environment e.g. prod, pre-prod, stage.
+     * @env DD_ENV
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     env?: string;
 
     /**
      * The version number of the application. If not set, the version
      * will attempted to be inferred from package.json.
+     * @env DD_VERSION
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     version?: string;
 
     /**
      * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
+     * @env DD_TRACE_SAMPLE_RATE, OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     sampleRate?: number;
 
@@ -556,6 +585,8 @@ declare namespace tracer {
      * Global rate limit that is applied on the global sample rate and all rules,
      * and controls the ingestion rate limit between the agent and the backend.
      * Defaults to deferring the decision to the agent.
+     * @env DD_TRACE_RATE_LIMIT
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     rateLimit?: number,
 
@@ -565,24 +596,32 @@ declare namespace tracer {
      * a trace's `service` and `name`, and a corresponding `sampleRate`. If not
      * specified, will defer to global sampling rate for all spans.
      * @default []
+     * @env DD_TRACE_SAMPLING_RULES
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     samplingRules?: SamplingRule[]
 
     /**
      * Span sampling rules that take effect when the enclosing trace is dropped, to ingest single spans
      * @default []
+     * @env DD_SPAN_SAMPLING_RULES, DD_SPAN_SAMPLING_RULES_FILE
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     spanSamplingRules?: SpanSamplingRule[]
 
     /**
      * Interval in milliseconds at which the tracer will submit traces to the agent.
      * @default 2000
+     * @env DD_TRACE_FLUSH_INTERVAL
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     flushInterval?: number;
 
     /**
      *  Number of spans before partially exporting a trace. This prevents keeping all the spans in memory for very large traces.
      * @default 1000
+     * @env DD_TRACE_PARTIAL_FLUSH_MIN_SPANS
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     flushMinSpans?: number;
 
@@ -591,14 +630,31 @@ declare namespace tracer {
      * @default false
      */
     runtimeMetrics?: boolean | {
+
+       /**
+       * @env DD_RUNTIME_METRICS_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       enabled?: boolean,
+
+       /**
+       * @env DD_RUNTIME_METRICS_GC_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       gc?: boolean,
+
+       /**
+       * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       eventLoop?: boolean
     }
 
     /**
      * Whether to add an auto-generated `runtime-id` tag to metrics.
      * @default false
+     * @env DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     runtimeMetricsRuntimeId?: boolean
 
@@ -611,6 +667,8 @@ declare namespace tracer {
     /**
      * Protocol version to use for requests to the agent. The version configured must be supported by the agent version installed or all traces will be dropped.
      * @default 0.4
+     * @env DD_TRACE_AGENT_PROTOCOL_VERSION
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     protocolVersion?: string
 
@@ -623,11 +681,15 @@ declare namespace tracer {
     ingestion?: {
       /**
        * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
+       * @env DD_TRACE_SAMPLE_RATE, OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       sampleRate?: number
 
       /**
        * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
+       * @env DD_TRACE_RATE_LIMIT
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       rateLimit?: number
     };
@@ -637,17 +699,26 @@ declare namespace tracer {
      * @default {}
      */
     experimental?: {
+
+      /**
+       * @default false
+       * @env DD_TRACE_EXPERIMENTAL_B3_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
       b3?: boolean
 
       /**
        * Whether to write traces to log output or agentless, rather than send to an agent
-       * @default false
+       * @env DD_TRACE_EXPERIMENTAL_EXPORTER
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       exporter?: 'log' | 'agent' | 'datadog'
 
       /**
        * Whether to enable the experimental `getRumData` method.
        * @default false
+       * @env DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enableGetRumData?: boolean
 
@@ -675,22 +746,32 @@ declare namespace tracer {
       aiguard?: {
         /**
          * Set to `true` to enable the SDK.
+         * @env DD_AI_GUARD_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
         /**
          * URL of the AI Guard REST API.
+         * @env DD_AI_GUARD_ENDPOINT
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         endpoint?: string,
         /**
          * Timeout used in calls to the AI Guard REST API in milliseconds (default 5000)
+         * @env DD_AI_GUARD_TIMEOUT
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         timeout?: number,
         /**
          * Maximum number of conversational messages allowed to be set in the meta-struct
+         * @env DD_AI_GUARD_MAX_MESSAGES_LENGTH
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         maxMessagesLength?: number,
         /**
          * Max size of the content property set in the meta-struct
+         * @env DD_AI_GUARD_MAX_CONTENT_SIZE
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         maxContentSize?: number
       }
@@ -707,6 +788,8 @@ declare namespace tracer {
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED environment variable.
          *
          * @default false
+         * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean
         /**
@@ -715,6 +798,8 @@ declare namespace tracer {
          * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS environment variable.
          *
          * @default 30000
+         * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
       }
@@ -740,24 +825,32 @@ declare namespace tracer {
 
     /**
      * Global tags that should be assigned to every span.
+     * @env DD_TAGS, OTEL_RESOURCE_ATTRIBUTES
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     tags?: { [key: string]: any };
 
     /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
      * @default false
+     * @env DD_TRACE_REPORT_HOSTNAME
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     reportHostname?: boolean
 
     /**
      * A string representing the minimum tracer log level to use when debug logging is enabled
      * @default 'debug'
+     * @env DD_TRACE_LOG_LEVEL, OTEL_LOG_LEVEL
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    logLevel?: 'error' | 'debug'
+    logLevel?: 'debug' | 'info' | 'warn' | 'error'
 
     /**
      * Enables DBM to APM link using tag injection.
      * @default 'disabled'
+     * @env DD_DBM_PROPAGATION_MODE
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     dbmPropagationMode?: 'disabled' | 'service' | 'full'
 
@@ -766,6 +859,8 @@ declare namespace tracer {
      * Can also be enabled via the DD_DATA_STREAMS_ENABLED environment variable.
      * When not provided, the value of DD_DATA_STREAMS_ENABLED is used.
      * @default false
+     * @env DD_DATA_STREAMS_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     dsmEnabled?: boolean
 
@@ -778,6 +873,8 @@ declare namespace tracer {
        * This option requires DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true to take effect.
        * The propagation hash enables correlation between traces and database operations.
        * @default false
+       * @env DD_DBM_INJECT_SQL_BASEHASH
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       injectSqlBaseHash?: boolean
     }
@@ -789,48 +886,66 @@ declare namespace tracer {
       /**
        * Whether to enable AppSec.
        * @default false
+       * @env DD_APPSEC_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean,
 
       /**
        * Specifies a path to a custom rules file.
+       * @env DD_APPSEC_RULES
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       rules?: string,
 
       /**
        * Controls the maximum amount of traces sampled by AppSec attacks, per second.
        * @default 100
+       * @env DD_APPSEC_TRACE_RATE_LIMIT
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       rateLimit?: number,
 
       /**
        * Controls the maximum amount of time in microseconds the WAF is allowed to run synchronously for.
        * @default 5000
+       * @env DD_APPSEC_WAF_TIMEOUT
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       wafTimeout?: number,
 
       /**
        * Specifies a regex that will redact sensitive data by its key in attack reports.
+       * @env DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       obfuscatorKeyRegex?: string,
 
       /**
        * Specifies a regex that will redact sensitive data by its value in attack reports.
+       * @env DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       obfuscatorValueRegex?: string,
 
       /**
        * Specifies a path to a custom blocking template html file.
+       * @env DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       blockedTemplateHtml?: string,
 
       /**
        * Specifies a path to a custom blocking template json file.
+       * @env DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       blockedTemplateJson?: string,
 
       /**
        * Specifies a path to a custom blocking template json file for graphql requests
+       * @env DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       blockedTemplateGraphql?: string,
 
@@ -852,6 +967,8 @@ declare namespace tracer {
          *
          * Unknown values will be considered as 'disabled'
          * @default 'identification'
+         * @env DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         mode?:
           'anonymous' | 'anon' | 'safe' |
@@ -864,16 +981,22 @@ declare namespace tracer {
       apiSecurity?: {
         /** Whether to enable Api Security.
          * @default true
+         * @env DD_API_SECURITY_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
 
         /** Whether to enable endpoint collection for API Security.
          * @default true
+         * @env DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         endpointCollectionEnabled?: boolean,
 
         /** Maximum number of endpoints that can be serialized per message.
          * @default 300
+         * @env DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         endpointCollectionMessageLimit?: number,
       },
@@ -883,6 +1006,8 @@ declare namespace tracer {
       rasp?: {
         /** Whether to enable RASP.
          * @default false
+         * @env DD_APPSEC_RASP_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
 
@@ -890,6 +1015,8 @@ declare namespace tracer {
          * @default false
          *
          * @deprecated Use UI and Remote Configuration to enable extended data collection
+         * @env DD_APPSEC_RASP_COLLECT_REQUEST_BODY
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         bodyCollection?: boolean
       },
@@ -899,16 +1026,22 @@ declare namespace tracer {
       stackTrace?: {
         /** Whether to enable stack trace reporting.
          * @default true
+         * @env DD_APPSEC_STACK_TRACE_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
 
         /** Specifies the maximum number of stack traces to be reported.
          * @default 2
+         * @env DD_APPSEC_MAX_STACK_TRACES
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         maxStackTraces?: number,
 
         /** Specifies the maximum depth of a stack trace to be reported.
          * @default 32
+         * @env DD_APPSEC_MAX_STACK_TRACE_DEPTH
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         maxDepth?: number,
       },
@@ -922,6 +1055,8 @@ declare namespace tracer {
          * @default false
          *
          * @deprecated Use UI and Remote Configuration to enable extended data collection
+         * @env DD_APPSEC_COLLECT_ALL_HEADERS
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled: boolean,
 
@@ -929,6 +1064,8 @@ declare namespace tracer {
          * @default true
          *
          * @deprecated Use UI and Remote Configuration to enable extended data collection
+         * @env DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         redaction: boolean,
 
@@ -936,6 +1073,8 @@ declare namespace tracer {
          * @default 50
          *
          * @deprecated Use UI and Remote Configuration to enable extended data collection
+         * @env DD_APPSEC_MAX_COLLECTED_HEADERS
+         * Programmatic configuration takes precedence over the environment variables listed above.
          */
         maxHeaders: number,
       }
@@ -948,6 +1087,8 @@ declare namespace tracer {
       /**
        * Whether to enable Code Origin for Spans.
        * @default true
+       * @env DD_CODE_ORIGIN_FOR_SPANS_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean
     }
@@ -964,6 +1105,8 @@ declare namespace tracer {
       /**
        * Specifies the remote configuration polling interval in seconds
        * @default 5
+       * @env DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       pollInterval?: number,
     }
@@ -971,16 +1114,23 @@ declare namespace tracer {
     /**
      * Whether to enable client IP collection from relevant IP headers
      * @default false
+     * @env DD_TRACE_CLIENT_IP_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     clientIpEnabled?: boolean
 
     /**
      * Custom header name to source the http.client_ip tag from.
+     * @env DD_TRACE_CLIENT_IP_HEADER
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     clientIpHeader?: string,
 
     /**
      * The selection and priority order of context propagation injection and extraction mechanisms.
+     * @env DD_TRACE_PROPAGATION_STYLE, DD_TRACE_PROPAGATION_STYLE_INJECT, DD_TRACE_PROPAGATION_STYLE_EXTRACT
+     * Also configurable via OTEL_PROPAGATORS when DD-specific propagation vars are not set.
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     tracePropagationStyle?: string[] | PropagationStyle
 
@@ -991,21 +1141,29 @@ declare namespace tracer {
       /**
        *  Additional JSONPath queries to replace with `redacted` in request payloads
        *  Undefined or invalid JSONPath queries disable the feature for requests.
+       * @env DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       request?: string,
       /**
        *  Additional JSONPath queries to replace with `redacted` in response payloads
        *  Undefined or invalid JSONPath queries disable the feature for responses.
+       * @env DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       response?: string,
       /**
        *  Maximum depth of payload traversal for tags
+       * @env DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       maxDepth?: number
     }
 
     /**
      * Configuration enabling LLM Observability. Enablement is superseded by the DD_LLMOBS_ENABLED environment variable.
+     * @env DD_LLMOBS_ENABLED
+     * The environment variable listed above takes precedence over programmatic configuration.
      */
     llmobs?: llmobs.LLMObsEnableOptions
 
@@ -1016,23 +1174,31 @@ declare namespace tracer {
       /**
        * Whether to enable Dynamic Instrumentation.
        * @default false
+       * @env DD_DYNAMIC_INSTRUMENTATION_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean
 
       /**
        * Path to a custom probes configuration file.
+       * @env DD_DYNAMIC_INSTRUMENTATION_PROBE_FILE
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       probeFile?: string
 
       /**
        * Timeout in milliseconds for capturing variable values.
        * @default 15
+       * @env DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       captureTimeoutMs?: number
 
       /**
        * Interval in seconds between uploads of probe data.
        * @default 1
+       * @env DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       uploadIntervalSeconds?: number
 
@@ -1044,6 +1210,8 @@ declare namespace tracer {
        * To avoid redacting some of those built-in identifiers, use
        * {@link redactionExcludedIdentifiers}.
        * @default []
+       * @env DD_DYNAMIC_INSTRUMENTATION_REDACTED_IDENTIFIERS
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       redactedIdentifiers?: string[]
 
@@ -1052,6 +1220,8 @@ declare namespace tracer {
        * Use this to avoid redacting some of the built-in identifiers (see
        * {@link redactedIdentifiers}).
        * @default []
+       * @env DD_DYNAMIC_INSTRUMENTATION_REDACTION_EXCLUDED_IDENTIFIERS
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       redactionExcludedIdentifiers?: string[]
     }
@@ -2492,6 +2662,7 @@ declare namespace tracer {
      * [openai](https://platform.openai.com/docs/api-reference?lang=node.js) module.
      *
      * Note that for logs to work you'll need to set the `DD_API_KEY` environment variable.
+     * @env DD_API_KEY
      * You'll also need to adjust any firewall settings to allow the tracer to communicate
      * with `http-intake.logs.datadoghq.com`.
      *
@@ -2704,6 +2875,7 @@ declare namespace tracer {
       /**
        * Controls whether websocket messages should be traced.
        * This is also configurable via `DD_TRACE_WEBSOCKET_MESSAGES_ENABLED`.
+       * @env DD_TRACE_WEBSOCKET_MESSAGES_ENABLED
        */
       traceWebsocketMessagesEnabled?: boolean;
     }
@@ -3015,24 +3187,32 @@ declare namespace tracer {
     /**
      * Whether to enable IAST.
      * @default false
+     * @env DD_IAST_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     enabled?: boolean,
 
     /**
      * Controls the percentage of requests that iast will analyze
      * @default 30
+     * @env DD_IAST_REQUEST_SAMPLING
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     requestSampling?: number,
 
     /**
      * Controls how many request can be analyzing code vulnerabilities at the same time
      * @default 2
+     * @env DD_IAST_MAX_CONCURRENT_REQUESTS
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     maxConcurrentRequests?: number,
 
     /**
      * Controls how many code vulnerabilities can be detected in the same request
      * @default 2
+     * @env DD_IAST_MAX_CONTEXT_OPERATIONS
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     maxContextOperations?: number,
 
@@ -3046,27 +3226,37 @@ declare namespace tracer {
     /**
      * Defines the number of rows to taint in data coming from databases
      * @default 1
+     * @env DD_IAST_DB_ROWS_TO_TAINT
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     dbRowsToTaint?: number,
 
     /**
      * Whether to enable vulnerability deduplication
+     * @env DD_IAST_DEDUPLICATION_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     deduplicationEnabled?: boolean,
 
     /**
      * Whether to enable vulnerability redaction
      * @default true
+     * @env DD_IAST_REDACTION_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     redactionEnabled?: boolean,
 
     /**
      * Specifies a regex that will redact sensitive source names in vulnerability reports.
+     * @env DD_IAST_REDACTION_NAME_PATTERN
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     redactionNamePattern?: string,
 
     /**
      * Specifies a regex that will redact sensitive source values in vulnerability reports.
+     * @env DD_IAST_REDACTION_VALUE_PATTERN
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     redactionValuePattern?: string,
 
@@ -3075,11 +3265,15 @@ declare namespace tracer {
      * using ESM.
      * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
      * environment variable instead.
+     * @env DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     securityControlsConfiguration?: string,
 
     /**
      * Specifies the verbosity of the sent telemetry. Default 'INFORMATION'
+     * @env DD_IAST_TELEMETRY_VERBOSITY
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     telemetryVerbosity?: string,
 
@@ -3089,6 +3283,8 @@ declare namespace tracer {
     stackTrace?: {
       /** Whether to enable stack trace reporting.
        * @default true
+       * @env DD_IAST_STACK_TRACE_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean,
     }
@@ -3518,6 +3714,7 @@ declare namespace tracer {
       /**
        * The name of the ML application that the agent is orchestrating.
        * If not provided, the default value will be set to mlApp provided during initialization, or `DD_LLMOBS_ML_APP`.
+       * @env DD_LLMOBS_ML_APP
        */
       mlApp?: string,
 
@@ -3553,11 +3750,15 @@ declare namespace tracer {
     interface LLMObsEnableOptions {
       /**
        * The name of your ML application.
+       * @env DD_LLMOBS_ML_APP
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       mlApp?: string,
 
       /**
        * Set to `true` to disable sending data that requires a Datadog Agent.
+       * @env DD_LLMOBS_AGENTLESS_ENABLED
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
       agentlessEnabled?: boolean,
     }
