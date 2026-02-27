@@ -3,8 +3,6 @@
 const log = require('../log')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
-const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
-
 /**
  * Formats a span for JSON encoding.
  * @param {object} span - The span to format
@@ -22,7 +20,9 @@ function formatSpan (span) {
 }
 
 /**
- * Converts a span to JSON-serializable format with IDs as lowercase hex strings.
+ * Converts a span to JSON-serializable format.
+ * IDs are converted to lowercase hex strings. Start time is converted from
+ * nanoseconds to seconds for the intake format.
  * @param {object} span - The formatted span
  * @returns {object} JSON-serializable span object
  */
@@ -58,16 +58,13 @@ function spanToJSON (span) {
 
 /**
  * JSON encoder for agentless span intake.
- * Encodes spans as JSON with the payload format: {"spans": [...]}
+ * Encodes a single trace as JSON with the payload format: {"spans": [...]}
+ *
+ * This encoder handles one trace at a time since each trace must be sent as a
+ * separate request to the intake. -- bengl
  */
 class AgentlessJSONEncoder {
-  /**
-   * @param {object} writer - The writer instance
-   * @param {number} [limit] - Soft limit for payload size
-   */
-  constructor (writer, limit = SOFT_LIMIT) {
-    this._limit = limit
-    this._writer = writer
+  constructor () {
     this._reset()
   }
 
@@ -101,55 +98,31 @@ class AgentlessJSONEncoder {
         )
       }
     }
-
-    const estimatedSize = this._estimateSize()
-    if (estimatedSize > this._limit) {
-      log.debug('Buffer went over soft limit, flushing')
-      this._writer.flush()
-    }
   }
 
   /**
-   * Creates the final JSON payloads - one per trace.
-   *
-   * IMPORTANT: The intake only accepts one trace per request. Multiple spans are allowed
-   * but they must all share the same trace_id. Requests containing spans with different
-   * trace_ids return HTTP 200 but silently drop all spans. This was confirmed through
-   * extensive testing - same trace_id batches work, mixed trace_id batches are dropped.
-   * We group spans by trace_id and send each trace as a separate request. -- bengl
-   *
-   * @returns {Buffer[]} Array of JSON payloads as buffers (one trace each)
+   * Creates the JSON payload for the encoded trace.
+   * @returns {Buffer} JSON payload as a buffer, or empty buffer if no spans
    */
   makePayload () {
-    const payloads = []
-
-    // Group spans by trace_id
-    const traceMap = new Map()
-    for (const span of this._spans) {
-      const traceId = span.trace_id
-      if (!traceMap.has(traceId)) {
-        traceMap.set(traceId, [])
-      }
-      traceMap.get(traceId).push(span)
+    if (this._spans.length === 0) {
+      this._reset()
+      return Buffer.alloc(0)
     }
 
-    // Create one payload per trace
-    for (const [traceId, spans] of traceMap) {
-      try {
-        const payload = JSON.stringify({ spans })
-        payloads.push(Buffer.from(payload, 'utf8'))
-      } catch (err) {
-        log.error(
-          'Failed to encode trace as JSON (trace_id: %s, spans: %d). Trace will be dropped. Error: %s',
-          traceId,
-          spans.length,
-          err.message
-        )
-      }
+    try {
+      const payload = JSON.stringify({ spans: this._spans })
+      this._reset()
+      return Buffer.from(payload, 'utf8')
+    } catch (err) {
+      log.error(
+        'Failed to encode trace as JSON (%d spans). Trace will be dropped. Error: %s',
+        this._spans.length,
+        err.message
+      )
+      this._reset()
+      return Buffer.alloc(0)
     }
-
-    this._reset()
-    return payloads
   }
 
   /**
@@ -159,22 +132,9 @@ class AgentlessJSONEncoder {
     this._reset()
   }
 
-  /**
-   * Internal reset method.
-   */
   _reset () {
     this._spans = []
     this._spanCount = 0
-  }
-
-  /**
-   * Estimates the current payload size.
-   * @returns {number} Estimated size in bytes
-   */
-  _estimateSize () {
-    // Rough estimate: JSON overhead + average span size
-    // This is an approximation to avoid serializing on every encode
-    return this._spans.length * 500 + 20
   }
 }
 

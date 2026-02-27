@@ -1,12 +1,12 @@
 'use strict'
 
+const { getValueFromEnvSources } = require('../../config/helper')
+const log = require('../../log')
 const request = require('../common/request')
+const tracerVersion = require('../../../../../package.json').version
 
 const BaseWriter = require('../common/writer')
 const { AgentlessJSONEncoder } = require('../../encode/agentless-json')
-const { getValueFromEnvSources } = require('../../config/helper')
-const log = require('../../log')
-const tracerVersion = require('../../../../../package.json').version
 
 /**
  * Writer for agentless APM span intake.
@@ -14,17 +14,15 @@ const tracerVersion = require('../../../../../package.json').version
  */
 class AgentlessWriter extends BaseWriter {
   #apiKeyMissing = false
-  #site
 
   /**
    * @param {object} options - Writer options
-   * @param {URL} options.url - The intake URL
+   * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
    * @param {string} [options.site='datadoghq.com'] - The Datadog site
    */
   constructor ({ url, site = 'datadoghq.com' }) {
     super({ url })
-    this.#site = site
-    this._encoder = new AgentlessJSONEncoder(this)
+    this._encoder = new AgentlessJSONEncoder()
 
     if (!url) {
       try {
@@ -49,16 +47,17 @@ class AgentlessWriter extends BaseWriter {
   }
 
   /**
-   * Flushes all pending spans, sending one request per trace sequentially.
-   *
-   * Traces are sent sequentially (not in parallel) to avoid hitting the max concurrent
-   * request limit (8) in the common request module, which silently drops excess requests.
-   * Combined with the one-trace-per-request limitation of the intake (see encoder comment),
-   * this ensures all traces are sent reliably. -- bengl
-   *
-   * @param {function} [done] - Callback when all sends complete
+   * Flushes the current trace. Since we flush after each trace, this sends
+   * a single request.
+   * @param {function} [done] - Callback when send completes
    */
   flush (done = () => {}) {
+    if (!request.writable) {
+      this._encoder.reset()
+      done()
+      return
+    }
+
     const count = this._encoder.count()
 
     if (count === 0) {
@@ -66,26 +65,15 @@ class AgentlessWriter extends BaseWriter {
       return
     }
 
-    const payloads = this._encoder.makePayload()
+    const payload = this._encoder.makePayload()
 
-    if (payloads.length === 0) {
+    if (payload.length === 0) {
+      log.debug('Skipping send of empty payload')
       done()
       return
     }
 
-    let index = 0
-
-    const sendNext = () => {
-      if (index >= payloads.length) {
-        done()
-        return
-      }
-
-      const payload = payloads[index++]
-      this._sendPayload(payload, 1, sendNext)
-    }
-
-    sendNext()
+    this._sendPayload(payload, count, done)
   }
 
   /**

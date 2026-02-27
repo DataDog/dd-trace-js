@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
 
 require('../setup/core')
 const id = require('../../src/id')
@@ -11,12 +10,10 @@ const { AgentlessJSONEncoder } = require('../../src/encode/agentless-json')
 
 describe('AgentlessJSONEncoder', () => {
   let encoder
-  let writer
   let data
 
   beforeEach(() => {
-    writer = { flush: sinon.spy() }
-    encoder = new AgentlessJSONEncoder(writer)
+    encoder = new AgentlessJSONEncoder()
     data = [{
       trace_id: id('1234abcd1234abcd'),
       span_id: id('5678efab5678efab'),
@@ -32,7 +29,7 @@ describe('AgentlessJSONEncoder', () => {
       metrics: {
         example: 1.5,
       },
-      start: 1234567890000000,
+      start: 1234567890000000000,
       duration: 5000000,
       links: [],
     }]
@@ -77,7 +74,7 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(span.trace_id.length, 32)
     })
 
-    it('should include span fields', () => {
+    it('should include span fields with start time converted to seconds', () => {
       encoder.encode(data)
 
       const buffer = encoder.makePayload()
@@ -89,13 +86,14 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(span.service, 'test-service')
       assert.strictEqual(span.type, 'web')
       assert.strictEqual(span.error, 0)
-      assert.strictEqual(span.start, 1234567890000000)
+      // Start time is converted from nanoseconds to seconds for intake format
+      assert.strictEqual(span.start, 1234567890)
       assert.strictEqual(span.duration, 5000000)
       assert.deepStrictEqual(span.meta, { foo: 'bar' })
       assert.deepStrictEqual(span.metrics, { example: 1.5 })
     })
 
-    it('should handle multiple traces', () => {
+    it('should handle multiple spans in one trace', () => {
       encoder.encode(data)
       encoder.encode(data)
 
@@ -157,18 +155,6 @@ describe('AgentlessJSONEncoder', () => {
       assert.deepStrictEqual(decoded.spans[0].links, [{ trace_id: 'abc123', span_id: 'def456' }])
     })
 
-    it('should flush writer when payload exceeds soft limit', () => {
-      const smallLimit = 100
-      encoder = new AgentlessJSONEncoder(writer, smallLimit)
-
-      // Create a span that will exceed the limit
-      data[0].meta = { largeValue: 'x'.repeat(200) }
-
-      encoder.encode(data)
-
-      sinon.assert.called(writer.flush)
-    })
-
     it('should skip malformed spans and continue encoding', () => {
       const goodSpan = data[0]
       const badSpan = { name: 'bad' } // Missing required ID fields
@@ -225,11 +211,11 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(encoder.count(), 0)
     })
 
-    it('should produce valid JSON with empty spans array when no spans encoded', () => {
+    it('should return empty buffer when no spans encoded', () => {
       const buffer = encoder.makePayload()
-      const decoded = JSON.parse(buffer.toString())
 
-      assert.deepStrictEqual(decoded, { spans: [] })
+      assert.ok(Buffer.isBuffer(buffer))
+      assert.strictEqual(buffer.length, 0)
     })
 
     it('should return empty buffer and reset on JSON stringify failure', () => {
