@@ -332,7 +332,7 @@ function execHelper (command, options) {
  * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
  */
 function packTarball (tarballPath, env) {
-  execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
+  execHelper(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
   log('Tarball packed successfully:', tarballPath)
 }
 
