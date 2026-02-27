@@ -1,5 +1,8 @@
 'use strict'
 
+const DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME = 'datadog-ci-visibility-test-execution-id'
+let rumFlushWaitMillis = 500
+
 let isEarlyFlakeDetectionEnabled = false
 let isKnownTestsEnabled = false
 let knownTestsForSuite = []
@@ -15,9 +18,10 @@ const retryReasonsByTestName = new Map()
 // Track quarantined test errors - we catch them in Cypress.on('fail') but need to report to Datadog
 const quarantinedTestErrors = new Map()
 
-// We need to grab the original window as soon as possible,
-// in case the test changes the origin. If the test does change the origin,
-// any call to `cy.window()` will result in a cross origin error.
+// Track the most recently loaded window in the AUT. Updated via the 'window:load'
+// event so we always get the real app window (after cy.visit()), not the
+// about:blank window that exists when beforeEach runs. If the test later navigates
+// to a cross-origin URL, safeGetRum() handles the access error.
 let originalWindow
 
 // If the test is using multi domain with cy.origin, trying to access
@@ -165,17 +169,44 @@ beforeEach(function () {
     retryReasonsByTestName.delete(testName)
   }
 
+  cy.on('window:load', (win) => {
+    originalWindow = win
+  })
+
   cy.task('dd:beforeEach', {
     testName,
     testSuite: Cypress.mocha.getRootSuite().file,
   }).then(({ traceId, shouldSkip }) => {
-    Cypress.env('traceId', traceId)
+    if (traceId) {
+      cy.setCookie(DD_CIVISIBILITY_TEST_EXECUTION_ID_COOKIE_NAME, traceId).then(() => {
+        // When testIsolation:false, the page is not reset between tests, so the RUM session
+        // stopped in afterEach must be explicitly restarted so events in this test are
+        // associated with the new testExecutionId.
+        //
+        // After stopSession(), the RUM SDK creates a new session upon a user interaction
+        // (click, scroll, keydown, or touchstart). We dispatch a synthetic click on the window
+        // to trigger session renewal, then call startView() to establish a view boundary.
+        if (!isTestIsolationEnabled && originalWindow) {
+          const rum = safeGetRum(originalWindow)
+          if (rum) {
+            try {
+              const evt = new originalWindow.MouseEvent('click', { bubbles: true, cancelable: true })
+              // The browser-sdk addEventListener wrapper filters out untrusted synthetic events
+              // unless __ddIsTrusted is set. Set it so the click triggers expandOrRenewSession().
+              // See: https://github.com/DataDog/browser-sdk/blob/v6.27.1/packages/core/src/browser/addEventListener.ts#L119
+              Object.defineProperty(evt, '__ddIsTrusted', { value: true })
+              originalWindow.dispatchEvent(evt)
+            } catch {}
+            if (rum.startView) {
+              rum.startView()
+            }
+          }
+        }
+      })
+    }
     if (shouldSkip) {
       this.skip()
     }
-  })
-  cy.window().then(win => {
-    originalWindow = win
   })
 })
 
@@ -195,6 +226,9 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
+        rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis
+      }
     }
   })
 })
@@ -241,8 +275,14 @@ afterEach(function () {
     testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
   } catch {}
 
-  if (safeGetRum(originalWindow)) {
+  const rum = safeGetRum(originalWindow)
+  if (rum) {
     testInfo.isRUMActive = true
+    if (rum.stopSession) {
+      rum.stopSession()
+      // eslint-disable-next-line cypress/no-unnecessary-waiting
+      cy.wait(rumFlushWaitMillis)
+    }
   }
   let coverage
   try {

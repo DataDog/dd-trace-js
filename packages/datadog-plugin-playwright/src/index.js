@@ -120,12 +120,15 @@ class PlaywrightPlugin extends CiPlugin {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
       const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
 
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'playwright'
-      )
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'playwright'
+        ),
+        ...this.getSessionRequestErrorTags(),
+      }
       if (testSourceFile) {
         testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
         testSuiteMetadata[TEST_SOURCE_START] = 1
@@ -222,6 +225,7 @@ class PlaywrightPlugin extends CiPlugin {
             // for a test session. They can be passed the same way `DD_PLAYWRIGHT_WORKER` is passed.
             formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
             formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
+            Object.assign(formattedSpan.meta, this.getSessionRequestErrorTags())
             formattedSpan.meta[TEST_COMMAND] = this.command
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized

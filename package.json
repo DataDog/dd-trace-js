@@ -1,11 +1,12 @@
 {
   "name": "dd-trace",
-  "version": "5.87.0",
+  "version": "5.88.0",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
   "scripts": {
     "env": "bash ./plugin-env",
+    "prepare": "cd vendor && npm ci",
     "preinstall": "node scripts/preinstall.js",
     "bench": "node benchmark/index.js",
     "bench:e2e:test-optimization": "node benchmark/e2e-test-optimization/benchmark-run.js",
@@ -16,6 +17,7 @@
     "lint": "node scripts/check_licenses.js && node scripts/check-no-coverage-artifacts.js && eslint . --concurrency=auto --max-warnings 0",
     "lint:fix": "node scripts/check_licenses.js && node scripts/check-no-coverage-artifacts.js && eslint . --concurrency=auto --max-warnings 0 --fix",
     "lint:inspect": "npx @eslint/config-inspector@latest",
+    "lint:codeowners": "node scripts/codeowners.mjs",
     "release:proposal": "node scripts/release/proposal",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "test": "echo '\nError: The root \"npm test\" command is intentionally disabled.\n\nInstead, run specific test suites:\n  - npm run test:trace:core\n  - npm run test:appsec\n  - etc.\n\nOr run individual test files:\n  npx mocha path/to/test.spec.js\n\nSee CONTRIBUTING.md (Testing section) for more details.\n' && exit 1",
@@ -134,12 +136,12 @@
     "import-in-the-middle": "^2.0.6"
   },
   "optionalDependencies": {
-    "@datadog/libdatadog": "0.7.0",
-    "@datadog/native-appsec": "10.3.0",
+    "@datadog/libdatadog": "0.8.1",
+    "@datadog/native-appsec": "11.0.1",
     "@datadog/native-iast-taint-tracking": "4.1.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/openfeature-node-server": "^0.3.3",
-    "@datadog/pprof": "5.13.3",
+    "@datadog/pprof": "5.13.4",
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0"
@@ -151,6 +153,7 @@
     "@msgpack/msgpack": "^3.1.3",
     "@openfeature/core": "^1.8.1",
     "@openfeature/server-sdk": "~1.20.0",
+    "@snyk/github-codeowners": "^1.1.0",
     "@stylistic/eslint-plugin": "^5.7.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.106",
@@ -171,6 +174,7 @@
     "glob": "^10.4.5",
     "globals": "^17.2.0",
     "graphql": "*",
+    "husky": "^9.1.7",
     "jszip": "^3.10.1",
     "mocha": "^11.6.0",
     "mocha-junit-reporter": "^2.2.1",
@@ -190,7 +194,6 @@
     "typescript": "^5.9.2",
     "workerpool": "^10.0.0",
     "yaml": "^2.8.0",
-    "husky": "^9.1.7",
     "yarn-deduplicate": "^6.0.2"
   }
 }

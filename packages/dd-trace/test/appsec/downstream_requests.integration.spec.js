@@ -64,10 +64,13 @@ describe('RASP - downstream request integration', () => {
 
   async function assertTelemetry (agent) {
     let appsecTelemetryReceived = false
-    return agent.assertTelemetryReceived(({ payload }) => {
+    let responseVariant = false
+    let requestVariant = false
+    await agent.assertTelemetryReceived(({ payload }) => {
       const namespace = payload.payload.namespace
 
       if (namespace === 'appsec') {
+        let error = null
         appsecTelemetryReceived = true
         const series = payload.payload.series
         const hasTag = (serie, tag) => Array.isArray(serie.tags) && serie.tags.includes(tag)
@@ -81,9 +84,6 @@ describe('RASP - downstream request integration', () => {
           if (hasTag(s, 'rule_variant:response')) evalVariants.add('response')
         }
 
-        assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
-        assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
-
         const matchSeries = series.filter(s => s.metric === 'rasp.rule.match')
         assert.ok(matchSeries, 'Rasp rule match series should exist')
 
@@ -92,8 +92,30 @@ describe('RASP - downstream request integration', () => {
           if (hasTag(s, 'rule_variant:request')) matchVariants.add('request')
           if (hasTag(s, 'rule_variant:response')) matchVariants.add('response')
         }
-        assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
-        assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
+
+        try {
+          assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
+          assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
+          requestVariant = true
+        } catch (e) {
+          if (!error) {
+            error = e
+          }
+        }
+
+        try {
+          assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
+          assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
+          responseVariant = true
+        } catch (e) {
+          if (!error) {
+            error = e
+          }
+        }
+
+        if (!(responseVariant && requestVariant)) {
+          throw error
+        }
       } else {
         throw new Error('Telemetry namespace is not appsec')
       }
@@ -123,39 +145,45 @@ describe('RASP - downstream request integration', () => {
       })
 
       it('should set all tags', async function () {
+        const resultPromise = Promise.all([assertMessage(agent), assertTelemetry(agent)])
         await axios.post('/with-body')
 
-        await Promise.all([assertMessage(agent), assertTelemetry(agent)])
+        return resultPromise
       })
 
       it('collects response body when stream is consumed via readable', async function () {
+        const resultPromise = Promise.all([assertMessage(agent), assertTelemetry(agent)])
         await axios.post('/with-readable')
 
-        await Promise.all([assertMessage(agent), assertTelemetry(agent)])
+        return resultPromise
       })
 
       it('collects response body when stream is consumed via async iterator', async function () {
+        const resultPromise = Promise.all([assertMessage(agent), assertTelemetry(agent)])
         await axios.post('/with-async-iterator')
 
-        await Promise.all([assertMessage(agent), assertTelemetry(agent)])
+        return resultPromise
       })
 
       it('collects response body for form-urlencoded content-type', async function () {
+        const resultPromise = Promise.all([assertMessage(agent), assertTelemetry(agent)])
         await axios.post('/with-body-form')
 
-        await Promise.all([assertMessage(agent), assertTelemetry(agent)])
+        return resultPromise
       })
 
       it('does not collect response body for unsupported content-type', async function () {
+        const resultPromise = Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
         await axios.post('/with-body-text')
 
-        await Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
+        return resultPromise
       })
 
       it('Handles redirection correctly', async function () {
+        const resultPromise = Promise.all([assertMessage(agent, true, true, 2), assertTelemetry(agent)])
         await axios.post('/with-redirect')
 
-        await Promise.all([assertMessage(agent, true, true, 2), assertTelemetry(agent)])
+        return resultPromise
       })
     })
 
@@ -179,9 +207,10 @@ describe('RASP - downstream request integration', () => {
 
       it('still sets metric even when body sampling is disabled', async function () {
         this.timeout(31_000)
+        const resultPromise = Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
         await axios.post('/with-body')
 
-        await Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
+        return resultPromise
       })
     })
 
@@ -205,9 +234,10 @@ describe('RASP - downstream request integration', () => {
 
       it('skips downstream analysis when limit is zero', async function () {
         this.timeout(31_000)
+        const resultPromise = Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
         await axios.post('/with-body')
 
-        await Promise.all([assertMessage(agent, true, false), assertTelemetry(agent)])
+        return resultPromise
       })
     })
   })

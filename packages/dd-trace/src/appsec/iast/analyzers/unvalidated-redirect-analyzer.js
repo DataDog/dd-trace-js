@@ -36,7 +36,7 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
   }
 
   isLocationHeader (name) {
-    return name && name.trim().toLowerCase() === 'location'
+    return name?.trim().toLowerCase() === 'location'
   }
 
   _isVulnerable (value, iastContext) {
