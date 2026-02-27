@@ -72,7 +72,7 @@ function rewrite (content, filename, format) {
       ast ??= parse(content.toString(), { range: true, sourceType })
 
       const query = astQuery || fromFunctionQuery(functionQuery)
-      const state = { ...inst, format, functionQuery }
+      const state = { ...inst, sourceType, functionQuery }
 
       traverse(ast, query, (...args) => transform(state, ...args))
     }
