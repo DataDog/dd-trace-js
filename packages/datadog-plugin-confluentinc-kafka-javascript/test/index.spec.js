@@ -252,6 +252,87 @@ describe('Plugin', () => {
               return expectedSpanPromise
             })
           })
+
+          describe('consumer (eachBatch)', () => {
+            let consumer
+            let batchMessages
+
+            beforeEach(async () => {
+              batchMessages = [{ key: 'key1', value: 'test2' }, { key: 'key2', value: 'test3' }]
+              consumer = kafka.consumer({
+                kafkaJS: { groupId, fromBeginning: true, autoCommit: false },
+              })
+              await consumer.connect()
+              await consumer.subscribe({ topic: testTopic })
+            })
+
+            afterEach(async () => {
+              await consumer.disconnect()
+            })
+
+            it('should be instrumented', async () => {
+              const expectedSpanPromise = expectSpanWithDefaults({
+                name: expectedSchema.receive.opName,
+                service: expectedSchema.receive.serviceName,
+                meta: {
+                  'span.kind': 'consumer',
+                  component: 'confluentinc-kafka-javascript',
+                  'kafka.topic': testTopic,
+                  'messaging.destination.name': testTopic,
+                  'messaging.system': 'kafka',
+                },
+                resource: testTopic,
+                error: 0,
+                type: 'worker',
+              })
+
+              await consumer.run({ eachBatch: () => {} })
+              await sendMessages(kafka, testTopic, batchMessages)
+              return expectedSpanPromise
+            })
+
+            it('should run the consumer in the context of the consumer span', done => {
+              const firstSpan = tracer.scope().active()
+              let eachBatch = async ({ batch }) => {
+                const currentSpan = tracer.scope().active()
+
+                try {
+                  assert.notEqual(currentSpan, firstSpan)
+                  assert.strictEqual(currentSpan.context()._name, expectedSchema.receive.opName)
+                  done()
+                } catch (e) {
+                  done(e)
+                } finally {
+                  eachBatch = () => {} // avoid being called for each message
+                }
+              }
+
+              consumer.run({ eachBatch: (...args) => eachBatch(...args) })
+                .then(() => sendMessages(kafka, testTopic, batchMessages))
+                .catch(done)
+            })
+
+            it('should propagate context via span links', async () => {
+              const expectedSpanPromise = agent.assertSomeTraces(traces => {
+                const span = traces[0][0]
+                const links = span.meta['_dd.span_links'] ? JSON.parse(span.meta['_dd.span_links']) : []
+
+                assertObjectContains(span, {
+                  name: expectedSchema.receive.opName,
+                  service: expectedSchema.receive.serviceName,
+                  resource: testTopic,
+                })
+
+                // librdkafka may deliver messages across multiple batches,
+                // so each batch span will have links for the messages it received.
+                assert.ok(links.length >= 1, `expected at least 1 span link, got ${links.length}`)
+              })
+
+              await consumer.run({ eachBatch: () => {} })
+              await sendMessages(kafka, testTopic, batchMessages)
+              await expectedSpanPromise
+            })
+          })
         })
 
         // Adding tests for the native API
