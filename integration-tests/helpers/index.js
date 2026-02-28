@@ -162,7 +162,8 @@ function assertTelemetryPoints (pid, msgs, expectedTelemetryPoints) {
 
     // Check that result metadata has expected values for telemetry scenarios
     const validResults = ['success', 'abort', 'error', 'unknown']
-    const validResultClasses = ['success', 'incompatible_runtime', 'incompatible_library', 'internal_error', 'unknown']
+    const validResultClasses = ['success', 'incompatible_runtime',
+      'incompatible_library', 'incompatible_bundle', 'internal_error', 'unknown']
 
     assert(validResults.includes(actualMetadata.result), `Invalid result: ${actualMetadata.result}`)
     assert(validResultClasses.includes(actualMetadata.result_class),
