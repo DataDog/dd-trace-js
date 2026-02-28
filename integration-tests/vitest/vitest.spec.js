@@ -920,6 +920,7 @@ versions.forEach((version) => {
         receiver.setKnownTestsResponseCode(500)
         receiver.setKnownTests({})
 
+        // Request module waits before retrying — need longer gather timeout
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -942,9 +943,11 @@ versions.forEach((version) => {
 
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
             assert.strictEqual(failedTests.length, 1)
-            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+            const testSessionEnd = events.find(event => event.type === 'test_session_end')
+            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+            const testSessionEvent = testSessionEnd.content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-          })
+          }, 60000)
 
         childProcess = exec(
           './node_modules/.bin/vitest run',
@@ -2010,15 +2013,18 @@ versions.forEach((version) => {
           })
           receiver.setTestManagementTestsResponseCode(500)
 
+          // Request module waits before retrying — need longer gather timeout
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const testSession = events.find(event => event.type === 'test_session_end').content
+              const testSessionEnd = events.find(event => event.type === 'test_session_end')
+              assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+              const testSession = testSessionEnd.content
               assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               // it is not retried
               assert.strictEqual(tests.length, 1)
-            })
+            }, 60000)
 
           childProcess = exec(
             './node_modules/.bin/vitest run',
