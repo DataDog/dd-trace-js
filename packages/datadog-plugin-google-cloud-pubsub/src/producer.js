@@ -36,6 +36,23 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
     if (topicName) attributes['pubsub.topic'] = topicName
   }
 
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { request } = ctx
+    const messages = request.messages || []
+    const topic = request.topic
+    const { span } = ctx.currentStore
+
+    for (const msg of messages) {
+      const dataStreamsContext = this.tracer.setCheckpoint(
+        ['direction:out', `topic:${topic}`, 'type:google-pubsub'],
+        span,
+        getHeadersSize(msg)
+      )
+      DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
+    }
+  }
+
   bindStart (ctx) {
     const { request, api, projectId } = ctx
     if (api !== 'publish') return
@@ -127,15 +144,6 @@ class GoogleCloudPubsubProducerPlugin extends ProducerPlugin {
 
       if (batchTraceIdUpper) {
         msg.attributes['_dd.pubsub_request.p.tid'] = batchTraceIdUpper
-      }
-
-      if (this.config.dsmEnabled) {
-        const dataStreamsContext = this.tracer.setCheckpoint(
-          ['direction:out', `topic:${topic}`, 'type:google-pubsub'],
-          batchSpan,
-          getHeadersSize(msg)
-        )
-        DsmPathwayCodec.encode(dataStreamsContext, msg.attributes)
       }
     }
 
