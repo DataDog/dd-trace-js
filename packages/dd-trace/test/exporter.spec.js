@@ -47,6 +47,17 @@ describe('exporter', () => {
     stub.restore()
   })
 
+  it('should create an AgentExporter when in Lambda environment with mini agent', () => {
+    process.env.AWS_LAMBDA_FUNCTION_NAME = 'my-func'
+    const stub = sinon.stub(fs, 'existsSync')
+    stub.withArgs('/tmp/datadog/mini_agent_ready').returns(true)
+
+    const Exporter = require('../src/exporter')()
+
+    assert.strictEqual(Exporter, AgentExporter)
+    stub.restore()
+  })
+
   it('should allow configuring the exporter', () => {
     const Exporter = require('../src/exporter')('log')
 
