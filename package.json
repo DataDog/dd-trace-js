@@ -169,7 +169,7 @@
     "eslint-plugin-mocha": "^11.2.0",
     "eslint-plugin-n": "^17.23.2",
     "eslint-plugin-promise": "^7.2.1",
-    "eslint-plugin-unicorn": "^62.0.0",
+    "eslint-plugin-unicorn": "^63.0.0",
     "express": "^5.1.0",
     "glob": "^10.4.5",
     "globals": "^17.2.0",
