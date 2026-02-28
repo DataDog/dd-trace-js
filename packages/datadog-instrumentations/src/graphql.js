@@ -213,11 +213,14 @@ function wrapResolve (resolve) {
 
     const field = assertField(ctx, info, args)
 
-    return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
-      field.ctx.error = err
-      field.ctx.info = info
-      field.ctx.field = field
-      updateFieldCh.publish(field.ctx)
+    const resolveSpan = field.ctx.currentStore.span
+    return resolveSpan.tracer().scope().activate(resolveSpan, () => {
+      return callInAsyncScope(resolve, this, arguments, ctx.abortController, (err) => {
+        field.ctx.error = err
+        field.ctx.info = info
+        field.ctx.field = field
+        updateFieldCh.publish(field.ctx)
+      })
     })
   }
 
