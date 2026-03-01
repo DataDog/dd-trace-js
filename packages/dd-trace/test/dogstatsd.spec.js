@@ -83,6 +83,7 @@ describe('dogstatsd', () => {
     assertData = undefined
     sockets = []
     httpServer = http.createServer((req, res) => {
+      assert.strictEqual(req.method, 'POST')
       assert.strictEqual(req.url, '/dogstatsd/v2/proxy')
       req.on('data', d => httpData.push(d))
       req.on('end', () => {
@@ -98,6 +99,7 @@ describe('dogstatsd', () => {
       }
       udsPath = path.join(os.tmpdir(), `test-dogstatsd-dd-trace-uds-${Math.random()}`)
       httpUdsServer = http.createServer((req, res) => {
+        assert.strictEqual(req.method, 'POST')
         assert.strictEqual(req.url, '/dogstatsd/v2/proxy')
         req.on('data', d => httpData.push(d))
         req.on('end', () => {
