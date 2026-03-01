@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const zlib = require('node:zlib')
-
+const { setTimeout: delay } = require('node:timers/promises')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const nock = require('nock')
@@ -32,6 +32,56 @@ const initHTTPServer = () => {
         server.close()
       }
       shutdown.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      resolve(shutdown)
+    })
+  })
+}
+
+const initSlowAgentHTTPServer = () => {
+  return new Promise(resolve => {
+    const sockets = []
+    let requestCount = 0
+    /** @type {import('node:http').ServerResponse | null} */
+    let firstRes = null
+    let releaseRequested = false
+
+    const maybeReleaseFirst = () => {
+      if (!releaseRequested || !firstRes) return
+      firstRes.writeHead(200, { Connection: 'close' })
+      firstRes.end('OK')
+      firstRes = null
+    }
+
+    const requestListener = function (req, res) {
+      requestCount++
+
+      // Keep the first request open to simulate a slow/unresponsive agent.
+      if (!firstRes) {
+        firstRes = res
+        maybeReleaseFirst()
+        return
+      }
+
+      res.writeHead(200, { Connection: 'close' })
+      res.end('OK')
+    }
+
+    const server = http.createServer(requestListener)
+    server.on('connection', socket => sockets.push(socket))
+
+    server.listen(0, () => {
+      const shutdown = () => {
+        sockets.forEach(socket => socket.end())
+        server.close()
+      }
+
+      shutdown.port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+      shutdown.releaseFirst = () => {
+        releaseRequested = true
+        maybeReleaseFirst()
+      }
+      shutdown.requestCount = () => requestCount
+
       resolve(shutdown)
     })
   })
@@ -207,6 +257,48 @@ describe('request', function () {
       assert.strictEqual(err, error)
       done()
     })
+  })
+
+  it('should discard payloads when agent is slow and maxActiveRequests is reached', async () => {
+    const shutdown = await initSlowAgentHTTPServer()
+
+    const makeCall = () => {
+      return new Promise(resolve => {
+        request(Buffer.from(''), {
+          path: '/',
+          method: 'PUT',
+          hostname: 'localhost',
+          protocol: 'http:',
+          port: shutdown.port,
+          timeout: 1000
+        }, (err, res) => resolve({ err, res }))
+      })
+    }
+
+    const promises = Array.from({ length: 9 }, () => makeCall())
+
+    // The 9th request should be dropped immediately because maxActiveRequests is 8.
+    const dropped = await Promise.race([
+      promises[8],
+      delay(200).then(() => {
+        throw new Error('Expected dropped request callback to be called quickly.')
+      })
+    ])
+
+    assert.strictEqual(dropped.err, null)
+    assert.strictEqual(dropped.res, undefined)
+
+    // Let the blocked request go through so the queued ones can drain.
+    shutdown.releaseFirst()
+
+    const results = await Promise.all(promises.slice(0, 8))
+    for (const { err, res } of results) {
+      assert.ifError(err)
+      assert.strictEqual(res, 'OK')
+    }
+
+    assert.strictEqual(shutdown.requestCount(), 8)
+    shutdown()
   })
 
   it('should be able to send form data', (done) => {
