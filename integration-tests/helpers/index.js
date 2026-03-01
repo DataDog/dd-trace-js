@@ -726,6 +726,36 @@ function checkSpansForServiceName (spans, name) {
  */
 
 /**
+ * Builds NODE_OPTIONS string for integration tests, including debug channel support.
+ *
+ * @param {AdditionalEnvArgs} envArgs - Environment args that may contain NODE_OPTIONS to merge
+ * @returns {{ nodeOptions: string, envArgs: AdditionalEnvArgs }}
+ */
+function buildDebugNodeOptions (envArgs) {
+  const result = { ...envArgs }
+  let nodeOptions = `--loader=${hookFile}`
+
+  if (process.env.TEST_CHANNEL_DEBUG) {
+    const channelPatch = path.join(__dirname, '../../packages/dd-trace/test/debug/channel-patch.js')
+    nodeOptions = `--require=${channelPatch} ${nodeOptions}`
+    if (!process.env.NO_COLOR) {
+      result.FORCE_COLOR = '1'
+    }
+  }
+
+  if (result.NODE_OPTIONS !== undefined) {
+    if (/--(loader|import)/.test(result.NODE_OPTIONS)) {
+      nodeOptions = result.NODE_OPTIONS
+    } else {
+      nodeOptions += ` ${result.NODE_OPTIONS}`
+    }
+    delete result.NODE_OPTIONS
+  }
+
+  return { nodeOptions, envArgs: result }
+}
+
+/**
  * Prepares spawn options for plugin integration tests.
  *
  * @param {string} cwd
@@ -740,17 +770,7 @@ function checkSpansForServiceName (spans, name) {
 function preparePluginIntegrationTestSpawnOptions (
   cwd, serverFile, agentPort, additionalEnvArgs, execArgv, stdioHandler
 ) {
-  additionalEnvArgs = { ...additionalEnvArgs }
-
-  let NODE_OPTIONS = `--loader=${hookFile}`
-  if (additionalEnvArgs.NODE_OPTIONS !== undefined) {
-    if (/--(loader|import)/.test(additionalEnvArgs.NODE_OPTIONS ?? '')) {
-      NODE_OPTIONS = additionalEnvArgs.NODE_OPTIONS
-    } else {
-      NODE_OPTIONS += ` ${additionalEnvArgs.NODE_OPTIONS}`
-    }
-    delete additionalEnvArgs.NODE_OPTIONS
-  }
+  const { nodeOptions, envArgs } = buildDebugNodeOptions(additionalEnvArgs)
 
   return {
     filename: path.join(cwd, serverFile),
@@ -758,10 +778,10 @@ function preparePluginIntegrationTestSpawnOptions (
       cwd,
       env: {
         ...process.env,
-        NODE_OPTIONS,
+        NODE_OPTIONS: nodeOptions,
         DD_TRACE_AGENT_PORT: String(agentPort),
         DD_TRACE_FLUSH_INTERVAL: '0',
-        ...additionalEnvArgs,
+        ...envArgs,
       },
       execArgv,
     },
