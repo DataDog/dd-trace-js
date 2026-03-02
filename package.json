@@ -138,6 +138,14 @@
     "import-in-the-middle": "^2.0.6",
     "unplugin": "^1.16.1"
   },
+  "peerDependencies": {
+    "webpack-virtual-modules": ">=0.5.0"
+  },
+  "peerDependenciesMeta": {
+    "webpack-virtual-modules": {
+      "optional": true
+    }
+  },
   "optionalDependencies": {
     "@datadog/libdatadog": "0.8.1",
     "@datadog/native-appsec": "11.0.1",

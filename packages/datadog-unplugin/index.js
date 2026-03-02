@@ -63,8 +63,8 @@ module.exports = createUnplugin(() => {
      * virtual-module resolveId/load hooks and the ESBuild-specific plugin logic.
      */
     esbuild: {
-      onResolveFilter: /^$/,  // never matches — disables unplugin's onResolve wrapper
-      onLoadFilter: /^$/,     // never matches — disables unplugin's onLoad wrapper
+      onResolveFilter: /^$/, // never matches — disables unplugin's onResolve wrapper
+      onLoadFilter: /^$/, // never matches — disables unplugin's onLoad wrapper
       setup (build) {
         require('../datadog-esbuild/index.js').setup(build)
       },
@@ -162,10 +162,8 @@ module.exports = createUnplugin(() => {
       // them when the importer is itself inside node_modules — i.e. it's an intra-package
       // require that may resolve to a file we instrument. Application code relative
       // imports are always skipped so we don't disturb normal app file resolution.
-      if (id.startsWith('.')) {
-        if (!importer || !importer.includes('node_modules/')) return null
-        // Fall through to resolve and check against modulesOfInterest
-      }
+      if (id.startsWith('.') && (!importer || !importer.includes('node_modules/'))) return null
+      // Fall through to resolve and check against modulesOfInterest
 
       // Handle Node.js built-in modules that are in modulesOfInterest (e.g. 'http', 'https').
       // Webpack's __webpack_require__ cache prevents RITM from reliably intercepting built-ins,
@@ -202,7 +200,7 @@ module.exports = createUnplugin(() => {
       }
 
       // Read package.json for the version
-      let version = null
+      let version
       try {
         const pkgJson = JSON.parse(fs.readFileSync(extracted.pkgJson, 'utf8'))
         version = pkgJson.version

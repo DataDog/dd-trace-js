@@ -20,7 +20,6 @@ const loadChannel = channel('dd-trace:instrumentation:load')
 
 // instrument everything that needs Plugin System V2 instrumentation
 require('../../datadog-instrumentations')
-const { processedPackages } = require('../../datadog-instrumentations/src/helpers/bundler-register')
 if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
   // instrument lambda environment
   require('./lambda')
@@ -127,6 +126,9 @@ module.exports = class PluginManager {
     // In bundler (webpack/esbuild) mode, some packages may have fired their
     // loadChannel events before plugin_manager.js was loaded. Ensure their
     // plugin classes are registered now so loadPlugin() can configure them.
+    // bundler-register is already loaded (via datadog-instrumentations above),
+    // so this require just retrieves the cached module.
+    const { processedPackages } = require('../../datadog-instrumentations/src/helpers/bundler-register')
     for (const name of processedPackages) {
       maybeEnable(plugins[name])
     }
