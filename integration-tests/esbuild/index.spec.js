@@ -61,6 +61,7 @@ esbuildVersions.forEach((version) => {
         process.exit(1)
       } finally {
         rmSync('./out.js', { force: true })
+        rmSync('./dd-trace-debugger-worker.cjs', { force: true })
       }
     })
 
@@ -106,11 +107,18 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('emits debugger worker bundle and allows LD/DI-enabled startup', () => {
+      execSync('node ./build-and-test-debugger-worker.js', {
+        timeout,
+      })
+    })
+
     describe('ESM', () => {
       afterEach(() => {
         rmSync('./out.mjs', { force: true })
         rmSync('./out.js', { force: true })
         rmSync('./basic-test.mjs', { force: true })
+        rmSync('./dd-trace-debugger-worker.cjs', { force: true })
       })
 
       it('works', () => {

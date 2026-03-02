@@ -49,6 +49,11 @@ for (const builtin of RAW_BUILTINS) {
 // eslint-disable-next-line eslint-rules/eslint-process-env
 const DD_IAST_ENABLED = process.env.DD_IAST_ENABLED?.toLowerCase() === 'true' || process.env.DD_IAST_ENABLED === '1'
 
+const DEBUGGER_WORKER_FILENAME = 'dd-trace-debugger-worker.cjs'
+
+// Path pattern to match the debugger index.js inside dd-trace package
+const DEBUGGER_INDEX_PATH = path.join('dd-trace', 'src', 'debugger', 'index.js')
+
 module.exports.name = 'datadog-esbuild'
 
 function isESMBuild (build) {
@@ -377,7 +382,146 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
         resolveDir: path.dirname(args.path),
       }
     }
+
+    // Rewrite the debugger worker path so it points to the emitted worker bundle
+    if (args.path.includes(DEBUGGER_INDEX_PATH)) {
+      log.debug('TRANSFORM DEBUGGER PATH: %s', args.path)
+      let contents = fs.readFileSync(args.path, 'utf8')
+
+      // Replace: join(__dirname, 'devtools_client', 'index.js')
+      // With: join(__dirname, 'dd-trace-debugger-worker.cjs')
+      // The bundled __dirname will point to the output directory where we emit the worker bundle
+      contents = contents.replaceAll(
+        /join\(__dirname,\s*['"]devtools_client['"],\s*['"]index\.js['"]\)/g,
+        `join(__dirname, '${DEBUGGER_WORKER_FILENAME}')`
+      )
+
+      return {
+        contents,
+        loader: 'js',
+        resolveDir: path.dirname(args.path),
+      }
+    }
   })
+
+  // Build the Dynamic Instrumentation worker bundle as a secondary artifact
+  build.onEnd(async (result) => {
+    if (result.errors.length > 0) {
+      log.debug('Skipping DI worker build due to main build errors')
+      return
+    }
+
+    const outputDir = getOutputDirectory(build.initialOptions)
+    if (!outputDir) {
+      log.warn(
+        // eslint-disable-next-line @stylistic/max-len
+        'Cannot emit Live Debugger/Dynamic Instrumentation worker bundle. No outfile or outdir specified. LD/DI will not work in the bundled application.'
+      )
+      return
+    }
+
+    await buildDebuggerWorker(build.initialOptions, outputDir, build.esbuild)
+  })
+}
+
+/**
+ * Determine the output directory from esbuild options
+ *
+ * @param {object} initialOptions - esbuild initial options
+ * @returns {string | null} - Output directory path or null
+ */
+function getOutputDirectory (initialOptions) {
+  if (initialOptions.outdir) {
+    return initialOptions.outdir
+  }
+  if (initialOptions.outfile) {
+    return path.dirname(initialOptions.outfile)
+  }
+  return null
+}
+
+/**
+ * Build the Dynamic Instrumentation worker bundle
+ *
+ * @param {object} parentOptions - Parent build options
+ * @param {string} outputDir - Output directory for the worker bundle
+ * @param {object} esbuild - esbuild module instance from the parent build
+ */
+async function buildDebuggerWorker (parentOptions, outputDir, esbuild) {
+  if (!esbuild) {
+    log.warn('esbuild instance not available. LD/DI worker bundle cannot be built.')
+    return
+  }
+
+  // Resolve the devtools_client entry point from the installed dd-trace package
+  let workerEntryPoint
+  try {
+    // First try to resolve dd-trace to find its installation path
+    // eslint-disable-next-line n/no-missing-require -- dd-trace is a peer dependency
+    const ddTracePath = require.resolve('dd-trace/package.json')
+    workerEntryPoint = path.join(path.dirname(ddTracePath), 'src', 'debugger', 'devtools_client', 'index.js')
+  } catch {
+    // Fallback: resolve relative to this plugin (for development/linked packages)
+    workerEntryPoint = path.join(__dirname, '..', 'dd-trace', 'src', 'debugger', 'devtools_client', 'index.js')
+  }
+
+  if (!fs.existsSync(workerEntryPoint)) {
+    log.warn(
+      'Could not find DI worker entry point at %s. LD/DI will not work in the bundled application.',
+      workerEntryPoint
+    )
+    return
+  }
+
+  const workerOutfile = path.join(outputDir, DEBUGGER_WORKER_FILENAME)
+
+  log.debug('Building DI worker bundle: %s -> %s', workerEntryPoint, workerOutfile)
+
+  // Plugin to patch the trace/span lookup to use global._ddtrace
+  const patchDDTracePlugin = {
+    name: 'patch-ddtrace-lookup',
+    setup (workerBuild) {
+      workerBuild.onLoad({ filter: /devtools_client[/\\]index\.js$/ }, (args) => {
+        let contents = fs.readFileSync(args.path, 'utf8')
+
+        // Replace the dd-trace require expression with a bundler-safe version
+        // Original: global.require('dd-trace').scope().active()?.context()
+        // New: (global._ddtrace ?? global.require?.('dd-trace'))?.scope?.()?.active?.()?.context?.()
+        contents = contents.replaceAll(
+          /global\.require\(['"]dd-trace['"]\)\.scope\(\)\.active\(\)\?\.context\(\)/g,
+          "(global._ddtrace ?? global.require?.('dd-trace'))?.scope?.()?.active?.()?.context?.()"
+        )
+
+        return {
+          contents,
+          loader: 'js',
+        }
+      })
+    },
+  }
+
+  try {
+    await esbuild.build({
+      entryPoints: [workerEntryPoint],
+      bundle: true,
+      platform: 'node',
+      format: 'cjs',
+      outfile: workerOutfile,
+      target: parentOptions.target || ['node18'],
+      // Keep Node.js builtins external
+      external: [...RAW_BUILTINS, ...RAW_BUILTINS.map(m => `node:${m}`)],
+      // Ensure function/class names are preserved for debugging
+      keepNames: true,
+      plugins: [patchDDTracePlugin],
+      // Don't minify the worker - keep it debuggable
+      minify: false,
+      logLevel: 'warning',
+    })
+
+    log.debug('DI worker bundle emitted: %s', workerOutfile)
+  } catch (err) {
+    log.warn('Failed to build DI worker bundle: %s', err.message)
+  }
 }
 
 // @see https://github.com/nodejs/node/issues/47000
