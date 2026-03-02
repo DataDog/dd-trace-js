@@ -1103,6 +1103,21 @@ class Config {
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(this.#getTraceAgentUrl(), this.#optionsArg)
 
+    // Experimental agentless APM span intake
+    // When enabled, sends spans directly to Datadog intake without an agent
+    const agentlessEnabled = isTrue(getEnv('_DD_APM_TRACING_AGENTLESS_ENABLED'))
+    if (agentlessEnabled) {
+      setString(calc, 'experimental.exporter', 'agentless')
+      // Disable rate limiting - server-side sampling will be used
+      calc['sampler.rateLimit'] = -1
+      // Disable client-side stats computation
+      setBoolean(calc, 'stats.enabled', false)
+      // Enable hostname reporting
+      setBoolean(calc, 'reportHostname', true)
+      // Clear sampling rules - server-side sampling handles this
+      calc['sampler.rules'] = []
+    }
+
     if (this.#isCiVisibility()) {
       setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         getEnv('DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED') ?? true)
