@@ -21,12 +21,12 @@ packages/datadog-instrumentations/src/
 **Hooks file** (`packages/datadog-instrumentations/src/<name>.js`):
 
 ```javascript
-'use strict'
+"use strict";
 
-const { addHook, getHooks } = require('./helpers/instrument')
+const { addHook, getHooks } = require("./helpers/instrument");
 
-for (const hook of getHooks('<npm-package>')) {
-  addHook(hook, exports => exports)
+for (const hook of getHooks("<npm-package>")) {
+  addHook(hook, (exports) => exports);
 }
 ```
 
@@ -69,12 +69,12 @@ Each entry in the instrumentations array:
 
 ### functionQuery Targeting
 
-| Field | Targets |
-|---|---|
-| `methodName` + `className` | A method on a specific class |
-| `methodName` alone | Any class method or object property method with that name |
-| `functionName` | A `FunctionDeclaration` by name |
-| `expressionName` | A `FunctionExpression` or `ArrowFunctionExpression` by name |
+| Field                      | Targets                                                     |
+| -------------------------- | ----------------------------------------------------------- |
+| `methodName` + `className` | A method on a specific class                                |
+| `methodName` alone         | Any class method or object property method with that name   |
+| `functionName`             | A `FunctionDeclaration` by name                             |
+| `expressionName`           | A `FunctionExpression` or `ArrowFunctionExpression` by name |
 
 ### astQuery (ESQuery Selectors)
 
@@ -87,18 +87,18 @@ For advanced cases where `functionQuery` fields are insufficient, use `astQuery`
 module.exports = [
   {
     module: {
-      name: '<npm-package>',
-      versionRange: '>=1.0.0',
-      filePath: 'dist/client.js'
+      name: "<npm-package>",
+      versionRange: ">=1.0.0",
+      filePath: "dist/client.js",
     },
     functionQuery: {
-      methodName: 'query',
-      className: 'Client',
-      kind: 'Async'
+      methodName: "query",
+      className: "Client",
+      kind: "Async",
     },
-    channelName: 'Client_query'
-  }
-]
+    channelName: "Client_query",
+  },
+];
 ```
 
 Multiple methods can be wrapped by adding more entries to the array.
@@ -106,11 +106,13 @@ Multiple methods can be wrapped by adding more entries to the array.
 ## Channel Name Formation
 
 Orchestrion channels follow this pattern:
+
 ```
 tracing:orchestrion:{module.name}:{channelName}:{event}
 ```
 
 Example with `module.name: "@langchain/core"` and `channelName: "RunnableSequence_invoke"`:
+
 - `tracing:orchestrion:@langchain/core:RunnableSequence_invoke:start`
 - `tracing:orchestrion:@langchain/core:RunnableSequence_invoke:asyncStart`
 - `tracing:orchestrion:@langchain/core:RunnableSequence_invoke:asyncEnd`
@@ -121,12 +123,12 @@ Example with `module.name: "@langchain/core"` and `channelName: "RunnableSequenc
 
 Orchestrion supports four transform types, selected by the `kind` field:
 
-| Kind | Transform | Behavior |
-|------|-----------|----------|
-| `Async` | `tracePromise` | Wraps in async arrow, calls `channel.tracePromise()` — handles promise resolution/rejection |
-| `AsyncIterator` | `traceAsyncIterator` | Wraps async generators/iterators — creates TWO channels: base and `_next` (**see [async-iterator-pattern.md](./async-iterator-pattern.md)**) |
-| `Callback` | `traceCallback` | Intercepts callback at `arguments[index]` (default: last arg, i.e. `-1`), wraps it to publish `asyncStart`/`asyncEnd`/`error` events |
-| `Sync` | `traceSync` | Wraps in non-async arrow, calls `channel.traceSync()` — handles synchronous return/throw. **Note:** `Sync` is the default when `kind` is omitted or unrecognized. |
+| Kind            | Transform            | Behavior                                                                                                                                                          |
+| --------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Async`         | `tracePromise`       | Wraps in async arrow, calls `channel.tracePromise()` — handles promise resolution/rejection                                                                       |
+| `AsyncIterator` | `traceAsyncIterator` | Wraps async generators/iterators — creates TWO channels: base and `_next` (**see [async-iterator-pattern.md](./async-iterator-pattern.md)**)                      |
+| `Callback`      | `traceCallback`      | Intercepts callback at `arguments[index]` (default: last arg, i.e. `-1`), wraps it to publish `asyncStart`/`asyncEnd`/`error` events                              |
+| `Sync`          | `traceSync`          | Wraps in non-async arrow, calls `channel.traceSync()` — handles synchronous return/throw. **Note:** `Sync` is the default when `kind` is omitted or unrecognized. |
 
 All transforms dispatch to `traceFunction` (for standalone functions) or `traceInstanceMethod` (for class methods, including inherited ones via constructor patching).
 
@@ -137,10 +139,12 @@ For `Callback` kind, use the `index` field to specify which argument is the call
 **⚠️ CRITICAL:** `AsyncIterator` is a special transform that requires **TWO plugins** and has specific implementation requirements.
 
 **When to use:**
+
 - Method returns `Promise<AsyncIterable>`, `Promise<AsyncIterableIterator>`, or `Promise<IterableReadableStream>`
 - Async generator functions: `async *methodName()`
 
 **How it works:**
+
 - Orchestrion creates **TWO channels**: base channel and `{channelName}_next` channel
 - **Main plugin**: Creates span when method is called
 - **Next plugin**: Finishes span when `result.done === true` (after all iterations complete)
@@ -150,6 +154,7 @@ For `Callback` kind, use the `index` field to specify which argument is the call
 👉 **[AsyncIterator Pattern Reference](./async-iterator-pattern.md)** 👈
 
 This pattern is complex and easy to get wrong. The reference document covers:
+
 - Two-channel pattern details
 - Complete plugin implementation examples
 - Common mistakes and how to avoid them
@@ -170,6 +175,7 @@ This pattern is complex and easy to get wrong. The reference document covers:
 **IMPORTANT: Patch both CJS and ESM code paths.** Many libraries duplicate their classes across separate CJS and ESM builds (e.g., `dist/cjs/client.js` and `dist/esm/client.js`). Each file path needs its own entry in the instrumentations array with the same `functionQuery` and `channelName`. If only one is patched, the instrumentation will silently fail for the other module format.
 
 Common locations:
+
 - `dist/cjs/index.js` / `dist/esm/index.js` — separate CJS/ESM builds
 - `dist/index.js` — single compiled output
 - `lib/client.js` — source files
@@ -181,19 +187,23 @@ Set `static prefix` to match the orchestrion channel base. The `TracingPlugin` b
 
 ```javascript
 class MyPlugin extends TracingPlugin {
-  static id = '<name>'
-  static prefix = 'tracing:orchestrion:<npm-package>:Client_query'
+  static id = "<name>";
+  static prefix = "tracing:orchestrion:<npm-package>:Client_query";
 
-  bindStart (ctx) {
-    const query = ctx.arguments?.[0]
-    const instance = ctx.self
+  bindStart(ctx) {
+    const query = ctx.arguments?.[0];
+    const instance = ctx.self;
 
-    this.startSpan(this.operationName(), {
-      resource: query,
-      meta: { component: '<name>' }
-    }, ctx)
+    this.startSpan(
+      this.operationName(),
+      {
+        resource: query,
+        meta: { component: "<name>" },
+      },
+      ctx,
+    );
 
-    return ctx.currentStore
+    return ctx.currentStore;
   }
 }
 ```
@@ -211,24 +221,29 @@ For integrations wrapping multiple methods, create a separate plugin class per m
 ## Common Issues
 
 ### Wrong filePath
+
 **Symptom**: No channel events published
 **Fix**: Verify the method is actually defined in that file (not re-exported from elsewhere)
 
 ### Case Mismatch
+
 **Symptom**: Method not found
 **Fix**: Match exact class/method name casing
 
 ### Multiple Build Outputs
+
 **Symptom**: Works in one context, not another
 **Fix**: Check if the package has separate CJS/ESM builds with different file paths; each needs its own entry in the instrumentations array
 
 ## Reference Implementations
 
 **Langchain** (canonical, multi-method):
+
 - Config: `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/langchain.js`
 - Hooks file: `packages/datadog-instrumentations/src/langchain.js`
 - Plugin: `packages/datadog-plugin-langchain/src/tracing.js`
 
 **BullMQ** (simpler, single-package):
+
 - Config: `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/bullmq.json`
 - Hooks file: `packages/datadog-instrumentations/src/bullmq.js`
