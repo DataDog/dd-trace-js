@@ -2200,6 +2200,114 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       ])
     })
 
+    it('uses decreasing EFD retry count as test duration increases (5s/10s/30s/5m buckets)', async function () {
+      this.timeout(180000)
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 10, '10s': 5, '30s': 3, '5m': 2 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          if (!events.some(e => e.type === 'test_session_end')) return
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const byResource = new Map()
+          for (const t of tests) {
+            const r = t.resource ?? (t.meta?.[TEST_SUITE] + '.' + t.meta?.[TEST_NAME])
+            byResource.set(r, (byResource.get(r) ?? 0) + 1)
+          }
+          // fast (<5s): 1 + 10 = 11; medium (5s–10s): 1 + 5 = 6; slow (10s–30s): 1 + 3 = 4
+          const counts = [...byResource.values()].sort((a, b) => b - a)
+          assert.ok(counts.length >= 3, 'at least 3 distinct tests')
+          assert.strictEqual(counts[0], 11, 'fastest test gets 10 EFD retries (11 runs)')
+          assert.strictEqual(counts[1], 6, 'medium test gets 5 EFD retries (6 runs)')
+          assert.strictEqual(counts[2], 4, 'slowest test gets 3 EFD retries (4 runs)')
+        }, 180000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-efd-duration/duration-buckets.js',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+    })
+
+    it('retries fast new tests and adds test.early_flake.abort_reason "slow" for slow new tests with no retries', async function () {
+      this.timeout(90000)
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      // < 5s: 2 retries; 5s–10s: 0 retries (simulates "too slow" → abort_reason "slow")
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 2, '10s': 0 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          if (!events.some(e => e.type === 'test_session_end')) return
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const byResource = new Map()
+          for (const t of tests) {
+            const r = t.resource ?? (t.meta?.[TEST_SUITE] + '.' + t.meta?.[TEST_NAME])
+            const list = byResource.get(r) ?? []
+            list.push(t)
+            byResource.set(r, list)
+          }
+          assert.strictEqual(byResource.size, 2, 'two tests: fast and slow')
+          const counts = [...byResource.values()].map(list => list.length).sort((a, b) => b - a)
+          assert.strictEqual(counts[0], 3, 'fast test gets 2 EFD retries (3 runs total)')
+          assert.strictEqual(counts[1], 1, 'slow test gets 0 retries (1 run only)')
+          const slowTestEvents = [...byResource.values()].find(list => list.length === 1)
+          assert.ok(slowTestEvents, 'slow test events found')
+          const slowTest = slowTestEvents[0]
+          assert.strictEqual(slowTest.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow',
+            'slow test has test.early_flake.abort_reason "slow"')
+          assert.strictEqual(slowTest.meta[TEST_IS_NEW], 'true', 'slow test has test.is_new')
+          const fastTestEvents = [...byResource.values()].find(list => list.length === 3)
+          assert.ok(fastTestEvents, 'fast test has 3 runs')
+          assert.strictEqual(fastTestEvents[0].meta[TEST_IS_NEW], 'true', 'fast test first run is new')
+          const efdRetries = fastTestEvents.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd)
+          assert.strictEqual(efdRetries.length, 2, 'fast test has 2 EFD retry events')
+        }, 60000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'jest-efd-fast-and-slow/fast-and-slow.js',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+    })
+
     it('preserves test errors when ATR retry suppression is active due to EFD', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // All tests are considered new, so EFD will be active
