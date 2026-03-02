@@ -348,7 +348,7 @@ async function main () {
         const reporterOptions = emitJunit
           ? {
               reporterEnabled: ['spec', 'xunit'],
-              xunitReporterOptions: { output: /** @type {string} */ (junitShard) },
+              xunitReporterOptions: { output: /** @type {string} */ (junitShard), showRelativePaths: true },
             }
           : {
               reporterEnabled: ['spec'],
