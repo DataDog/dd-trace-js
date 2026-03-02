@@ -864,6 +864,48 @@ describe('Plugin', () => {
           await queryPromise
         })
       })
+
+      describe('with DBM propagation enabled with append comment using tracer configuration', () => {
+        before(async () => {
+          await agent.load('pg', {
+            appendComment: true,
+            service: () => 'serviced',
+            dbmPropagationMode: 'service',
+          })
+          pg = require(`../../../versions/pg@${version}`).get()
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach((done) => {
+          client = new pg.Client({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres',
+          })
+          client.connect(err => done(err))
+        })
+
+        afterEach((done) => {
+          client.end(done)
+        })
+
+        it('should append service mode comment in query text', async () => {
+          const queryQueueName = Object.hasOwn(client, '_queryQueue') ? '_queryQueue' : 'queryQueue'
+
+          const queryPromise = client.query('SELECT $1::text as message', ['Hello world!'])
+
+          assert.strictEqual(client[queryQueueName][0].text,
+            'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
+              `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/`
+          )
+
+          await queryPromise
+        })
+      })
     })
   })
 })

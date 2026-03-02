@@ -1,12 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { execSync } = require('node:child_process')
+const { execFileSync, execSync } = require('node:child_process')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+
 const { after, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const semifies = require('semifies')
+
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -82,7 +84,7 @@ async function copySchemaToVersionDir (schemaPath, range) {
 }
 
 function createPrismaClient (prisma, config) {
-  // With the introduction of v7 prisma now enforces the use of adpaters
+  // With the introduction of v7 prisma now enforces the use of adapters
   if (config.v7) {
     const { PrismaPg } = require('@prisma/adapter-pg')
     const adapter = new PrismaPg({ connectionString: process.env[TEST_DATABASE_ENV_NAME] })
@@ -92,6 +94,21 @@ function createPrismaClient (prisma, config) {
     return new prisma.PrismaClient({ datasourceUrl: process.env[TEST_DATABASE_ENV_NAME] })
   }
   return new prisma.PrismaClient()
+}
+
+function createEngineDbQuerySpan (queryText) {
+  return [{
+    id: '1',
+    parentId: null,
+    name: 'prisma:engine:db_query',
+    startTime: [1745340876, 436861000],
+    endTime: [1745340876, 438601541],
+    kind: 'client',
+    attributes: {
+      'db.system': 'postgresql',
+      'db.query.text': queryText,
+    },
+  }]
 }
 
 describe('Plugin', () => {
@@ -488,24 +505,63 @@ describe('Plugin', () => {
             })
 
             const engineSpans = [
-              {
-                id: '1',
-                parentId: null,
-                name: 'prisma:engine:db_query',
-                startTime: [1745340876, 436861000],
-                endTime: [1745340876, 438601541],
-                kind: 'client',
-                attributes: {
-                  'db.system': 'postgresql',
-                  'db.query.text': 'SELECT 1',
-                },
-              },
+              ...createEngineDbQuerySpan('SELECT 1'),
             ]
             tracingHelper.dispatchEngineSpans(engineSpans)
             await Promise.all([
               tracingPromise,
             ])
           })
+
+          if (config.v7) {
+            it('should tag db_query spans with the active client adapter metadata in read-replica setups', async () => {
+              const initialDbUrl = process.env[TEST_DATABASE_ENV_NAME]
+              process.env[TEST_DATABASE_ENV_NAME] =
+                'postgres://postgres:postgres@primary.db.internal:5432/postgres'
+              const primaryClient = createPrismaClient(prisma, config)
+
+              process.env[TEST_DATABASE_ENV_NAME] =
+                'postgres://postgres:postgres@replica.db.internal:5433/postgres'
+              const replicaClient = createPrismaClient(prisma, config)
+
+              if (initialDbUrl === undefined) {
+                delete process.env[TEST_DATABASE_ENV_NAME]
+              } else {
+                process.env[TEST_DATABASE_ENV_NAME] = initialDbUrl
+              }
+
+              assert.ok(primaryClient._tracingHelper)
+              assert.ok(replicaClient._tracingHelper)
+
+              const replicaReadTrace = agent.assertSomeTraces(traces => {
+                const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+                assertObjectContains(dbQuerySpan, {
+                  resource: 'SELECT 1',
+                  meta: {
+                    'out.host': 'replica.db.internal',
+                    'network.destination.port': '5433',
+                  },
+                })
+              })
+              replicaClient._tracingHelper.dispatchEngineSpans(createEngineDbQuerySpan('SELECT 1'))
+              await replicaReadTrace
+
+              const primaryWriteTrace = agent.assertSomeTraces(traces => {
+                const dbQuerySpan = traces[0].find(span => span.meta['prisma.name'] === 'db_query')
+                assertObjectContains(dbQuerySpan, {
+                  resource: 'INSERT INTO "User" ("name") VALUES ($1)',
+                  meta: {
+                    'out.host': 'primary.db.internal',
+                    'network.destination.port': '5432',
+                  },
+                })
+              })
+              primaryClient._tracingHelper.dispatchEngineSpans(createEngineDbQuerySpan(
+                'INSERT INTO "User" ("name") VALUES ($1)'
+              ))
+              await primaryWriteTrace
+            })
+          }
         })
 
         describe('with configuration', () => {
