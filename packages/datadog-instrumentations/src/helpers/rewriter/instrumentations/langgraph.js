@@ -36,7 +36,7 @@ module.exports = [
     functionQuery: {
       methodName: 'stream',
       className: 'Pregel',
-      kind: 'Async',
+      kind: 'AsyncIterator',
     },
     channelName: 'Pregel_stream',
   },
@@ -49,7 +49,7 @@ module.exports = [
     functionQuery: {
       methodName: 'stream',
       className: 'Pregel',
-      kind: 'Async',
+      kind: 'AsyncIterator',
     },
     channelName: 'Pregel_stream',
   },
