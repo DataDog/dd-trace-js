@@ -104,6 +104,16 @@ jobs:
         with:
           flags: platform-esbuild
 
+  webpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:webpack
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:integration:webpack
+
   instrumentation-bluebird:
     runs-on: ubuntu-latest
     env:
@@ -416,6 +426,7 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
       - run: yarn test:integration:esbuild
+      - run: yarn test:integration:webpack
       - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
         if: always() && github.actor != 'dependabot[bot]'
         with:
