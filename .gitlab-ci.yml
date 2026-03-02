@@ -3,9 +3,10 @@ stages:
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
-  - macrobenchmarks
-  - macrobenchmarks-gate
-  - macrobenchmarks-notify
+  - infrastructure
+  - node-hapi-redis-tests
+  - node-hapi-redis-macrobenchmarks
+  - generate-slos
 
 # Config Registry CI jobs
 validate_supported_configurations_v2_local_file:
@@ -25,7 +26,9 @@ update_central_configurations_version_range_v2:
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
-  - local: ".gitlab/macrobenchmarks.yml"
+  - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
+    file: '.gitlab/ci-node-hapi-redis.yml'
+    ref: 'main'
 
 workflow:
   auto_cancel:
@@ -41,6 +44,7 @@ variables:
   AGENT_REPO_PRODUCT_NAME: auto_inject-node
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
+  APM_SDKS_BENCHMARKS_BRANCH: 'main'
 
 configure_system_tests:
   variables:
@@ -52,4 +56,3 @@ requirements_json_test:
   variables:
     REQUIREMENTS_BLOCK_JSON_PATH: ".gitlab/requirements_block.json"
     REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"
-
