@@ -36,7 +36,7 @@ const { filterSensitiveInfoFromRepository } = require('./url')
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
-function parseEmailAndName (emailAndName) {
+function parseEmailAndName(emailAndName) {
   if (!emailAndName) {
     return { name: '', email: '' }
   }
@@ -51,7 +51,7 @@ function parseEmailAndName (emailAndName) {
   return { name, email }
 }
 
-function removeEmptyValues (tags) {
+function removeEmptyValues(tags) {
   return Object.keys(tags).reduce((filteredTags, tag) => {
     if (!tags[tag]) {
       return filteredTags
@@ -63,20 +63,20 @@ function removeEmptyValues (tags) {
   }, {})
 }
 
-function normalizeTag (targetTags, tagKey, normalize) {
+function normalizeTag(targetTags, tagKey, normalize) {
   if (targetTags[tagKey]) {
     targetTags[tagKey] = normalize(targetTags[tagKey])
   }
 }
 
-function normalizeRef (ref) {
+function normalizeRef(ref) {
   if (!ref) {
     return ref
   }
   return ref.replaceAll(/origin\/|refs\/heads\/|tags\//gm, '')
 }
 
-function resolveTilde (filePath) {
+function resolveTilde(filePath) {
   if (!filePath || typeof filePath !== 'string') {
     return ''
   }
@@ -87,14 +87,14 @@ function resolveTilde (filePath) {
   return filePath
 }
 
-function normalizeNumber (number) {
+function normalizeNumber(number) {
   if (typeof number !== 'number') {
     return number
   }
   return number.toString()
 }
 
-function getGitHubEventPayload () {
+function getGitHubEventPayload() {
   const path = getEnvironmentVariable('GITHUB_EVENT_PATH')
   if (!path) {
     return
@@ -104,7 +104,7 @@ function getGitHubEventPayload () {
 
 module.exports = {
   normalizeRef,
-  getCIMetadata () {
+  getCIMetadata() {
     const env = getEnvironmentVariables()
 
     let tags = {}
@@ -313,7 +313,6 @@ module.exports = {
           GITHUB_SERVER_URL: filterSensitiveInfoFromRepository(GITHUB_SERVER_URL),
           GITHUB_REPOSITORY,
           GITHUB_RUN_ID,
-          GITHUB_RUN_ATTEMPT,
         }),
         [CI_JOB_ID]: GITHUB_JOB,
       }
