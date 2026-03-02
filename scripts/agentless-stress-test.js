@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 /**
  * Agentless Exporter Stress Test
  *
@@ -26,7 +28,7 @@ process.env.DD_TRACE_FLUSH_INTERVAL = '2000'
 
 const tracer = require('../packages/dd-trace').init()
 
-const sleep = ms => new Promise(r => setTimeout(r, ms))
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 async function run () {
   console.log('\n=== Agentless Exporter Stress Test ===')
@@ -91,7 +93,7 @@ async function run () {
     { lang: 'russian', text: 'Привет мир' },
     { lang: 'arabic', text: 'مرحبا' },
     { lang: 'emoji', text: '🚀 🎉 ✨ 💻' },
-    { lang: 'special', text: '<>&"\'chars' }
+    { lang: 'special', text: '<>&"\'chars' },
   ]
   for (const item of unicodeTexts) {
     tracer.trace('unicode.operation', { resource: `unicode_${item.lang}` }, (span) => {
@@ -103,7 +105,7 @@ async function run () {
 
   // Scenario 6: Large string values (4)
   console.log('[Large Strings] Creating 4 spans with large tag values...')
-  const sizes = [100, 1000, 5000, 10000]
+  const sizes = [100, 1000, 5000, 10_000]
   for (const size of sizes) {
     tracer.trace('large.string.operation', { resource: `string_size_${size}` }, (span) => {
       span.setTag('large_value', 'x'.repeat(size))
@@ -137,11 +139,10 @@ async function run () {
   const promises = []
   for (let i = 0; i < 10; i++) {
     promises.push(new Promise(resolve => {
-      tracer.trace('concurrent.operation', { resource: `concurrent_${i}` }, async (span) => {
+      tracer.trace('concurrent.operation', { resource: `concurrent_${i}` }, (span) => {
         span.setTag('concurrency_index', i)
-        tracer.trace('concurrent.child', { resource: `concurrent_child_${i}` }, async () => {
-          await sleep(Math.random() * 100)
-          resolve()
+        tracer.trace('concurrent.child', { resource: `concurrent_child_${i}` }, () => {
+          sleep(Math.random() * 100).then(resolve)
         })
       })
     }))
@@ -161,7 +162,7 @@ async function run () {
     'graphql.query',
     'lambda.invoke',
     'sqs.SendMessage',
-    'dynamodb.PutItem'
+    'dynamodb.PutItem',
   ]
   for (const resource of resources) {
     tracer.trace('resource.operation', { resource }, (span) => {
@@ -184,11 +185,11 @@ async function run () {
   console.log(`\n=== Created ${totalSpans} spans ===`)
   console.log('Waiting 60 seconds for sequential flush to complete...\n')
 
-  await sleep(60000)
+  await sleep(60_000)
 
   console.log('=== Stress Test Complete ===\n')
   console.log('Validate in Datadog UI:')
-  console.log(`  1. Navigate to APM > Traces`)
+  console.log('  1. Navigate to APM > Traces')
   console.log(`  2. Filter by: env:${process.env.DD_ENV}`)
   console.log(`  3. Expected: ${totalSpans} spans\n`)
   console.log('Checklist:')

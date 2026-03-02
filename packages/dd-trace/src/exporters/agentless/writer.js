@@ -39,17 +39,14 @@ class AgentlessWriter extends BaseWriter {
 
     if (!getValueFromEnvSources('DD_API_KEY')) {
       this.#apiKeyMissing = true
-      log.error(
-        'DD_API_KEY is required for agentless span intake. ' +
-        'Set the DD_API_KEY environment variable. Spans will not be sent.'
-      )
+      log.error('DD_API_KEY is required for agentless span intake. Set DD_API_KEY. Spans will not be sent.')
     }
   }
 
   /**
    * Flushes the current trace. Since we flush after each trace, this sends
    * a single request.
-   * @param {function} [done] - Callback when send completes
+   * @param {Function} [done] - Callback when send completes
    */
   flush (done = () => {}) {
     if (!request.writable) {
@@ -80,7 +77,7 @@ class AgentlessWriter extends BaseWriter {
    * Sends the encoded payload to the intake endpoint.
    * @param {Buffer} data - The encoded JSON payload
    * @param {number} count - Number of spans in the payload
-   * @param {function} done - Callback when complete
+   * @param {Function} done - Callback when complete
    */
   _sendPayload (data, count, done) {
     if (!data || data.length === 0) {
@@ -99,10 +96,7 @@ class AgentlessWriter extends BaseWriter {
     if (!apiKey) {
       if (!this.#apiKeyMissing) {
         this.#apiKeyMissing = true
-        log.error(
-          'DD_API_KEY is required for agentless span intake. ' +
-          'Set the DD_API_KEY environment variable. Spans will not be sent.'
-        )
+        log.error('DD_API_KEY is required for agentless span intake. Set DD_API_KEY. Spans will not be sent.')
       }
       log.debug('Dropping %d span(s) due to missing DD_API_KEY', count)
       done()
@@ -169,19 +163,19 @@ class AgentlessWriter extends BaseWriter {
         statusCode,
         count
       )
-    } else if (!statusCode) {
-      log.error(
-        'Network error sending %d span(s) to %s: %s',
-        count,
-        this._url?.hostname || 'unknown',
-        err.message
-      )
-    } else {
+    } else if (statusCode) {
       log.error(
         'Error sending agentless payload (status %s): %s. %d span(s) dropped.',
         statusCode,
         err.message,
         count
+      )
+    } else {
+      log.error(
+        'Network error sending %d span(s) to %s: %s',
+        count,
+        this._url?.hostname || 'unknown',
+        err.message
       )
     }
   }

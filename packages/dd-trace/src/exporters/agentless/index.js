@@ -45,10 +45,7 @@ class AgentlessExporter {
     if (ddTrace?.beforeExitHandlers) {
       ddTrace.beforeExitHandlers.add(this.flush.bind(this))
     } else {
-      log.error(
-        'dd-trace global not properly initialized. ' +
-        'beforeExit handler not registered for agentless exporter.'
-      )
+      log.error('dd-trace global not properly initialized. beforeExit handler not registered for agentless exporter.')
     }
   }
 
@@ -63,14 +60,8 @@ class AgentlessExporter {
       this._url = url
       this._writer.setUrl(url)
       return true
-    } catch (e) {
-      log.error(
-        'Invalid URL provided to agentless exporter: %s. ' +
-        'URL must be a valid absolute URL (e.g., https://intake.example.com). ' +
-        'Continuing to use previous URL: %s',
-        urlString,
-        this._url?.href || 'none'
-      )
+    } catch {
+      log.error('Invalid URL for agentless exporter: %s. Using previous URL: %s', urlString, this._url?.href || 'none')
       return false
     }
   }
@@ -88,7 +79,7 @@ class AgentlessExporter {
   /**
    * Flushes any pending spans. With immediate flush per trace, this is mainly
    * used for the beforeExit handler to ensure nothing is left unsent.
-   * @param {function} [done] - Callback when flush is complete
+   * @param {Function} [done] - Callback when flush is complete
    */
   flush (done = () => {}) {
     this._writer.flush(done)

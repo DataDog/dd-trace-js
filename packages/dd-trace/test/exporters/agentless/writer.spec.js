@@ -143,7 +143,7 @@ describe('AgentlessWriter', () => {
       sinon.assert.calledOnce(log.error)
       const call = log.error.getCall(0)
       assert.ok(call.args[0].includes('DD_API_KEY is required'))
-      assert.ok(call.args[0].includes('Set the DD_API_KEY environment variable'))
+      assert.ok(call.args[0].includes('Set DD_API_KEY'))
     })
 
     it('should skip sending when API key is missing', (done) => {
