@@ -4,7 +4,7 @@ const { channel } = require('dc-polyfill')
 const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 
-const toolCreationCh = channel('dd-trace:vercel-ai:tool')
+const toolCreationCh = channel('tracing:orchestrion:ai:tool:start')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
 
 const { MODEL_NAME, MODEL_PROVIDER, NAME } = require('../../constants/tags')
@@ -95,8 +95,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this.#toolCallIdsToName = {}
     this.#availableTools = new Set()
-    toolCreationCh.subscribe(toolArgs => {
-      this.#availableTools.add(toolArgs)
+    toolCreationCh.subscribe(ctx => {
+      const toolArgs = ctx.arguments
+      const tool = toolArgs[0] ?? {}
+      this.#availableTools.add(tool)
     })
 
     setAttributesCh.subscribe(({ ctx, attributes }) => {
