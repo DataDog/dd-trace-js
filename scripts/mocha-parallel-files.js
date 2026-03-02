@@ -216,7 +216,7 @@ async function main () {
   const runFileScript = path.join(repoRoot, 'scripts', 'mocha-run-file.js')
 
   const junitTmpDir = path.join(repoRoot, '.junit-tmp')
-  const junitOutFile = path.join(repoRoot, multiMochaRc.mochaJunitReporterReporterOptions.mochaFile)
+  const junitOutFile = path.join(repoRoot, multiMochaRc.scriptsJunitReporterJsReporterOptions.mochaFile)
   const junitTmpFiles = []
   const emitJunit = Boolean(process.env.CI)
 
