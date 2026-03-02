@@ -2978,6 +2978,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_LANGGRAPH_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_LDAPJS_ENABLED": [
       {
         "implementation": "A",
