@@ -1,7 +1,7 @@
 # TODO: Restructure the project by product and clean up this file.
 
 # AppSec
-/integration-tests/appsec/ @DataDog/asm-js
+/integration-tests/appsec/* @DataDog/asm-js
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
 
