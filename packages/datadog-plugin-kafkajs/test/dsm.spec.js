@@ -52,6 +52,10 @@ describe('Plugin', () => {
       describe('data stream monitoring', () => {
         const messages = [{ key: 'key1', value: 'test2' }]
 
+        afterEach(() => {
+          delete process.env.DD_DATA_STREAMS_ENABLED
+        })
+
         beforeEach(async () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
           tracer = require('../../dd-trace')

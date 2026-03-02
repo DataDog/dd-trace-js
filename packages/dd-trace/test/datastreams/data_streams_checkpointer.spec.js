@@ -97,4 +97,28 @@ describe('data streams checkpointer manual api', () => {
     const calledTags = mockSetCheckpoint.getCall(0).args[0]
     assert.ok(!calledTags.includes('manual_checkpoint:true'))
   })
+
+  it('should call trackTransaction on the processor with correct args', function () {
+    const mockTrackTransaction = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
+
+    tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
+
+    sinon.assert.calledOnce(mockTrackTransaction)
+    sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested')
+  })
+
+  it('trackTransaction is a no-op when dsmEnabled is false', function () {
+    const mockTrackTransaction = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
+
+    const originalDsmEnabled = tracer._tracer._config.dsmEnabled
+    tracer._tracer._config.dsmEnabled = false
+
+    tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
+
+    sinon.assert.notCalled(mockTrackTransaction)
+
+    tracer._tracer._config.dsmEnabled = originalDsmEnabled
+  })
 })
