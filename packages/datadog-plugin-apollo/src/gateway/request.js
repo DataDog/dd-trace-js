@@ -59,8 +59,11 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     if (Array.isArray(errors) && errors.at(-1)?.stack && errors.at(-1).message) {
       ctx.currentStore.span.setTag('error', errors.at(-1))
     }
-    ctx.currentStore.span.finish()
-    return ctx.parentStore
+
+    const span = ctx?.currentStore?.span
+    this.config.hooks.request(span, ctx)
+
+    return super.asyncStart(ctx)
   }
 }
 
