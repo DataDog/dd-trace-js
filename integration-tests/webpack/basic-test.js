@@ -1,0 +1,35 @@
+#!/usr/bin/env node
+'use strict'
+
+// eslint-disable-next-line import/order
+const tracer = require('../../').init() // dd-trace
+
+const assert = require('assert')
+const http = require('http')
+const express = require('express')
+
+const app = express()
+const PORT = 31416 // different port from esbuild test to avoid conflicts
+
+const server = app.listen(PORT, () => {
+  setImmediate(() => {
+    http.request(`http://localhost:${PORT}`).end() // query to self
+  })
+})
+
+app.get('/', (_req, res) => {
+  assert.equal(
+    tracer.scope().active().context()._tags.component,
+    'express',
+    `the sample app bundled by webpack is not properly instrumented. using node@${process.version}`
+  ) // bad exit
+
+  res.json({ narwhal: 'bacons' })
+
+  setImmediate(() => {
+    server.close() // clean exit
+    setImmediate(() => {
+      process.exit(0)
+    })
+  })
+})

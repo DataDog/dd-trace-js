@@ -65,6 +65,7 @@
     "test:integration:cypress": "mocha --timeout 60000 \"integration-tests/cypress/*.spec.js\"",
     "test:integration:debugger": "mocha --timeout 60000 \"integration-tests/debugger/*.spec.js\"",
     "test:integration:esbuild": "mocha --timeout 60000 \"integration-tests/esbuild/*.spec.js\"",
+    "test:integration:webpack": "mocha --timeout 60000 \"integration-tests/webpack/*.spec.js\"",
     "test:integration:openfeature": "mocha --timeout 60000 \"integration-tests/openfeature/*.spec.js\"",
     "test:integration:jest": "mocha --timeout 60000 \"integration-tests/jest/*.spec.js\"",
     "test:integration:mocha": "mocha --timeout 60000 \"integration-tests/mocha/*.spec.js\"",
@@ -108,6 +109,7 @@
     "ci/**/*",
     "cypress/**/*",
     "esbuild.js",
+    "webpack.js",
     "ext/**/*",
     "index.d.ts",
     "index.js",
@@ -133,7 +135,8 @@
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.10",
-    "import-in-the-middle": "^2.0.6"
+    "import-in-the-middle": "^2.0.6",
+    "unplugin": "^1.16.1"
   },
   "optionalDependencies": {
     "@datadog/libdatadog": "0.8.1",

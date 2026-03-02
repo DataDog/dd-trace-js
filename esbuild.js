@@ -1,3 +1,3 @@
 'use strict'
 
-module.exports = require('./packages/datadog-esbuild/index.js')
+module.exports = require('./packages/datadog-unplugin/index.js').esbuild()

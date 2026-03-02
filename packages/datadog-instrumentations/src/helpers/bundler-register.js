@@ -13,6 +13,11 @@ const instrumentations = require('./instrumentations')
 
 const CHANNEL = 'dd-trace:bundler:load'
 
+// Track all packages that were processed so plugin_manager can initialize plugins
+// for them even if loadChannel.publish fired before plugin_manager.js was loaded.
+const processedPackages = new Set()
+module.exports = { processedPackages }
+
 if (!dc.subscribe) {
   dc.subscribe = (channel, cb) => {
     dc.channel(channel).subscribe(cb)
@@ -59,6 +64,7 @@ dc.subscribe(CHANNEL, (payload) => {
     if (!matchVersion(payload.version, versions)) continue
 
     try {
+      processedPackages.add(name)
       loadChannel.publish({ name, version: payload.version, file })
       payload.module = hook(payload.module, payload.version)
     } catch (e) {
