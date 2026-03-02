@@ -58,7 +58,7 @@ exports.getHooks = function getHooks (names) {
  * @param {string} [args.file='index.js'] path to file within package to instrument
  * @param {string} [args.filePattern] pattern to match files within package to instrument
  * @param {boolean} [args.patchDefault=true] whether to patch the default export
- * @param {import('./instrumentations').Hook} hook
+ * @param {(moduleExports: unknown, version: string, isIitm?: boolean) => unknown} [hook] Patches module exports
  */
 exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
   if (!instrumentations[name]) {

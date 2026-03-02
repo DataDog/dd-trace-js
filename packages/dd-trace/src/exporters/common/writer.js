@@ -1,13 +1,19 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const log = require('../../log')
 const request = require('./request')
 const { safeJSONStringify } = require('./util')
+
+const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
 class Writer {
   constructor ({ url }) {
     this._url = url
   }
+
+  #isFirstFlush = true
 
   flush (done = () => {}) {
     const count = this._encoder.count()
@@ -16,8 +22,11 @@ class Writer {
       this._encoder.reset()
       done()
     } else if (count > 0) {
+      if (this.#isFirstFlush && firstFlushChannel.hasSubscribers) {
+        this.#isFirstFlush = false
+        firstFlushChannel.publish()
+      }
       const payload = this._encoder.makePayload()
-
       this._sendPayload(payload, count, done)
     } else {
       done()

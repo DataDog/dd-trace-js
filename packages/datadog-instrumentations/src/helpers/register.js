@@ -71,8 +71,6 @@ if (disabledInstrumentations.size) {
   builtinsSet.clear()
 }
 
-let timeout
-
 for (const name of names) {
   if (disabledInstrumentations.has(name)) continue
 
@@ -88,14 +86,6 @@ for (const name of names) {
   }
 
   Hook([name], hookOptions, (moduleExports, moduleName, moduleBaseDir, moduleVersion, isIitm) => {
-    if (timeout === undefined) {
-      // Delay the logging of aborted integrations to handle async loading graphs.
-      timeout = setTimeout(() => {
-        logAbortedIntegrations()
-      }, 100).unref()
-    } else {
-      timeout.refresh()
-    }
     // All loaded versions are first expected to fail instrumentation.
     if (!instrumentedIntegrationsSuccess.has(`${name}@${moduleVersion}`)) {
       instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, false)
@@ -164,6 +154,7 @@ for (const name of names) {
 }
 
 globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers.add(logAbortedIntegrations)
+channel('dd-trace:exporter:first-flush').subscribe(logAbortedIntegrations)
 
 function logAbortedIntegrations () {
   for (const [nameVersion, success] of instrumentedIntegrationsSuccess) {

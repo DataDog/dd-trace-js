@@ -14,6 +14,7 @@ const NODE_OPTIONS = '--require dd-trace/init.js'
 const DD_TRACE_DEBUG = 'true'
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_LOG_LEVEL = 'error'
+const DD_TRACE_FLUSH_INTERVAL = '0'
 const NODE_MAJOR = Number(process.versions.node.split('.')[0])
 const FASTIFY_DEP = NODE_MAJOR < 20 ? 'fastify@4' : 'fastify'
 
@@ -35,6 +36,17 @@ describe('package guardrails', () => {
 
       it('should not instrument the package, and send telemetry', () =>
         runTest('false\n',
+          ['complete', 'injection_forced:false',
+            'abort.integration', 'integration:bluebird,integration_version:1.0.0',
+          ]
+        ))
+    })
+
+    context('when flushing and DD_INJECTION_ENABLED', () => {
+      useEnv({ DD_INJECTION_ENABLED, DD_TRACE_FLUSH_INTERVAL })
+
+      it('should send abort.integration on first flush via diagnostic channel', () =>
+        testFile('package-guardrails/flush.js', 'false\n',
           ['complete', 'injection_forced:false',
             'abort.integration', 'integration:bluebird,integration_version:1.0.0',
           ]
