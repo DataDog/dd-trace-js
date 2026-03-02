@@ -12,10 +12,28 @@ env:
   GROUPS: '["dev-minor-and-patch-dependencies", "gh-actions-packages", "test-versions"]'
 
 jobs:
+  dependabot:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    # Keep this job as a stable, always-green check on Dependabot PRs, even when the workflow is
+    # re-triggered by an automation commit (e.g., vendoring). Sensitive operations (OIDC token mint,
+    # approving, enabling auto-merge) are delegated to `dependabot-automation` below.
+    permissions:
+      contents: read
+    steps:
+      - name: Status
+        run: |
+          echo "Dependabot PR detected."
+          if [ "${{ github.actor }}" = "dependabot[bot]" ]; then
+            echo "Automation steps will run in the 'dependabot-automation' job."
+          else
+            echo "Skipping automation: workflow actor is '${{ github.actor }}'."
+          fi
+
   dependabot-automation:
     # Only run automation on the initial Dependabot-triggered run. If an automation commit is pushed
-    # GitHub re-triggers this workflow with `github.actor == 'dd-octo-sts[bot]'`. We intentionally
-    # avoid minting tokens / approving / enabling auto-merge on that follow-up run.
+    # (e.g. vendor output), GitHub re-triggers this workflow with `github.actor == 'dd-octo-sts[bot]'`.
+    # We intentionally avoid minting tokens / approving / enabling auto-merge on that follow-up run.
     if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
@@ -43,3 +61,283 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+
+  vendor-build:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    # Security: this job checks out and runs code from the PR (vendoring build),
+    # so it is intentionally restricted to read-only permissions and produces a
+    # patch artifact instead of pushing directly.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      has_changes: ${{ steps.diff.outputs.has_changes }}
+      is_vendor_group: ${{ steps.ctx.outputs.is_vendor_group }}
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # 2.5.0
+      - name: Compute vendor context
+        id: ctx
+        run: |
+          set -euo pipefail
+
+          echo "is_vendor_group=${{ steps.metadata.outputs.directory == '/vendor' }}" >> $GITHUB_OUTPUT
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Restore trusted Node setup actions
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- .github/actions/node
+      - name: Restore trusted vendoring scripts
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- vendor/rspack.js vendor/rspack.config.js
+      - uses: ./.github/actions/node/active-lts
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+      - name: Install vendoring deps (no lifecycle scripts)
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: yarn --ignore-scripts --frozen-lockfile --non-interactive
+        working-directory: ./vendor
+      - name: Build vendored bundles (trusted script)
+        if: steps.ctx.outputs.is_vendor_group == 'true'
+        run: node ./rspack.js
+        working-directory: ./vendor
+      - name: Create patch (restricted paths only)
+        id: diff
+        run: |
+          set -euo pipefail
+
+          if [ "${{ steps.ctx.outputs.is_vendor_group }}" != "true" ]; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          allowed_prefix_1="vendor/dist/"
+          allowed_file_1="vendor/package.json"
+          allowed_file_2="vendor/yarn.lock"
+
+          bad=0
+          while IFS= read -r file; do
+            case "$file" in
+              "$allowed_file_1" | "$allowed_file_2" | "$allowed_prefix_1"*)
+                ;;
+              *)
+                echo "Unexpected changed path: $file"
+                bad=1
+                ;;
+            esac
+          done < <(git diff --name-only)
+
+          if [ "$bad" -ne 0 ]; then
+            echo "Refusing to proceed: unexpected paths changed during vendoring."
+            exit 1
+          fi
+
+          git diff --binary --no-color > "${RUNNER_TEMP}/vendor.patch"
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: steps.diff.outputs.has_changes == 'true'
+        with:
+          name: vendor-patch
+          path: ${{ runner.temp }}/vendor.patch
+          if-no-files-found: error
+
+  vendor-push:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && needs.vendor-build.outputs.is_vendor_group == 'true' && needs.vendor-build.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    needs: vendor-build
+    # Security: this job never runs installs/builds.
+    # It only applies the vetted patch artifact and writes the update via the GitHub API.
+    permissions:
+      id-token: write
+    steps:
+      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: dependabot-automation
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # 2.5.0
+        with:
+          github-token: "${{ steps.octo-sts.outputs.token }}"
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.octo-sts.outputs.token }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: vendor-patch
+          path: ${{ runner.temp }}/vendor-artifact
+      - name: Apply patch
+        run: git apply --whitespace=nowarn "${{ runner.temp }}/vendor-artifact/vendor.patch"
+      - name: Validate changed paths
+        run: |
+          set -euo pipefail
+
+          allowed_prefix_1="vendor/dist/"
+          allowed_file_1="vendor/package.json"
+          allowed_file_2="vendor/yarn.lock"
+
+          bad=0
+          while IFS= read -r file; do
+            case "$file" in
+              "$allowed_file_1" | "$allowed_file_2" | "$allowed_prefix_1"*)
+                ;;
+              *)
+                echo "Unexpected changed path after applying patch: $file"
+                bad=1
+                ;;
+            esac
+          done < <(git diff --name-only)
+
+          if [ "$bad" -ne 0 ]; then
+            echo "Refusing to proceed: unexpected paths changed."
+            exit 1
+          fi
+      - name: Create verified commit via GitHub API (server-side)
+        env:
+          TARGET_BRANCH: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          repo="${GITHUB_REPOSITORY}"
+          expected_head_oid="$(git rev-parse HEAD)"
+
+          max_files=200
+          max_total_bytes=$((10 * 1024 * 1024)) # 10 MiB
+
+          mapfile -t changes < <(git diff --name-status)
+          change_count="${#changes[@]}"
+          if [ "$change_count" -eq 0 ]; then
+            echo "No changed files detected."
+            exit 1
+          fi
+          if [ "$change_count" -gt "$max_files" ]; then
+            echo "Too many changed files ($change_count > $max_files)."
+            exit 1
+          fi
+
+          additions='[]'
+          deletions='[]'
+          total_bytes=0
+          for change in "${changes[@]}"; do
+            read -r status path path2 <<<"$change"
+
+            if [[ "$status" == D ]]; then
+              deletions="$(jq -c --arg path "$path" '. + [{path: $path}]' <<<"$deletions")"
+              continue
+            fi
+
+            # Treat renames as delete+add to keep the server-side tree in sync.
+            if [[ "$status" == R* ]]; then
+              deletions="$(jq -c --arg path "$path" '. + [{path: $path}]' <<<"$deletions")"
+              path="$path2"
+            fi
+
+            test -f "$path"
+            file_bytes="$(stat -c '%s' "$path")"
+            total_bytes=$((total_bytes + file_bytes))
+            if [ "$total_bytes" -gt "$max_total_bytes" ]; then
+              echo "Total changes too large (${total_bytes} bytes)."
+              exit 1
+            fi
+            contents="$(base64 -w 0 "$path")"
+            additions="$(jq -c --arg path "$path" --arg contents "$contents" '. + [{path: $path, contents: $contents}]' <<<"$additions")"
+          done
+
+          variables="$(jq -c \
+            --arg repo "$repo" \
+            --arg branch "$TARGET_BRANCH" \
+            --arg msg "update vendored dependencies with new versions" \
+            --arg expected "$expected_head_oid" \
+            --argjson additions "$additions" \
+            --argjson deletions "$deletions" \
+            '{
+              input: {
+                branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                message: { headline: $msg },
+                expectedHeadOid: $expected,
+                fileChanges: { additions: $additions, deletions: $deletions }
+              }
+            }'
+          )"
+
+          query='mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }'
+          gh api graphql -f query="$query" -f variables="$variables" -q '.data.createCommitOnBranch.commit.oid' >/dev/null
+
+      # If branch protection is configured to dismiss stale approvals when new commits are pushed,
+      # the vendoring commit will invalidate the earlier approval. Re-approve and (re-)enable
+      # auto-merge after pushing so Dependabot PRs can still merge automatically.
+      - name: Approve a PR (after vendoring commit)
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - name: Enable auto-merge for Dependabot PRs (after vendoring commit)
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+
+  vendor-validate:
+    # Run validation after the generated vendor patch has been pushed, to ensure the PR contains
+    # the committed `vendor/dist/*` outputs. This runs inside the same workflow as the push, so it
+    # doesn't rely on additional workflows being triggered by that push.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && needs.vendor-build.outputs.is_vendor_group == 'true' && needs.vendor-build.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    needs:
+      - vendor-build
+      - vendor-push
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Restore trusted Node setup actions
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- .github/actions/node
+      - name: Restore trusted vendoring scripts
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.event.pull_request.base.sha }}"
+          git checkout "${{ github.event.pull_request.base.sha }}" -- vendor/rspack.js vendor/rspack.config.js
+      - uses: ./.github/actions/node/active-lts
+      # Running `yarn` also automatically runs Rspack as a postinstall script.
+      - run: yarn --frozen-lockfile
+        working-directory: vendor
+      - name: Ensure no untracked outputs
+        run: |
+          set -euo pipefail
+
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Working tree is dirty after vendoring:"
+            git status --porcelain
+            exit 1
+          fi
+      - name: Diff only expected paths
+        run: git diff --exit-code -- vendor/dist vendor/package.json vendor/yarn.lock
