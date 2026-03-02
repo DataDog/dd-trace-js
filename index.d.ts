@@ -161,6 +161,12 @@ interface Tracer extends opentracing.Tracer {
   aiguard: tracer.aiguard.AIGuard;
 
   /**
+   * AI Guard middleware for Vercel AI SDK.
+   * Evaluates prompts and tool calls against security policies.
+   */
+  AIGuardMiddleware: typeof tracer.aiguard.AIGuardMiddleware;
+
+  /**
    * @experimental
    *
    * Set a baggage item and return the new context.
@@ -1667,6 +1673,144 @@ declare namespace tracer {
        *          The promise rejects with AIGuardClientError when communication with the AI Guard service fails.
        */
       evaluate (messages: Message[], opts?: { block?: boolean }): Promise<Evaluation>;
+    }
+
+    /**
+     * The type of evaluation that was performed.
+     */
+    export type GuardKind = 'Prompt' | 'Tool call';
+
+    /**
+     * Configuration options for AIGuardMiddleware.
+     */
+    export interface AIGuardMiddlewareOptions {
+      /**
+       * The initialized dd-trace tracer instance.
+       */
+      tracer: Tracer;
+      /**
+       * Whether to allow requests when AI Guard evaluation fails.
+       * @default true
+       */
+      allowOnFailure?: boolean;
+    }
+
+    /**
+     * Error thrown when AI Guard blocks a request (DENY or ABORT action with blocking enabled).
+     * 
+     * SECURITY: This error class does NOT store the reason, tags, or cause from the SDK error.
+     * Only the kind and a fixed message are preserved to prevent any leakage of sensitive data.
+     * 
+     * NOTE: This interface describes the error shape for TypeScript type checking.
+     * The error class is internal and not exported. Use `error.code` for identification:
+     * 
+     * @example
+     * ```javascript
+     * try {
+     *   await generateText({ model, prompt })
+     * } catch (error) {
+     *   if (error.code === 'AI_GUARD_MIDDLEWARE_ABORT') {
+     *     // Blocked by AI Guard security policy
+     *     console.log(error.kind) // 'Prompt' or 'Tool call'
+     *   }
+     * }
+     * ```
+     */
+    export interface AIGuardMiddlewareAbortError extends Error {
+      readonly name: 'AIGuardMiddlewareAbortError';
+      readonly code: 'AI_GUARD_MIDDLEWARE_ABORT';
+      readonly kind: GuardKind;
+    }
+
+    /**
+     * Error thrown when AI Guard evaluation itself fails (API error, timeout, etc.).
+     * 
+     * SECURITY: This error class does NOT store the cause (original exception).
+     * Only the fixed message is preserved to prevent internal error details from leaking.
+     * 
+     * NOTE: This interface describes the error shape for TypeScript type checking.
+     * The error class is internal and not exported. Use `error.code` for identification:
+     * 
+     * @example
+     * ```javascript
+     * try {
+     *   await generateText({ model, prompt })
+     * } catch (error) {
+     *   if (error.code === 'AI_GUARD_MIDDLEWARE_CLIENT_ERROR') {
+     *     // AI Guard evaluation failed (only when allowOnFailure: false)
+     *   }
+     * }
+     * ```
+     */
+    export interface AIGuardMiddlewareClientError extends Error {
+      readonly name: 'AIGuardMiddlewareClientError';
+      readonly code: 'AI_GUARD_MIDDLEWARE_CLIENT_ERROR';
+    }
+
+    /**
+     * AI Guard middleware for Vercel AI SDK.
+     * Implements LanguageModelV3Middleware (specificationVersion: 'v3').
+     * Evaluates prompts and tool calls against security policies.
+     * 
+     * The middleware always calls the SDK with `{ block: true }`, delegating the actual 
+     * blocking decision to the Datadog service's `is_blocking_enabled` setting.
+     *
+     * @example
+     * ```javascript
+     * const tracer = require('dd-trace').init({
+     *   experimental: { aiguard: { enabled: true } }
+     * });
+     * const { generateText, wrapLanguageModel } = require('ai');
+     * const { openai } = require('@ai-sdk/openai');
+     *
+     * const middleware = new tracer.AIGuardMiddleware({
+     *   tracer,
+     *   allowOnFailure: true
+     * });
+     *
+     * const model = wrapLanguageModel({
+     *   model: openai('gpt-4o'),
+     *   middleware
+     * });
+     *
+     * const result = await generateText({
+     *   model,
+     *   prompt: 'Hello!'
+     * });
+     * ```
+     */
+    export class AIGuardMiddleware {
+      /**
+       * Identifies the spec version as v3 for language model middleware.
+       */
+      readonly specificationVersion: 'v3';
+
+      /**
+       * Creates a new AI Guard middleware instance.
+       * @param options - Configuration options
+       * @throws {TypeError} If tracer is not provided
+       */
+      constructor(options: AIGuardMiddlewareOptions);
+
+      /**
+       * Wraps a synchronous LLM call to evaluate prompts and tool calls.
+       * Implements LanguageModelV3Middleware.wrapGenerate.
+       */
+      wrapGenerate(args: {
+        doGenerate: () => PromiseLike<unknown>;
+        params: { prompt: unknown[] };
+        model: unknown;
+      }): PromiseLike<unknown>;
+
+      /**
+       * Wraps a streaming LLM call to evaluate prompts and tool calls.
+       * Implements LanguageModelV3Middleware.wrapStream.
+       */
+      wrapStream(args: {
+        doStream: () => PromiseLike<{ stream: ReadableStream; response: unknown }>;
+        params: { prompt: unknown[] };
+        model: unknown;
+      }): PromiseLike<{ stream: ReadableStream; response: unknown }>;
     }
   }
 

@@ -573,3 +573,176 @@ function handle () {
   })
 }
 ```
+
+<h2 id="aiguard-middleware">AI Guard Middleware</h2>
+
+The AI Guard Middleware provides security evaluation for LLM applications using the Vercel AI SDK. It evaluates prompts and tool calls against security policies before they are processed by the LLM.
+
+<h3 id="aiguard-middleware-installation">Installation</h3>
+
+```bash
+npm install dd-trace ai @ai-sdk/openai
+```
+
+**Requirements:**
+- `ai@>=6.0.0` (Vercel AI SDK with LanguageModelV3Middleware support)
+- An AI provider SDK (e.g., `@ai-sdk/openai`, `@ai-sdk/anthropic`)
+
+<h3 id="aiguard-middleware-usage">Basic Usage</h3>
+
+```javascript
+// 1. Initialize dd-trace with AI Guard enabled
+const tracer = require('dd-trace').init({
+  service: 'my-ai-app',
+  experimental: {
+    aiguard: {
+      enabled: true
+    }
+  }
+})
+
+// 2. Create the middleware instance
+const middleware = new tracer.AIGuardMiddleware({
+  tracer,
+  allowOnFailure: true    // default: true
+})
+
+// 3. Use with Vercel AI SDK
+const { generateText, wrapLanguageModel } = require('ai')
+const { openai } = require('@ai-sdk/openai')
+
+const model = wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware
+})
+
+const result = await generateText({
+  model,
+  prompt: 'Hello, how are you?'
+})
+```
+
+The `AIGuardMiddleware` class implements the Vercel AI SDK `LanguageModelV3Middleware` interface with `specificationVersion: 'v3'`.
+
+<h3 id="aiguard-middleware-options">Configuration Options</h3>
+
+| Option | Type | Required | Default | Description |
+|--------|------|----------|---------|-------------|
+| `tracer` | `Tracer` | Yes | - | The initialized dd-trace tracer instance |
+| `allowOnFailure` | `boolean` | No | `true` | Whether to allow requests when AI Guard evaluation fails |
+
+<h3 id="aiguard-middleware-blocking">Blocking Behavior</h3>
+
+The blocking behavior is determined by the Datadog AI Guard service configuration. When a policy violation is detected:
+
+- If blocking is enabled in Datadog, the middleware throws an error with `code: 'AI_GUARD_MIDDLEWARE_ABORT'`
+- If blocking is disabled, the request proceeds and violations are reported for monitoring
+
+**Evaluation order:**
+1. Prompts are evaluated before the LLM call
+2. Tool calls are evaluated sequentially in order
+3. Evaluation stops immediately on the first violation
+
+```javascript
+try {
+  const model = wrapLanguageModel({
+    model: openai('gpt-4o'),
+    middleware
+  })
+  const result = await generateText({
+    model,
+    prompt: userInput
+  })
+} catch (error) {
+  if (error.code === 'AI_GUARD_MIDDLEWARE_ABORT') {
+    // Request was blocked by AI Guard security policy
+    // error.kind indicates what was blocked: 'Prompt' or 'Tool call'
+    console.error('[Security] Blocked:', error.kind, error.message)
+    // Return safe response to client
+    res.status(403).json({ error: 'Request blocked by security policy' })
+  }
+}
+```
+
+<h3 id="aiguard-middleware-streaming">Streaming Support</h3>
+
+The middleware also supports streaming responses:
+
+```javascript
+const { streamText, wrapLanguageModel } = require('ai')
+const { openai } = require('@ai-sdk/openai')
+
+const model = wrapLanguageModel({
+  model: openai('gpt-4o'),
+  middleware
+})
+
+const result = await streamText({
+  model,
+  prompt: 'Tell me a story'
+})
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+<h3 id="aiguard-middleware-advanced">Advanced Usage</h3>
+
+The `AIGuardMiddleware` class exposes the following methods that implement the `LanguageModelV3Middleware` interface:
+
+| Property/Method | Description |
+|-----------------|-------------|
+| `specificationVersion` | Always `'v3'` - identifies the middleware spec version |
+| `wrapGenerate(options)` | Wraps synchronous LLM calls (`generateText`). Evaluates prompts and tool calls before execution. |
+| `wrapStream(options)` | Wraps streaming LLM calls (`streamText`). Evaluates prompts before streaming begins, and tool call chunks during streaming. |
+
+For detailed type signatures, see the TypeScript definitions exported from `dd-trace`.
+
+<h3 id="aiguard-middleware-errors">Error Handling</h3>
+
+The middleware uses `error.code` for error identification. This approach is recommended over `instanceof` checks for better compatibility across module boundaries and bundlers.
+
+| Error Code | Description |
+|------------|-------------|
+| `AI_GUARD_MIDDLEWARE_ABORT` | The request was blocked due to a policy violation |
+| `AI_GUARD_MIDDLEWARE_CLIENT_ERROR` | The AI Guard evaluation itself failed (only when `allowOnFailure: false`) |
+
+**Error properties for `AI_GUARD_MIDDLEWARE_ABORT`:**
+- `code`: `'AI_GUARD_MIDDLEWARE_ABORT'`
+- `kind`: Either `'Prompt'` or `'Tool call'` indicating what was blocked
+- `message`: `'Prompt blocked by AI Guard security policy'` or `'Tool call blocked by AI Guard security policy'`
+
+**Error properties for `AI_GUARD_MIDDLEWARE_CLIENT_ERROR`:**
+- `code`: `'AI_GUARD_MIDDLEWARE_CLIENT_ERROR'`
+- `message`: Fixed message `'AI Guard evaluation failed'`
+
+<h4 id="aiguard-middleware-security">Security: Error Information</h4>
+
+**⚠️ IMPORTANT:** For security, these error classes intentionally do NOT store sensitive information:
+
+- **No `reason`**: The blocking reason from AI Guard is not stored
+- **No `tags`**: Attack category tags are not stored
+- **No `cause`**: Original exceptions are not stored
+
+This design prevents accidental leakage of security-sensitive information through error serialization.
+
+**✅ Recommended error handling:**
+```javascript
+try {
+  await generateText({ model, prompt })
+} catch (error) {
+  if (error.code === 'AI_GUARD_MIDDLEWARE_ABORT') {
+    // Blocked by AI Guard security policy
+    console.error(`[Security] ${error.kind} blocked`)
+    res.status(403).json({ error: 'Request blocked by security policy' })
+  } else if (error.code === 'AI_GUARD_MIDDLEWARE_CLIENT_ERROR') {
+    // AI Guard evaluation failed (when allowOnFailure: false)
+    console.error('[Security] AI Guard evaluation failed')
+    res.status(503).json({ error: 'Security evaluation unavailable' })
+  } else {
+    throw error // Re-throw other errors
+  }
+}
+```
+
