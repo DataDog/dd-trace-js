@@ -2,7 +2,6 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
-const RAW_BUILTINS = require('node:module').builtinModules
 const path = require('node:path')
 const { pathToFileURL, fileURLToPath } = require('node:url')
 
@@ -25,15 +24,27 @@ for (const hook of Object.values(hooks)) {
   }
 }
 
+function moduleOfInterestKey (name, file) {
+  return file ? `${name}/${file}` : name
+}
+
+const builtinModules = new Set(require('module').builtinModules)
+
+function addModuleOfInterest (name, file) {
+  if (!name) return
+
+  modulesOfInterest.add(moduleOfInterestKey(name, file))
+
+  if (builtinModules.has(name)) {
+    modulesOfInterest.add(moduleOfInterestKey(`node:${name}`, file))
+  }
+}
+
 const modulesOfInterest = new Set()
 
-for (const instrumentation of Object.values(instrumentations)) {
+for (const [name, instrumentation] of Object.entries(instrumentations)) {
   for (const entry of instrumentation) {
-    if (entry.file) {
-      modulesOfInterest.add(`${entry.name}/${entry.file}`) // e.g. "redis/my/file.js"
-    } else {
-      modulesOfInterest.add(entry.name) // e.g. "redis"
-    }
+    addModuleOfInterest(name, entry.file)
   }
 }
 
@@ -41,7 +52,7 @@ const CHANNEL = 'dd-trace:bundler:load'
 
 const builtins = new Set()
 
-for (const builtin of RAW_BUILTINS) {
+for (const builtin of builtinModules) {
   builtins.add(builtin)
   builtins.add(`node:${builtin}`)
 }
@@ -173,8 +184,8 @@ ${build.initialOptions.banner.js}`
 
     // TODO: Should this also check for namespace === 'file'?
     if (!modulesOfInterest.has(args.path) &&
-        args.path.startsWith('@') &&
-        !args.importer.includes('node_modules/')) {
+      args.path.startsWith('@') &&
+      !args.importer.includes('node_modules/')) {
       // This is the Next.js convention for loading local files
       log.debug('@LOCAL: %s', args.path)
       return
@@ -247,7 +258,7 @@ ${build.initialOptions.banner.js}`
       }
 
       try {
-        const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */ (pathToPackageJson)).toString())
+        const packageJson = JSON.parse(fs.readFileSync(/** @type {string} */(pathToPackageJson)).toString())
 
         const isESM = isESMFile(fullPathToModule, pathToPackageJson, packageJson)
         if (isESM && !interceptedESMModules.has(fullPathToModule)) {

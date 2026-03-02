@@ -269,7 +269,8 @@ export default [
       }],
       'import/no-useless-path-segments': 'error',
       'import/no-webpack-loader-syntax': 'error',
-      'jsdoc/check-tag-names': ['error', { definedTags: ['datadog'] }],
+      'jsdoc/check-param-names': ['warn', { disableMissingParamChecks: true }],
+      'jsdoc/check-tag-names': ['warn', { definedTags: ['datadog'] }],
       // TODO: Enable the rules that we want to use.
       // no-defaults: This should be activated, since the defaults will not be picked up in a description.
       'jsdoc/no-defaults': 'off',

@@ -2,13 +2,11 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
-const names = ['url', 'node:url']
-
 const parseFinishedChannel = channel('datadog:url:parse:finish')
 const urlGetterChannel = channel('datadog:url:getter:finish')
 const instrumentedGetters = ['host', 'origin', 'hostname']
 
-addHook({ name: names }, function (url) {
+addHook({ name: 'url' }, function (url) {
   shimmer.wrap(url, 'parse', (parse) => {
     return function wrappedParse (input) {
       const parsedValue = parse.apply(this, arguments)

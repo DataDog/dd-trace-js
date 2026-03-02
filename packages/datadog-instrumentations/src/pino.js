@@ -97,7 +97,7 @@ addHook({ name: 'pino', versions: ['>=5.14.0 <6.8.0'] }, (pino) => {
   return wrapped
 })
 
-addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino, _1, _2, isIitm) => {
+addHook({ name: 'pino', versions: ['>=6.8.0'], patchDefault: false }, (pino) => {
   const mixinSym = pino.symbols.mixinSym
 
   const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(mixinSym, wrapMixin, pino))

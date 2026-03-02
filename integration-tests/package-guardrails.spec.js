@@ -50,8 +50,9 @@ describe('package guardrails', () => {
 
       it('should not instrument the package', () =>
         runTest(`Application instrumentation bootstrapping complete
-Found incompatible integration version: bluebird@1.0.0
 false
+instrumentation source: manual
+Found incompatible integration version: bluebird@1.0.0
 `, []))
     })
   })

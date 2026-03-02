@@ -6,7 +6,7 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
-addHook({ name: 'sequelize', versions: ['>=4'], file: ['lib/sequelize.js'] }, Sequelize => {
+addHook({ name: 'sequelize', versions: ['>=4'], file: 'lib/sequelize.js' }, Sequelize => {
   const startCh = channel('datadog:sequelize:query:start')
   const finishCh = channel('datadog:sequelize:query:finish')
 
