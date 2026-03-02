@@ -57,6 +57,21 @@ Currently we do not have CI to test PRs for mergeability to past release lines, 
 
 This library follows the semantic versioning standard, but there are some subtleties left under-specified so this section is meant to clarify exactly how we interpret the meaning of semver. Additionally, it exists to communicate that we also use semver labels on all PRs to indicate which type of release the change should land in. Outside contributions should be evaluated and a semver label selected by the relevant team.
 
+## Pull Requests and CI
+
+### Commit Messages
+
+Conventional format: `type(scope): description`
+
+- Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
+- Example: `feat(appsec): add new WAF rule`
+
+### PR Requirements
+
+- Use template from `.github/pull_request_template.md`
+- Label: `semver-patch` (fixes only), `semver-minor` (new features), `semver-major` (breaking)
+- **All tests must pass - all-green policy, no exceptions**
+
 ### semver-patch
 
 If the change is a bug or security fix, it should be labelled as semver-patch. These changes should generally not alter existing behavior in any way other than to correct the specific issue.
