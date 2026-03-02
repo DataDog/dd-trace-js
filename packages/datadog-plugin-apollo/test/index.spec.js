@@ -574,32 +574,29 @@ describe('Plugin', () => {
             key => config.hooks[key].resetHistory()
           ))
 
-          it('should run hooks before spans are finished', done => {
+          it('should run request, plan, execute and postprocessing hooks before spans are finished', done => {
             const operationName = 'MyQuery'
             const source = `query ${operationName} { hello(name: "world") }`
             const variableValues = { who: 'world' }
 
             agent
               .assertSomeTraces((traces) => {
-                const spansByName = Object.fromEntries(traces[0].map(span => [span.name, span]))
-                const hookExpectations = [
-                  { name: expectedSchema.server.opName, hook: config.hooks.request },
-                  { name: 'apollo.gateway.validate', hook: config.hooks.validate },
-                  { name: 'apollo.gateway.plan', hook: config.hooks.plan },
-                  { name: 'apollo.gateway.execute', hook: config.hooks.execute },
-                  { name: 'apollo.gateway.fetch', hook: config.hooks.fetch },
-                  { name: 'apollo.gateway.postprocessing', hook: config.hooks.postprocessing },
-                ]
+                sinon.assert.calledOnce(config.hooks.request)
+                sinon.assert.calledOnce(config.hooks.plan)
+                sinon.assert.calledOnce(config.hooks.execute)
+                sinon.assert.calledOnce(config.hooks.postprocessing)
 
-                for (const { name, hook } of hookExpectations) {
-                  sinon.assert.calledOnce(hook)
-                  const hookSpan = hook.firstCall.args[0]
-                  const hookCtx = hook.firstCall.args[1]
+                const requestSpan = config.hooks.request.firstCall.args[0]
+                const requestCtx = config.hooks.request.firstCall.args[1]
+                const planSpan = config.hooks.plan.firstCall.args[0]
+                const executeSpan = config.hooks.execute.firstCall.args[0]
+                const postprocessingSpan = config.hooks.postprocessing.firstCall.args[0]
 
-                  assert.strictEqual(hookSpan.context()._name, name)
-                  assert.ok(hookCtx)
-                  assert.ok(spansByName[name])
-                }
+                assert.strictEqual(requestSpan.context()._name, expectedSchema.server.opName)
+                assert.strictEqual(planSpan.context()._name, 'apollo.gateway.plan')
+                assert.strictEqual(executeSpan.context()._name, 'apollo.gateway.execute')
+                assert.strictEqual(postprocessingSpan.context()._name, 'apollo.gateway.postprocessing')
+                assert.strictEqual(requestCtx.requestContext.operationName, operationName)
               })
               .then(done)
               .catch(done)
@@ -628,6 +625,13 @@ describe('Plugin', () => {
                 sinon.assert.notCalled(config.hooks.execute)
                 sinon.assert.notCalled(config.hooks.fetch)
                 sinon.assert.notCalled(config.hooks.postprocessing)
+
+                const validateSpan = config.hooks.validate.firstCall.args[0]
+                const validateCtx = config.hooks.validate.firstCall.args[1]
+
+                assert.strictEqual(validateSpan.context()._name, 'apollo.gateway.validate')
+                assert.ok(Array.isArray(validateCtx.result))
+                assert.strictEqual(validateCtx.result.at(-1).message, error.message)
 
                 assertObjectContains(traces[0][1], {
                   name: 'apollo.gateway.validate',
@@ -660,8 +664,16 @@ describe('Plugin', () => {
               .assertSomeTraces((traces) => {
                 sinon.assert.calledOnce(config.hooks.request)
                 sinon.assert.calledOnce(config.hooks.fetch)
-                assert.ok(config.hooks.request.firstCall.args[1]?.result?.errors?.length)
-                assert.ok(config.hooks.fetch.firstCall.args[1]?.error)
+
+                const requestSpan = config.hooks.request.firstCall.args[0]
+                const requestCtx = config.hooks.request.firstCall.args[1]
+                const fetchSpan = config.hooks.fetch.firstCall.args[0]
+                const fetchCtx = config.hooks.fetch.firstCall.args[1]
+
+                assert.strictEqual(requestSpan.context()._name, expectedSchema.server.opName)
+                assert.strictEqual(fetchSpan.context()._name, 'apollo.gateway.fetch')
+                assert.ok(requestCtx?.result?.errors?.length)
+                assert.ok(fetchCtx?.error)
 
                 assertObjectContains(traces[0][0], {
                   name: expectedSchema.server.opName,
