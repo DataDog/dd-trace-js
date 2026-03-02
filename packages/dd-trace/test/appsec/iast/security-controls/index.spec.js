@@ -28,20 +28,20 @@ describe('IAST Security Controls', () => {
 
       const channels = {
         'dd-trace:moduleLoadStart': {
-          subscribe: startChSubscribe
+          subscribe: startChSubscribe,
         },
         'dd-trace:moduleLoadEnd': {
-          subscribe: endChSubscribe
-        }
+          subscribe: endChSubscribe,
+        },
       }
 
       securityControls = proxyquire('../../../../src/appsec/iast/security-controls', {
         'dc-polyfill': {
-          channel: name => channels[name]
+          channel: name => channels[name],
         },
         './parser': {
-          parse
-        }
+          parse,
+        },
       })
     })
 
@@ -81,15 +81,15 @@ describe('IAST Security Controls', () => {
 
       securityControls = proxyquire('../../../../src/appsec/iast/security-controls', {
         '../taint-tracking/operations': {
-          addSecureMark
+          addSecureMark,
         },
         '../../../../../datadog-core': {
           storage: () => {
             return {
-              getStore: sinon.stub().returns(context)
+              getStore: sinon.stub().returns(context),
             }
-          }
-        }
+          },
+        },
       })
 
       saveIastContext(context, {}, iastContext)

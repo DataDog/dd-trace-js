@@ -12,7 +12,7 @@ function waitForRedis () {
         retry_strategy: options => {
           if (operation.retry(options.error)) return
           reject(options.error)
-        }
+        },
       })
 
       client.on('connect', (a) => {

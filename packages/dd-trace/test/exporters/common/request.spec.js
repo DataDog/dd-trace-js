@@ -1,15 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const nock = require('nock')
 const http = require('node:http')
 const zlib = require('node:zlib')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const nock = require('nock')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-
 const FormData = require('../../../src/exporters/common/form-data')
 
 const initHTTPServer = () => {
@@ -45,16 +45,16 @@ describe('request', function () {
   beforeEach(() => {
     log = {
       error: sinon.spy(),
-      debug: sinon.spy()
+      debug: sinon.spy(),
     }
     docker = {
       inject (carrier) {
         carrier['datadog-container-id'] = 'abcd'
-      }
+      },
     }
     request = proxyquire('../../../src/exporters/common/request', {
       './docker': docker,
-      '../../log': log
+      '../../log': log,
     })
   })
 
@@ -66,8 +66,8 @@ describe('request', function () {
     nock('http://test:123', {
       reqheaders: {
         'content-type': 'application/octet-stream',
-        'content-length': '13'
-      }
+        'content-length': '13',
+      },
     })
       .put('/path')
       .reply(200, 'OK')
@@ -80,8 +80,8 @@ describe('request', function () {
         path: '/path',
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/octet-stream'
-        }
+          'Content-Type': 'application/octet-stream',
+        },
       },
       (err, res) => {
         assert.strictEqual(res, 'OK')
@@ -97,7 +97,7 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-      port: 8080
+      port: 8080,
     }, err => {
       assert.ok(err instanceof Error)
       assert.strictEqual(err.message, 'Error from http://localhost:8080/path: 400 Bad Request.')
@@ -113,7 +113,7 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-      url: new URL('http://api.datadog.com/')
+      url: new URL('http://api.datadog.com/'),
     }, err => {
       assert.ok(err instanceof Error)
       assert.strictEqual(err.message, 'Error from http://api.datadog.com/path: 400 Bad Request.')
@@ -131,7 +131,7 @@ describe('request', function () {
 
     request(Buffer.from(''), {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
     }, err => {
       assert.ok(err instanceof Error)
       assert.strictEqual(err.message, 'socket hang up')
@@ -149,7 +149,7 @@ describe('request', function () {
     request(Buffer.from(''), {
       path: '/path',
       method: 'PUT',
-      timeout: 100
+      timeout: 100,
     }, err => {
       assert.ok(err instanceof Error)
       assert.strictEqual(err.message, 'socket hang up')
@@ -160,8 +160,8 @@ describe('request', function () {
   it('should inject the container ID', () => {
     nock('http://test:123', {
       reqheaders: {
-        'datadog-container-id': 'abcd'
-      }
+        'datadog-container-id': 'abcd',
+      },
     })
       .get('/')
       .reply(200, 'OK')
@@ -169,7 +169,7 @@ describe('request', function () {
     return request(Buffer.from(''), {
       hostname: 'test',
       port: 123,
-      path: '/'
+      path: '/',
     }, (err, res) => {
       assert.strictEqual(res, 'OK')
     })
@@ -184,7 +184,7 @@ describe('request', function () {
 
     request(Buffer.from(''), {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
     }, (err, res) => {
       assert.strictEqual(res, 'OK')
       done()
@@ -202,7 +202,7 @@ describe('request', function () {
 
     request(Buffer.from(''), {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
     }, (err, res) => {
       assert.strictEqual(err, error)
       done()
@@ -220,7 +220,7 @@ describe('request', function () {
 
     request(form, {
       path: '/path',
-      method: 'PUT'
+      method: 'PUT',
     }, (err, res) => {
       assert.strictEqual(res, 'OK')
       done()
@@ -236,7 +236,7 @@ describe('request', function () {
           method: 'POST',
           hostname: 'localhost',
           protocol: 'http:',
-          port: shutdownFirst.port
+          port: shutdownFirst.port,
         }, () => {})
       }, 1000)
 
@@ -246,7 +246,7 @@ describe('request', function () {
           method: 'POST',
           hostname: 'localhost',
           protocol: 'http:',
-          port: shutdownSecond.port
+          port: shutdownSecond.port,
         }, (err, res) => {
           assert.strictEqual(res, 'OK')
           shutdownFirst()
@@ -262,8 +262,8 @@ describe('request', function () {
     nock('http://[2607:f0d0:1002:51::4]:123', {
       reqheaders: {
         'content-type': 'application/octet-stream',
-        'content-length': '13'
-      }
+        'content-length': '13',
+      },
     })
       .put('/path')
       .reply(200, 'OK')
@@ -273,8 +273,8 @@ describe('request', function () {
         url: 'http://[2607:f0d0:1002:51::4]:123/path',
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/octet-stream'
-        }
+          'Content-Type': 'application/octet-stream',
+        },
       },
       (err, res) => {
         assert.strictEqual(res, 'OK')
@@ -288,7 +288,7 @@ describe('request', function () {
     request(
       Buffer.from(''), {
         url: 'unix:' + sock,
-        method: 'PUT'
+        method: 'PUT',
       },
       (err, _) => {
         assert.strictEqual(err.address, sock)
@@ -302,7 +302,7 @@ describe('request', function () {
     request(
       Buffer.from(''), {
         url: 'unix:' + pipe,
-        method: 'PUT'
+        method: 'PUT',
       },
       (err, _) => {
         assert.strictEqual(err.address, pipe)
@@ -328,7 +328,7 @@ describe('request', function () {
         host: 'test',
         port: 123,
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       },
       (err, res) => {
         assert.strictEqual(res, 'OK')
@@ -355,8 +355,8 @@ describe('request', function () {
       nock('http://[1337::cafe]:123', {
         reqheaders: {
           'content-type': 'application/octet-stream',
-          'content-length': '13'
-        }
+          'content-length': '13',
+        },
       })
         .put('/path')
         .reply(200, 'OK')
@@ -366,8 +366,8 @@ describe('request', function () {
           url: new URL('http://[1337::cafe]:123/path'),
           method: 'PUT',
           headers: {
-            'Content-Type': 'application/octet-stream'
-          }
+            'Content-Type': 'application/octet-stream',
+          },
         },
         (err, res) => {
           const options = http.request.getCall(0).args[0]
@@ -384,8 +384,8 @@ describe('request', function () {
       nock('http://test:123', {
         reqheaders: {
           'content-type': 'application/json',
-          'accept-encoding': 'gzip'
-        }
+          'accept-encoding': 'gzip',
+        },
       })
         .post('/path')
         .reply(200, compressedData, { 'content-encoding': 'gzip' })
@@ -398,8 +398,8 @@ describe('request', function () {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'accept-encoding': 'gzip'
-        }
+          'accept-encoding': 'gzip',
+        },
       }, (err, res) => {
         assert.strictEqual(res, JSON.stringify({ foo: 'bar' }))
         done(err)
@@ -411,8 +411,8 @@ describe('request', function () {
       nock('http://test:123', {
         reqheaders: {
           'content-type': 'application/json',
-          'accept-encoding': 'gzip'
-        }
+          'accept-encoding': 'gzip',
+        },
       })
         .post('/path')
         .reply(200, badlyCompressedData, { 'content-encoding': 'gzip' })
@@ -425,8 +425,8 @@ describe('request', function () {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'accept-encoding': 'gzip'
-        }
+          'accept-encoding': 'gzip',
+        },
       }, (err, res) => {
         sinon.assert.calledWith(log.error, 'Could not gunzip response: %s', 'unexpected end of file')
         assert.strictEqual(res, '')

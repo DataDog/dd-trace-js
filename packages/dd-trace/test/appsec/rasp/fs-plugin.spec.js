@@ -1,11 +1,11 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
+const path = require('node:path')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const dc = require('dc-polyfill')
-const path = require('node:path')
 
 const { storage } = require('../../../../datadog-core')
 const { AppsecFsPlugin } = require('../../../src/appsec/rasp/fs-plugin')
@@ -39,7 +39,7 @@ describe('AppsecFsPlugin', () => {
       }
 
       fsPlugin = proxyquire('../../../src/appsec/rasp/fs-plugin', {
-        '../../plugins/plugin': PluginClass
+        '../../plugins/plugin': PluginClass,
       })
     })
 
@@ -103,14 +103,14 @@ describe('AppsecFsPlugin', () => {
 
       let store = appsecFsPlugin._onFsOperationStart()
 
-      assert.property(store, 'fs')
-      assert.propertyVal(store.fs, 'parentStore', origStore)
-      assert.propertyVal(store.fs, 'root', true)
+      assert.ok(Object.hasOwn(store, 'fs'))
+      assert.strictEqual(store.fs.parentStore, origStore)
+      assert.strictEqual(store.fs.root, true)
 
       store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
-      assert.equal(store, origStore)
-      assert.notProperty(store, 'fs')
+      assert.strictEqual(store, origStore)
+      assert.ok(!('fs' in store))
     })
 
     it('should mark fs children', () => {
@@ -119,29 +119,29 @@ describe('AppsecFsPlugin', () => {
 
       const rootStore = appsecFsPlugin._onFsOperationStart()
 
-      assert.property(rootStore, 'fs')
-      assert.propertyVal(rootStore.fs, 'parentStore', origStore)
-      assert.propertyVal(rootStore.fs, 'root', true)
+      assert.ok(Object.hasOwn(rootStore, 'fs'))
+      assert.strictEqual(rootStore.fs.parentStore, origStore)
+      assert.strictEqual(rootStore.fs.root, true)
 
       storage('legacy').enterWith(rootStore)
 
       let store = appsecFsPlugin._onFsOperationStart()
 
-      assert.property(store, 'fs')
-      assert.propertyVal(store.fs, 'parentStore', rootStore)
-      assert.propertyVal(store.fs, 'root', false)
-      assert.propertyVal(store, 'orig', true)
+      assert.ok(Object.hasOwn(store, 'fs'))
+      assert.strictEqual(store.fs.parentStore, rootStore)
+      assert.strictEqual(store.fs.root, false)
+      assert.strictEqual(store.orig, true)
 
       storage('legacy').enterWith(store)
 
       store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
-      assert.equal(store, rootStore)
+      assert.strictEqual(store, rootStore)
 
       storage('legacy').enterWith(store)
 
       store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
-      assert.equal(store, origStore)
+      assert.strictEqual(store, origStore)
     })
   })
 
@@ -154,16 +154,16 @@ describe('AppsecFsPlugin', () => {
 
       let store = appsecFsPlugin._onResponseRenderStart()
 
-      assert.property(store, 'fs')
-      assert.propertyVal(store.fs, 'parentStore', origStore)
-      assert.propertyVal(store.fs, 'opExcluded', true)
+      assert.ok(Object.hasOwn(store, 'fs'))
+      assert.strictEqual(store.fs.parentStore, origStore)
+      assert.strictEqual(store.fs.opExcluded, true)
 
       storage('legacy').enterWith(store)
 
       store = appsecFsPlugin._onFsOperationFinishOrRenderEnd()
 
-      assert.equal(store, origStore)
-      assert.notProperty(store, 'fs')
+      assert.strictEqual(store, origStore)
+      assert.ok(!('fs' in store))
     })
   })
 
@@ -181,7 +181,7 @@ describe('AppsecFsPlugin', () => {
         let count = 0
         const onStart = () => {
           const store = storage('legacy').getStore()
-          assert.isNotNull(store.fs)
+          assert.notStrictEqual(store.fs, null)
 
           count++
           assert.strictEqual(count === 1, store.fs.root)
@@ -205,15 +205,15 @@ describe('AppsecFsPlugin', () => {
         let count = 0
         const onStart = () => {
           const store = storage('legacy').getStore()
-          assert.isNotNull(store.fs)
+          assert.notStrictEqual(store.fs, null)
 
           count++
-          assert.isUndefined(store.fs.root)
+          assert.strictEqual(store.fs.root, undefined)
         }
 
         try {
           const origStore = {
-            fs: { opExcluded: true }
+            fs: { opExcluded: true },
           }
           storage('legacy').enterWith(origStore)
 
@@ -234,7 +234,7 @@ describe('AppsecFsPlugin', () => {
           count--
 
           if (count === 0) {
-            assert.isUndefined(store.fs)
+            assert.strictEqual(store.fs, undefined)
           }
         }
         try {

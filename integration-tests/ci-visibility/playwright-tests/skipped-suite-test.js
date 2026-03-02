@@ -8,6 +8,6 @@ test.beforeEach(async ({ page }) => {
 
 test.fixme('should work with fixme root', async ({ page }) => {
   await expect(page.locator('.hello-world')).toHaveText([
-    'Hello Warld'
+    'Hello Warld',
   ])
 })

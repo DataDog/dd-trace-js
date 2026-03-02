@@ -2,8 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
@@ -26,7 +25,7 @@ describe('Plugin Manager', () => {
 
   beforeEach(() => {
     tracer = {
-      _nomenclature: nomenclature
+      _nomenclature: nomenclature,
     }
     instantiated = []
     class FakePlugin {
@@ -55,7 +54,7 @@ describe('Plugin Manager', () => {
       eight: class Eight extends FakePlugin {
         static experimental = true
         static id = 'eight'
-      }
+      },
     }
 
     Two = plugins.two
@@ -77,11 +76,14 @@ describe('Plugin Manager', () => {
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
-      '../../dd-trace/src/config-helper': {
+      '../../dd-trace/src/config/helper': {
         getEnvironmentVariable (name) {
           return process.env[name]
-        }
-      }
+        },
+        getValueFromEnvSources (name) {
+          return process.env[name]
+        },
+      },
     })
     pm = new PluginManager(tracer)
   })
@@ -110,7 +112,7 @@ describe('Plugin Manager', () => {
         loadChannel.publish({ name: 'two' })
         sinon.assert.calledWithMatch(Two.prototype.configure, {
           enabled: true,
-          foo: 'bar'
+          foo: 'bar',
         })
       })
     })
@@ -274,7 +276,7 @@ describe('Plugin Manager', () => {
       it('should not instantiate plugins', () => {
         pm.configure()
         pm.configurePlugin('two')
-        expect(instantiated).to.be.empty
+        assert.strictEqual(instantiated.length, 0)
         sinon.assert.notCalled(Two.prototype.configure)
       })
     })
@@ -311,7 +313,7 @@ describe('Plugin Manager', () => {
     describe('service naming schema manager', () => {
       const config = {
         foo: { bar: 1 },
-        baz: 2
+        baz: 2,
       }
       let configureSpy
 
@@ -340,7 +342,7 @@ describe('Plugin Manager', () => {
         serviceMapping: { two: 'deux' },
         logInjection: true,
         queryStringObfuscation: '.*',
-        clientIpEnabled: true
+        clientIpEnabled: true,
       })
       loadChannel.publish({ name: 'two' })
       loadChannel.publish({ name: 'four' })
@@ -349,13 +351,13 @@ describe('Plugin Manager', () => {
         service: 'deux',
         logInjection: true,
         queryStringObfuscation: '.*',
-        clientIpEnabled: true
+        clientIpEnabled: true,
       })
       sinon.assert.calledWithMatch(Four.prototype.configure, {
         enabled: true,
         logInjection: true,
         queryStringObfuscation: '.*',
-        clientIpEnabled: true
+        clientIpEnabled: true,
       })
     })
   })

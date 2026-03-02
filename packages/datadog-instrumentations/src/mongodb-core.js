@@ -1,11 +1,11 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
   addHook,
-  AsyncResource
+  AsyncResource,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 const startCh = channel('apm:mongodb:query:start')
 const finishCh = channel('apm:mongodb:query:finish')
@@ -161,7 +161,7 @@ function instrument (operation, command, instance, args, server, ns, ops, option
     ns,
     ops,
     options: serverInfo,
-    name
+    name,
   }
   return startCh.runStores(ctx, () => {
     args[index] = shimmer.wrapFunction(callback, callback => function (err, res) {
@@ -193,7 +193,7 @@ function instrumentPromise (operation, command, instance, args, server, ns, ops,
     ns,
     ops,
     options: serverInfo,
-    name
+    name,
   }
 
   return startCh.runStores(ctx, () => {

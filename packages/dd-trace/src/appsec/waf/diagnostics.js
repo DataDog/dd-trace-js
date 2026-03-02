@@ -10,6 +10,6 @@ module.exports = {
     'scanners',
     'rules_override',
     'rules_data',
-    'exclusion_data'
-  ]
+    'exclusion_data',
+  ],
 }

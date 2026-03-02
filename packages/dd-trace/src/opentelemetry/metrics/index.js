@@ -41,7 +41,7 @@ function initializeOpenTelemetryMetrics (config) {
   const resourceAttributes = {
     'service.name': config.service,
     'service.version': config.version,
-    'deployment.environment': config.env
+    'deployment.environment': config.env,
   }
 
   if (config.tags) {
@@ -77,5 +77,5 @@ function initializeOpenTelemetryMetrics (config) {
 
 module.exports = {
   MeterProvider,
-  initializeOpenTelemetryMetrics
+  initializeOpenTelemetryMetrics,
 }

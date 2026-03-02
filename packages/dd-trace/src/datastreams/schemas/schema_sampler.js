@@ -23,5 +23,5 @@ class SchemaSampler {
 }
 
 module.exports = {
-  SchemaSampler
+  SchemaSampler,
 }

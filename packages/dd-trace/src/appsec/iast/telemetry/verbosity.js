@@ -4,7 +4,7 @@ const Verbosity = {
   OFF: 0,
   MANDATORY: 1,
   INFORMATION: 2,
-  DEBUG: 3
+  DEBUG: 3,
 }
 
 function isDebugAllowed (value) {
@@ -37,5 +37,5 @@ module.exports = {
   isDebugAllowed,
   isInfoAllowed,
   getVerbosity,
-  getName
+  getName,
 }

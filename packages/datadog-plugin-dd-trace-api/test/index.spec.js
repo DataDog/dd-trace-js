@@ -4,10 +4,34 @@ const assert = require('node:assert')
 
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const {
+  supportedConfigurations,
+} = require('../../dd-trace/src/config/supported-configurations.json')
+
 const SELF = Symbol('self')
+const supportedConfigurationsWithDdTraceApi = {
+  ...supportedConfigurations,
+  DD_TRACE_DD_TRACE_API_ENABLED: [
+    {
+      implementation: 'A',
+      type: 'boolean',
+      default: 'true',
+    },
+  ],
+}
+
+const configHelperPath = require.resolve('../../dd-trace/src/config/helper')
+const reloadedConfigHelper = proxyquire.noPreserveCache()(configHelperPath, {
+  './supported-configurations.json': {
+    supportedConfigurations: supportedConfigurationsWithDdTraceApi,
+  },
+})
+Object.assign(require(configHelperPath), reloadedConfigHelper)
+
+const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('Plugin', () => {
   describe('dd-trace-api', () => {
@@ -41,11 +65,11 @@ describe('Plugin', () => {
 
       dummyTracer = {
         appsec: {},
-        dogstatsd: {}
+        dogstatsd: {},
       }
       const payload = {
         proxy: () => dummyTracer,
-        args: []
+        args: [],
       }
       dc.channel('datadog-api:v1:tracerinit').publish(payload)
     })
@@ -61,7 +85,7 @@ describe('Plugin', () => {
         testChannel({
           name: 'scope',
           fn: tracer.scope,
-          ret: dummyScope
+          ret: dummyScope,
         })
       })
 
@@ -73,7 +97,7 @@ describe('Plugin', () => {
             name: 'scope:active',
             fn: scope.active,
             self: dummyScope,
-            ret: null
+            ret: null,
           })
           scope.active.restore()
         })
@@ -86,7 +110,7 @@ describe('Plugin', () => {
           testChannel({
             name: 'scope:activate',
             fn: scope.activate,
-            self: dummyScope
+            self: dummyScope,
           })
           scope.activate.restore()
         })
@@ -99,7 +123,7 @@ describe('Plugin', () => {
           testChannel({
             name: 'scope:bind',
             fn: scope.bind,
-            self: dummyScope
+            self: dummyScope,
           })
           scope.bind.restore()
         })
@@ -117,7 +141,7 @@ describe('Plugin', () => {
         testChannel({
           name: 'startSpan',
           fn: tracer.startSpan,
-          ret: dummySpan
+          ret: dummySpan,
         })
         span = tracer.startSpan.getCall(0).returnValue
         sinon.spy(span)
@@ -134,7 +158,7 @@ describe('Plugin', () => {
             name: 'span:context',
             fn: span.context,
             self: dummySpan,
-            ret: dummySpanContext
+            ret: dummySpanContext,
           })
           spanContext = span.context.getCall(0).returnValue
           sinon.stub(spanContext, 'toTraceId').callsFake(() => traceId)
@@ -148,7 +172,7 @@ describe('Plugin', () => {
               name: 'context:toTraceId',
               fn: spanContext.toTraceId,
               self: dummySpanContext,
-              ret: traceId
+              ret: traceId,
             })
           })
         })
@@ -159,7 +183,7 @@ describe('Plugin', () => {
               name: 'context:toSpanId',
               fn: spanContext.toSpanId,
               self: dummySpanContext,
-              ret: spanId
+              ret: spanId,
             })
           })
         })
@@ -170,7 +194,7 @@ describe('Plugin', () => {
               name: 'context:toTraceparent',
               fn: spanContext.toTraceparent,
               self: dummySpanContext,
-              ret: traceparent
+              ret: traceparent,
             })
           })
         })
@@ -182,7 +206,7 @@ describe('Plugin', () => {
             name: 'span:setTag',
             fn: span.setTag,
             self: dummySpan,
-            ret: dummySpan
+            ret: dummySpan,
           })
         })
       })
@@ -193,7 +217,7 @@ describe('Plugin', () => {
             name: 'span:addTags',
             fn: span.addTags,
             self: dummySpan,
-            ret: dummySpan
+            ret: dummySpan,
           })
         })
       })
@@ -203,7 +227,7 @@ describe('Plugin', () => {
           testChannel({
             name: 'span:finish',
             fn: span.finish,
-            self: dummySpan
+            self: dummySpan,
           })
         })
       })
@@ -215,7 +239,7 @@ describe('Plugin', () => {
             fn: span.addLink,
             self: dummySpan,
             ret: dummySpan,
-            args: [dummySpanContext]
+            args: [dummySpanContext],
           })
         })
       })
@@ -263,7 +287,7 @@ describe('Plugin', () => {
           const options = {
             name: `${name}:${command}`,
             fn: tracer[name][command],
-            self: tracer[name]
+            self: tracer[name],
           }
           if (typeof ret !== 'undefined') {
             options.ret = ret

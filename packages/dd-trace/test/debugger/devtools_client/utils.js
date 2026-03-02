@@ -4,13 +4,25 @@ const { randomUUID } = require('node:crypto')
 
 module.exports = {
   generateProbeConfig,
-  getRequestOptions
+  getRequestOptions,
 }
 
 /**
  * @typedef {object} RequestOptions
  * @property {string} method
  * @property {string} path
+ */
+
+/**
+ * @typedef {object} CaptureExpression
+ * @property {string} name - The name of the expression (used as key in snapshot)
+ * @property {object} expr - The expression AST to evaluate
+ * @property {{
+ *   maxReferenceDepth?: number,
+ *   maxCollectionSize?: number,
+ *   maxFieldCount?: number,
+ *   maxLength?: number
+ * }} [capture] - Optional per-expression capture limits
  */
 
 /**
@@ -23,7 +35,8 @@ module.exports = {
  * @property {string[]} tags
  * @property {string} template
  * @property {Array<{ str: string } | { dsl: string, json: object }>} segments
- * @property {boolean} captureSnapshot
+ * @property {boolean} [captureSnapshot] - Capture full snapshot
+ * @property {CaptureExpression[]} [captureExpressions] - Expressions to capture
  * @property {'EXIT'} evaluateAt
  * @property {{
  *   maxReferenceDepth?: number,
@@ -61,7 +74,7 @@ function generateProbeConfig (breakpoint, overrides = {}) {
     evaluateAt: 'EXIT',
     ...overrides,
     capture: { maxReferenceDepth: 3, ...overrides.capture },
-    sampling: { snapshotsPerSecond: 5000, ...overrides.sampling }
+    sampling: { snapshotsPerSecond: 5000, ...overrides.sampling },
   }
 }
 

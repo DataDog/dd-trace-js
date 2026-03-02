@@ -23,7 +23,7 @@ class Http2ServerPlugin extends ServerPlugin {
       this.tracer,
       {
         ...this.config,
-        service: this.config.service || this.serviceName()
+        service: this.config.service || this.serviceName(),
       },
       req,
       res,

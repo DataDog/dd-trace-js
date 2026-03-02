@@ -2,17 +2,16 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
-const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 require('../../../setup/mocha')
 
-const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 const {
   LARGE_OBJECT_SKIP_THRESHOLD,
-  DEFAULT_MAX_COLLECTION_SIZE
+  DEFAULT_MAX_COLLECTION_SIZE,
 } = require('../../../../src/debugger/devtools_client/snapshot/constants')
+const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 
 const target = getTargetCodePath(__filename)
 
@@ -20,7 +19,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
   describe('maxCollectionSize', function () {
     const configs = [
       undefined,
-      { maxCollectionSize: 3 }
+      { maxCollectionSize: 3 },
     ]
 
     beforeEach(enable(__filename))
@@ -42,8 +41,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
             { type: 'number', value: i.toString() },
             {
               type: 'Object',
-              fields: { i: { type: 'number', value: i.toString() } }
-            }
+              fields: { i: { type: 'number', value: i.toString() } },
+            },
           ])
         }
 
@@ -55,33 +54,39 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         })
 
         it('should have expected number of elements in state', function () {
-          expect(state).to.have.keys(['LARGE_SIZE', 'arr', 'map', 'set', 'wmap', 'wset', 'typedArray'])
+          assert.deepStrictEqual(
+            Object.keys(state).sort(),
+            ['LARGE_SIZE', 'arr', 'map', 'set', 'typedArray', 'wmap', 'wset']
+          )
         })
 
         it('Array', function () {
-          expect(state).to.have.deep.property('arr', {
+          assert.ok('arr' in state)
+          assert.deepStrictEqual(state.arr, {
             type: 'Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
         })
 
         it('Map', function () {
-          expect(state).to.have.deep.property('map', {
+          assert.ok('map' in state)
+          assert.deepStrictEqual(state.map, {
             type: 'Map',
             entries: expectedEntries,
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
         })
 
         it('Set', function () {
-          expect(state).to.have.deep.property('set', {
+          assert.ok('set' in state)
+          assert.deepStrictEqual(state.set, {
             type: 'Set',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
         })
 
@@ -89,7 +94,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertObjectContains(state.wmap, {
             type: 'WeakMap',
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
 
           assert.strictEqual(state.wmap.entries.length, maxCollectionSize)
@@ -111,7 +116,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
           assertObjectContains(state.wset, {
             type: 'WeakSet',
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
 
           assert.strictEqual(state.wset.elements.length, maxCollectionSize)
@@ -127,11 +132,12 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         })
 
         it('TypedArray', function () {
-          expect(state).to.have.deep.property('typedArray', {
+          assert.ok('typedArray' in state)
+          assert.deepStrictEqual(state.typedArray, {
             type: 'Uint16Array',
             elements: expectedElements,
             notCapturedReason: 'collectionSize',
-            size: LARGE_OBJECT_SKIP_THRESHOLD - 1
+            size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
           })
         })
       })

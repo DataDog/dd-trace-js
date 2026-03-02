@@ -1,17 +1,17 @@
 'use strict'
 
-const { processModule } = require('../src/utils.js')
 const assert = require('assert')
 const path = require('path')
-const sinon = require('sinon')
 const fs = require('fs')
+const sinon = require('sinon')
+const { processModule } = require('../src/utils.js')
 
 describe('esbuild utils', () => {
   describe('processModule', () => {
     it('should set a single exported method', async () => {
       const setters = await processModule({
         path: path.join(__dirname, 'resources', 'export-method.mjs'),
-        context: { format: 'module' }
+        context: { format: 'module' },
       })
       assert.strictEqual(setters.size, 1)
       assert.strictEqual(setters.has('exportMethod'), true)
@@ -20,7 +20,7 @@ describe('esbuild utils', () => {
     it('should set the default exported method', async () => {
       const setters = await processModule({
         path: path.join(__dirname, 'resources', 'export-default-method.mjs'),
-        context: { format: 'module' }
+        context: { format: 'module' },
       })
 
       assert.strictEqual(setters.size, 1)
@@ -30,7 +30,7 @@ describe('esbuild utils', () => {
     it('should set the nested exports', async () => {
       const setters = await processModule({
         path: path.join(__dirname, 'resources', 'export-method-and-nested-method.mjs'),
-        context: { format: 'module' }
+        context: { format: 'module' },
       })
 
       assert.strictEqual(setters.size, 2)
@@ -42,7 +42,7 @@ describe('esbuild utils', () => {
       const setters = await processModule({
         path: 'http',
         internal: true,
-        context: { format: 'module' }
+        context: { format: 'module' },
       })
 
       assert.strictEqual(setters.size, Object.keys(await import('http')).length)

@@ -1,9 +1,9 @@
 'use strict'
 
-const { addHook } = require('./helpers/instrument')
+const { channel, tracingChannel } = require('dc-polyfill')
+
 const shimmer = require('../../datadog-shimmer')
-const tracingChannel = require('dc-polyfill').tracingChannel
-const channel = require('dc-polyfill').channel
+const { addHook } = require('./helpers/instrument')
 
 const genaiTracingChannel = tracingChannel('apm:google:genai:request')
 const onStreamedChunkCh = channel('apm:google:genai:request:chunk')
@@ -83,7 +83,7 @@ function finish (ctx, result, error) {
 // Hook the main package entry point
 addHook({
   name: '@google/genai',
-  versions: ['>=1.19.0']
+  versions: ['>=1.19.0'],
 }, exports => {
   // Wrap GoogleGenAI to intercept when it creates Models instances
   if (!exports.GoogleGenAI) return exports

@@ -23,7 +23,7 @@ const potentialConflicts = new Set([
   'elastic-apm-node',
   'newrelic',
   'stackify-node-apm',
-  'sqreen'
+  'sqreen',
 ])
 
 const extractPackageAndModulePath = require('./extract-package-and-module-path')

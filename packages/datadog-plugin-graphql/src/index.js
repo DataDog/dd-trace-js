@@ -15,7 +15,7 @@ class GraphQLPlugin extends CompositePlugin {
       execute: GraphQLExecutePlugin,
       parse: GraphQLParsePlugin,
       validate: GraphQLValidatePlugin,
-      resolve: GraphQLResolvePlugin
+      resolve: GraphQLResolvePlugin,
     }
   }
 
@@ -35,7 +35,7 @@ function validateConfig (config) {
     depth: getDepth(config),
     variables: getVariablesFilter(config),
     collapse: config.collapse === undefined || !!config.collapse,
-    hooks: getHooks(config)
+    hooks: getHooks(config),
   }
 }
 

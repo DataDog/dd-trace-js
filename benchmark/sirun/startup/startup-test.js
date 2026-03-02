@@ -27,7 +27,6 @@ if (Number(process.env.EVERYTHING)) {
     'axios',
     'benchmark',
     'body-parser',
-    'chai',
     'crypto-randomuuid',
     'dc-polyfill',
     'eslint-plugin-cypress',
@@ -67,16 +66,14 @@ if (Number(process.env.EVERYTHING)) {
     'semifies',
     'semver',
     'shell-quote',
-    'sinon-chai',
     'sinon',
     'source-map',
-    'tap',
     'tiktoken',
     'tlhunter-sorted-set',
     'ttl-set',
     'workerpool',
     'yaml',
-    'yarn-deduplicate'
+    'yarn-deduplicate',
   ]
   for (const pkg of packages) {
     require(pkg)

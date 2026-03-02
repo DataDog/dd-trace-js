@@ -29,14 +29,14 @@ describe('sendTelemetry', () => {
       { name: 'abort', tags: ['1'] },
       { name: 'abort.integration', tags: ['2'] },
       { name: 'abort.integration', tags: ['3'] },
-      { name: 'foo', tags: ['4'] }
+      { name: 'foo', tags: ['4'] },
     ])
     const msgs = await cleanup()
     assertTelemetryPoints(process.pid, msgs, [
       'abort', '1',
       'abort.integration', '2',
       'abort.integration', '3',
-      'foo', '4'
+      'foo', '4',
     ])
   })
 
@@ -44,7 +44,7 @@ describe('sendTelemetry', () => {
     it('should not send `abort` more than once in the same call', async () => {
       sendTelemetry([
         { name: 'abort', tags: ['1'] },
-        { name: 'abort', tags: ['2'] }
+        { name: 'abort', tags: ['2'] },
       ])
       const msgs = await cleanup()
       assertTelemetryPoints(process.pid, msgs, ['abort', '1'])
@@ -60,7 +60,7 @@ describe('sendTelemetry', () => {
     it('should not send `abort.integration` more than once if tags are the same in the same call', async () => {
       sendTelemetry([
         { name: 'abort.integration', tags: ['1'] },
-        { name: 'abort.integration', tags: ['1'] }
+        { name: 'abort.integration', tags: ['1'] },
       ])
       const msgs = await cleanup()
       assertTelemetryPoints(process.pid, msgs, ['abort.integration', '1'])
@@ -88,12 +88,12 @@ describe('sendTelemetry', () => {
 
     function loadTelemetryModuleWithMockProc () {
       return proxyquire('../../src/guardrails/telemetry', {
-        child_process: { spawn: () => mockProc }
+        child_process: { spawn: () => mockProc },
       })
     }
 
     function assertStdinMetadata (expected) {
-      assert.ok(capturedStdinData != null)
+      assert.ok(capturedStdinData)
       const parsed = JSON.parse(capturedStdinData)
       assert.strictEqual(parsed.metadata.result, expected.result)
       assert.strictEqual(parsed.metadata.result_class, expected.result_class)
@@ -110,13 +110,13 @@ describe('sendTelemetry', () => {
       telemetryModule([{ name: 'error', tags: ['integration:express'] }], undefined, {
         result: 'error',
         result_class: 'internal_error',
-        result_reason: 'Error during instrumentation of express@4.18.0: TypeError'
+        result_reason: 'Error during instrumentation of express@4.18.0: TypeError',
       })
 
       assertStdinMetadata({
         result: 'error',
         result_class: 'internal_error',
-        result_reason: 'Error during instrumentation of express@4.18.0: TypeError'
+        result_reason: 'Error during instrumentation of express@4.18.0: TypeError',
       })
     })
 
@@ -124,13 +124,13 @@ describe('sendTelemetry', () => {
       telemetryModule('abort.integration', ['integration:redis'], {
         result: 'abort',
         result_class: 'incompatible_library',
-        result_reason: 'Incompatible integration version: redis@2.8.0'
+        result_reason: 'Incompatible integration version: redis@2.8.0',
       })
 
       assertStdinMetadata({
         result: 'abort',
         result_class: 'incompatible_library',
-        result_reason: 'Incompatible integration version: redis@2.8.0'
+        result_reason: 'Incompatible integration version: redis@2.8.0',
       })
     })
 
@@ -140,20 +140,20 @@ describe('sendTelemetry', () => {
       assertStdinMetadata({
         result: 'unknown',
         result_class: 'unknown',
-        result_reason: 'unknown'
+        result_reason: 'unknown',
       })
     })
 
     it('should partially override default metadata', () => {
       telemetryModule('error', ['integration:mongodb'], {
         result: 'error',
-        result_reason: 'Connection failed'
+        result_reason: 'Connection failed',
       })
 
       assertStdinMetadata({
         result: 'error',
         result_class: 'unknown',
-        result_reason: 'Connection failed'
+        result_reason: 'Connection failed',
       })
     })
   })

@@ -9,8 +9,8 @@ function createSingleExposureEvent () {
     subject: {
       id: 'user-123',
       type: 'user',
-      attributes: { plan: 'premium' }
-    }
+      attributes: { plan: 'premium' },
+    },
   }
 }
 
@@ -23,12 +23,12 @@ function createExposureEventArray (count = 10) {
     subject: {
       id: `user-${i}`,
       type: 'user',
-      attributes: { plan: 'premium' }
-    }
+      attributes: { plan: 'premium' },
+    },
   }))
 }
 
 module.exports = {
   createSingleExposureEvent,
-  createExposureEventArray
+  createExposureEventArray,
 }

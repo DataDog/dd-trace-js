@@ -1,7 +1,11 @@
 'use strict'
 
-const IMAGE_FALLBACK = '[image]'
-const FILE_FALLBACK = '[file]'
+const {
+  INPUT_TYPE_IMAGE,
+  INPUT_TYPE_FILE,
+  IMAGE_FALLBACK,
+  FILE_FALLBACK,
+} = require('./constants')
 
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
 
@@ -11,8 +15,8 @@ const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
  * Performs reverse templating: reconstructs the template by replacing actual values with {{variable_name}}.
  * For images/files: uses {{variable_name}} when values are available, falls back to [image]/[file] when stripped.
  *
- * @param {Array<Object>} instructions - From Response.instructions (array of ResponseInputMessageItem)
- * @param {Object<string, string>} variables - Normalized variables (output of normalizePromptVariables)
+ * @param {Array<object>} instructions - From Response.instructions (array of ResponseInputMessageItem)
+ * @param {Record<string, string>} variables - Normalized variables (output of normalizePromptVariables)
  * @returns {Array<{role: string, content: string}>} Chat template with placeholders
  */
 function extractChatTemplateFromInstructions (instructions, variables) {
@@ -66,7 +70,7 @@ function extractChatTemplateFromInstructions (instructions, variables) {
  * Used for both input messages and chat template extraction. Falls back to [image]/[file] markers
  * when the actual values are stripped (e.g., by OpenAI's default URL stripping behavior).
  *
- * @param {Object} contentItem - Content item from Response.instructions[].content (ResponseInputContentItem)
+ * @param {object} contentItem - Content item from Response.instructions[].content (ResponseInputContentItem)
  * @returns {string|null} Text content, URL/file reference, or [image]/[file] fallback marker
  */
 function extractTextFromContentItem (contentItem) {
@@ -77,11 +81,11 @@ function extractTextFromContentItem (contentItem) {
   }
 
   // For image/file items, extract the actual reference value
-  if (contentItem.type === 'input_image') {
+  if (contentItem.type === INPUT_TYPE_IMAGE) {
     return contentItem.image_url || contentItem.file_id || IMAGE_FALLBACK
   }
 
-  if (contentItem.type === 'input_file') {
+  if (contentItem.type === INPUT_TYPE_FILE) {
     return contentItem.file_id || contentItem.file_url || contentItem.filename || FILE_FALLBACK
   }
 
@@ -93,8 +97,8 @@ function extractTextFromContentItem (contentItem) {
  *
  * Converts ResponseInputText, ResponseInputImage, and ResponseInputFile objects to simple string values.
  *
- * @param {Object<string, string|Object>} variables - From ResponsePrompt.variables
- * @returns {Object<string, string>} Normalized variables with simple string values
+ * @param {Record<string, string | object>} variables - From ResponsePrompt.variables
+ * @returns {Record<string, string>} Normalized variables with simple string values
  */
 function normalizePromptVariables (variables) {
   if (!variables) return {}
@@ -102,13 +106,21 @@ function normalizePromptVariables (variables) {
   return Object.fromEntries(
     Object.entries(variables).map(([key, value]) => [
       key,
-      extractTextFromContentItem(value) ?? String(value ?? '')
+      extractTextFromContentItem(value) ?? String(value ?? ''),
     ])
+  )
+}
+
+function hasMultimodalInputs (variables) {
+  if (!variables) return false
+  return Object.values(variables).some(value =>
+    value?.type === INPUT_TYPE_IMAGE || value?.type === INPUT_TYPE_FILE
   )
 }
 
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
-  extractTextFromContentItem
+  extractTextFromContentItem,
+  hasMultimodalInputs,
 }

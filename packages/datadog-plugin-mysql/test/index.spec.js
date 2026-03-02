@@ -6,14 +6,13 @@ const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
+const ddpv = require('mocha/package.json').version
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
-const ddpv = require('mocha/package.json').version
 
 describe('Plugin', () => {
   let mysql
@@ -39,7 +38,7 @@ describe('Plugin', () => {
           connection = mysql.createConnection({
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -92,8 +91,8 @@ describe('Plugin', () => {
                 'db.user': 'root',
                 'db.type': 'mysql',
                 component: 'mysql',
-                '_dd.integration': 'mysql'
-              }
+                '_dd.integration': 'mysql',
+              },
             })
             .then(done)
             .catch(done)
@@ -113,8 +112,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'mysql'
-                }
+                  component: 'mysql',
+                },
               })
             })
             .then(done)
@@ -150,7 +149,7 @@ describe('Plugin', () => {
           connection = mysql.createConnection({
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -160,12 +159,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mysql.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mysql.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
 
@@ -173,7 +172,7 @@ describe('Plugin', () => {
           agent
             .assertFirstTraceSpan({
               name: expectedSchema.outbound.opName,
-              service: 'custom'
+              service: 'custom',
             })
             .then(done)
             .catch(done)
@@ -199,7 +198,7 @@ describe('Plugin', () => {
           connection = mysql.createConnection({
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -209,12 +208,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mysql.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mysql.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
 
@@ -225,7 +224,7 @@ describe('Plugin', () => {
             sinon.assert.calledWith(serviceSpy, sinon.match({
               host: 'localhost',
               user: 'root',
-              database: 'db'
+              database: 'db',
             }))
             done()
           })
@@ -251,7 +250,7 @@ describe('Plugin', () => {
             connectionLimit: 1,
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
         })
 
@@ -274,8 +273,8 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 'db.user': 'root',
                 'db.type': 'mysql',
-                component: 'mysql'
-              }
+                component: 'mysql',
+              },
             })
             .then(done)
             .catch(done)
@@ -322,7 +321,7 @@ describe('Plugin', () => {
           connection = mysql.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -394,7 +393,7 @@ describe('Plugin', () => {
           connection = mysql.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -415,7 +414,7 @@ describe('Plugin', () => {
         it('trace query resource should not be changed when propagation is enabled', done => {
           agent
             .assertFirstTraceSpan({
-              resource: 'SELECT 1 + 1 AS solution'
+              resource: 'SELECT 1 + 1 AS solution',
             })
             .then(done)
             .catch(done)
@@ -444,7 +443,7 @@ describe('Plugin', () => {
           connection = mysql.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -480,7 +479,7 @@ describe('Plugin', () => {
           connection = mysql.createConnection({
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect()
         })
@@ -540,7 +539,7 @@ describe('Plugin', () => {
             connectionLimit: 1,
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
         })
 
@@ -576,7 +575,7 @@ describe('Plugin', () => {
             connectionLimit: 1,
             host: '127.0.0.1',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
         })
 

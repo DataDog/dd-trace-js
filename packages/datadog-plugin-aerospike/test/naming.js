@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   command: {
     v0: {
       opName: 'aerospike.command',
-      serviceName: 'test-aerospike'
+      serviceName: 'test-aerospike',
     },
     v1: {
       opName: 'aerospike.command',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

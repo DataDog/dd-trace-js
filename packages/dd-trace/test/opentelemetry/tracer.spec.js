@@ -1,22 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
-const sinon = require('sinon')
 const { performance } = require('perf_hooks')
+
+const { describe, it } = require('mocha')
+const sinon = require('sinon')
 const api = require('@opentelemetry/api')
-const { hrTime, timeInputToHrTime } = require('@opentelemetry/core')
 
+const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 require('../setup/core')
-
 require('../../').init()
-
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const Span = require('../../src/opentelemetry/span')
-
 const DatadogSpan = require('../../src/opentracing/span')
 const tracer = require('../../')
 
@@ -32,7 +28,7 @@ function isChildOf (child, parent) {
 describe('OTel Tracer', () => {
   it('should get resource', () => {
     const tracerProvider = new TracerProvider({
-      resource: 'some resource'
+      resource: 'some resource',
     })
 
     const tracer = new Tracer({}, {}, tracerProvider)
@@ -54,10 +50,10 @@ describe('OTel Tracer', () => {
     const otelTracer = new Tracer({}, {}, tracerProvider)
 
     const span = otelTracer.startSpan('name')
-    expect(span).to.be.an.instanceOf(Span)
+    assert.ok(span instanceof Span)
 
     const ddSpan = span._ddSpan
-    expect(ddSpan).to.be.an.instanceOf(DatadogSpan)
+    assert.ok(ddSpan instanceof DatadogSpan)
     assert.strictEqual(ddSpan._name, 'name')
   })
 
@@ -67,8 +63,8 @@ describe('OTel Tracer', () => {
 
     const span = otelTracer.startSpan('name', {
       attributes: {
-        foo: 'bar'
-      }
+        foo: 'bar',
+      },
     })
 
     const ddSpanContext = span._ddSpan.context()
@@ -85,12 +81,12 @@ describe('OTel Tracer', () => {
       [api.SpanKind.SERVER, api.SpanKind.SERVER],
       [api.SpanKind.CLIENT, api.SpanKind.CLIENT],
       [api.SpanKind.PRODUCER, api.SpanKind.PRODUCER],
-      [api.SpanKind.CONSUMER, api.SpanKind.CONSUMER]
+      [api.SpanKind.CONSUMER, api.SpanKind.CONSUMER],
     ]
 
     for (const [input, output] of checks) {
       const span = otelTracer.startSpan('name', {
-        kind: input
+        kind: input,
       })
 
       assert.strictEqual(span.kind, output)
@@ -111,12 +107,12 @@ describe('OTel Tracer', () => {
       // performance.now()
       [perfnow, hrTime(perfnow)],
       // Date.now()
-      [datenow, timeInputToHrTime(datenow)]
+      [datenow, timeInputToHrTime(datenow)],
     ]
 
     for (const [input, output] of checks) {
       const span = otelTracer.startSpan('name', {
-        startTime: input
+        startTime: input,
       })
       assert.deepStrictEqual(span.startTime, output)
     }
@@ -128,7 +124,7 @@ describe('OTel Tracer', () => {
     const otelTracer = new Tracer({}, {}, tracerProvider)
 
     otelTracer.startActiveSpan('name', (span) => {
-      expect(span).to.be.an.instanceOf(Span)
+      assert.ok(span instanceof Span)
       assert.strictEqual(span._ddSpan, tracer.scope().active())
     })
   })
@@ -175,14 +171,14 @@ describe('OTel Tracer', () => {
 
     otelTracer.startActiveSpan('name', (outer) => {
       const inner = otelTracer.startSpan('name', {
-        root: true
+        root: true,
       })
 
       const parentContext = outer._ddSpan.context()
       const childContext = inner._ddSpan.context()
 
       assert.notStrictEqual(childContext.toTraceId(), parentContext.toTraceId())
-      expect(childContext._parentId).to.not.eql(parentContext._spanId)
+      assert.notDeepStrictEqual(childContext._parentId, parentContext._spanId)
     })
   })
 

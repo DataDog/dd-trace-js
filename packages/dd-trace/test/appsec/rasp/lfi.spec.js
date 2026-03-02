@@ -14,24 +14,24 @@ describe('RASP - lfi.js', () => {
 
   beforeEach(() => {
     legacyStorage = {
-      getStore: sinon.stub()
+      getStore: sinon.stub(),
     }
 
     waf = {
-      run: sinon.stub()
+      run: sinon.stub(),
     }
 
     web = {
-      root: sinon.stub()
+      root: sinon.stub(),
     }
 
     blocking = {
-      block: sinon.stub()
+      block: sinon.stub(),
     }
 
     appsecFsPlugin = {
       enable: sinon.stub(),
-      disable: sinon.stub()
+      disable: sinon.stub(),
     }
 
     lfi = proxyquire('../../../src/appsec/rasp/lfi', {
@@ -39,7 +39,7 @@ describe('RASP - lfi.js', () => {
       '../waf': waf,
       '../../plugins/util/web': web,
       '../blocking': blocking,
-      './fs-plugin': appsecFsPlugin
+      './fs-plugin': appsecFsPlugin,
     })
 
     config = {
@@ -47,9 +47,9 @@ describe('RASP - lfi.js', () => {
         stackTrace: {
           enabled: true,
           maxStackTraces: 2,
-          maxDepth: 42
-        }
-      }
+          maxDepth: 42,
+        },
+      },
     }
   })
 

@@ -95,5 +95,5 @@ function decodeUvarint64 (
 
 module.exports = {
   encodeVarint,
-  decodeVarint
+  decodeVarint,
 }

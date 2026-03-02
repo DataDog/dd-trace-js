@@ -6,3 +6,4 @@ paths-ignore:
   - 'node-upstream-tests'
   - 'packages/**/test'
   - 'scripts'
+  - 'vendor/dist'

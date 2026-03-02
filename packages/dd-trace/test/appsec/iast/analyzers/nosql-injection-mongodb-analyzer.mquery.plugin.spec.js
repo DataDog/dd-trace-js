@@ -75,7 +75,7 @@ describe('nosql injection detection with mquery', () => {
                 try {
                   const result = await collection
                     .find({
-                      name: req.query.key
+                      name: req.query.key,
                     })
                     .exec()
 
@@ -91,7 +91,7 @@ describe('nosql injection detection with mquery', () => {
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -101,7 +101,7 @@ describe('nosql injection detection with mquery', () => {
                 try {
                   return collection
                     .find({
-                      name: req.query.key
+                      name: req.query.key,
                     })
                     .then((result) => {
                       assert.notStrictEqual(result, undefined)
@@ -117,7 +117,7 @@ describe('nosql injection detection with mquery', () => {
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -134,7 +134,7 @@ describe('nosql injection detection with mquery', () => {
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -152,7 +152,7 @@ describe('nosql injection detection with mquery', () => {
               occurrences: 2,
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value&key2=value2`).catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -170,7 +170,7 @@ describe('nosql injection detection with mquery', () => {
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value&key2=value2`).catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -188,7 +188,7 @@ describe('nosql injection detection with mquery', () => {
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value&key2=value2`).catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -207,14 +207,14 @@ describe('nosql injection detection with mquery', () => {
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value&key2=value`).catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
               testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability in correct file and line [find]',
               fn: async (req, res) => {
                 const filter = {
-                  name: req.query.key
+                  name: req.query.key,
                 }
                 try {
                   await require(tmpFilePath).vulnerableFind(collection, filter)
@@ -231,16 +231,16 @@ describe('nosql injection detection with mquery', () => {
                 occurrences: 1,
                 location: {
                   path: vulnerableMethodFilename,
-                  line: 5
-                }
-              }
+                  line: 5,
+                },
+              },
             })
 
             testThatRequestHasVulnerability({
               testDescription: 'should have NOSQL_MONGODB_INJECTION vulnerability in correct file and line [findOne]',
               fn: async (req, res) => {
                 const filter = {
-                  name: req.query.key
+                  name: req.query.key,
                 }
                 try {
                   await require(tmpFilePath).vulnerableFindOne(collection, filter)
@@ -257,9 +257,9 @@ describe('nosql injection detection with mquery', () => {
                 occurrences: 1,
                 location: {
                   path: vulnerableMethodFilename,
-                  line: 10
-                }
-              }
+                  line: 10,
+                },
+              },
             })
 
             // this is a known issue. In this case promise is not resolved and exec method is not called but
@@ -278,14 +278,14 @@ describe('nosql injection detection with mquery', () => {
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value&key2=value2`).catch(done)
-              }
+              },
             })
 
             testThatRequestHasNoVulnerability(async (req, res) => {
               try {
                 await collection
                   .find({
-                    name: 'test'
+                    name: 'test',
                   })
               } catch (e) {
                 // do nothing
@@ -313,7 +313,7 @@ describe('nosql injection detection with mquery', () => {
             testThatRequestHasNoVulnerability({
               fn: async (req, res) => {
                 const filter = {
-                  name: req.query.key
+                  name: req.query.key,
                 }
                 try {
                   await require(tmpFilePath).vulnerableFindOne(collection, filter)
@@ -325,7 +325,7 @@ describe('nosql injection detection with mquery', () => {
               vulnerability: 'NOSQL_MONGODB_INJECTION',
               makeRequest: (done, config) => {
                 axios.get(`http://localhost:${config.port}/?key=value`).catch(done)
-              }
+              },
             })
           })
         })

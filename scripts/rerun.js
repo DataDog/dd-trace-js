@@ -9,7 +9,7 @@ const {
   ATTEMPTS = 30,
   BRANCH,
   INTERVAL = 600,
-  WORKFLOW
+  WORKFLOW,
 } = process.env
 
 function rerun (current = 1) {

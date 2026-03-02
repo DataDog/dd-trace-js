@@ -22,6 +22,6 @@ if (builtinModules.includes('inspector/promises')) {
 
   module.exports = {
     ...inspector,
-    Session
+    Session,
   }
 }

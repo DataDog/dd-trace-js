@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../plugins/agent')
@@ -17,7 +16,7 @@ const setup = () => {
     LAMBDA_TASK_ROOT: './packages/dd-trace/test/lambda/fixtures',
     AWS_LAMBDA_FUNCTION_NAME: 'mock-function-name',
     DD_TRACE_ENABLED: 'true',
-    DD_LOG_LEVEL: 'debug'
+    DD_LOG_LEVEL: 'debug',
   }
   process.env = { ...oldEnv, ...newEnv }
 }
@@ -30,16 +29,15 @@ const restoreEnv = () => {
  * Loads the test agent and makes sure the hook for the
  * AWS Lambda function patch is re-registered.
  *
- * @param {*} exporter defines the type of exporter for the test agent.
  * @returns a promise of the agent to load.
  */
-const loadAgent = ({ exporter = 'agent' } = {}) => {
+const loadAgent = () => {
   // Make sure the hook is re-registered
   require('../../src/lambda')
   return agent.load([], [], {
     experimental: {
-      exporter
-    }
+      exporter: 'agent',
+    },
   })
 }
 
@@ -75,7 +73,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -94,7 +92,7 @@ describe('lambda', () => {
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
           assert.strictEqual(trace.error, 0)
         })
@@ -109,7 +107,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -131,7 +129,7 @@ describe('lambda', () => {
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
           assert.strictEqual(trace.error, 0)
         })
@@ -146,7 +144,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
 
@@ -165,7 +163,7 @@ describe('lambda', () => {
       // Expect traces to be correct.
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
           assert.strictEqual(trace.error, 1)
         })
@@ -179,7 +177,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 150
+        getRemainingTimeInMillis: () => 150,
       }
       const _event = {}
       const _ = {}
@@ -196,7 +194,7 @@ describe('lambda', () => {
 
       const checkTraces = agent.assertSomeTraces((_traces) => {
         const traces = _traces[0]
-        expect(traces).lengthOf(1)
+        assert.strictEqual(traces.length, 1)
         traces.forEach((trace) => {
           assert.strictEqual(trace.error, 0)
         })
@@ -220,6 +218,125 @@ describe('lambda', () => {
     })
   })
 
+  describe('lambda authorizers (no context)', () => {
+    beforeEach(setup)
+
+    afterEach(() => {
+      restoreEnv()
+      return closeAgent()
+    })
+
+    it('patches async lambda authorizer correctly (event only, no context)', async () => {
+      // Set the desired handler to patch
+      process.env.DD_LAMBDA_HANDLER = 'handler.authorizerHandler'
+      // Load the agent and re-register hook for patching.
+      await loadAgent()
+
+      // Lambda Authorizers only receive an event, no context
+      const _event = {
+        type: 'REQUEST',
+        methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
+        headers: {
+          Authorization: 'Bearer token123',
+        },
+      }
+
+      // Mock `datadog-lambda` handler resolve and import.
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      // Run the function without context - this should NOT throw
+      const result = await datadog(app.authorizerHandler)(_event)
+
+      assert.notStrictEqual(result, undefined)
+      assert.strictEqual(result.principalId, 'user123')
+      assert.strictEqual(result.policyDocument.Statement[0].Effect, 'Allow')
+
+      // Expect traces to be correct.
+      const checkTraces = agent.assertSomeTraces((_traces) => {
+        const traces = _traces[0]
+        assert.strictEqual(traces.length, 1)
+        traces.forEach((trace) => {
+          assert.strictEqual(trace.error, 0)
+        })
+      })
+      await checkTraces
+    })
+
+    it('patches sync lambda authorizer correctly (event only, no context)', async () => {
+      // Set the desired handler to patch
+      process.env.DD_LAMBDA_HANDLER = 'handler.authorizerHandlerSync'
+      // Load the agent and re-register hook for patching.
+      await loadAgent()
+
+      // Lambda Authorizers only receive an event, no context
+      const _event = {
+        type: 'REQUEST',
+        methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
+      }
+
+      // Mock `datadog-lambda` handler resolve and import.
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      // Run the function without context - this should NOT throw
+      // Note: datadog-lambda mock wraps in async, so we need to await
+      const result = await datadog(app.authorizerHandlerSync)(_event)
+
+      assert.notStrictEqual(result, undefined)
+      assert.strictEqual(result.principalId, 'user123')
+      assert.strictEqual(result.policyDocument.Statement[0].Effect, 'Allow')
+
+      // Expect traces to be correct.
+      const checkTraces = agent.assertSomeTraces((_traces) => {
+        const traces = _traces[0]
+        assert.strictEqual(traces.length, 1)
+        traces.forEach((trace) => {
+          assert.strictEqual(trace.error, 0)
+        })
+      })
+      await checkTraces
+    })
+
+    it('handles errors in lambda authorizer correctly (event only, no context)', async () => {
+      // Set the desired handler to patch
+      process.env.DD_LAMBDA_HANDLER = 'handler.authorizerErrorHandler'
+      // Load the agent and re-register hook for patching.
+      await loadAgent()
+
+      const _event = {
+        type: 'REQUEST',
+        methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
+      }
+
+      // Mock `datadog-lambda` handler resolve and import.
+      const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
+      const app = require(_handlerPath)
+      datadog = require('./fixtures/datadog-lambda')
+
+      // Run the function - should throw but not because of missing context
+      try {
+        await datadog(app.authorizerErrorHandler)(_event)
+        assert.fail('Expected error to be thrown')
+      } catch (e) {
+        assert.strictEqual(e.name, 'AuthorizationError')
+        assert.strictEqual(e.message, 'Unauthorized')
+      }
+
+      // Expect traces to be correct with error.
+      const checkTraces = agent.assertSomeTraces((_traces) => {
+        const traces = _traces[0]
+        assert.strictEqual(traces.length, 1)
+        traces.forEach((trace) => {
+          assert.strictEqual(trace.error, 1)
+        })
+      })
+      await checkTraces
+    })
+  })
+
   describe('timeout spans', () => {
     beforeEach(setup)
 
@@ -233,7 +350,7 @@ describe('lambda', () => {
       await loadAgent()
 
       const _context = {
-        getRemainingTimeInMillis: () => 25
+        getRemainingTimeInMillis: () => 25,
       }
       const _event = {}
 
@@ -254,17 +371,17 @@ describe('lambda', () => {
 
     const deadlines = [
       {
-        envVar: 'default'
+        envVar: 'default',
         // will use default remaining time
       },
       {
         envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '-100' // will default to 0
+        value: '-100', // will default to 0
       },
       {
         envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '10' // subtract 10 from the remaining time
-      }
+        value: '10', // subtract 10 from the remaining time
+      },
     ]
 
     deadlines.forEach(deadline => {
@@ -276,7 +393,7 @@ describe('lambda', () => {
         process.env.DD_LAMBDA_HANDLER = 'handler.timeoutHandler'
 
         const _context = {
-          getRemainingTimeInMillis: () => 25
+          getRemainingTimeInMillis: () => 25,
         }
         const _event = {}
 

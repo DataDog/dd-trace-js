@@ -2,9 +2,9 @@ export default {
   meta: {
     type: 'problem',
     docs: {
-      description: 'Disallow usage of process.env outside config-helper.js'
+      description: 'Disallow usage of process.env outside config/helper.js',
     },
-    schema: []
+    schema: [],
   },
   create (context) {
     const isProcessEnvObject = (node) => {
@@ -16,7 +16,7 @@ export default {
     const report = (node) => {
       context.report({
         node,
-        message: 'Usage of process.env is only allowed in config-helper.js'
+        message: 'Usage of process.env is only allowed in config/helper.js',
       })
     }
 
@@ -76,7 +76,7 @@ export default {
             break
           }
         }
-      }
+      },
     }
-  }
+  },
 }

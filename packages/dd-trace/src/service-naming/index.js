@@ -6,7 +6,7 @@ class SchemaManager {
    */
   config = {
     spanAttributeSchema: 'v0',
-    spanRemoveIntegrationFromService: false
+    spanRemoveIntegrationFromService: false,
   }
 
   schemas = {

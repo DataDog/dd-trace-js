@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 
 require('../setup/core')
-
 const SpanContext = require('../../src/opentelemetry/span_context')
 const DDSpanContext = require('../../src/opentracing/span_context')
 const id = require('../../src/id')
@@ -21,7 +21,7 @@ describe('OTel Span Context', () => {
     const spanId = id()
     const ddContext = new DDSpanContext({
       traceId: spanId,
-      spanId
+      spanId,
     })
     const context = new SpanContext(ddContext)
     assert.strictEqual(context._ddContext, ddContext)
@@ -31,7 +31,7 @@ describe('OTel Span Context', () => {
     const spanId = id()
     const context = new SpanContext({
       traceId: spanId,
-      spanId
+      spanId,
     })
     const ddContext = context._ddContext
     assert.ok(ddContext instanceof DDSpanContext)
@@ -42,7 +42,7 @@ describe('OTel Span Context', () => {
   it('should get trace id as hex', () => {
     const traceId = id()
     const context = new SpanContext({
-      traceId
+      traceId,
     })
     // normalize to 128 bit since that is what otel expects
     const normalizedTraceId = traceId.toString(16).padStart(32, '0')
@@ -52,7 +52,7 @@ describe('OTel Span Context', () => {
   it('should get span id as hex', () => {
     const spanId = id()
     const context = new SpanContext({
-      spanId
+      spanId,
     })
     assert.strictEqual(context.spanId, spanId.toString(16))
   })
@@ -62,7 +62,7 @@ describe('OTel Span Context', () => {
       [USER_REJECT, 0],
       [AUTO_REJECT, 0],
       [AUTO_KEEP, 1],
-      [USER_KEEP, 1]
+      [USER_KEEP, 1],
     ]
 
     for (const [priority, traceFlags] of checks) {
@@ -71,8 +71,8 @@ describe('OTel Span Context', () => {
         traceId: spanId,
         spanId,
         sampling: {
-          priority
-        }
+          priority,
+        },
       })
       assert.strictEqual(context.traceFlags, traceFlags)
     }
@@ -85,7 +85,7 @@ describe('OTel Span Context', () => {
     })
 
     const context = new SpanContext({
-      tracestate
+      tracestate,
     })
 
     assert.strictEqual(context.traceState.serialize(), 'dd=foo:bar')

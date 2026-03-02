@@ -3,7 +3,7 @@
 const ROLE_MAPPINGS = {
   human: 'user',
   ai: 'assistant',
-  system: 'system'
+  system: 'system',
 }
 
 class LangChainLLMObsHandler {
@@ -38,7 +38,7 @@ class LangChainLLMObsHandler {
     }
     try {
       const messageContent = {
-        content: message.content || ''
+        content: message.content || '',
       }
 
       const role = this.getRole(message)
@@ -55,7 +55,7 @@ class LangChainLLMObsHandler {
     const tokens = {
       inputTokens: 0,
       outputTokens: 0,
-      totalTokens: 0
+      totalTokens: 0,
     }
     if (!llmOutput) return tokens
     const tokenUsage = llmOutput.tokenUsage || llmOutput.usageMetadata || llmOutput.usage || {}
@@ -85,9 +85,9 @@ class LangChainLLMObsHandler {
       tokens: {
         inputTokens,
         outputTokens,
-        totalTokens
+        totalTokens,
       },
-      runId: runIdBase
+      runId: runIdBase,
     }
   }
 

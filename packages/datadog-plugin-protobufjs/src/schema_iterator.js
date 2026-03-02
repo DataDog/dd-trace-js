@@ -7,11 +7,11 @@ const {
   SCHEMA_NAME,
   SCHEMA_OPERATION,
   SCHEMA_WEIGHT,
-  SCHEMA_TYPE
+  SCHEMA_TYPE,
 } = require('../../dd-trace/src/constants')
 const log = require('../../dd-trace/src/log')
 const {
-  SchemaBuilder
+  SchemaBuilder,
 } = require('../../dd-trace/src/datastreams')
 
 class SchemaExtractor {
@@ -39,7 +39,7 @@ class SchemaExtractor {
       Enum: ['enum', null],
       Type: ['type', null],
       map: ['map', null],
-      repeated: ['array', null]
+      repeated: ['array', null],
     }
 
     return typeFormatMapping[type] || ['string', null]

@@ -34,11 +34,11 @@ async function runCypress () {
             return module.default(on, config)
           })
         },
-        specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js'
+        specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
       },
       video: false,
-      screenshotOnRunFailure: false
-    }
+      screenshotOnRunFailure: false,
+    },
   })
   if (results.totalFailed !== 0) {
     process.exit(1)

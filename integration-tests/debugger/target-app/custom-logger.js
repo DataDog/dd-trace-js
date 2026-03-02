@@ -6,8 +6,8 @@ require('dd-trace').init({
     error: (...args) => console.log('[CUSTOM LOGGER][ERROR]:', ...args), // eslint-disable-line no-console
     warn: (...args) => console.log('[CUSTOM LOGGER][WARN]:', ...args), // eslint-disable-line no-console
     info: (...args) => console.log('[CUSTOM LOGGER][INFO]:', ...args), // eslint-disable-line no-console
-    debug: (...args) => console.log('[CUSTOM LOGGER][DEBUG]:', ...args) // eslint-disable-line no-console
-  }
+    debug: (...args) => console.log('[CUSTOM LOGGER][DEBUG]:', ...args), // eslint-disable-line no-console
+  },
 })
 
 const http = require('http')

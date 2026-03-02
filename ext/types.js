@@ -3,5 +3,5 @@
 module.exports = {
   HTTP: 'http',
   SERVERLESS: 'serverless',
-  WEB: 'web'
+  WEB: 'web',
 }

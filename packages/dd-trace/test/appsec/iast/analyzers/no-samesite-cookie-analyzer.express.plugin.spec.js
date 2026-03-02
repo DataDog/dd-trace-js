@@ -1,10 +1,10 @@
 'use strict'
 
-const { prepareTestServerForIastInExpress } = require('../utils')
-const { withVersions } = require('../../../setup/mocha')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { withVersions } = require('../../../setup/mocha')
+const { prepareTestServerForIastInExpress } = require('../utils')
 
 describe('no SameSite cookie vulnerability', () => {
   let setCookieFunctions
@@ -30,8 +30,8 @@ describe('no SameSite cookie vulnerability', () => {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
-            line: 4
-          }
+            line: 4,
+          },
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -41,8 +41,8 @@ describe('no SameSite cookie vulnerability', () => {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
-            line: 4
-          }
+            line: 4,
+          },
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -51,8 +51,8 @@ describe('no SameSite cookie vulnerability', () => {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
-            line: 8
-          }
+            line: 8,
+          },
         })
 
         testThatRequestHasVulnerability((req, res) => {
@@ -61,8 +61,8 @@ describe('no SameSite cookie vulnerability', () => {
           occurrences: 1,
           location: {
             path: setCookieFunctionsFilename,
-            line: 12
-          }
+            line: 12,
+          },
         })
 
         testThatRequestHasNoVulnerability((req, res) => {

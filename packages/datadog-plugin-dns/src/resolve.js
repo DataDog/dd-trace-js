@@ -16,8 +16,8 @@ class DNSResolvePlugin extends ClientPlugin {
       kind: 'client',
       meta: {
         'dns.hostname': hostname,
-        'dns.rrtype': rrtype
-      }
+        'dns.rrtype': rrtype,
+      },
     }, ctx)
 
     return ctx.currentStore

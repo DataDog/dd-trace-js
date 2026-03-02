@@ -1,12 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
-// we will use this to populate the span-tags map
+const { beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const LLMObsTagger = require('../../src/llmobs/tagger')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('span processor', () => {
   let LLMObsSpanProcessor
@@ -16,16 +17,16 @@ describe('span processor', () => {
 
   beforeEach(() => {
     writer = {
-      append: sinon.stub()
+      append: sinon.stub(),
     }
 
     log = {
-      warn: sinon.stub()
+      warn: sinon.stub(),
     }
 
     LLMObsSpanProcessor = proxyquire('../../src/llmobs/span_processor', {
       '../../../../package.json': { version: 'x.y.z' },
-      '../log': log
+      '../log': log,
     })
 
     processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
@@ -38,13 +39,13 @@ describe('span processor', () => {
     it('should do nothing if llmobs is not enabled', () => {
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: false } })
 
-      expect(() => processor.process(span)).not.to.throw()
+      assert.doesNotThrow(() => processor.process(span))
     })
 
     it('should do nothing if the span is not an llm obs span', () => {
       span = { context: () => ({ _tags: {} }) }
 
-      expect(writer.append).to.not.have.been.called
+      sinon.assert.notCalled(writer.append)
     })
 
     it('should format the span event for the writer', () => {
@@ -56,9 +57,9 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' }, // should not use this
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
@@ -68,13 +69,13 @@ describe('span processor', () => {
         '_ml_obs.meta.ml_app': 'myApp',
         '_ml_obs.meta.input.messages': [{ role: 'user', content: 'hello' }],
         '_ml_obs.meta.output.messages': [{ role: 'assistant', content: 'world' }],
-        '_ml_obs.llmobs_parent_id': '1234'
+        '_ml_obs.llmobs_parent_id': '1234',
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload).to.deep.equal({
+      assert.deepStrictEqual(payload, {
         trace_id: '123',
         span_id: '456',
         parent_id: '1234',
@@ -87,7 +88,7 @@ describe('span processor', () => {
           'ml_app:myApp',
           'ddtrace.version:x.y.z',
           'error:0',
-          'language:javascript'
+          'language:javascript',
         ],
         start_ns: 0,
         duration: 1000000,
@@ -97,21 +98,21 @@ describe('span processor', () => {
           model_name: 'myModel',
           model_provider: 'myprovider', // should be lowercase
           input: {
-            messages: [{ role: 'user', content: 'hello' }]
+            messages: [{ role: 'user', content: 'hello' }],
           },
           output: {
-            messages: [{ role: 'assistant', content: 'world' }]
+            messages: [{ role: 'assistant', content: 'world' }],
           },
-          metadata: { foo: 'bar' }
+          metadata: { foo: 'bar' },
         },
         metrics: {},
         _dd: {
           trace_id: '123',
-          span_id: '456'
-        }
+          span_id: '456',
+        },
       })
 
-      expect(writer.append).to.have.been.calledOnce
+      sinon.assert.calledOnce(writer.append)
     })
 
     it('removes problematic fields from the metadata', () => {
@@ -119,9 +120,9 @@ describe('span processor', () => {
       const metadata = {
         bigint: 1n,
         deep: {
-          foo: 'bar'
+          foo: 'bar',
         },
-        bar: 'baz'
+        bar: 'baz',
       }
       metadata.circular = metadata
       metadata.deep.circular = metadata.deep
@@ -130,24 +131,24 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.meta.metadata': metadata
+        '_ml_obs.meta.metadata': metadata,
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.meta.metadata).to.deep.equal({
+      assert.deepStrictEqual(payload.meta.metadata, {
         bar: 'baz',
         bigint: 'Unserializable value',
         circular: 'Unserializable value',
-        deep: { foo: 'bar', circular: 'Unserializable value' }
+        deep: { foo: 'bar', circular: 'Unserializable value' },
       })
     })
 
@@ -157,24 +158,24 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'retrieval',
-        '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
+        '_ml_obs.meta.output.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }],
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.meta.output.documents).to.deep.equal([{
+      assert.deepStrictEqual(payload.meta.output.documents, [{
         text: 'hello',
         name: 'myDoc',
         id: '1',
-        score: 0.6
+        score: 0.6,
       }])
     })
 
@@ -184,24 +185,24 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'embedding',
-        '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }]
+        '_ml_obs.meta.input.documents': [{ text: 'hello', name: 'myDoc', id: '1', score: 0.6 }],
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.meta.input.documents).to.deep.equal([{
+      assert.deepStrictEqual(payload.meta.input.documents, [{
         text: 'hello',
         name: 'myDoc',
         id: '1',
-        score: 0.6
+        score: 0.6,
       }])
     })
 
@@ -211,20 +212,20 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.meta.model_name': 'myModel'
+        '_ml_obs.meta.model_name': 'myModel',
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.meta.model_provider).to.equal('custom')
+      assert.strictEqual(payload.meta.model_provider, 'custom')
     })
 
     it('sets an error appropriately', () => {
@@ -234,27 +235,27 @@ describe('span processor', () => {
             _tags: {
               'error.message': 'error message',
               'error.type': 'error type',
-              'error.stack': 'error stack'
+              'error.stack': 'error stack',
             },
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
-        '_ml_obs.meta.span.kind': 'llm'
+        '_ml_obs.meta.span.kind': 'llm',
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.meta['error.message']).to.equal('error message')
-      expect(payload.meta['error.type']).to.equal('error type')
-      expect(payload.meta['error.stack']).to.equal('error stack')
-      expect(payload.status).to.equal('error')
+      assert.strictEqual(payload.meta['error.message'], 'error message')
+      assert.strictEqual(payload.meta['error.type'], 'error type')
+      assert.strictEqual(payload.meta['error.stack'], 'error stack')
+      assert.strictEqual(payload.status, 'error')
 
-      expect(payload.tags).to.include('error_type:error type')
+      assertObjectContains(payload.tags, ['error_type:error type'])
     })
 
     it('uses the error itself if the span does not have specific error fields', () => {
@@ -262,27 +263,27 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {
-              error: new Error('error message')
+              error: new Error('error message'),
             },
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
-        '_ml_obs.meta.span.kind': 'llm'
+        '_ml_obs.meta.span.kind': 'llm',
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.meta['error.message']).to.equal('error message')
-      expect(payload.meta['error.type']).to.equal('Error')
-      expect(payload.meta['error.stack']).to.exist
-      expect(payload.status).to.equal('error')
+      assert.strictEqual(payload.meta['error.message'], 'error message')
+      assert.strictEqual(payload.meta['error.type'], 'Error')
+      assert.ok(payload.meta['error.stack'])
+      assert.strictEqual(payload.status, 'error')
 
-      expect(payload.tags).to.include('error_type:Error')
+      assertObjectContains(payload.tags, ['error_type:Error'])
     })
 
     it('uses the span name from the tag if provided', () => {
@@ -292,20 +293,20 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.name': 'mySpan'
+        '_ml_obs.name': 'mySpan',
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.name).to.equal('mySpan')
+      assert.strictEqual(payload.name, 'mySpan')
     })
 
     it('attaches session id if provided', () => {
@@ -314,21 +315,21 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.session_id': '1234'
+        '_ml_obs.session_id': '1234',
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.session_id).to.equal('1234')
-      expect(payload.tags).to.include('session_id:1234')
+      assert.strictEqual(payload.session_id, '1234')
+      assertObjectContains(payload.tags, ['session_id:1234'])
     })
 
     it('sets span tags appropriately', () => {
@@ -337,22 +338,20 @@ describe('span processor', () => {
           return {
             _tags: {},
             toTraceId () { return '123' },
-            toSpanId () { return '456' }
+            toSpanId () { return '456' },
           }
-        }
+        },
       }
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
-        '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' }
+        '_ml_obs.tags': { hostname: 'localhost', foo: 'bar', source: 'mySource' },
       })
 
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      expect(payload.tags).to.include('foo:bar')
-      expect(payload.tags).to.include('source:mySource')
-      expect(payload.tags).to.include('hostname:localhost')
+      assertObjectContains(payload.tags, ['source:mySource', 'hostname:localhost', 'foo:bar'])
     })
   })
 })

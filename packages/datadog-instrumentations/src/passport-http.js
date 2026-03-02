@@ -6,5 +6,5 @@ const { strategyHook } = require('./passport-utils')
 addHook({
   name: 'passport-http',
   file: 'lib/passport-http/strategies/basic.js',
-  versions: ['>=0.3.0']
+  versions: ['>=0.3.0'],
 }, strategyHook)

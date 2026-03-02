@@ -29,8 +29,8 @@ module.exports = {
       }
       return ddTracePlugin(on, config)
     },
-    specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js'
+    specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
   },
   video: false,
-  screenshotOnRunFailure: false
+  screenshotOnRunFailure: false,
 }

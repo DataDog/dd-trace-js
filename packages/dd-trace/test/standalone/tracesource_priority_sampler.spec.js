@@ -1,12 +1,12 @@
 'use strict'
 
-const { assert } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
-
 const { USER_KEEP, AUTO_KEEP } = require('../../../../ext/priority')
 const DatadogSpan = require('../../src/opentracing/span')
 const TraceSourcePrioritySampler = require('../../src/standalone/tracesource_priority_sampler')
@@ -28,8 +28,8 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
       _sampling: {},
       _trace: {
         tags: {},
-        started: [root]
-      }
+        started: [root],
+      },
     }
     sinon.stub(prioritySampler, '_getContext').returns(context)
   })
@@ -37,7 +37,7 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
   describe('sample', () => {
     it('should provide the context when invoking _getPriorityFromTags', () => {
       const span = new DatadogSpan({}, {}, prioritySampler, {
-        operationName: 'operation'
+        operationName: 'operation',
       })
 
       const _getPriorityFromTags = sinon.stub(prioritySampler, '_getPriorityFromTags')
@@ -55,14 +55,14 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
     })
 
     it('should return undefined if manual.keep or _dd.p.ts are not present', () => {
-      assert.isUndefined(prioritySampler._getPriorityFromTags(tags, context))
+      assert.strictEqual(prioritySampler._getPriorityFromTags(tags, context), undefined)
     })
   })
 
   describe('_getPriorityFromAuto', () => {
     it('should keep trace if it contains _dd.p.ts tag', () => {
       const span = {
-        _trace: {}
+        _trace: {},
       }
 
       context._trace.tags[TRACE_SOURCE_PROPAGATION_KEY] = '02'
@@ -72,7 +72,7 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
 
     it('should use rate limiter if it does not contain _dd.p.ts tag', () => {
       const span = {
-        _trace: {}
+        _trace: {},
       }
 
       sinon.stub(prioritySampler, '_isSampledByRateLimit').returns(true)
@@ -98,8 +98,8 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
       const TraceSourcePrioritySampler = proxyquire('../../src/standalone/tracesource_priority_sampler', {
         '../priority_sampler': PrioritySampler,
         './tracesource': {
-          addTraceSourceTag
-        }
+          addTraceSourceTag,
+        },
       })
 
       prioritySampler = new TraceSourcePrioritySampler('test')
@@ -109,7 +109,7 @@ describe('Disabled APM Tracing or Standalone - TraceSourcePrioritySampler', () =
 
     it('should add tracesource tag for the corresponding product', () => {
       const span = {
-        _trace: {}
+        _trace: {},
       }
 
       prioritySampler.setPriority(span, USER_KEEP, ASM)

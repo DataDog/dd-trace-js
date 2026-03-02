@@ -1,7 +1,7 @@
 'use strict'
 
-const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { addHook, channel } = require('./helpers/instrument')
 const names = ['url', 'node:url']
 
 const parseFinishedChannel = channel('datadog:url:parse:finish')
@@ -17,7 +17,7 @@ addHook({ name: names }, function (url) {
       parseFinishedChannel.publish({
         input,
         parsed: parsedValue,
-        isURL: false
+        isURL: false,
       })
 
       return parsedValue
@@ -25,7 +25,7 @@ addHook({ name: names }, function (url) {
   })
 
   const URLPrototype = url.URL.prototype.constructor.prototype
-  instrumentedGetters.forEach(property => {
+  for (const property of instrumentedGetters) {
     shimmer.wrap(URLPrototype, property, function (originalGet) {
       return function get () {
         const result = originalGet.call(this)
@@ -37,7 +37,7 @@ addHook({ name: names }, function (url) {
         return context.result
       }
     })
-  })
+  }
 
   shimmer.wrap(url, 'URL', (URL) => {
     return class extends URL {
@@ -50,7 +50,7 @@ addHook({ name: names }, function (url) {
           input,
           base,
           parsed: this,
-          isURL: true
+          isURL: true,
         })
       }
 
@@ -70,7 +70,7 @@ addHook({ name: names }, function (url) {
           input,
           base,
           parsed: parsedValue,
-          isURL: true
+          isURL: true,
         })
 
         return parsedValue

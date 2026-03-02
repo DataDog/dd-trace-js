@@ -2,7 +2,7 @@ import 'dd-trace/init.js'
 import mongoose from 'mongoose'
 
 const testSchema = new mongoose.Schema({
-  a: Number
+  a: Number,
 })
 const TestModel = mongoose.model('Test', testSchema)
 

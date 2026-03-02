@@ -34,7 +34,7 @@ const tagger = {
       default:
         return {}
     }
-  }
+  },
 }
 
 module.exports = { tagger }

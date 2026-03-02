@@ -1,11 +1,11 @@
 'use strict'
 
 const assert = require('node:assert')
-const { setup } = require('./utils')
 const {
   DEFAULT_MAX_COLLECTION_SIZE,
-  LARGE_OBJECT_SKIP_THRESHOLD
+  LARGE_OBJECT_SKIP_THRESHOLD,
 } = require('../../packages/dd-trace/src/debugger/devtools_client/snapshot/constants')
+const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('input messages', function () {
@@ -14,14 +14,18 @@ describe('Dynamic Instrumentation', function () {
         // Force a very small time budget in ms to trigger partial snapshots
         const budget = 1
         const t = setup({
+          testApp: 'target-app/time-budget.js',
           dependencies: ['fastify'],
-          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) }
+          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
         })
 
         it(
           'should include partial snapshot marked with notCapturedReason: timeout',
-          // A tolerance of 15ms is used to avoid flakiness
-          test({ t, maxPausedTime: budget + 15, breakpointIndex: 0, maxReferenceDepth: 5 }, (locals) => {
+          // Timing is tested in unit tests with mocked time (collector-deadline.spec.js).
+          // This integration test verifies the end-to-end behavior: that timeout markers
+          // appear in snapshots when the budget is exceeded. We don't assert on exact timing
+          // to avoid flakiness in CI environments where execution time is unpredictable.
+          test({ t, breakpointIndex: 0, maxReferenceDepth: 5 }, (locals) => {
             assert.strictEqual(
               containsTimeBudget(locals),
               true,
@@ -32,7 +36,7 @@ describe('Dynamic Instrumentation', function () {
       })
 
       context('default time budget', function () {
-        const t = setup({ dependencies: ['fastify'] })
+        const t = setup({ testApp: 'target-app/time-budget.js', dependencies: ['fastify'] })
 
         it(
           'should timeout first, then disable subsequent snapshots and emit error diagnostics',
@@ -42,7 +46,7 @@ describe('Dynamic Instrumentation', function () {
               expr: '',
               message: 'An object with 1000000 properties was detected while collecting a snapshot. This exceeds ' +
                 `the maximum number of allowed properties of ${LARGE_OBJECT_SKIP_THRESHOLD}. Future snapshots for ` +
-                'existing probes in this location will be skipped until the Node.js process is restarted'
+                'existing probes in this location will be skipped until the Node.js process is restarted',
             }]
 
             // Listen for the first snapshot payload (should contain notCapturedReason: "timeout")
@@ -62,7 +66,7 @@ describe('Dynamic Instrumentation', function () {
             // Install probe with snapshot capture enabled
             t.agent.addRemoteConfig(breakpoint.generateRemoteConfig({
               captureSnapshot: true,
-              capture: { maxReferenceDepth: 1 }
+              capture: { maxReferenceDepth: 1 },
             }))
 
             // Trigger once; this run is expected to be slow and mark fields with "timeout"
@@ -102,8 +106,9 @@ describe('Dynamic Instrumentation', function () {
         // that the tests should not be flaky, but still fail if the thresholds are not applied.
         const budget = 100
         const t = setup({
+          testApp: 'target-app/time-budget.js',
           dependencies: ['fastify'],
-          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) }
+          env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
         })
 
         it(
@@ -154,8 +159,9 @@ describe('Dynamic Instrumentation', function () {
             this.timeout(2000)
 
             const t = setup({
+              testApp: 'target-app/time-budget.js',
               dependencies: ['fastify'],
-              env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) }
+              env: { DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: String(budget) },
             })
 
             // If this test uncovers any issues, it will show itself as being flaky, as the exact timing of how long it
@@ -163,7 +169,7 @@ describe('Dynamic Instrumentation', function () {
             it('should send a probe result to the agent', async function () {
               t.agent.addRemoteConfig(t.generateRemoteConfig({
                 captureSnapshot: true,
-                capture: { maxReferenceDepth: 5 }
+                capture: { maxReferenceDepth: 5 },
               }))
               t.triggerBreakpoint()
 
@@ -187,7 +193,15 @@ describe('Dynamic Instrumentation', function () {
   })
 })
 
-function test ({ t, maxPausedTime = 0, breakpointIndex, maxReferenceDepth }, assertFn) {
+/**
+ * @param {object} config
+ * @param {object} config.t - Test environment
+ * @param {number} [config.maxPausedTime] - Optional maximum pause time in ms (skips timing assertion if not provided)
+ * @param {number} config.breakpointIndex - Index of the breakpoint to test
+ * @param {number} config.maxReferenceDepth - Maximum reference depth for snapshot
+ * @param {Function} [assertFn] - Optional assertion function for the snapshot locals
+ */
+function test ({ t, maxPausedTime, breakpointIndex, maxReferenceDepth }, assertFn) {
   const breakpoint = t.breakpoints[breakpointIndex]
 
   return async function () {
@@ -195,15 +209,17 @@ function test ({ t, maxPausedTime = 0, breakpointIndex, maxReferenceDepth }, ass
 
     t.agent.addRemoteConfig(breakpoint.generateRemoteConfig({
       captureSnapshot: true,
-      capture: { maxReferenceDepth }
+      capture: { maxReferenceDepth },
     }))
 
     const { data } = await breakpoint.triggerBreakpoint()
 
-    assert.ok(
-      data.paused <= maxPausedTime,
-      `expected thread to be paused <=${maxPausedTime}ms, but was paused for ~${data.paused}ms`
-    )
+    if (maxPausedTime !== undefined) {
+      assert.ok(
+        data.paused <= maxPausedTime,
+        `expected thread to be paused <=${maxPausedTime}ms, but was paused for ~${data.paused}ms`
+      )
+    }
 
     const snapshot = await snapshotPromise
     assertFn?.(snapshot.captures.lines[breakpoint.line].locals)

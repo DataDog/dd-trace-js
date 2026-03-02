@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   server: {
     v0: {
       opName: 'graphql.execute',
-      serviceName: 'test'
+      serviceName: 'test',
     },
     v1: {
       opName: 'graphql.server.request',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

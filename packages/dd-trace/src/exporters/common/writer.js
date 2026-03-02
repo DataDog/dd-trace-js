@@ -1,7 +1,7 @@
 'use strict'
 
-const request = require('./request')
 const log = require('../../log')
+const request = require('./request')
 const { safeJSONStringify } = require('./util')
 
 class Writer {
@@ -26,10 +26,12 @@ class Writer {
 
   append (payload) {
     if (!request.writable) {
+      // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => `Maximum number of active requests reached. Payload discarded: ${safeJSONStringify(payload)}`)
       return
     }
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
     this._encode(payload)

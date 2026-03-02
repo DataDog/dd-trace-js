@@ -23,10 +23,11 @@ const artifactsUrl = num =>
 function get (url, headers) {
   return new Promise((resolve, reject) => {
     https.get(url, {
-      headers: Object.assign({
+      headers: {
         'user-agent': 'dd-results-retriever',
-        accept: 'application/json'
-      }, headers)
+        accept: 'application/json',
+        ...headers,
+      },
     }, async res => {
       if (res.statusCode >= 300 && res.statusCode < 400) {
         resolve(get(res.headers.location))
@@ -93,7 +94,7 @@ function summary (iterations) {
       stddev: s,
       stddev_pct: (s / m) * 100.0,
       min: Math.min(...items),
-      max: Math.max(...items)
+      max: Math.max(...items),
     }
   }
   return result
@@ -143,7 +144,7 @@ module.exports = {
   artifactsUrl,
   circleHeaders,
   summarizeResults,
-  getResults
+  getResults,
 }
 if (require.main === module) {
   main()

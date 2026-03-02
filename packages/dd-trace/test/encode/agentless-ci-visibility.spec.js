@@ -2,17 +2,15 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const id = require('../../src/id')
+
 const {
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
@@ -22,7 +20,7 @@ const {
   MAX_RESOURCE_NAME_LENGTH,
   MAX_TYPE_LENGTH,
   DEFAULT_SPAN_NAME,
-  DEFAULT_SERVICE_NAME
+  DEFAULT_SERVICE_NAME,
 } = require('../../src/encode/tags-processors')
 
 const { version: ddTraceVersion } = require('../../../../package.json')
@@ -35,10 +33,10 @@ describe('agentless-ci-visibility-encode', () => {
 
   beforeEach(() => {
     logger = {
-      debug: sinon.stub()
+      debug: sinon.stub(),
     }
     const { AgentlessCiVisibilityEncoder } = proxyquire('../../src/encode/agentless-ci-visibility', {
-      '../log': logger
+      '../log': logger,
     })
     writer = { flush: sinon.spy() }
     encoder = new AgentlessCiVisibilityEncoder(writer, {})
@@ -53,7 +51,7 @@ describe('agentless-ci-visibility-encode', () => {
       type: 'foo',
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
       },
       metrics: {
         positive: 123456712345,
@@ -61,10 +59,10 @@ describe('agentless-ci-visibility-encode', () => {
         float: 1.23456712345,
         negativefloat: -1.23456789,
         bigfloat: 12345678.9,
-        bignegativefloat: -12345678.9
+        bignegativefloat: -12345678.9,
       },
       start: 123,
-      duration: 456
+      duration: 456,
     }]
   })
 
@@ -77,7 +75,7 @@ describe('agentless-ci-visibility-encode', () => {
     assert.strictEqual(decodedTrace.version, 1)
     assertObjectContains(decodedTrace.metadata['*'], {
       language: 'javascript',
-      library_version: ddTraceVersion
+      library_version: ddTraceVersion,
     })
     const spanEvent = decodedTrace.events[0]
     assert.strictEqual(spanEvent.type, 'span')
@@ -89,20 +87,20 @@ describe('agentless-ci-visibility-encode', () => {
       name: 'test',
       resource: 'test-r',
       service: 'test-s',
-      type: 'foo'
+      type: 'foo',
     })
     assert.strictEqual(spanEvent.content.error, 0)
     assert.strictEqual(spanEvent.content.start, 123)
     assert.strictEqual(spanEvent.content.duration, 456)
 
     assert.deepStrictEqual(spanEvent.content.meta, {
-      bar: 'baz'
+      bar: 'baz',
     })
     assertObjectContains(spanEvent.content.metrics, {
       float: 1.23456712345,
       negativefloat: -1.23456789,
       bigfloat: 12345678.9,
-      bignegativefloat: -12345678.9
+      bignegativefloat: -12345678.9,
     })
 
     assert.strictEqual(spanEvent.content.metrics.positive, 123456712345)
@@ -137,7 +135,7 @@ describe('agentless-ci-visibility-encode', () => {
       parent_id: id('1234abcd1234abcd'),
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
       },
       metrics: {},
       name: tooLongString,
@@ -145,14 +143,14 @@ describe('agentless-ci-visibility-encode', () => {
       type: tooLongString,
       service: tooLongString,
       start: 123,
-      duration: 456
+      duration: 456,
     }]
     encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    expect(decodedTrace)
+    assert.ok(decodedTrace)
     const spanEvent = decodedTrace.events[0]
     assert.strictEqual(spanEvent.content.type.length, MAX_TYPE_LENGTH)
     assert.strictEqual(spanEvent.content.name.length, MAX_NAME_LENGTH)
@@ -168,19 +166,19 @@ describe('agentless-ci-visibility-encode', () => {
       parent_id: id('1234abcd1234abcd'),
       error: 0,
       meta: {
-        bar: 'baz'
+        bar: 'baz',
       },
       metrics: {},
       resource: 'resource',
       start: 123,
-      duration: 456
+      duration: 456,
     }]
     encoder.encode(traceToTruncate)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    expect(decodedTrace)
+    assert.ok(decodedTrace)
     const spanEvent = decodedTrace.events[0]
     assert.strictEqual(spanEvent.content.service, DEFAULT_SERVICE_NAME)
     assert.strictEqual(spanEvent.content.name, DEFAULT_SPAN_NAME)
@@ -195,17 +193,17 @@ describe('agentless-ci-visibility-encode', () => {
       parent_id: id('1234abcd1234abcd'),
       error: 0,
       meta: {
-        [tooLongKey]: tooLongValue
+        [tooLongKey]: tooLongValue,
       },
       metrics: {
-        [tooLongKey]: 15
+        [tooLongKey]: 15,
       },
       start: 123,
       duration: 456,
       type: 'foo',
       name: '',
       resource: '',
-      service: ''
+      service: '',
     }]
     encoder.encode(traceToTruncate)
 
@@ -213,10 +211,10 @@ describe('agentless-ci-visibility-encode', () => {
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
     const spanEvent = decodedTrace.events[0]
     assert.deepStrictEqual(spanEvent.content.meta, {
-      [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`
+      [`${tooLongKey.slice(0, MAX_META_KEY_LENGTH)}...`]: `${tooLongValue.slice(0, MAX_META_VALUE_LENGTH)}...`,
     })
     assert.deepStrictEqual(spanEvent.content.metrics, {
-      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15
+      [`${tooLongKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`]: 15,
     })
   })
 
@@ -234,7 +232,7 @@ describe('agentless-ci-visibility-encode', () => {
         type: 'test_session_end',
         name: '',
         resource: '',
-        service: ''
+        service: '',
       },
       {
         trace_id: id('1234abcd1234abcd'),
@@ -248,8 +246,8 @@ describe('agentless-ci-visibility-encode', () => {
         type: 'http',
         name: '',
         resource: '',
-        service: ''
-      }
+        service: '',
+      },
     ]
 
     encoder.encode(traceToFilter)
@@ -268,7 +266,7 @@ describe('agentless-ci-visibility-encode', () => {
       parent_id: id('1234abcd1234abcd'),
       error: 0,
       meta: {
-        test_session_id: '1234abcd1234abcd'
+        test_session_id: '1234abcd1234abcd',
       },
       metrics: {},
       start: 123,
@@ -276,7 +274,7 @@ describe('agentless-ci-visibility-encode', () => {
       type: 'foo',
       name: '',
       resource: '',
-      service: ''
+      service: '',
     }]
     encoder.encode(traceToTruncate)
     const buffer = encoder.makePayload()
@@ -294,7 +292,7 @@ describe('agentless-ci-visibility-encode', () => {
     it('should add simple metadata tags', () => {
       const tags = {
         test: { tag: 'value1' },
-        test_session_end: { tag: 'value2' }
+        test_session_end: { tag: 'value2' },
       }
       encoder.addMetadataTags(tags)
       assert.deepStrictEqual(encoder.metadataTags, tags)
@@ -302,16 +300,16 @@ describe('agentless-ci-visibility-encode', () => {
 
     it('should merge dictionaries if there are values already', () => {
       encoder.metadataTags = {
-        test: { tag: 'value1' }
+        test: { tag: 'value1' },
       }
       const tags = {
         test: { other: 'value2' },
-        test_session_end: { tag: 'value3' }
+        test_session_end: { tag: 'value3' },
       }
       encoder.addMetadataTags(tags)
       assert.deepStrictEqual(encoder.metadataTags, {
         test: { tag: 'value1', other: 'value2' },
-        test_session_end: { tag: 'value3' }
+        test_session_end: { tag: 'value3' },
       })
     })
 

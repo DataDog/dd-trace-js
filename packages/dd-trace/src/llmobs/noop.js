@@ -39,7 +39,7 @@ class NoopLLMObs {
     const llmobs = this
     return function (target, ctxOrPropertyKey, descriptor) {
       if (!ctxOrPropertyKey) return target
-      if (typeof ctxOrPropertyKey === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
+      if (typeof ctxOrPropertyKey === 'object') {
         const ctx = ctxOrPropertyKey
         if (ctx.kind !== 'method') return target
 
@@ -59,7 +59,7 @@ class NoopLLMObs {
       const original = target[propertyKey]
       Object.defineProperty(target, propertyKey, {
         ...Object.getOwnPropertyDescriptor(target, propertyKey),
-        value: llmobs.wrap({ name: propertyKey, _decorator: true, ...options }, original)
+        value: llmobs.wrap({ name: propertyKey, _decorator: true, ...options }, original),
       })
 
       return target
@@ -81,6 +81,8 @@ class NoopLLMObs {
   deregisterProcessor () {}
 
   annotationContext (options, fn) { return fn() }
+
+  routingContext (options, fn) { return fn() }
 }
 
 module.exports = NoopLLMObs

@@ -5,7 +5,7 @@ module.exports = function extractSensitiveRanges (evidence) {
   if (evidence.ranges[0].start > 0) {
     newRanges.push({
       start: 0,
-      end: evidence.ranges[0].start
+      end: evidence.ranges[0].start,
     })
   }
 

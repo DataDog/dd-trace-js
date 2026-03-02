@@ -18,8 +18,8 @@ module.exports.init = function (tracerConfig) {
       tags: [
         `service:${tracerConfig.tags.service}`,
         `env:${tracerConfig.tags.env}`,
-        `version:${tracerConfig.tags.version}`
-      ]
+        `version:${tracerConfig.tags.version}`,
+      ],
     })
     : new NoopDogStatsDClient()
 
@@ -29,7 +29,7 @@ module.exports.init = function (tracerConfig) {
       hostname: tracerConfig.hostname,
       service: tracerConfig.service,
       apiKey: tracerConfig.apiKey,
-      interval: FLUSH_INTERVAL
+      interval: FLUSH_INTERVAL,
     })
     : new NoopExternalLogger()
 

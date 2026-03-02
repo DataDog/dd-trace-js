@@ -14,11 +14,11 @@ class DNSLookupServicePlugin extends ClientPlugin {
       resource: `${address}:${port}`,
       kind: 'client',
       meta: {
-        'dns.address': address
+        'dns.address': address,
       },
       metrics: {
-        'dns.port': port
-      }
+        'dns.port': port,
+      },
     }, ctx)
 
     return ctx.currentStore

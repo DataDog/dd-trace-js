@@ -6,26 +6,26 @@ const rawExpectedSchema = {
   client: {
     v0: {
       serviceName: 'test',
-      opName: 'http.request'
+      opName: 'http.request',
     },
     v1: {
       serviceName: 'test',
-      opName: 'http.client.request'
-    }
+      opName: 'http.client.request',
+    },
   },
   server: {
     v0: {
       serviceName: 'test',
-      opName: 'http.request'
+      opName: 'http.request',
     },
     v1: {
       serviceName: 'test',
-      opName: 'http.server.request'
-    }
-  }
+      opName: 'http.server.request',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

@@ -1,12 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const axios = require('axios')
 const {
   sandboxCwd, useSandbox, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc
+  FakeAgent, spawnPluginIntegrationTestProc,
 } = require('../../../../integration-tests/helpers')
-const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const axios = require('axios')
 
 withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
   describe('ESM', () => {

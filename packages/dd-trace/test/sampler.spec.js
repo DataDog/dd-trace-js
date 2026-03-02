@@ -2,12 +2,10 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('./setup/core')
-
 const SpanContext = require('../src/opentracing/span_context')
 const id = require('../src/id')
 
@@ -41,7 +39,7 @@ describe('Sampler', () => {
         [0.5, 9223372036854775808n],
         [0.75, 13835058055282163712n],
         [0.9, 16602069666338596864n],
-        [0.95, 17524406870024073216n]
+        [0.95, 17524406870024073216n],
       ]
 
       rates.forEach(([rate, expected]) => {
@@ -55,20 +53,20 @@ describe('Sampler', () => {
     it('should always sample when rate is 1', () => {
       sampler = new Sampler(1)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.true
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id() })), true)
     })
 
     it('should never sample when rate is 0', () => {
       sampler = new Sampler(0)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id() }))).to.be.false
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id() })), false)
     })
 
     it('should sample according to the rate', () => {
       sampler = new Sampler(0.1234)
 
-      expect(sampler.isSampled(new SpanContext({ traceId: id('8135292307740797052', 10) }))).to.be.true
-      expect(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) }))).to.be.false
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id('8135292307740797052', 10) })), true)
+      assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id('2263640730249415707', 10) })), false)
     })
 
     it('should sample according to different rates', () => {
@@ -101,12 +99,12 @@ describe('Sampler', () => {
         [id('10350218024687037124', 10), 0.5, true],
         [id('12078589664685934330', 10), 0.5, false],
         [id('13794769880582338323', 10), 0.5, true],
-        [id('14629469446186818297', 10), 0.5, false]
+        [id('14629469446186818297', 10), 0.5, false],
       ]
 
       idsAndRates.forEach(([id, rate, expected]) => {
         const sampler = new Sampler(rate)
-        expect(sampler.isSampled(new SpanContext({ traceId: id }))).to.equal(expected)
+        assert.strictEqual(sampler.isSampled(new SpanContext({ traceId: id })), expected)
       })
     })
   })

@@ -17,5 +17,5 @@ container.connect({
   username: 'admin',
   password: 'admin',
   host: 'localhost',
-  port: 5673
+  port: 5673,
 })

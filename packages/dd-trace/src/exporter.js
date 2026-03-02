@@ -1,9 +1,9 @@
 'use strict'
 
-const exporters = require('../../../ext/exporters')
 const fs = require('fs')
+const exporters = require('../../../ext/exporters')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const constants = require('./constants')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 module.exports = function getExporter (name) {
   switch (name) {
@@ -11,6 +11,8 @@ module.exports = function getExporter (name) {
       return require('./exporters/log')
     case exporters.AGENT:
       return require('./exporters/agent')
+    case exporters.AGENTLESS:
+      return require('./exporters/agentless')
     case exporters.DATADOG:
       return require('./ci-visibility/exporters/agentless')
     case exporters.AGENT_PROXY:

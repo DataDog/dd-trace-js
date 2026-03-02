@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
 import express from 'express'
-import { Sequelize } from 'sequelize'
+import sequelizeLib from 'sequelize'
 import dc from 'dc-polyfill'
 
 const startCh = dc.channel('datadog:sequelize:query:start')
@@ -12,7 +12,7 @@ startCh.subscribe(() => {
 
 const app = express()
 
-const sequelize = new Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false })
+const sequelize = new sequelizeLib.Sequelize({ dialect: 'sqlite', storage: ':memory:', logging: false })
 
 app.get('/', async (req, res) => {
   await sequelize.query('SELECT 1 AS result')

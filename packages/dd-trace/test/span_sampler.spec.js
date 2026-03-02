@@ -1,12 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-
 const id = require('../src/id')
 
 describe('span sampler', () => {
@@ -24,7 +24,7 @@ describe('span sampler', () => {
     }
 
     SpanSampler = proxyquire('../src/span_sampler', {
-      './sampling_rule': SamplingRule
+      './sampling_rule': SamplingRule,
     })
   })
 
@@ -34,20 +34,20 @@ describe('span sampler', () => {
     const spanContext = {
       _spanId: id('1234567812345678'),
       _sampling: {
-        priority: 2
+        priority: 2,
       },
       _trace: {
-        started: []
+        started: [],
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     try {
@@ -64,26 +64,26 @@ describe('span sampler', () => {
           service: 'test',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 5
-        }
-      ]
+          maxPerSecond: 5,
+        },
+      ],
     })
 
     const spanContext = {
       _spanId: id('1234567812345678'),
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     sampler.sample(spanContext)
@@ -95,7 +95,7 @@ describe('span sampler', () => {
 
     assert.deepStrictEqual(spanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
   })
 
@@ -106,38 +106,38 @@ describe('span sampler', () => {
           service: 'does-not-match',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 3
+          maxPerSecond: 3,
         },
         {
           service: 'test',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 5
+          maxPerSecond: 5,
         },
         {
           service: 'test',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 10
-        }
-      ]
+          maxPerSecond: 10,
+        },
+      ],
     })
 
     const spanContext = {
       _spanId: id('1234567812345678'),
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     sampler.sample(spanContext)
@@ -149,7 +149,7 @@ describe('span sampler', () => {
 
     assert.deepStrictEqual(spanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
   })
 
@@ -160,9 +160,9 @@ describe('span sampler', () => {
           service: 'test',
           name: '*operation',
           sampleRate: 1.0,
-          maxPerSecond: 5
-        }
-      ]
+          maxPerSecond: 5,
+        },
+      ],
     })
 
     // Create two span contexts
@@ -171,31 +171,31 @@ describe('span sampler', () => {
       _spanId: id('1234567812345678'),
       _sampling: {},
       _trace: {
-        started
+        started,
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     const secondSpanContext = {
       ...firstSpanContext,
       _spanId: id('1234567812345679'),
-      _name: 'second operation'
+      _name: 'second operation',
     }
 
     // Add spans for both to the context
     started.push({
       context: sinon.stub().returns(firstSpanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
     started.push({
       context: sinon.stub().returns(secondSpanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     sampler.sample(firstSpanContext)
@@ -207,11 +207,11 @@ describe('span sampler', () => {
 
     assert.deepStrictEqual(firstSpanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
     assert.deepStrictEqual(secondSpanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
   })
 
@@ -222,15 +222,15 @@ describe('span sampler', () => {
           service: 'test',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 5
+          maxPerSecond: 5,
         },
         {
           service: 'test',
           name: 'second*',
           sampleRate: 1.0,
-          maxPerSecond: 3
-        }
-      ]
+          maxPerSecond: 3,
+        },
+      ],
     })
 
     // Create two span contexts
@@ -239,31 +239,31 @@ describe('span sampler', () => {
       _spanId: id('1234567812345678'),
       _sampling: {},
       _trace: {
-        started
+        started,
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     const secondSpanContext = {
       ...firstSpanContext,
       _spanId: id('1234567812345679'),
-      _name: 'second operation'
+      _name: 'second operation',
     }
 
     // Add spans for both to the context
     started.push({
       context: sinon.stub().returns(firstSpanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
     started.push({
       context: sinon.stub().returns(secondSpanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     sampler.sample(firstSpanContext)
@@ -275,11 +275,11 @@ describe('span sampler', () => {
 
     assert.deepStrictEqual(firstSpanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
     assert.deepStrictEqual(secondSpanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 3
+      maxPerSecond: 3,
     })
   })
 })

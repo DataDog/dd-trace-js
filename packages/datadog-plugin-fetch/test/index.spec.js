@@ -9,6 +9,7 @@ const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./naming')
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
 const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
@@ -69,19 +70,20 @@ describe('Plugin', function () {
           res.status(200).send()
         })
         appListener = server(app, port => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-              assert.strictEqual(traces[0][0].type, 'http')
-              assert.strictEqual(traces[0][0].resource, 'GET')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              assert.strictEqual(traces[0][0].meta.component, 'fetch')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'fetch')
-              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
-            })
+          agent.assertFirstTraceSpan({
+            service: SERVICE_NAME,
+            type: 'http',
+            resource: 'GET',
+            meta: {
+              'span.kind': 'client',
+              'http.url': `http://localhost:${port}/user`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+              component: 'fetch',
+              '_dd.integration': 'fetch',
+              'out.host': 'localhost',
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -95,18 +97,19 @@ describe('Plugin', function () {
           res.status(200).send()
         })
         appListener = server(app, port => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-              assert.strictEqual(traces[0][0].type, 'http')
-              assert.strictEqual(traces[0][0].resource, 'POST')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-              assert.strictEqual(traces[0][0].meta['http.method'], 'POST')
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              assert.strictEqual(traces[0][0].meta.component, 'fetch')
-              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
-            })
+          agent.assertFirstTraceSpan({
+            service: SERVICE_NAME,
+            type: 'http',
+            resource: 'POST',
+            meta: {
+              'span.kind': 'client',
+              'http.url': `http://localhost:${port}/user`,
+              'http.method': 'POST',
+              'http.status_code': '200',
+              component: 'fetch',
+              'out.host': 'localhost',
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -120,18 +123,19 @@ describe('Plugin', function () {
           res.status(200).send()
         })
         appListener = server(app, port => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-              assert.strictEqual(traces[0][0].type, 'http')
-              assert.strictEqual(traces[0][0].resource, 'GET')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              assert.strictEqual(traces[0][0].meta.component, 'fetch')
-              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
-            })
+          agent.assertFirstTraceSpan({
+            service: SERVICE_NAME,
+            type: 'http',
+            resource: 'GET',
+            meta: {
+              'span.kind': 'client',
+              'http.url': `http://localhost:${port}/user`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+              component: 'fetch',
+              'out.host': 'localhost',
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -162,11 +166,12 @@ describe('Plugin', function () {
         })
 
         appListener = server(app, port => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-            })
+          agent.assertFirstTraceSpan({
+            meta: {
+              'http.status_code': '200',
+              'http.url': `http://localhost:${port}/user`,
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -185,10 +190,11 @@ describe('Plugin', function () {
         })
 
         appListener = server(app, port => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-            })
+          agent.assertFirstTraceSpan({
+            meta: {
+              'http.status_code': '200',
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -208,10 +214,11 @@ describe('Plugin', function () {
         })
 
         appListener = server(app, port => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-            })
+          agent.assertFirstTraceSpan({
+            meta: {
+              'http.status_code': '200',
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -224,10 +231,12 @@ describe('Plugin', function () {
 
         agent
           .assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-            assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message || error.code)
-            assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-            assert.strictEqual(traces[0][0].meta.component, 'fetch')
+            assertObjectContains(traces[0][0].meta, {
+              [ERROR_TYPE]: error.name,
+              [ERROR_MESSAGE]: error.message || error.code,
+              [ERROR_STACK]: error.stack,
+              component: 'fetch',
+            })
           })
           .then(done)
           .catch(done)
@@ -284,7 +293,7 @@ describe('Plugin', function () {
           agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].error, 0)
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+              assert.ok(!('http.status_code' in traces[0][0].meta))
             })
             .then(done)
             .catch(done)
@@ -292,7 +301,7 @@ describe('Plugin', function () {
           const controller = new AbortController()
 
           fetch(`http://localhost:${port}/user`, {
-            signal: controller.signal
+            signal: controller.signal,
           }).catch(e => {})
 
           controller.abort()
@@ -317,7 +326,7 @@ describe('Plugin', function () {
           const controller = new AbortController()
 
           fetch(`http://localhost:${port}/user`, {
-            signal: controller.signal
+            signal: controller.signal,
           }).catch(e => {})
 
           controller.abort()
@@ -356,7 +365,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          service: 'custom'
+          service: 'custom',
         }
 
         return agent.load('fetch', config)
@@ -391,7 +400,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          validateStatus: status => status < 500
+          validateStatus: status => status < 500,
         }
 
         return agent.load('fetch', config)
@@ -426,7 +435,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          splitByDomain: true
+          splitByDomain: true,
         }
 
         return agent.load('fetch', config)
@@ -461,7 +470,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          headers: ['x-baz', 'x-foo']
+          headers: ['x-baz', 'x-foo'],
         }
 
         return agent.load('fetch', config)
@@ -492,8 +501,8 @@ describe('Plugin', function () {
 
           fetch(`http://localhost:${port}/user`, {
             headers: {
-              'x-baz': 'qux'
-            }
+              'x-baz': 'qux',
+            },
           }).catch(() => {})
         })
       })
@@ -507,8 +516,8 @@ describe('Plugin', function () {
           hooks: {
             request: (span, req, res) => {
               span.setTag('foo', '/foo')
-            }
-          }
+            },
+          },
         }
 
         return agent.load('fetch', config)
@@ -543,7 +552,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          propagationBlocklist: [/\/users/]
+          propagationBlocklist: [/\/users/],
         }
 
         return agent.load('fetch', config)
@@ -580,7 +589,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          blocklist: [/\/user/]
+          blocklist: [/\/user/],
         }
 
         return agent.load('fetch', config)
@@ -651,18 +660,19 @@ describe('Plugin', function () {
           res.status(200).send()
         })
         appListener = server(app, port => {
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-              assert.strictEqual(traces[0][0].type, 'http')
-              assert.strictEqual(traces[0][0].resource, 'GET')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              assert.strictEqual(traces[0][0].meta.component, 'fetch')
-              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
-            })
+          agent.assertFirstTraceSpan({
+            service: SERVICE_NAME,
+            type: 'http',
+            resource: 'GET',
+            meta: {
+              'span.kind': 'client',
+              'http.url': `http://localhost:${port}/user`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+              component: 'fetch',
+              'out.host': 'localhost',
+            },
+          })
             .then(done)
             .catch(done)
 

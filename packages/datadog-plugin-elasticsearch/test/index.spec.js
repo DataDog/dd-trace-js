@@ -2,15 +2,15 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 describe('Plugin', () => {
   let elasticsearch
   let tracer
@@ -38,8 +38,9 @@ describe('Plugin', () => {
         beforeEach(() => {
           elasticsearch = metaModule.get()
 
+          temporaryWarningExceptions.add('The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.')
           client = new elasticsearch.Client({
-            node: 'http://localhost:9200'
+            node: 'http://localhost:9200',
           })
         })
 
@@ -57,7 +58,7 @@ describe('Plugin', () => {
 
           client.search({
             index: 'logstash-2000.01.01',
-            body: {}
+            body: {},
           }, hasCallbackSupport ? () => {} : undefined)
         })
 
@@ -70,9 +71,9 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           // Ignore index_not_found_exception
           }, hasCallbackSupport ? () => done() : undefined)?.catch?.(() => {}),
           'localhost',
@@ -82,22 +83,29 @@ describe('Plugin', () => {
         it('should set the correct tags', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-              assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'elasticsearch')
-              assert.strictEqual(traces[0][0].meta['db.type'], 'elasticsearch')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['elasticsearch.method'], 'POST')
-              assert.strictEqual(traces[0][0].meta['elasticsearch.url'], '/docs/_search')
-              assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                meta: {
+                  component: 'elasticsearch',
+                  '_dd.integration': 'elasticsearch',
+                  'db.type': 'elasticsearch',
+                  'span.kind': 'client',
+                  'elasticsearch.method': 'POST',
+                  'elasticsearch.url': '/docs/_search',
+                  'out.host': 'localhost',
+                },
+              })
 
               if (hasCallbackSupport) {
-                assert.strictEqual(traces[0][0].meta['elasticsearch.body'], '{"query":{"match_all":{}}}')
-                assert.strictEqual(traces[0][0].meta['elasticsearch.params'], '{"sort":"name","size":100}')
+                assertObjectContains(traces[0][0].meta, {
+                  'elasticsearch.body': '{"query":{"match_all":{}}}',
+                  'elasticsearch.params': '{"sort":"name","size":100}',
+                })
               } else {
-                expect(traces[0][0].meta).to.have.property(
-                  'elasticsearch.body',
+                assert.ok('elasticsearch.body' in traces[0][0].meta)
+                assert.strictEqual(
+                  traces[0][0].meta['elasticsearch.body'],
                   '{"query":{"match_all":{}},"sort":"name","size":100}'
                 )
               }
@@ -111,24 +119,29 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           }, hasCallbackSupport ? () => {} : undefined)
         })
 
         it('should set the correct tags on msearch', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-              assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
-              assert.strictEqual(traces[0][0].meta['db.type'], 'elasticsearch')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['elasticsearch.method'], 'POST')
-              assert.strictEqual(traces[0][0].meta['elasticsearch.url'], '/_msearch')
-              expect(traces[0][0].meta).to.have.property(
-                'elasticsearch.body',
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                meta: {
+                  component: 'elasticsearch',
+                  'db.type': 'elasticsearch',
+                  'span.kind': 'client',
+                  'elasticsearch.method': 'POST',
+                  'elasticsearch.url': '/_msearch',
+                },
+              })
+              assert.ok('elasticsearch.body' in traces[0][0].meta)
+              assert.strictEqual(
+                traces[0][0].meta['elasticsearch.body'],
                 '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
               )
             })
@@ -140,23 +153,23 @@ describe('Plugin', () => {
               { index: 'docs' },
               {
                 query: {
-                  match_all: {}
-                }
+                  match_all: {},
+                },
               },
               { index: 'docs2' },
               {
                 query: {
-                  match_all: {}
-                }
-              }
-            ]
+                  match_all: {},
+                },
+              },
+            ],
           }, hasCallbackSupport ? () => {} : undefined)
         })
 
         it('should skip tags for unavailable fields', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.ok(!Object.hasOwn(traces[0][0].meta, 'elasticsearch.body'))
+              assert.ok(!('elasticsearch.body' in traces[0][0].meta))
             })
             .then(done)
             .catch(done)
@@ -212,10 +225,12 @@ describe('Plugin', () => {
 
               agent
                 .assertSomeTraces(traces => {
-                  assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-                  assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
-                  assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-                  assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
+                  assertObjectContains(traces[0][0].meta, {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'elasticsearch',
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -226,9 +241,9 @@ describe('Plugin', () => {
             })
 
             it('should support aborting the query', () => {
-              expect(() => {
+              assert.doesNotThrow(() => {
                 client.ping(() => {}).abort()
-              }).not.to.throw()
+              })
             })
           })
         }
@@ -269,11 +284,16 @@ describe('Plugin', () => {
           it('should handle errors', done => {
             let error
 
-            agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
+            agent.assertFirstTraceSpan(span => {
+              assert.ok(error)
+              assertObjectContains(span, {
+                meta: {
+                  [ERROR_TYPE]: error.name,
+                  [ERROR_MESSAGE]: error.message,
+                  [ERROR_STACK]: error.stack,
+                  component: 'elasticsearch',
+                },
+              })
             })
               .then(done)
               .catch(done)
@@ -285,13 +305,13 @@ describe('Plugin', () => {
           })
 
           it('should support aborting the query', () => {
-            expect(() => {
+            assert.doesNotThrow(() => {
               const promise = client.ping()
 
               if (promise.abort) {
                 promise.abort()
               }
-            }).not.to.throw()
+            })
           })
 
           it('should work with userland promises', done => {
@@ -332,8 +352,8 @@ describe('Plugin', () => {
             hooks: {
               query: (span, params) => {
                 span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })
-              }
-            }
+              },
+            },
           })
         })
 
@@ -344,7 +364,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           elasticsearch = require(`../../../versions/${moduleName}@${version}`).get()
           client = new elasticsearch.Client({
-            node: 'http://localhost:9200'
+            node: 'http://localhost:9200',
           })
         })
 
@@ -355,19 +375,20 @@ describe('Plugin', () => {
             size: 100,
             body: {
               query: {
-                match_all: {}
-              }
-            }
+                match_all: {},
+              },
+            },
           }, hasCallbackSupport ? () => {} : undefined)
 
-          agent
-            .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, 'custom')
-              assert.strictEqual(traces[0][0].meta.component, 'elasticsearch')
-              assert.strictEqual(traces[0][0].meta['elasticsearch.params'], 'foo')
-              assert.strictEqual(traces[0][0].meta['elasticsearch.method'], 'POST')
-            })
+          agent.assertFirstTraceSpan({
+            name: expectedSchema.outbound.opName,
+            service: 'custom',
+            meta: {
+              component: 'elasticsearch',
+              'elasticsearch.params': 'foo',
+              'elasticsearch.method': 'POST',
+            },
+          })
             .then(done)
             .catch(done)
 
@@ -388,12 +409,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'elasticsearch.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'elasticsearch.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })

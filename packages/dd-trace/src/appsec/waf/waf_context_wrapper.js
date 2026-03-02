@@ -8,7 +8,7 @@ const { wafRunFinished } = require('../channels')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
-  addresses.HTTP_INCOMING_QUERY
+  addresses.HTTP_INCOMING_QUERY,
 ])
 
 class WAFContextWrapper {
@@ -96,7 +96,7 @@ class WAFContextWrapper {
       errorCode: null,
       maxTruncatedString: null,
       maxTruncatedContainerSize: null,
-      maxTruncatedContainerDepth: null
+      maxTruncatedContainerDepth: null,
     }
 
     try {

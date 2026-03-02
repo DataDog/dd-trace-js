@@ -11,5 +11,5 @@ module.exports = {
   HTTP_REQUEST_URI: 'http.request.uri',
   KAFKA_MESSAGE_KEY: 'kafka.message.key',
   KAFKA_MESSAGE_VALUE: 'kafka.message.value',
-  SQL_ROW_VALUE: 'sql.row.value'
+  SQL_ROW_VALUE: 'sql.row.value',
 }

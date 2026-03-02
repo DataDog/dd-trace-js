@@ -5,6 +5,7 @@ const { TracerProvider } = tracer
 const provider = new TracerProvider()
 provider.register()
 
+const http = require('http')
 const { registerInstrumentations } = require('@opentelemetry/instrumentation')
 const { HttpInstrumentation } = require('@opentelemetry/instrumentation-http')
 const { ExpressInstrumentation } = require('@opentelemetry/instrumentation-express')
@@ -21,15 +22,14 @@ registerInstrumentations({
         // Ignore spans from static assets.
         return req.path === '/v0.4/traces' || req.path === '/v0.7/config' ||
         req.path === '/telemetry/proxy/api/v2/apmtelemetry'
-      }
+      },
     }),
-    new ExpressInstrumentation()
+    new ExpressInstrumentation(),
   ],
-  tracerProvider: provider
+  tracerProvider: provider,
 })
 
 const express = require('express')
-const http = require('http')
 const app = express()
 const PORT = process.env.SERVER_PORT
 

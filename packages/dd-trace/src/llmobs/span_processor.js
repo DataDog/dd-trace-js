@@ -1,5 +1,14 @@
 'use strict'
 
+const util = require('node:util')
+
+const tracerVersion = require('../../../../package.json').version
+const logger = require('../log')
+const {
+  ERROR_MESSAGE,
+  ERROR_TYPE,
+  ERROR_STACK,
+} = require('../constants')
 const {
   SPAN_KIND,
   MODEL_NAME,
@@ -17,24 +26,14 @@ const {
   TAGS,
   PARENT_ID_KEY,
   SESSION_ID,
-  NAME
+  NAME,
+  INPUT_PROMPT,
+  ROUTING_API_KEY,
+  ROUTING_SITE,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
-
-const {
-  ERROR_MESSAGE,
-  ERROR_TYPE,
-  ERROR_STACK
-} = require('../constants')
-
 const telemetry = require('./telemetry')
-
 const LLMObsTagger = require('./tagger')
-
-const tracerVersion = require('../../../../package.json').version
-const logger = require('../log')
-
-const util = require('node:util')
 
 class LLMObservabilitySpan {
   constructor () {
@@ -82,7 +81,13 @@ class LLMObsSpanProcessor {
       telemetry.incrementLLMObsSpanFinishedCount(span)
       if (formattedEvent == null) return
 
-      this.#writer.append(formattedEvent)
+      const mlObsTags = LLMObsTagger.tagMap.get(span)
+      const routing = {
+        apiKey: mlObsTags[ROUTING_API_KEY],
+        site: mlObsTags[ROUTING_SITE],
+      }
+
+      this.#writer.append(formattedEvent, routing)
     } catch (e) {
       // this should be a rare case
       // we protect against unserializable properties in the format function, and in
@@ -124,11 +129,6 @@ class LLMObsSpanProcessor {
     } else if (mlObsTags[INPUT_VALUE]) {
       llmObsSpan.input = [{ role: '', content: mlObsTags[INPUT_VALUE] }]
       inputType = 'value'
-    }
-
-    // Handle prompt metadata for reusable prompts
-    if (mlObsTags['_ml_obs.meta.input.prompt']) {
-      input.prompt = mlObsTags['_ml_obs.meta.input.prompt']
     }
 
     if (spanKind === 'llm' && mlObsTags[OUTPUT_MESSAGES]) {
@@ -181,6 +181,12 @@ class LLMObsSpanProcessor {
     if (input) meta.input = input
     if (output) meta.output = output
 
+    const prompt = mlObsTags[INPUT_PROMPT]
+    if (prompt && spanKind === 'llm') {
+      // by this point, we should have logged a warning if the span kind was not llm
+      meta.input.prompt = prompt
+    }
+
     const llmObsSpanEvent = {
       trace_id: span.context().toTraceId(true),
       span_id: span.context().toSpanId(),
@@ -194,8 +200,8 @@ class LLMObsSpanProcessor {
       metrics,
       _dd: {
         span_id: span.context().toSpanId(),
-        trace_id: span.context().toTraceId(true)
-      }
+        trace_id: span.context().toTraceId(true),
+      },
     }
 
     if (sessionId) llmObsSpanEvent.session_id = sessionId
@@ -250,7 +256,7 @@ class LLMObsSpanProcessor {
       ml_app: mlApp,
       'ddtrace.version': tracerVersion,
       error: Number(!!error) || 0,
-      language: 'javascript'
+      language: 'javascript',
     }
 
     const errType = span.context()._tags[ERROR_TYPE] || error?.name

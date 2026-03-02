@@ -10,5 +10,5 @@ function validateObject (input) {
 
 module.exports = {
   validate,
-  validateObject
+  validateObject,
 }

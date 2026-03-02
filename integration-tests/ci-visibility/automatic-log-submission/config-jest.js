@@ -5,8 +5,8 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/'],
   cache: false,
   testMatch: [
-    '**/ci-visibility/automatic-log-submission/automatic-log-submission-*'
+    '**/ci-visibility/automatic-log-submission/automatic-log-submission-*',
   ],
   testRunner: 'jest-circus/runner',
-  testEnvironment: 'node'
+  testEnvironment: 'node',
 }

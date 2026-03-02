@@ -2,22 +2,20 @@
 
 const { AsyncResource } = require('async_hooks')
 
+const Scope = require('../packages/dd-trace/src/scope')
 const benchmark = require('./benchmark')
+const spanStub = require('./stubs/span')
 
 const suite = benchmark('scope')
 
-const spanStub = require('./stubs/span')
-
-const Scope = require('../packages/dd-trace/src/scope')
-
 const scope = new Scope({
-  experimental: {}
+  experimental: {},
 })
 
 function activateResource (name) {
   return scope.activate(spanStub, () => {
     return new AsyncResource(name, {
-      requireManualDestroy: true
+      requireManualDestroy: true,
     })
   })
 }
@@ -28,7 +26,7 @@ suite
       const resource = activateResource('test')
       resource.runInAsyncScope(() => {})
       resource.emitDestroy()
-    }
+    },
   })
   .add('Scope#activate (nested)', {
     fn () {
@@ -48,7 +46,7 @@ suite
 
       inner.runInAsyncScope(() => {})
       inner.emitDestroy()
-    }
+    },
   })
   .add('Scope#activate (async)', {
     defer: true,
@@ -58,7 +56,7 @@ suite
           deferred.resolve()
         })
       })
-    }
+    },
   })
   .add('Scope#activate (promise)', {
     defer: true,
@@ -68,7 +66,7 @@ suite
           deferred.resolve()
         })
       })
-    }
+    },
   })
   .add('Scope#activate (async/await)', {
     defer: true,
@@ -77,12 +75,12 @@ suite
         return Promise.resolve()
       })
       deferred.resolve()
-    }
+    },
   })
   .add('Scope#active', {
     fn () {
       scope.active()
-    }
+    },
   })
 
 suite.run()

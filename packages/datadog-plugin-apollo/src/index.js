@@ -7,7 +7,7 @@ class ApolloPlugin extends CompositePlugin {
   static id = 'apollo'
   static get plugins () {
     return {
-      gateway: ApolloGatewayPlugin
+      gateway: ApolloGatewayPlugin,
     }
   }
 }

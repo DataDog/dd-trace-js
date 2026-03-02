@@ -10,7 +10,7 @@ function waitForOpenLdap () {
     operation.attempt(currentAttempt => {
       const base = 'dc=example,dc=org'
       const client = ldapjs.createClient({
-        url: 'ldap://localhost:1389'
+        url: 'ldap://localhost:1389',
       })
       client.bind(`cn=admin,${base}`, 'adminpassword', (err) => {
         if (err) {

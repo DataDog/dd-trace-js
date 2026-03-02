@@ -1,10 +1,10 @@
 'use strict'
 
+const shimmer = require('../../datadog-shimmer')
 const {
   channel,
-  addHook
+  addHook,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 
 /**
  * @description The enum values in this map are not exposed from ShareDB, so the keys are hard-coded here.
@@ -27,7 +27,7 @@ const READABLE_ACTION_NAMES = {
   p: 'presence-broadcast',
   pr: 'presence-request',
   ps: 'presence-subscribe',
-  pu: 'presence-unsubscribe'
+  pu: 'presence-unsubscribe',
 }
 
 addHook({ name: 'sharedb', versions: ['>=1'], file: 'lib/agent.js' }, Agent => {

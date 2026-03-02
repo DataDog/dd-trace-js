@@ -13,7 +13,7 @@ class DataStreamsCheckpointer {
    * @param {string} type - The type of the checkpoint, usually the streaming technology being used.
    *                       Examples include kafka, kinesis, sns etc.
    * @param {string} target - The target of data. This can be a topic, exchange or stream name.
-   * @param {Object} carrier - The carrier object to inject context into.
+   * @param {object} carrier - The carrier object to inject context into.
    */
   setProduceCheckpoint (type, target, carrier) {
     if (!this.config.dsmEnabled) return
@@ -33,7 +33,7 @@ class DataStreamsCheckpointer {
    * @param {string} type - The type of the checkpoint, usually the streaming technology being used.
    *                       Examples include kafka, kinesis, sns etc.
    * @param {string} source - The source of data. This can be a topic, exchange or stream name.
-   * @param {Object} carrier - The carrier object to extract context from.
+   * @param {object} carrier - The carrier object to extract context from.
    * @param {boolean} [manualCheckpoint=true] - Whether this checkpoint was manually set. Keep true if manually
    *                                           instrumenting. Manual instrumentation always overrides automatic
    *                                           instrumentation in the case a call is both manually and automatically
@@ -63,5 +63,5 @@ class DataStreamsCheckpointer {
 }
 
 module.exports = {
-  DataStreamsCheckpointer
+  DataStreamsCheckpointer,
 }

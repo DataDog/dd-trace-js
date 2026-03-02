@@ -2,8 +2,8 @@
 
 const dc = require('dc-polyfill')
 
-const { addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { addHook } = require('./helpers/instrument')
 
 const graphqlMiddlewareChannel = dc.tracingChannel('datadog:apollo:middleware')
 const apolloHttpServerChannel = dc.tracingChannel('datadog:apollo:httpserver')
@@ -32,17 +32,17 @@ function wrapExecuteHTTPGraphQLRequest (originalExecuteHTTPGraphQLRequest) {
         // This method is expected to return response data
         // with headers, status and body
         const headers = new HeaderMap()
-        Object.keys(abortData.headers).forEach(key => {
+        for (const key of Object.keys(abortData.headers)) {
           headers.set(key, abortData.headers[key])
-        })
+        }
 
         resolve({
           headers,
           status: abortData.statusCode,
           body: {
             kind: 'complete',
-            string: abortData.message
-          }
+            string: abortData.message,
+          },
         })
       }, { once: true })
     })

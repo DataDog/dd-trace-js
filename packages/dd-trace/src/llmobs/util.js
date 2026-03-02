@@ -178,5 +178,5 @@ module.exports = {
   encodeUnicode,
   validateKind,
   getFunctionArguments,
-  spanHasError
+  spanHasError,
 }

@@ -8,6 +8,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -24,7 +25,10 @@ describe('Plugin', () => {
     withVersions('express', 'express', version => {
     // Express.js 4.10.5 and below have a Node.js incompatibility in the `fresh` package RE res._headers missing
       if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
-        describe.skip(`refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`)
+        describe.skip(
+          `refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`,
+          () => {}
+        )
         return
       }
 
@@ -118,15 +122,19 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].service, 'test')
-                assert.strictEqual(spans[0].type, 'web')
-                assert.strictEqual(spans[0].resource, 'GET /user')
-                assert.strictEqual(spans[0].meta.component, 'express')
-                assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
-                assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                assert.strictEqual(spans[0].meta['http.status_code'], '200')
-                assert.strictEqual(spans[0].meta['http.route'], '/user')
+                assertObjectContains(spans[0], {
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /user',
+                  meta: {
+                    component: 'express',
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/user`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                    'http.route': '/user',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -154,15 +162,19 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].service, 'test')
-                assert.strictEqual(spans[0].type, 'web')
-                assert.strictEqual(spans[0].resource, 'GET /app/user/:id')
-                assert.strictEqual(spans[0].meta.component, 'express')
-                assert.strictEqual(spans[0].meta['_dd.integration'], 'express')
-                assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/app/user/1`)
-                assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                assertObjectContains(spans[0], {
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /app/user/:id',
+                  meta: {
+                    component: 'express',
+                    '_dd.integration': 'express',
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/app/user/1`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -192,14 +204,18 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].service, 'test')
-                assert.strictEqual(spans[0].type, 'web')
-                assert.strictEqual(spans[0].resource, 'GET /app/user/:id')
-                assert.strictEqual(spans[0].meta.component, 'express')
-                assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/app/user/1`)
-                assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                assertObjectContains(spans[0], {
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /app/user/:id',
+                  meta: {
+                    component: 'express',
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/app/user/1`,
+                    'http.method': 'GET',
+                    'http.status_code': '200',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -232,34 +248,54 @@ describe('Plugin', () => {
                 const whichMiddleware = isExpress4 ? 'express' : 'router'
 
                 const rootSpan = spans[index++]
-                assert.strictEqual(rootSpan.resource, 'GET /app/user/:id')
-                assert.strictEqual(rootSpan.name, 'express.request')
-                assert.strictEqual(rootSpan.meta.component, 'express')
+                assertObjectContains(rootSpan, {
+                  resource: 'GET /app/user/:id',
+                  name: 'express.request',
+                  meta: {
+                    component: 'express',
+                  },
+                })
 
                 if (isExpress4) {
-                  assert.strictEqual(spans[index].resource, 'query')
-                  assert.strictEqual(spans[index].name, 'express.middleware')
+                  assertObjectContains(spans[index], {
+                    resource: 'query',
+                    name: 'express.middleware',
+                    meta: {
+                      component: 'express',
+                    },
+                  })
                   assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
-                  assert.strictEqual(spans[index].meta.component, 'express')
                   index++
 
-                  assert.strictEqual(spans[index].resource, 'expressInit')
-                  assert.strictEqual(spans[index].name, 'express.middleware')
+                  assertObjectContains(spans[index], {
+                    resource: 'expressInit',
+                    name: 'express.middleware',
+                    meta: {
+                      component: 'express',
+                    },
+                  })
                   assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
-                  assert.strictEqual(spans[index].meta.component, 'express')
                   index++
                 }
 
-                assert.strictEqual(spans[index].resource, 'named')
-                assert.strictEqual(spans[index].name, `${whichMiddleware}.middleware`)
+                assertObjectContains(spans[index], {
+                  resource: 'named',
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware,
+                  },
+                })
                 assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
-                assert.strictEqual(spans[index].meta.component, whichMiddleware)
                 index++
 
-                assert.strictEqual(spans[index].resource, 'router')
-                assert.strictEqual(spans[index].name, `${whichMiddleware}.middleware`)
+                assertObjectContains(spans[index], {
+                  resource: 'router',
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware,
+                  },
+                })
                 assert.strictEqual(spans[index].parent_id.toString(), rootSpan.span_id.toString())
-                assert.strictEqual(spans[index].meta.component, whichMiddleware)
                 index++
 
                 if (isExpress4) {
@@ -267,15 +303,23 @@ describe('Plugin', () => {
                 } else {
                   assert.strictEqual(spans[index].resource, 'handle')
                 }
-                assert.strictEqual(spans[index].name, `${whichMiddleware}.middleware`)
+                assertObjectContains(spans[index], {
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware,
+                  },
+                })
                 assert.strictEqual(spans[index].parent_id.toString(), spans[index - 1].span_id.toString())
-                assert.strictEqual(spans[index].meta.component, whichMiddleware)
                 index++
 
-                assert.strictEqual(spans[index].resource, '<anonymous>')
-                assert.strictEqual(spans[index].name, `${whichMiddleware}.middleware`)
+                assertObjectContains(spans[index], {
+                  resource: '<anonymous>',
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware,
+                  },
+                })
                 assert.strictEqual(spans[index].parent_id.toString(), spans[index - 1].span_id.toString())
-                assert.strictEqual(spans[index].meta.component, whichMiddleware)
 
                 assert.strictEqual(index, spans.length - 1)
               })
@@ -318,12 +362,20 @@ describe('Plugin', () => {
                   ? 'express'
                   : 'router'
 
-                assert.strictEqual(spans[0].resource, 'GET /user/:id')
-                assert.strictEqual(spans[0].name, 'express.request')
-                assert.strictEqual(spans[0].meta.component, 'express')
-                assert.strictEqual(spans[breakingSpanIndex].resource, 'breaking')
-                assert.strictEqual(spans[breakingSpanIndex].name, `${whichMiddleware}.middleware`)
-                assert.strictEqual(spans[breakingSpanIndex].meta.component, whichMiddleware)
+                assertObjectContains(spans[0], {
+                  resource: 'GET /user/:id',
+                  name: 'express.request',
+                  meta: {
+                    component: 'express',
+                  },
+                })
+                assertObjectContains(spans[breakingSpanIndex], {
+                  resource: 'breaking',
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    component: whichMiddleware,
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -366,11 +418,19 @@ describe('Plugin', () => {
                   ? 'express'
                   : 'router'
 
-                assert.strictEqual(spans[0].name, 'express.request')
-                assert.strictEqual(spans[errorSpanIndex].name, `${whichMiddleware}.middleware`)
-                assert.strictEqual(spans[errorSpanIndex].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta.component, 'express')
-                assert.strictEqual(spans[errorSpanIndex].meta.component, whichMiddleware)
+                assertObjectContains(spans[0], {
+                  name: 'express.request',
+                  meta: {
+                    component: 'express',
+                  },
+                })
+                assertObjectContains(spans[errorSpanIndex], {
+                  name: `${whichMiddleware}.middleware`,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    component: whichMiddleware,
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -546,8 +606,12 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
 
                 assert.strictEqual(spans.filter(span => span.name === 'express.request').length, 1)
-                assert.strictEqual(spans[0].resource, 'GET /parent/child')
-                assert.strictEqual(spans[0].meta.component, 'express')
+                assertObjectContains(spans[0], {
+                  resource: 'GET /parent/child',
+                  meta: {
+                    component: 'express',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -750,7 +814,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('long regex should not steal path', done => {
+        it('long regex should not steal path', function (done) {
           const app = express()
 
           try {
@@ -760,7 +824,7 @@ describe('Plugin', () => {
           } catch (err) {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
-            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            this.skip()
             return done()
           }
 
@@ -786,7 +850,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('should work with regex having flags', done => {
+        it('should work with regex having flags', function (done) {
           const app = express()
 
           try {
@@ -796,7 +860,7 @@ describe('Plugin', () => {
           } catch (err) {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
-            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            this.skip()
             return done()
           }
 
@@ -822,7 +886,7 @@ describe('Plugin', () => {
           })
         })
 
-        it('long regex child of string router should not steal path', done => {
+        it('long regex child of string router should not steal path', function (done) {
           const app = express()
           const router = express.Router()
 
@@ -834,7 +898,7 @@ describe('Plugin', () => {
           } catch (err) {
             // eslint-disable-next-line no-console
             console.log('This version of Express (>4.0 <4.6) has broken support for regex routing. Skipping this test.')
-            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            this.skip()
             return done()
           }
 
@@ -1067,8 +1131,8 @@ describe('Plugin', () => {
                 headers: {
                   'x-datadog-trace-id': '1234',
                   'x-datadog-parent-id': '5678',
-                  'ot-baggage-foo': 'bar'
-                }
+                  'ot-baggage-foo': 'bar',
+                },
               })
               .catch(done)
           })
@@ -1091,17 +1155,21 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].error, 1)
-              assert.strictEqual(spans[0].resource, 'GET /user')
-              assert.strictEqual(spans[0].meta['http.status_code'], '500')
-              assert.strictEqual(spans[0].meta.component, 'express')
+              assertObjectContains(spans[0], {
+                error: 1,
+                resource: 'GET /user',
+                meta: {
+                  'http.status_code': '500',
+                  component: 'express',
+                },
+              })
 
               done()
             })
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1125,17 +1193,21 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].error, 0)
-              assert.strictEqual(spans[0].resource, 'GET /user')
-              assert.strictEqual(spans[0].meta['http.status_code'], '400')
-              assert.strictEqual(spans[0].meta.component, 'express')
+              assertObjectContains(spans[0], {
+                error: 0,
+                resource: 'GET /user',
+                meta: {
+                  'http.status_code': '400',
+                  component: 'express',
+                },
+              })
 
               done()
             })
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 400
+                validateStatus: status => status === 400,
               })
               .catch(done)
           })
@@ -1154,19 +1226,23 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta['http.status_code'], '500')
-                assert.strictEqual(spans[0].meta.component, 'express')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'express',
+                  },
+                })
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1190,23 +1266,31 @@ describe('Plugin', () => {
                   ? 'express'
                   : 'router'
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta.component, 'express')
-                assert.strictEqual(spans[secondErrorIndex].error, 1)
-                assert.strictEqual(spans[secondErrorIndex].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[secondErrorIndex].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[secondErrorIndex].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[secondErrorIndex].meta.component, whichMiddleware)
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'express',
+                  },
+                })
+                assertObjectContains(spans[secondErrorIndex], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: whichMiddleware,
+                  },
+                })
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1227,31 +1311,41 @@ describe('Plugin', () => {
                 const spans = sort(traces[0])
                 const secondErrorIndex = spans.length - 2
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta.component, 'express')
-                assert.strictEqual(spans[secondErrorIndex].error, 1)
-                assert.strictEqual(spans[secondErrorIndex].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[secondErrorIndex].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[secondErrorIndex].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta.component, 'express')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'express',
+                  },
+                })
+                assertObjectContains(spans[secondErrorIndex], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                  },
+                })
+                assertObjectContains(spans[0].meta, {
+                  component: 'express',
+                })
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
         })
 
-        it('should support capturing groups in routes', done => {
+        it('should support capturing groups in routes', function (done) {
           if (semver.intersects(version, '>=5.0.0')) {
-            this.skip && this.skip() // mocha allows dynamic skipping, tap does not
+            this.skip()
             return done()
           }
 
@@ -1268,8 +1362,12 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].resource, 'GET /:path(*)')
-                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                assertObjectContains(spans[0], {
+                  resource: 'GET /:path(*)',
+                  meta: {
+                    'http.url': `http://localhost:${port}/user`,
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -1294,8 +1392,12 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].resource, 'GET /*user')
-                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                assertObjectContains(spans[0], {
+                  resource: 'GET /*user',
+                  meta: {
+                    'http.url': `http://localhost:${port}/user`,
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -1372,16 +1474,20 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].error, 0)
-              assert.strictEqual(spans[0].resource, 'GET')
-              assert.strictEqual(spans[0].meta['http.status_code'], '404')
-              assert.strictEqual(spans[0].meta.component, 'express')
-              assert.ok(!Object.hasOwn(spans[0].meta, 'http.route'))
+              assertObjectContains(spans[0], {
+                error: 0,
+                resource: 'GET',
+                meta: {
+                  'http.status_code': '404',
+                  component: 'express',
+                },
+              })
+              assert.ok(!('http.route' in spans[0].meta))
             }).then(done).catch(done)
 
             axios
               .get(`http://localhost:${port}/does-not-exist`, {
-                validateStatus: status => status === 404
+                validateStatus: status => status === 404,
               })
               .catch(done)
           })
@@ -1410,14 +1516,18 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  assert.strictEqual(spans[0].service, 'test')
-                  assert.strictEqual(spans[0].type, 'web')
-                  assert.strictEqual(spans[0].resource, 'GET /dd')
-                  assert.strictEqual(spans[0].meta['span.kind'], 'server')
-                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/dd`)
-                  assert.strictEqual(spans[0].meta['http.method'], 'GET')
-                  assert.strictEqual(spans[0].meta['http.status_code'], '200')
-                  assert.strictEqual(spans[0].meta.component, 'express')
+                  assertObjectContains(spans[0], {
+                    service: 'test',
+                    type: 'web',
+                    resource: 'GET /dd',
+                    meta: {
+                      'span.kind': 'server',
+                      'http.url': `http://localhost:${port}/dd`,
+                      'http.method': 'GET',
+                      'http.status_code': '200',
+                      component: 'express',
+                    },
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -1465,7 +1575,7 @@ describe('Plugin', () => {
             service: 'custom',
             validateStatus: code => code < 400,
             headers: ['User-Agent'],
-            blocklist: ['/health']
+            blocklist: ['/health'],
           }, { client: false }, {}])
         })
 
@@ -1523,7 +1633,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 400
+                validateStatus: status => status === 400,
               })
               .catch(done)
           })
@@ -1550,7 +1660,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/user`, {
-                headers: { 'User-Agent': 'test' }
+                headers: { 'User-Agent': 'test' },
               })
               .catch(done)
           })
@@ -1590,7 +1700,7 @@ describe('Plugin', () => {
       describe('with configuration for middleware disabled', () => {
         before(() => {
           return agent.load(['express', 'http', 'router'], [{
-            middleware: false
+            middleware: false,
           }, { client: false }, { middleware: false }])
         })
 
@@ -1678,17 +1788,21 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].error, 1)
-              assert.strictEqual(spans[0].resource, 'GET /user')
-              assert.strictEqual(spans[0].meta['http.status_code'], '500')
-              assert.strictEqual(spans[0].meta.component, 'express')
+              assertObjectContains(spans[0], {
+                error: 1,
+                resource: 'GET /user',
+                meta: {
+                  'http.status_code': '500',
+                  component: 'express',
+                },
+              })
 
               done()
             })
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1713,17 +1827,21 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 0)
-                assert.strictEqual(spans[0].resource, 'GET /user')
-                assert.strictEqual(spans[0].meta['http.status_code'], '400')
-                assert.strictEqual(spans[0].meta.component, 'express')
+                assertObjectContains(spans[0], {
+                  error: 0,
+                  resource: 'GET /user',
+                  meta: {
+                    'http.status_code': '400',
+                    component: 'express',
+                  },
+                })
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 400
+                validateStatus: status => status === 400,
               })
               .catch(done)
           })
@@ -1743,18 +1861,22 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta.component, 'express')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    component: 'express',
+                  },
+                })
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })
@@ -1773,19 +1895,23 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].error, 1)
-                assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-                assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-                assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-                assert.strictEqual(spans[0].meta['http.status_code'], '500')
-                assert.strictEqual(spans[0].meta.component, 'express')
+                assertObjectContains(spans[0], {
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                    'http.status_code': '500',
+                    component: 'express',
+                  },
+                })
               })
               .then(done)
               .catch(done)
 
             axios
               .get(`http://localhost:${port}/user`, {
-                validateStatus: status => status === 500
+                validateStatus: status => status === 500,
               })
               .catch(done)
           })

@@ -2,22 +2,20 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const { context, propagation, trace, ROOT_CONTEXT } = require('@opentelemetry/api')
 const api = require('@opentelemetry/api')
+const { getAllBaggageItems, setBaggageItem, removeBaggageItem } = require('../../src/baggage')
 
 require('../setup/core')
-
 const ContextManager = require('../../src/opentelemetry/context_manager')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
-const tracer = require('../../').init()
+require('../../').init()
 
-function makeSpan (...args) {
+function getTracer () {
   const tracerProvider = new TracerProvider()
   tracerProvider.register()
-  const tracer = tracerProvider.getTracer()
-  return tracer.startSpan(...args)
+  return tracerProvider.getTracer()
 }
 
 describe('OTel Context Manager', () => {
@@ -31,7 +29,7 @@ describe('OTel Context Manager', () => {
       getSomeValue: async () => {
         await new Promise(resolve => setTimeout(resolve, 100))
         return { name: 'Dummy Name' }
-      }
+      },
     }
   })
 
@@ -65,7 +63,7 @@ describe('OTel Context Manager', () => {
 
   it('should return root context', () => {
     const ctx = api.context.active()
-    expect(ctx).to.be.an.instanceof(ROOT_CONTEXT.constructor)
+    assert.ok(ctx instanceof ROOT_CONTEXT.constructor)
   })
 
   it('should set active context', () => {
@@ -107,7 +105,7 @@ describe('OTel Context Manager', () => {
 
     const ctx2 = ctx.setValue(key, 'context 2')
     assert.strictEqual(ctx.getValue(key), undefined)
-    expect(ctx).to.be.an.instanceof(ROOT_CONTEXT.constructor)
+    assert.ok(ctx instanceof ROOT_CONTEXT.constructor)
     assert.strictEqual(ctx2.getValue(key), 'context 2')
 
     const ret = api.context.with(ctx2, () => {
@@ -130,72 +128,58 @@ describe('OTel Context Manager', () => {
 
   it('should propagate baggage from an otel span to a datadog span', () => {
     const entries = {
-      foo: { value: 'bar' }
+      foo: { value: 'bar' },
     }
     const baggage = propagation.createBaggage(entries)
     const contextWithBaggage = propagation.setBaggage(context.active(), baggage)
-    const span = makeSpan('otel-to-dd')
-    const contextWithSpan = trace.setSpan(contextWithBaggage, span)
-    api.context.with(contextWithSpan, () => {
-      assert.strictEqual(tracer.scope().active().getBaggageItem('foo'), 'bar')
+    api.context.with(contextWithBaggage, () => {
+      assert.deepStrictEqual(getAllBaggageItems(), { foo: 'bar' })
     })
   })
 
   it('should propagate baggage from a datadog span to an otel span', () => {
-    const baggageKey = 'raccoon'
-    const baggageVal = 'chunky'
-    const ddSpan = tracer.startSpan('dd-to-otel')
-    ddSpan.setBaggageItem(baggageKey, baggageVal)
-    tracer.scope().activate(ddSpan, () => {
-      const baggages = propagation.getActiveBaggage().getAllEntries()
-      assert.strictEqual(baggages.length, 1)
-      const baggage = baggages[0]
-      assert.strictEqual(baggage[0], baggageKey)
-      assert.strictEqual(baggage[1].value, baggageVal)
-    })
+    setBaggageItem('raccoon', 'chunky')
+    assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(),
+      [['raccoon', { value: 'chunky' }]]
+    )
   })
 
   it('should handle dd-otel baggage conflict', () => {
-    const ddSpan = tracer.startSpan('dd')
-    ddSpan.setBaggageItem('key1', 'dd1')
-    let contextWithUpdatedBaggages
-    tracer.scope().activate(ddSpan, () => {
-      let baggages = propagation.getBaggage(api.context.active())
-      baggages = baggages.setEntry('key1', { value: 'otel1' })
-      baggages = baggages.setEntry('key2', { value: 'otel2' })
-      contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
-    })
-    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal({ key1: 'dd1' })
+    setBaggageItem('key1', 'dd1')
+    let baggages = propagation.getActiveBaggage()
+    baggages = baggages.setEntry('key1', { value: 'otel1' })
+    baggages = baggages.setEntry('key2', { value: 'otel2' })
+    const contextWithUpdatedBaggages = propagation.setBaggage(context.active(), baggages)
+    assert.deepStrictEqual(getAllBaggageItems(), { key1: 'dd1' })
     api.context.with(contextWithUpdatedBaggages, () => {
-      expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-        { key1: 'otel1', key2: 'otel2' }
-      )
-      ddSpan.setBaggageItem('key2', 'dd2')
-      assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(),
-        [['key1', { value: 'otel1' }], ['key2', { value: 'dd2' }]]
-      )
+      assert.deepStrictEqual(getAllBaggageItems(), { key1: 'otel1', key2: 'otel2' })
     })
+    setBaggageItem('key2', 'dd2')
+    assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(),
+      [['key1', { value: 'otel1' }], ['key2', { value: 'dd2' }]]
+    )
   })
 
   it('should handle dd-otel baggage removal', () => {
-    const ddSpan = tracer.startSpan('dd')
-    ddSpan.setBaggageItem('key1', 'dd1')
-    ddSpan.setBaggageItem('key2', 'dd2')
-    let contextWithUpdatedBaggages
-    tracer.scope().activate(ddSpan, () => {
-      let baggages = propagation.getBaggage(api.context.active())
-      baggages = baggages.removeEntry('key1')
-      contextWithUpdatedBaggages = propagation.setBaggage(api.context.active(), baggages)
-    })
-    expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-      { key1: 'dd1', key2: 'dd2' }
-    )
+    setBaggageItem('key1', 'dd1')
+    setBaggageItem('key2', 'dd2')
+    let baggages = propagation.getActiveBaggage()
+    baggages = baggages.removeEntry('key1')
+    const contextWithUpdatedBaggages = propagation.setBaggage(context.active(), baggages)
+    assert.deepStrictEqual(getAllBaggageItems(), { key1: 'dd1', key2: 'dd2' })
     api.context.with(contextWithUpdatedBaggages, () => {
-      expect(JSON.parse(ddSpan.getAllBaggageItems())).to.deep.equal(
-        { key2: 'dd2' }
-      )
-      ddSpan.removeBaggageItem('key2')
-      assert.deepStrictEqual(propagation.getActiveBaggage().getAllEntries(), [])
+      assert.deepStrictEqual(getAllBaggageItems(), { key2: 'dd2' })
+    })
+    removeBaggageItem('key2')
+    assert.deepStrictEqual(propagation.getActiveBaggage(), undefined)
+  })
+
+  it('should return active span', () => {
+    const otelTracer = getTracer()
+    otelTracer.startActiveSpan('otel', (span) => {
+      const activeSpan = trace.getActiveSpan()
+      assert.strictEqual(activeSpan, span)
+      span.end()
     })
   })
 })

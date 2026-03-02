@@ -18,7 +18,7 @@ function checkAll () {
 function checkGit () {
   try {
     run('git --version', false)
-  } catch (e) {
+  } catch {
     fatal(
       'The "git" CLI could not be found.',
       'Please visit https://git-scm.com/downloads for instructions to install.'
@@ -30,10 +30,10 @@ function checkGit () {
 function checkBranchDiff () {
   try {
     run('branch-diff --version', false)
-  } catch (e) {
+  } catch {
     const link = [
       'https://datadoghq.atlassian.net/wiki/spaces/DL/pages/4987160870/Legacy+proposal+process',
-      '#Install-and-Configure-branch-diff-to-automate-some-operations'
+      '#Install-and-Configure-branch-diff-to-automate-some-operations',
     ].join('')
     fatal(
       'The "branch-diff" CLI could not be found.',
@@ -69,7 +69,7 @@ function checkGitHub () {
 
   try {
     run('gh --version', false)
-  } catch (e) {
+  } catch {
     fatal(
       'The "gh" CLI could not be found.',
       'Please visit https://github.com/cli/cli#installation for instructions to install.'

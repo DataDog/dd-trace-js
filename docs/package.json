@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "main": "typedoc.js",
   "scripts": {
-    "build": "typedoc ../index.d.ts && ./add-redirects.sh",
+    "build": "typedoc ../index.d.ts",
     "pretest": "tsc -p . && tsc --types node test",
     "test": "node test"
   },
   "license": "BSD-3-Clause",
   "private": true,
   "devDependencies": {
-    "typedoc": "^0.28.12",
-    "typescript": "^5.9.2"
+    "typedoc": "^0.28.16",
+    "typescript": "^5.9.3"
   }
 }

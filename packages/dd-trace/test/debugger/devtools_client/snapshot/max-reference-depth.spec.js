@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
 
@@ -25,12 +24,14 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
         assert.strictEqual(Object.keys(state.myNestedObj).length, 2)
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepObj', {
-          type: 'Object', notCapturedReason: 'depth'
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
+          type: 'Object', notCapturedReason: 'depth',
         })
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepArr', {
-          type: 'Array', notCapturedReason: 'depth'
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
+          type: 'Array', notCapturedReason: 'depth',
         })
       })
 
@@ -46,7 +47,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
         assert.strictEqual(Object.entries(state.myNestedObj).length, 2)
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepObj', {
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
           type: 'Object',
           fields: {
             foo: {
@@ -58,17 +60,18 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
                     foo: {
                       type: 'Object',
                       fields: {
-                        foo: { type: 'Object', notCapturedReason: 'depth' }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
+                        foo: { type: 'Object', notCapturedReason: 'depth' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         })
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepArr', {
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
           type: 'Array',
           elements: [{
             type: 'Array',
@@ -76,10 +79,10 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
               type: 'Array',
               elements: [{
                 type: 'Array',
-                elements: [{ type: 'Array', notCapturedReason: 'depth' }]
-              }]
-            }]
-          }]
+                elements: [{ type: 'Array', notCapturedReason: 'depth' }],
+              }],
+            }],
+          }],
         })
       })
 
@@ -95,7 +98,8 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         assert.ok(Object.hasOwn(state.myNestedObj, 'fields'))
         assert.strictEqual(Object.entries(state.myNestedObj).length, 2)
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepObj', {
+        assert.ok('deepObj' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepObj, {
           type: 'Object',
           fields: {
             foo: {
@@ -103,22 +107,23 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
               fields: {
                 foo: {
                   type: 'Object',
-                  notCapturedReason: 'depth'
-                }
-              }
-            }
-          }
+                  notCapturedReason: 'depth',
+                },
+              },
+            },
+          },
         })
 
-        expect(state.myNestedObj.fields).to.have.deep.property('deepArr', {
+        assert.ok('deepArr' in state.myNestedObj.fields)
+        assert.deepStrictEqual(state.myNestedObj.fields.deepArr, {
           type: 'Array',
           elements: [{
             type: 'Array',
             elements: [{
               type: 'Array',
-              notCapturedReason: 'depth'
-            }]
-          }]
+              notCapturedReason: 'depth',
+            }],
+          }],
         })
       })
 

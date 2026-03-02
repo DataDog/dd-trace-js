@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
+
+const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
-
 const { registerExtraService, getExtraServices, clear } = require('../../src/service-naming/extra-services')
 
 describe('Extra services', () => {

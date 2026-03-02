@@ -7,20 +7,20 @@ module.exports = {
       testPathIgnorePatterns: ['/node_modules/'],
       cache: false,
       testMatch: [
-        '**/ci-visibility/test/ci-visibility-test*'
+        '**/ci-visibility/test/ci-visibility-test*',
       ],
       testRunner: 'jest-circus/runner',
-      testEnvironment: 'node'
+      testEnvironment: 'node',
     },
     {
       displayName: 'node',
       testPathIgnorePatterns: ['/node_modules/'],
       cache: false,
       testMatch: [
-        '**/ci-visibility/test/ci-visibility-test*'
+        '**/ci-visibility/test/ci-visibility-test*',
       ],
       testRunner: 'jest-circus/runner',
-      testEnvironment: 'node'
-    }
-  ]
+      testEnvironment: 'node',
+    },
+  ],
 }

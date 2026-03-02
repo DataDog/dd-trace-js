@@ -23,8 +23,8 @@ class Amqp10ConsumerPlugin extends ConsumerPlugin {
         'amqp.link.handle': link.handle,
         'amqp.connection.host': address.host,
         'amqp.connection.port': address.port,
-        'amqp.connection.user': address.user
-      }
+        'amqp.connection.user': address.user,
+      },
     }, ctx)
 
     return ctx.currentStore

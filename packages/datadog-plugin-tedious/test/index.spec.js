@@ -40,16 +40,16 @@ describe('Plugin', () => {
           server: 'localhost',
           options: {
             database: 'master',
-            trustServerCertificate: true
-          }
+            trustServerCertificate: true,
+          },
         }
         if (semver.intersects(version, '>=4.0.0')) {
           config.authentication = {
             options: {
               userName: MSSQL_USERNAME,
-              password: MSSQL_PASSWORD
+              password: MSSQL_PASSWORD,
             },
-            type: 'default'
+            type: 'default',
           }
         } else {
           config.userName = MSSQL_USERNAME
@@ -427,15 +427,15 @@ describe('Plugin', () => {
           server: 'localhost',
           options: {
             database: 'master',
-            trustServerCertificate: true
+            trustServerCertificate: true,
           },
           authentication: {
             options: {
               userName: MSSQL_USERNAME,
-              password: MSSQL_PASSWORD
+              password: MSSQL_PASSWORD,
             },
-            type: 'default'
-          }
+            type: 'default',
+          },
         }
 
         connection = new tds.Connection(config)

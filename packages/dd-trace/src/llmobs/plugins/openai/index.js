@@ -1,13 +1,23 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
-const { extractChatTemplateFromInstructions, normalizePromptVariables, extractTextFromContentItem } = require('./utils')
+const {
+  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
+  PROMPT_MULTIMODAL,
+  INSTRUMENTATION_METHOD_AUTO,
+} = require('../../constants/tags')
+const {
+  extractChatTemplateFromInstructions,
+  normalizePromptVariables,
+  extractTextFromContentItem,
+  hasMultimodalInputs,
+} = require('./utils')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
   'temperature',
   'stream',
-  'reasoning'
+  'reasoning',
 ])
 
 function isIterable (obj) {
@@ -39,7 +49,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       modelProvider,
       modelName: inputs.model,
       kind,
-      name
+      name,
     }
   }
 
@@ -116,6 +126,10 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
           metrics.cacheReadTokens = cacheReadTokens
         }
       }
+      // Reasoning tokens - Responses API returns `output_tokens_details`, `completion_tokens_details`
+      const reasoningOutputObject = tokenUsage.output_tokens_details ?? tokenUsage.completion_tokens_details
+      const reasoningOutputTokens = reasoningOutputObject?.reasoning_tokens ?? 0
+      if (reasoningOutputTokens !== undefined) metrics.reasoningOutputTokens = reasoningOutputTokens
     }
 
     return metrics
@@ -125,7 +139,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const { model, ...parameters } = inputs
 
     const metadata = {
-      encoding_format: parameters.encoding_format || 'float'
+      encoding_format: parameters.encoding_format || 'float',
     }
     if (inputs.dimensions) metadata.dimensions = inputs.dimensions
     this._tagger.tagMetadata(span, metadata)
@@ -196,7 +210,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       if (message.function_call) {
         const functionCallInfo = {
           name: message.function_call.name,
-          arguments: JSON.parse(message.function_call.arguments)
+          arguments: JSON.parse(message.function_call.arguments),
         }
         outputMessages.push({ content, role, toolCalls: [functionCallInfo] })
       } else if (message.tool_calls) {
@@ -206,7 +220,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             arguments: JSON.parse(toolCall.function.arguments),
             name: toolCall.function.name,
             toolId: toolCall.id,
-            type: toolCall.type
+            type: toolCall.type,
           }
           toolCallsInfo.push(toolCallInfo)
         }
@@ -276,8 +290,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               toolId: item.call_id,
               name: item.name,
               arguments: parsedArgs,
-              type: item.type
-            }]
+              type: item.type,
+            }],
           })
         } else if (item.type === 'function_call_output') {
           // Function output: convert to user message with tool_results
@@ -287,8 +301,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               toolId: item.call_id,
               result: item.output,
               name: item.name || '',
-              type: item.type
-            }]
+              type: item.type,
+            }],
           })
         } else if (item.role && item.content) {
           // Regular message
@@ -332,8 +346,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
             content: JSON.stringify({
               summary: item.summary ?? [],
               encrypted_content: item.encrypted_content ?? null,
-              id: item.id ?? ''
-            })
+              id: item.id ?? '',
+            }),
           })
         } else if (item.type === 'function_call') {
           // Handle function_call type (responses API tool calls)
@@ -352,8 +366,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
               toolId: item.call_id,
               name: item.name,
               arguments: args,
-              type: item.type
-            }]
+              type: item.type,
+            }],
           })
         } else {
           // Handle regular message objects
@@ -387,7 +401,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
                 toolId: tc.id,
                 name: tc.function?.name || tc.name,
                 arguments: args,
-                type: tc.type || 'function_call'
+                type: tc.type || 'function_call',
               }
             })
           }
@@ -408,16 +422,20 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     // Handle prompt tracking for reusable prompts
     if (inputs.prompt && response?.prompt) {
       const { id, version } = response.prompt // ResponsePrompt
-      // TODO: Add proper tagger API for prompt metadata
       if (id && version) {
         const normalizedVariables = normalizePromptVariables(inputs.prompt.variables)
         const chatTemplate = extractChatTemplateFromInstructions(response.instructions, normalizedVariables)
-        this._tagger._setTag(span, '_ml_obs.meta.input.prompt', {
+        this._tagger.tagPrompt(span, {
           id,
           version,
           variables: normalizedVariables,
-          chat_template: chatTemplate
-        })
+          template: chatTemplate,
+        }, true)
+        const tags = { [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_AUTO }
+        if (hasMultimodalInputs(inputs.prompt.variables)) {
+          tags[PROMPT_MULTIMODAL] = 'true'
+        }
+        this._tagger.tagSpanTags(span, tags)
       }
     }
 
@@ -429,9 +447,6 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (response.tool_choice !== undefined) outputMetadata.tool_choice = response.tool_choice
     if (response.truncation !== undefined) outputMetadata.truncation = response.truncation
     if (response.text !== undefined) outputMetadata.text = response.text
-    if (response.usage?.output_tokens_details?.reasoning_tokens !== undefined) {
-      outputMetadata.reasoning_tokens = response.usage.output_tokens_details.reasoning_tokens
-    }
 
     this._tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
   }

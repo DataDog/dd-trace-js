@@ -42,8 +42,8 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'cookie-parser-rules.json')
-        }
+          rules: path.join(__dirname, 'cookie-parser-rules.json'),
+        },
       }))
     })
 
@@ -67,8 +67,8 @@ withVersions('cookie-parser', 'cookie-parser', version => {
       try {
         await axios.post(`http://localhost:${port}/`, {}, {
           headers: {
-            Cookie: 'key=testattack'
-          }
+            Cookie: 'key=testattack',
+          },
         })
 
         return Promise.reject(new Error('Request should not return 200'))

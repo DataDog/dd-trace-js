@@ -4,18 +4,18 @@ const path = require('path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
-const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
+const { DD_MAJOR } = require('../../../version')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
   constructChatCompletionResponseFromStreamedChunks,
-  constructResponseResponseFromStreamedChunks
+  constructResponseResponseFromStreamedChunks,
 } = require('./stream-helpers')
 
-const { DD_MAJOR } = require('../../../version')
+const services = require('./services')
 
 class OpenAiTracingPlugin extends TracingPlugin {
   static id = 'openai'
@@ -97,8 +97,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
       meta: {
         [MEASURED]: 1,
         // Only model is added to all requests
-        'openai.request.model': payload.model
-      }
+        'openai.request.model': payload.model,
+      },
     }, false)
 
     const openaiStore = Object.create(null)
@@ -200,7 +200,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
           // The OpenAI API appears to use both created and created_at in different places
           // Here we're conciously choosing to surface this inconsistency instead of normalizing
           'openai.response.created': body.created,
-          'openai.response.created_at': body.created_at
+          'openai.response.created_at': body.created_at,
         }
 
     responseDataExtractionByMethod(normalizedMethodName, tags, body, openaiStore)
@@ -291,7 +291,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const log = {
       status: error ? 'error' : 'info',
       message: `sampled ${methodName}`,
-      ...openaiStore
+      ...openaiStore,
     }
 
     this.logger.log(log, span, tags)
@@ -645,7 +645,7 @@ function normalizeRequestPayload (methodName, args) {
     case 'createFile':
       return {
         file: args[0],
-        purpose: args[1]
+        purpose: args[1],
       }
 
     case 'deleteFile':
@@ -663,7 +663,7 @@ function normalizeRequestPayload (methodName, args) {
     case 'fine-tune.listEvents':
       return {
         fine_tune_id: args[0],
-        stream: args[1] // undocumented
+        stream: args[1], // undocumented
       }
 
     case 'retrieveFineTune':
@@ -685,7 +685,7 @@ function normalizeRequestPayload (methodName, args) {
         n: args[3],
         size: args[4],
         response_format: args[5],
-        user: args[6]
+        user: args[6],
       }
 
     case 'createImageVariation':
@@ -694,7 +694,7 @@ function normalizeRequestPayload (methodName, args) {
         n: args[1],
         size: args[2],
         response_format: args[3],
-        user: args[4]
+        user: args[4],
       }
 
     case 'createTranscription':
@@ -705,7 +705,7 @@ function normalizeRequestPayload (methodName, args) {
         prompt: args[2],
         response_format: args[3],
         temperature: args[4],
-        language: args[5] // only used for createTranscription
+        language: args[5], // only used for createTranscription
       }
   }
 

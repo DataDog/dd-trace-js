@@ -1,8 +1,9 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
 
 describe('IAST - overhead-controller - integration', () => {
@@ -28,29 +29,29 @@ describe('IAST - overhead-controller - integration', () => {
   })
 
   describe('vulnerability sampling algorithm', () => {
-    beforeEach(async () => {
+    beforeEach(async function () {
+      this.timeout(30_000)
+
       proc = await spawnProc(path.join(cwd, 'resources', 'overhead-controller.js'), {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_IAST_ENABLED: 'true',
           DD_IAST_REQUEST_SAMPLING: '100',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-          NODE_OPTIONS: '--require ./resources/init.js'
-        }
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+          NODE_OPTIONS: '--require ./resources/init.js',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
-      await axios.request(path, { method })
-
-      await agent.assertMessageReceived(({ payload }) => {
+      const assertPromise = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].type, 'web')
         assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-        assert.property(payload[0][0].meta, '_dd.iast.json')
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
         const vulnerabilitiesTrace = JSON.parse(payload[0][0].meta['_dd.iast.json'])
-        assert.isNotNull(vulnerabilitiesTrace)
+        assert.notStrictEqual(vulnerabilitiesTrace, null)
 
         const vulnerabilities = {}
         vulnerabilitiesTrace.vulnerabilities.forEach(v => {
@@ -64,16 +65,24 @@ describe('IAST - overhead-controller - integration', () => {
           assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
         })
       }, 1000, 1, true)
+
+      await Promise.all([
+        axios.request(path, { method }),
+        assertPromise,
+      ])
     }
 
     async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {
-      await axios.request(path, { method })
-
-      await agent.assertMessageReceived(({ payload }) => {
+      const assertPromise = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].type, 'web')
         assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
-        assert.notProperty(payload[0][0].meta, '_dd.iast.json')
+        assert.ok(!('_dd.iast.json' in payload[0][0].meta))
       }, 1000, 1, true)
+
+      await Promise.all([
+        axios.request(path, { method }),
+        assertPromise,
+      ])
     }
 
     it('should report vulnerability only in the first request', async () => {

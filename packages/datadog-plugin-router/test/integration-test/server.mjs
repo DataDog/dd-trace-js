@@ -1,6 +1,6 @@
 import 'dd-trace/init.js'
-import router from 'router'
 import http from 'http'
+import router from 'router'
 
 const app = router()
 

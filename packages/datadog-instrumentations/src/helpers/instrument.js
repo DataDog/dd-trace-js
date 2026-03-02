@@ -1,8 +1,9 @@
 'use strict'
 
+const { AsyncResource } = require('async_hooks')
 const dc = require('dc-polyfill')
 const instrumentations = require('./instrumentations')
-const { AsyncResource } = require('async_hooks')
+const rewriterInstrumentations = require('./rewriter/instrumentations')
 
 const channelMap = {}
 exports.channel = function (name) {
@@ -20,6 +21,15 @@ exports.tracingChannel = function (name) {
   const tc = dc.tracingChannel(name)
   tracingChannelMap[name] = tc
   return tc
+}
+
+exports.getHooks = function getHooks (names) {
+  names = [names].flat()
+
+  return rewriterInstrumentations
+    .map(inst => inst.module)
+    .filter(({ name }) => names.includes(name))
+    .map(({ name, versionRange, filePath }) => ({ name, versions: [versionRange], file: filePath }))
 }
 
 /**

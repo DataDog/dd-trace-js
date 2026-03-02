@@ -12,7 +12,7 @@ export async function POST (request) {
       'authentication-info': 'header-value-6',
       'proxy-authentication-info': 'header-value-7',
       cookie: 'header-value-8',
-      'set-cookie': 'header-value-9'
-    }
+      'set-cookie': 'header-value-9',
+    },
   })
 }

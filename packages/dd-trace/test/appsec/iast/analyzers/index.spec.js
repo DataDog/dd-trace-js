@@ -11,14 +11,14 @@ describe('Analyzers index', () => {
   beforeEach(() => {
     fakeAnalyzers = {
       analyzerA: {
-        configure: sinon.spy()
+        configure: sinon.spy(),
       },
       analyzerB: {
-        configure: sinon.spy()
-      }
+        configure: sinon.spy(),
+      },
     }
     analyzers = proxyquire.noCallThru()('../../../../src/appsec/iast/analyzers', {
-      './analyzers': fakeAnalyzers
+      './analyzers': fakeAnalyzers,
     })
   })
 

@@ -34,7 +34,7 @@ class OracledbPlugin extends DatabasePlugin {
         'db.instance': dbInstance,
         'db.hostname': hostname,
         [CLIENT_PORT_KEY]: port,
-      }
+      },
     }, ctx)
 
     return ctx.currentStore

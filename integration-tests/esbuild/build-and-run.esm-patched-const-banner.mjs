@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import esbuild from 'esbuild'
 import { spawnSync } from 'child_process'
+import esbuild from 'esbuild'
 import commonConfig from './build.esm.common-config.js'
 
 await esbuild.build({
@@ -13,8 +13,8 @@ import { fileURLToPath  } from 'url';
 import { dirname } from 'path';
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);`
-  }
+const __dirname = dirname(__filename);`,
+  },
 })
 
 const { status, stdout, stderr } = spawnSync('node', ['out.mjs'])

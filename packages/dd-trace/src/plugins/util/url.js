@@ -142,5 +142,5 @@ module.exports = {
   obfuscateQs,
   calculateHttpEndpoint,
   filterSensitiveInfoFromRepository,
-  extractPathFromUrl // test only
+  extractPathFromUrl, // test only
 }

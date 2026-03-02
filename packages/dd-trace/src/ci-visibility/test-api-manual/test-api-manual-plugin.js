@@ -4,7 +4,7 @@ const CiPlugin = require('../../plugins/ci_plugin')
 const {
   TEST_STATUS,
   finishAllTraceSpans,
-  getTestSuitePath
+  getTestSuitePath,
 } = require('../../plugins/util/test')
 const { storage } = require('../../../../datadog-core')
 

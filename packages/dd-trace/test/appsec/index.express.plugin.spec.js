@@ -1,13 +1,12 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+const path = require('node:path')
+const zlib = require('node:zlib')
 const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
 const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
-
-const assert = require('node:assert/strict')
-const path = require('node:path')
-const zlib = require('node:zlib')
 
 const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
@@ -76,13 +75,15 @@ withVersions('express', 'express', version => {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'rules-example.json')
-        }
+          rules: path.join(__dirname, 'rules-example.json'),
+        },
       }))
     })
 
     afterEach(() => {
       appsec.disable()
+      // TODO: Remove the workaround once https://github.com/sinonjs/sinon/issues/2671 is resolved
+      paramCallbackSpy.resetHistory()
       sinon.reset()
     })
 
@@ -226,8 +227,8 @@ withVersions('express', 'express', version => {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'rules-example.json')
-        }
+          rules: path.join(__dirname, 'rules-example.json'),
+        },
       }))
     })
 
@@ -304,9 +305,9 @@ withVersions('express', 'express', version => {
           enabled: true,
           rules: path.join(__dirname, 'api_security_rules.json'),
           apiSecurity: {
-            enabled: true
-          }
-        }
+            enabled: true,
+          },
+        },
       })
     })
 
@@ -332,7 +333,7 @@ withVersions('express', 'express', version => {
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
-          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+          assert.ok(!('_dd.appsec.s.res.body' in span.meta))
           assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
 

@@ -7,5 +7,5 @@ suiteTest({
   repoUrl: 'axios/axios',
   commitish: 'latest',
   testCmd: 'node_modules/.bin/grunt mochaTest',
-  parallel: false
+  parallel: false,
 })

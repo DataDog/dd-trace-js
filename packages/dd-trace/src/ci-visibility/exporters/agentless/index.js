@@ -1,10 +1,10 @@
 'use strict'
 
 const URL = require('url').URL
-const Writer = require('./writer')
-const CoverageWriter = require('./coverage-writer')
 const CiVisibilityExporter = require('../ci-visibility-exporter')
 const log = require('../../../log')
+const Writer = require('./writer')
+const CoverageWriter = require('./coverage-writer')
 
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
@@ -20,6 +20,8 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
 
     this._coverageUrl = url || new URL(`https://citestcov-intake.${site}`)
     this._coverageWriter = new CoverageWriter({ url: this._coverageUrl })
+
+    this._codeCoverageReportUrl = url || new URL(`https://ci-intake.${site}`)
 
     if (isTestDynamicInstrumentationEnabled) {
       const DynamicInstrumentationLogsWriter = require('./di-logs-writer')

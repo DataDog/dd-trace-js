@@ -2,11 +2,11 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 
 const constants = require('../src/constants')
 require('./setup/core')
+
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
 const ERROR_TYPE = constants.ERROR_TYPE
@@ -33,28 +33,28 @@ describe('tagger', () => {
     assert.strictEqual(carrier.baz, 'qux:quxx')
     assert.strictEqual(carrier.def, '')
     assert.strictEqual(carrier.abc, '')
-    assert.ok(!Object.hasOwn(carrier, ''))
+    assert.ok(!('' in carrier))
     assert.strictEqual(carrier.valid, '')
 
     tagger.add(carrier, ':')
 
-    assert.ok(!Object.hasOwn(carrier, ''))
+    assert.ok(!('' in carrier))
   })
 
   it('should not add empty tags', () => {
     tagger.add(carrier, '  ')
 
-    assert.ok(!Object.hasOwn(carrier, ''))
+    assert.ok(!('' in carrier))
 
     tagger.add(carrier, 'a:true,\t')
 
     assert.strictEqual(carrier.a, 'true')
-    assert.ok(!Object.hasOwn(carrier, ''))
+    assert.ok(!('' in carrier))
 
     tagger.add(carrier, 'a:true,')
 
     assert.strictEqual(carrier.a, 'true')
-    assert.ok(!Object.hasOwn(carrier, ''))
+    assert.ok(!('' in carrier))
   })
 
   it('should add tags as an array', () => {
@@ -71,11 +71,11 @@ describe('tagger', () => {
   })
 
   it('should handle missing key/value pairs', () => {
-    expect(() => tagger.add(carrier)).not.to.throw()
+    assert.doesNotThrow(() => tagger.add(carrier))
   })
 
   it('should handle missing carrier', () => {
-    expect(() => tagger.add()).not.to.throw()
+    assert.doesNotThrow(() => tagger.add())
   })
 
   it('should set trace error', () => {
@@ -83,24 +83,24 @@ describe('tagger', () => {
       [ERROR_TYPE]: 'foo',
       [ERROR_MESSAGE]: 'foo',
       [ERROR_STACK]: 'foo',
-      doNotSetTraceError: true
+      doNotSetTraceError: true,
     })
 
     assert.strictEqual(carrier[ERROR_TYPE], 'foo')
     assert.strictEqual(carrier[ERROR_MESSAGE], 'foo')
     assert.strictEqual(carrier[ERROR_STACK], 'foo')
     assert.strictEqual(carrier.doNotSetTraceError, true)
-    assert.ok(!Object.hasOwn(carrier, 'setTraceError'))
+    assert.ok(!('setTraceError' in carrier))
 
     tagger.add(carrier, {
       [ERROR_TYPE]: 'foo',
       [ERROR_MESSAGE]: 'foo',
-      [ERROR_STACK]: 'foo'
+      [ERROR_STACK]: 'foo',
     })
 
     assert.strictEqual(carrier[ERROR_TYPE], 'foo')
     assert.strictEqual(carrier[ERROR_MESSAGE], 'foo')
     assert.strictEqual(carrier[ERROR_STACK], 'foo')
-    assert.ok(!Object.hasOwn(carrier, 'setTraceError'))
+    assert.ok(!('setTraceError' in carrier))
   })
 })

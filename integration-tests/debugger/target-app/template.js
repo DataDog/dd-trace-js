@@ -29,7 +29,7 @@ fastify.get('/:name', function (request) {
       baz: 42,
       nil: null,
       undef: undefined,
-      deep: { nested: { obj: { that: { goes: { on: { forever: true } } } } } }
+      deep: { nested: { obj: { that: { goes: { on: { forever: true } } } } } },
     },
     bar: true,
     get baz () {
@@ -37,12 +37,12 @@ fastify.get('/:name', function (request) {
     },
     [inspect.custom] () {
       return 'This is a custom inspect!'
-    }
+    },
   }
   const proxy = new Proxy(obj, {
     get () {
       return 'This is a proxy!'
-    }
+    },
   })
   const circular = {}
   circular.circular = circular

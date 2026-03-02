@@ -52,8 +52,8 @@ describe('Plugin', () => {
                 'span.kind': 'client',
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                component: 'memcached'
-              }
+                component: 'memcached',
+              },
             })
             .then(done)
             .catch(done)
@@ -92,8 +92,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'memcached'
-                }
+                  component: 'memcached',
+                },
               })
             })
             .then(done)
@@ -112,8 +112,8 @@ describe('Plugin', () => {
               meta: {
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                component: 'memcached'
-              }
+                component: 'memcached',
+              },
             })
             .then(done)
             .catch(done)
@@ -124,7 +124,7 @@ describe('Plugin', () => {
         it('should support an object of servers with weights', done => {
           memcached = new Memcached({
             'localhost:11211': 1,
-            'other:11211': 1
+            'other:11211': 1,
           }, { retries: 0 })
 
           agent
@@ -132,8 +132,8 @@ describe('Plugin', () => {
               meta: {
                 'out.host': 'localhost',
                 'network.destination.port': '11211',
-                component: 'memcached'
-              }
+                component: 'memcached',
+              },
             })
             .then(done)
             .catch(done)
@@ -144,10 +144,10 @@ describe('Plugin', () => {
         it('should support redundancy', done => {
           memcached = new Memcached({
             'localhost:11211': 1,
-            'other:11211': 1
+            'other:11211': 1,
           }, {
             retries: 0,
-            redundancy: 1
+            redundancy: 1,
           })
 
           try {
@@ -158,8 +158,8 @@ describe('Plugin', () => {
                 meta: {
                   'out.host': 'localhost',
                   'network.destination.port': '11211',
-                  component: 'memcached'
-                }
+                  component: 'memcached',
+                },
               })
               .then(done)
               .catch(done)
@@ -185,7 +185,7 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertFirstTraceSpan({
-              service: 'custom'
+              service: 'custom',
             })
             .then(done)
             .catch(done)
@@ -212,8 +212,8 @@ describe('Plugin', () => {
             agent
               .assertFirstTraceSpan({
                 meta: {
-                  'memcached.command': 'version'
-                }
+                  'memcached.command': 'version',
+                },
               })
               .then(done)
               .catch(done)
@@ -238,7 +238,7 @@ describe('Plugin', () => {
           it('trace should not contain memcached.command', done => {
             agent
               .assertSomeTraces(traces => {
-                assert.ok(!Object.hasOwn(traces[0][0].meta, 'memcached.command'))
+                assert.ok(!('memcached.command' in traces[0][0].meta))
               })
               .then(done)
               .catch(done)

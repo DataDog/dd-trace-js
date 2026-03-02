@@ -20,7 +20,7 @@ const conn = {
   host: 'localhost',
   database: 'postgres',
   password: 'hunter2',
-  port: 5433
+  port: 5433,
 }
 
 console.log('pg connect') // eslint-disable-line no-console
@@ -35,7 +35,7 @@ app.get('/', async (_req, res) => {
   const query2 = await client2.query('SELECT NOW() AS now')
   res.json({
     connection_pg: query.rows[0].now,
-    connection_pg_promise: query2[0].now
+    connection_pg_promise: query2[0].now,
   })
 })
 

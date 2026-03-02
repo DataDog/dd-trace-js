@@ -104,7 +104,7 @@ const logCollector = {
     if (overflowedCount > 0) {
       drained.push({
         message: `Omitted ${overflowedCount} entries due to overflowing`,
-        level: 'ERROR'
+        level: 'ERROR',
       })
     }
 
@@ -120,7 +120,7 @@ const logCollector = {
     if (max) {
       maxEntries = max
     }
-  }
+  },
 }
 
 logCollector.reset()

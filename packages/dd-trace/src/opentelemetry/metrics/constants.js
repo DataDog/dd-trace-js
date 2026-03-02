@@ -7,7 +7,7 @@ const METRIC_TYPES = {
   UPDOWNCOUNTER: 'updowncounter',
   OBSERVABLECOUNTER: 'observable-counter',
   OBSERVABLEUPDOWNCOUNTER: 'observable-updowncounter',
-  GAUGE: 'gauge'
+  GAUGE: 'gauge',
 }
 
 // Temporality constants
@@ -15,7 +15,7 @@ const TEMPORALITY = {
   DELTA: 'DELTA',
   CUMULATIVE: 'CUMULATIVE',
   GAUGE: 'GAUGE',
-  LOWMEMORY: 'LOWMEMORY'
+  LOWMEMORY: 'LOWMEMORY',
 }
 
 // Default histogram bucket boundaries (in milliseconds for latency metrics)
@@ -30,5 +30,5 @@ module.exports = {
   METRIC_TYPES,
   TEMPORALITY,
   DEFAULT_HISTOGRAM_BUCKETS,
-  DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
+  DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE,
 }

@@ -3,10 +3,10 @@
 const assert = require('node:assert/strict')
 const path = require('path')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { assertObjectContains } = require('../helpers')
 const startApiMock = require('./api-mock')
 const { executeRequest } = require('./util')
 
@@ -37,8 +37,8 @@ describe('AIGuard SDK integration tests', () => {
         DD_AI_GUARD_ENABLED: 'true',
         DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
         DD_API_KEY: 'DD_API_KEY',
-        DD_APP_KEY: 'DD_APP_KEY'
-      }
+        DD_APP_KEY: 'DD_APP_KEY',
+      },
     })
     url = `${proc.url}`
   })
@@ -51,7 +51,7 @@ describe('AIGuard SDK integration tests', () => {
   const testSuite = [
     { endpoint: '/allow', action: 'ALLOW', reason: 'The prompt looks harmless' },
     { endpoint: '/deny', action: 'DENY', reason: 'I am feeling suspicious today' },
-    { endpoint: '/abort', action: 'ABORT', reason: 'The user is trying to destroy me' }
+    { endpoint: '/abort', action: 'ABORT', reason: 'The user is trying to destroy me' },
   ].flatMap(r => [
     { ...r, blocking: true },
     { ...r, blocking: false },
@@ -63,11 +63,11 @@ describe('AIGuard SDK integration tests', () => {
       const response = await executeRequest(`${url}${endpoint}`, 'GET', headers)
       if (blocking && action !== 'ALLOW') {
         assert.strictEqual(response.status, 403)
-        expect(response.body).to.contain(reason)
+        assertObjectContains(response.body, reason)
       } else {
         assert.strictEqual(response.status, 200)
-        expect(response.body).to.have.nested.property('action', action)
-        expect(response.body).to.have.nested.property('reason', reason)
+        assert.strictEqual(response.body?.action, action)
+        assert.strictEqual(response.body?.reason, reason)
       }
       await agent.assertMessageReceived(({ headers, payload }) => {
         const span = payload[0].find(span => span.name === 'ai_guard')

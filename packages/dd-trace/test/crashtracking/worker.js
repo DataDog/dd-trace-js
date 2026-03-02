@@ -7,17 +7,17 @@ require('../setup/core')
 
 const crashtracker = {
   start: sinon.stub(),
-  configure: sinon.stub()
+  configure: sinon.stub(),
 }
 
 const noop = {
   start: sinon.stub(),
-  configure: sinon.stub()
+  configure: sinon.stub(),
 }
 
 const crashtracking = proxyquire('../../src/crashtracking', {
   './crashtracker': crashtracker,
-  './noop': noop
+  './noop': noop,
 })
 
 crashtracking.start()

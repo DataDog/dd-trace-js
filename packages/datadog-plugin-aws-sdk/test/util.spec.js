@@ -57,7 +57,7 @@ describe('generatePointerHash', () => {
         'some-table',
         'other-key',
         Buffer.from('123'),
-        'some-key', Buffer.from('some-value')
+        'some-key', Buffer.from('some-value'),
       ])
       assert.strictEqual(hash, '7aa1b80b0e49bd2078a5453399f4dd67')
     })
@@ -158,7 +158,7 @@ describe('extractPrimaryKeys', () => {
       const keySet = ['userId', 'email']
       const item = {
         userId: { S: 'user123' },
-        email: { S: 'test@example.com' }
+        email: { S: 'test@example.com' },
       }
       const result = extractPrimaryKeys(keySet, item)
       assert.deepStrictEqual(result, ['email', Buffer.from('test@example.com'), 'userId', Buffer.from('user123')])
@@ -168,7 +168,7 @@ describe('extractPrimaryKeys', () => {
       const keySet = ['timestamp', 'userId']
       const item = {
         timestamp: { N: '1234567' },
-        userId: { S: 'user123' }
+        userId: { S: 'user123' },
       }
       const result = extractPrimaryKeys(keySet, item)
       assert.deepStrictEqual(result, ['timestamp', Buffer.from('1234567'), 'userId', Buffer.from('user123')])
@@ -187,7 +187,7 @@ describe('extractPrimaryKeys', () => {
       const keySet = ['userId', 'timestamp']
       const item = {
         userId: { S: 'user123' },
-        timestamp: { INVALID: '1234567' }
+        timestamp: { INVALID: '1234567' },
       }
       const result = extractPrimaryKeys(keySet, item)
       assert.strictEqual(result, undefined)
@@ -202,7 +202,7 @@ describe('extractPrimaryKeys', () => {
       const keySet = ['key1', 'key2']
       const item = {
         key1: null,
-        key2: { S: 'value2' }
+        key2: { S: 'value2' },
       }
       const result = extractPrimaryKeys(keySet, item)
       assert.strictEqual(result, undefined)
@@ -211,7 +211,7 @@ describe('extractPrimaryKeys', () => {
     it('returns undefined when undefined values in item', () => {
       const keySet = ['key1', 'key2']
       const item = {
-        key2: { S: 'value2' }
+        key2: { S: 'value2' },
       }
       const result = extractPrimaryKeys(keySet, item)
       assert.strictEqual(result, undefined)
@@ -225,7 +225,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('https://sqs.eu-west-1.amazonaws.com/987654321098/test-queue')
       assert.deepStrictEqual(result, {
         queueName: 'test-queue',
-        arn: 'arn:aws:sqs:eu-west-1:987654321098:test-queue'
+        arn: 'arn:aws:sqs:eu-west-1:987654321098:test-queue',
       })
     })
 
@@ -233,7 +233,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('https://sqs.cn-north-1.amazonaws.com.cn/123456789012/china-queue')
       assert.deepStrictEqual(result, {
         queueName: 'china-queue',
-        arn: 'arn:aws-cn:sqs:cn-north-1:123456789012:china-queue'
+        arn: 'arn:aws-cn:sqs:cn-north-1:123456789012:china-queue',
       })
     })
 
@@ -241,7 +241,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('https://sqs.us-gov-west-1.amazonaws.com/123456789012/gov-queue')
       assert.deepStrictEqual(result, {
         queueName: 'gov-queue',
-        arn: 'arn:aws-us-gov:sqs:us-gov-west-1:123456789012:gov-queue'
+        arn: 'arn:aws-us-gov:sqs:us-gov-west-1:123456789012:gov-queue',
       })
     })
 
@@ -249,7 +249,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('https://sqs.us-west-2.amazonaws.com/123456789012/my-queue-test_123')
       assert.deepStrictEqual(result, {
         queueName: 'my-queue-test_123',
-        arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue-test_123'
+        arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue-test_123',
       })
     })
   })
@@ -259,7 +259,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('http://localhost:4566/000000000000/local-queue')
       assert.deepStrictEqual(result, {
         queueName: 'local-queue',
-        arn: 'arn:aws:sqs:us-east-1:000000000000:local-queue'
+        arn: 'arn:aws:sqs:us-east-1:000000000000:local-queue',
       })
     })
 
@@ -267,7 +267,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('http://127.0.0.1:9324/123456789012/dev-queue')
       assert.deepStrictEqual(result, {
         queueName: 'dev-queue',
-        arn: 'arn:aws:sqs:us-east-1:123456789012:dev-queue'
+        arn: 'arn:aws:sqs:us-east-1:123456789012:dev-queue',
       })
     })
   })
@@ -277,7 +277,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('https://us-west-2.queue.amazonaws.com/123456789012/legacy-queue')
       assert.deepStrictEqual(result, {
         queueName: 'legacy-queue',
-        arn: 'arn:aws:sqs:us-west-2:123456789012:legacy-queue'
+        arn: 'arn:aws:sqs:us-west-2:123456789012:legacy-queue',
       })
     })
 
@@ -285,7 +285,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('https://queue.amazonaws.com/123456789012/global-legacy-queue')
       assert.deepStrictEqual(result, {
         queueName: 'global-legacy-queue',
-        arn: 'arn:aws:sqs:us-east-1:123456789012:global-legacy-queue'
+        arn: 'arn:aws:sqs:us-east-1:123456789012:global-legacy-queue',
       })
     })
 
@@ -293,7 +293,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('eu-central-1.queue.amazonaws.com/987654321098/no-scheme-legacy')
       assert.deepStrictEqual(result, {
         queueName: 'no-scheme-legacy',
-        arn: 'arn:aws:sqs:eu-central-1:987654321098:no-scheme-legacy'
+        arn: 'arn:aws:sqs:eu-central-1:987654321098:no-scheme-legacy',
       })
     })
   })
@@ -303,7 +303,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('sqs.eu-west-1.amazonaws.com/123456789012/no-scheme-queue')
       assert.deepStrictEqual(result, {
         queueName: 'no-scheme-queue',
-        arn: 'arn:aws:sqs:eu-west-1:123456789012:no-scheme-queue'
+        arn: 'arn:aws:sqs:eu-west-1:123456789012:no-scheme-queue',
       })
     })
 
@@ -311,7 +311,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('localhost:4566/000000000000/local-no-scheme')
       assert.deepStrictEqual(result, {
         queueName: 'local-no-scheme',
-        arn: 'arn:aws:sqs:us-east-1:000000000000:local-no-scheme'
+        arn: 'arn:aws:sqs:us-east-1:000000000000:local-no-scheme',
       })
     })
   })
@@ -346,7 +346,7 @@ describe('extractQueueMetadata', () => {
       const result = extractQueueMetadata('https://sqs.us-west-2.amazonaws.com/123456789012/my-queue/')
       assert.deepStrictEqual(result, {
         queueName: 'my-queue',
-        arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue'
+        arn: 'arn:aws:sqs:us-west-2:123456789012:my-queue',
       })
     })
   })

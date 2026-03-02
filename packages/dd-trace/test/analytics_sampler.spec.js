@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('./setup/core')
@@ -15,9 +15,9 @@ describe('analyticsSampler', () => {
     sampler = require('../src/analytics_sampler')
     span = {
       context: sinon.stub().returns({
-        _name: 'web.request'
+        _name: 'web.request',
       }),
-      setTag: sinon.spy()
+      setTag: sinon.spy(),
     }
   })
 
@@ -30,7 +30,7 @@ describe('analyticsSampler', () => {
 
     it('should sample a span by span name', () => {
       sampler.sample(span, {
-        'web.request': 1
+        'web.request': 1,
       })
 
       sinon.assert.calledWith(span.setTag, MEASURED, true)

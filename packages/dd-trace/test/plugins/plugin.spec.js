@@ -2,7 +2,7 @@
 
 const assert = require('node:assert')
 
-const { describe, it, after } = require('tap').mocha
+const { describe, it, after } = require('mocha')
 const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -11,11 +11,11 @@ require('../setup/core')
 
 const log = {
   error: sinon.stub(),
-  info: sinon.stub()
+  info: sinon.stub(),
 }
 
 const Plugin = proxyquire('../../src/plugins/plugin', {
-  '../log': log
+  '../log': log,
 })
 const { storage } = require('../../../datadog-core')
 

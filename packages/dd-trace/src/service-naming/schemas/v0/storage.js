@@ -34,14 +34,14 @@ const redisConfig = {
   opName: () => 'redis.command',
   serviceName: ({ tracerService, pluginConfig, system, connectionName }) => {
     return getRedisService(pluginConfig, connectionName) || fromSystem(tracerService, system)
-  }
+  },
 }
 
 const valkeyConfig = {
   opName: () => 'valkey.command',
   serviceName: ({ tracerService, pluginConfig, system, connectionName }) => {
     return getRedisService(pluginConfig, connectionName) || fromSystem(tracerService, system)
-  }
+  },
 }
 
 const storage = {
@@ -49,70 +49,70 @@ const storage = {
     aerospike: {
       opName: () => 'aerospike.command',
       serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || `${tracerService}-aerospike`
+        pluginConfig.service || `${tracerService}-aerospike`,
     },
     'cassandra-driver': {
       opName: () => 'cassandra.query',
       serviceName: ({ tracerService, pluginConfig, system }) =>
-        pluginConfig.service || fromSystem(tracerService, system)
+        pluginConfig.service || fromSystem(tracerService, system),
     },
     couchbase: {
       opName: ({ operation }) => `couchbase.${operation}`,
-      serviceName: ({ tracerService, pluginConfig }) => pluginConfig.service || `${tracerService}-couchbase`
+      serviceName: ({ tracerService, pluginConfig }) => pluginConfig.service || `${tracerService}-couchbase`,
     },
     elasticsearch: {
       opName: () => 'elasticsearch.query',
       serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || `${tracerService}-elasticsearch`
+        pluginConfig.service || `${tracerService}-elasticsearch`,
     },
     ioredis: redisConfig,
     iovalkey: valkeyConfig,
     mariadb: {
       opName: () => 'mariadb.query',
-      serviceName: mysqlServiceName
+      serviceName: mysqlServiceName,
     },
     memcached: {
       opName: () => 'memcached.command',
       serviceName: ({ tracerService, pluginConfig, system }) =>
-        pluginConfig.service || fromSystem(tracerService, system)
+        pluginConfig.service || fromSystem(tracerService, system),
     },
     'mongodb-core': {
       opName: () => 'mongodb.query',
       serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || `${tracerService}-mongodb`
+        pluginConfig.service || `${tracerService}-mongodb`,
     },
     mysql: {
       opName: () => 'mysql.query',
-      serviceName: mysqlServiceName
+      serviceName: mysqlServiceName,
     },
     mysql2: {
       opName: () => 'mysql.query',
-      serviceName: mysqlServiceName
+      serviceName: mysqlServiceName,
     },
     opensearch: {
       opName: () => 'opensearch.query',
       serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || `${tracerService}-opensearch`
+        pluginConfig.service || `${tracerService}-opensearch`,
     },
     oracledb: {
       opName: () => 'oracle.query',
-      serviceName: withSuffixFunction('oracle')
+      serviceName: withSuffixFunction('oracle'),
     },
     pg: {
       opName: () => 'pg.query',
-      serviceName: withSuffixFunction('postgres')
+      serviceName: withSuffixFunction('postgres'),
     },
     prisma: {
       opName: ({ operation }) => `prisma.${operation}`,
-      serviceName: withSuffixFunction('prisma')
+      serviceName: withSuffixFunction('prisma'),
     },
     redis: redisConfig,
     tedious: {
       opName: () => 'tedious.request',
       serviceName: ({ tracerService, pluginConfig, system }) =>
-        pluginConfig.service || fromSystem(tracerService, system)
-    }
-  }
+        pluginConfig.service || fromSystem(tracerService, system),
+    },
+  },
 }
 
 module.exports = storage

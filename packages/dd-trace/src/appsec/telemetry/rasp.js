@@ -8,7 +8,7 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 const BLOCKING_STATUS = {
   FAILURE: 'failure',
   IRRELEVANT: 'irrelevant',
-  SUCCESS: 'success'
+  SUCCESS: 'success',
 }
 
 function addRaspRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
@@ -67,7 +67,7 @@ function trackRaspRuleMatch (store, raspRule, blockTriggered, blocked) {
     waf_version: telemetryMetrics.wafVersion,
     event_rules_version: telemetryMetrics.rulesVersion,
     rule_type: raspRule.type,
-    block: getRuleMatchBlockingStatus(blockTriggered, blocked)
+    block: getRuleMatchBlockingStatus(blockTriggered, blocked),
   }
 
   if (raspRule.variant) {
@@ -99,5 +99,5 @@ module.exports = {
   addRaspRequestMetrics,
   trackRaspMetrics,
   trackRaspRuleMatch,
-  trackRaspRuleSkipped
+  trackRaspRuleSkipped,
 }

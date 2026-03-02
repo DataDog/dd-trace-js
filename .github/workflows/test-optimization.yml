@@ -3,8 +3,7 @@ name: Test Optimization
 on:
   pull_request:
   push:
-    branches:
-      - master
+    branches: [master, mq-working-branch-master-*]
   schedule:
     - cron: 0 4 * * *
 
@@ -27,7 +26,7 @@ jobs:
         with:
           scope: DataDog/test-environment
           policy: dd-trace-js
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -40,21 +39,22 @@ jobs:
     strategy:
       matrix:
         version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - name: Get latest Playwright version
+      - name: Get Playwright version from versions package.json
         id: playwright-version
         run: |
-          PLAYWRIGHT_VERSION=$(npm view @playwright/test version)
+          PLAYWRIGHT_VERSION=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies['@playwright/test']")
           echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
-          echo "Latest Playwright version: $PLAYWRIGHT_VERSION"
+          echo "Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -76,7 +76,7 @@ jobs:
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -96,13 +96,13 @@ jobs:
           echo "dd-trace major version: $MAJOR"
       - name: Cache Playwright browsers
         if: matrix.playwright-version == 'oldest'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: /github/home/.cache/ms-playwright
           key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
       - run: yarn test:integration:playwright
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
 
   integration-mocha:
     strategy:
@@ -115,14 +115,14 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:mocha
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
 
   integration-jest:
@@ -136,14 +136,14 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:jest
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
 
   integration-cucumber:
@@ -157,14 +157,14 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:cucumber
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
 
   integration-selenium:
@@ -178,7 +178,7 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -202,7 +202,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:integration:selenium
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
 
   integration-cypress:
     strategy:
@@ -213,14 +213,14 @@ jobs:
         # 14.5.4 is the latest version that supports Node 18
         # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
         cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
-        module-type: ['commonJS', 'esm']
+        module-type: ["commonJS", "esm"]
     runs-on: ubuntu-latest
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -229,7 +229,7 @@ jobs:
       # as that changes frequently and would have a low cache hit rate
       - name: Cache Cypress binary
         if: matrix.cypress-version != 'latest'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         with:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
@@ -237,7 +237,7 @@ jobs:
       - run: yarn test:integration:cypress --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
 
@@ -252,11 +252,11 @@ jobs:
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:vitest
         env:
-          NODE_OPTIONS: '-r ./ci/init'
+          NODE_OPTIONS: "-r ./ci/init"

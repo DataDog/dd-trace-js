@@ -13,6 +13,6 @@ export default async function POST (req, res) {
   const body = req.body
   res.status(200).json({
     cache: 'no-store',
-    data: body
+    data: body,
   })
 }

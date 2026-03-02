@@ -6,6 +6,8 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { removeDestroyHandler } = require('../util')
+
 describe('LLMObsSpanWriter', () => {
   let LLMObsSpanWriter
   let writer
@@ -15,20 +17,20 @@ describe('LLMObsSpanWriter', () => {
   beforeEach(() => {
     logger = {
       warn: sinon.stub(),
-      debug: sinon.stub()
+      debug: sinon.stub(),
     }
     LLMObsSpanWriter = proxyquire('../../../src/llmobs/writers/spans', {
-      '../../log': logger
+      '../../log': logger,
     })
     config = {
       port: 8126,
       hostname: 'localhost',
-      site: 'datadoghq.com'
+      site: 'datadoghq.com',
     }
   })
 
   afterEach(() => {
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   it('is initialized correctly', () => {
@@ -60,7 +62,7 @@ describe('LLMObsSpanWriter', () => {
 
     writer.append(event)
 
-    assert.strictEqual(writer._bufferSize, eventSizeBytes)
+    assert.strictEqual(writer._buffer.size, eventSizeBytes)
   })
 
   it('truncates the event if it exceeds the size limit', () => {
@@ -70,20 +72,20 @@ describe('LLMObsSpanWriter', () => {
       name: 'test',
       meta: {
         input: { value: 'a'.repeat(1024 * 1024) },
-        output: { value: 'a'.repeat(1024 * 1024) }
-      }
+        output: { value: 'a'.repeat(1024 * 1024) },
+      },
     }
 
     writer.append(event)
 
-    const bufferEvent = writer._buffer[0]
+    const bufferEvent = writer._buffer.events[0]
     assert.deepStrictEqual(bufferEvent, {
       name: 'test',
       meta: {
         input: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" },
-        output: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" }
+        output: { value: "[This value has been dropped because this span's size exceeds the 1MB size limit.]" },
       },
-      collection_errors: ['dropped_io']
+      collection_errors: ['dropped_io'],
     })
   })
 
@@ -91,8 +93,8 @@ describe('LLMObsSpanWriter', () => {
     writer = new LLMObsSpanWriter(config)
     writer.flush = sinon.stub()
 
-    writer._bufferSize = (5 << 20) - 1
-    writer._buffer = Array.from({ length: 10 })
+    writer._buffer.size = (5 << 20) - 1
+    writer._buffer.events = Array.from({ length: 10 })
     const event = { name: 'test', value: 'a'.repeat(1024) }
 
     writer.append(event)
@@ -107,7 +109,7 @@ describe('LLMObsSpanWriter', () => {
     writer = new LLMObsSpanWriter(config)
 
     const events = [
-      { name: 'test', value: 1 }
+      { name: 'test', value: 1 },
     ]
 
     const payload = writer.makePayload(events)

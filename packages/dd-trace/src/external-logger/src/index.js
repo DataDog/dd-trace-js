@@ -1,13 +1,12 @@
 'use strict'
 
-const tracerLogger = require('../../log')// path to require tracer logger
-
 const https = require('https')
+const tracerLogger = require('../../log')// path to require tracer logger
 
 class ExternalLogger {
   // Note: these attribute names match the corresponding entry in the JSON payload.
   constructor ({
-    ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10_000, timeout = 2000, limit = 1000
+    ddsource, hostname, service, apiKey, site = 'datadoghq.com', interval = 10_000, timeout = 2000, limit = 1000,
   }) {
     this.enabled = !!apiKey
 
@@ -23,7 +22,7 @@ class ExternalLogger {
     this.intake = `http-intake.logs.${this.site}`
     this.headers = {
       'DD-API-KEY': apiKey,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     }
     this.timer = setInterval(() => {
       this.flush()
@@ -57,7 +56,7 @@ class ExternalLogger {
       hostname: log.hostname || this.hostname,
       ddsource: log.ddsource || this.ddsource,
       service: log.service || this.service,
-      ddtags: logTags || undefined
+      ddtags: logTags || undefined,
     }
 
     this.enqueue(payload)
@@ -105,7 +104,7 @@ class ExternalLogger {
       path: this.endpoint,
       method: 'POST',
       headers: this.headers,
-      timeout: this.timeout
+      timeout: this.timeout,
     }
 
     const req = https.request(options, (res) => {

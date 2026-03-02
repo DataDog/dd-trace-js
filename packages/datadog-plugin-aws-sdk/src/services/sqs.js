@@ -30,9 +30,9 @@ class Sqs extends BaseAwsSdkPlugin {
           childOf: contextExtraction.datadogContext,
           meta: {
             ...this.requestTags.get(request),
-            'span.kind': 'server'
+            'span.kind': 'server',
           },
-          integrationName: 'aws-sdk'
+          integrationName: 'aws-sdk',
         }
         parsedMessageAttributes = contextExtraction.parsedAttributes
         span = this.startSpan('aws.response', options, ctx)
@@ -58,13 +58,13 @@ class Sqs extends BaseAwsSdkPlugin {
       case 'receiveMessage':
         return this.operationName({
           type: 'messaging',
-          kind: 'consumer'
+          kind: 'consumer',
         })
       case 'sendMessage':
       case 'sendMessageBatch':
         return this.operationName({
           type: 'messaging',
-          kind: 'producer'
+          kind: 'producer',
         })
     }
 
@@ -72,7 +72,7 @@ class Sqs extends BaseAwsSdkPlugin {
       id: 'aws',
       type: 'web',
       kind: 'client',
-      awsService: 'sqs'
+      awsService: 'sqs',
     })
   }
 
@@ -149,7 +149,7 @@ class Sqs extends BaseAwsSdkPlugin {
     if (parsedAttributes) {
       return {
         datadogContext: this.tracer.extract('text_map', parsedAttributes),
-        parsedAttributes
+        parsedAttributes,
       }
     }
   }
@@ -177,7 +177,7 @@ class Sqs extends BaseAwsSdkPlugin {
     // we only want to set the payloadSize on the span if we have one message
     span = response.Messages.length > 1 ? null : span
 
-    response.Messages.forEach(message => {
+    for (let message of response.Messages) {
       // we may have already parsed the message attributes when extracting trace context
       if (!parsedAttributes) {
         if (message.Body) {
@@ -198,7 +198,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
       const payloadSize = getHeadersSize({
         Body: message.Body,
-        MessageAttributes: message.MessageAttributes
+        MessageAttributes: message.MessageAttributes,
       })
       const queue = params.QueueUrl.split('/').pop()
       if (parsedAttributes) {
@@ -206,7 +206,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
-    })
+    }
   }
 
   requestInject (span, request) {
@@ -258,7 +258,7 @@ class Sqs extends BaseAwsSdkPlugin {
       this.tracer.inject(span, 'text_map', ddInfo)
       params.MessageAttributes._datadog = {
         DataType: 'String',
-        StringValue: JSON.stringify(ddInfo)
+        StringValue: JSON.stringify(ddInfo),
       }
     }
 
@@ -266,7 +266,7 @@ class Sqs extends BaseAwsSdkPlugin {
       if (!params.MessageAttributes._datadog) {
         params.MessageAttributes._datadog = {
           DataType: 'String',
-          StringValue: JSON.stringify(ddInfo)
+          StringValue: JSON.stringify(ddInfo),
         }
       }
 
@@ -286,7 +286,7 @@ class Sqs extends BaseAwsSdkPlugin {
   setDSMCheckpoint (span, params, queueUrl) {
     const payloadSize = getHeadersSize({
       Body: params.MessageBody,
-      MessageAttributes: params.MessageAttributes
+      MessageAttributes: params.MessageAttributes,
     })
     const queue = queueUrl.split('/').pop()
     const dataStreamsContext = this.tracer

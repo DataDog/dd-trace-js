@@ -13,7 +13,7 @@ const outfile = path.join(__dirname, 'build', 'iast-disabled.mjs')
 esbuild.build({
   ...esbuildCommonConfig,
   outfile,
-  sourcemap: false
+  sourcemap: false,
 }).catch((err) => {
   console.error(err)
   process.exit(1)

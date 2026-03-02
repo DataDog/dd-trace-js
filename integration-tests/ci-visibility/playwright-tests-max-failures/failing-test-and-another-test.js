@@ -8,12 +8,12 @@ test.beforeEach(async ({ page }) => {
 
 test('should work with failing tests', async ({ page }) => {
   await expect(page.locator('.hello-world')).toHaveText([
-    'Hello Warld'
+    'Hello Warld',
   ])
 })
 
 test('does not crash afterwards', async ({ page }) => {
   await expect(page.locator('.hello-world')).toHaveText([
-    'Hello World'
+    'Hello World',
   ])
 })

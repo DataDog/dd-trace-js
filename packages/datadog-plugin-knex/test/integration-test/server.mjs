@@ -1,7 +1,7 @@
 import 'dd-trace/init.js'
+import { AsyncLocalStorage } from 'async_hooks'
 import express from 'express'
 import knex from 'knex'
-import { AsyncLocalStorage } from 'async_hooks'
 
 let counter = 0
 const asyncStore = new AsyncLocalStorage()
@@ -9,7 +9,7 @@ const app = express()
 
 const db = knex({
   client: 'sqlite3',
-  connection: { filename: ':memory:' }
+  connection: { filename: ':memory:' },
 })
 
 app.get('/', (req, res) => {

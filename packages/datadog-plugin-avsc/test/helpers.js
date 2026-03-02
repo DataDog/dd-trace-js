@@ -12,7 +12,7 @@ async function loadMessage (avro, messageTypeName) {
 
     return {
       schema,
-      path: filePath
+      path: filePath,
     }
   } else if (messageTypeName === 'AdvancedUser') {
     // Read and parse the Avro schema
@@ -23,11 +23,11 @@ async function loadMessage (avro, messageTypeName) {
 
     return {
       schema,
-      path: filePath
+      path: filePath,
     }
   }
 }
 
 module.exports = {
-  loadMessage
+  loadMessage,
 }

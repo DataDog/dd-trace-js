@@ -49,6 +49,6 @@ module.exports = function makeUtilities (integrationName, tracerConfig) {
      * @param {import('index').Span|import('index').SpanContext} span
      * @returns {boolean} `true` if the prompt completion should be sampled, otherwise `false`.
      */
-    isPromptCompletionSampled: (span) => isPromptCompletionSampled(sampler, span)
+    isPromptCompletionSampled: (span) => isPromptCompletionSampled(sampler, span),
   }
 }

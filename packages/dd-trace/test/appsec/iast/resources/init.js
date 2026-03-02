@@ -3,5 +3,5 @@
 const tracer = require('dd-trace')
 
 tracer.init({
-  flushInterval: 0
+  flushInterval: 0,
 })

@@ -23,7 +23,7 @@ const Activation = {
       default:
         return Activation.DISABLED
     }
-  }
+  },
 }
 
 module.exports = Activation

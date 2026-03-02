@@ -27,14 +27,14 @@ describe('extended data collection', () => {
     const tests = [
       {
         appName: 'pages-dir',
-        serverPath: 'server'
-      }
+        serverPath: 'server',
+      },
     ]
 
     if (satisfies(realVersion, '>=13.2') && (NODE_MAJOR < 24 || satisfies(realVersion, '!=13.2'))) {
       tests.push({
         appName: 'app-dir',
-        serverPath: '.next/standalone/server.js'
+        serverPath: '.next/standalone/server.js',
       })
     }
 
@@ -49,8 +49,8 @@ describe('extended data collection', () => {
             other: 'other',
             chained: {
               child: 'one',
-              child2: 2
-            }
+              child2: 2,
+            },
           }
 
           await axios.post(
@@ -60,8 +60,8 @@ describe('extended data collection', () => {
               headers: {
                 'custom-header-key-1': 'custom-header-value-1',
                 'custom-header-key-2': 'custom-header-value-2',
-                'custom-header-key-3': 'custom-header-value-3'
-              }
+                'custom-header-key-3': 'custom-header-value-3',
+              },
             }
           )
 
@@ -83,7 +83,7 @@ describe('extended data collection', () => {
 
         it('Should redact request/response headers', async () => {
           const requestBody = {
-            bodyParam: 'collect-standard'
+            bodyParam: 'collect-standard',
           }
           await axios.post(
             `http://127.0.0.1:${serverData.port}/api/extended-data-collection/redacted-headers`,
@@ -97,8 +97,8 @@ describe('extended data collection', () => {
                 'authentication-info': 'header-value-5',
                 'proxy-authentication-info': 'header-value-6',
                 cookie: 'header-value-7',
-                'set-cookie': 'header-value-8'
-              }
+                'set-cookie': 'header-value-8',
+              },
             }
           )
 
@@ -131,8 +131,8 @@ describe('extended data collection', () => {
             other: 'other',
             chained: {
               child: 'one',
-              child2: 2
-            }
+              child2: 2,
+            },
           }
           await axios.post(
             `http://127.0.0.1:${serverData.port}/api/extended-data-collection`,
@@ -148,8 +148,8 @@ describe('extended data collection', () => {
                 'custom-request-header-7': 'custom-request-header-value-7',
                 'custom-request-header-8': 'custom-request-header-value-8',
                 'custom-request-header-9': 'custom-request-header-value-9',
-                'custom-request-header-10': 'custom-request-header-value-10'
-              }
+                'custom-request-header-10': 'custom-request-header-value-10',
+              },
             }
           )
 
@@ -176,13 +176,13 @@ describe('extended data collection', () => {
 
           const requestBody = {
             bodyParam: 'collect-standard',
-            deepObject
+            deepObject,
           }
 
           const expectedDeepTruncatedObject = createDeepObject({ 's-19': 's-19' }, 1, 18)
           const expectedRequestBody = {
             bodyParam: 'collect-standard',
-            deepObject: expectedDeepTruncatedObject
+            deepObject: expectedDeepTruncatedObject,
           }
           await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
@@ -197,12 +197,12 @@ describe('extended data collection', () => {
         it('Should truncate the request body when string length is more than 4096 characters', async () => {
           const requestBody = {
             bodyParam: 'collect-standard',
-            longValue: Array(5000).fill('A').join('')
+            longValue: Array(5000).fill('A').join(''),
           }
 
           const expectedRequestBody = {
             bodyParam: 'collect-standard',
-            longValue: Array(4096).fill('A').join('')
+            longValue: Array(4096).fill('A').join(''),
           }
           await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 
@@ -218,12 +218,12 @@ describe('extended data collection', () => {
           const children = Array(300).fill('item')
           const requestBody = {
             bodyParam: 'collect-standard',
-            children
+            children,
           }
 
           const expectedRequestBody = {
             bodyParam: 'collect-standard',
-            children: children.slice(0, 256)
+            children: children.slice(0, 256),
           }
           await axios.post(`http://127.0.0.1:${serverData.port}/api/extended-data-collection`, requestBody)
 

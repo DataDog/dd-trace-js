@@ -55,7 +55,7 @@ describe('Code injection vulnerability', () => {
                   assert.strictEqual(res.data, 'test-result')
                 })
                 .catch(done)
-            }
+            },
           })
 
           testThatRequestHasVulnerability({
@@ -68,21 +68,21 @@ describe('Code injection vulnerability', () => {
               res.send(require(evalFunctionsPath).runEval(str, 'test-result'))
             },
             vulnerability: 'CODE_INJECTION',
-            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source',
           })
 
           testThatRequestHasNoVulnerability({
             fn: (req, res) => {
-              res.send('' + require(evalFunctionsPath).runFakeEval(req.query.script))
+              res.send(`${require(evalFunctionsPath).runFakeEval(req.query.script)}`)
             },
             vulnerability: 'CODE_INJECTION',
             makeRequest: (done, config) => {
               axios.get(`http://localhost:${config.port}/?script=1%2B2`).catch(done)
-            }
+            },
           })
 
           testThatRequestHasNoVulnerability((req, res) => {
-            res.send('' + require(evalFunctionsPath).runEval('1 + 2'))
+            res.send(`${require(evalFunctionsPath).runEval('1 + 2')}`)
           }, 'CODE_INJECTION')
         })
     })
@@ -116,7 +116,7 @@ describe('Code injection vulnerability', () => {
                   assert.strictEqual(res.data, 3)
                 })
                 .catch(done)
-            }
+            },
           })
 
           testThatRequestHasVulnerability({
@@ -130,7 +130,7 @@ describe('Code injection vulnerability', () => {
               res.send(`${result}`)
             },
             vulnerability: 'CODE_INJECTION',
-            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source',
           })
 
           testThatRequestHasNoVulnerability((req, res) => {
@@ -155,7 +155,7 @@ describe('Code injection vulnerability', () => {
                   assert.strictEqual(res.data, 3)
                 })
                 .catch(done)
-            }
+            },
           })
 
           testThatRequestHasVulnerability({
@@ -169,7 +169,7 @@ describe('Code injection vulnerability', () => {
               res.send(`${result}`)
             },
             vulnerability: 'CODE_INJECTION',
-            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source',
           })
 
           testThatRequestHasNoVulnerability((req, res) => {
@@ -194,7 +194,7 @@ describe('Code injection vulnerability', () => {
                   assert.strictEqual(res.data, 3)
                 })
                 .catch(done)
-            }
+            },
           })
 
           testThatRequestHasVulnerability({
@@ -208,7 +208,7 @@ describe('Code injection vulnerability', () => {
               res.send(`${result}`)
             },
             vulnerability: 'CODE_INJECTION',
-            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source',
           })
 
           testThatRequestHasNoVulnerability((req, res) => {
@@ -234,7 +234,7 @@ describe('Code injection vulnerability', () => {
                   assert.strictEqual(res.data, 3)
                 })
                 .catch(done)
-            }
+            },
           })
 
           testThatRequestHasVulnerability({
@@ -248,7 +248,7 @@ describe('Code injection vulnerability', () => {
               res.send(`${result}`)
             },
             vulnerability: 'CODE_INJECTION',
-            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+            testDescription: 'Should detect CODE_INJECTION vulnerability with DB source',
           })
 
           testThatRequestHasNoVulnerability((req, res) => {
@@ -275,7 +275,7 @@ describe('Code injection vulnerability', () => {
                     assert.strictEqual(res.data, 3)
                   })
                   .catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -290,7 +290,7 @@ describe('Code injection vulnerability', () => {
                 res.send(`${result}`)
               },
               vulnerability: 'CODE_INJECTION',
-              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source',
             })
 
             testThatRequestHasNoVulnerability((req, res) => {
@@ -317,7 +317,7 @@ describe('Code injection vulnerability', () => {
                     assert.strictEqual(res.data, 3)
                   })
                   .catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -332,7 +332,7 @@ describe('Code injection vulnerability', () => {
                 res.send(`${result}`)
               },
               vulnerability: 'CODE_INJECTION',
-              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source',
             })
 
             testThatRequestHasNoVulnerability((req, res) => {
@@ -359,7 +359,7 @@ describe('Code injection vulnerability', () => {
                     assert.strictEqual(res.data, 3)
                   })
                   .catch(done)
-              }
+              },
             })
 
             testThatRequestHasVulnerability({
@@ -374,7 +374,7 @@ describe('Code injection vulnerability', () => {
                 res.send(`${result}`)
               },
               vulnerability: 'CODE_INJECTION',
-              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source'
+              testDescription: 'Should detect CODE_INJECTION vulnerability with DB source',
             })
 
             testThatRequestHasNoVulnerability((req, res) => {

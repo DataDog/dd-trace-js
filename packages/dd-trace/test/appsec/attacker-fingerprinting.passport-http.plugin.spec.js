@@ -1,8 +1,8 @@
 'use strict'
 
-const Axios = require('axios')
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 
+const Axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
@@ -10,12 +10,12 @@ const { withVersions } = require('../setup/mocha')
 
 function assertFingerprintInTraces (traces) {
   const span = traces[0][0]
-  assert.property(span.meta, '_dd.appsec.fp.http.header')
-  assert.equal(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-e58aa9dd')
-  assert.property(span.meta, '_dd.appsec.fp.http.network')
-  assert.equal(span.meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
-  assert.property(span.meta, '_dd.appsec.fp.http.endpoint')
-  assert.equal(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-7e93fba0--')
+  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.header'))
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.header'], 'hdr-0110000110-74c2908f-5-e58aa9dd')
+  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.network'))
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.network'], 'net-0-0000000000')
+  assert.ok(Object.hasOwn(span.meta, '_dd.appsec.fp.http.endpoint'))
+  assert.strictEqual(span.meta['_dd.appsec.fp.http.endpoint'], 'http-post-7e93fba0--')
 }
 
 withVersions('passport-http', 'passport-http', version => {
@@ -28,7 +28,7 @@ withVersions('passport-http', 'passport-http', version => {
 
     before(() => {
       appsec.enable(getConfigFresh({
-        appsec: true
+        appsec: true,
       }))
     })
 
@@ -47,7 +47,7 @@ withVersions('passport-http', 'passport-http', version => {
           if (username === 'success') {
             done(null, {
               id: 1234,
-              username
+              username,
             })
           } else {
             done(null, false)
@@ -64,8 +64,8 @@ withVersions('passport-http', 'passport-http', version => {
         axios = Axios.create({
           baseURL: `http://localhost:${port}`,
           headers: {
-            'User-Agent': 'test-user-agent'
-          }
+            'User-Agent': 'test-user-agent',
+          },
         })
         done()
       })
@@ -86,8 +86,8 @@ withVersions('passport-http', 'passport-http', version => {
           `http://localhost:${port}/login`, {}, {
             auth: {
               username: 'fail',
-              password: '1234'
-            }
+              password: '1234',
+            },
           }
         )
       } catch (e) {}
@@ -100,8 +100,8 @@ withVersions('passport-http', 'passport-http', version => {
         `http://localhost:${port}/login`, {}, {
           auth: {
             username: 'success',
-            password: '1234'
-          }
+            password: '1234',
+          },
         }
       )
 

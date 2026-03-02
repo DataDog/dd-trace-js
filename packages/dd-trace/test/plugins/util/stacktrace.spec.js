@@ -1,14 +1,15 @@
 'use strict'
 
-const { describe, it } = require('tap').mocha
 const assert = require('node:assert')
 const { join } = require('node:path')
+
+const { describe, it } = require('mocha')
 
 require('../../setup/core')
 
 const {
   getCallSites,
-  parseUserLandFrames
+  parseUserLandFrames,
 } = require('../../../src/plugins/util/stacktrace')
 
 describe('stacktrace utils', () => {
@@ -36,12 +37,12 @@ describe('stacktrace utils', () => {
         const { stack } = new Error('foo')
         const [frame] = parseUserLandFrames(stack)
         assert.deepStrictEqual(frame, {
-          typeName: 'Test',
+          typeName: 'Context',
           functionName: 'outerFunction',
           methodName: undefined,
           fileName: __filename,
           lineNumber,
-          columnNumber: '27'
+          columnNumber: '27',
         })
       })
 
@@ -55,7 +56,7 @@ describe('stacktrace utils', () => {
           methodName: undefined,
           fileName: __filename,
           lineNumber,
-          columnNumber: '27'
+          columnNumber: '27',
         })
       })
 
@@ -73,7 +74,7 @@ describe('stacktrace utils', () => {
           methodName: undefined,
           fileName: 'foo/bar/baz.js',
           lineNumber: '123',
-          columnNumber: '456'
+          columnNumber: '456',
         })
       })
 
@@ -84,7 +85,7 @@ describe('stacktrace utils', () => {
           methodName: undefined,
           fileName: '     f[i](l<e>:.js:1:2)    ',
           lineNumber: '2',
-          columnNumber: '1'
+          columnNumber: '1',
         })
       })
 
@@ -95,7 +96,7 @@ describe('stacktrace utils', () => {
           methodName: undefined,
           fileName: 'evalmachine.<anonymous>',
           lineNumber: '1',
-          columnNumber: '17'
+          columnNumber: '17',
         })
       })
     })
@@ -107,7 +108,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '123',
-        columnNumber: '456'
+        columnNumber: '456',
       })
     })
 
@@ -118,7 +119,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: 'foo [bar] (baz).js',
         lineNumber: '123',
-        columnNumber: '456'
+        columnNumber: '456',
       })
     })
 
@@ -129,7 +130,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '     f[i](l<e>:.js:1:2)    ',
         lineNumber: '1',
-        columnNumber: '33'
+        columnNumber: '33',
       })
     })
 
@@ -140,7 +141,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: 'file:///foo/bar/baz.js',
         lineNumber: '123',
-        columnNumber: '456'
+        columnNumber: '456',
       })
     })
 
@@ -151,7 +152,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: 'D:\\foo\\bar\\baz.js',
         lineNumber: '123',
-        columnNumber: '456'
+        columnNumber: '456',
       })
     })
 
@@ -162,7 +163,7 @@ describe('stacktrace utils', () => {
         methodName: 'bar',
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -173,7 +174,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -184,7 +185,7 @@ describe('stacktrace utils', () => {
         typeName: 'Foo',
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -195,7 +196,7 @@ describe('stacktrace utils', () => {
         typeName: 'Foo',
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -206,7 +207,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -218,7 +219,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -229,7 +230,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         lineNumber: '3',
         columnNumber: '4',
-        fileName: 'c/d/e.js'
+        fileName: 'c/d/e.js',
       })
     })
 
@@ -241,7 +242,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -252,7 +253,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -264,7 +265,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -275,7 +276,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -286,7 +287,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -297,7 +298,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -308,7 +309,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -319,7 +320,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -330,7 +331,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/foo/bar/baz.js',
         lineNumber: '3',
-        columnNumber: '8'
+        columnNumber: '8',
       })
     })
 
@@ -342,7 +343,7 @@ describe('stacktrace utils', () => {
           fileName: '/foo/bar/baz.js',
           functionName: 'eval',
           methodName: undefined,
-          typeName: undefined
+          typeName: undefined,
         })
       })
 
@@ -353,7 +354,7 @@ describe('stacktrace utils', () => {
           fileName: '/foo/bar/baz.js',
           functionName: 'eval',
           methodName: undefined,
-          typeName: undefined
+          typeName: undefined,
         })
       })
 
@@ -364,7 +365,7 @@ describe('stacktrace utils', () => {
           fileName: 'a file with eval .js',
           functionName: 'eval',
           methodName: undefined,
-          typeName: undefined
+          typeName: undefined,
         })
       })
 
@@ -376,7 +377,7 @@ describe('stacktrace utils', () => {
           fileName: '/foo/bar/baz.js',
           functionName: 'eval',
           methodName: undefined,
-          typeName: undefined
+          typeName: undefined,
         })
       })
     })
@@ -404,7 +405,7 @@ describe('stacktrace utils', () => {
         methodName: undefined,
         fileName: '/USER/Db (Person)/x/y.js',
         lineNumber: '14',
-        columnNumber: '11'
+        columnNumber: '11',
       })
     })
 
@@ -420,14 +421,14 @@ describe('stacktrace utils', () => {
           functionName: 'foo',
           lineNumber: '123',
           methodName: undefined,
-          typeName: undefined
+          typeName: undefined,
         }, {
           columnNumber: '2',
           fileName: join(__dirname, 'baz.js'),
           functionName: 'foo',
           lineNumber: '1',
           methodName: undefined,
-          typeName: undefined
+          typeName: undefined,
         }])
       })
 

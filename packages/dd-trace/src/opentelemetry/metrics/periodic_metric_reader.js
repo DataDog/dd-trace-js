@@ -1,10 +1,10 @@
 'use strict'
 
-const {
-  METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE
-} = require('./constants')
 const log = require('../../log')
 const { stableStringify } = require('../otlp/otlp_transformer_base')
+const {
+  METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE,
+} = require('./constants')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -13,7 +13,32 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 
 /**
- * @typedef {Object} NumberDataPoint
+ * @typedef {{ value: number, startTime: number }} SumCumulativeState
+ *
+ * @typedef {{
+ *   count: number,
+ *   sum: number,
+ *   min: number,
+ *   max: number,
+ *   bucketCounts: number[],
+ *   startTime: number
+ * }} HistogramCumulativeState
+ *
+ * @typedef {SumCumulativeState | HistogramCumulativeState} CumulativeStateValue
+ *
+ * @typedef {{
+ *   count: number,
+ *   sum: number,
+ *   min?: number,
+ *   max?: number,
+ *   bucketCounts: number[]
+ * }} HistogramLastExportedState
+ *
+ * @typedef {number | HistogramLastExportedState} LastExportedStateValue
+ */
+
+/**
+ * @typedef {object} NumberDataPoint
  * @property {Attributes} attributes - Number data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
@@ -22,7 +47,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 
 /**
- * @typedef {Object} HistogramDataPoint
+ * @typedef {object} HistogramDataPoint
  * @property {Attributes} attributes - Histogram data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
@@ -36,7 +61,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 
 /**
- * @typedef {Object} AggregatedMetricDataPoint
+ * @typedef {object} AggregatedMetricDataPoint
  * @property {Attributes} attributes - Aggregated metric data point metric attributes
  * @property {string} attrKey - Stable stringified key for attributes
  * @property {number} timeUnixNano - Timestamp in nanoseconds
@@ -50,7 +75,7 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
  */
 
 /**
- * @typedef {Object} AggregatedMetric
+ * @typedef {object} AggregatedMetric
  * @property {string} name - Metric name
  * @property {string} description - Metric description
  * @property {string} unit - Metric unit
@@ -113,7 +138,7 @@ class PeriodicMetricReader {
    */
   forceFlush () {
     if (this.#isShutdown) {
-      log.warn(`PeriodicMetricReader is shutdown. ${this.#droppedCount} measurement(s) were dropped`)
+      log.warn('PeriodicMetricReader is shutdown. %d measurement(s) were dropped', this.#droppedCount)
       return
     }
     this.#collectAndExport()
@@ -185,10 +210,8 @@ class PeriodicMetricReader {
     }
 
     if (this.#droppedCount > 0) {
-      log.warn(
-        `Metric queue exceeded limit (max: ${DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE}). ` +
-        `Dropping ${this.#droppedCount} measurements. `
-      )
+      log.warn('Metric queue exceeded limit (max: %d). Dropping %d measurements.',
+        DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE, this.#droppedCount)
       this.#droppedCount = 0
     }
 
@@ -255,8 +278,8 @@ class MetricAggregator {
    * Aggregates measurements into metrics.
    *
    * @param {Measurement[]} measurements - The measurements to aggregate
-   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
-   * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
+   * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
+   * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
    * @returns {Iterable<AggregatedMetric>} The aggregated metrics
    */
   aggregate (measurements, cumulativeState, lastExportedState) {
@@ -271,7 +294,7 @@ class MetricAggregator {
         instrumentationScope,
         value,
         attributes,
-        timestamp
+        timestamp,
       } = measurement
 
       const scopeKey = this.#getScopeKey(instrumentationScope)
@@ -283,9 +306,11 @@ class MetricAggregator {
       if (!metric) {
         if (metricsMap.size >= this.#maxBatchedQueueSize) {
           log.warn(
-            `Metric queue exceeded limit (max: ${this.#maxBatchedQueueSize}). ` +
-            `Dropping metric: ${metricKey}, value: ${value}. ` +
-            'Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.'
+            // eslint-disable-next-line @stylistic/max-len
+            'Metric queue exceeded limit (max: %d). Dropping metric: %s, value: %s. Consider increasing OTEL_BSP_MAX_QUEUE_SIZE or decreasing OTEL_METRIC_EXPORT_INTERVAL.',
+            this.#maxBatchedQueueSize,
+            metricKey,
+            value
           )
           continue
         }
@@ -296,7 +321,7 @@ class MetricAggregator {
           type,
           instrumentationScope,
           temporality: this.#getTemporality(type),
-          dataPointMap: new Map()
+          dataPointMap: new Map(),
         }
         metricsMap.set(metricKey, metric)
       }
@@ -353,7 +378,7 @@ class MetricAggregator {
    * Applies delta temporality to the metrics.
    *
    * @param {Iterable<AggregatedMetric>} metrics - The metrics to apply delta temporality to
-   * @param {Map<string, any>} lastExportedState - The last exported state of the metrics
+   * @param {Map<string, LastExportedStateValue>} lastExportedState - The last exported state of the metrics
    * @returns {void}
    */
   #applyDeltaTemporality (metrics, lastExportedState) {
@@ -373,14 +398,14 @@ class MetricAggregator {
             const lastState = lastExportedState.get(stateKey) || {
               count: 0,
               sum: 0,
-              bucketCounts: new Array(dataPoint.bucketCounts.length).fill(0)
+              bucketCounts: new Array(dataPoint.bucketCounts.length).fill(0),
             }
             const currentState = {
               count: dataPoint.count,
               sum: dataPoint.sum,
               min: dataPoint.min,
               max: dataPoint.max,
-              bucketCounts: [...dataPoint.bucketCounts]
+              bucketCounts: [...dataPoint.bucketCounts],
             }
             dataPoint.count = currentState.count - lastState.count
             dataPoint.sum = currentState.sum - lastState.sum
@@ -424,13 +449,13 @@ class MetricAggregator {
    * @param {string} attrKey - The attribute key
    * @param {number} timestamp - The timestamp of the measurement
    * @param {string} stateKey - The state key
-   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
+   * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
    */
   #aggregateSum (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
     if (!cumulativeState.has(stateKey)) {
       cumulativeState.set(stateKey, {
         value: 0,
-        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp
+        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp,
       })
     }
 
@@ -440,7 +465,7 @@ class MetricAggregator {
     const dataPoint = this.#findOrCreateDataPoint(metric, attributes, attrKey, () => ({
       startTimeUnixNano: state.startTime,
       timeUnixNano: timestamp,
-      value: 0
+      value: 0,
     }))
 
     dataPoint.value = state.value
@@ -460,7 +485,7 @@ class MetricAggregator {
   #aggregateLastValue (metric, value, attributes, attrKey, timestamp) {
     const dataPoint = this.#findOrCreateDataPoint(metric, attributes, attrKey, () => ({
       timeUnixNano: timestamp,
-      value: 0
+      value: 0,
     }))
 
     dataPoint.value = value
@@ -478,7 +503,7 @@ class MetricAggregator {
    * @param {string} attrKey - The attribute key
    * @param {number} timestamp - The timestamp of the measurement
    * @param {string} stateKey - The state key
-   * @param {Map<string, any>} cumulativeState - The cumulative state of the metrics
+   * @param {Map<string, CumulativeStateValue>} cumulativeState - The cumulative state of the metrics
    * @returns {void}
    */
   #aggregateHistogram (metric, value, attributes, attrKey, timestamp, stateKey, cumulativeState) {
@@ -489,7 +514,7 @@ class MetricAggregator {
         min: Infinity,
         max: -Infinity,
         bucketCounts: new Array(DEFAULT_HISTOGRAM_BUCKETS.length + 1).fill(0),
-        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp
+        startTime: metric.temporality === TEMPORALITY.CUMULATIVE ? this.#startTime : timestamp,
       })
     }
 
@@ -517,7 +542,7 @@ class MetricAggregator {
       min: Infinity,
       max: -Infinity,
       bucketCounts: new Array(DEFAULT_HISTOGRAM_BUCKETS.length + 1).fill(0),
-      explicitBounds: DEFAULT_HISTOGRAM_BUCKETS
+      explicitBounds: DEFAULT_HISTOGRAM_BUCKETS,
     }))
 
     dataPoint.count = state.count

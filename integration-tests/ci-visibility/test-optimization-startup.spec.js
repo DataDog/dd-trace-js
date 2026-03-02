@@ -1,10 +1,9 @@
 'use strict'
 
+const assert = require('assert')
+
 const { exec } = require('child_process')
 const { once } = require('events')
-
-const { assert } = require('chai')
-
 const { sandboxCwd, useSandbox } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 
@@ -37,26 +36,25 @@ describe('test optimization startup', () => {
           env: {
             ...process.env,
             NODE_OPTIONS: '-r dd-trace/ci/init',
-            DD_TRACE_DEBUG: '1'
+            DD_TRACE_DEBUG: '1',
           },
-          stdio: 'pipe'
         }
       )
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 
       await Promise.all([
         once(childProcess, 'exit'),
         once(childProcess.stdout, 'end'),
-        once(childProcess.stderr, 'end')
+        once(childProcess.stderr, 'end'),
       ])
 
-      assert.include(processOutput, 'dd-trace is not initialized in a package manager')
+      assert.match(processOutput, /dd-trace is not initialized in a package manager/)
     })
   })
 
@@ -67,27 +65,26 @@ describe('test optimization startup', () => {
         env: {
           ...process.env,
           NODE_OPTIONS: '-r dd-trace/ci/init',
-          DD_TRACE_DEBUG: '1'
+          DD_TRACE_DEBUG: '1',
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 
     await Promise.all([
       once(childProcess, 'exit'),
       once(childProcess.stdout, 'end'),
-      once(childProcess.stderr, 'end')
+      once(childProcess.stderr, 'end'),
     ])
 
-    assert.include(processOutput, 'hello!')
-    assert.notInclude(processOutput, 'dd-trace is not initialized in a package manager')
+    assert.match(processOutput, /hello!/)
+    assert.doesNotMatch(processOutput, /dd-trace is not initialized in a package manager/)
   })
 
   it('fails if DD_API_KEY is not set when in a non test worker', async () => {
@@ -100,25 +97,24 @@ describe('test optimization startup', () => {
           DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
           DD_API_KEY: '',
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 
     await Promise.all([
       once(childProcess, 'exit'),
       once(childProcess.stdout, 'end'),
-      once(childProcess.stderr, 'end')
+      once(childProcess.stderr, 'end'),
     ])
 
-    assert.include(processOutput, 'hello!')
-    assert.include(processOutput, 'dd-trace will not be initialized')
+    assert.match(processOutput, /hello!/)
+    assert.match(processOutput, /dd-trace will not be initialized/)
   })
 
   it('does not fail if DD_API_KEY is not set when in a test worker', async () => {
@@ -130,26 +126,25 @@ describe('test optimization startup', () => {
           NODE_OPTIONS: '-r dd-trace/ci/init',
           DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
           DD_API_KEY: '',
-          JEST_WORKER_ID: '1' // worker id is set in jest workers
+          JEST_WORKER_ID: '1', // worker id is set in jest workers
         },
-        stdio: 'pipe'
       }
     )
 
-    childProcess.stdout.on('data', (chunk) => {
+    childProcess.stdout?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
-    childProcess.stderr.on('data', (chunk) => {
+    childProcess.stderr?.on('data', (chunk) => {
       processOutput += chunk.toString()
     })
 
     await Promise.all([
       once(childProcess, 'exit'),
       once(childProcess.stdout, 'end'),
-      once(childProcess.stderr, 'end')
+      once(childProcess.stderr, 'end'),
     ])
 
-    assert.include(processOutput, 'hello!')
-    assert.notInclude(processOutput, 'dd-trace will not be initialized')
+    assert.match(processOutput, /hello!/)
+    assert.doesNotMatch(processOutput, /dd-trace will not be initialized/)
   })
 })

@@ -20,7 +20,7 @@ class OtlpHttpExporterBase {
    * Creates a new OtlpHttpExporterBase instance.
    *
    * @param {string} url - OTLP endpoint URL
-   * @param {string} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {string|undefined} headers - Additional HTTP headers as comma-separated key=value string
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {string} defaultPath - Default path to use if URL has no path
@@ -44,12 +44,12 @@ class OtlpHttpExporterBase {
       timeout,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
-        ...this.#parseAdditionalHeaders(headers)
-      }
+        ...this.#parseAdditionalHeaders(headers),
+      },
     }
     this.telemetryTags = [
       'protocol:http',
-      `encoding:${isJson ? 'json' : 'protobuf'}`
+      `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
   }
 
@@ -79,8 +79,8 @@ class OtlpHttpExporterBase {
       ...this.options,
       headers: {
         ...this.options.headers,
-        'Content-Length': payload.length
-      }
+        'Content-Length': payload.length,
+      },
     }
 
     const req = http.request(options, (res) => {
@@ -90,7 +90,7 @@ class OtlpHttpExporterBase {
         data += chunk
       })
 
-      res.on('end', () => {
+      res.once('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resultCallback({ code: 0 })
         } else {
@@ -101,11 +101,11 @@ class OtlpHttpExporterBase {
     })
 
     req.on('error', (error) => {
-      log.error(`Error sending OTLP ${this.signalType}:`, error)
+      log.error('Error sending OTLP %s:', this.signalType, error)
       resultCallback({ code: 1, error })
     })
 
-    req.on('timeout', () => {
+    req.once('timeout', () => {
       req.destroy()
       const error = new Error('Request timeout')
       resultCallback({ code: 1, error })
@@ -117,11 +117,10 @@ class OtlpHttpExporterBase {
 
   /**
    * Parses additional HTTP headers from a comma-separated string.
-   * @param {string} headersString - Comma-separated key=value pairs
+   * @param {string} [headersString=''] - Comma-separated key=value pairs
    * @returns {Record<string, string>} Parsed headers object
-   * @private
    */
-  #parseAdditionalHeaders (headersString) {
+  #parseAdditionalHeaders (headersString = '') {
     const headers = {}
     let key = ''
     let value = ''

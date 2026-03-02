@@ -3,7 +3,7 @@
 const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getValueFromEnvSources } = require('../../config/helper')
 
 const {
   incrementCountMetric,
@@ -12,7 +12,7 @@ const {
   TELEMETRY_KNOWN_TESTS_MS,
   TELEMETRY_KNOWN_TESTS_ERRORS,
   TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS,
-  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES
+  TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES,
 } = require('../../ci-visibility/telemetry')
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
@@ -31,16 +31,16 @@ function getKnownTests ({
   osArchitecture,
   runtimeName,
   runtimeVersion,
-  custom
+  custom,
 }, done) {
   const options = {
     path: '/api/v2/ci/libraries/tests',
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
     timeout: 20_000,
-    url
+    url,
   }
 
   if (isGzipCompatible) {
@@ -51,7 +51,7 @@ function getKnownTests ({
     options.path = `${evpProxyPrefix}/api/v2/ci/libraries/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getEnvironmentVariable('DD_API_KEY')
+    const apiKey = getValueFromEnvSources('DD_API_KEY')
     if (!apiKey) {
       return done(new Error('Known tests were not fetched because Datadog API key is not defined.'))
     }
@@ -70,14 +70,14 @@ function getKnownTests ({
           'os.architecture': osArchitecture,
           'runtime.name': runtimeName,
           'runtime.version': runtimeVersion,
-          custom
+          custom,
         },
         service,
         env,
         repository_url: repositoryUrl,
-        sha
-      }
-    }
+        sha,
+      },
+    },
   })
 
   incrementCountMetric(TELEMETRY_KNOWN_TESTS)
@@ -95,7 +95,7 @@ function getKnownTests ({
 
         const numTests = getNumFromKnownTests(knownTests)
 
-        incrementCountMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
 
         log.debug('Number of received known tests:', numTests)

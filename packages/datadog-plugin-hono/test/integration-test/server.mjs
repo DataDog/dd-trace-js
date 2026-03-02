@@ -1,8 +1,7 @@
 import 'dd-trace/init.js'
+import process from 'node:process'
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
-
-import process from 'node:process'
 
 const app = new Hono()
 

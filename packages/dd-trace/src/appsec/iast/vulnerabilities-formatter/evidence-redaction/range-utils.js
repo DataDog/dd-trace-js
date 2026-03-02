@@ -32,5 +32,5 @@ function remove (range, rangeToRemove) {
 module.exports = {
   contains,
   intersects,
-  remove
+  remove,
 }

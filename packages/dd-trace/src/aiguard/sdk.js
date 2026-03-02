@@ -1,5 +1,9 @@
 'use strict'
 
+const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const log = require('../log')
+const telemetryMetrics = require('../telemetry/metrics')
+const tracerVersion = require('../../../../package.json').version
 const NoopAIGuard = require('./noop')
 const executeRequest = require('./client')
 const {
@@ -11,21 +15,19 @@ const {
   AI_GUARD_META_STRUCT_KEY,
   AI_GUARD_TOOL_NAME_TAG_KEY,
   AI_GUARD_TELEMETRY_REQUESTS,
-  AI_GUARD_TELEMETRY_TRUNCATED
+  AI_GUARD_TELEMETRY_TRUNCATED,
 } = require('./tags')
-const log = require('../log')
-const telemetryMetrics = require('../telemetry/metrics')
-const tracerVersion = require('../../../../package.json').version
 
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const ALLOW = 'ALLOW'
 
 class AIGuardAbortError extends Error {
-  constructor (reason) {
+  constructor (reason, tags) {
     super(reason)
     this.name = 'AIGuardAbortError'
     this.reason = reason
+    this.tags = tags
   }
 }
 
@@ -66,7 +68,7 @@ class AIGuard extends NoopAIGuard {
       'DD-APPLICATION-KEY': config.appKey,
       'DD-AI-GUARD-VERSION': tracerVersion,
       'DD-AI-GUARD-SOURCE': 'SDK',
-      'DD-AI-GUARD-LANGUAGE': 'nodejs'
+      'DD-AI-GUARD-LANGUAGE': 'nodejs',
     }
     const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
@@ -77,20 +79,26 @@ class AIGuard extends NoopAIGuard {
     this.#initialized = true
   }
 
-  #truncate (messages) {
+  /**
+   * Returns a safe copy of the messages to be serialized into the meta struct.
+   *
+   * - Clones each message so callers cannot mutate the data set in the meta struct.
+   * - Truncates the list of messages and `content` fields emitting metrics accordingly.
+   */
+  #buildMessagesForMetaStruct (messages) {
     const size = Math.min(messages.length, this.#maxMessagesLength)
     if (messages.length > size) {
       appsecMetrics.count(AI_GUARD_TELEMETRY_TRUNCATED, { type: 'messages' }).inc(1)
     }
-    const result = messages.slice(-size)
-
+    const result = []
     let contentTruncated = false
-    for (let i = 0; i < size; i++) {
-      const message = result[i]
+    for (let i = messages.length - size; i < messages.length; i++) {
+      const message = rfdc(messages[i])
       if (message.content?.length > this.#maxContentSize) {
         contentTruncated = true
-        result[i] = { ...message, content: message.content.slice(0, this.#maxContentSize) }
+        message.content = message.content.slice(0, this.#maxContentSize)
       }
+      result.push(message)
     }
     if (contentTruncated) {
       appsecMetrics.count(AI_GUARD_TELEMETRY_TRUNCATED, { type: 'content' }).inc(1)
@@ -139,10 +147,10 @@ class AIGuard extends NoopAIGuard {
         }
       }
       const metaStruct = {
-        messages: this.#truncate(messages)
+        messages: this.#buildMessagesForMetaStruct(messages),
       }
       span.meta_struct = {
-        [AI_GUARD_META_STRUCT_KEY]: metaStruct
+        [AI_GUARD_META_STRUCT_KEY]: metaStruct,
       }
       let response
       try {
@@ -151,8 +159,8 @@ class AIGuard extends NoopAIGuard {
             attributes: {
               messages,
               meta: this.#meta,
-            }
-          }
+            },
+          },
         }
         response = await executeRequest(
           payload,
@@ -192,9 +200,9 @@ class AIGuard extends NoopAIGuard {
       }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
-        throw new AIGuardAbortError(reason)
+        throw new AIGuardAbortError(reason, tags)
       }
-      return { action, reason }
+      return { action, reason, tags }
     })
   }
 }

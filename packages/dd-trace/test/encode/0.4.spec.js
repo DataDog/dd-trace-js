@@ -1,15 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
-
 const id = require('../../src/id')
 
 function randString (length) {
@@ -27,10 +26,10 @@ describe('encode', () => {
   describe('without configuration', () => {
     beforeEach(() => {
       logger = {
-        debug: sinon.stub()
+        debug: sinon.stub(),
       }
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
-        '../log': logger
+        '../log': logger,
       })
       writer = { flush: sinon.spy() }
       encoder = new AgentEncoder(writer)
@@ -44,14 +43,14 @@ describe('encode', () => {
         type: 'foo',
         error: 0,
         meta: {
-          bar: 'baz'
+          bar: 'baz',
         },
         metrics: {
-          example: 1
+          example: 1,
         },
         start: 123,
         duration: 456,
-        links: []
+        links: [],
       }]
     })
 
@@ -155,14 +154,14 @@ describe('encode', () => {
         type: 'foo',
         error: 0,
         meta: {
-          bar: 'baz'
+          bar: 'baz',
         },
         metrics: {
           example: 1,
-          moreExample: 2
+          moreExample: 2,
         },
         start: 123,
-        duration: 456
+        duration: 456,
       })
       encoder.encode(dataToEncode)
 
@@ -174,16 +173,16 @@ describe('encode', () => {
           resource: 'test-r',
           service: 'test-s',
           type: 'foo',
-          error: 0
+          error: 0,
         })
         assert.strictEqual(decodedData.start, 123n)
         assert.strictEqual(decodedData.duration, 456n)
         assert.deepStrictEqual(decodedData.meta, {
-          bar: 'baz'
+          bar: 'baz',
         })
         assert.deepStrictEqual(decodedData.metrics, {
           example: 1,
-          moreExample: 2
+          moreExample: 2,
         })
         assert.strictEqual(decodedData.trace_id.toString(16), '1234abcd1234abcd')
         assert.strictEqual(decodedData.span_id.toString(16), '1234abcd1234abcd')
@@ -197,8 +196,8 @@ describe('encode', () => {
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
           time_unix_nano: 1633023102000000,
-          attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false }
-        }
+          attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
+        },
       ]
 
       const encodedLink = '[{"name":"Something went so wrong","time_unix_nano":1000000},' +
@@ -270,7 +269,7 @@ describe('encode', () => {
       it('should encode meta_struct with simple key value object', () => {
         const metaStruct = {
           foo: 'bar',
-          baz: 123
+          baz: 123,
         }
         data[0].meta_struct = metaStruct
         encoder.encode(data)
@@ -299,7 +298,7 @@ describe('encode', () => {
       it('should encode meta_struct with empty object and array', () => {
         const metaStruct = {
           foo: {},
-          bar: []
+          bar: [],
         }
         data[0].meta_struct = metaStruct
         encoder.encode(data)
@@ -327,33 +326,33 @@ describe('encode', () => {
                     file: 'test.js',
                     line: 1,
                     column: 31,
-                    function: 'test'
+                    function: 'test',
                   },
                   {
                     id: 1,
                     file: 'test2.js',
                     line: 54,
                     column: 77,
-                    function: 'test'
+                    function: 'test',
                   },
                   {
                     id: 2,
                     file: 'test.js',
                     line: 1245,
                     column: 41,
-                    function: 'test'
+                    function: 'test',
                   },
                   {
                     id: 3,
                     file: 'test3.js',
                     line: 2024,
                     column: 32,
-                    function: 'test'
-                  }
-                ]
-              }
-            ]
-          }
+                    function: 'test',
+                  },
+                ],
+              },
+            ],
+          },
         }
         data[0].meta_struct = metaStruct
 
@@ -370,12 +369,12 @@ describe('encode', () => {
         const circular = {
           bar: 'baz',
           deeper: {
-            foo: 'bar'
-          }
+            foo: 'bar',
+          },
         }
         circular.deeper.circular = circular
         const metaStruct = {
-          foo: circular
+          foo: circular,
         }
         data[0].meta_struct = metaStruct
 
@@ -390,20 +389,20 @@ describe('encode', () => {
           foo: {
             bar: 'baz',
             deeper: {
-              foo: 'bar'
-            }
-          }
+              foo: 'bar',
+            },
+          },
         }
         assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
       })
 
       it('should encode meta_struct ignoring circular references in arrays', () => {
         const circular = [{
-          bar: 'baz'
+          bar: 'baz',
         }]
         circular.push(circular)
         const metaStruct = {
-          foo: circular
+          foo: circular,
         }
         data[0].meta_struct = metaStruct
 
@@ -416,8 +415,8 @@ describe('encode', () => {
 
         const expectedMetaStruct = {
           foo: [{
-            bar: 'baz'
-          }]
+            bar: 'baz',
+          }],
         }
         assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
       })
@@ -425,7 +424,7 @@ describe('encode', () => {
       it('should encode meta_struct ignoring undefined properties', () => {
         const metaStruct = {
           foo: 'bar',
-          undefinedProperty: undefined
+          undefinedProperty: undefined,
         }
         data[0].meta_struct = metaStruct
 
@@ -437,7 +436,7 @@ describe('encode', () => {
         const trace = decoded[0]
 
         const expectedMetaStruct = {
-          foo: 'bar'
+          foo: 'bar',
         }
         assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
         assert.strictEqual(trace[0].meta_struct.undefinedProperty, undefined)
@@ -446,7 +445,7 @@ describe('encode', () => {
       it('should encode meta_struct ignoring null properties', () => {
         const metaStruct = {
           foo: 'bar',
-          nullProperty: null
+          nullProperty: null,
         }
         data[0].meta_struct = metaStruct
 
@@ -458,7 +457,7 @@ describe('encode', () => {
         const trace = decoded[0]
 
         const expectedMetaStruct = {
-          foo: 'bar'
+          foo: 'bar',
         }
         assert.deepStrictEqual(msgpack.decode(trace[0].meta_struct.foo), expectedMetaStruct.foo)
         assert.strictEqual(trace[0].meta_struct.nullProperty, undefined)
@@ -485,11 +484,11 @@ describe('encode', () => {
     beforeEach(() => {
       // Create a sinon spy for log.debug
       logger = {
-        debug: sinon.spy()
+        debug: sinon.spy(),
       }
 
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
-        '../log': logger
+        '../log': logger,
       })
       writer = { flush: sinon.spy(), _config: { trace: { nativeSpanEvents: true } } }
       encoder = new AgentEncoder(writer)
@@ -501,8 +500,8 @@ describe('encode', () => {
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
           time_unix_nano: 1633023102000000,
-          attributes: { emotion: 'happy', happiness: 10, rating: 9.8, other: ['hi', false, 1, 1.2], idol: false }
-        }
+          attributes: { emotion: 'happy', happiness: 10, rating: 9.8, other: ['hi', false, 1, 1.2], idol: false },
+        },
       ]
 
       data[0].span_events = topLevelEvents
@@ -531,12 +530,12 @@ describe('encode', () => {
                   { type: 0, string_value: 'hi' },
                   { type: 1, bool_value: false },
                   { type: 2, int_value: 1 },
-                  { type: 3, double_value: 1.2 }
-                ]
-              }
-            }
-          }
-        }
+                  { type: 3, double_value: 1.2 },
+                ],
+              },
+            },
+          },
+        },
       ]
 
       assert.deepStrictEqual(trace[0].span_events, formattedTopLevelEvent)
@@ -548,13 +547,13 @@ describe('encode', () => {
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
           time_unix_nano: 1633023102000000,
-          attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array']] }
+          attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array']] },
         },
         {
           name: 'I can sing!!!',
           time_unix_nano: 1633023102000000,
-          attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array'], 'valid_value'] }
-        }
+          attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array'], 'valid_value'] },
+        },
       ]
 
       data[0].span_events = topLevelEvents
@@ -569,13 +568,13 @@ describe('encode', () => {
       const formattedTopLevelEvent = [
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000
+          time_unix_nano: 1633023102000000,
         },
         {
           name: 'I can sing!!!',
           time_unix_nano: 1633023102000000,
-          attributes: { array: { type: 4, array_value: { values: [{ type: 0, string_value: 'valid_value' }] } } }
-        }
+          attributes: { array: { type: 4, array_value: { values: [{ type: 0, string_value: 'valid_value' }] } } },
+        },
       ]
 
       assert.deepStrictEqual(trace[0].span_events, formattedTopLevelEvent)
@@ -586,23 +585,23 @@ describe('encode', () => {
         {
           name: 'Event 1',
           time_unix_nano: 1000000,
-          attributes: { unsupported_key: { some: 'object' }, other_key: 'valid' }
+          attributes: { unsupported_key: { some: 'object' }, other_key: 'valid' },
         },
         {
           name: 'Event 2',
           time_unix_nano: 2000000,
-          attributes: { unsupported_key: { another: 'object' } }
+          attributes: { unsupported_key: { another: 'object' } },
         },
         {
           name: 'Event 3',
           time_unix_nano: 3000000,
-          attributes: { unsupported_key: { yet: 'another object' } }
+          attributes: { unsupported_key: { yet: 'another object' } },
         },
         {
           name: 'Event 4',
           time_unix_nano: 4000000,
-          attributes: { unsupported_key: { different: 'structure' } }
-        }
+          attributes: { unsupported_key: { different: 'structure' } },
+        },
       ]
 
       data[0].span_events = topLevelEvents
@@ -622,18 +621,18 @@ describe('encode', () => {
         {
           name: 'Event 1',
           time_unix_nano: 1000000,
-          attributes: { unsupported_key1: { some: 'object' }, unsupported_key2: { another: 'object' } }
+          attributes: { unsupported_key1: { some: 'object' }, unsupported_key2: { another: 'object' } },
         },
         {
           name: 'Event 2',
           time_unix_nano: 2000000,
-          attributes: { unsupported_key1: { different: 'structure' }, unsupported_key3: { more: 'objects' } }
+          attributes: { unsupported_key1: { different: 'structure' }, unsupported_key3: { more: 'objects' } },
         },
         {
           name: 'Event 3',
           time_unix_nano: 3000000,
-          attributes: { unsupported_key2: { yet: 'another object' }, unsupported_key3: { extra: 'data' } }
-        }
+          attributes: { unsupported_key2: { yet: 'another object' }, unsupported_key3: { extra: 'data' } },
+        },
       ]
 
       data[0].span_events = topLevelEvents

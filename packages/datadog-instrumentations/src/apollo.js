@@ -1,11 +1,12 @@
 'use strict'
 
+const tracingChannel = require('dc-polyfill').tracingChannel
+
+const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
-  channel
+  channel,
 } = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-const tracingChannel = require('dc-polyfill').tracingChannel
 
 const CHANNELS = {
   'gateway.request': tracingChannel('apm:apollo:gateway:request'),
@@ -13,7 +14,7 @@ const CHANNELS = {
   'gateway.validate': tracingChannel('apm:apollo:gateway:validate'),
   'gateway.execute': tracingChannel('apm:apollo:gateway:execute'),
   'gateway.fetch': tracingChannel('apm:apollo:gateway:fetch'),
-  'gateway.postprocessing': tracingChannel('apm:apollo:gateway:postprocessing')
+  'gateway.postprocessing': tracingChannel('apm:apollo:gateway:postprocessing'),
 }
 
 const generalErrorCh = channel('apm:apollo:gateway:general:error')

@@ -46,12 +46,15 @@ module.exports = {
   SCHEMA_TOPIC: 'schema.topic',
   SCHEMA_OPERATION: 'schema.operation',
   SCHEMA_NAME: 'schema.name',
-  GRPC_CLIENT_ERROR_STATUSES: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-  GRPC_SERVER_ERROR_STATUSES: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
   DYNAMODB_PTR_KIND: 'aws.dynamodb.item',
   S3_PTR_KIND: 'aws.s3.object',
+  WEBSOCKET_PTR_KIND: 'websocket',
   SPAN_POINTER_DIRECTION: Object.freeze({
     UPSTREAM: 'u',
-    DOWNSTREAM: 'd'
-  })
+    DOWNSTREAM: 'd',
+  }),
+  SPAN_POINTER_DIRECTION_NAME: Object.freeze({
+    UPSTREAM: 'span-pointer-up',
+    DOWNSTREAM: 'span-pointer-down',
+  }),
 }

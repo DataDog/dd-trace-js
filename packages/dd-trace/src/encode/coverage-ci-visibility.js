@@ -1,13 +1,13 @@
 'use strict'
-const { AgentEncoder } = require('./0.4')
 const { MsgpackChunk } = require('../msgpack')
 
 const {
   distributionMetric,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
-  TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT
+  TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
 const FormData = require('../exporters/common/form-data')
+const { AgentEncoder } = require('./0.4')
 
 const COVERAGE_PAYLOAD_VERSION = 2
 const COVERAGE_KEYS_LENGTH = 2
@@ -73,7 +73,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
   _encodePayloadStart (bytes) {
     const payload = {
       version: COVERAGE_PAYLOAD_VERSION,
-      coverages: []
+      coverages: [],
     }
     this._encodeMapPrefix(bytes, COVERAGE_KEYS_LENGTH)
     this._encodeString(bytes, 'version')
@@ -108,7 +108,7 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       buffer,
       {
         filename: 'coverage1.msgpack',
-        contentType: 'application/msgpack'
+        contentType: 'application/msgpack',
       }
     )
     this.form.append(

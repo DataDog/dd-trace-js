@@ -44,8 +44,8 @@ function makeQuery (derivativeParam) {
 const books = [
   {
     title: 'Test title',
-    author: 'Test author'
-  }
+    author: 'Test author',
+  },
 ]
 
 const resolvers = {
@@ -54,21 +54,21 @@ const resolvers = {
       return books.filter(book => {
         return book.title.includes(args.title)
       })
-    }
-  }
+    },
+  },
 }
 
 async function makeGraphqlRequest (port, variables, derivativeParam, extraHeaders = {}) {
   const headers = {
     'content-type': 'application/json',
-    ...extraHeaders
+    ...extraHeaders,
   }
 
   const query = makeQuery(derivativeParam)
   return axios.post(`http://localhost:${port}/graphql`, {
     operationName: 'GetBooks',
     query,
-    variables
+    variables,
   }, { headers, maxRedirects: 0 })
 }
 
@@ -157,8 +157,8 @@ function graphqlCommonTests (config) {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'graphql-rules.json'),
-          blockedTemplateGraphql
-        }
+          blockedTemplateGraphql,
+        },
       }))
     })
 
@@ -183,8 +183,8 @@ function graphqlCommonTests (config) {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'graphql-rules-redirect.json')
-        }
+          rules: path.join(__dirname, 'graphql-rules-redirect.json'),
+        },
       }))
     })
 
@@ -227,5 +227,5 @@ module.exports = {
   schema,
   query,
   resolvers,
-  graphqlCommonTests
+  graphqlCommonTests,
 }

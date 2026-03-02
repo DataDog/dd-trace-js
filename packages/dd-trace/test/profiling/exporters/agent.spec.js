@@ -1,25 +1,25 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-const express = require('express')
-const upload = require('multer')()
-const { Profile } = require('pprof-format')
 const os = require('node:os')
 const path = require('node:path')
 const { request } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+const express = require('express')
+const upload = require('multer')()
 
+const { Profile } = require('../../../../../vendor/dist/pprof-format')
+require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
 const logger = require('../../../src/log')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const version = require('../../../../../package.json').version
+const processTags = require('../../../src/process-tags')
 
 const RUNTIME_ID = 'a1b2c3d4-a1b2-a1b2-a1b2-a1b2c3d4e5f6'
 const ENV = 'test-env'
@@ -43,8 +43,8 @@ async function createProfile (periodType) {
         throw err
       },
       warn (err) {
-      }
-    }
+      },
+    },
   })
 
   await wait(50)
@@ -75,65 +75,74 @@ describe('exporters/agent', function () {
     assert.strictEqual(req.files[0].size, req.files[0].buffer.length)
 
     const event = JSON.parse(req.files[0].buffer.toString())
-    assert.ok(Object.hasOwn(event, 'attachments'))
-    assert.strictEqual(event.attachments.length, 2)
-    assert.strictEqual(event.attachments[0], 'wall.pprof')
-    assert.strictEqual(event.attachments[1], 'space.pprof')
-    assert.strictEqual(event.start, start.toISOString())
-    assert.strictEqual(event.end, end.toISOString())
-    assert.strictEqual(event.family, 'node')
-    assert.strictEqual(event.version, '4')
-    assert.strictEqual(event.tags_profiler, [
-      'language:javascript',
-      'runtime:nodejs',
-      `runtime_arch:${process.arch}`,
-      `runtime_os:${process.platform}`,
-      `runtime_version:${process.version}`,
-      `process_id:${process.pid}`,
-      `profiler_version:${version}`,
-      'format:pprof',
-      `runtime-id:${RUNTIME_ID}`
-    ].join(','))
-    assert.ok(Object.hasOwn(event, 'info'))
-    assert.ok(Object.hasOwn(event.info, 'application'))
-    assert.strictEqual(Object.keys(event.info.application).length, 4)
-    assert.strictEqual(event.info.application.env, ENV)
-    assert.strictEqual(event.info.application.service, SERVICE)
-    assert.ok(Object.hasOwn(event.info.application, 'start_time'))
-    assert.strictEqual(event.info.application.version, '1.2.3')
-    assert.ok(Object.hasOwn(event.info, 'platform'))
-    assert.strictEqual(Object.keys(event.info.platform).length, 4)
-    assert.strictEqual(event.info.platform.hostname, HOST)
-    assert.strictEqual(event.info.platform.kernel_name, os.type())
-    assert.strictEqual(event.info.platform.kernel_release, os.release())
-    assert.strictEqual(event.info.platform.kernel_version, os.version())
-    assert.ok(Object.hasOwn(event.info, 'profiler'))
-    assert.strictEqual(Object.keys(event.info.profiler).length, 3)
-    assert.strictEqual(event.info.profiler.activation, 'unknown')
-    assert.ok(Object.hasOwn(event.info.profiler, 'ssi'))
-    assert.strictEqual(event.info.profiler.ssi.mechanism, 'none')
-    assert.strictEqual(event.info.profiler.version, version)
-    assert.ok(Object.hasOwn(event.info, 'runtime'))
-    assert.strictEqual(Object.keys(event.info.runtime).length, 3)
-    assert.ok(Object.hasOwn(event.info.runtime, 'available_processors'))
-    assert.strictEqual(event.info.runtime.engine, 'nodejs')
-    assert.strictEqual(event.info.runtime.version, process.version.substring(1))
 
-    assert.strictEqual(req.files[1].fieldname, 'wall.pprof')
-    assert.strictEqual(req.files[1].originalname, 'wall.pprof')
-    assert.strictEqual(req.files[1].mimetype, 'application/octet-stream')
-    assert.strictEqual(req.files[1].size, req.files[1].buffer.length)
+    assert.strictEqual(typeof event.info.application.start_time, 'string')
 
-    assert.strictEqual(req.files[2].fieldname, 'space.pprof')
-    assert.strictEqual(req.files[2].originalname, 'space.pprof')
-    assert.strictEqual(req.files[2].mimetype, 'application/octet-stream')
-    assert.strictEqual(req.files[2].size, req.files[2].buffer.length)
+    delete event.info.application.start_time
+
+    assert.deepStrictEqual(event, {
+      attachments: ['wall.pprof', 'space.pprof'],
+      start: start.toISOString(),
+      end: end.toISOString(),
+      family: 'node',
+      version: '4',
+      tags_profiler: [
+        'language:javascript',
+        'runtime:nodejs',
+        `runtime_arch:${process.arch}`,
+        `runtime_os:${process.platform}`,
+        `runtime_version:${process.version}`,
+        `process_id:${process.pid}`,
+        `profiler_version:${version}`,
+        'format:pprof',
+        `runtime-id:${RUNTIME_ID}`,
+      ].join(','),
+      info: {
+        application: {
+          env: ENV,
+          service: SERVICE,
+          version: APP_VERSION,
+        },
+        platform: {
+          hostname: HOST,
+          kernel_name: os.type(),
+          kernel_release: os.release(),
+          kernel_version: os.version(),
+        },
+        profiler: {
+          activation: 'unknown',
+          ssi: {
+            mechanism: 'none',
+          },
+          version,
+        },
+        runtime: {
+          // @ts-expect-error - availableParallelism is only available from node 18.14.0 and above
+          available_processors: os.availableParallelis?.() ?? os.cpus().length,
+          engine: 'nodejs',
+          version: process.version.substring(1),
+        },
+      },
+      process_tags: processTags.serialized,
+    })
+
+    assertObjectContains(req.files, [{
+      fieldname: 'wall.pprof',
+      originalname: 'wall.pprof',
+      mimetype: 'application/octet-stream',
+      size: req.files[1].buffer.length,
+    }, {
+      fieldname: 'space.pprof',
+      originalname: 'space.pprof',
+      mimetype: 'application/octet-stream',
+      size: req.files[2].buffer.length,
+    }])
 
     const wallProfile = Profile.decode(req.files[1].buffer)
     const spaceProfile = Profile.decode(req.files[2].buffer)
 
-    expect(wallProfile).to.be.a.profile
-    expect(spaceProfile).to.be.a.profile
+    assertIsProfile(wallProfile)
+    assertIsProfile(spaceProfile)
 
     assert.deepStrictEqual(wallProfile, Profile.decode(profiles.wall))
     assert.deepStrictEqual(spaceProfile, Profile.decode(profiles.space))
@@ -143,14 +152,14 @@ describe('exporters/agent', function () {
     docker = {
       inject (carrier) {
         carrier.test = 'injected'
-      }
+      },
     }
     http = {
-      request: sinon.spy(request)
+      request: sinon.spy(request),
     }
     const agent = proxyquire('../../../src/profiling/exporters/agent', {
       '../../exporters/common/docker': docker,
-      http
+      http,
     })
     AgentExporter = agent.AgentExporter
     computeRetries = agent.computeRetries
@@ -166,7 +175,7 @@ describe('exporters/agent', function () {
       env: ENV,
       service: SERVICE,
       version: APP_VERSION,
-      host: HOST
+      host: HOST,
     })
   }
 
@@ -192,17 +201,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
@@ -235,17 +244,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let attempt = 0
@@ -287,7 +296,7 @@ describe('exporters/agent', function () {
         assert.strictEqual(Number.isInteger(call.args[0].timeout), true)
 
         // Retry is 1-indexed so add 1 to i
-        assert.strictEqual(call.args[0].timeout, initialTimeout * Math.pow(2, i + 1))
+        assert.strictEqual(call.args[0].timeout, initialTimeout * 2 ** (i + 1))
       }
     })
 
@@ -299,7 +308,7 @@ describe('exporters/agent', function () {
         /^Submitting profiler agent report attempt #1 to:/i,
         /^Error from the agent: HTTP Error 500$/,
         /^Submitting profiler agent report attempt #2 to:/i,
-        /^Agent export response: ([0-9a-f]{2}( |$))*/
+        /^Agent export response: ([0-9a-f]{2}( |$))*/,
       ]
 
       let doneLogs
@@ -321,12 +330,12 @@ describe('exporters/agent', function () {
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let tries = 0
@@ -339,14 +348,14 @@ describe('exporters/agent', function () {
         const data = Buffer.from(json)
         res.writeHead(500, {
           'content-type': 'application/json',
-          'content-length': data.length
+          'content-length': data.length,
         })
         res.end(data)
       })
 
       await Promise.all([
         exporter.export({ profiles, start, end, tags }),
-        waitForResponse
+        waitForResponse,
       ])
     })
 
@@ -358,12 +367,12 @@ describe('exporters/agent', function () {
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       let tries = 0
@@ -373,7 +382,7 @@ describe('exporters/agent', function () {
         const data = Buffer.from(json)
         res.writeHead(400, {
           'content-type': 'application/json',
-          'content-length': data.length
+          'content-length': data.length,
         })
         res.end(data)
       })
@@ -410,17 +419,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
@@ -440,7 +449,7 @@ describe('exporters/agent', function () {
     })
   })
 
-  describe('using UDS', () => {
+  ;(os.platform() === 'win32' ? describe.skip : describe)('using UDS', () => {
     let listener
 
     beforeEach(done => {
@@ -460,17 +469,17 @@ describe('exporters/agent', function () {
       const start = new Date()
       const end = new Date()
       const tags = {
-        'runtime-id': RUNTIME_ID
+        'runtime-id': RUNTIME_ID,
       }
 
       const [wall, space] = await Promise.all([
         createProfile(['wall', 'microseconds']),
-        createProfile(['space', 'bytes'])
+        createProfile(['space', 'bytes']),
       ])
 
       const profiles = {
         wall,
-        space
+        space,
       }
 
       await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
@@ -488,5 +497,58 @@ describe('exporters/agent', function () {
         exporter.export({ profiles, start, end, tags }).catch(reject)
       }))
     })
-  }, { skip: os.platform() === 'win32' })
+  })
 })
+
+function assertIsProfile (obj, msg) {
+  assert.ok(typeof obj === 'object' && obj !== null, msg)
+  assert.strictEqual(typeof obj.timeNanos, 'bigint', msg)
+  assert.ok(typeof obj.period === 'number' || typeof obj.period === 'bigint', msg)
+
+  assertIsValueType(obj.periodType, msg)
+
+  assert.ok(Array.isArray(obj.sampleType), msg)
+  assert.strictEqual(obj.sampleType.length, 2, msg)
+  assert.ok(Array.isArray(obj.sample), msg)
+  assert.ok(Array.isArray(obj.location), msg)
+  assert.ok(Array.isArray(obj.function), msg)
+
+  assert.ok(typeof obj.stringTable === 'object' && obj.stringTable !== null, msg)
+  assert.ok(Array.isArray(obj.stringTable.strings), msg)
+  assert.ok(obj.stringTable.strings.length >= 1, msg)
+  assert.strictEqual(obj.stringTable.strings[0], '', msg)
+
+  for (const sampleType of obj.sampleType) {
+    assertIsValueType(sampleType, msg)
+  }
+
+  for (const fn of obj.function) {
+    assert.strictEqual(typeof fn.filename, 'number', msg)
+    assert.strictEqual(typeof fn.systemName, 'number', msg)
+    assert.strictEqual(typeof fn.name, 'number', msg)
+    assert.ok(Number.isSafeInteger(fn.id), msg)
+  }
+
+  for (const location of obj.location) {
+    assert.ok(Number.isSafeInteger(location.id), msg)
+    assert.ok(Array.isArray(location.line), msg)
+
+    for (const line of location.line) {
+      assert.ok(Number.isSafeInteger(line.functionId), msg)
+      assert.strictEqual(typeof line.line, 'number', msg)
+    }
+  }
+
+  for (const sample of obj.sample) {
+    assert.ok(Array.isArray(sample.locationId), msg)
+    assert.ok(sample.locationId.length >= 1, msg)
+    assert.ok(Array.isArray(sample.value), msg)
+    assert.strictEqual(sample.value.length, obj.sampleType.length, msg)
+  }
+
+  function assertIsValueType (valueType, msg) {
+    assert.ok(typeof valueType === 'object' && valueType !== null, msg)
+    assert.strictEqual(typeof valueType.type, 'number', msg)
+    assert.strictEqual(typeof valueType.unit, 'number', msg)
+  }
+}

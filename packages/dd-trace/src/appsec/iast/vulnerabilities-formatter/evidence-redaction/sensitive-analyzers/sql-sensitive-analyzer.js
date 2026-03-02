@@ -18,7 +18,7 @@ const NUMERIC_LITERAL =
       HEX_NUMBER,
       BIN_NUMBER,
       DECIMAL_NUMBER + EXPONENT,
-      INTEGER_NUMBER + EXPONENT
+      INTEGER_NUMBER + EXPONENT,
     ].join('|')
   })`
 const ORACLE_ESCAPED_LITERAL = String.raw`q'<.*?>'|q'\(.*?\)'|q'\{.*?\}'|q'\[.*?\]'|q'(?<ESCAPE>.).*?\k<ESCAPE>'`
@@ -29,7 +29,7 @@ const patterns = {
       NUMERIC_LITERAL,
       STRING_LITERAL,
       LINE_COMMENT,
-      BLOCK_COMMENT
+      BLOCK_COMMENT,
     ].join('|'),
     'gmi'
   ),
@@ -38,7 +38,7 @@ const patterns = {
       NUMERIC_LITERAL,
       MYSQL_STRING_LITERAL,
       LINE_COMMENT,
-      BLOCK_COMMENT
+      BLOCK_COMMENT,
     ].join('|'),
     'gmi'
   ),
@@ -48,7 +48,7 @@ const patterns = {
       POSTGRESQL_ESCAPED_LITERAL,
       STRING_LITERAL,
       LINE_COMMENT,
-      BLOCK_COMMENT
+      BLOCK_COMMENT,
     ].join('|'),
     'gmi'
   ),
@@ -57,9 +57,9 @@ const patterns = {
     ORACLE_ESCAPED_LITERAL,
     STRING_LITERAL,
     LINE_COMMENT,
-    BLOCK_COMMENT
+    BLOCK_COMMENT,
   ].join('|'),
-  'gmi')
+  'gmi'),
 }
 patterns.SQLITE = patterns.MYSQL
 patterns.MARIADB = patterns.MYSQL

@@ -12,5 +12,5 @@ const isDdTrace = function (file) {
 
 module.exports = {
   isPrivateModule,
-  isDdTrace
+  isDdTrace,
 }

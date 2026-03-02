@@ -18,7 +18,7 @@ function getThreadLabels () {
   return {
     [THREAD_NAME_LABEL]: eventLoopThreadName,
     [THREAD_ID_LABEL]: `${threadId}`,
-    [OS_THREAD_ID_LABEL]: `${nativeThreadId}`
+    [OS_THREAD_ID_LABEL]: `${nativeThreadId}`,
   }
 }
 
@@ -51,5 +51,5 @@ module.exports = {
   eventLoopThreadName,
   getNonJSThreadsLabels,
   getThreadLabels: cacheThreadLabels(),
-  encodeProfileAsync
+  encodeProfileAsync,
 }

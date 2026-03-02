@@ -18,7 +18,7 @@ function generatePointerHash (components) {
 
 /**
  * Encodes a DynamoDB attribute value to Buffer for span pointer hashing.
- * @param {Object} valueObject - DynamoDB value in AWS format ({ S: string } or { N: string } or { B: Buffer })
+ * @param {object} valueObject - DynamoDB value in AWS format ({ S: string } or { N: string } or { B: Buffer })
  * @returns {Buffer|undefined} Encoded value as Buffer, or undefined if invalid input.
  *
  * @example
@@ -55,7 +55,7 @@ function encodeValue (valueObject) {
  * Handles tables with single-key and two-key scenarios.
  *
  * @param {Array<string>} keyNames - Set of primary key names.
- * @param {Object} keyValuePairs - Object containing key/value pairs.
+ * @param {object} keyValuePairs - Object containing key/value pairs.
  * @returns {Array|undefined} [key1Name, key1Value, key2Name, key2Value], or undefined if invalid input.
  *                            key2 entries are empty strings in the single-key case.
  * @example
@@ -90,7 +90,7 @@ const extractPrimaryKeys = (keyNames, keyValuePairs) => {
  * Automatically detects AWS partitions (standard, China, GovCloud) from region.
  *
  * @param {string} queueURL - SQS queue URL in any supported format
- * @returns {Object|null} Object with queueName and arn, or null if URL format is invalid
+ * @returns {object | null} Object with queueName and arn, or null if URL format is invalid
  *
  * @example
  * // Modern AWS SQS URLs
@@ -147,5 +147,5 @@ module.exports = {
   generatePointerHash,
   encodeValue,
   extractPrimaryKeys,
-  extractQueueMetadata
+  extractQueueMetadata,
 }

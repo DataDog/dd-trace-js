@@ -1,16 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
-const sinon = require('sinon')
 const { hostname } = require('node:os')
+
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../setup/core')
-
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
@@ -23,7 +21,7 @@ const DEFAULT_CURRENT_HASH = Buffer.from('e858212fd11a41e5', 'hex')
 const ANOTHER_CURRENT_HASH = Buffer.from('e851212fd11a21e9', 'hex')
 
 const writer = {
-  flush: sinon.stub()
+  flush: sinon.stub(),
 }
 const DataStreamsWriter = sinon.stub().returns(writer)
 const {
@@ -34,9 +32,9 @@ const {
   DataStreamsProcessor,
   getHeadersSize,
   getMessageSize,
-  getSizeOrZero
+  getSizeOrZero,
 } = proxyquire('../../src/datastreams/processor', {
-  './writer': { DataStreamsWriter }
+  './writer': { DataStreamsWriter },
 })
 
 const mockCheckpoint = {
@@ -46,7 +44,7 @@ const mockCheckpoint = {
   edgeTags: ['service:service-name', 'env:env-name', 'topic:test-topic'],
   edgeLatencyNs: DEFAULT_LATENCY,
   pathwayLatencyNs: DEFAULT_LATENCY,
-  payloadSize: 100
+  payloadSize: 100,
 }
 
 const anotherMockCheckpoint = {
@@ -56,7 +54,7 @@ const anotherMockCheckpoint = {
   edgeTags: ['service:service-name', 'env:env-name', 'topic:test-topic'],
   edgeLatencyNs: DEFAULT_LATENCY,
   pathwayLatencyNs: DEFAULT_LATENCY,
-  payloadSize: 100
+  payloadSize: 100,
 }
 
 describe('StatsPoint', () => {
@@ -93,7 +91,7 @@ describe('StatsBucket', () => {
     it('should add a new entry when no matching key is found', () => {
       const bucket = buckets.forCheckpoint(mockCheckpoint)
       const checkpoints = buckets.checkpoints
-      expect(bucket).to.be.an.instanceOf(StatsPoint)
+      assert.ok(bucket instanceof StatsPoint)
       assert.strictEqual(checkpoints.size, 1)
       const [key, value] = Array.from(checkpoints.entries())[0]
       assert.strictEqual(key.toString(), mockCheckpoint.hash.toString())
@@ -120,7 +118,7 @@ describe('StatsBucket', () => {
       type: 'kafka_consume',
       consumer_group: 'test-consumer',
       partition: 0,
-      topic: 'test-topic'
+      topic: 'test-topic',
     }
 
     beforeEach(() => {
@@ -134,7 +132,7 @@ describe('StatsBucket', () => {
     it('should add a new entry when empty', () => {
       const bucket = backlogBuckets.forBacklog(mockBacklog)
       const backlogs = backlogBuckets.backlogs
-      expect(bucket).to.be.an.instanceOf(Backlog)
+      assert.ok(bucket instanceof Backlog)
       const [, value] = Array.from(backlogs.entries())[0]
       assert.ok(value instanceof Backlog)
     })
@@ -145,7 +143,7 @@ describe('StatsBucket', () => {
         type: 'kafka_consume',
         consumer_group: 'test-consumer',
         partition: 1,
-        topic: 'test-topic'
+        topic: 'test-topic',
       }
 
       backlogBuckets.forBacklog(mockBacklog)
@@ -159,7 +157,7 @@ describe('StatsBucket', () => {
         type: 'kafka_consume',
         consumer_group: 'test-consumer',
         partition: 0,
-        topic: 'test-topic'
+        topic: 'test-topic',
       }
 
       backlogBuckets.forBacklog(mockBacklog)
@@ -174,7 +172,7 @@ describe('StatsBucket', () => {
         type: 'kafka_consume',
         consumer_group: 'test-consumer',
         partition: 0,
-        topic: 'test-topic'
+        topic: 'test-topic',
       }
 
       backlogBuckets.forBacklog(mockBacklog)
@@ -191,7 +189,7 @@ describe('TimeBuckets', () => {
     assert.strictEqual(buckets.size, 0)
     const bucket = buckets.forTime(12345)
     assert.strictEqual(buckets.size, 1)
-    expect(bucket).to.be.an.instanceOf(StatsBucket)
+    assert.ok(bucket instanceof StatsBucket)
   })
 })
 
@@ -209,7 +207,7 @@ describe('DataStreamsProcessor', () => {
     env: 'test',
     version: 'v1',
     service: 'service1',
-    tags: { foo: 'foovalue', bar: 'barvalue' }
+    tags: { foo: 'foovalue', bar: 'barvalue' },
   }
 
   beforeEach(() => {
@@ -221,10 +219,10 @@ describe('DataStreamsProcessor', () => {
     processor = new DataStreamsProcessor(config)
     clearTimeout(processor.timer)
 
-    expect(DataStreamsWriter).to.be.calledWith({
+    sinon.assert.calledWith(DataStreamsWriter, {
       hostname: config.hostname,
       port: config.port,
-      url: config.url
+      url: config.url,
     })
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, hostname())
@@ -239,7 +237,7 @@ describe('DataStreamsProcessor', () => {
       type: 'kafka_consume',
       consumer_group: 'test-consumer',
       partition: 0,
-      topic: 'test-topic'
+      topic: 'test-topic',
     }
     assert.strictEqual(processor.buckets.size, 0)
     processor.recordOffset({ timestamp: DEFAULT_TIMESTAMP, ...mockBacklog })
@@ -256,9 +254,9 @@ describe('DataStreamsProcessor', () => {
     const encoded = backlog.encode()
     assert.deepStrictEqual(encoded, {
       Tags: [
-        'consumer_group:test-consumer', 'partition:0', 'topic:test-topic', 'type:kafka_consume'
+        'consumer_group:test-consumer', 'partition:0', 'topic:test-topic', 'type:kafka_consume',
       ],
-      Value: 12
+      Value: 12,
     })
   })
 
@@ -294,7 +292,7 @@ describe('DataStreamsProcessor', () => {
   it('should export on interval', () => {
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
-    expect(writer.flush).to.be.calledWith({
+    sinon.assert.calledWith(writer.flush, {
       Env: 'test',
       Service: 'service1',
       Version: 'v1',
@@ -307,14 +305,56 @@ describe('DataStreamsProcessor', () => {
           EdgeTags: mockCheckpoint.edgeTags,
           EdgeLatency: edgeLatency.toProto(),
           PathwayLatency: pathwayLatency.toProto(),
-          PayloadSize: payloadSize.toProto()
+          PayloadSize: payloadSize.toProto(),
         }],
-        Backlogs: []
+        Backlogs: [],
       }],
       TracerVersion: pkg.version,
       Lang: 'javascript',
-      Tags: ['foo:foovalue', 'bar:barvalue']
+      Tags: ['foo:foovalue', 'bar:barvalue'],
     })
+  })
+
+  it('should include ProcessTags when propagation is enabled', () => {
+    const propagationHash = require('../../src/propagation-hash')
+    const processTags = require('../../src/process-tags')
+
+    // Configure and enable the feature
+    propagationHash.configure({ propagateProcessTags: { enabled: true } })
+
+    processor.recordCheckpoint(mockCheckpoint)
+    processor.onInterval()
+
+    const call = writer.flush.getCall(writer.flush.callCount - 1)
+    const payload = call.args[0]
+
+    assert.ok(payload.ProcessTags, 'ProcessTags should be present')
+    assert.deepStrictEqual(
+      payload.ProcessTags,
+      processTags.serialized.split(','),
+      'ProcessTags should match process-tags module as array'
+    )
+
+    // Cleanup
+    propagationHash.configure(null)
+  })
+
+  it('should not include ProcessTags when propagation is disabled', () => {
+    const propagationHash = require('../../src/propagation-hash')
+
+    // Ensure the feature is disabled
+    propagationHash.configure({ propagateProcessTags: { enabled: false } })
+
+    processor.recordCheckpoint(mockCheckpoint)
+    processor.onInterval()
+
+    const call = writer.flush.getCall(writer.flush.callCount - 1)
+    const payload = call.args[0]
+
+    assert.strictEqual(payload.ProcessTags, undefined, 'ProcessTags should not be present')
+
+    // Cleanup
+    propagationHash.configure(null)
   })
 })
 
@@ -348,7 +388,7 @@ describe('getHeadersSize', () => {
   it('should return the total size of all headers', () => {
     const headers = {
       'Content-Type': 'application/json',
-      'Content-Length': '100'
+      'Content-Length': '100',
     }
     assert.strictEqual(getHeadersSize(headers), 45)
   })
@@ -361,8 +401,8 @@ describe('getMessageSize', () => {
       value: 'value',
       headers: {
         'Content-Type': 'application/json',
-        'Content-Length': '100'
-      }
+        'Content-Length': '100',
+      },
     }
     assert.strictEqual(getMessageSize(message), 53)
   })

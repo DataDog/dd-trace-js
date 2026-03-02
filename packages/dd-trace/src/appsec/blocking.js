@@ -17,7 +17,7 @@ const responseBlockedSet = new WeakSet()
 const blockDelegations = new WeakMap()
 
 const specificBlockingTypes = {
-  GRAPHQL: 'graphql'
+  GRAPHQL: 'graphql',
 }
 
 function getSpecificKey (method, url) {
@@ -34,7 +34,7 @@ function getBlockWithRedirectData (actionParameters) {
     statusCode = 303
   }
   const headers = {
-    Location: actionParameters.location
+    Location: actionParameters.location,
   }
 
   return { headers, statusCode }
@@ -45,7 +45,7 @@ function getSpecificBlockingData (type) {
     case specificBlockingTypes.GRAPHQL:
       return {
         type: 'application/json',
-        body: templateGraphqlJson
+        body: templateGraphqlJson,
       }
   }
 }
@@ -88,7 +88,7 @@ function getBlockWithContentData (req, specificType, actionParameters) {
 
   const headers = {
     'Content-Type': type,
-    'Content-Length': Buffer.byteLength(body)
+    'Content-Length': Buffer.byteLength(body),
   }
 
   return { body, statusCode, headers }
@@ -192,5 +192,5 @@ module.exports = {
   getBlockingAction,
   setTemplates,
   isBlocked,
-  setDefaultBlockingActionParameters
+  setDefaultBlockingActionParameters,
 }

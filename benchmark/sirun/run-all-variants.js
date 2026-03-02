@@ -11,13 +11,13 @@ process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 require('./squash-affinity')
 
 const metaJson = require(path.join(process.cwd(), 'meta.json'))
-const env = Object.assign({}, process.env, { DD_TRACE_STARTUP_LOGS: 'false' })
+const env = { ...process.env, DD_TRACE_STARTUP_LOGS: 'false' }
 
 ;(async () => {
   if (metaJson.variants) {
     const variants = metaJson.variants
     for (const variant in variants) {
-      const variantEnv = Object.assign({}, env, { SIRUN_VARIANT: variant })
+      const variantEnv = { ...env, SIRUN_VARIANT: variant }
       await exec('sirun', ['meta-temp.json'], { env: variantEnv, stdio })
     }
   } else {

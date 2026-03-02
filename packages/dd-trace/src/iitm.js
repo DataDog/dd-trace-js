@@ -8,7 +8,7 @@ addHook((name, namespace) => {
   if (moduleLoadStartChannel.hasSubscribers) {
     moduleLoadStartChannel.publish({
       filename: name,
-      module: namespace
+      module: namespace,
     })
   }
 })

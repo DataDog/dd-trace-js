@@ -7,10 +7,10 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
-const urlFilter = require('./urlfilter')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../constants')
-const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const TracingPlugin = require('../tracing')
+const urlFilter = require('./urlfilter')
+const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
 
 let extractIp
@@ -54,6 +54,7 @@ function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
 
 const web = {
   TYPE: WEB,
+  /** @type {TracingPlugin | null} */
   plugin: null,
 
   // Ensure the configuration has the correct structure and defaults.
@@ -74,7 +75,7 @@ const web = {
       hooks,
       filter,
       middleware,
-      queryStringObfuscation
+      queryStringObfuscation,
     }
   },
 
@@ -118,7 +119,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, config, name, req, traceCtx)
+      span = web.startServerlessSpanWithInferredProxy(tracer, config, name, req, traceCtx)
     }
 
     context.tracer = tracer
@@ -188,7 +189,7 @@ const web = {
     analyticsSampler.sample(span, config.measured)
 
     span.addTags({
-      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>'
+      [RESOURCE_NAME]: middleware._name || middleware.name || '<anonymous>',
     })
 
     context.middleware.push(span)
@@ -218,7 +219,7 @@ const web = {
         span.addTags({
           [ERROR_TYPE]: error.name,
           [ERROR_MESSAGE]: error.message,
-          [ERROR_STACK]: error.stack
+          [ERROR_STACK]: error.stack,
         })
       }
 
@@ -250,7 +251,7 @@ const web = {
       paths: [],
       middleware: [],
       beforeEnd: [],
-      config: {}
+      config: {},
     }
 
     contexts.set(req, context)
@@ -274,11 +275,14 @@ const web = {
     return context.middleware.at(-1)
   },
 
-  // Extract the parent span from the headers and start a new span as its child
-  startChildSpan (tracer, config, name, req, traceCtx) {
+  startServerlessSpanWithInferredProxy (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
-    let childOf = tracer.extract(FORMAT_HTTP_HEADERS, headers)
+    const { storage } = require('../../../../datadog-core')
+    const store = storage('legacy').getStore()
+    const pubsubSpan = store?.span?._name === 'pubsub.push.receive' ? store.span : null
+
+    let childOf = pubsubSpan || tracer.extract(FORMAT_HTTP_HEADERS, headers)
 
     // we may have headers signaling a router proxy span should be created (such as for AWS API Gateway)
     if (tracer._config?.inferredProxyServicesEnabled) {
@@ -334,12 +338,12 @@ const web = {
     }
   },
 
-  finishSpan (context) {
+  finishSpan (context, spanType) {
     const { req, res } = context
 
     if (context.finished && !req.stream) return
 
-    addRequestTags(context, this.TYPE)
+    addRequestTags(context, spanType)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -349,14 +353,14 @@ const web = {
     context.finished = true
   },
 
-  finishAll (context) {
+  finishAll (context, spanType) {
     for (const beforeEnd of context.beforeEnd) {
       beforeEnd()
     }
 
     web.finishMiddleware(context)
 
-    web.finishSpan(context)
+    web.finishSpan(context, spanType)
 
     finishInferredProxySpan(context)
   },
@@ -403,9 +407,9 @@ const web = {
       },
       set (value) {
         ends.set(this, scope.bind(value, context.span))
-      }
+      },
     })
-  }
+  },
 }
 
 function addAllowHeaders (req, res, headers) {
@@ -417,7 +421,7 @@ function addAllowHeaders (req, res, headers) {
     'x-datadog-sampled', // Deprecated, but still accept it in case it's sent.
     'x-datadog-sampling-priority',
     'x-datadog-trace-id',
-    'x-datadog-tags'
+    'x-datadog-tags',
   ]
 
   for (const header of contextHeaders) {
@@ -453,13 +457,14 @@ function reactivate (req, fn) {
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
   const url = extractURL(req)
+  const type = spanType ?? WEB
 
   span.addTags({
     [HTTP_URL]: obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: spanType,
-    [HTTP_USERAGENT]: req.headers['user-agent']
+    [SPAN_TYPE]: type,
+    [HTTP_USERAGENT]: req.headers['user-agent'],
   })
 
   // if client ip has already been set by appsec, no need to run it again
@@ -490,10 +495,10 @@ function addResponseTags (context) {
   }
 
   span.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
+    [HTTP_STATUS_CODE]: res.statusCode,
   })
   inferredProxySpan?.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode
+    [HTTP_STATUS_CODE]: res.statusCode,
   })
 
   web.addStatusError(req, res.statusCode)
@@ -503,7 +508,7 @@ function addResourceTag (context) {
   const { req, span } = context
   const tags = span.context()._tags
 
-  if (tags['resource.name']) return
+  if (tags[RESOURCE_NAME]) return
 
   const resource = [req.method, tags[HTTP_ROUTE]]
     .filter(Boolean)
@@ -515,7 +520,7 @@ function addResourceTag (context) {
 function addHeaders (context) {
   const { req, res, config, span, inferredProxySpan } = context
 
-  config.headers.forEach(([key, tag]) => {
+  for (const [key, tag] of config.headers) {
     const reqHeader = req.headers[key]
     const resHeader = res.getHeader(key)
 
@@ -528,7 +533,7 @@ function addHeaders (context) {
       span.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
       inferredProxySpan?.setTag(tag || `${HTTP_RESPONSE_HEADERS}.${key}`, resHeader)
     }
-  })
+  }
 }
 
 function getHeadersToRecord (config) {

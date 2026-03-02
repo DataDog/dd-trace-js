@@ -54,5 +54,5 @@ module.exports = {
     } catch (e) {
       log.error('Failed to write heap snapshots to %s.', destination, e)
     }
-  }
+  },
 }

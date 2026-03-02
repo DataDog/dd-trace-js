@@ -6,26 +6,26 @@ const rawExpectedSchema = {
   client: {
     v0: {
       opName: 'moleculer.call',
-      serviceName: 'test'
+      serviceName: 'test',
     },
     v1: {
       opName: 'moleculer.client.request',
-      serviceName: 'test'
-    }
+      serviceName: 'test',
+    },
   },
   server: {
     v0: {
       opName: 'moleculer.action',
-      serviceName: 'test'
+      serviceName: 'test',
     },
     v1: {
       opName: 'moleculer.server.request',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

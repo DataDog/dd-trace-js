@@ -13,8 +13,8 @@ class SharedbPlugin extends ServerPlugin {
       resource: getReadableResourceName(actionName, request.c, request.q),
       kind: 'server',
       meta: {
-        'sharedb.action': actionName
-      }
+        'sharedb.action': actionName,
+      },
     }, ctx)
 
     if (this.config.hooks && this.config.hooks.receive) {

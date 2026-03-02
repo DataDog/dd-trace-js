@@ -1,0 +1,79 @@
+interactions:
+- request:
+    body: '{"model":"gpt-4o-mini","input":[{"role":"user","content":[{"type":"input_text","text":"Invent
+      a character for a video game"}]}],"text":{"format":{"type":"json_schema","strict":true,"name":"response","schema":{"type":"object","properties":{"name":{"type":"string"},"age":{"type":"number"},"height":{"type":"string"}},"required":["name","age","height"]}}},"stream":true}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - '*/*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '368'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - ai-sdk/openai/3.0.7 ai-sdk/provider-utils/4.0.4 runtime/node.js/22
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"error\": {\n    \"message\": \"Invalid schema for response_format
+        'response': In context=(), 'additionalProperties' is required to be supplied
+        and to be false.\",\n    \"type\": \"invalid_request_error\",\n    \"param\":
+        \"text.format.schema\",\n    \"code\": \"invalid_json_schema\"\n  }\n}"
+    headers:
+      CF-RAY:
+      - 9bd6812f28c71980-IAD
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '273'
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 13 Jan 2026 17:10:00 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=h8GJQ2FDA.2vMsUUj3qfYv_uviO73uWn49mOTI83o7Q-1768324200-1.0.1.1-8gPW4uuLJUPMRLfrH6ehubXJ1SohL.ZGPIWNEIYcwsB3qVI5MwwCvf1aXCpnalvJeGftedMiIBa0HuoAS_3d4nfpHOOMM9W2ctM9Y9mpknQ;
+        path=/; expires=Tue, 13-Jan-26 17:40:00 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=oYiTy7Nk6kuuNh5qn8VxW4p.NPTINP5vamQ5LLyUiOg-1768324200928-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '15'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '18'
+      x-request-id:
+      - req_3788ac2fc3c94d358011e32029585208
+    status:
+      code: 400
+      message: Bad Request
+version: 1

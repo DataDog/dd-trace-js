@@ -23,10 +23,8 @@ const external = [
   '@datadog/native-iast-taint-tracking',
   '@datadog/native-iast-rewriter',
 
-  // required if you encounter graphql errors during the build step
-  'graphql/language/visitor',
-  'graphql/language/printer',
-  'graphql/utilities',
+  // required if you use OpenFeature (peer dependency)
+  '@openfeature/server-sdk',
 ]
 
 esbuild.build({
@@ -38,5 +36,5 @@ esbuild.build({
   target: 'node22',
   plugins: [ddPlugin],
   format: 'cjs',
-  external
+  external,
 })

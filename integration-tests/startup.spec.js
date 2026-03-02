@@ -1,41 +1,61 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const path = require('path')
+const { inspect } = require('util')
+const fs = require('fs')
+const semver = require('semver')
 const {
   FakeAgent,
   spawnProc,
+  spawnProcAndExpectExit,
   sandboxCwd,
   useSandbox,
-  curlAndAssertMessage
+  curlAndAssertMessage,
 } = require('./helpers')
-const path = require('path')
-const { assert } = require('chai')
-const semver = require('semver')
-const { inspect } = require('util')
-const fs = require('fs')
 
 const execArgvs = [
   {
-    execArgv: []
+    execArgv: [],
   },
   {
     execArgv: ['--import', 'dd-trace/register.js'],
-    skip: semver.satisfies(process.versions.node, '<20.6')
+    skip: semver.satisfies(process.versions.node, '<20.6'),
+  },
+  {
+    execArgv: ['--import', 'dd-trace/loader-hook.mjs'],
+    skip: semver.satisfies(process.versions.node, '<20.6'),
   },
   {
     execArgv: ['--loader', 'dd-trace/loader-hook.mjs'],
-    skip: semver.satisfies(process.versions.node, '>=20.6')
-  }
+    skip: semver.satisfies(process.versions.node, '>=20.6'),
+  },
+  {
+    execArgv: [],
+    optional: false,
+  },
 ]
 
-execArgvs.forEach(({ execArgv, skip }) => {
+execArgvs.forEach(({ execArgv, skip, optional = true }) => {
   const describe = skip ? globalThis.describe.skip : globalThis.describe
 
-  describe(`startup ${execArgv.join(' ')}`, () => {
+  describe(`startup ${execArgv.join(' ').concat(`(optional: ${optional})`)}`, () => {
     let agent
     let proc
     let cwd
     let startupTestFile
     let unsupportedTestFile
+
+    before(() => {
+      if (optional === false) {
+        process.env.OMIT = 'optional'
+      }
+    })
+
+    after(() => {
+      delete process.env.OMIT
+    })
 
     useSandbox(['d3-format@3.1.0'])
 
@@ -60,67 +80,70 @@ execArgvs.forEach(({ execArgv, skip }) => {
           cwd,
           execArgv,
           env: {
-            AGENT_PORT: agent.port
-          }
+            AGENT_PORT: agent.port,
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
 
-      it('saves tracer configuration on disk', async () => {
-        if (process.platform !== 'linux') {
-          return
-        }
-
-        proc = await spawnProc(startupTestFile, {
-          cwd,
-          execArgv,
-          env: {
-            AGENT_PORT: agent.port
+      // This feature requires libdatadog which is an optional dependency.
+      if (optional) {
+        it('saves tracer configuration on disk', async () => {
+          if (process.platform !== 'linux') {
+            return
           }
+
+          proc = await spawnProc(startupTestFile, {
+            cwd,
+            execArgv,
+            env: {
+              AGENT_PORT: agent.port,
+            },
+          })
+
+          const containsDatadogMemfd = (fds) => {
+            for (const fd of fds) {
+              try {
+                const fdName = fs.readlinkSync(`/proc/${proc.pid}/fd/${fd}`)
+                if (fdName.includes('datadog-tracer-info-')) {
+                  return true
+                }
+              } catch {}
+            }
+            return false
+          }
+
+          const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
+
+          assert(
+            containsDatadogMemfd(fds),
+            `FDs ${inspect(fds)} of PID ${proc.pid} did not contain the datadog tracer configuration in memfd`
+          )
         })
-
-        const containsDatadogMemfd = (fds) => {
-          for (const fd of fds) {
-            try {
-              const fdName = fs.readlinkSync(`/proc/${proc.pid}/fd/${fd}`)
-              if (fdName.includes('datadog-tracer-info-')) {
-                return true
-              }
-            } catch {}
-          }
-          return false
-        }
-
-        const fds = fs.readdirSync(`/proc/${proc.pid}/fd`)
-
-        assert(
-          containsDatadogMemfd(fds),
-          `FDs ${inspect(fds)} of PID ${proc.pid} did not contain the datadog tracer configuration in memfd`
-        )
-      })
+      }
 
       it('works for options.url', async () => {
         proc = await spawnProc(startupTestFile, {
           cwd,
           execArgv,
           env: {
-            AGENT_URL: `http://localhost:${agent.port}`
-          }
+            AGENT_URL: `http://localhost:${agent.port}`,
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `localhost:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `localhost:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
     })
@@ -140,16 +163,16 @@ execArgvs.forEach(({ execArgv, skip }) => {
           cwd,
           execArgv,
           env: {
-            DD_TRACE_AGENT_PORT: agent.port
-          }
+            DD_TRACE_AGENT_PORT: agent.port,
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
 
@@ -158,16 +181,16 @@ execArgvs.forEach(({ execArgv, skip }) => {
           cwd,
           execArgv,
           env: {
-            DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
-          }
+            DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `localhost:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `localhost:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
     })
@@ -187,15 +210,15 @@ execArgvs.forEach(({ execArgv, skip }) => {
       it('works for hostname and port', async () => {
         proc = await spawnProc(startupTestFile, {
           cwd,
-          execArgv
+          execArgv,
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', '127.0.0.1:8126')
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, '127.0.0.1:8126')
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
 
@@ -204,25 +227,25 @@ execArgvs.forEach(({ execArgv, skip }) => {
           cwd,
           execArgv,
           env: {
-            STEALTHY_REQUIRE: 'true'
-          }
+            STEALTHY_REQUIRE: 'true',
+          },
         })
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', '127.0.0.1:8126')
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, '127.0.0.1:8126')
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
           assert.strictEqual(payload[0].length, 1)
-          assert.propertyVal(payload[0][0], 'name', 'web.request')
+          assert.strictEqual(payload[0][0].name, 'web.request')
         })
       })
     })
 
     context('with unsupported module', () => {
       it('skips the unsupported module', async () => {
-        await spawnProc(unsupportedTestFile, {
+        await spawnProcAndExpectExit(unsupportedTestFile, {
           cwd,
-          execArgv
+          execArgv,
         })
       })
     })

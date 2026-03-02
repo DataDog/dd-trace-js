@@ -2,11 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
-
 const NoopFlaggingProvider = require('../../src/openfeature/noop')
 
 describe('NoopFlaggingProvider', () => {
@@ -36,13 +34,13 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveBooleanEvaluation('test-flag', true, {}, {})
       assert.deepStrictEqual(result, {
         value: true,
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
 
       const result2 = await noopProvider.resolveBooleanEvaluation('test-flag', false, {}, {})
       assert.deepStrictEqual(result2, {
         value: false,
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
     })
 
@@ -50,13 +48,13 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveStringEvaluation('test-flag', 'default', {}, {})
       assert.deepStrictEqual(result, {
         value: 'default',
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
 
       const result2 = await noopProvider.resolveStringEvaluation('test-flag', 'custom', {}, {})
       assert.deepStrictEqual(result2, {
         value: 'custom',
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
     })
 
@@ -64,13 +62,13 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveNumberEvaluation('test-flag', 42, {}, {})
       assert.deepStrictEqual(result, {
         value: 42,
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
 
       const result2 = await noopProvider.resolveNumberEvaluation('test-flag', 0, {}, {})
       assert.deepStrictEqual(result2, {
         value: 0,
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
     })
 
@@ -79,14 +77,14 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveObjectEvaluation('test-flag', defaultObj, {}, {})
       assert.deepStrictEqual(result, {
         value: defaultObj,
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
 
       const emptyObj = {}
       const result2 = await noopProvider.resolveObjectEvaluation('test-flag', emptyObj, {}, {})
       assert.deepStrictEqual(result2, {
         value: emptyObj,
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
     })
 
@@ -94,7 +92,7 @@ describe('NoopFlaggingProvider', () => {
       const result = await noopProvider.resolveBooleanEvaluation('test-flag', true)
       assert.deepStrictEqual(result, {
         value: true,
-        reason: 'STATIC'
+        reason: 'STATIC',
       })
     })
   })
@@ -138,10 +136,10 @@ describe('NoopFlaggingProvider', () => {
       const numberResult = noopProvider.resolveNumberEvaluation('test', 42, {}, {})
       const objectResult = noopProvider.resolveObjectEvaluation('test', {}, {}, {})
 
-      expect(booleanResult).to.be.a('promise')
-      expect(stringResult).to.be.a('promise')
-      expect(numberResult).to.be.a('promise')
-      expect(objectResult).to.be.a('promise')
+      assert.ok(booleanResult && typeof booleanResult.then === 'function')
+      assert.ok(stringResult && typeof stringResult.then === 'function')
+      assert.ok(numberResult && typeof numberResult.then === 'function')
+      assert.ok(objectResult && typeof objectResult.then === 'function')
     })
 
     it('should resolve promises immediately', async () => {
@@ -151,7 +149,7 @@ describe('NoopFlaggingProvider', () => {
         noopProvider.resolveBooleanEvaluation('test', true, {}, {}),
         noopProvider.resolveStringEvaluation('test', 'default', {}, {}),
         noopProvider.resolveNumberEvaluation('test', 42, {}, {}),
-        noopProvider.resolveObjectEvaluation('test', {}, {}, {})
+        noopProvider.resolveObjectEvaluation('test', {}, {}, {}),
       ])
 
       const duration = Date.now() - start

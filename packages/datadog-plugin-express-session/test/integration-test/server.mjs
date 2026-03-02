@@ -16,7 +16,7 @@ app.use(expressSession({
   resave: false,
   rolling: true,
   saveUninitialized: true,
-  genid: () => 'sid_123'
+  genid: () => 'sid_123',
 }))
 
 app.get('/', (req, res) => {

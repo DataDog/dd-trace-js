@@ -6,7 +6,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const {
   ERROR_TYPE,
   ERROR_MESSAGE,
-  ERROR_STACK
+  ERROR_STACK,
 } = require('../../dd-trace/src/constants')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
@@ -42,7 +42,7 @@ describe('Plugin', () => {
         app.get('/user/:id', (c) => {
           return c.json({
             id: c.req.param('id'),
-            middleware: c.get('middleware')
+            middleware: c.get('middleware'),
           })
         })
       })
@@ -60,7 +60,7 @@ describe('Plugin', () => {
 
         server = serve({
           fetch: app.fetch,
-          port: 0
+          port: 0,
         }, ({ port }) => resolver(port))
 
         const port = await promise
@@ -69,7 +69,7 @@ describe('Plugin', () => {
 
         assert.deepStrictEqual(data, {
           id: '123',
-          middleware: 'test'
+          middleware: 'test',
         })
 
         await agent.assertFirstTraceSpan({
@@ -83,7 +83,7 @@ describe('Plugin', () => {
             'http.method': 'GET',
             'http.status_code': '200',
             component: 'hono',
-          }
+          },
         })
       })
 
@@ -97,14 +97,14 @@ describe('Plugin', () => {
 
         books.get('/:id', (c) => c.json({
           id: c.req.param('id'),
-          name: 'test'
+          name: 'test',
         }))
 
         app.route('/books', books)
 
         server = serve({
           fetch: app.fetch,
-          port: 0
+          port: 0,
         }, ({ port }) => resolver(port))
 
         const port = await promise
@@ -113,7 +113,7 @@ describe('Plugin', () => {
 
         assert.deepStrictEqual(data, {
           id: '12345',
-          name: 'test'
+          name: 'test',
         })
 
         await agent.assertFirstTraceSpan({
@@ -127,7 +127,7 @@ describe('Plugin', () => {
             'http.method': 'GET',
             'http.status_code': '200',
             component: 'hono',
-          }
+          },
         })
       })
 
@@ -145,7 +145,7 @@ describe('Plugin', () => {
 
         server = serve({
           fetch: app.fetch,
-          port: 0
+          port: 0,
         }, ({ port }) => resolver(port))
 
         const port = await promise
@@ -154,7 +154,7 @@ describe('Plugin', () => {
           axios.get(`http://localhost:${port}/error`),
           {
             message: 'Request failed with status code 500',
-            name: 'AxiosError'
+            name: 'AxiosError',
           }
         )
 
@@ -167,7 +167,7 @@ describe('Plugin', () => {
             [ERROR_STACK]: error.stack,
             'http.status_code': '500',
             component: 'hono',
-          }
+          },
         })
       })
 
@@ -184,7 +184,7 @@ describe('Plugin', () => {
 
         server = serve({
           fetch: app.fetch,
-          port: 0
+          port: 0,
         }, ({ port }) => resolver(port))
 
         const port = await promise
@@ -207,7 +207,7 @@ describe('Plugin', () => {
 
         server = serve({
           fetch: app.fetch,
-          port: 0
+          port: 0,
         }, ({ port }) => resolver(port))
 
         const port = await promise
@@ -216,8 +216,8 @@ describe('Plugin', () => {
           headers: {
             'x-datadog-trace-id': '1234',
             'x-datadog-parent-id': '5678',
-            'ot-baggage-foo': 'bar'
-          }
+            'ot-baggage-foo': 'bar',
+          },
         })
 
         await agent.assertFirstTraceSpan({

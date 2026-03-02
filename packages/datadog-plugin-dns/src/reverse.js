@@ -14,8 +14,8 @@ class DNSReversePlugin extends ClientPlugin {
       resource: ip,
       kind: 'client',
       meta: {
-        'dns.ip': ip
-      }
+        'dns.ip': ip,
+      },
     }, ctx)
 
     return ctx.currentStore

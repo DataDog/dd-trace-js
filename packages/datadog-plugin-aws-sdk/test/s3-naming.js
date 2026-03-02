@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   outbound: {
     v0: {
       serviceName: () => 'test-aws-s3',
-      opName: () => 'aws.request'
+      opName: () => 'aws.request',
     },
     v1: {
       serviceName: () => 'test',
-      opName: () => 'aws.s3.request'
-    }
-  }
+      opName: () => 'aws.s3.request',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

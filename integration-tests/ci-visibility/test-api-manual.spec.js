@@ -1,17 +1,17 @@
 'use strict'
 
+const assert = require('assert')
+
 const { exec } = require('child_process')
-
-const { assert } = require('chai')
-
 const {
   sandboxCwd,
   useSandbox,
-  getCiVisAgentlessConfig
+  getCiVisAgentlessConfig,
+  assertObjectContains,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
-  TEST_STATUS
+  TEST_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 
 describe('test-api-manual', () => {
@@ -37,27 +37,27 @@ describe('test-api-manual', () => {
       const events = payloads.flatMap(({ payload }) => payload.events)
 
       const testEvents = events.filter(event => event.type === 'test')
-      assert.includeMembers(testEvents.map(test => test.content.resource), [
+      assertObjectContains(testEvents.map(test => test.content.resource), [
         'ci-visibility/test-api-manual/test.fake.js.second test will fail',
         'ci-visibility/test-api-manual/test.fake.js.first test will pass',
         'ci-visibility/test-api-manual/test.fake.js.async test will pass',
-        'ci-visibility/test-api-manual/test.fake.js.integration test'
+        'ci-visibility/test-api-manual/test.fake.js.integration test',
       ])
 
-      assert.includeMembers(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+      assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
+        'fail',
         'pass',
         'pass',
         'pass',
-        'fail'
       ])
 
       const passedTest = testEvents.find(
         test => test.content.resource === 'ci-visibility/test-api-manual/test.fake.js.first test will pass'
       )
-      assert.propertyVal(passedTest.content.meta, 'test.custom.tag', 'custom.value')
+      assert.strictEqual(passedTest.content.meta['test.custom.tag'], 'custom.value')
 
       const customSpan = events.find(event => event.type === 'span')
-      assert.propertyVal(customSpan.content, 'resource', 'custom.span')
+      assert.strictEqual(customSpan.content.resource, 'custom.span')
     }).catch(done)
 
     childProcess = exec(
@@ -66,7 +66,6 @@ describe('test-api-manual', () => {
       {
         cwd,
         env: getCiVisAgentlessConfig(receiver.port),
-        stdio: 'pipe'
       }
     )
     childProcess.on('exit', () => {
@@ -87,9 +86,8 @@ describe('test-api-manual', () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false'
+          DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
         },
-        stdio: 'pipe'
       }
     )
     childProcess.on('exit', () => {

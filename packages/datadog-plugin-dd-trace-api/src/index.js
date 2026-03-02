@@ -3,13 +3,13 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const telemetryMetrics = require('../../dd-trace/src/telemetry/metrics')
 const apiMetrics = telemetryMetrics.manager.namespace('tracers')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 // api ==> here
 const objectMap = new WeakMap()
 
 const injectionEnabledTag =
-  `injection_enabled:${getEnvironmentVariable('DD_INJECTION_ENABLED') ? 'yes' : 'no'}`
+  `injection_enabled:${getValueFromEnvSources('DD_INJECTION_ENABLED') ? 'yes' : 'no'}`
 
 module.exports = class DdTraceApiPlugin extends Plugin {
   static id = 'dd-trace-api'
@@ -30,7 +30,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
       const counter = apiMetrics.count('public_api.called', [
         `name:${name.replaceAll(':', '.')}`,
         'api_version:v1',
-        injectionEnabledTag
+        injectionEnabledTag,
       ])
 
       // For v1, APIs are 1:1 with their internal equivalents, so we can just

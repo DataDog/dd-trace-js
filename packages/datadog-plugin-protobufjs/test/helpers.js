@@ -6,13 +6,13 @@ async function loadMessage (protobuf, messageTypeName) {
     const OtherMessage = root.lookupType('OtherMessage')
     const message = OtherMessage.create({
       name: ['Alice'],
-      age: 30
+      age: 30,
     })
     return {
       OtherMessage: {
         type: OtherMessage,
-        instance: message
-      }
+        instance: message,
+      },
     }
   } else if (messageTypeName === 'MyMessage') {
     const messageProto = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/message.proto')
@@ -28,18 +28,18 @@ async function loadMessage (protobuf, messageTypeName) {
       status: Status.values.ACTIVE,
       otherMessage: [
         OtherMessage.create({ name: ['Alice'], age: 30 }),
-        OtherMessage.create({ name: ['Bob'], age: 25 })
-      ]
+        OtherMessage.create({ name: ['Bob'], age: 25 }),
+      ],
     })
     return {
       OtherMessage: {
         type: OtherMessage,
-        instance: null
+        instance: null,
       },
       MyMessage: {
         type: MyMessage,
-        instance: message
-      }
+        instance: message,
+      },
     }
   } else if (messageTypeName === 'MainMessage') {
     const root = await protobuf.load('packages/datadog-plugin-protobufjs/test/schemas/all_types.proto')
@@ -66,12 +66,12 @@ async function loadMessage (protobuf, messageTypeName) {
       doubleField: 2.718281828459,
       boolField: true,
       stringField: 'Hello, world!',
-      bytesField: Buffer.from('bytes data')
+      bytesField: Buffer.from('bytes data'),
     })
 
     const nestedMessageInstance = NestedMessage.create({
       id: 'nested_id_123',
-      scalars: scalarsInstance
+      scalars: scalarsInstance,
     })
 
     const complexMessageInstance = ComplexMessage.create({
@@ -80,27 +80,27 @@ async function loadMessage (protobuf, messageTypeName) {
         key1: scalarsInstance,
         key2: Scalars.create({
           int32Field: 24,
-          stringField: 'Another string'
-        })
-      }
+          stringField: 'Another string',
+        }),
+      },
     })
 
     const mainMessageInstance = MainMessage.create({
       status: Status.values.ACTIVE,
       scalars: scalarsInstance,
       nested: nestedMessageInstance,
-      complex: complexMessageInstance
+      complex: complexMessageInstance,
     })
 
     return {
       MainMessage: {
         type: MainMessage,
-        instance: mainMessageInstance
-      }
+        instance: mainMessageInstance,
+      },
     }
   }
 }
 
 module.exports = {
-  loadMessage
+  loadMessage,
 }

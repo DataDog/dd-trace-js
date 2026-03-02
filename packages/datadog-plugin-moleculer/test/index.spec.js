@@ -38,7 +38,7 @@ describe('Plugin', () => {
           namespace: 'multi',
           nodeID: `server-${process.pid}`,
           logger: false,
-          transporter: `tcp://127.0.0.1:${port}/server-${process.pid}`
+          transporter: `tcp://127.0.0.1:${port}/server-${process.pid}`,
         })
 
         broker.createService({
@@ -52,8 +52,8 @@ describe('Plugin', () => {
 
             numerify (ctx) {
               return Number(ctx.params)
-            }
-          }
+            },
+          },
         })
 
         broker.createService({
@@ -61,8 +61,8 @@ describe('Plugin', () => {
           actions: {
             async error (ctx) {
               throw new Error('Invalid number')
-            }
-          }
+            },
+          },
         })
 
         return broker.start()
@@ -123,7 +123,7 @@ describe('Plugin', () => {
             client: false,
             server: { service: 'custom' },
             params: true,
-            meta: true
+            meta: true,
           }))
 
           before(() => startBroker())
@@ -145,12 +145,12 @@ describe('Plugin', () => {
             {
               v0: {
                 opName: 'moleculer.action',
-                serviceName: 'custom'
+                serviceName: 'custom',
               },
               v1: {
                 opName: 'moleculer.server.request',
-                serviceName: 'custom'
-              }
+                serviceName: 'custom',
+              },
             }
           )
         })
@@ -203,8 +203,8 @@ describe('Plugin', () => {
                   'moleculer.node_id': `server-${process.pid}`,
                 },
                 metrics: {
-                  'network.destination.port': port
-                }
+                  'network.destination.port': port,
+                },
               })
 
               assert.strictEqual(typeof span.meta['moleculer.context.request_id'], 'string')
@@ -231,8 +231,8 @@ describe('Plugin', () => {
                   'moleculer.node_id': `server-${process.pid}`,
                 },
                 metrics: {
-                  'network.destination.port': port
-                }
+                  'network.destination.port': port,
+                },
               })
 
               assert.strictEqual(typeof span.meta['moleculer.context.request_id'], 'string')
@@ -250,7 +250,7 @@ describe('Plugin', () => {
             client: { service: 'custom' },
             server: false,
             params: true,
-            meta: true
+            meta: true,
           }))
 
           before(() => startBroker())
@@ -272,12 +272,12 @@ describe('Plugin', () => {
             {
               v0: {
                 opName: 'moleculer.call',
-                serviceName: 'custom'
+                serviceName: 'custom',
               },
               v1: {
                 opName: 'moleculer.client.request',
-                serviceName: 'custom'
-              }
+                serviceName: 'custom',
+              },
             }
           )
         })
@@ -344,10 +344,10 @@ describe('Plugin', () => {
               options: {
                 udpDiscovery: false,
                 urls: [
-                  `127.0.0.1:${port}/server-${process.pid}`
-                ]
-              }
-            }
+                  `127.0.0.1:${port}/server-${process.pid}`,
+                ],
+              },
+            },
           })
 
           return clientBroker.start()
@@ -392,14 +392,14 @@ describe('Plugin', () => {
       })
       describe('meta propagation', () => {
         before(() => agent.load('moleculer', {
-          meta: true
+          meta: true,
         }))
 
         before(async () => {
           const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
           broker = new ServiceBroker({
             nodeID: `server-${process.pid}`,
-            logger: false
+            logger: false,
           })
 
           broker.createService({
@@ -408,15 +408,15 @@ describe('Plugin', () => {
               async first (ctx) {
                 await ctx.call('test.second', null, {
                   meta: {
-                    a: 'John'
-                  }
+                    a: 'John',
+                  },
                 })
                 return ctx.meta.a
               },
               second (ctx) {
                 ctx.meta.a = 'Doe'
-              }
-            }
+              },
+            },
           })
 
           return broker.start()

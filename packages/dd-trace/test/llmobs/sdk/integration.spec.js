@@ -6,7 +6,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../plugins/agent')
-const { useLlmObs, assertLlmObsSpanEvent } = require('../util')
+const { useLlmObs, assertLlmObsSpanEvent, assertLlmObsEvaluationMetric } = require('../util')
 function getTag (llmobsSpan, tagName) {
   const tag = llmobsSpan.tags.find(tag => tag.split(':')[0] === tagName)
   return tag?.split(':')[1]
@@ -16,7 +16,7 @@ describe('end to end sdk integration tests', () => {
   let tracer
   let llmobs
 
-  const getEvents = useLlmObs()
+  const { getEvents, getEvaluationMetrics } = useLlmObs()
 
   before(() => {
     tracer = require('../../../../dd-trace')
@@ -48,7 +48,7 @@ describe('end to end sdk integration tests', () => {
       tags: { ml_app: 'test', bar: 'baz' },
       metadata: { foo: 'bar' },
       inputValue: 'hello',
-      outputValue: 'world'
+      outputValue: 'world',
     })
 
     assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -58,7 +58,7 @@ describe('end to end sdk integration tests', () => {
       tags: { ml_app: 'test' },
       name: 'myWorkflow',
       inputValue: 'world',
-      outputValue: 'hello'
+      outputValue: 'hello',
     })
   })
 
@@ -97,7 +97,7 @@ describe('end to end sdk integration tests', () => {
       tags: { ml_app: 'test' },
       inputValue: 'hello',
       outputValue: 'world',
-      metadata: { foo: 'bar' }
+      metadata: { foo: 'bar' },
     })
 
     assertLlmObsSpanEvent(llmobsSpans[1], {
@@ -107,7 +107,7 @@ describe('end to end sdk integration tests', () => {
       tags: { ml_app: 'test' },
       name: 'myWorkflow',
       inputValue: 'my custom input',
-      outputValue: 'custom'
+      outputValue: 'custom',
     })
   })
 
@@ -120,38 +120,42 @@ describe('end to end sdk integration tests', () => {
       Date.now.restore()
     })
 
-    // TODO(sabrenner): follow-up on re-enabling this test in a different PR
-    it.skip('submits evaluations', () => {
+    it('submits evaluations', async () => {
       llmobs.trace({ kind: 'agent', name: 'myAgent' }, () => {
         llmobs.annotate({ inputData: 'hello', outputData: 'world' })
         const spanCtx = llmobs.exportSpan()
         llmobs.submitEvaluation(spanCtx, {
           label: 'foo',
           metricType: 'categorical',
-          value: 'bar'
+          value: 'bar',
+          tags: {
+            foo: 'bar',
+          },
         })
       })
 
-      // const { spans, llmobsSpans, evaluationMetrics } = run(payloadGenerator)
-      // assert.strictEqual(spans.length, 1)
-      // assert.strictEqual(llmobsSpans.length, 1)
-      // assert.strictEqual(evaluationMetrics.length, 1)
+      const { apmSpans, llmobsSpans } = await getEvents()
+      const llmobsEvaluationMetrics = await getEvaluationMetrics()
 
-      // // check eval metrics content
-      // const expected = [
-      //   {
-      //     trace_id: spans[0].context().toTraceId(true),
-      //     span_id: spans[0].context().toSpanId(),
-      //     label: 'foo',
-      //     metric_type: 'categorical',
-      //     categorical_value: 'bar',
-      //     ml_app: 'test',
-      //     timestamp_ms: 1234567890,
-      //     tags: [`ddtrace.version:${tracerVersion}`, 'ml_app:test']
-      //   }
-      // ]
+      assert.equal(apmSpans.length, 1)
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(llmobsEvaluationMetrics.length, 1)
 
-      // check(expected, evaluationMetrics)
+      assertLlmObsEvaluationMetric(llmobsEvaluationMetrics[0], {
+        joinOn: {
+          span: {
+            traceId: llmobsSpans[0].trace_id,
+            spanId: llmobsSpans[0].span_id,
+          },
+        },
+        label: 'foo',
+        metricType: 'categorical',
+        mlApp: 'test',
+        value: 'bar',
+        tags: {
+          foo: 'bar',
+        },
+      })
     })
   })
 
@@ -377,6 +381,92 @@ describe('end to end sdk integration tests', () => {
 
       assert.equal(getTag(llmobsSpans[5], 'foo'), undefined)
       assert.equal(llmobsSpans[5].parent_id, llmobsSpans[0].span_id)
+    })
+  })
+
+  describe('prompts', () => {
+    it('annotates an llm span with a prompt', async () => {
+      llmobs.trace({ kind: 'llm', name: 'myLLM' }, () => {
+        llmobs.annotate({
+          prompt: {
+            id: '123',
+            version: '1.0.0',
+            template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
+            variables: {
+              user_query: 'test',
+              message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
+            },
+            contextVariables: ['message_history'],
+            queryVariables: ['user_query'],
+          },
+        })
+      })
+
+      const { llmobsSpans } = await getEvents()
+
+      assert.equal(llmobsSpans.length, 1)
+      assert.deepEqual(llmobsSpans[0].meta.input.prompt, {
+        id: '123',
+        version: '1.0.0',
+        template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
+        variables: {
+          user_query: 'test',
+          message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
+        },
+        _dd_context_variable_keys: ['message_history'],
+        _dd_query_variable_keys: ['user_query'],
+      })
+      assert.equal(llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:annotated'), true)
+    })
+
+    it('does not annotate a non-llm span with a prompt', async () => {
+      llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, () => {
+        llmobs.annotate({
+          prompt: {
+            id: '123',
+            version: '1.0.0',
+            template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
+          },
+        })
+      })
+
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.equal(llmobsSpans[0].meta.input.prompt, undefined)
+      assert.equal(llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:annotated'), false)
+    })
+
+    it('is respected via annotationContext', async () => {
+      llmobs.annotationContext({
+        prompt: {
+          id: '123',
+          version: '1.0.0',
+          template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
+          variables: {
+            user_query: 'test',
+            message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
+          },
+          contextVariables: ['message_history'],
+          queryVariables: ['user_query'],
+        },
+      }, () => {
+        llmobs.trace({ kind: 'llm', name: 'myLLM' }, () => {})
+      })
+
+      const { llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 1)
+      assert.deepEqual(llmobsSpans[0].meta.input.prompt, {
+        id: '123',
+        version: '1.0.0',
+        template: 'this is a {{user_query}}. please summarize based on {{message_history}}',
+        variables: {
+          user_query: 'test',
+          message_history: '1. User: hello!\n\n2. AI: hello, how can I help you today?',
+        },
+        _dd_context_variable_keys: ['message_history'],
+        _dd_query_variable_keys: ['user_query'],
+      })
+      assert.equal(llmobsSpans[0].tags.includes('prompt_tracking_instrumentation_method:annotated'), true)
     })
   })
 })

@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
 
+const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
 
-const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 const { DEFAULT_MAX_FIELD_COUNT } = require('../../../../src/debugger/devtools_client/snapshot/constants')
+const { getTargetCodePath, enable, teardown, assertOnBreakpoint, setAndTriggerBreakpoint } = require('./utils')
 
 const target = getTargetCodePath(__filename)
 
@@ -40,12 +40,14 @@ function generateTestCases (config) {
     })
 
     it('should capture expected snapshot', function () {
-      expect(state).to.have.keys(['obj'])
-      expect(state).to.have.deep.property('obj', {
+      assert.strictEqual(Object.keys(state).length, ((Array.isArray(['obj']) ? ['obj'] : [['obj']])).length)
+      assert.ok(((Array.isArray(['obj']) ? ['obj'] : [['obj']])).every(k => Object.hasOwn(state, k)))
+      assert.ok('obj' in state)
+      assert.deepStrictEqual(state.obj, {
         type: 'Object',
         fields: expectedFields,
         notCapturedReason: 'fieldCount',
-        size: 40
+        size: 40,
       })
     })
   }

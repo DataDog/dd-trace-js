@@ -6,87 +6,87 @@ const web = {
   client: {
     grpc: {
       opName: () => 'grpc.client',
-      serviceName: identityService
+      serviceName: identityService,
     },
     moleculer: {
       opName: () => 'moleculer.call',
-      serviceName: identityService
+      serviceName: identityService,
     },
     http: {
       opName: () => 'http.request',
-      serviceName: httpPluginClientService
+      serviceName: httpPluginClientService,
     },
     fetch: {
       opName: () => 'http.request',
-      serviceName: httpPluginClientService
+      serviceName: httpPluginClientService,
     },
     http2: {
       opName: () => 'http.request',
-      serviceName: httpPluginClientService
+      serviceName: httpPluginClientService,
     },
     genai: {
       opName: () => 'google_genai.request',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
     },
     aws: {
       opName: () => 'aws.request',
-      serviceName: awsServiceV0
+      serviceName: awsServiceV0,
     },
     lambda: {
       opName: () => 'aws.request',
-      serviceName: awsServiceV0
+      serviceName: awsServiceV0,
     },
     undici: {
       opName: () => 'undici.request',
-      serviceName: httpPluginClientService
-    }
+      serviceName: httpPluginClientService,
+    },
   },
   server: {
     'apollo.gateway.request': {
       opName: () => 'apollo.gateway.request',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
     },
     'apollo.gateway.plan': {
       opName: () => 'apollo.gateway.plan',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
     },
     'apollo.gateway.validate': {
       opName: () => 'apollo.gateway.validate',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
     },
     'apollo.gateway.execute': {
       opName: () => 'apollo.gateway.execute',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
     },
     'apollo.gateway.fetch': {
       opName: () => 'apollo.gateway.fetch',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
     },
     'apollo.gateway.postprocessing': {
       opName: () => 'apollo.gateway.postprocessing',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService
+      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
     },
     grpc: {
       opName: () => 'grpc.server',
-      serviceName: identityService
+      serviceName: identityService,
     },
     moleculer: {
       opName: () => 'moleculer.action',
-      serviceName: identityService
+      serviceName: identityService,
     },
     http: {
       opName: () => 'web.request',
-      serviceName: identityService
+      serviceName: identityService,
     },
     http2: {
       opName: () => 'web.request',
-      serviceName: identityService
+      serviceName: identityService,
     },
     next: {
       opName: () => 'next.request',
-      serviceName: identityService
-    }
-  }
+      serviceName: identityService,
+    },
+  },
 }
 
 module.exports = web

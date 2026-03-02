@@ -9,6 +9,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
 describe('Plugin', () => {
   let aerospike
   let config
@@ -33,8 +34,8 @@ describe('Plugin', () => {
 
         config = {
           hosts: [
-            { addr: process.env.AEROSPIKE_HOST_ADDRESS ? process.env.AEROSPIKE_HOST_ADDRESS : '127.0.0.1', port: 3000 }
-          ]
+            { addr: process.env.AEROSPIKE_HOST_ADDRESS ? process.env.AEROSPIKE_HOST_ADDRESS : '127.0.0.1', port: 3000 },
+          ],
         }
         key = new aerospike.Key(ns, set, userKey)
         keyString = `${ns}:${set}:${userKey}`
@@ -79,8 +80,8 @@ describe('Plugin', () => {
                   'aerospike.namespace': ns,
                   'aerospike.setname': set,
                   'aerospike.userkey': userKey,
-                  component: 'aerospike'
-                }
+                  component: 'aerospike',
+                },
               })
               .then(done)
               .catch(done)
@@ -102,8 +103,8 @@ describe('Plugin', () => {
                 type: 'aerospike',
                 meta: {
                   'span.kind': 'client',
-                  component: 'aerospike'
-                }
+                  component: 'aerospike',
+                },
               })
               .then(done)
               .catch(done)
@@ -124,8 +125,8 @@ describe('Plugin', () => {
                   'aerospike.namespace': ns,
                   'aerospike.setname': set,
                   'aerospike.userkey': userKey,
-                  component: 'aerospike'
-                }
+                  component: 'aerospike',
+                },
               })
               .then(done)
               .catch(done)
@@ -149,8 +150,8 @@ describe('Plugin', () => {
                   'aerospike.namespace': ns,
                   'aerospike.setname': set,
                   'aerospike.userkey': userKey,
-                  component: 'aerospike'
-                }
+                  component: 'aerospike',
+                },
               })
               .then(done)
               .catch(done)
@@ -160,7 +161,7 @@ describe('Plugin', () => {
                 .then(() => {
                   const ops = [
                     aerospike.operations.incr('i', 1),
-                    aerospike.operations.read('i')
+                    aerospike.operations.read('i'),
                   ]
                   return client.operate(key, ops)
                 })
@@ -181,8 +182,8 @@ describe('Plugin', () => {
                   'aerospike.setname': 'demo',
                   'aerospike.bin': 'tags',
                   'aerospike.index': 'tags_idx',
-                  component: 'aerospike'
-                }
+                  component: 'aerospike',
+                },
               })
               .then(done)
               .catch(done)
@@ -194,7 +195,7 @@ describe('Plugin', () => {
                 bin: 'tags',
                 index: 'tags_idx',
                 type: aerospike.indexType.LIST,
-                datatype: aerospike.indexDataType.STRING
+                datatype: aerospike.indexDataType.STRING,
               }
               return client.createIndex(index)
                 .then(() => client.close(false))
@@ -212,8 +213,8 @@ describe('Plugin', () => {
                   'span.kind': 'client',
                   'aerospike.namespace': ns,
                   'aerospike.setname': set,
-                  component: 'aerospike'
-                }
+                  component: 'aerospike',
+                },
               })
               .then(done)
               .catch(done)
@@ -224,13 +225,13 @@ describe('Plugin', () => {
                 set: 'demo',
                 bin: 'tags',
                 index: 'tags_idx',
-                datatype: aerospike.indexDataType.STRING
+                datatype: aerospike.indexDataType.STRING,
               }
               client.createIndex(index, (error, job) => {
                 job.waitUntilDone((waitError) => {
                   const query = client.query(ns, 'demo')
                   const queryPolicy = {
-                    totalTimeout: 10000
+                    totalTimeout: 10000,
                   }
                   query.select('id', 'tags')
                   query.where(aerospike.filter.contains('tags', 'green', aerospike.indexType.LIST))
@@ -264,8 +265,8 @@ describe('Plugin', () => {
                     [ERROR_TYPE]: error.name,
                     [ERROR_MESSAGE]: error.message,
                     [ERROR_STACK]: error.stack,
-                    component: 'aerospike'
-                  }
+                    component: 'aerospike',
+                  },
                 })
               })
               .then(done)
@@ -277,7 +278,7 @@ describe('Plugin', () => {
                   .then(() => {
                     const ops = [
                       aerospike.operations.incr('i', 1),
-                      aerospike.operations.read('i')
+                      aerospike.operations.read('i'),
                     ]
 
                     return client.operate(key, ops)
@@ -312,7 +313,7 @@ describe('Plugin', () => {
           agent
             .assertFirstTraceSpan({
               name: expectedSchema.command.opName,
-              service: 'custom'
+              service: 'custom',
             })
             .then(done)
             .catch(done)
@@ -332,12 +333,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'aerospike.command',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'aerospike.command',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })

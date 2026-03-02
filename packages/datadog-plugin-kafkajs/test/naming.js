@@ -6,26 +6,26 @@ const rawExpectedSchema = {
   send: {
     v0: {
       opName: 'kafka.produce',
-      serviceName: 'test-kafka'
+      serviceName: 'test-kafka',
     },
     v1: {
       opName: 'kafka.send',
-      serviceName: 'test'
-    }
+      serviceName: 'test',
+    },
   },
   receive: {
     v0: {
       opName: 'kafka.consume',
-      serviceName: 'test-kafka'
+      serviceName: 'test-kafka',
     },
     v1: {
       opName: 'kafka.process',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

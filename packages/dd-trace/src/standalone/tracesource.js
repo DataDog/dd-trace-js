@@ -32,5 +32,5 @@ function hasTraceSourcePropagationTag (tags) {
 
 module.exports = {
   addTraceSourceTag,
-  hasTraceSourcePropagationTag
+  hasTraceSourcePropagationTag,
 }

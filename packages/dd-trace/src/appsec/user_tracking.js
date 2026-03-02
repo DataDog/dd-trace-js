@@ -2,11 +2,11 @@
 
 const crypto = require('crypto')
 const log = require('../log')
+const { keepTrace } = require('../priority_sampler')
+const { ASM } = require('../standalone/product')
 const telemetry = require('./telemetry')
 const addresses = require('./addresses')
-const { keepTrace } = require('../priority_sampler')
 const waf = require('./waf')
-const { ASM } = require('../standalone/product')
 
 // the RFC doesn't include '_id', but it's common in MongoDB
 const USER_ID_FIELDS = ['id', '_id', 'email', 'username', 'login', 'user']
@@ -88,7 +88,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
   let newTags
 
   const persistent = {
-    [addresses.USER_LOGIN]: login
+    [addresses.USER_LOGIN]: login,
   }
 
   const currentTags = rootSpan.context()._tags
@@ -103,7 +103,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
     newTags = {
       'appsec.events.users.login.success.track': 'true',
       '_dd.appsec.events.users.login.success.auto.mode': collectionMode,
-      '_dd.appsec.usr.login': login
+      '_dd.appsec.usr.login': login,
     }
 
     if (shouldSetTag('appsec.events.users.login.success.usr.login')) {
@@ -124,7 +124,7 @@ function trackLogin (framework, login, user, success, rootSpan) {
     newTags = {
       'appsec.events.users.login.failure.track': 'true',
       '_dd.appsec.events.users.login.failure.auto.mode': collectionMode,
-      '_dd.appsec.usr.login': login
+      '_dd.appsec.usr.login': login,
     }
 
     if (shouldSetTag('appsec.events.users.login.failure.usr.login')) {
@@ -172,13 +172,13 @@ function trackUser (user, rootSpan) {
   if (!isSdkCalled) {
     rootSpan.addTags({
       'usr.id': userId,
-      '_dd.appsec.user.collection_mode': collectionMode
+      '_dd.appsec.user.collection_mode': collectionMode,
     })
 
     return waf.run({
       persistent: {
-        [addresses.USER_ID]: userId
-      }
+        [addresses.USER_ID]: userId,
+      },
     })
   }
 }
@@ -186,5 +186,5 @@ function trackUser (user, rootSpan) {
 module.exports = {
   setCollectionMode,
   trackLogin,
-  trackUser
+  trackUser,
 }

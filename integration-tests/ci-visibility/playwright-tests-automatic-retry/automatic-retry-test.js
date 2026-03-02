@@ -11,7 +11,7 @@ test.describe('playwright', () => {
     const shouldFail = test.info().retry < 2
 
     await expect(page.locator('.hello-world')).toHaveText([
-      shouldFail ? 'Hello Warld' : 'Hello World'
+      shouldFail ? 'Hello Warld' : 'Hello World',
     ])
   })
 })

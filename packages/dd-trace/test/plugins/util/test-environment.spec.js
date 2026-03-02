@@ -1,16 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
-
-const { describe, it } = require('tap').mocha
 const fs = require('node:fs')
 const path = require('node:path')
+
+const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
 
 const cachedExecStub = sinon.stub().returns('')
@@ -21,18 +19,18 @@ const {
   CI_NODE_LABELS,
   GIT_PULL_REQUEST_BASE_BRANCH,
   GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
-  GIT_COMMIT_HEAD_SHA
+  GIT_COMMIT_HEAD_SHA,
 } = require('../../../src/plugins/util/tags')
 
 const { getGitMetadata } = proxyquire('../../../src/plugins/util/git', {
   './git-cache': {
-    cachedExec: cachedExecStub
-  }
+    cachedExec: cachedExecStub,
+  },
 })
 const { getTestEnvironmentMetadata } = proxyquire('../../../src/plugins/util/test', {
   './git': {
-    getGitMetadata
-  }
+    getGitMetadata,
+  },
 })
 
 describe('test environment data', () => {
@@ -59,17 +57,17 @@ describe('test environment data', () => {
         const {
           [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
           [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,
-          [GIT_COMMIT_HEAD_SHA]: headCommitSha
+          [GIT_COMMIT_HEAD_SHA]: headCommitSha,
         } = getTestEnvironmentMetadata()
 
         assert.deepStrictEqual({
           pullRequestBaseBranch,
           pullRequestBaseBranchHeadSha,
-          headCommitSha
+          headCommitSha,
         }, {
           pullRequestBaseBranch: 'datadog:main',
           pullRequestBaseBranchHeadSha: '52e0974c74d41160a03d59ddc73bb9f5adab054b',
-          headCommitSha: 'df289512a51123083a8e6931dd6f57bb3883d4c4'
+          headCommitSha: 'df289512a51123083a8e6931dd6f57bb3883d4c4',
         })
       })
       it('does not crash if GITHUB_EVENT_PATH is not a valid JSON file', () => {
@@ -79,7 +77,7 @@ describe('test environment data', () => {
         const {
           [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
           [GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA]: pullRequestBaseBranchHeadSha,
-          [GIT_COMMIT_HEAD_SHA]: headCommitSha
+          [GIT_COMMIT_HEAD_SHA]: headCommitSha,
         } = getTestEnvironmentMetadata()
 
         assert.strictEqual(pullRequestBaseBranch, 'datadog:main')
@@ -99,14 +97,16 @@ describe('test environment data', () => {
           ...restOfExpectedTags
         } = expectedSpanTags
 
-        expect(restOfTags, testCaseName ? `${testCaseName} has failed.` : undefined).to.contain(restOfExpectedTags)
-        // `CI_ENV_VARS` key contains a dictionary, so we do a `eql` comparison
+        const msg = testCaseName ?? `${testCaseName} Failed`
+
+        assertObjectContains(restOfTags, restOfExpectedTags, msg)
+        // `CI_ENV_VARS` key contains a dictionary
         if (envVars && expectedEnvVars) {
-          assert.deepStrictEqual(JSON.parse(envVars), JSON.parse(expectedEnvVars))
+          assert.deepStrictEqual(JSON.parse(envVars), JSON.parse(expectedEnvVars), msg)
         }
-        // `CI_NODE_LABELS` key contains an array, so we do a `to.have.same.members` comparison
+        // `CI_NODE_LABELS` key contains an array
         if (nodeLabels && expectedNodeLabels) {
-          expect(JSON.parse(nodeLabels)).to.have.same.members(JSON.parse(expectedNodeLabels))
+          assertObjectContains(JSON.parse(nodeLabels).sort(), JSON.parse(expectedNodeLabels).sort(), msg)
         }
       })
     })

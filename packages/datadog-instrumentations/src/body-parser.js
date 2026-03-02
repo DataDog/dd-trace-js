@@ -23,7 +23,7 @@ function publishRequestBodyAndNext (req, res, next) {
 addHook({
   name: 'body-parser',
   file: 'lib/read.js',
-  versions: ['>=1.4.0 <1.20.0']
+  versions: ['>=1.4.0 <1.20.0'],
 }, read => {
   return shimmer.wrapFunction(read, read => function (req, res, next) {
     const nextResource = new AsyncResource('bound-anonymous-fn')
@@ -35,7 +35,7 @@ addHook({
 addHook({
   name: 'body-parser',
   file: 'lib/read.js',
-  versions: ['>=1.20.0']
+  versions: ['>=1.20.0'],
 }, read => {
   return shimmer.wrapFunction(read, read => function (req, res, next) {
     arguments[2] = publishRequestBodyAndNext(req, res, next)

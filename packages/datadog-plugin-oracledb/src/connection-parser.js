@@ -28,7 +28,7 @@ module.exports = function getDBInformation (connAttrs) {
     return {
       hostname: url.hostname || 'localhost', // Default Oracle hostname
       port: url.port || '1521', // Default Oracle port
-      dbInstance: url.pathname && url.pathname.slice(1) || 'XEPDB1' // Default Oracle service name
+      dbInstance: url.pathname && url.pathname.slice(1) || 'XEPDB1', // Default Oracle service name
     }
   } catch (error) {
     log.error('Invalid oracle connection string', error)

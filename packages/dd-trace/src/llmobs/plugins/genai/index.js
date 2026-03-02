@@ -9,12 +9,12 @@ const {
   formatInputMessages,
   formatEmbeddingInput,
   formatOutputMessages,
-  formatEmbeddingOutput
+  formatEmbeddingOutput,
 } = require('./util')
 
 class GenAiLLMObsPlugin extends LLMObsPlugin {
   static id = 'google-genai'
-  static integration = 'genai'
+  static integration = 'google_genai'
   static prefix = 'tracing:apm:google:genai:request'
 
   constructor () {
@@ -44,7 +44,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
       modelProvider: 'google',
       modelName: inputs.model,
       kind: operation,
-      name: 'google_genai.request'
+      name: 'google_genai.request',
     }
   }
 

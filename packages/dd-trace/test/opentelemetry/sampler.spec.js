@@ -1,10 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it } = require('tap').mocha
+
+const { describe, it } = require('mocha')
 
 require('../setup/core')
-
 const Sampler = require('../../src/opentelemetry/sampler')
 
 describe('OTel Sampler', () => {
@@ -12,7 +12,7 @@ describe('OTel Sampler', () => {
     const sampler = new Sampler()
 
     assert.deepStrictEqual(sampler.shouldSample(), {
-      decision: 2
+      decision: 2,
     })
   })
 

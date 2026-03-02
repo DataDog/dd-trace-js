@@ -1,14 +1,14 @@
 'use strict'
 
 const {
-  ENCODER_VERSION
+  ENCODER_VERSION,
 } = process.env
 
 const { AgentEncoder } = require(`../../../packages/dd-trace/src/encode/${ENCODER_VERSION}`)
 const id = require('../../../packages/dd-trace/src/id')
 
 const writer = {
-  flush: () => {}
+  flush: () => {},
 }
 
 function createSpan (parent) {
@@ -25,13 +25,13 @@ function createSpan (parent) {
     meta: {
       a: 'b',
       hello: 'world',
-      and: 'this is a longer string, just because we want to test some longer strongs, got it? okay'
+      and: 'this is a longer string, just because we want to test some longer strongs, got it? okay',
     },
     metrics: {
       b: 45,
       something: 98764389,
-      afloaty: 203987465.756754
-    }
+      afloaty: 203987465.756754,
+    },
   }
 }
 

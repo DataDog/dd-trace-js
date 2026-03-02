@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { describe, it, beforeEach } = require('tap').mocha
+
+const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
 
@@ -29,14 +30,14 @@ describe('tagger', () => {
       foo: 'bar',
       baz: 'qux',
       undefined,
-      null: null
+      null: null,
     }
 
     const parsed = tagger.parse(tags)
 
     assert.deepStrictEqual(parsed, {
       foo: 'bar',
-      baz: 'qux'
+      baz: 'qux',
     })
   })
 
@@ -46,7 +47,7 @@ describe('tagger', () => {
 
     assert.deepStrictEqual(parsed, {
       foo: 'bar',
-      baz: 'qux'
+      baz: 'qux',
     })
   })
 
@@ -56,7 +57,7 @@ describe('tagger', () => {
 
     assert.deepStrictEqual(parsed, {
       foo: 'bar',
-      baz: 'qux'
+      baz: 'qux',
     })
   })
 
@@ -65,7 +66,7 @@ describe('tagger', () => {
     const parsed = tagger.parse(tags)
 
     assert.deepStrictEqual(parsed, {
-      foo: 'bar:baz'
+      foo: 'bar:baz',
     })
   })
 
@@ -96,7 +97,7 @@ describe('tagger', () => {
 
     assert.deepStrictEqual(parsed, {
       foo: 'bar',
-      fruit: 'banana'
+      fruit: 'banana',
     })
   })
 })

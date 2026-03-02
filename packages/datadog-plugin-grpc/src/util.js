@@ -14,7 +14,7 @@ module.exports = {
       kind,
       name: '',
       service: '',
-      package: ''
+      package: '',
     }
 
     if (typeof path !== 'string') return tags
@@ -62,5 +62,5 @@ module.exports = {
     }
 
     return getEmptyObject
-  }
+  },
 }

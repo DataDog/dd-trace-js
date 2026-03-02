@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 
-const { expect } = require('chai')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
@@ -30,7 +29,7 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
 
       if (statusCode !== 200) {
         body = '{}'
-      } if (stream) {
+      } else if (stream) {
         body = fs.createReadStream(path.join(__dirname, 'resources', `${scenario}.txt`))
       } else {
         const contents = require(`./resources/${scenario}.json`)
@@ -40,8 +39,8 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
       return new Response(body, {
         status: statusCode,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
     }
   })
@@ -77,7 +76,7 @@ describe('Plugin', () => {
 
         const client = new VertexAI({
           project: 'datadog-sandbox',
-          location: 'us-central1'
+          location: 'us-central1',
         })
 
         model = client.getGenerativeModel({
@@ -85,8 +84,8 @@ describe('Plugin', () => {
           systemInstruction: 'Please provide an answer',
           generationConfig: {
             maxOutputTokens: 50,
-            temperature: 1.0
-          }
+            temperature: 1.0,
+          },
         })
       })
 
@@ -110,7 +109,7 @@ describe('Plugin', () => {
           })
 
           const { response } = await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }]
+            contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }],
           })
           assert.ok(Object.hasOwn(response, 'candidates'))
 
@@ -163,7 +162,7 @@ describe('Plugin', () => {
           const { stream, response } = await model.generateContentStream('Hello, how are you?')
 
           // check that response is a promise
-          expect(response).to.be.a('promise')
+          assert.ok(response && typeof response.then === 'function')
 
           const promState = await promiseState(response)
           assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise
@@ -197,8 +196,8 @@ describe('Plugin', () => {
             const chat = model.startChat({
               history: [
                 { role: 'user', parts: [{ text: 'Foobar?' }] },
-                { role: 'model', parts: [{ text: 'Foobar!' }] }
-              ]
+                { role: 'model', parts: [{ text: 'Foobar!' }] },
+              ],
             })
             const { response } = await chat.sendMessage([{ text: 'Hello, how are you?' }])
 
@@ -252,7 +251,7 @@ describe('Plugin', () => {
             const { stream, response } = await chat.sendMessageStream('Hello, how are you?')
 
             // check that response is a promise
-            expect(response).to.be.a('promise')
+            assert.ok(response && typeof response.then === 'function')
 
             const promState = await promiseState(response)
             assert.strictEqual(promState, 'pending') // we shouldn't have consumed the promise

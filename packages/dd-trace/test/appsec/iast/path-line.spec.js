@@ -4,10 +4,8 @@ const assert = require('node:assert/strict')
 const os = require('os')
 const path = require('path')
 
-const { expect } = require('chai')
 const proxyquire = require('proxyquire')
 
-const { getCallsiteFrames } = require('../../../src/appsec/stack_trace')
 class CallSiteMock {
   constructor (fileName, lineNumber, columnNumber = 0) {
     this.file = fileName
@@ -27,10 +25,12 @@ describe('path-line', function () {
   const firstSep = tmpdir.indexOf(path.sep)
   const rootPath = tmpdir.slice(0, firstSep + 1)
 
-  const DIAGNOSTICS_CHANNEL_PATHS = [
+  const EXCLUDED_TEST_PATHS = [
     path.join(rootPath, 'path', 'node_modules', 'dc-polyfill'),
     'node:diagnostics_channel',
-    'diagnostics_channel'
+    'node:fs',
+    'node:events',
+    'node:internal/async_local_storage',
   ]
   let mockPath, pathLine, mockProcess
 
@@ -39,24 +39,24 @@ describe('path-line', function () {
     mockProcess = {}
     pathLine = proxyquire('../../../src/appsec/iast/path-line', {
       path: mockPath,
-      process: mockProcess
+      process: mockProcess,
     })
   })
 
-  describe('getNonDDCallSiteFrames', () => {
+  describe('getCallSiteFramesForLocation', () => {
     describe('does not fail', () => {
       it('with null parameter', () => {
-        const result = pathLine.getNonDDCallSiteFrames(null)
+        const result = pathLine.getCallSiteFramesForLocation(null)
         assert.deepStrictEqual(result, [])
       })
 
       it('with empty list parameter', () => {
-        const result = pathLine.getNonDDCallSiteFrames([])
+        const result = pathLine.getCallSiteFramesForLocation([])
         assert.deepStrictEqual(result, [])
       })
 
       it('without parameter', () => {
-        const result = pathLine.getNonDDCallSiteFrames()
+        const result = pathLine.getCallSiteFramesForLocation()
         assert.deepStrictEqual(result, [])
       })
     })
@@ -82,7 +82,7 @@ describe('path-line', function () {
         const callsites = []
         const expectedFilePaths = [
           path.join('first', 'file', 'out', 'of', 'dd.js'),
-          path.join('second', 'file', 'out', 'of', 'dd.js')
+          path.join('second', 'file', 'out', 'of', 'dd.js'),
         ]
         const firstFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[0])
         const secondFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[1])
@@ -92,7 +92,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
         callsites.push(new CallSiteMock(secondFileOutOfDD, 20, 15))
 
-        const results = pathLine.getNonDDCallSiteFrames(callsites)
+        const results = pathLine.getCallSiteFramesForLocation(callsites)
 
         assert.strictEqual(results.length, 2)
 
@@ -105,17 +105,19 @@ describe('path-line', function () {
         assert.strictEqual(results[1].column, 15)
       })
 
-      it('should return an empty array when all stack frames are in dd trace', () => {
+      it('should fallback to all processed frames when all stack frames are in dd trace', () => {
         const callsites = []
         callsites.push(new CallSiteMock(PATH_AND_LINE_PATH, PATH_AND_LINE_LINE))
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'other', 'file', 'in', 'dd.js'), 89))
         callsites.push(new CallSiteMock(path.join(DD_BASE_PATH, 'another', 'file', 'in', 'dd.js'), 5))
 
-        const results = pathLine.getNonDDCallSiteFrames(callsites)
-        assert.deepStrictEqual(results, [])
+        const results = pathLine.getCallSiteFramesForLocation(callsites)
+
+        assert.strictEqual(results.length, 3)
+        assert.ok(results.every(r => r.path && typeof r.isInternal === 'boolean'))
       })
 
-      DIAGNOSTICS_CHANNEL_PATHS.forEach((dcPath) => {
+      EXCLUDED_TEST_PATHS.forEach((dcPath) => {
         it(`should exclude ${dcPath} from the results`, () => {
           const callsites = []
           const expectedFilePath = path.join('first', 'file', 'out', 'of', 'dd.js')
@@ -126,7 +128,7 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(dcPath, 25))
           callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
 
-          const results = pathLine.getNonDDCallSiteFrames(callsites)
+          const results = pathLine.getCallSiteFramesForLocation(callsites)
           assert.strictEqual(results.length, 1)
 
           assert.strictEqual(results[0].path, expectedFilePath)
@@ -158,7 +160,7 @@ describe('path-line', function () {
         const callsites = []
         const expectedFilePaths = [
           path.join('first', 'file', 'out', 'of', 'dd.js'),
-          path.join('second', 'file', 'out', 'of', 'dd.js')
+          path.join('second', 'file', 'out', 'of', 'dd.js'),
         ]
         const firstFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[0])
         const secondFileOutOfDD = path.join(PROJECT_PATH, expectedFilePaths[1])
@@ -168,7 +170,7 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
         callsites.push(new CallSiteMock(secondFileOutOfDD, 20, 15))
 
-        const results = pathLine.getNonDDCallSiteFrames(callsites)
+        const results = pathLine.getCallSiteFramesForLocation(callsites)
         assert.strictEqual(results.length, 2)
 
         assert.strictEqual(results[0].path, expectedFilePaths[0])
@@ -197,10 +199,10 @@ describe('path-line', function () {
                 return {
                   path: path.join(line % 2 ? DD_BASE_PATH : PROJECT_PATH, 'file.js'),
                   line,
-                  column
+                  column,
                 }
-              }
-            }
+              },
+            },
           })
 
           previousDDBasePath = pathLine.ddBasePath
@@ -231,7 +233,7 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 3))
           callsites.push(new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 4, 71))
 
-          const results = pathLine.getNonDDCallSiteFrames(callsites)
+          const results = pathLine.getCallSiteFramesForLocation(callsites)
           assert.strictEqual(results.length, 2)
 
           assert.strictEqual(results[0].path, 'file.js')
@@ -276,7 +278,7 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(path.join(OUT_BUILD_PATH, bundleOutFile), 3, 14))
           callsites.push(new CallSiteMock(path.join(OUT_BUILD_PATH, bundleOutFile), 2, 71))
 
-          const results = pathLine.getNonDDCallSiteFrames(callsites)
+          const results = pathLine.getCallSiteFramesForLocation(callsites)
           assert.strictEqual(results.length, 4)
 
           assert.strictEqual(results[0].path, bundleOutFile)
@@ -298,35 +300,12 @@ describe('path-line', function () {
   })
 
   describe('getNodeModulesPaths', () => {
-    function getCallSiteInfo () {
-      const previousPrepareStackTrace = Error.prepareStackTrace
-      const previousStackTraceLimit = Error.stackTraceLimit
-      let callsiteList
-      Error.stackTraceLimit = 100
-      Error.prepareStackTrace = function (_, callsites) {
-        callsiteList = callsites
-      }
-      const e = new Error()
-      e.stack
-      Error.prepareStackTrace = previousPrepareStackTrace
-      Error.stackTraceLimit = previousStackTraceLimit
-
-      return callsiteList
-    }
-
     it('should handle windows paths correctly', () => {
-      const basePath = pathLine.ddBasePath
-      pathLine.ddBasePath = path.join('test', 'base', 'path')
-
-      const list = getCallsiteFrames(32, getCallSiteInfo, getCallSiteInfo)
-      const firstNonDDPath = pathLine.getNonDDCallSiteFrames(list)[0]
-
-      const expectedPath = path.join('node_modules', firstNonDDPath.path)
-      const nodeModulesPaths = pathLine.getNodeModulesPaths(firstNonDDPath.path)
+      const testPath = 'some/nested/path/file.js'
+      const expectedPath = path.join('node_modules', 'some', 'nested', 'path', 'file.js')
+      const nodeModulesPaths = pathLine.getNodeModulesPaths(testPath)
 
       assert.strictEqual(nodeModulesPaths[0], expectedPath)
-
-      pathLine.ddBasePath = basePath
     })
 
     it('should convert / to \\ in windows platforms', () => {
@@ -341,7 +320,7 @@ describe('path-line', function () {
       const paths = pathLine.getNodeModulesPaths('/this/is/a/path', '/another/path')
 
       assert.strictEqual(paths.length, 2)
-      expect(paths[0].startsWith('node_modules')).to.true
+      assert.strictEqual(paths[0].startsWith('node_modules'), true)
     })
   })
 })

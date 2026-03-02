@@ -34,7 +34,7 @@ ndjsons.forEach(n => {
 fs.writeFileSync('all-sirun-output.ndjson', jsons.join('\n'))
 
 const buildData = {
-  byVersion: true
+  byVersion: true,
 }
 for (const version in versionResults) {
   buildData[version] = {}

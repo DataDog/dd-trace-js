@@ -5,10 +5,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const visitor_1 = require("graphql/language/visitor");
-const printer_1 = require("graphql/language/printer");
-const utilities_1 = require("graphql/utilities");
-const lodash_sortby_1 = __importDefault(require("lodash.sortby"));
+const ddGlobal = globalThis[Symbol.for('dd-trace')];
+const visitor_1 = ddGlobal.graphql_visitor;
+const printer_1 = ddGlobal.graphql_printer;
+const utilities_1 = ddGlobal.graphql_utilities;
+const lodash_sortby_1 = __importDefault(require("../../../../vendor/dist/lodash.sortby"));
 function hideLiterals(ast) {
     return visitor_1.visit(ast, {
         IntValue(node) {

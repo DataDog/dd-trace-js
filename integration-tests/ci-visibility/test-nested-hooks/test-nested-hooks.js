@@ -1,7 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
-
+const assert = require('assert')
 let globalAttempts = 0
 
 describe('describe', function () {
@@ -21,7 +20,7 @@ describe('describe', function () {
     // eslint-disable-next-line no-console
     console.log('is not nested')
     try {
-      expect(process.env.SHOULD_FAIL ? globalAttempts++ : 1).to.equal(1)
+      assert.strictEqual(process.env.SHOULD_FAIL ? globalAttempts++ : 1, 1)
       done()
     } catch (error) {
       done(error)
@@ -42,7 +41,7 @@ describe('describe', function () {
     it('nested test with retries', function () {
       // eslint-disable-next-line no-console
       console.log('nested test with retries')
-      expect(0).to.equal(0)
+      assert.strictEqual(0, 0)
     })
   })
 })

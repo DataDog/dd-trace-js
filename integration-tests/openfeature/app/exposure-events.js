@@ -5,7 +5,7 @@ tracer.init({
   flushInterval: 1,
   service: 'ffe-test-service',
   version: '1.2.3',
-  env: 'test'
+  env: 'test',
 })
 const express = require('express')
 const { channel } = require('dc-polyfill')
@@ -35,21 +35,21 @@ app.get('/evaluate-flags', async (req, res) => {
     const booleanResult = await client.getBooleanValue('test-boolean-flag', false, {
       targetingKey: 'test-user-123',
       user: 'test-user-123',
-      plan: 'premium'
+      plan: 'premium',
     })
 
     const stringResult = await client.getStringValue('test-string-flag', 'default', {
       targetingKey: 'test-user-456',
       user: 'test-user-456',
-      tier: 'enterprise'
+      tier: 'enterprise',
     })
 
     res.json({
       results: {
         boolean: booleanResult,
-        string: stringResult
+        string: stringResult,
       },
-      evaluationsCompleted: 2
+      evaluationsCompleted: 2,
     })
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -67,14 +67,14 @@ app.get('/evaluate-multiple-flags', async (req, res) => {
     const users = [
       { id: 'user-1', attributes: { plan: 'basic' } },
       { id: 'user-2', attributes: { plan: 'premium' } },
-      { id: 'user-3', attributes: { plan: 'enterprise', tier: 'gold' } }
+      { id: 'user-3', attributes: { plan: 'enterprise', tier: 'gold' } },
     ]
 
     for (const user of users) {
       const context = {
         targetingKey: user.id,
         user: user.id,
-        ...user.attributes
+        ...user.attributes,
       }
 
       const boolResult = await client.getBooleanValue('test-boolean-flag', false, context)
@@ -83,13 +83,13 @@ app.get('/evaluate-multiple-flags', async (req, res) => {
       results.push({
         user: user.id,
         boolean: boolResult,
-        string: stringResult
+        string: stringResult,
       })
     }
 
     res.json({
       results,
-      evaluationsCompleted: users.length * 2
+      evaluationsCompleted: users.length * 2,
     })
   } catch (error) {
     res.status(500).json({ error: error.message })

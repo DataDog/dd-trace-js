@@ -9,11 +9,11 @@ test.beforeEach(async ({ page }) => {
 test.describe('playwright', () => {
   test('should have RUM active', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
     await page.goto(`${process.env.PW_BASE_URL}/another-page`)
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

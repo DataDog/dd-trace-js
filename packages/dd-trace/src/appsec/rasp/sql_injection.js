@@ -4,7 +4,7 @@ const {
   pgQueryStart,
   pgPoolQueryStart,
   wafRunFinished,
-  mysql2OuterQueryStart
+  mysql2OuterQueryStart,
 } = require('../channels')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
@@ -69,7 +69,7 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
 
   const ephemeral = {
     [addresses.DB_STATEMENT]: query,
-    [addresses.DB_SYSTEM]: dbSystem
+    [addresses.DB_SYSTEM]: dbSystem,
   }
 
   const raspRule = { type: RULE_TYPES.SQL_INJECTION }

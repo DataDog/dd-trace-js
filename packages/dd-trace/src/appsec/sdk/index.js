@@ -1,14 +1,14 @@
 'use strict'
 
+const { setTemplates } = require('../blocking')
 const {
   trackUserLoginSuccessEvent,
   trackUserLoginFailureEvent,
   trackCustomEvent,
   trackUserLoginSuccessV2,
-  trackUserLoginFailureV2
+  trackUserLoginFailureV2,
 } = require('./track_event')
 const { checkUserAndSetUser, blockRequest } = require('./user_blocking')
-const { setTemplates } = require('../blocking')
 const { setUser } = require('./set_user')
 
 class EventTrackingV2 {

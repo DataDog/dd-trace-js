@@ -48,7 +48,7 @@ class ChildProcessPlugin extends TracingPlugin {
 
     const meta = {
       component: 'subprocess',
-      [property]: (shell === true) ? cmdFields.join(' ') : JSON.stringify(cmdFields)
+      [property]: (shell === true) ? cmdFields.join(' ') : JSON.stringify(cmdFields),
     }
 
     if (truncated) {
@@ -59,7 +59,7 @@ class ChildProcessPlugin extends TracingPlugin {
       service: this.config.service || this._tracerConfig.service,
       resource: (shell === true) ? 'sh' : cmdFields[0],
       type: 'system',
-      meta
+      meta,
     }, ctx)
 
     return ctx.currentStore

@@ -20,6 +20,6 @@ if (!Array.prototype.at) {
       return (index < 0 || index >= len) ? undefined : this[index]
     },
     writable: true,
-    configurable: true
+    configurable: true,
   })
 }

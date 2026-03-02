@@ -1,9 +1,9 @@
 'use strict'
 
-const { getRootSpan } = require('./utils')
 const log = require('../../log')
 const waf = require('../waf')
 const addresses = require('../addresses')
+const { getRootSpan } = require('./utils')
 
 function setUserTags (user, rootSpan) {
   for (const k of Object.keys(user)) {
@@ -28,7 +28,7 @@ function setUser (tracer, user) {
   setUserTags(user, rootSpan)
 
   const persistent = {
-    [addresses.USER_ID]: String(user.id)
+    [addresses.USER_ID]: String(user.id),
   }
 
   if (user.session_id && typeof user.session_id === 'string') {
@@ -40,5 +40,5 @@ function setUser (tracer, user) {
 
 module.exports = {
   setUserTags,
-  setUser
+  setUser,
 }

@@ -14,7 +14,7 @@ export async function POST (request) {
       'custom-response-header-7': 'custom-response-header-value-7',
       'custom-response-header-8': 'custom-response-header-value-8',
       'custom-response-header-9': 'custom-response-header-value-9',
-      'custom-response-header-10': 'custom-response-header-value-10'
-    }
+      'custom-response-header-10': 'custom-response-header-value-10',
+    },
   })
 }

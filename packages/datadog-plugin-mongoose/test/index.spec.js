@@ -8,6 +8,7 @@ const semver = require('semver')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 
 describe('Plugin', () => {
   let tracer
@@ -22,13 +23,14 @@ describe('Plugin', () => {
       // to the queue.
       function connect (mongooseVersion) {
         const connectOptions = {
-          bufferCommands: false
+          bufferCommands: false,
         }
 
-        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 5
-        if (semver.lt(mongooseVersion, '5.0.0')) {
+        // useNewUrlParser and useUnifiedTopology are not supported in mongoose >= 6
+        if (semver.lt(mongooseVersion, '6.0.0')) {
           connectOptions.useNewUrlParser = true
           connectOptions.useUnifiedTopology = true
+          connectOptions.useMongoClient = true
         }
 
         // mongoose.connect('mongodb://username:password@host:port/database?options...');
@@ -107,6 +109,9 @@ describe('Plugin', () => {
           const span = {}
 
           tracer.scope().activate(span, () => {
+            temporaryWarningExceptions.add(
+              'The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.'
+            )
             Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec(() => {
               try {
                 assert.strictEqual(tracer.scope().active(), span)

@@ -1,7 +1,7 @@
 'use strict'
 
 const { readFileSync } = require('fs')
-const { parse } = require('jest-docblock')
+const { parse } = require('../../../vendor/dist/jest-docblock')
 
 const { getTestSuitePath } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
@@ -162,8 +162,14 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
     skippedSuites,
     suitesToRun,
     hasUnskippableSuites,
-    hasForcedToRunSuites
+    hasForcedToRunSuites,
   }
 }
 
-module.exports = { getFormattedJestTestParameters, getJestTestName, getJestSuitesToRun, isMarkedAsUnskippable }
+module.exports = {
+  SEED_SUFFIX_RE,
+  getFormattedJestTestParameters,
+  getJestTestName,
+  getJestSuitesToRun,
+  isMarkedAsUnskippable,
+}

@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -11,16 +10,16 @@ const sinon = require('sinon')
 const constants = require('../../../../src/appsec/iast/taint-tracking/constants')
 const iastEnabledConfig = {
   iast: {
-    enabled: true
-  }
+    enabled: true,
+  },
 }
 
 describe('IAST Rewriter', () => {
   it('Addon should return a rewritter instance', () => {
     let rewriter = null
-    expect(() => {
+    assert.doesNotThrow(() => {
       rewriter = require('@datadog/wasm-js-rewriter')
-    }).to.not.throw(Error)
+    }, Error)
     assert.notStrictEqual(rewriter, null)
   })
 
@@ -33,35 +32,35 @@ describe('IAST Rewriter', () => {
         return {
           content: content + 'rewritten',
           metrics: {
-            instrumentedPropagation: 2
-          }
+            instrumentedPropagation: 2,
+          },
         }
       }
     }
 
     beforeEach(() => {
       iastTelemetry = {
-        add: sinon.spy()
+        add: sinon.spy(),
       }
 
       shimmer = {
         wrap: sinon.spy(),
-        unwrap: sinon.spy()
+        unwrap: sinon.spy(),
       }
 
       Module = {
-        register: sinon.stub()
+        register: sinon.stub(),
       }
 
       cacheRewrittenSourceMap = sinon.stub()
 
       log = {
-        error: sinon.stub()
+        error: sinon.stub(),
       }
 
       const kSymbolPrepareStackTrace = Symbol('kTestSymbolPrepareStackTrace')
       rewriterTelemetry = {
-        incrementTelemetryIfNeeded: sinon.stub()
+        incrementTelemetryIfNeeded: sinon.stub(),
       }
 
       workerThreads = require('worker_threads')
@@ -88,22 +87,22 @@ describe('IAST Rewriter', () => {
             }
 
             Object.defineProperty(testWrap, kSymbolPrepareStackTrace, {
-              value: true
+              value: true,
             })
             return testWrap
           },
           kSymbolPrepareStackTrace,
-          cacheRewrittenSourceMap
+          cacheRewrittenSourceMap,
         },
         '@datadog/wasm-js-rewriter/js/source-map': {
-          cacheRewrittenSourceMap
+          cacheRewrittenSourceMap,
         },
         '../../../../../datadog-shimmer': shimmer,
         '../../telemetry': iastTelemetry,
         module: Module,
         '../../../log': log,
         './rewriter-telemetry': rewriterTelemetry,
-        worker_threads: workerThreads
+        worker_threads: workerThreads,
       })
     })
 
@@ -115,7 +114,7 @@ describe('IAST Rewriter', () => {
     it('Should wrap module compile method on taint tracking enable', () => {
       rewriter.enable(iastEnabledConfig)
       sinon.assert.calledOnce(shimmer.wrap)
-      expect(shimmer.wrap.getCall(0).args[1]).eq('_compile')
+      assert.strictEqual(shimmer.wrap.getCall(0).args[1], '_compile')
 
       rewriter.disable()
     })
@@ -145,7 +144,7 @@ describe('IAST Rewriter', () => {
 
       rewriter.disable()
 
-      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, testPrepareStackTrace)
 
       Error.prepareStackTrace = orig
     })
@@ -160,7 +159,7 @@ describe('IAST Rewriter', () => {
 
       rewriter.disable()
 
-      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, testPrepareStackTrace)
 
       Error.prepareStackTrace = orig
     })
@@ -180,7 +179,7 @@ describe('IAST Rewriter', () => {
 
       rewriter.disable()
 
-      expect(Error.prepareStackTrace).to.be.eq(testPrepareStackTrace)
+      assert.strictEqual(Error.prepareStackTrace, testPrepareStackTrace)
 
       Error.prepareStackTrace = orig
     })
@@ -204,7 +203,7 @@ describe('IAST Rewriter', () => {
       it('Should not enable esm rewriter when ESM is not instrumented', () => {
         rewriter.enable(iastEnabledConfig)
 
-        expect(Module.register).not.to.be.called
+        sinon.assert.notCalled(Module.register)
       })
 
       it('Should enable esm rewriter when ESM is configured with --loader exec arg', () => {
@@ -269,15 +268,15 @@ describe('IAST Rewriter', () => {
           const data = {
             rewritten: {
               metrics: { status: 'modified' },
-              content
+              content,
             },
-            url: 'file://file.js'
+            url: 'file://file.js',
           }
 
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(cacheRewrittenSourceMap).to.be.calledOnceWith('file.js', content)
+            sinon.assert.calledOnceWithExactly(cacheRewrittenSourceMap, 'file.js', content)
 
             done()
           })
@@ -289,15 +288,15 @@ describe('IAST Rewriter', () => {
           const data = {
             rewritten: {
               metrics,
-              content
+              content,
             },
-            url: 'file://file.js'
+            url: 'file://file.js',
           }
 
           port.postMessage({ type: constants.REWRITTEN_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(rewriterTelemetry.incrementTelemetryIfNeeded).to.be.calledOnceWith(metrics)
+            sinon.assert.calledOnceWithExactly(rewriterTelemetry.incrementTelemetryIfNeeded, metrics)
 
             done()
           })
@@ -311,9 +310,9 @@ describe('IAST Rewriter', () => {
             rewritten: {
               metrics,
               content,
-              literalsResult
+              literalsResult,
             },
-            url: 'file://file.js'
+            url: 'file://file.js',
           }
           const hardcodedSecretCh = dc.channel('datadog:secrets:result')
 
@@ -333,19 +332,19 @@ describe('IAST Rewriter', () => {
           const messages = ['this is a %s', 'test']
           const data = {
             level: 'error',
-            messages
+            messages,
           }
 
           port.postMessage({ type: constants.LOG_MESSAGE, data })
 
           waitUntilCheckSuccess(() => {
-            expect(log.error).to.be.calledOnceWith(...messages)
+            sinon.assert.calledOnceWithExactly(log.error, ...messages)
             done()
           })
         })
 
         it('should call port1.on before port1.unref', () => {
-          expect(port1On).to.be.calledBefore(port1Unref)
+          assert.strictEqual(port1On.calledBefore(port1Unref), true)
         })
       })
     })
@@ -358,8 +357,8 @@ describe('IAST Rewriter', () => {
       getOriginalPathAndLineFromSourceMap = sinon.spy()
       rewriter = proxyquire('../../../../src/appsec/iast/taint-tracking/rewriter', {
         '@datadog/wasm-js-rewriter': {
-          getOriginalPathAndLineFromSourceMap
-        }
+          getOriginalPathAndLineFromSourceMap,
+        },
       })
       argvs = [...process.execArgv].filter(arg => arg !== '--enable-source-maps')
     })
@@ -377,7 +376,7 @@ describe('IAST Rewriter', () => {
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
 
-      expect(getOriginalPathAndLineFromSourceMap).to.be.calledOnceWithExactly('test', 42, 4)
+      sinon.assert.calledOnceWithExactly(getOriginalPathAndLineFromSourceMap, 'test', 42, 4)
     })
 
     it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps is present', () => {
@@ -388,7 +387,7 @@ describe('IAST Rewriter', () => {
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
 
-      expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
+      sinon.assert.notCalled(getOriginalPathAndLineFromSourceMap)
     })
 
     it('should not call native getOriginalPathAndLineFromSourceMap if --enable-source-maps as NODE_OPTION', () => {
@@ -405,7 +404,7 @@ describe('IAST Rewriter', () => {
       const location = { path: 'test', line: 42, column: 4 }
       rewriter.getOriginalPathAndLineFromSourceMap(location)
 
-      expect(getOriginalPathAndLineFromSourceMap).to.not.be.called
+      sinon.assert.notCalled(getOriginalPathAndLineFromSourceMap)
 
       process.env.NODE_OPTIONS = origNodeOptions
     })

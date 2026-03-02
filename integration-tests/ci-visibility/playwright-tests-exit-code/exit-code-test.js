@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('exit code', () => {
   test('should exit with code 1', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

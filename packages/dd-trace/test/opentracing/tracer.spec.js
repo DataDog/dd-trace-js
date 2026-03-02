@@ -1,19 +1,17 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
-const sinon = require('sinon')
-const opentracing = require('opentracing')
-const proxyquire = require('proxyquire')
-
 const os = require('node:os')
 
-require('../setup/core')
+const { describe, it, beforeEach } = require('mocha')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 
+const opentracing = require('../../../../vendor/dist/opentracing')
+require('../setup/core')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')
+
 const Reference = opentracing.Reference
 
 describe('Tracer', () => {
@@ -43,22 +41,22 @@ describe('Tracer', () => {
     fields = {}
 
     span = {
-      addTags: sinon.stub().returns(span)
+      addTags: sinon.stub().returns(span),
     }
     Span = sinon.stub().returns(span)
 
     prioritySampler = {
-      sample: sinon.stub()
+      sample: sinon.stub(),
     }
     PrioritySampler = sinon.stub().returns(prioritySampler)
 
     agentExporter = {
-      export: sinon.spy()
+      export: sinon.spy(),
     }
     AgentExporter = sinon.stub().returns(agentExporter)
 
     processor = {
-      process: sinon.spy()
+      process: sinon.spy(),
     }
     SpanProcessor = sinon.stub().returns(processor)
 
@@ -71,7 +69,7 @@ describe('Tracer', () => {
     LogPropagator = sinon.stub()
     propagator = {
       inject: sinon.stub(),
-      extract: sinon.stub()
+      extract: sinon.stub(),
     }
 
     config = {
@@ -82,13 +80,13 @@ describe('Tracer', () => {
       logger: 'logger',
       tags: {},
       debug: true,
-      experimental: {}
+      experimental: {},
     }
 
     log = {
       use: sinon.spy(),
       toggle: sinon.spy(),
-      error: sinon.spy()
+      error: sinon.spy(),
     }
 
     exporter = sinon.stub().returns(AgentExporter)
@@ -103,7 +101,7 @@ describe('Tracer', () => {
       './propagation/binary': BinaryPropagator,
       './propagation/log': LogPropagator,
       '../log': log,
-      '../exporter': exporter
+      '../exporter': exporter,
     })
   })
 
@@ -135,17 +133,17 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'service'
+          'service.name': 'service',
         },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: undefined
+        links: undefined,
       }, true)
 
       sinon.assert.calledWith(span.addTags, {
-        foo: 'bar'
+        foo: 'bar',
       })
 
       assert.strictEqual(testSpan, span)
@@ -155,7 +153,7 @@ describe('Tracer', () => {
       const parent = new SpanContext()
 
       fields.references = [
-        new Reference(opentracing.REFERENCE_CHILD_OF, parent)
+        new Reference(opentracing.REFERENCE_CHILD_OF, parent),
       ]
 
       tracer = new Tracer(config)
@@ -163,7 +161,7 @@ describe('Tracer', () => {
 
       sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
-        parent
+        parent,
       })
     })
 
@@ -171,7 +169,7 @@ describe('Tracer', () => {
       const parent = new SpanContext()
 
       fields.references = [
-        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent)
+        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent),
       ]
 
       tracer = new Tracer(config)
@@ -179,7 +177,7 @@ describe('Tracer', () => {
 
       sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
-        parent
+        parent,
       })
     })
 
@@ -194,13 +192,13 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'service'
+          'service.name': 'service',
         },
         startTime: fields.startTime,
         hostname: os.hostname(),
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: undefined
+        links: undefined,
       })
 
       assert.strictEqual(testSpan, span)
@@ -211,7 +209,7 @@ describe('Tracer', () => {
 
       fields.references = [
         new Reference(opentracing.REFERENCE_FOLLOWS_FROM, parent),
-        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, new SpanContext())
+        new Reference(opentracing.REFERENCE_FOLLOWS_FROM, new SpanContext()),
       ]
 
       tracer = new Tracer(config)
@@ -219,7 +217,7 @@ describe('Tracer', () => {
 
       sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
-        parent
+        parent,
       })
     })
 
@@ -227,7 +225,7 @@ describe('Tracer', () => {
       const parent = new SpanContext()
 
       fields.references = [
-        new Reference('test', parent)
+        new Reference('test', parent),
       ]
 
       tracer = new Tracer(config)
@@ -235,19 +233,19 @@ describe('Tracer', () => {
 
       sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
-        parent: null
+        parent: null,
       })
     })
 
     it('should merge default tracer tags with span tags', () => {
       config.tags = {
         foo: 'tracer',
-        bar: 'tracer'
+        bar: 'tracer',
       }
 
       fields.tags = {
         bar: 'span',
-        baz: 'span'
+        baz: 'span',
       }
 
       tracer = new Tracer(config)
@@ -261,13 +259,13 @@ describe('Tracer', () => {
       'ensure spans `version` tag is undefined.', () => {
       config.tags = {
         foo: 'tracer',
-        bar: 'tracer'
+        bar: 'tracer',
       }
 
       fields.tags = {
         bar: 'span',
         baz: 'span',
-        service: 'new-service'
+        service: 'new-service',
 
       }
 
@@ -280,13 +278,13 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'new-service'
+          'service.name': 'new-service',
         },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: undefined
+        links: undefined,
       })
       assert.strictEqual(testSpan, span)
     })
@@ -300,13 +298,13 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'service'
+          'service.name': 'service',
         },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: true,
         integrationName: undefined,
-        links: undefined
+        links: undefined,
       })
 
       assert.strictEqual(testSpan, span)
@@ -322,13 +320,13 @@ describe('Tracer', () => {
         operationName: 'name',
         parent: null,
         tags: {
-          'service.name': 'service'
+          'service.name': 'service',
         },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
-        links: [{ context }]
+        links: [{ context }],
       })
 
       assert.strictEqual(testSpan, span)
@@ -368,7 +366,7 @@ describe('Tracer', () => {
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      expect(() => tracer.inject({})).not.to.throw()
+      assert.doesNotThrow(() => tracer.inject({}))
       sinon.assert.calledOnce(log.error)
     })
 
@@ -426,7 +424,7 @@ describe('Tracer', () => {
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      expect(() => tracer.extract()).not.to.throw()
+      assert.doesNotThrow(() => tracer.extract())
     })
   })
 })

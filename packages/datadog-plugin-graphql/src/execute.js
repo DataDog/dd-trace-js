@@ -27,8 +27,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
       meta: {
         'graphql.operation.type': type,
         'graphql.operation.name': name,
-        'graphql.source': source
-      }
+        'graphql.source': source,
+      },
     }, ctx)
 
     addVariableTags(this.config, span, args.variableValues)

@@ -1,10 +1,10 @@
 'use strict'
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
+const assert = require('node:assert/strict')
+
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
 describe('WAF Metrics', () => {
   let axios, cwd, appFile
 
@@ -29,9 +29,9 @@ describe('WAF Metrics', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-          DD_APPSEC_WAF_TIMEOUT: 0.1
-        }
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+          DD_APPSEC_WAF_TIMEOUT: '0.1',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -45,7 +45,7 @@ describe('WAF Metrics', () => {
       let appsecTelemetryMetricsReceived = false
 
       const body = {
-        name: 'hey'
+        name: 'hey',
       }
 
       await axios.post('/', body)
@@ -63,21 +63,21 @@ describe('WAF Metrics', () => {
           const series = payload.payload.series
           const wafRequests = series.find(s => s.metric === 'waf.requests')
 
-          assert.exists(wafRequests, 'Waf requests serie should exist')
+          assert.ok(wafRequests)
           assert.strictEqual(wafRequests.type, 'count')
-          assert.include(wafRequests.tags, 'waf_error:true')
-          assert.include(wafRequests.tags, 'rate_limited:false')
+          assert.ok(wafRequests.tags.includes('waf_error:true'))
+          assert.ok(wafRequests.tags.includes('rate_limited:false'))
 
           const wafError = series.find(s => s.metric === 'waf.error')
-          assert.exists(wafError, 'Waf error serie should exist')
+          assert.ok(wafError)
           assert.strictEqual(wafError.type, 'count')
-          assert.include(wafError.tags, 'waf_error:-127')
+          assert.ok(wafError.tags.includes('waf_error:-127'))
         }
       }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
-      assert.equal(appsecTelemetryMetricsReceived, true)
+      assert.strictEqual(appsecTelemetryMetricsReceived, true)
     })
   })
 
@@ -91,9 +91,9 @@ describe('WAF Metrics', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1,
-          DD_APPSEC_WAF_TIMEOUT: 1
-        }
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+          DD_APPSEC_WAF_TIMEOUT: '1',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -111,7 +111,7 @@ describe('WAF Metrics', () => {
 
       const checkMessages = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].metrics['_dd.appsec.enabled'], 1)
-        assert.isTrue(payload[0][0].metrics['_dd.appsec.waf.timeouts'] > 0)
+        assert.strictEqual(payload[0][0].metrics['_dd.appsec.waf.timeouts'] > 0, true)
       })
 
       const checkTelemetryMetrics = agent.assertTelemetryReceived(({ payload }) => {
@@ -122,15 +122,15 @@ describe('WAF Metrics', () => {
           const series = payload.payload.series
           const wafRequests = series.find(s => s.metric === 'waf.requests')
 
-          assert.exists(wafRequests, 'Waf requests serie should exist')
+          assert.ok(wafRequests)
           assert.strictEqual(wafRequests.type, 'count')
-          assert.include(wafRequests.tags, 'waf_timeout:true')
+          assert.ok(wafRequests.tags.includes('waf_timeout:true'))
         }
       }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
-      assert.equal(appsecTelemetryMetricsReceived, true)
+      assert.strictEqual(appsecTelemetryMetricsReceived, true)
     })
   })
 
@@ -144,8 +144,8 @@ describe('WAF Metrics', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_APPSEC_ENABLED: 'true',
-          DD_TELEMETRY_HEARTBEAT_INTERVAL: 1
-        }
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
@@ -176,19 +176,19 @@ describe('WAF Metrics', () => {
           const series = payload.payload.series
           const inputTruncated = series.find(s => s.metric === 'waf.input_truncated')
 
-          assert.exists(inputTruncated, 'input truncated serie should exist')
+          assert.ok(inputTruncated)
           assert.strictEqual(inputTruncated.type, 'count')
-          assert.include(inputTruncated.tags, 'truncation_reason:7')
+          assert.ok(inputTruncated.tags.includes('truncation_reason:7'))
 
           const wafRequests = series.find(s => s.metric === 'waf.requests')
-          assert.exists(wafRequests, 'waf requests serie should exist')
-          assert.include(wafRequests.tags, 'input_truncated:true')
+          assert.ok(wafRequests)
+          assert.ok(wafRequests.tags.includes('input_truncated:true'))
         }
       }, 'generate-metrics', 30_000, 2)
 
       await Promise.all([checkMessages, checkTelemetryMetrics])
 
-      assert.equal(appsecTelemetryMetricsReceived, true)
+      assert.strictEqual(appsecTelemetryMetricsReceived, true)
     })
   })
 })
@@ -204,7 +204,7 @@ const createComplexPayload = () => {
   return {
     deepObject,
     longValue,
-    largeObject
+    largeObject,
   }
 }
 

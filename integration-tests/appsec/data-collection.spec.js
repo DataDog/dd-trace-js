@@ -1,6 +1,6 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const path = require('path')
 const Axios = require('axios')
 
@@ -8,7 +8,7 @@ const {
   sandboxCwd,
   useSandbox,
   FakeAgent,
-  spawnProc
+  spawnProc,
 } = require('../helpers')
 
 describe('ASM Data collection', () => {
@@ -27,8 +27,8 @@ describe('ASM Data collection', () => {
 
       const env = {
         DD_TRACE_AGENT_PORT: agent.port,
-        DD_APPSEC_ENABLED: true,
-        DD_APPSEC_RULES: path.join(cwd, 'appsec', 'data-collection', 'data-collection-rules.json')
+        DD_APPSEC_ENABLED: 'true',
+        DD_APPSEC_RULES: path.join(cwd, 'appsec', 'data-collection', 'data-collection-rules.json'),
       }
 
       if (extendedDataCollection) {
@@ -55,7 +55,7 @@ describe('ASM Data collection', () => {
         requestHeaders.length
       )
       requestHeaders.forEach((headerName) => {
-        assert.property(payload[0][0].meta, `http.request.headers.${headerName}`)
+        assert.ok(Object.hasOwn(payload[0][0].meta, `http.request.headers.${headerName}`))
       })
 
       // Response headers
@@ -64,7 +64,7 @@ describe('ASM Data collection', () => {
         responseHeaders.length
       )
       responseHeaders.forEach((headerName) => {
-        assert.property(payload[0][0].meta, `http.response.headers.${headerName}`)
+        assert.ok(Object.hasOwn(payload[0][0].meta, `http.response.headers.${headerName}`))
       })
     })
   }
@@ -77,12 +77,12 @@ describe('ASM Data collection', () => {
         'user-agent',
         'accept',
         'host',
-        'accept-encoding'
+        'accept-encoding',
       ]
 
       const expectedResponseHeaders = [
         'content-type',
-        'content-language'
+        'content-language',
       ]
 
       await axios.get('/', { headers: { 'User-Agent': 'Arachni/v1' } })
@@ -99,7 +99,7 @@ describe('ASM Data collection', () => {
         'accept',
         'host',
         'accept-encoding',
-        'connection'
+        'connection',
       ]
 
       // DD_APPSEC_MAX_COLLECTED_HEADERS is set to 25, so it is expected to collect
@@ -110,7 +110,7 @@ describe('ASM Data collection', () => {
         ),
         'x-powered-by',
         'content-type',
-        'content-language'
+        'content-language',
       ]
 
       await axios.get('/', { headers: { 'User-Agent': 'Arachni/v1' } })

@@ -3,7 +3,7 @@
 module.exports = {
   compile,
   compileSegments,
-  templateRequiresEvaluation
+  templateRequiresEvaluation,
 }
 
 const identifierRegex = /^[@a-zA-Z_$][\w$]*$/
@@ -34,7 +34,7 @@ const reservedWords = new Set([
   'implements', 'interface', 'package', 'private', 'protected', 'public',
 
   // Literals
-  'NaN'
+  'NaN',
 ])
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'bigint', 'boolean', 'undefined', 'symbol', 'null'])
@@ -206,7 +206,7 @@ function isTypedArray (variable) {
 }
 
 function isInstanceOfCoreType (type, variable, fallback = `${variable} instanceof ${type}`) {
-  return `(process[Symbol.for('datadog:node:util:types')]?.is${type}?.(${variable}) ?? ${fallback})`
+  return `(globalThis[Symbol.for('dd-trace')].utilTypes?.is${type}?.(${variable}) ?? ${fallback})`
 }
 
 function getSize (variable) {

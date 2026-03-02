@@ -14,11 +14,15 @@ class WSPlugin extends CompositePlugin {
       server: WSServerPlugin,
       producer: WSProducerPlugin,
       receiver: WSReceiverPlugin,
-      close: WSClosePlugin
+      close: WSClosePlugin,
     }
   }
 
   configure (config) {
+    if (!config.traceWebsocketMessagesEnabled) {
+      super.configure(false)
+      return
+    }
     return super.configure(config)
   }
 }

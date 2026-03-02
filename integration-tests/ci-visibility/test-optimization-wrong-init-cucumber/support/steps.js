@@ -1,9 +1,10 @@
 'use strict'
 
-const tracer = require('dd-trace')
-const { Given, When, Then } = require('@cucumber/cucumber')
-const { expect } = require('chai')
+const assert = require('assert')
 
+const { Given, When, Then } = require('@cucumber/cucumber')
+// eslint-disable-next-line import/order
+const tracer = require('dd-trace')
 let num1, num2, result
 
 Given('I have two numbers {int} and {int}', function (first, second) {
@@ -17,5 +18,5 @@ When('I add them together', function () {
 })
 
 Then('the result should be {int}', function (expected) {
-  expect(result).to.equal(expected)
+  assert.strictEqual(result, expected)
 })

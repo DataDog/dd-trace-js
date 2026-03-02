@@ -1,10 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
   useSandbox, sandboxCwd, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc, curl
+  FakeAgent, spawnPluginIntegrationTestProc, curl,
 } = require('../../../../integration-tests/helpers')
-const assert = require('node:assert/strict')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('node-serialize', 'node-serialize', version => {
@@ -15,7 +15,7 @@ withVersions('node-serialize', 'node-serialize', version => {
       ['./packages/datadog-plugin-node-serialize/test/integration-test/*'])
 
     before(function () {
-      variants = varySandbox('server.mjs', 'node-serialize', undefined, 'lib')
+      variants = varySandbox('server.mjs', 'lib', 'unserialize, serialize', 'node-serialize')
     })
 
     beforeEach(async () => {

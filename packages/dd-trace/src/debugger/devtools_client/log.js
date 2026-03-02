@@ -25,6 +25,6 @@ const threshold = LEVELS.indexOf(logLevel)
 module.exports = Object.fromEntries(
   LEVELS.map(level => [
     level,
-    debug && threshold >= LEVELS.indexOf(level) ? on.bind(null, level) : off
+    debug && threshold >= LEVELS.indexOf(level) ? on.bind(null, level) : off,
   ])
 )

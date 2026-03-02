@@ -48,7 +48,7 @@ class SpanSampler {
       if (rule && rule.sample(spanContext)) {
         span.context()._spanSampling = {
           sampleRate: rule.sampleRate,
-          maxPerSecond: rule.maxPerSecond
+          maxPerSecond: rule.maxPerSecond,
         }
       }
     }

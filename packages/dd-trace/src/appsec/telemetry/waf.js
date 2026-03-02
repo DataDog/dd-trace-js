@@ -10,7 +10,7 @@ const DD_TELEMETRY_WAF_RESULT_TAGS = Symbol('_dd.appsec.telemetry.waf.result.tag
 const TRUNCATION_FLAGS = {
   STRING: 1,
   CONTAINER_SIZE: 2,
-  CONTAINER_DEPTH: 4
+  CONTAINER_DEPTH: 4,
 }
 
 function addWafRequestMetrics (store, { duration, durationExt, wafTimeout, errorCode }) {
@@ -83,7 +83,7 @@ function getOrCreateMetricTags (store, versionsTags) {
       [tags.WAF_ERROR]: false,
       [tags.WAF_TIMEOUT]: false,
 
-      ...versionsTags
+      ...versionsTags,
     }
     store[DD_TELEMETRY_WAF_RESULT_TAGS] = metricTags
   }
@@ -139,5 +139,5 @@ module.exports = {
   incrementWafInit,
   incrementWafUpdates,
   incrementWafConfigErrors,
-  incrementWafRequests
+  incrementWafRequests,
 }

@@ -1,7 +1,7 @@
 'use strict'
 
-const { sanitizeAttributes } = require('@opentelemetry/core')
 const { context } = require('@opentelemetry/api')
+const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { VERSION: packageVersion } = require('../../../../../version')
 
 /**

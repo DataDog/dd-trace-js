@@ -4,7 +4,6 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const axios = require('axios')
-const { expect } = require('chai')
 const sinon = require('sinon')
 
 const appsec = require('../../src/appsec')
@@ -42,8 +41,8 @@ withVersions('body-parser', 'body-parser', version => {
       appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
-          rules: path.join(__dirname, 'body-parser-rules.json')
-        }
+          rules: path.join(__dirname, 'body-parser-rules.json'),
+        },
       }))
     })
 
@@ -71,7 +70,7 @@ withVersions('body-parser', 'body-parser', version => {
       } catch (e) {
         assert.strictEqual(e.response.status, 403)
         assert.deepStrictEqual(e.response.data, JSON.parse(json))
-        expect(requestBody).not.to.be.called
+        sinon.assert.notCalled(requestBody)
       }
     })
 
@@ -89,7 +88,7 @@ withVersions('body-parser', 'body-parser', version => {
         const complexPayload = {
           deepObject,
           longValue,
-          largeObject
+          largeObject,
         }
 
         await axios.post(`http://localhost:${port}/`, { complexPayload })
@@ -98,7 +97,7 @@ withVersions('body-parser', 'body-parser', version => {
       } catch (e) {
         assert.strictEqual(e.response.status, 403)
         assert.deepStrictEqual(e.response.data, JSON.parse(json))
-        expect(requestBody).not.to.be.called
+        sinon.assert.notCalled(requestBody)
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]

@@ -3,15 +3,17 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+const { PATHWAY_HASH } = require('../../../../ext/tags')
+const log = require('../log')
+const processTags = require('../process-tags')
+const propagationHash = require('../propagation-hash')
 const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
-const { PATHWAY_HASH } = require('../../../../ext/tags')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
-const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -41,7 +43,7 @@ class StatsPoint {
       EdgeTags: this.edgeTags,
       EdgeLatency: this.edgeLatency.toProto(),
       PathwayLatency: this.pathwayLatency.toProto(),
-      PayloadSize: this.payloadSize.toProto()
+      PayloadSize: this.payloadSize.toProto(),
     }
   }
 }
@@ -62,7 +64,7 @@ class Backlog {
   encode () {
     return {
       Tags: this.tags,
-      Value: this.offset
+      Value: this.offset,
     }
   }
 }
@@ -133,12 +135,12 @@ class DataStreamsProcessor {
     tags,
     version,
     service,
-    flushInterval
+    flushInterval,
   } = {}) {
     this.writer = new DataStreamsWriter({
       hostname,
       port,
-      url
+      url,
     })
     this.bucketSizeNs = 1e10
     this.buckets = new TimeBuckets()
@@ -156,12 +158,13 @@ class DataStreamsProcessor {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
       this.timer.unref()
     }
-    process.once('beforeExit', () => this.onInterval())
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
   }
 
   onInterval () {
     const { Stats } = this._serializeBuckets()
     if (Stats.length === 0) return
+
     const payload = {
       Env: this.env,
       Service: this.service,
@@ -169,8 +172,14 @@ class DataStreamsProcessor {
       TracerVersion: pkg.version,
       Version: this.version,
       Lang: 'javascript',
-      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`)
+      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`),
     }
+
+    // Add ProcessTags only if feature is enabled and process tags exist
+    if (propagationHash.isEnabled() && processTags.serialized) {
+      payload.ProcessTags = processTags.serialized.split(',')
+    }
+
     this.writer.flush(payload)
   }
 
@@ -229,10 +238,16 @@ class DataStreamsProcessor {
         closestOppositeDirectionEdgeStart = edgeStartNs
       }
       log.debug(
-        () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
+        'Setting DSM Checkpoint from extracted parent context with hash: %s and edge tags: %s',
+        parentHash,
+        edgeTags
       )
     }
-    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
+
+    // Get propagation hash if enabled
+    const propagationHashValue = propagationHash.isEnabled() ? propagationHash.getHash() : null
+
+    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash, propagationHashValue)
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
@@ -241,7 +256,7 @@ class DataStreamsProcessor {
       pathwayStartNs,
       previousDirection: direction,
       closestOppositeDirectionHash,
-      closestOppositeDirectionEdgeStart
+      closestOppositeDirectionEdgeStart,
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
@@ -257,7 +272,7 @@ class DataStreamsProcessor {
       edgeTags,
       edgeLatencyNs,
       pathwayLatencyNs,
-      payloadSize
+      payloadSize,
     }
     this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
@@ -274,7 +289,7 @@ class DataStreamsProcessor {
     const nowNs = Date.now() * 1e6
     const backlogData = {
       ...offsetObj,
-      timestamp: nowNs
+      timestamp: nowNs,
     }
     this.recordOffset(backlogData)
   }
@@ -300,14 +315,14 @@ class DataStreamsProcessor {
         Start: BigInt(timeNs),
         Duration: BigInt(this.bucketSizeNs),
         Stats: points,
-        Backlogs: backlogs
+        Backlogs: backlogs,
       })
     }
 
     this.buckets.clear()
 
     return {
-      Stats: serializedBuckets
+      Stats: serializedBuckets,
     }
   }
 
@@ -352,5 +367,5 @@ module.exports = {
   getHeadersSize,
   getSizeOrZero,
   getAmqpMessageSize,
-  ENTRY_PARENT_HASH
+  ENTRY_PARENT_HASH,
 }

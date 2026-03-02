@@ -9,7 +9,7 @@ const { isInfoAllowed } = require('../telemetry/verbosity')
 const {
   getTaintTrackingImpl,
   getTaintTrackingNoop,
-  lodashTaintTrackingHandler
+  lodashTaintTrackingHandler,
 } = require('./taint-tracking-impl')
 const { taintObject, taintQueryWithCache } = require('./operations-taint-object')
 
@@ -104,5 +104,5 @@ module.exports = {
   enableTaintOperations,
   disableTaintOperations,
   setMaxTransactions,
-  IAST_TRANSACTION_ID
+  IAST_TRANSACTION_ID,
 }

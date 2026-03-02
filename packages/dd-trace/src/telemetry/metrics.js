@@ -64,7 +64,7 @@ class Metric {
       interval,
       type,
       tags,
-      common
+      common,
     }
   }
 }
@@ -106,7 +106,7 @@ class DistributionMetric extends Metric {
       metric,
       points,
       common,
-      tags
+      tags,
     }
   }
 }
@@ -153,7 +153,7 @@ const metricsTypes = {
   count: CountMetric,
   distribution: DistributionMetric,
   gauge: GaugeMetric,
-  rate: RateMetric
+  rate: RateMetric,
 }
 
 class MetricsCollection extends Map {
@@ -182,7 +182,7 @@ class MetricsCollection extends Map {
     const { namespace } = this
     return {
       namespace,
-      series
+      series,
     }
   }
 }
@@ -235,7 +235,7 @@ class Namespace {
     const { distributions, metrics } = this
     return {
       distributions: distributions.toJSON(),
-      metrics: metrics.toJSON()
+      metrics: metrics.toJSON(),
     }
   }
 }
@@ -284,5 +284,5 @@ module.exports = {
   MetricsCollection,
   Namespace,
   NamespaceManager,
-  manager
+  manager,
 }

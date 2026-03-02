@@ -13,14 +13,14 @@ const message = { body: 'Hello Datadog!' }
 
 const messages = [
   { body: 'Hello Datadog!' },
-  { body: 'Hello Azure!' }
+  { body: 'Hello Azure!' },
 ]
 
 const amqpMessage = {
   body: 'Hello from an amqp message',
   annotations: {
     'x-opt-custom-annotation-key': 'custom-value', // Custom annotation
-    'x-opt-partition-key': 'myPartitionKey' // Example of a common annotation
+    'x-opt-partition-key': 'myPartitionKey', // Example of a common annotation
   },
 }
 
@@ -29,16 +29,16 @@ const amqpMessages = [
     body: 'Hello from an amqp message',
     annotations: {
       'x-opt-custom-annotation-key': 'custom-value', // Custom annotation
-      'x-opt-partition-key': 'myPartitionKey' // Example of a common annotation
+      'x-opt-partition-key': 'myPartitionKey', // Example of a common annotation
     },
   },
   {
     body: 'Hello from an amqp message 2 ',
     annotations: {
       'x-opt-custom-annotation-key': 'custom-value-2', // Custom annotation
-      'x-opt-partition-key': 'myPartitionKey-2' // Example of a common annotation
-    }
-  }
+      'x-opt-partition-key': 'myPartitionKey-2', // Example of a common annotation
+    },
+  },
 ]
 
 app.http('send-message-1', {
@@ -48,9 +48,9 @@ app.http('send-message-1', {
     await sender1.sendMessages(message)
     return {
       status: 200,
-      body: 'Sent single message'
+      body: 'Sent single message',
     }
-  }
+  },
 })
 
 app.http('send-messages-1', {
@@ -60,9 +60,9 @@ app.http('send-messages-1', {
     await sender1.sendMessages(messages)
     return {
       status: 200,
-      body: 'Sent messages'
+      body: 'Sent messages',
     }
-  }
+  },
 })
 
 app.http('send-amqp-message-1', {
@@ -72,9 +72,9 @@ app.http('send-amqp-message-1', {
     await sender1.sendMessages(amqpMessage)
     return {
       status: 200,
-      body: 'Sent single AMQP message'
+      body: 'Sent single AMQP message',
     }
-  }
+  },
 })
 
 app.http('send-amqp-messages-1', {
@@ -84,9 +84,9 @@ app.http('send-amqp-messages-1', {
     await sender1.sendMessages(amqpMessages)
     return {
       status: 200,
-      body: 'Sent AMQP message'
+      body: 'Sent AMQP message',
     }
-  }
+  },
 })
 
 app.http('send-message-batch-1', {
@@ -100,9 +100,9 @@ app.http('send-message-batch-1', {
     await sender1.sendMessages(batch)
     return {
       status: 200,
-      body: 'Sent message batch using createMessageBatch'
+      body: 'Sent message batch using createMessageBatch',
     }
-  }
+  },
 })
 
 app.http('send-message-2', {
@@ -112,9 +112,9 @@ app.http('send-message-2', {
     await sender2.sendMessages(message)
     return {
       status: 200,
-      body: 'Sent single message'
+      body: 'Sent single message',
     }
-  }
+  },
 })
 
 app.http('send-messages-2', {
@@ -124,9 +124,9 @@ app.http('send-messages-2', {
     await sender2.sendMessages(messages)
     return {
       status: 200,
-      body: 'Sent messages'
+      body: 'Sent messages',
     }
-  }
+  },
 })
 
 app.http('send-amqp-message-2', {
@@ -136,9 +136,9 @@ app.http('send-amqp-message-2', {
     await sender2.sendMessages(amqpMessage)
     return {
       status: 200,
-      body: 'Sent single AMQP message'
+      body: 'Sent single AMQP message',
     }
-  }
+  },
 })
 
 app.http('send-amqp-messages-2', {
@@ -148,9 +148,9 @@ app.http('send-amqp-messages-2', {
     await sender2.sendMessages(amqpMessages)
     return {
       status: 200,
-      body: 'Sent AMQP messages'
+      body: 'Sent AMQP messages',
     }
-  }
+  },
 })
 
 app.http('send-message-batch-2', {
@@ -164,9 +164,9 @@ app.http('send-message-batch-2', {
     await sender2.sendMessages(batch)
     return {
       status: 200,
-      body: 'Sent message batch using createMessageBatch'
+      body: 'Sent message batch using createMessageBatch',
     }
-  }
+  },
 })
 
 app.http('servicebus-test3', {
@@ -177,7 +177,7 @@ app.http('servicebus-test3', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('servicebus-test4', {
@@ -188,7 +188,7 @@ app.http('servicebus-test4', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.serviceBusQueue('queueTest1', {
@@ -200,7 +200,7 @@ app.serviceBusQueue('queueTest1', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.serviceBusQueue('queueTest2', {
@@ -212,7 +212,7 @@ app.serviceBusQueue('queueTest2', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.serviceBusTopic('topicTest1', {
@@ -224,7 +224,7 @@ app.serviceBusTopic('topicTest1', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.serviceBusTopic('topicTest2', {
@@ -236,5 +236,5 @@ app.serviceBusTopic('topicTest2', {
     return {
       status: 200,
     }
-  }
+  },
 })

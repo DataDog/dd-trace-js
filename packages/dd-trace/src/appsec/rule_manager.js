@@ -1,14 +1,12 @@
 'use strict'
 
-const fs = require('fs')
+const { readFileSync } = require('node:fs')
+
 const waf = require('./waf')
 const { DIAGNOSTIC_KEYS } = require('./waf/diagnostics')
-const { ACKNOWLEDGED, ERROR } = require('../remote_config/apply_states')
-const Reporter = require('./reporter')
-
 const blocking = require('./blocking')
-
-const ASM_PRODUCTS = new Set(['ASM', 'ASM_DD', 'ASM_DATA'])
+const Reporter = require('./reporter')
+const { ASM_WAF_PRODUCTS_SET } = require('./rc-products')
 
 /*
   ASM Actions must be tracked in order to update the defaultBlockingActions in blocking. These actions are used
@@ -16,9 +14,21 @@ const ASM_PRODUCTS = new Set(['ASM', 'ASM_DD', 'ASM_DATA'])
  */
 let appliedActions = new Map()
 
+/**
+ * @typedef {object} AsmConfigFile
+ * @property {Array<Record<string, unknown>>} [actions]
+ */
+
+/**
+ * @typedef {import('./waf').WAFConfig & { rules?: string }} AppSecConfig
+ */
+
+/**
+ * @param {AppSecConfig} config
+ */
 function loadRules (config) {
   const defaultRules = config.rules
-    ? JSON.parse(fs.readFileSync(config.rules))
+    ? JSON.parse(readFileSync(config.rules, 'utf8'))
     : require('./recommended.json')
 
   waf.init(defaultRules, config)
@@ -26,19 +36,26 @@ function loadRules (config) {
   blocking.setDefaultBlockingActionParameters(defaultRules?.actions)
 }
 
-function updateWafFromRC ({ toUnapply, toApply, toModify }) {
+/**
+ * Apply ASM remote-config updates to the WAF in a single batch.
+ *
+ * @param {import('../remote_config/manager').RcBatchUpdateTransaction} transaction
+ */
+function updateWafFromRC (transaction) {
+  const { toUnapply, toApply, toModify } = transaction
+
   const newActions = new SpyMap(appliedActions)
 
   let wafUpdated = false
   let wafUpdatedFailed = false
 
   for (const item of toUnapply) {
-    if (!ASM_PRODUCTS.has(item.product)) continue
+    if (!ASM_WAF_PRODUCTS_SET.has(item.product)) continue
 
     try {
       waf.removeConfig(item.path)
 
-      item.apply_state = ACKNOWLEDGED
+      transaction.ack(item.path)
       wafUpdated = true
 
       // ASM actions
@@ -46,30 +63,30 @@ function updateWafFromRC ({ toUnapply, toApply, toModify }) {
         newActions.delete(item.id)
       }
     } catch (e) {
-      item.apply_state = ERROR
-      item.apply_error = e.toString()
+      transaction.error(item.path, e)
       wafUpdatedFailed = true
     }
   }
 
   for (const item of [...toApply, ...toModify]) {
-    if (!ASM_PRODUCTS.has(item.product)) continue
+    if (!ASM_WAF_PRODUCTS_SET.has(item.product)) continue
 
     try {
       waf.updateConfig(item.product, item.id, item.path, item.file)
 
-      item.apply_state = ACKNOWLEDGED
+      transaction.ack(item.path)
       wafUpdated = true
 
       // ASM actions
-      if (item.product === 'ASM' && item.file?.actions?.length) {
-        newActions.set(item.id, item.file.actions)
+      if (item.product === 'ASM') {
+        const asmFile = /** @type {AsmConfigFile} */ (item.file)
+        if (asmFile?.actions?.length) {
+          newActions.set(item.id, asmFile.actions)
+        }
       }
     } catch (e) {
-      item.apply_state = ERROR
-      item.apply_error = e instanceof waf.WafUpdateError
-        ? JSON.stringify(extractErrors(e.diagnosticErrors))
-        : e.toString()
+      const error = e instanceof waf.WafUpdateError ? JSON.stringify(extractErrors(e.diagnosticErrors)) : e
+      transaction.error(item.path, error)
       wafUpdatedFailed = true
     }
   }
@@ -147,5 +164,5 @@ function clearAllRules () {
 module.exports = {
   loadRules,
   updateWafFromRC,
-  clearAllRules
+  clearAllRules,
 }

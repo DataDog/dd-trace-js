@@ -45,5 +45,5 @@ function extractErrorIntoSpanEvent (config, span, exc) {
 }
 
 module.exports = {
-  extractErrorIntoSpanEvent
+  extractErrorIntoSpanEvent,
 }

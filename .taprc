@@ -1,5 +1,0 @@
-check-coverage: false
-color: true
-coverage: false
-node-arg: --expose-gc
-reporter: spec

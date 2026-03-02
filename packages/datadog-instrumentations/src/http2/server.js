@@ -5,7 +5,7 @@
 
 const {
   channel,
-  addHook
+  addHook,
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 

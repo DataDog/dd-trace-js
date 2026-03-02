@@ -8,11 +8,11 @@ jest.mock('winston', () => ({
     info: jest.fn(),
   })),
   format: {
-    simple: jest.fn(() => ({}))
+    simple: jest.fn(() => ({})),
   },
   transports: {
-    Console: jest.fn()
-  }
+    Console: jest.fn(),
+  },
 }))
 
 describe('winston mock test', () => {

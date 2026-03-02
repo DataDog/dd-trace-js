@@ -8,15 +8,15 @@ const { VERSION } = process.env // Next.js version to dynamically modify parts
 
 const config = {
   eslint: {
-    ignoreDuringBuilds: true
+    ignoreDuringBuilds: true,
   },
-  experimental: {}
+  experimental: {},
 }
 
 // Ensure webpack 5 is used by default for older versions
 if (satisfies(VERSION, '<11')) {
   config.future = {
-    webpack5: true
+    webpack5: true,
   }
 }
 
@@ -38,7 +38,7 @@ if (satisfies(VERSION, '<=11')) {
       ...config.resolve.fallback,
       worker_threads: false,
       perf_hooks: false,
-      'util/types': false
+      'util/types': false,
     }
 
     return config

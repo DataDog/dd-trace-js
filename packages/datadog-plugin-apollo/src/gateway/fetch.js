@@ -15,7 +15,7 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
       childOf,
       service: this.getServiceName(),
       type: this.constructor.type,
-      meta: {}
+      meta: {},
     }
 
     const serviceName = ctx?.attributes?.service

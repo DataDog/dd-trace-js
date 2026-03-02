@@ -3,7 +3,6 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const semver = require('semver')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const { withVersions } = require('../../../setup/mocha')
@@ -12,9 +11,9 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 const vulnerabilityReporter = require('../../../../src/appsec/iast/vulnerability-reporter')
 
 describe('sql-injection-analyzer with knex', () => {
-  withVersions('knex', 'knex', knexVersion => {
-    if (!semver.satisfies(knexVersion, '>=2')) return
+  const originalMaxStackTraces = process.env.DD_APPSEC_MAX_STACK_TRACES
 
+  withVersions('knex', 'knex', '>=2', knexVersion => {
     withVersions('pg', 'pg', () => {
       let knex
 
@@ -23,6 +22,20 @@ describe('sql-injection-analyzer with knex', () => {
           const srcFilePath = path.join(__dirname, 'resources', 'knex-sql-injection-methods.js')
           const dstFilePath = path.join(os.tmpdir(), 'knex-sql-injection-methods.js')
           let queryMethods
+
+          before(() => {
+            // This suite can emit multiple IAST vulnerabilities (e.g. WEAK_HASH during pg auth) before SQL_INJECTION.
+            // The default stack trace budget is 2, which can be exhausted before SQL_INJECTION is reported.
+            process.env.DD_APPSEC_MAX_STACK_TRACES = '10'
+          })
+
+          after(() => {
+            if (originalMaxStackTraces === undefined) {
+              delete process.env.DD_APPSEC_MAX_STACK_TRACES
+            } else {
+              process.env.DD_APPSEC_MAX_STACK_TRACES = originalMaxStackTraces
+            }
+          })
 
           beforeEach(() => {
             vulnerabilityReporter.clearCache()
@@ -34,8 +47,8 @@ describe('sql-injection-analyzer with knex', () => {
                 host: '127.0.0.1',
                 database: 'postgres',
                 user: 'postgres',
-                password: 'postgres'
-              }
+                password: 'postgres',
+              },
             })
 
             fs.copyFileSync(srcFilePath, dstFilePath)
@@ -60,8 +73,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 4
-              }
+                line: 4,
+              },
             })
 
             testThatRequestHasNoVulnerability(() => {
@@ -84,8 +97,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 9
-              }
+                line: 9,
+              },
             })
           })
 
@@ -104,8 +117,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 40
-              }
+                line: 40,
+              },
             })
           })
 
@@ -124,8 +137,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 17
-              }
+                line: 17,
+              },
             })
           })
 
@@ -144,8 +157,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 28
-              }
+                line: 28,
+              },
             })
           })
 
@@ -164,8 +177,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 47
-              }
+                line: 47,
+              },
             })
           })
 
@@ -192,8 +205,8 @@ describe('sql-injection-analyzer with knex', () => {
               occurrences: 1,
               location: {
                 path: 'knex-sql-injection-methods.js',
-                line: 34
-              }
+                line: 34,
+              },
             })
           })
         })

@@ -10,6 +10,6 @@ if (process.env.CI) {
 module.exports = {
   reporterEnabled,
   mochaJunitReporterReporterOptions: {
-    mochaFile: `./node-${process.versions.node}-junit.xml`
-  }
+    mochaFile: `./node-${process.versions.node}-junit.xml`,
+  },
 }

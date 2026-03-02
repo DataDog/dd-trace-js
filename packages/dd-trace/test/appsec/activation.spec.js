@@ -11,7 +11,7 @@ describe('Appsec Activation', () => {
 
   beforeEach(() => {
     config = {
-      appsec: {}
+      appsec: {},
     }
   })
 

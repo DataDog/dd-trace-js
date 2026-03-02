@@ -12,7 +12,7 @@ test.describe('disable', () => {
   test('should disable test', async ({ page }) => {
     console.log('SHOULD NOT BE EXECUTED')
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello Warld'
+      'Hello Warld',
     ])
   })
 })
@@ -20,7 +20,7 @@ test.describe('disable', () => {
 test.describe('not disabled', () => {
   test('should not disable test', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })
@@ -28,7 +28,7 @@ test.describe('not disabled', () => {
 test.describe('not disabled 2', () => {
   test('should not disable test 2', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })
@@ -36,7 +36,7 @@ test.describe('not disabled 2', () => {
 test.describe('not disabled 3', () => {
   test('should not disable test 3', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

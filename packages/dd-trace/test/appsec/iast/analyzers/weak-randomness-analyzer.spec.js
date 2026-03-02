@@ -52,21 +52,21 @@ describe('weak-randomness-analyzer', () => {
           return {
             toSpanId () {
               return '123'
-            }
+            },
           }
-        }
-      }
+        },
+      },
     }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
-        getIastContext: () => iastContext
+        getIastContext: () => iastContext,
       },
       '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
+      '../vulnerability-reporter': { addVulnerability },
     })
     const proxiedWeakRandomnessAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/weak-randomness-analyzer',
       {
-        './vulnerability-analyzer': ProxyAnalyzer
+        './vulnerability-analyzer': ProxyAnalyzer,
       })
     proxiedWeakRandomnessAnalyzer.analyze(Math.random)
     sinon.assert.calledOnce(addVulnerability)
@@ -98,8 +98,8 @@ describe('weak-randomness-analyzer', () => {
           occurrences: 1,
           location: {
             path: randomFunctionsPath,
-            line: 4
-          }
+            line: 4,
+          },
         })
       })
 

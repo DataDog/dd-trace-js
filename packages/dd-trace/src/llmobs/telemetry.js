@@ -1,5 +1,8 @@
 'use strict'
 
+const ERROR_TYPE = require('../constants')
+
+const telemetryMetrics = require('../telemetry/metrics')
 const {
   SPAN_KIND,
   MODEL_PROVIDER,
@@ -7,12 +10,8 @@ const {
   SESSION_ID,
   ROOT_PARENT_ID,
   INTEGRATION,
-  DECORATOR
+  DECORATOR,
 } = require('./constants/tags')
-
-const ERROR_TYPE = require('../constants')
-
-const telemetryMetrics = require('../telemetry/metrics')
 
 const LLMObsTagger = require('./tagger')
 
@@ -35,7 +34,7 @@ function extractTagsFromSpanEvent (event) {
     span_kind: spanKind,
     autoinstrumented: Number(autoinstrumented),
     error: error ? 1 : 0,
-    integration: integration || 'N/A'
+    integration: integration || 'N/A',
   }
 }
 
@@ -62,7 +61,7 @@ function incrementLLMObsSpanFinishedCount (span, value = 1) {
     is_root_span: Number(isRootSpan),
     span_kind: spanKind,
     integration: integration || 'N/A',
-    error: error ? 1 : 0
+    error: error ? 1 : 0,
   }
   if (!autoInstrumented) {
     tags.decorator = Number(decorator)
@@ -86,7 +85,7 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
     agentless: Number(config.llmobs.agentlessEnabled),
     site: config.site,
     auto: Number(autoEnabled),
-    ml_app: config.llmobs.mlApp
+    ml_app: config.llmobs.mlApp,
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)
@@ -118,7 +117,7 @@ function recordLLMObsAnnotate (span, err, value = 1) {
   const tags = {
     error: Number(!!err),
     span_kind: spanKind,
-    is_root_span: Number(isRootSpan)
+    is_root_span: Number(isRootSpan),
   }
   if (err) tags.error_type = err
   llmobsMetrics.count('annotations', tags).inc(value)
@@ -138,7 +137,7 @@ function recordExportSpan (span, err, value = 1) {
   const tags = {
     error: Number(!!err),
     span_kind: spanKind,
-    is_root_span: Number(isRootSpan)
+    is_root_span: Number(isRootSpan),
   }
   if (err) tags.error_type = err
   llmobsMetrics.count('spans_exported', tags).inc(value)
@@ -147,7 +146,7 @@ function recordExportSpan (span, err, value = 1) {
 function recordSubmitEvaluation (options, err, value = 1) {
   const tags = {
     error: Number(!!err),
-    custom_joining_key: 0
+    custom_joining_key: 0,
   }
   const metricType = options?.metricType?.toLowerCase()
   if (metricType !== 'categorical' && metricType !== 'score') tags.metric_type = 'other'
@@ -171,5 +170,5 @@ module.exports = {
   recordUserFlush,
   recordExportSpan,
   recordSubmitEvaluation,
-  recordLLMObsUserProcessorCalled
+  recordLLMObsUserProcessorCalled,
 }

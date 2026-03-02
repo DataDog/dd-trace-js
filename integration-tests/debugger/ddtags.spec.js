@@ -2,9 +2,9 @@
 
 const os = require('os')
 
-const { assert } = require('chai')
-const { setup } = require('./utils')
+const assert = require('assert')
 const { version } = require('../../package.json')
+const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
   describe('ddtags', function () {
@@ -14,28 +14,28 @@ describe('Dynamic Instrumentation', function () {
           DD_ENV: 'test-env',
           DD_VERSION: 'test-version',
           DD_GIT_COMMIT_SHA: 'test-commit-sha',
-          DD_GIT_REPOSITORY_URL: 'test-repository-url'
+          DD_GIT_REPOSITORY_URL: 'test-repository-url',
         },
         testApp: 'target-app/basic.js',
-        dependencies: ['fastify']
+        dependencies: ['fastify'],
       })
 
       it('should add the expected ddtags as a query param to /debugger/v1/input', function (done) {
         t.triggerBreakpoint()
 
         t.agent.on('debugger-input', ({ query }) => {
-          assert.property(query, 'ddtags')
+          assert.ok(Object.hasOwn(query, 'ddtags'))
 
           const ddtags = extractDDTagsFromQuery(query)
 
-          assert.hasAllKeys(ddtags, [
-            'env',
-            'version',
+          assert.deepStrictEqual([
             'debugger_version',
-            'host_name',
+            'env',
             'git.commit.sha',
-            'git.repository_url'
-          ])
+            'git.repository_url',
+            'host_name',
+            'version',
+          ], Object.keys(ddtags).sort())
 
           assert.strictEqual(ddtags.env, 'test-env')
           assert.strictEqual(ddtags.version, 'test-version')
@@ -58,14 +58,11 @@ describe('Dynamic Instrumentation', function () {
         t.triggerBreakpoint()
 
         t.agent.on('debugger-input', ({ query }) => {
-          assert.property(query, 'ddtags')
+          assert.ok(Object.hasOwn(query, 'ddtags'))
 
           const ddtags = extractDDTagsFromQuery(query)
 
-          assert.hasAllKeys(ddtags, [
-            'debugger_version',
-            'host_name'
-          ])
+          assert.deepStrictEqual(['debugger_version', 'host_name'], Object.keys(ddtags).sort())
 
           done()
         })

@@ -4,6 +4,7 @@ const log = require('../../log')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
+ * @typedef {import('@opentelemetry/api').AttributeValue} AttributeValue
  */
 
 /**
@@ -27,8 +28,11 @@ class OtlpTransformerBase {
   constructor (resourceAttributes, protocol, signalType) {
     this.#resourceAttributes = this.transformAttributes(resourceAttributes)
     if (protocol === 'grpc') {
-      log.warn(`OTLP gRPC protocol is not supported for ${signalType}. ` +
-        'Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.')
+      log.warn(
+        // eslint-disable-next-line @stylistic/max-len
+        'OTLP gRPC protocol is not supported for %s. Defaulting to http/protobuf. gRPC protobuf support may be added in a future release.',
+        signalType
+      )
       protocol = 'http/protobuf'
     }
     this.protocol = protocol
@@ -61,33 +65,33 @@ class OtlpTransformerBase {
 
   /**
    * Transforms resource attributes to OTLP resource format.
-   * @returns {Object} OTLP resource object
+   * @returns {object} OTLP resource object
    * @protected
    */
   transformResource () {
     return {
       attributes: this.#resourceAttributes,
-      droppedAttributesCount: 0
+      droppedAttributesCount: 0,
     }
   }
 
   /**
    * Transforms attributes to OTLP KeyValue format.
-   * @param {Object} attributes - Attributes to transform
-   * @returns {Object[]} Array of OTLP KeyValue objects
+   * @param {Attributes} attributes - Attributes to transform
+   * @returns {object[]} Array of OTLP KeyValue objects
    * @protected
    */
   transformAttributes (attributes) {
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: this.transformAnyValue(value)
+      value: this.transformAnyValue(value),
     }))
   }
 
   /**
    * Transforms attributes to JSON format (simplified).
-   * @param {Object} attributes - Attributes to transform
-   * @returns {Object[]} Array of OTLP KeyValue objects with string values
+   * @param {object} attributes - Attributes to transform
+   * @returns {object[]} Array of OTLP KeyValue objects with string values
    * @protected
    */
   attributesToJson (attributes) {
@@ -95,7 +99,7 @@ class OtlpTransformerBase {
 
     return Object.entries(attributes).map(([key, value]) => ({
       key,
-      value: { stringValue: String(value) }
+      value: { stringValue: String(value) },
     }))
   }
 
@@ -103,8 +107,8 @@ class OtlpTransformerBase {
    * Transforms any value to OTLP AnyValue format.
    * Supports: strings, numbers (int/double), booleans, arrays.
    * Objects are filtered out by sanitizeAttributes before reaching this method.
-   * @param {any} value - Value to transform
-   * @returns {Object} OTLP AnyValue object
+   * @param {AttributeValue | null | undefined} value - Value to transform
+   * @returns {object} OTLP AnyValue object
    * @protected
    */
   transformAnyValue (value) {
@@ -120,8 +124,8 @@ class OtlpTransformerBase {
     } else if (Array.isArray(value)) {
       return {
         arrayValue: {
-          values: value.map(v => this.transformAnyValue(v))
-        }
+          values: value.map(v => this.transformAnyValue(v)),
+        },
       }
     }
     // Fallback for any unexpected types
@@ -130,8 +134,8 @@ class OtlpTransformerBase {
 
   /**
    * Serializes data to protobuf format.
-   * @param {Object} protoType - Protobuf type from protobuf_loader
-   * @param {Object} data - Data to serialize
+   * @param {object} protoType - Protobuf type from protobuf_loader
+   * @param {object} data - Data to serialize
    * @returns {Buffer} Protobuf-encoded data
    * @protected
    */
@@ -143,7 +147,7 @@ class OtlpTransformerBase {
 
   /**
    * Serializes data to JSON format.
-   * @param {Object} data - Data to serialize
+   * @param {object} data - Data to serialize
    * @returns {Buffer} JSON-encoded data
    * @protected
    */

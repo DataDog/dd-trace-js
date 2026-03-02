@@ -6,5 +6,5 @@ suiteTest({
   modName: 'graphql',
   repoUrl: 'graphql/graphql-js',
   commitish: 'latest',
-  testCmd: 'npm run testonly'
+  testCmd: 'npm run testonly',
 })

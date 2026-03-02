@@ -9,7 +9,7 @@ const Level = {
   warn: 40,
   error: 50,
   critical: 50,
-  off: 100
+  off: 100,
 }
 
 const traceChannel = channel('datadog:log:trace')
@@ -74,5 +74,5 @@ module.exports = {
   debugChannel,
   infoChannel,
   warnChannel,
-  errorChannel
+  errorChannel,
 }

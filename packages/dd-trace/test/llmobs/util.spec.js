@@ -2,13 +2,12 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { before, describe, it } = require('mocha')
 const {
   encodeUnicode,
   getFunctionArguments,
   validateKind,
-  spanHasError
+  spanHasError,
 } = require('../../src/llmobs/util')
 
 describe('util', () => {
@@ -45,25 +44,26 @@ describe('util', () => {
   describe('getFunctionArguments', () => {
     describe('functionality', () => {
       it('should return undefined for a function without arguments', () => {
-        expect(getFunctionArguments(() => {})).to.deep.equal(undefined)
+        assert.deepStrictEqual(getFunctionArguments(() => {}), undefined)
       })
 
       it('should capture a single argument only by its value', () => {
-        expect(getFunctionArguments((arg) => {}, ['bar'])).to.deep.equal('bar')
+        assert.deepStrictEqual(getFunctionArguments((arg) => {}, ['bar']), 'bar')
       })
 
       it('should capture multiple arguments by name', () => {
-        expect(getFunctionArguments((foo, bar) => {}, ['foo', 'bar'])).to.deep.equal({ foo: 'foo', bar: 'bar' })
+        assert.deepStrictEqual(getFunctionArguments((foo, bar) => {}, ['foo', 'bar']), { foo: 'foo', bar: 'bar' })
       })
 
       it('should ignore arguments not passed in', () => {
-        expect(getFunctionArguments((foo, bar, baz) => {}, ['foo', 'bar'])).to.deep.equal({ foo: 'foo', bar: 'bar' })
+        assert.deepStrictEqual(getFunctionArguments((foo, bar, baz) => {}, ['foo', 'bar']), { foo: 'foo', bar: 'bar' })
       })
 
       it('should capture spread arguments', () => {
-        expect(
-          getFunctionArguments((foo, bar, ...args) => {}, ['foo', 'bar', 1, 2, 3])
-        ).to.deep.equal({ foo: 'foo', bar: 'bar', args: [1, 2, 3] })
+        assert.deepStrictEqual(
+          getFunctionArguments((foo, bar, ...args) => {}, ['foo', 'bar', 1, 2, 3]),
+          { foo: 'foo', bar: 'bar', args: [1, 2, 3] }
+        )
       })
     })
 
@@ -152,7 +152,7 @@ describe('util', () => {
     before(() => {
       Span = require('../../src/opentracing/span')
       ps = {
-        sample () {}
+        sample () {},
       }
     })
 

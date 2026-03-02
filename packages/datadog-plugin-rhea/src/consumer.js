@@ -27,8 +27,8 @@ class RheaConsumerPlugin extends ConsumerPlugin {
       meta: {
         component: 'rhea',
         'amqp.link.source.address': name,
-        'amqp.link.role': 'receiver'
-      }
+        'amqp.link.role': 'receiver',
+      },
     }, ctx)
 
     if (

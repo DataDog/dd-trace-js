@@ -1,10 +1,10 @@
 'use strict'
 
+const tracer = require('dd-trace').init()
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
-const tracer = require('dd-trace').init()
 tracer.profilerStarted().then(() => {
   tracer.trace('x', (_, done) => {
     setImmediate(() => {

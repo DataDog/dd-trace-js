@@ -1,10 +1,12 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('tap').mocha
+const path = require('node:path')
+const os = require('node:os')
+const { Worker } = require('node:worker_threads')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const path = require('node:path')
-const { Worker } = require('node:worker_threads')
 
 require('../setup/core')
 
@@ -17,21 +19,23 @@ describe('crashtracking', () => {
   beforeEach(() => {
     crashtracker = {
       start: sinon.stub(),
-      configure: sinon.stub()
+      configure: sinon.stub(),
     }
 
     noop = {
       start: sinon.stub(),
-      configure: sinon.stub()
+      configure: sinon.stub(),
     }
 
     config = {}
   })
 
-  describe('with a working crashtracker', () => {
+  const describeNotWindows = os.platform() !== 'win32' ? describe : describe.skip
+
+  describeNotWindows('with a working crashtracker', function () {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
-        './crashtracker': crashtracker
+        './crashtracker': crashtracker,
       })
     })
 
@@ -48,7 +52,7 @@ describe('crashtracking', () => {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': null,
-        './noop': noop
+        './noop': noop,
       })
     })
 
@@ -67,7 +71,7 @@ describe('crashtracking', () => {
     beforeEach(() => {
       crashtracking = proxyquire('../../src/crashtracking', {
         './crashtracker': null,
-        './noop': noop
+        './noop': noop,
       })
 
       worker = new Worker(path.join(__dirname, 'worker.js'))

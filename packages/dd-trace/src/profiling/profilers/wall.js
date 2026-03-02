@@ -1,21 +1,21 @@
 'use strict'
 
-const { storage } = require('../../../../datadog-core')
-
 const dc = require('dc-polyfill')
+
+const { storage } = require('../../../../datadog-core')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
+const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
+
 const {
   END_TIMESTAMP_LABEL,
   SPAN_ID_LABEL,
   LOCAL_ROOT_SPAN_ID_LABEL,
   getNonJSThreadsLabels,
   getThreadLabels,
-  encodeProfileAsync
+  encodeProfileAsync,
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
-
-const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
 let beforeCh
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -183,7 +183,7 @@ class NativeWallProfiler {
       sourceMapper: this.#mapper,
       useCPED: this.#asyncContextFrameEnabled,
       withContexts: this.#withContexts,
-      workaroundV8Bug: this.#v8ProfilerBugWorkaroundEnabled
+      workaroundV8Bug: this.#v8ProfilerBugWorkaroundEnabled,
     })
 
     if (this.#withContexts) {
@@ -298,7 +298,7 @@ class NativeWallProfiler {
   #setNewContext () {
     this.#pprof.time.setContext(
       this._currentContext = {
-        ref: {}
+        ref: {},
       }
     )
   }
@@ -414,7 +414,7 @@ class NativeWallProfiler {
     const { totalAsyncContextCount, usedAsyncContextCount } = this.#pprof.time.getMetrics()
     return {
       totalAsyncContextCount,
-      usedAsyncContextCount
+      usedAsyncContextCount,
     }
   }
 

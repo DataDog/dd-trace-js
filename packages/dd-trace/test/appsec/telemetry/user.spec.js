@@ -15,7 +15,7 @@ describe('Appsec User Telemetry metrics', () => {
   beforeEach(() => {
     inc = sinon.spy()
     count = sinon.stub(appsecNamespace, 'count').returns({
-      inc
+      inc,
     })
 
     appsecNamespace.metrics.clear()
@@ -39,7 +39,7 @@ describe('Appsec User Telemetry metrics', () => {
 
         sinon.assert.calledOnceWithExactly(count, 'instrum.user_auth.missing_user_login', {
           framework: 'passport-local',
-          event_type: 'login_success'
+          event_type: 'login_success',
         })
       })
     })
@@ -50,7 +50,7 @@ describe('Appsec User Telemetry metrics', () => {
 
         sinon.assert.calledOnceWithExactly(count, 'instrum.user_auth.missing_user_id', {
           framework: 'passport',
-          event_type: 'authenticated_request'
+          event_type: 'authenticated_request',
         })
       })
     })
@@ -61,7 +61,7 @@ describe('Appsec User Telemetry metrics', () => {
 
         sinon.assert.calledOnceWithExactly(count, 'sdk.event', {
           event_type: 'login_success',
-          sdk_version: 'v1'
+          sdk_version: 'v1',
         })
       })
     })

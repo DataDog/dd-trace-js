@@ -1,18 +1,18 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 
 describe('sendData', () => {
   const application = {
     language_name: 'nodejs',
-    tracer_version: 'version'
+    tracer_version: 'version',
   }
 
   let sendDataModule
@@ -21,7 +21,7 @@ describe('sendData', () => {
   beforeEach(() => {
     request = sinon.stub()
     sendDataModule = proxyquire('../../src/telemetry/send-data', {
-      '../exporters/common/request': request
+      '../exporters/common/request': request,
     })
   })
 
@@ -29,7 +29,7 @@ describe('sendData', () => {
     sendDataModule.sendData({
       hostname: '',
       port: '12345',
-      tags: { 'runtime-id': '123' }
+      tags: { 'runtime-id': '123' },
     }, application, 'test', 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -43,18 +43,18 @@ describe('sendData', () => {
         'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version
+        'dd-client-library-version': application.tracer_version,
       },
       url: undefined,
       hostname: '',
-      port: '12345'
+      port: '12345',
     })
   })
 
   it('should call to request (UDP)', () => {
     sendDataModule.sendData({
       url: 'unix:/foo/bar/baz',
-      tags: { 'runtime-id': '123' }
+      tags: { 'runtime-id': '123' },
     }, application, 'test', 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -68,11 +68,11 @@ describe('sendData', () => {
         'dd-telemetry-api-version': 'v2',
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version
+        'dd-client-library-version': application.tracer_version,
       },
       url: 'unix:/foo/bar/baz',
       hostname: undefined,
-      port: undefined
+      port: undefined,
     })
   })
 
@@ -80,7 +80,7 @@ describe('sendData', () => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': '123' },
-      telemetry: { debug: true }
+      telemetry: { debug: true },
     }, application, 'test', 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -95,11 +95,11 @@ describe('sendData', () => {
         'dd-telemetry-request-type': 'req-type',
         'dd-telemetry-debug-enabled': 'true',
         'dd-client-library-language': application.language_name,
-        'dd-client-library-version': application.tracer_version
+        'dd-client-library-version': application.tracer_version,
       },
       url: '/test',
       hostname: undefined,
-      port: undefined
+      port: undefined,
     })
   })
 
@@ -108,7 +108,7 @@ describe('sendData', () => {
       message: 'test',
       logger: {},
       tags: {},
-      serviceMapping: {}
+      serviceMapping: {},
     }
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } }, 'test', 'test', 'req-type', payload)
 
@@ -126,9 +126,9 @@ describe('sendData', () => {
       payload: {
         integrations: [
           { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
-        ]
-      }
+          { name: 'bar2', enabled: false, auto_enabled: true },
+        ],
+      },
 
     }, retryObjData]
 
@@ -143,12 +143,12 @@ describe('sendData', () => {
       payload: {
         integrations: [
           { name: 'foo2', enabled: true, auto_enabled: true },
-          { name: 'bar2', enabled: false, auto_enabled: true }
-        ]
-      }
+          { name: 'bar2', enabled: false, auto_enabled: true },
+        ],
+      },
     }, {
       request_type: 'req-type-1',
-      payload: { foo: 'bar' }
+      payload: { foo: 'bar' },
     }]
     assert.strictEqual(data.request_type, 'message-batch')
     assert.deepStrictEqual(data.payload, expectedPayload)
@@ -161,7 +161,7 @@ describe('sendData', () => {
       {
         isCiVisibility: true,
         tags: { 'runtime-id': '123' },
-        site: 'datadoghq.eu'
+        site: 'datadoghq.eu',
       },
       application,
       'test', 'req-type'
@@ -171,7 +171,7 @@ describe('sendData', () => {
     const options = request.getCall(0).args[1]
     assertObjectContains(options, {
       method: 'POST',
-      path: '/api/v2/apmtelemetry'
+      path: '/api/v2/apmtelemetry',
     })
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))

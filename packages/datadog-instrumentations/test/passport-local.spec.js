@@ -2,13 +2,12 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const dc = require('dc-polyfill')
 const { after, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const agent = require('../../dd-trace/test/plugins/agent')
 const axios = require('axios').create({ validateStatus: null })
+const agent = require('../../dd-trace/test/plugins/agent')
 const { storage } = require('../../datadog-core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
@@ -18,7 +17,11 @@ withVersions('passport-local', 'passport-local', version => {
     let port, server, subscriberStub
 
     before(() => {
-      return agent.load(['http', 'express', 'passport', 'passport-local'], { client: false })
+      return agent.load(
+        ['http', 'express', 'passport', 'passport-local'],
+        { client: false },
+        { appsec: { enabled: true } }
+      )
     })
 
     before((done) => {
@@ -42,7 +45,7 @@ withVersions('passport-local', 'passport-local', version => {
           _id: 1,
           username: 'test',
           password: '1234',
-          email: 'testuser@ddog.com'
+          email: 'testuser@ddog.com',
         }]
 
         const user = users.find(user => (user.username === username) && (user.password === password))
@@ -57,13 +60,13 @@ withVersions('passport-local', 'passport-local', version => {
       passport.use('local', new LocalStrategy({
         usernameField: 'username',
         passwordField: 'password',
-        passReqToCallback: false
+        passReqToCallback: false,
       }, validateUser))
 
       passport.use('local-withreq', new LocalStrategy({
         usernameField: 'username',
         passwordField: 'password',
-        passReqToCallback: true
+        passReqToCallback: true,
       }, validateUser))
 
       app.use(passport.initialize())
@@ -73,7 +76,7 @@ withVersions('passport-local', 'passport-local', version => {
         passport.authenticate('local', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          session: false
+          session: false,
         })
       )
 
@@ -81,7 +84,7 @@ withVersions('passport-local', 'passport-local', version => {
         passport.authenticate('local-withreq', {
           successRedirect: '/grant',
           failureRedirect: '/deny',
-          session: false
+          session: false,
         })
       )
 
@@ -114,7 +117,7 @@ withVersions('passport-local', 'passport-local', version => {
       const res = await axios.post(`http://localhost:${port}/`, { username: 'error', password: '1234' })
 
       assert.strictEqual(res.status, 500)
-      expect(subscriberStub).to.not.be.called
+      sinon.assert.notCalled(subscriberStub)
     })
 
     it('should call subscriber with proper arguments on success', async () => {
@@ -122,12 +125,12 @@ withVersions('passport-local', 'passport-local', version => {
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-local',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -136,12 +139,12 @@ withVersions('passport-local', 'passport-local', version => {
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Granted')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-local',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -150,12 +153,12 @@ withVersions('passport-local', 'passport-local', version => {
 
       assert.strictEqual(res.status, 200)
       assert.strictEqual(res.data, 'Denied')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-local',
         login: 'test',
         user: false,
         success: false,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
 
@@ -169,12 +172,12 @@ withVersions('passport-local', 'passport-local', version => {
 
       assert.strictEqual(res.status, 403)
       assert.strictEqual(res.data, 'Blocked')
-      expect(subscriberStub).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(subscriberStub, {
         framework: 'passport-local',
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController()
+        abortController: new AbortController(),
       })
     })
   })

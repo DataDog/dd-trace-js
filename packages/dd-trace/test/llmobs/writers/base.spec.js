@@ -2,12 +2,13 @@
 
 const assert = require('node:assert/strict')
 
-const { expect } = require('chai')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+require('../../setup/core')
 const { useEnv } = require('../../../../../integration-tests/helpers')
+const { removeDestroyHandler } = require('../util')
 
 describe('BaseLLMObsWriter', () => {
   let BaseLLMObsWriter
@@ -22,18 +23,18 @@ describe('BaseLLMObsWriter', () => {
     logger = {
       debug: sinon.stub(),
       warn: sinon.stub(),
-      error: sinon.stub()
+      error: sinon.stub(),
     }
     BaseLLMObsWriter = proxyquire('../../../src/llmobs/writers/base', {
       '../../exporters/common/request': request,
       '../../log': logger,
       './util': proxyquire('../../../src/llmobs/writers/util', {
-        '../../log': logger
-      })
+        '../../log': logger,
+      }),
     })
 
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
 
     options = {
@@ -43,14 +44,14 @@ describe('BaseLLMObsWriter', () => {
         site: 'site.com',
         hostname: 'localhost',
         port: 8126,
-        apiKey: 'test'
-      }
+        apiKey: 'test',
+      },
     }
   })
 
   afterEach(() => {
     clock.restore()
-    process.removeAllListeners('beforeExit')
+    removeDestroyHandler()
   })
 
   it('constructs an agentless writer', () => {
@@ -71,7 +72,7 @@ describe('BaseLLMObsWriter', () => {
 
   describe('with override origin', () => {
     useEnv({
-      _DD_LLMOBS_OVERRIDE_ORIGIN: 'http://override-origin:12345'
+      _DD_LLMOBS_OVERRIDE_ORIGIN: 'http://override-origin:12345',
     })
 
     it('constructs a writer with the correct url', () => {
@@ -158,9 +159,9 @@ describe('BaseLLMObsWriter', () => {
     const event = { foo: 'bar–' }
     writer.append(event)
 
-    assert.strictEqual(writer._buffer.length, 1)
-    assert.deepStrictEqual(writer._buffer[0], event)
-    assert.strictEqual(writer._bufferSize, 16)
+    assert.strictEqual(writer._buffer.events.length, 1)
+    assert.deepStrictEqual(writer._buffer.events[0], event)
+    assert.strictEqual(writer._buffer.size, 16)
   })
 
   it('does not append an event if the buffer is full', () => {
@@ -172,7 +173,7 @@ describe('BaseLLMObsWriter', () => {
     }
 
     writer.append({ foo: 'bar' })
-    assert.strictEqual(writer._buffer.length, 1000)
+    assert.strictEqual(writer._buffer.events.length, 1000)
     sinon.assert.calledWith(logger.warn, 'BaseLLMObsWriter event buffer full (limit is 1000), dropping event')
   })
 
@@ -207,6 +208,20 @@ describe('BaseLLMObsWriter', () => {
       assert.strictEqual(requestOptions.headers['X-Datadog-EVP-Subdomain'], 'intake')
     })
 
+    it('flushes routed buffers directly to intake in agent proxy mode', () => {
+      writer = new BaseLLMObsWriter(options)
+      writer.setAgentless(false)
+      writer.makePayload = (events) => ({ events })
+
+      writer.append({ foo: 'bar' }, { apiKey: 'key-a', site: 'site-a.com' })
+      writer.flush()
+
+      const requestOptions = request.getCall(0).args[1]
+      assert.strictEqual(requestOptions.url.href, 'https://intake.site-a.com/')
+      assert.strictEqual(requestOptions.path, '/endpoint')
+      assert.strictEqual(requestOptions.headers['DD-API-KEY'], 'key-a')
+    })
+
     it('does not flush when agentless property is not set', () => {
       writer = new BaseLLMObsWriter(options)
       writer.makePayload = (events) => ({ events })
@@ -216,8 +231,8 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       sinon.assert.notCalled(request)
-      assert.strictEqual(writer._buffer.length, 1)
-      assert.deepStrictEqual(writer._buffer[0], event)
+      assert.strictEqual(writer._buffer.events.length, 1)
+      assert.deepStrictEqual(writer._buffer.events[0], event)
 
       writer.setAgentless(true)
       writer.flush()
@@ -262,13 +277,18 @@ describe('BaseLLMObsWriter', () => {
       writer.flush = sinon.stub()
 
       writer.destroy()
+      // Call twice to ensure it sets the state properly
+      writer.destroy()
 
-      assert.strictEqual(writer._destroyed, true)
       sinon.assert.calledWith(clearInterval, writer._periodic)
-      sinon.assert.calledWith(process.removeListener, 'beforeExit', writer._beforeExitHandler)
       sinon.assert.calledOnce(writer.flush)
-      expect(logger.debug)
-        .to.have.been.calledWith('Stopping BaseLLMObsWriter')
+      sinon.assert.calledWith(logger.debug, 'Stopping BaseLLMObsWriter')
+
+      for (const handler of globalThis[Symbol.for('dd-trace')].beforeExitHandlers) {
+        if (handler.name.endsWith('destroy')) {
+          assert.fail('destroy handler should not be present')
+        }
+      }
     })
 
     it('does not destroy more than once', () => {

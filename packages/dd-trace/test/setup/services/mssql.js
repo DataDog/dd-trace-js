@@ -1,25 +1,26 @@
 'use strict'
 
 const RetryOperation = require('../operation')
-const tedious = require('../../../../../versions/tedious').get()
 
-function waitForMssql () {
-  return new Promise((resolve, reject) => {
+function waitForMssql (isSandbox) {
+  const tedious = isSandbox ? require('tedious') : require('../../../../../versions/tedious').get()
+
+  return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const operation = new RetryOperation('mssql')
 
     operation.attempt(currentAttempt => {
       const connection = new tedious.Connection({
         server: 'localhost',
         options: {
-          trustServerCertificate: true
+          trustServerCertificate: true,
         },
         authentication: {
           options: {
             userName: 'sa',
-            password: 'DD_HUNTER2'
+            password: 'DD_HUNTER2',
           },
-          type: 'default'
-        }
+          type: 'default',
+        },
       }).on('connect', err => {
         if (operation.retry(err)) return
         if (err) return reject(err)
@@ -36,7 +37,7 @@ function waitForMssql () {
       })
       connection.connect()
     })
-  })
+  }))
 }
 
 module.exports = waitForMssql

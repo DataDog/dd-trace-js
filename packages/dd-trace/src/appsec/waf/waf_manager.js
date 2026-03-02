@@ -6,9 +6,20 @@ const WAFContextWrapper = require('./waf_context_wrapper')
 
 const contexts = new WeakMap()
 
+/**
+ * @typedef {object} WAFManagerConfig
+ * @property {number} wafTimeout - Maximum time in microseconds for WAF execution
+ * @property {string} obfuscatorKeyRegex - Regex to redact sensitive data by key
+ * @property {string} obfuscatorValueRegex - Regex to redact sensitive data by value
+ */
+
 class WAFManager {
   static defaultWafConfigPath = 'datadog/00/ASM_DD/default/config'
 
+  /**
+   * @param {object} rules
+   * @param {WAFManagerConfig} config
+   */
   constructor (rules, config) {
     this.config = config
     this.wafTimeout = config.wafTimeout

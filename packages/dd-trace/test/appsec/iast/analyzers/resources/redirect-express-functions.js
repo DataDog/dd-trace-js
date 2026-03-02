@@ -15,5 +15,5 @@ function insecureWithResLocationMethod (value, res) {
 module.exports = {
   insecureWithResHeaderMethod,
   insecureWithResRedirectMethod,
-  insecureWithResLocationMethod
+  insecureWithResLocationMethod,
 }

@@ -1,6 +1,6 @@
 'use strict'
 
-const { sanitizeAttributes } = require('@opentelemetry/core')
+const { sanitizeAttributes } = require('../../../../../vendor/dist/@opentelemetry/core')
 const { METRIC_TYPES } = require('./constants')
 
 /**
@@ -9,7 +9,7 @@ const { METRIC_TYPES } = require('./constants')
  */
 
 /**
- * @typedef {Object} Measurement
+ * @typedef {object} Measurement
  * @property {string} name - Instrument name
  * @property {string} description - Instrument description
  * @property {string} unit - Measurement unit
@@ -30,11 +30,11 @@ class Instrument {
    * Creates a new instrument instance.
    *
    * @param {string} name - Instrument name (e.g., 'http.request.duration')
-   * @param {Object} options - Instrument configuration options
+   * @param {object} options - Instrument configuration options
    * @param {string} [options.description] - Human-readable description of the instrument
    * @param {string} [options.unit] - Unit of measurement (e.g., 'ms', 'bytes', '1')
    * @param {InstrumentationScope} instrumentationScope - Instrumentation scope for this instrument
-   * @param {Object} reader - Metric reader for recording measurements
+   * @param {object} reader - Metric reader for recording measurements
    */
   constructor (name, options, instrumentationScope, reader) {
     this.name = name
@@ -62,7 +62,7 @@ class Instrument {
       type,
       value,
       attributes: sanitizeAttributes(attributes),
-      timestamp: Number(process.hrtime.bigint())
+      timestamp: Number(process.hrtime.bigint()),
     }
   }
 }
@@ -165,7 +165,7 @@ class ObservableInstrument extends Instrument {
     const observableResult = {
       observe: (value, attributes = {}) => {
         observations.push(this.createMeasurement(this.#type, value, attributes))
-      }
+      },
     }
 
     for (const callback of this.#callbacks) {
@@ -221,5 +221,5 @@ module.exports = {
   Gauge,
   ObservableGauge,
   ObservableCounter,
-  ObservableUpDownCounter
+  ObservableUpDownCounter,
 }

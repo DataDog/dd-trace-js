@@ -1,8 +1,8 @@
 'use strict'
 
-const { getNextSecureMark, reset } = require('../../../../src/appsec/iast/taint-tracking/secure-marks-generator')
 const assert = require('node:assert')
 const { describe, it, beforeEach } = require('mocha')
+const { getNextSecureMark, reset } = require('../../../../src/appsec/iast/taint-tracking/secure-marks-generator')
 
 describe('test secure marks generator', () => {
   beforeEach(() => {
