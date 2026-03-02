@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const request = require('../common/request')
 const { startupLog } = require('../../startup-log')
 const runtimeMetrics = require('../../runtime_metrics')
@@ -9,10 +11,14 @@ const BaseWriter = require('../common/writer')
 const propagationHash = require('../../propagation-hash')
 
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
+const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
 class AgentWriter extends BaseWriter {
   constructor (...args) {
-    super(...args)
+    super({
+      ...args[0],
+      beforeFirstFlush: () => firstFlushChannel.publish(),
+    })
     const { prioritySampler, lookup, protocolVersion, headers, config = {} } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 

@@ -9,8 +9,9 @@ const { safeJSONStringify } = require('./util')
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
 class Writer {
-  constructor ({ url }) {
+  constructor ({ url, beforeFirstFlush }) {
     this._url = url
+    this._beforeFirstFlush = beforeFirstFlush
   }
 
   #isFirstFlush = true
@@ -22,9 +23,9 @@ class Writer {
       this._encoder.reset()
       done()
     } else if (count > 0) {
-      if (this.#isFirstFlush && firstFlushChannel.hasSubscribers) {
+      if (this.#isFirstFlush && firstFlushChannel.hasSubscribers && this._beforeFirstFlush) {
         this.#isFirstFlush = false
-        firstFlushChannel.publish()
+        this._beforeFirstFlush()
       }
       const payload = this._encoder.makePayload()
       this._sendPayload(payload, count, done)
