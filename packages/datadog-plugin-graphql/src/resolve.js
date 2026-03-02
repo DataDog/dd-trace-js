@@ -43,13 +43,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
-      resource: `${info.fieldName}:${info.returnType}`,
+      resource: `${info.parentType}.${info.fieldName}`, // https://spec.graphql.org/draft/#sec-Schema-Coordinates
       childOf,
       type: 'graphql',
       meta: {
         'graphql.field.name': info.fieldName,
         'graphql.field.path': computedPathString,
-        'graphql.field.type': info.returnType.name,
+        'graphql.field.type': info.returnType.toString(),
         'graphql.source': source,
       },
     }, fieldCtx)
