@@ -1,14 +1,11 @@
 name: All Green
 on:
   pull_request:
-  push:
-    branches:
-      - master
-  schedule:
-    - cron: 0 4 * * *
+  check_suite:
+    types: [completed]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: all-green-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -20,22 +17,25 @@ jobs:
     steps:
       - uses: wechuli/allcheckspassed@1d00cf0c34c4b0805db8866d8913f22e7125301e # v2.3.0
         with:
-          delay: ${{ github.run_attempt == 1 && '7' || '0' }} # 7 minutes on first attempt, no delay on reruns
-          retries: 15
-          polling_interval: 2 # Once every 2 minutes
+          delay: ${{ github.run_attempt == 1 && '1' || '0' }} # 1 minutes on first attempt, no delay on reruns
+          poll: false
+          commit_sha: ${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
           checks_exclude: devflow.*
-          fail_fast: false
           verbose: true # What checks are still waited for?
       - name: Require vendor validation when vendor/ changes
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' || toJSON(github.event.check_suite.pull_requests) != '[]'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUESTS_JSON: ${{ toJSON(github.event.check_suite.pull_requests) }}
+          HEAD_SHA: ${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
 
+          if [ -z "${BASE_SHA}" ]; then
+            BASE_SHA="$(echo "${PULL_REQUESTS_JSON}" | jq -r '.[0].base.sha')"
+          fi
           vendor_changed="$(gh api "repos/${REPO}/compare/${BASE_SHA}...${HEAD_SHA}" --jq 'any(.files[].filename; startswith("vendor/"))')"
           if [ "$vendor_changed" != "true" ]; then
             exit 0
@@ -44,7 +44,7 @@ jobs:
           # If vendor/ was touched, require *some* vendor validation check to be present:
           # - For most PRs: `Validate vendored bundle / validate-vendored-bundle`
           # - For Dependabot vendor PRs: `Dependabot Automation / vendor-validate`
-          check_names="$(gh api "repos/${REPO}/commits/${{ github.event.pull_request.head.sha }}/check-runs" \
+          check_names="$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" \
             -H "Accept: application/vnd.github+json" \
             --paginate \
             --jq '.check_runs[].name')"
