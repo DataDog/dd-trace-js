@@ -23,7 +23,7 @@ function findPkg () {
   if (filePath === undefined) return {}
 
   try {
-    return require(filePath)
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'))
   } catch {
     return {}
   }
