@@ -199,10 +199,13 @@
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/encode/0.4.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/encode/0.5.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/encode/agentless-json.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/encode/span-stats.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporter.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/agent/exporter.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/agent/writer.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/exporters/agentless/exporter.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/exporters/agentless/writer.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/common/buffering-exporter.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/common/docker.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/exporters/common/request.spec.js @DataDog/lang-platform-js
