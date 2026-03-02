@@ -52,7 +52,7 @@ Each entry in the instrumentations array:
 
   // Option A: functionQuery (recommended)
   functionQuery: {
-    kind: 'Async' | 'Callback' | 'Sync',  // transform type (see below)
+    kind: 'Async' | 'AsyncIterator' | 'Callback' | 'Sync',  // transform type (see below)
     methodName: string,      // class method or property method name
     className?: string,      // scope to a specific class
     functionName?: string,   // target a FunctionDeclaration (alternative to methodName)
@@ -119,17 +119,80 @@ Example with `module.name: "@langchain/core"` and `channelName: "RunnableSequenc
 
 ## Function Kinds and Transforms
 
-Orchestrion supports three transform types, selected by the `kind` field:
+Orchestrion supports four transform types, selected by the `kind` field:
 
 | Kind | Transform | Behavior |
 |------|-----------|----------|
 | `Async` | `tracePromise` | Wraps in async arrow, calls `channel.tracePromise()` — handles promise resolution/rejection |
+| `AsyncIterator` | `traceAsyncIterator` | Wraps async generators/iterators — creates TWO channels: base and `_next` (see below) |
 | `Callback` | `traceCallback` | Intercepts callback at `arguments[index]` (default: last arg, i.e. `-1`), wraps it to publish `asyncStart`/`asyncEnd`/`error` events |
 | `Sync` | `traceSync` | Wraps in non-async arrow, calls `channel.traceSync()` — handles synchronous return/throw. **Note:** `Sync` is the default when `kind` is omitted or unrecognized. |
 
-All three transforms dispatch to `traceFunction` (for standalone functions) or `traceInstanceMethod` (for class methods, including inherited ones via constructor patching).
+All transforms dispatch to `traceFunction` (for standalone functions) or `traceInstanceMethod` (for class methods, including inherited ones via constructor patching).
 
 For `Callback` kind, use the `index` field to specify which argument is the callback (defaults to `-1`, meaning the last argument).
+
+### AsyncIterator Pattern (Two Plugins Required)
+
+**When `kind: 'AsyncIterator'` is used, Orchestrion automatically creates TWO channels:**
+1. Base channel: `tracing:orchestrion:{package}:{channelName}:*`
+2. Next channel: `tracing:orchestrion:{package}:{channelName}_next:*`
+
+**You must create TWO plugins to handle both channels:**
+
+```javascript
+// Main plugin - creates the span when stream starts
+class StreamPlugin extends TracingPlugin {
+  static id = 'mypackage'
+  static prefix = 'tracing:orchestrion:mypackage:Class_stream'
+
+  bindStart (ctx) {
+    this.startSpan('mypackage.stream', {
+      service: this.config.service,
+      kind: 'internal',
+      component: 'mypackage'
+    }, ctx)
+    return ctx.currentStore
+  }
+}
+
+// Next plugin - handles each chunk and finishes span when done
+class NextStreamPlugin extends StreamPlugin {
+  static id = 'mypackage'
+  static prefix = 'tracing:orchestrion:mypackage:Class_stream_next'
+
+  bindStart (ctx) {
+    // Don't create a new span - inherit the store from the main plugin
+    return ctx.currentStore
+  }
+
+  asyncEnd (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    // Check if the iterator is done (result.done === true)
+    if (ctx.result.done === true) {
+      span.finish()
+    }
+  }
+
+  error (ctx) {
+    const span = ctx.currentStore?.span
+    if (span) {
+      this.addError(ctx?.error, span)
+      span.finish()
+    }
+  }
+}
+```
+
+**Key points:**
+- Main plugin creates the span
+- Next plugin uses `_next` suffix in prefix
+- Next plugin extends main plugin for consistency
+- Next plugin's `bindStart` returns inherited store (no new span)
+- Next plugin's `asyncEnd` finishes span when `result.done === true`
+- Both plugins must be exported and registered
 
 ## Finding the Right filePath
 
