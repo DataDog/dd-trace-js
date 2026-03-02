@@ -6,7 +6,6 @@
   "typings": "index.d.ts",
   "scripts": {
     "env": "bash ./plugin-env",
-    "prepare": "cd vendor && npm ci",
     "preinstall": "node scripts/preinstall.js",
     "bench": "node benchmark/index.js",
     "bench:e2e:test-optimization": "node benchmark/e2e-test-optimization/benchmark-run.js",

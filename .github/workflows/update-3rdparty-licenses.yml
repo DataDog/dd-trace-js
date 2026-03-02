@@ -3,8 +3,6 @@ name: Update 3rd-party licenses
 on:
   pull_request:
     paths:
-      - ".github/vendored-dependencies.csv"
-      - "vendor/package-lock.json"
       - "yarn.lock"
 
 jobs:
@@ -35,8 +33,8 @@ jobs:
       - name: Check out dd-license-attribution
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: watson/dd-license-attribution
-          ref: 8ea483b9f735bf8da632c89796789cc2a050a9a6
+          repository: DataDog/dd-license-attribution
+          ref: 224a89cb69d3143e8aa4640405037cf9c233ddf5
           path: dd-license-attribution
 
       - name: Install dd-license-attribution
@@ -69,7 +67,7 @@ jobs:
             --use-mirrors=mirrors.json \
             --no-scancode-strategy \
             --no-github-sbom-strategy \
-            --lockfile-subdir vendor \
+            --yarn-subdir vendor \
             "${REPOSITORY_URL}" > LICENSE-3rdparty.csv
 
       - name: Append vendored dependencies from PR
