@@ -66,6 +66,7 @@ describe('AppSec Index', function () {
 
   beforeEach(() => {
     config = {
+      inferredProxyServicesEnabled: false,
       appsec: {
         enabled: true,
         rules: './path/rules.json',
@@ -175,7 +176,7 @@ describe('AppSec Index', function () {
 
       sinon.assert.calledOnceWithExactly(blocking.setTemplates, config)
       sinon.assert.calledOnceWithExactly(RuleManager.loadRules, config.appsec)
-      sinon.assert.calledOnceWithExactly(Reporter.init, config.appsec)
+      sinon.assert.calledOnceWithExactly(Reporter.init, config.appsec, config.inferredProxyServicesEnabled)
       sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, 'anon', false)
       sinon.assert.calledOnceWithExactly(incomingHttpRequestStart.subscribe, AppSec.incomingHttpStartTranslator)
       sinon.assert.calledOnceWithExactly(incomingHttpRequestEnd.subscribe, AppSec.incomingHttpEndTranslator)
@@ -361,6 +362,105 @@ describe('AppSec Index', function () {
           'http.client_ip': '127.0.0.1',
         },
       }, req)
+    })
+
+    describe('inferred proxy spans', () => {
+      it('should add _dd.appsec.enabled to inferred proxy span when present', () => {
+        AppSec.disable()
+        config.inferredProxyServicesEnabled = true
+        AppSec.enable(config)
+
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        const inferredProxySpan = {
+          setTag: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({ inferredProxySpan })
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.calledOnceWithExactly(inferredProxySpan.setTag, '_dd.appsec.enabled', 1)
+      })
+
+      it('should not fail when inferred proxy span is not present', () => {
+        AppSec.disable()
+        config.inferredProxyServicesEnabled = true
+        AppSec.enable(config)
+
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({})
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.calledOnce(rootSpan.addTags)
+      })
+
+      it('should not add _dd.appsec.enabled to inferred proxy span when inferredProxyServicesEnabled is false', () => {
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        const inferredProxySpan = {
+          setTag: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({ inferredProxySpan })
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.notCalled(inferredProxySpan.setTag)
+      })
     })
   })
 

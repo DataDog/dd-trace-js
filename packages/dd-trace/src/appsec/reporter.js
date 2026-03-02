@@ -34,6 +34,7 @@ const config = {
   maxHeadersCollected: 0,
   headersRedaction: false,
   raspBodyCollection: false,
+  inferredProxyServicesEnabled: false,
 }
 
 const metricsQueue = new Map()
@@ -103,11 +104,12 @@ const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHea
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
 const REDACTED_HEADERS = new Set(redactedHeadersList)
 
-function init (_config) {
+function init (_config, inferredProxyServicesEnabled) {
   config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
   config.maxHeadersCollected = _config.extendedHeadersCollection.maxHeaders
   config.headersRedaction = _config.extendedHeadersCollection.redaction
   config.raspBodyCollection = _config.rasp.bodyCollection
+  config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
 }
 
 function formatHeaderName (name) {
@@ -361,6 +363,14 @@ function reportAttack ({ events: attackData, actions }) {
   }
 
   rootSpan.addTags(newTags)
+
+  // Add _dd.appsec.json tag to inferred proxy span
+  if (config.inferredProxyServicesEnabled) {
+    const context = web.getContext(req)
+    if (context?.inferredProxySpan) {
+      context.inferredProxySpan.setTag('_dd.appsec.json', newTags['_dd.appsec.json'])
+    }
+  }
 
   // TODO this should be deleted in a major
   if (config.raspBodyCollection && isRaspAttack(attackData)) {
