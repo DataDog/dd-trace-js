@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const { describe, it } = require('mocha')
 
-const { getFormattedJestTestParameters, getJestSuitesToRun } = require('../src/util')
+const { getFormattedJestTestParameters, getJestSuitesToRun, getEfdRetryCount } = require('../src/util')
 describe('getFormattedJestTestParameters', () => {
   it('returns formatted parameters for arrays', () => {
     const result = getFormattedJestTestParameters([[[1, 2], [3, 4]]])
@@ -186,5 +186,45 @@ describe('getJestSuitesToRun', () => {
       globalConfig.testEnvironmentOptions._ddForcedToRun,
       JSON.stringify({ 'fixtures/test-unskippable.js': true })
     )
+  })
+})
+
+describe('getEfdRetryCount', () => {
+  const slowTestRetries = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+
+  it('returns 10 retries for a 0 ms test', () => {
+    assert.strictEqual(getEfdRetryCount(0, slowTestRetries), 10)
+  })
+
+  it('returns 10 retries for a 4999 ms test', () => {
+    assert.strictEqual(getEfdRetryCount(4999, slowTestRetries), 10)
+  })
+
+  it('returns 5 retries for a 5000 ms test', () => {
+    assert.strictEqual(getEfdRetryCount(5000, slowTestRetries), 5)
+  })
+
+  it('returns 5 retries for a 9999 ms test', () => {
+    assert.strictEqual(getEfdRetryCount(9999, slowTestRetries), 5)
+  })
+
+  it('returns 3 retries for a 10000 ms test', () => {
+    assert.strictEqual(getEfdRetryCount(10000, slowTestRetries), 3)
+  })
+
+  it('returns 2 retries for a 30000 ms test', () => {
+    assert.strictEqual(getEfdRetryCount(30000, slowTestRetries), 2)
+  })
+
+  it('returns 0 retries for a 300000 ms test (5 min)', () => {
+    assert.strictEqual(getEfdRetryCount(300000, slowTestRetries), 0)
+  })
+
+  it('returns 0 retries for a test longer than 5 min', () => {
+    assert.strictEqual(getEfdRetryCount(300001, slowTestRetries), 0)
+  })
+
+  it('falls back to 0 when slow_test_retries is empty', () => {
+    assert.strictEqual(getEfdRetryCount(0, {}), 0)
   })
 })

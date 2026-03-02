@@ -117,6 +117,31 @@ function isMarkedAsUnskippable (test) {
   return false
 }
 
+/**
+ * Given a test's first-execution duration (ms) and the slow_test_retries map
+ * from the backend, return how many EFD retries to run.
+ *
+ * Returns 0 when the test is too slow to retry (≥ 5 min).
+ *
+ * @param {number} durationMs
+ * @param {Record<string, number>} slowTestRetries  e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @returns {number}
+ */
+function getEfdRetryCount (durationMs, slowTestRetries) {
+  const thresholds = [
+    { limitMs: 5 * 1000, key: '5s' },
+    { limitMs: 10 * 1000, key: '10s' },
+    { limitMs: 30 * 1000, key: '30s' },
+    { limitMs: 5 * 60 * 1000, key: '5m' },
+  ]
+  for (const { limitMs, key } of thresholds) {
+    if (durationMs < limitMs) {
+      return slowTestRetries[key] ?? 0
+    }
+  }
+  return 0 // ≥ 5 min — abort
+}
+
 function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
   const unskippableSuites = {}
   const forcedToRunSuites = {}
@@ -172,4 +197,5 @@ module.exports = {
   getJestTestName,
   getJestSuitesToRun,
   isMarkedAsUnskippable,
+  getEfdRetryCount,
 }
