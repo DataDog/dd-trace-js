@@ -1,6 +1,6 @@
 'use strict'
 
-const { readFileSync } = require('fs')
+const { readFileSync, readFileSync } = require('fs')
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
@@ -100,6 +100,46 @@ function getGitHubEventPayload () {
     return
   }
   return JSON.parse(readFileSync(path, 'utf8'))
+}
+
+function getJobIDFromDiagFile () {
+  
+  // There should be an if statement here for checking wether the env job id var is available or not.
+  // If it is available, just return that... 
+
+  // Extract the Job ID from a Github diagnostic file
+  const diagPath = '/home/runner/actions-runner/cached/_diag'
+
+  let foundDiagDir = ''
+  let workerLogFiles = []
+
+  const path = require("path")
+
+  try {
+    // Obtain a list of fs.Dirent objects of the files in diagPath
+    const files = fs.readdirSync(diagPath, {withFileTypes: true})
+
+    // Check if there are valid pontential log files
+    const potentialLogs = files
+      .filter((file) => file.isFile() && file.name.startsWith('Worker_')) // && file.name.endsWith('.log'))
+      .map((file) => file.name)
+
+    if (potentialLogs.length > 0) { workerLogFiles = potentialLogs }
+    else { return null }
+  }
+  catch { return null }
+
+  // Get the job ID via regex
+  for (const logFile of workerLogFiles) {
+    const filePath = path.posix.join(foundDiagDir, logFile)
+    const content = fs.readFileSync(filePath, 'utf-8')
+
+    const match = content.match('/"job"\s*:\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/')
+
+    // match[1] is the captured group with the display name
+    if (match && match[1]) { return match[1] }
+  }
+
 }
 
 module.exports = {
@@ -289,6 +329,9 @@ module.exports = {
       if (GITHUB_RUN_ATTEMPT) {
         pipelineURL = `${pipelineURL}/attempts/${GITHUB_RUN_ATTEMPT}`
       }
+
+      console.log("PRINTING JOB ID!!!")
+      console.log(getJobIDFromDiagFile())
 
       const jobUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
 
