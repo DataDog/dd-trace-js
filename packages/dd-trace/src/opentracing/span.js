@@ -396,6 +396,13 @@ class DatadogSpan {
   }
 
   _addTags (keyValuePairs) {
+    if (keyValuePairs) {
+      const serviceName = keyValuePairs['service.name'] || keyValuePairs.service
+      if (serviceName && serviceName !== this._parentTracer?._service && !keyValuePairs['_dd.srv_src']) {
+        keyValuePairs['_dd.srv_src'] = 'm'
+      }
+    }
+
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)

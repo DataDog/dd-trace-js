@@ -53,9 +53,12 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         return parentStore
       }
 
+      const snOpts = {}
+      const serviceName = this.serviceName(snOpts)
+
       const meta = {
         'span.kind': 'client',
-        'service.name': this.serviceName(),
+        'service.name': serviceName,
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
@@ -63,6 +66,9 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         aws_service: awsService,
         'aws.service': awsService,
         component: 'aws-sdk',
+      }
+      if (snOpts.srvSrc) {
+        meta['_dd.srv_src'] = snOpts.srvSrc
       }
       if (this.requestTags) this.requestTags.set(request, meta)
 

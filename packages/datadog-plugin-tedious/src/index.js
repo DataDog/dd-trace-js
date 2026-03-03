@@ -9,9 +9,11 @@ class TediousPlugin extends DatabasePlugin {
   static system = 'mssql'
 
   bindStart (ctx) {
-    const service = this.serviceName({ pluginConfig: this.config, system: this.system })
+    const snOpts = { pluginConfig: this.config, system: this.system }
+    const service = this.serviceName(snOpts)
     const span = this.startSpan(this.operationName(), {
       service,
+      srvSrc: snOpts.srvSrc,
       resource: ctx.queryOrProcedure,
       type: 'sql',
       kind: 'client',

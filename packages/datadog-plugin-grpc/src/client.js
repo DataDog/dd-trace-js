@@ -24,8 +24,15 @@ class GrpcClientPlugin extends ClientPlugin {
     const { metadata, path, type } = message
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
+    const snOpts = {}
+    const service = this.config.service || this.serviceName(snOpts)
+    const srvSrc = this.config.service
+      ? (this.config.serviceFromMapping ? 'opt.mapping' : 'm')
+      : snOpts.srvSrc
+
     const span = this.startSpan(this.operationName(), {
-      service: this.config.service || this.serviceName(),
+      service,
+      srvSrc,
       resource: path,
       kind: 'client',
       type: 'http',

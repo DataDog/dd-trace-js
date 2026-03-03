@@ -15,10 +15,13 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
   bindStart (ctx) {
     const store = storage('legacy').getStore()
     const childOf = store ? store.span : null
+    const snOpts = { id: `${this.constructor.id}.${this.constructor.operation}`, pluginConfig: this.config }
+    const service = this.serviceName(snOpts)
+
     const spanData = {
       childOf,
-      service: this.serviceName(
-        { id: `${this.constructor.id}.${this.constructor.operation}`, pluginConfig: this.config }),
+      service,
+      srvSrc: snOpts.srvSrc,
       type: this.constructor.type,
       kind: this.constructor.kind,
       meta: {},

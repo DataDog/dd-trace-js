@@ -38,19 +38,28 @@ class Http2ClientPlugin extends ClientPlugin {
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
+    const snOpts = { pluginConfig: this.config, sessionDetails }
+    const serviceName = this.serviceName(snOpts)
+
+    const meta = {
+      [COMPONENT]: this.constructor.id,
+      [SPAN_KIND]: CLIENT,
+      'service.name': serviceName,
+      'resource.name': method,
+      'span.type': 'http',
+      'http.method': method,
+      'http.url': uri,
+      'out.host': sessionDetails.host,
+    }
+
+    if (snOpts.srvSrc) {
+      meta['_dd.srv_src'] = snOpts.srvSrc
+    }
+
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
-      meta: {
-        [COMPONENT]: this.constructor.id,
-        [SPAN_KIND]: CLIENT,
-        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails }),
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': uri,
-        'out.host': sessionDetails.host,
-      },
+      meta,
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port),
       },

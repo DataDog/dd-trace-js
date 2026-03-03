@@ -176,6 +176,7 @@ class TracingPlugin extends Plugin {
       meta,
       metrics,
       service,
+      srvSrc,
       startTime,
       resource,
       type,
@@ -189,18 +190,24 @@ class TracingPlugin extends Plugin {
       childOf = /** @type {import('../opentracing/span') | undefined} */ (store.span)
     }
 
+    const tags = {
+      [COMPONENT]: component,
+      'service.name': service || meta?.service || tracer._service,
+      'resource.name': resource,
+      'span.kind': kind,
+      'span.type': type,
+      ...meta,
+      ...metrics,
+    }
+
+    if (srvSrc) {
+      tags['_dd.srv_src'] = srvSrc
+    }
+
     const span = tracer.startSpan(name, {
       startTime,
       childOf,
-      tags: {
-        [COMPONENT]: component,
-        'service.name': service || meta?.service || tracer._service,
-        'resource.name': resource,
-        'span.kind': kind,
-        'span.type': type,
-        ...meta,
-        ...metrics,
-      },
+      tags,
       integrationName: integrationName || component,
       links: childOf?._links,
     })

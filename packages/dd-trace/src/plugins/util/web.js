@@ -105,6 +105,7 @@ const web = {
 
     if (config.service) {
       span.setTag(SERVICE_NAME, config.service)
+      span.setTag('_dd.srv_src', config.serviceFromMapping ? 'opt.mapping' : 'm')
     }
 
     analyticsSampler.sample(span, config.measured, true)

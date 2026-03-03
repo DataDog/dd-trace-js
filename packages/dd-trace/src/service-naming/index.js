@@ -48,7 +48,14 @@ class SchemaManager {
       ? this.schemas.v1
       : this.schema
 
-    return schema.getServiceName(type, kind, plugin, { ...opts, tracerService: this.config.service })
+    const schemaOpts = { ...opts, tracerService: this.config.service }
+    const result = schema.getServiceName(type, kind, plugin, schemaOpts)
+
+    if (schemaOpts.srvSrc !== undefined && opts) {
+      opts.srvSrc = schemaOpts.srvSrc
+    }
+
+    return result
   }
 
   /**
