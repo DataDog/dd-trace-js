@@ -1,6 +1,6 @@
 'use strict'
 
-const request = require('../../exporters/common/request')
+const request = require('../requests/request')
 const id = require('../../id')
 const { getValueFromEnvSources } = require('../../config/helper')
 const log = require('../../log')
