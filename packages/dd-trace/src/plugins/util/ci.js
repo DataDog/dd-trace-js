@@ -109,7 +109,7 @@ function getJobIDFromDiagFile () {
   // If it is available, just return that... 
 
   // Extract the Job ID from a Github diagnostic file
-  const diagPath = '/home/runner/actions-runner/cached/_diag'
+  const diagPath = '/home/runner/actions-runner/_diag'
 
   let workerLogFiles = []
 
