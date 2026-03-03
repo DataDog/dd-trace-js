@@ -117,7 +117,6 @@ function isMarkedAsUnskippable (test) {
   return false
 }
 
-
 function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
   const unskippableSuites = {}
   const forcedToRunSuites = {}
