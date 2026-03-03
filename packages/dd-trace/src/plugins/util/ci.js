@@ -115,7 +115,7 @@ function getJobIDFromDiagFile () {
 
   try {
     // Obtain a list of fs.Dirent objects of the files in diagPath
-    const files = fs.readdirSync(diagPath, {withFileTypes: true})
+    const files = readdirSync(diagPath, {withFileTypes: true})
 
     // Check if there are valid pontential log files
     const potentialLogs = files
@@ -129,10 +129,10 @@ function getJobIDFromDiagFile () {
     console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%");
     console.log(error);
 
-    console.log(fs.existsSync('/home/runner/actions-runner/cached/_diag'))
-    console.log(fs.existsSync('/home/runner/actions-runner/_diag'))
-    console.log(fs.existsSync('/home/runner/actions-runner/'))
-    console.log(fs.existsSync('/home/runner/'))
+    console.log(existsSync('/home/runner/actions-runner/cached/_diag'))
+    console.log(existsSync('/home/runner/actions-runner/_diag'))
+    console.log(existsSync('/home/runner/actions-runner/'))
+    console.log(existsSync('/home/runner/'))
 
     return null 
   }
@@ -140,7 +140,7 @@ function getJobIDFromDiagFile () {
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
     const filePath = path.posix.join(diagPath, logFile)
-    const content = fs.readFileSync(filePath, 'utf-8')
+    const content = readFileSync(filePath, 'utf-8')
 
   console.log("%%%%%%%%%%%%%%%%%% PRINTING FILE CONTENT %%%%%%%%%%%%%%%%%%");  
   console.log(content);
