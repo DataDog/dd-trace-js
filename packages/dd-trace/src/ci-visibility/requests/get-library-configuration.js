@@ -1,6 +1,5 @@
 'use strict'
 
-const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
 const { getValueFromEnvSources } = require('../../config/helper')
@@ -13,6 +12,7 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
 const { writeSettingsToCache } = require('../test-optimization-cache')
+const request = require('./request')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
