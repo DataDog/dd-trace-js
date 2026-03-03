@@ -617,6 +617,22 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const retryCount = getEfdRetryCount(durationMs, earlyFlakeDetectionSlowTestRetries)
           efdDeterminedRetries.set(testName, retryCount)
           if (retryCount > 0) {
+            // Temporarily adjust jest-circus state so that retry tests are registered
+            // into the correct describe block and bypass the "tests have started" guard.
+            //
+            // Problem 1 (jest-circus ≤24): currentDescribeBlock points to ROOT during
+            // execution, and ROOT's tests loop already finished before children ran.
+            //
+            // Problem 2 (jest-circus ≥27): `hasStarted = true` causes `test()` to throw
+            // "Cannot add a test after tests have started running".
+            //
+            // Fix: temporarily point currentDescribeBlock to the test's parent (so retries
+            // land in the still-iterating children array) and set hasStarted = false (so the
+            // guard is bypassed). Both are restored immediately after scheduling the retries.
+            const originalDescribeBlock = state.currentDescribeBlock
+            const originalHasStarted = state.hasStarted
+            state.currentDescribeBlock = event.test.parent ?? originalDescribeBlock
+            state.hasStarted = false
             this.retryTest({
               jestEvent: {
                 testName: event.test.name,
@@ -626,6 +642,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               retryCount,
               retryType: 'Early flake detection',
             })
+            state.currentDescribeBlock = originalDescribeBlock
+            state.hasStarted = originalHasStarted
           } else {
             efdSlowAbortedTests.add(testName)
           }
