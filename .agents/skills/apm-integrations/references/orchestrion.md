@@ -124,7 +124,7 @@ Orchestrion supports four transform types, selected by the `kind` field:
 | Kind | Transform | Behavior |
 |------|-----------|----------|
 | `Async` | `tracePromise` | Wraps in async arrow, calls `channel.tracePromise()` — handles promise resolution/rejection |
-| `AsyncIterator` | `traceAsyncIterator` | Wraps async generators/iterators — creates TWO channels: base and `_next` (see below) |
+| `AsyncIterator` | `traceAsyncIterator` | Wraps async generators/iterators — creates TWO channels: base and `_next` (**see [async-iterator-pattern.md](./async-iterator-pattern.md)**) |
 | `Callback` | `traceCallback` | Intercepts callback at `arguments[index]` (default: last arg, i.e. `-1`), wraps it to publish `asyncStart`/`asyncEnd`/`error` events |
 | `Sync` | `traceSync` | Wraps in non-async arrow, calls `channel.traceSync()` — handles synchronous return/throw. **Note:** `Sync` is the default when `kind` is omitted or unrecognized. |
 
@@ -134,65 +134,29 @@ For `Callback` kind, use the `index` field to specify which argument is the call
 
 ### AsyncIterator Pattern (Two Plugins Required)
 
-**When `kind: 'AsyncIterator'` is used, Orchestrion automatically creates TWO channels:**
-1. Base channel: `tracing:orchestrion:{package}:{channelName}:*`
-2. Next channel: `tracing:orchestrion:{package}:{channelName}_next:*`
+**⚠️ CRITICAL:** `AsyncIterator` is a special transform that requires **TWO plugins** and has specific implementation requirements.
 
-**You must create TWO plugins to handle both channels:**
+**When to use:**
+- Method returns `Promise<AsyncIterable>`, `Promise<AsyncIterableIterator>`, or `Promise<IterableReadableStream>`
+- Async generator functions: `async *methodName()`
 
-```javascript
-// Main plugin - creates the span when stream starts
-class StreamPlugin extends TracingPlugin {
-  static id = 'mypackage'
-  static prefix = 'tracing:orchestrion:mypackage:Class_stream'
+**How it works:**
+- Orchestrion creates **TWO channels**: base channel and `{channelName}_next` channel
+- **Main plugin**: Creates span when method is called
+- **Next plugin**: Finishes span when `result.done === true` (after all iterations complete)
 
-  bindStart (ctx) {
-    this.startSpan('mypackage.stream', {
-      service: this.config.service,
-      kind: 'internal',
-      component: 'mypackage'
-    }, ctx)
-    return ctx.currentStore
-  }
-}
+**📖 REQUIRED READING:** If you are implementing an AsyncIterator integration, you **MUST** read the complete guide:
 
-// Next plugin - handles each chunk and finishes span when done
-class NextStreamPlugin extends StreamPlugin {
-  static id = 'mypackage'
-  static prefix = 'tracing:orchestrion:mypackage:Class_stream_next'
+👉 **[AsyncIterator Pattern Reference](./async-iterator-pattern.md)** 👈
 
-  bindStart (ctx) {
-    // Don't create a new span - inherit the store from the main plugin
-    return ctx.currentStore
-  }
+This pattern is complex and easy to get wrong. The reference document covers:
+- Two-channel pattern details
+- Complete plugin implementation examples
+- Common mistakes and how to avoid them
+- Testing strategies
+- Full working example (LangGraph)
 
-  asyncEnd (ctx) {
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    // Check if the iterator is done (result.done === true)
-    if (ctx.result.done === true) {
-      span.finish()
-    }
-  }
-
-  error (ctx) {
-    const span = ctx.currentStore?.span
-    if (span) {
-      this.addError(ctx?.error, span)
-      span.finish()
-    }
-  }
-}
-```
-
-**Key points:**
-- Main plugin creates the span
-- Next plugin uses `_next` suffix in prefix
-- Next plugin extends main plugin for consistency
-- Next plugin's `bindStart` returns inherited store (no new span)
-- Next plugin's `asyncEnd` finishes span when `result.done === true`
-- Both plugins must be exported and registered
+**DO NOT** attempt to implement AsyncIterator without reading the full reference.
 
 ## Finding the Right filePath
 
