@@ -3,7 +3,6 @@
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
-const dateNow = Date.now
 const util = require('util')
 const { channel } = require('dc-polyfill')
 const id = require('../id')
@@ -13,12 +12,15 @@ const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { getValueFromEnvSources } = require('../config/helper')
+const { isTrue } = require('../util')
 const SpanContext = require('./span_context')
+
+const dateNow = Date.now
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
-const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
+const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING'))
+const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS'))
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
@@ -251,7 +253,7 @@ class DatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext._tags['service.name']) {
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext._tags['service.name']) {
       log.error('Finishing invalid span: %s', this)
     }
 
