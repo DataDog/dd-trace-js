@@ -3809,4 +3809,48 @@ rules:
       assert.strictEqual(config.sampleRate, undefined)
     })
   })
+
+  context('agentless APM span intake', () => {
+    it('should not enable agentless exporter by default', () => {
+      const config = getConfig()
+      assert.notStrictEqual(config.experimental.exporter, 'agentless')
+    })
+
+    it('should enable agentless exporter when _DD_APM_TRACING_AGENTLESS_ENABLED is true', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.experimental.exporter, 'agentless')
+    })
+
+    it('should disable rate limiting when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.sampler.rateLimit, -1)
+    })
+
+    it('should disable stats computation when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.stats.enabled, false)
+    })
+
+    it('should enable hostname reporting when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.reportHostname, true)
+    })
+
+    it('should clear sampling rules when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.deepStrictEqual(config.sampler.rules, [])
+    })
+
+    it('should not affect other config when agentless is disabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'false'
+      const config = getConfig()
+      assert.notStrictEqual(config.experimental.exporter, 'agentless')
+      assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+  })
 })
