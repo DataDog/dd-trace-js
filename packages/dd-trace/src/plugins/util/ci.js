@@ -1,6 +1,6 @@
 'use strict'
 
-const { readFileSync, readFileSync } = require('fs')
+const { readFileSync } = require('fs')
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
@@ -33,6 +33,7 @@ const {
   GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
+const path = require("path")
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -110,10 +111,7 @@ function getJobIDFromDiagFile () {
   // Extract the Job ID from a Github diagnostic file
   const diagPath = '/home/runner/actions-runner/cached/_diag'
 
-  let foundDiagDir = ''
   let workerLogFiles = []
-
-  const path = require("path")
 
   try {
     // Obtain a list of fs.Dirent objects of the files in diagPath
@@ -131,15 +129,16 @@ function getJobIDFromDiagFile () {
 
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
-    const filePath = path.posix.join(foundDiagDir, logFile)
+    const filePath = path.posix.join(diagPath, logFile)
     const content = fs.readFileSync(filePath, 'utf-8')
 
-    const match = content.match('/"job"\s*:\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/')
+    const match = content.match(/"job"\s*:\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
 
     // match[1] is the captured group with the display name
     if (match && match[1]) { return match[1] }
   }
 
+  return null
 }
 
 module.exports = {
