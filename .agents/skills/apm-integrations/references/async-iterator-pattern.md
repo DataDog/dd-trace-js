@@ -60,43 +60,12 @@ Both plugins MUST be:
 ## Common Mistakes
 
 ### ❌ Only creating one plugin
-```javascript
-// WRONG - only handles base channel, span never finishes
-class StreamPlugin extends TracingPlugin {
-  static prefix = 'tracing:orchestrion:mypackage:Class_stream'
-  // Missing the _next plugin!
-}
-```
 
 ### ❌ Creating new span in Next plugin
-```javascript
-// WRONG - creates multiple spans per iteration
-class NextStreamPlugin extends StreamPlugin {
-  bindStart (ctx) {
-    this.startSpan('mypackage.stream', {}, ctx)  // ❌ DON'T DO THIS
-    return ctx.currentStore
-  }
-}
-```
 
 ### ❌ Finishing span on every iteration
-```javascript
-// WRONG - finishes span prematurely
-class NextStreamPlugin extends StreamPlugin {
-  asyncEnd (ctx) {
-    const span = ctx.currentStore?.span
-    span.finish()  // ❌ Should check result.done first!
-  }
-}
-```
 
 ### ❌ Wrong channel suffix
-```javascript
-// WRONG - suffix must be exactly _next
-class NextStreamPlugin extends StreamPlugin {
-  static prefix = 'tracing:orchestrion:mypackage:Class_stream_next_iteration'  // ❌
-}
-```
 
 ## Complete Example: LangGraph Stream
 
