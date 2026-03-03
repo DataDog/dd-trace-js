@@ -32,77 +32,9 @@ async getStream() { /* returns Promise<ReadableStream> */ }
    - Fires on EACH iteration (`next()` call)
    - Used to finish the span when `result.done === true`
 
-## Two-Plugin Pattern (REQUIRED)
-
-You **MUST** create TWO plugins to handle both channels:
-
-### Main Plugin (Base Channel)
-
-Creates the span when the stream/iterator starts:
-
-```javascript
-class StreamPlugin extends TracingPlugin {
-  static id = 'mypackage'
-  static prefix = 'tracing:orchestrion:mypackage:Class_stream'
-
-  bindStart (ctx) {
-    // Extract any metadata from arguments
-    const input = ctx.arguments?.[0]
-
-    // Create the span
-    this.startSpan('mypackage.stream', {
-      service: this.config.service,
-      kind: 'internal',
-      component: 'mypackage',
-      meta: {
-        // Add any relevant tags
-      }
-    }, ctx)
-
-    return ctx.currentStore
-  }
-}
-```
-
-### Next Plugin (_next Channel)
-
-Handles iteration and finishes the span when done:
-
-```javascript
-class NextStreamPlugin extends StreamPlugin {
-  static id = 'mypackage'
-  static prefix = 'tracing:orchestrion:mypackage:Class_stream_next'  // Note: _next suffix
-
-  bindStart (ctx) {
-    // DON'T create a new span - inherit the store from the main plugin
-    return ctx.currentStore
-  }
-
-  asyncEnd (ctx) {
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    // Check if the iterator is DONE
-    if (ctx.result.done === true) {
-      // Add any final metadata if needed
-      // span.setTag(...)
-
-      span.finish()
-    }
-    // If NOT done, do nothing - let iteration continue
-  }
-
-  error (ctx) {
-    const span = ctx.currentStore?.span
-    if (span) {
-      this.addError(ctx?.error, span)
-      span.finish()
-    }
-  }
-}
-```
-
 ## Critical Implementation Requirements
+
+You **MUST** create TWO plugins to handle both channels. See the complete LangGraph example below for the full implementation pattern.
 
 ### 1. Channel Naming
 - Base channel: Uses `channelName` from config exactly as-is
@@ -122,33 +54,8 @@ class NextStreamPlugin extends StreamPlugin {
 
 ### 4. Plugin Export and Registration
 Both plugins MUST be:
-- Exported from the plugin file
-- Registered in the plugin system
-
-```javascript
-// packages/datadog-plugin-mypackage/src/index.js
-module.exports = [
-  {
-    name: 'mypackage',
-    versions: ['>=1.0.0'],
-    file: 'tracing.js'
-  }
-]
-
-// packages/datadog-plugin-mypackage/src/tracing.js
-const { TracingPlugin } = require('../../dd-trace/src/plugins/tracing')
-
-class StreamPlugin extends TracingPlugin {
-  // ... main plugin implementation
-}
-
-class NextStreamPlugin extends StreamPlugin {
-  // ... next plugin implementation
-}
-
-// CRITICAL: Export BOTH plugins
-module.exports = [StreamPlugin, NextStreamPlugin]
-```
+- Exported from the plugin file: `module.exports = [StreamPlugin, NextStreamPlugin]`
+- Registered in the plugin system (see LangGraph example below)
 
 ## Common Mistakes
 
