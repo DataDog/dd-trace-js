@@ -510,6 +510,19 @@ describe('DataStreamsProcessor.trackTransaction', () => {
     // Each entry: [1 id][8 ts][1 len][6 id bytes] = 16 bytes → total 32
     assert.strictEqual(txBytes.length, 32)
   })
+
+  it('sets DSM tags on span when span is provided', () => {
+    const span = { setTag: sinon.stub() }
+    processor.trackTransaction('tx-001', 'ingested', span)
+    sinon.assert.calledWith(span.setTag, 'dsm.transaction.id', 'tx-001')
+    sinon.assert.calledWith(span.setTag, 'dsm.transaction.checkpoint', 'ingested')
+  })
+
+  it('does not call setTag when no span is provided', () => {
+    // Should not throw; bucket is still written
+    processor.trackTransaction('tx-001', 'ingested')
+    assert.strictEqual(processor.buckets.size, 1)
+  })
 })
 
 describe('_serializeBuckets with transactions', () => {

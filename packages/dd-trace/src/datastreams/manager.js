@@ -26,9 +26,10 @@ class DataStreamsManager {
   /**
    * @param {string} transactionId
    * @param {string} checkpointName
+   * @param {object|null} [span=null]
    */
-  trackTransaction (transactionId, checkpointName) {
-    this._dataStreamsProcessor.trackTransaction(transactionId, checkpointName)
+  trackTransaction (transactionId, checkpointName, span = null) {
+    this._dataStreamsProcessor.trackTransaction(transactionId, checkpointName, span)
   }
 }
 

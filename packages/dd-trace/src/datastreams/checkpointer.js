@@ -63,12 +63,15 @@ class DataStreamsCheckpointer {
 
   /**
    * Records a transaction ID at a named checkpoint without pathway propagation.
+   * Tags the active span (or the provided span) with the transaction ID and checkpoint name.
    * @param {string} transactionId - The transaction identifier to track.
    * @param {string} checkpointName - The logical checkpoint name.
+   * @param {object|null} [span=null] - Span to tag. Defaults to the currently active span.
    */
-  trackTransaction (transactionId, checkpointName) {
+  trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.config.dsmEnabled) return
-    this.dsmProcessor.trackTransaction(transactionId, checkpointName)
+    const activeSpan = span ?? this.tracer.scope().active()
+    this.dsmProcessor.trackTransaction(transactionId, checkpointName, activeSpan)
   }
 }
 

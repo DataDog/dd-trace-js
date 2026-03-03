@@ -30,6 +30,8 @@ const tags = {
 
   // DSM Specific
   PATHWAY_HASH: 'pathway.hash',
+  DSM_TRANSACTION_ID: 'dsm.transaction.id',
+  DSM_TRANSACTION_CHECKPOINT: 'dsm.transaction.checkpoint',
 }
 
 // Deprecated

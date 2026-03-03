@@ -105,7 +105,32 @@ describe('data streams checkpointer manual api', () => {
     tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
 
     sinon.assert.calledOnce(mockTrackTransaction)
-    sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested')
+    // Third arg is the active span (null when no span is active in this test context)
+    sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested', null)
+  })
+
+  it('should pass an explicit span to the processor', function () {
+    const mockTrackTransaction = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
+    const span = { setTag: sinon.stub() }
+
+    tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested', span)
+
+    sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested', span)
+  })
+
+  it('should use the active span when no span is provided', function () {
+    const mockTrackTransaction = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
+    const activeSpan = { setTag: sinon.stub() }
+    const scopeStub = sinon.stub(tracer._tracer, 'scope').returns({ active: () => activeSpan })
+
+    try {
+      tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
+      sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested', activeSpan)
+    } finally {
+      scopeStub.restore()
+    }
   })
 
   it('trackTransaction is a no-op when dsmEnabled is false', function () {

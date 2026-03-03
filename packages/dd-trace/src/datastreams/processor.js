@@ -4,7 +4,7 @@ const os = require('os')
 const pkg = require('../../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
-const { PATHWAY_HASH } = require('../../../../ext/tags')
+const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require('../../../../ext/tags')
 const log = require('../log')
 const processTags = require('../process-tags')
 const propagationHash = require('../propagation-hash')
@@ -378,8 +378,9 @@ class DataStreamsProcessor {
    *
    * @param {string} transactionId - Truncated to 255 UTF-8 bytes.
    * @param {string} checkpointName - Mapped to a stable 1-byte ID; silently dropped if registry full.
+   * @param {import('../opentelemetry/span').Span|null} [span=null] - Active span to tag with DSM transaction metadata.
    */
-  trackTransaction (transactionId, checkpointName) {
+  trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.enabled) {
       log.warn('trackTransaction called but DD_DATA_STREAMS_ENABLED is not set. Transaction will not be tracked.')
       return
@@ -400,6 +401,11 @@ class DataStreamsProcessor {
 
     // Number() cast is safe here: 10s bucket granularity tolerates ~0.5ns precision loss
     this.bucketFromTimestamp(Number(timestampNs)).addTransaction(entry)
+
+    if (span) {
+      span.setTag(DSM_TRANSACTION_ID, transactionId)
+      span.setTag(DSM_TRANSACTION_CHECKPOINT, checkpointName)
+    }
   }
 
   _serializeBuckets () {
