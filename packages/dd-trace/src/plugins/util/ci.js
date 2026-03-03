@@ -1,6 +1,6 @@
 'use strict'
 
-const { readFileSync, readdirSync } = require('fs')
+const { readFileSync, readdirSync, existsSync } = require('fs') // TODO: DELETE existsSync
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
@@ -125,7 +125,17 @@ function getJobIDFromDiagFile () {
     if (potentialLogs.length > 0) { workerLogFiles = potentialLogs }
     else { console.log("%%%%%%%%%%%%%%%%%% NULL IN POTENTIAL LOGS %%%%%%%%%%%%%%%%%%"); return null }
   }
-  catch { console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); return null }
+  catch (error) { 
+    console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%");
+    console.log(error);
+
+    console.log(fs.existsSync('/home/runner/actions-runner/cached/_diag'))
+    console.log(fs.existsSync('/home/runner/actions-runner/_diag'))
+    console.log(fs.existsSync('/home/runner/actions-runner/'))
+    console.log(fs.existsSync('/home/runner/'))
+
+    return null 
+  }
 
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
