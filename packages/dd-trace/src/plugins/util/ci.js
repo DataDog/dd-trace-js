@@ -1,6 +1,6 @@
 'use strict'
 
-const { readFileSync } = require('fs')
+const { readFileSync, readdirSync } = require('fs')
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
@@ -123,14 +123,18 @@ function getJobIDFromDiagFile () {
       .map((file) => file.name)
 
     if (potentialLogs.length > 0) { workerLogFiles = potentialLogs }
-    else { return null }
+    else { console.log("%%%%%%%%%%%%%%%%%% NULL IN POTENTIAL LOGS %%%%%%%%%%%%%%%%%%"); return null }
   }
-  catch { return null }
+  catch { console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); return null }
 
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
     const filePath = path.posix.join(diagPath, logFile)
     const content = fs.readFileSync(filePath, 'utf-8')
+
+  console.log("%%%%%%%%%%%%%%%%%% PRINTING FILE CONTENT %%%%%%%%%%%%%%%%%%");  
+  console.log(content);
+  console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");  
 
     const match = content.match(/"job"\s*:\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
 
@@ -329,8 +333,9 @@ module.exports = {
         pipelineURL = `${pipelineURL}/attempts/${GITHUB_RUN_ATTEMPT}`
       }
 
-      console.log("PRINTING JOB ID!!!")
+      console.log("%%%%%%%%%%%%%%%%%% PRINTING JOB ID %%%%%%%%%%%%%%%%%%")
       console.log(getJobIDFromDiagFile())
+      console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
 
       const jobUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
 
