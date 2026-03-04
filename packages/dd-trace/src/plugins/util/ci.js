@@ -128,7 +128,20 @@ function getJobIDFromDiagFile (homePath) {
     if (potentialLogs.length > 0) { workerLogFiles = potentialLogs }
     else { return null }
   }
-  catch (error) { console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); console.log(error); return null }
+  catch (error) { 
+    console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); 
+    const entradas = fs.readdirSync(homePath, { withFileTypes: true });
+
+    entradas.forEach(e => {
+      if (e.isDirectory()) {
+        console.log('📁', e.name);
+      } else {
+        console.log('📄', e.name);
+      }
+    });
+
+    return null 
+  }
 
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
