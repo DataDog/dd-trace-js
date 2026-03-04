@@ -9,7 +9,7 @@ const { randomUUID } = require('crypto')
 const Axios = require('axios')
 
 const { assertObjectContains, assertUUID } = require('../helpers')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 const { version } = require('../../package.json')
 
@@ -222,7 +222,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   })
 
   afterEach(async function () {
-    t.proc?.kill()
+    await stopProc(t.proc)
     await t.agent?.stop()
   })
 
