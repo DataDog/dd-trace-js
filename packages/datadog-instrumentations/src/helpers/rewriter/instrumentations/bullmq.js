@@ -5,104 +5,104 @@ module.exports = [
     module: {
       name: 'bullmq',
       versionRange: '>=5.66.0',
-      filePath: 'dist/cjs/classes/queue.js'
+      filePath: 'dist/cjs/classes/queue.js',
     },
     functionQuery: {
       methodName: 'add',
       className: 'Queue',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Queue_add'
+    channelName: 'Queue_add',
   },
   {
     module: {
       name: 'bullmq',
       versionRange: '>=5.66.0',
-      filePath: 'dist/cjs/classes/queue.js'
+      filePath: 'dist/cjs/classes/queue.js',
     },
     functionQuery: {
       methodName: 'addBulk',
       className: 'Queue',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Queue_addBulk'
+    channelName: 'Queue_addBulk',
   },
   {
     module: {
       name: 'bullmq',
       versionRange: '>=5.66.0',
-      filePath: 'dist/cjs/classes/worker.js'
+      filePath: 'dist/cjs/classes/worker.js',
     },
     functionQuery: {
       methodName: 'callProcessJob',
       className: 'Worker',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Worker_callProcessJob'
+    channelName: 'Worker_callProcessJob',
   },
   {
     module: {
       name: 'bullmq',
       versionRange: '>=5.66.0',
-      filePath: 'dist/cjs/classes/flow-producer.js'
+      filePath: 'dist/cjs/classes/flow-producer.js',
     },
     functionQuery: {
       methodName: 'add',
       className: 'FlowProducer',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'FlowProducer_add'
+    channelName: 'FlowProducer_add',
   },
   {
     module: {
       name: 'bullmq',
       versionRange: '>=5.66.0',
-      filePath: 'dist/esm/classes/queue.js'
+      filePath: 'dist/esm/classes/queue.js',
     },
     functionQuery: {
       methodName: 'add',
       className: 'Queue',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Queue_add'
+    channelName: 'Queue_add',
   },
   {
     module: {
       name: 'bullmq',
       versionRange: '>=5.66.0',
-      filePath: 'dist/esm/classes/queue.js'
+      filePath: 'dist/esm/classes/queue.js',
     },
     functionQuery: {
       methodName: 'addBulk',
       className: 'Queue',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Queue_addBulk'
+    channelName: 'Queue_addBulk',
   },
   {
     module: {
       name: 'bullmq',
       versionRange: '>=5.66.0',
-      filePath: 'dist/esm/classes/worker.js'
+      filePath: 'dist/esm/classes/worker.js',
     },
     functionQuery: {
       methodName: 'callProcessJob',
       className: 'Worker',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'Worker_callProcessJob'
+    channelName: 'Worker_callProcessJob',
   },
   {
     module: {
       name: 'bullmq',
       versionRange: '>=5.66.0',
-      filePath: 'dist/esm/classes/flow-producer.js'
+      filePath: 'dist/esm/classes/flow-producer.js',
     },
     functionQuery: {
       methodName: 'add',
       className: 'FlowProducer',
-      kind: 'Async'
+      kind: 'Async',
     },
-    channelName: 'FlowProducer_add'
-  }
+    channelName: 'FlowProducer_add',
+  },
 ]
