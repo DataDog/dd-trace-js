@@ -129,10 +129,17 @@ function getJobIDFromDiagFile () {
     console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%");
     console.log(error);
 
-    console.log(existsSync('/home/runner/actions-runner/cached/_diag'))
-    console.log(existsSync('/home/runner/actions-runner/_diag'))
-    console.log(existsSync('/home/runner/actions-runner/'))
-    console.log(existsSync('/home/runner/'))
+    const fsss = fs.readdirSync('/home/');
+
+    fsss.forEach(file => {
+    const fullPath = path.join(dir, file);
+    const stats = fs.statSync(fullPath);
+
+    if (stats.isDirectory()) {
+      console.log(`📁 ${file}`);
+    } else {
+      console.log(`📄 ${file}`);
+    }})
 
     return null 
   }
