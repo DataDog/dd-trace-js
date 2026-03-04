@@ -61,12 +61,12 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
 
   _extractDatadog (job) {
     const metadataStr = job?.opts?.telemetry?.metadata
-    if (!metadataStr) return undefined
+    if (!metadataStr) return
 
     try {
       const metadata = JSON.parse(metadataStr)
       const ddCarrier = metadata._datadog
-      if (!ddCarrier) return undefined
+      if (!ddCarrier) return
 
       // Clean up only our _datadog key, preserve other metadata
       delete metadata._datadog
@@ -74,7 +74,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
 
       return ddCarrier
     } catch {
-      return undefined
+      // Ignore malformed metadata
     }
   }
 }
