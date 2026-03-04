@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const { before, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 describe('Endpoints collection', () => {
   let cwd
@@ -193,7 +193,7 @@ describe('Endpoints collection', () => {
         assert.strictEqual(invalidEndpoints.length, 0, 'Invalid router paths should not be collected')
       }
     } finally {
-      proc?.kill()
+      await stopProc(proc)
       await agent?.stop()
     }
   }

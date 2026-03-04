@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const { once } = require('events')
-const { FakeAgent, spawnProc, sandboxCwd, useSandbox, curl, assertObjectContains } = require('./helpers')
+const { FakeAgent, spawnProc, sandboxCwd, useSandbox, stopProc, curl, assertObjectContains } = require('./helpers')
 
 describe('pino test', () => {
   let agent
@@ -25,7 +25,7 @@ describe('pino test', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc, assertObjectContains } = require('./helpers')
 
 describe('telemetry', () => {
   describe('dependencies', () => {
@@ -33,7 +33,7 @@ describe('telemetry', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
