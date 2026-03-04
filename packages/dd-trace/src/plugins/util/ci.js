@@ -145,7 +145,7 @@ function getJobIDFromDiagFile (homePath) {
 
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
-    const filePath = path.posix.join(diagPath, logFile)
+    const filePath = path.posix.join(chosenDiagPath, logFile)
     const content = readFileSync(filePath, 'utf-8')
 
     console.log("%%%%%%%%%%%%%%%%%% PRINTING FILE CONTENT %%%%%%%%%%%%%%%%%%");  
