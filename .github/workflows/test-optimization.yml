@@ -15,6 +15,14 @@ env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
 
 jobs:
+  extract-github-job-name:
+    name: Extract GitHub job display name
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Extract job name from runner logs
+        run: node ./extract-github-job-name-from-logs.js
+
   benchmarks-e2e:
     name: Performance and correctness tests
     runs-on: ubuntu-latest
