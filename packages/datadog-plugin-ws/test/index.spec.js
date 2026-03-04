@@ -3,9 +3,11 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { storage } = require('../../datadog-core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 
@@ -63,6 +65,29 @@ describe('Plugin', () => {
         afterEach(async () => {
           clientPort++
           agent.close({ ritmReset: false, wipe: true })
+        })
+
+        it('should not retain the connection span during socket setup', async () => {
+          const setSocketCh = dc.channel('tracing:ws:server:connect:setSocket')
+          let resolve
+          const promise = new Promise((_resolve) => {
+            resolve = _resolve
+          })
+
+          const handler = () => {
+            resolve(storage('legacy').getStore())
+            setSocketCh.unsubscribe(handler)
+          }
+          setSocketCh.subscribe(handler)
+
+          // Trigger setSocket
+          const newClient = new WebSocket(`ws://localhost:${clientPort}/test`)
+          newClient.on('open', () => newClient.close())
+
+          const store = await promise
+
+          assert.strictEqual(store?.span, undefined,
+            'connection span should not be in the store during setSocket')
         })
 
         it('should do automatic instrumentation and remove broken handler', () => {

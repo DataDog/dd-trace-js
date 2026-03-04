@@ -4,7 +4,12 @@ const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup({ dependencies: ['fastify'] })
+  const t = setup({
+    dependencies: ['fastify'],
+    env: {
+      DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: '100',
+    },
+  })
 
   describe('input messages', function () {
     describe('with snapshot', function () {
@@ -63,6 +68,13 @@ describe('Dynamic Instrumentation', function () {
               },
             },
             emptyObj: { type: 'Object', fields: {} },
+            map: {
+              type: 'Map',
+              entries: [
+                [{ type: 'number', value: '1' }, { type: 'number', value: '2' }],
+                [{ type: 'number', value: '3' }, { type: 'number', value: '4' }],
+              ],
+            },
             p: {
               type: 'Promise',
               fields: {
@@ -136,6 +148,7 @@ describe('Dynamic Instrumentation', function () {
             arr: { type: 'Array', notCapturedReason: 'depth' },
             obj: { type: 'Object', notCapturedReason: 'depth' },
             emptyObj: { type: 'Object', notCapturedReason: 'depth' },
+            map: { type: 'Map', notCapturedReason: 'depth' },
             p: { type: 'Promise', notCapturedReason: 'depth' },
             arrowFn: { type: 'Function', notCapturedReason: 'depth' },
           })

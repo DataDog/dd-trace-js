@@ -47,40 +47,37 @@ function sanitizedExec (
   errorMetric,
   shouldTrim = true
 ) {
-  const store = storage('legacy').getStore()
-  storage('legacy').enterWith({ noop: true })
-
-  let startTime
-  if (operationMetric) {
-    incrementCountMetric(operationMetric.name, operationMetric.tags)
-  }
-  if (durationMetric) {
-    startTime = Date.now()
-  }
-  try {
-    let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
-
-    if (shouldTrim) {
-      result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
+  return storage('legacy').run({ noop: true }, () => {
+    let startTime
+    if (operationMetric) {
+      incrementCountMetric(operationMetric.name, operationMetric.tags)
     }
-
     if (durationMetric) {
-      distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
+      startTime = Date.now()
     }
-    return result
-  } catch (err) {
-    if (errorMetric) {
-      incrementCountMetric(errorMetric.name, {
-        ...errorMetric.tags,
-        errorType: err.code,
-        exitCode: err.status || err.errno,
-      })
+    try {
+      let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
+
+      if (shouldTrim) {
+        result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
+      }
+
+      if (durationMetric) {
+        distributionMetric(durationMetric.name, durationMetric.tags, Date.now() - startTime)
+      }
+      return result
+    } catch (err) {
+      if (errorMetric) {
+        incrementCountMetric(errorMetric.name, {
+          ...errorMetric.tags,
+          errorType: err.code,
+          exitCode: err.status || err.errno,
+        })
+      }
+      log.error('Git plugin error executing command', err)
+      return ''
     }
-    log.error('Git plugin error executing command', err)
-    return ''
-  } finally {
-    storage('legacy').enterWith(store)
-  }
+  })
 }
 
 function isDirectory (path) {

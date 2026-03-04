@@ -54,6 +54,7 @@ function startSpanHelper (tracer, name, options, traceCtx, config = {}) {
 
 const web = {
   TYPE: WEB,
+  /** @type {TracingPlugin | null} */
   plugin: null,
 
   // Ensure the configuration has the correct structure and defaults.
@@ -118,7 +119,7 @@ const web = {
       context.span.context()._name = name
       span = context.span
     } else {
-      span = web.startChildSpan(tracer, config, name, req, traceCtx)
+      span = web.startServerlessSpanWithInferredProxy(tracer, config, name, req, traceCtx)
     }
 
     context.tracer = tracer
@@ -274,7 +275,7 @@ const web = {
     return context.middleware.at(-1)
   },
 
-  startChildSpan (tracer, config, name, req, traceCtx) {
+  startServerlessSpanWithInferredProxy (tracer, config, name, req, traceCtx) {
     const headers = req.headers
     const reqCtx = contexts.get(req)
     const { storage } = require('../../../../datadog-core')
@@ -337,12 +338,12 @@ const web = {
     }
   },
 
-  finishSpan (context) {
+  finishSpan (context, spanType) {
     const { req, res } = context
 
     if (context.finished && !req.stream) return
 
-    addRequestTags(context, this.TYPE)
+    addRequestTags(context, spanType)
     addResponseTags(context)
 
     context.config.hooks.request(context.span, req, res)
@@ -352,14 +353,14 @@ const web = {
     context.finished = true
   },
 
-  finishAll (context) {
+  finishAll (context, spanType) {
     for (const beforeEnd of context.beforeEnd) {
       beforeEnd()
     }
 
     web.finishMiddleware(context)
 
-    web.finishSpan(context)
+    web.finishSpan(context, spanType)
 
     finishInferredProxySpan(context)
   },
@@ -456,12 +457,13 @@ function reactivate (req, fn) {
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
   const url = extractURL(req)
+  const type = spanType ?? WEB
 
   span.addTags({
     [HTTP_URL]: obfuscateQs(config, url),
     [HTTP_METHOD]: req.method,
     [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: spanType,
+    [SPAN_TYPE]: type,
     [HTTP_USERAGENT]: req.headers['user-agent'],
   })
 

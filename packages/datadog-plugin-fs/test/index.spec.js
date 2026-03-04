@@ -7,7 +7,7 @@ const util = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
-const realFS = Object.assign({}, require('node:fs'))
+const realFS = { ...require('node:fs') }
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
@@ -1937,12 +1937,13 @@ describe('Plugin', () => {
 })
 
 function mkExpected (props) {
-  const meta = Object.assign({ component: 'fs', 'span.kind': 'internal' }, props.meta)
-  const expected = Object.assign({
+  const meta = { component: 'fs', 'span.kind': 'internal', ...props.meta }
+  const expected = {
     name: 'fs.operation',
     error: 0,
     service: 'test',
-  }, props)
+    ...props,
+  }
   expected.meta = meta
   return expected
 }

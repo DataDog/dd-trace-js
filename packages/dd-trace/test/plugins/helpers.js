@@ -61,7 +61,7 @@ function isObject (obj) {
 }
 
 function withDefaults (defaults, obj) {
-  const newObj = Object.assign({}, defaults, obj)
+  const newObj = { ...defaults, ...obj }
   for (const propName in defaults) {
     if (isObject(defaults[propName]) && isObject(obj[propName])) {
       newObj[propName] = withDefaults(defaults[propName], obj[propName])

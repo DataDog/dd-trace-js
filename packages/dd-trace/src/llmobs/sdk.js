@@ -359,15 +359,15 @@ class LLMObs extends NoopLLMObs {
         throw new Error('timestampMs must be a non-negative integer. Evaluation metric data will not be sent')
       }
 
-      const { label, value, tags } = options
+      const { label, value, tags, reasoning, assessment, metadata } = options
       const metricType = options.metricType?.toLowerCase()
       if (!label) {
         err = 'invalid_metric_label'
         throw new Error('label must be the specified name of the evaluation metric')
       }
-      if (!metricType || !['categorical', 'score', 'boolean'].includes(metricType)) {
+      if (!metricType || !['categorical', 'score', 'boolean', 'json'].includes(metricType)) {
         err = 'invalid_metric_type'
-        throw new Error('metricType must be one of "categorical" or "score"')
+        throw new Error('metricType must be one of "categorical", "score", "boolean" or "json"')
       }
       if (metricType === 'categorical' && typeof value !== 'string') {
         err = 'invalid_metric_value'
@@ -380,6 +380,22 @@ class LLMObs extends NoopLLMObs {
       if (metricType === 'boolean' && typeof value !== 'boolean') {
         err = 'invalid_metric_value'
         throw new Error('value must be a boolean for a boolean metric')
+      }
+      if (metricType === 'json' && !(typeof value === 'object' && value != null && !Array.isArray(value))) {
+        err = 'invalid_metric_value'
+        throw new Error('value must be a JSON object for a json metric')
+      }
+      if (assessment != null && assessment !== 'pass' && assessment !== 'fail') {
+        err = 'invalid_assessment'
+        throw new Error('assessment must be pass or fail')
+      }
+      if (reasoning != null && typeof reasoning !== 'string') {
+        err = 'invalid_reasoning'
+        throw new Error('reasoning must be a string')
+      }
+      if (metadata != null && (typeof metadata !== 'object' || Array.isArray(metadata))) {
+        err = 'invalid_metadata'
+        throw new Error('metadata must be a JSON object')
       }
 
       const evaluationTags = {
@@ -412,14 +428,27 @@ class LLMObs extends NoopLLMObs {
       }
 
       const payload = {
-        span_id: spanId,
-        trace_id: traceId,
+        join_on: {
+          span: {
+            span_id: spanId,
+            trace_id: traceId,
+          },
+        },
         label,
         metric_type: metricType,
         ml_app: mlApp,
         [`${metricType}_value`]: value,
         timestamp_ms: timestampMs,
         tags: Object.entries(evaluationTags).map(([key, value]) => `${key}:${value}`),
+      }
+      if (reasoning != null) {
+        payload.reasoning = reasoning
+      }
+      if (metadata != null) {
+        payload.metadata = metadata
+      }
+      if (assessment != null) {
+        payload.assessment = assessment
       }
       const currentStore = storage.getStore()
       const routing = currentStore?.routingContext

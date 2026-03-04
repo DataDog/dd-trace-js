@@ -206,9 +206,7 @@ class VitestPlugin extends CiPlugin {
 
     this.addSub('ci:vitest:test:pass', ({ span, task }) => {
       if (span) {
-        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
-        })
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
@@ -236,9 +234,7 @@ class VitestPlugin extends CiPlugin {
           promises.setProbePromise = setProbePromise
         }
       }
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!span.context()._tags[TEST_CODE_OWNERS],
-      })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
       span.setTag(TEST_STATUS, 'fail')
 
       if (error) {
@@ -272,18 +268,18 @@ class VitestPlugin extends CiPlugin {
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
         }
       )
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-        hasCodeowners: !!testSpan.context()._tags[TEST_CODE_OWNERS],
-      })
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
       testSpan.finish()
     })
 
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
       const { testSuiteAbsolutePath, frameworkVersion } = ctx
 
+      // TODO: Handle case where the command is not set
       this.command = getValueFromEnvSources('DD_CIVISIBILITY_TEST_COMMAND')
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
+        // TODO: Handle case where the session ID or module ID is not set
         'x-datadog-trace-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_SESSION_ID'),
         'x-datadog-parent-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_MODULE_ID'),
       })
@@ -307,14 +303,17 @@ class VitestPlugin extends CiPlugin {
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'vitest'
-      )
-      testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
-      testSuiteMetadata[TEST_SOURCE_START] = 1
+      // Request error tags are applied to test spans in the main process (worker-report:trace handler)
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'vitest'
+        ),
+        [TEST_SOURCE_FILE]: testSuite,
+        [TEST_SOURCE_START]: 1,
+      }
 
       const codeOwners = this.getCodeOwners(testSuiteMetadata)
       if (codeOwners) {
@@ -401,7 +400,9 @@ class VitestPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,

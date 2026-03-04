@@ -76,6 +76,7 @@ class Profiler extends EventEmitter {
       repositoryUrl,
       commitSHA,
       injectionEnabled,
+      reportHostname,
     } = config
     const { enabled, sourceMap, exporters } = config.profiling
     const { heartbeatInterval } = config.telemetry
@@ -112,6 +113,7 @@ class Profiler extends EventEmitter {
       libraryInjected,
       activation,
       heartbeatInterval,
+      reportHostname,
     }
 
     return this._start(options).catch((err) => {

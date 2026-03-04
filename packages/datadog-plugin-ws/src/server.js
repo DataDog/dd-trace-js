@@ -17,6 +17,14 @@ class WSServerPlugin extends TracingPlugin {
   static get type () { return 'websocket' }
   static get kind () { return 'request' }
 
+  constructor (...args) {
+    super(...args)
+
+    // Bind the setSocket channel so internal ws event handlers (data, close)
+    // don't capture their async context.
+    this.addBind('tracing:ws:server:connect:setSocket', () => {})
+  }
+
   bindStart (ctx) {
     const req = ctx.req
 

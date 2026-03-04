@@ -3,6 +3,7 @@
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 const {
   TEST_STATUS,
@@ -25,8 +26,6 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
-  TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
   getFormattedError,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
@@ -157,7 +156,9 @@ class JestPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
 
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
@@ -165,6 +166,7 @@ class JestPlugin extends CiPlugin {
         autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
 
+      appClosingTelemetry()
       this.tracer._exporter.flush(() => {
         if (onDone) {
           onDone()
@@ -180,9 +182,10 @@ class JestPlugin extends CiPlugin {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
-        config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
+        config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
@@ -206,6 +209,7 @@ class JestPlugin extends CiPlugin {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
         _ddTestModuleId: testModuleId,
+        _ddRequestErrorTags: requestErrorTags,
         _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
         _ddUnskippable,
@@ -217,7 +221,11 @@ class JestPlugin extends CiPlugin {
         'x-datadog-parent-id': testModuleId,
       })
 
-      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
+        // requestErrorTags from test env options may be undefined
+        ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
+      }
 
       if (_ddUnskippable) {
         const unskippableSuites = this.getUnskippableSuites(_ddUnskippable)
@@ -274,6 +282,23 @@ class JestPlugin extends CiPlugin {
       }))
       for (const formattedCoverage of formattedCoverages) {
         this.tracer._exporter.exportCoverage(formattedCoverage)
+      }
+    })
+
+    this.addSub('ci:jest:worker-report:telemetry', data => {
+      const telemetryEvents = JSON.parse(data)
+      for (const event of telemetryEvents) {
+        if (event.type === 'ciVisEvent') {
+          this.telemetry.ciVisEvent(event.name, event.testLevel, {
+            ...event.tags,
+            testFramework: event.testFramework,
+            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
+          })
+        } else if (event.type === 'count') {
+          this.telemetry.count(event.name, event.tags, event.value)
+        } else if (event.type === 'distribution') {
+          this.telemetry.distribution(event.name, event.tags, event.measure)
+        }
       }
     })
 
@@ -370,6 +395,7 @@ class JestPlugin extends CiPlugin {
       attemptToFixFailed,
       isAtrRetry,
       finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       span.setTag(TEST_STATUS, status)
       if (finalStatus) {
@@ -390,17 +416,14 @@ class JestPlugin extends CiPlugin {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
       }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
+      }
 
-      const spanTags = span.context()._tags
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        {
-          hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-          isNew: spanTags[TEST_IS_NEW] === 'true',
-          isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-          browserDriver: spanTags[TEST_BROWSER_DRIVER],
-        }
+        this.getTestTelemetryTags(span)
       )
 
       span.finish()
@@ -432,6 +455,12 @@ class JestPlugin extends CiPlugin {
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
+
+      this.telemetry.ciVisEvent(
+        TELEMETRY_EVENT_FINISHED,
+        'test',
+        this.getTestTelemetryTags(span)
+      )
 
       span.finish()
     })

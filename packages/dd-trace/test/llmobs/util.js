@@ -40,8 +40,12 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
 /**
  * @typedef {{
  *   label: string,
- *   traceId: string,
- *   spanId: string,
+ *   joinOn: {
+ *     span: {
+ *       traceId: string,
+ *       spanId: string,
+ *     },
+ *   },
  *   metricType: 'categorical' | 'score',
  *   mlApp: string,
  *   timestamp?: number,
@@ -279,8 +283,12 @@ function assertLlmObsSpanEvent (actual, expected) {
 function assertLlmObsEvaluationMetric (actual, expected) {
   const {
     label,
-    traceId = MOCK_STRING,
-    spanId = MOCK_STRING,
+    joinOn = {
+      span: {
+        traceId: MOCK_STRING,
+        spanId: MOCK_STRING,
+      },
+    },
     metricType,
     mlApp,
     timestamp = MOCK_NUMBER,
@@ -318,8 +326,12 @@ function assertLlmObsEvaluationMetric (actual, expected) {
   }
 
   const expectedEvaluationMetric = {
-    span_id: spanId,
-    trace_id: traceId,
+    join_on: {
+      span: {
+        trace_id: joinOn.span.traceId,
+        span_id: joinOn.span.spanId,
+      },
+    },
     label,
     metric_type: metricType,
     ml_app: mlApp,

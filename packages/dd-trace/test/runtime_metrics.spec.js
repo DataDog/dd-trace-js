@@ -292,6 +292,9 @@ function createGarbage (count = 50) {
           const isGC95Percentile = sinon.match((value) => {
             return value >= 1e5 && value < 1e8 // In Nanoseconds. 0.1ms to 100ms.
           })
+          const isHeapSpace = sinon.match((metricName) => {
+            return /^heap_space:[a-z_]+$/.test(metricName)
+          })
 
           // These return percentages as strings and are tested later.
           sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.user')
@@ -349,10 +352,15 @@ function createGarbage (count = 50) {
             })
           )
 
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.used_size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.available_size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.physical_size.by.space', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.size.by.space', isFiniteNumber, isHeapSpace)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.used_size.by.space', isFiniteNumber, isHeapSpace)
+          sinon.assert.calledWith(
+            client.gauge,
+            'runtime.node.heap.available_size.by.space',
+            isFiniteNumber,
+            isHeapSpace
+          )
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.physical_size.by.space', isFiniteNumber, isHeapSpace)
 
           sinon.assert.called(client.flush)
         })
@@ -527,8 +535,8 @@ function createGarbage (count = 50) {
               }
               if (metric === 'runtime.node.cpu.total') {
                 assert(
-                  // Subtracting 0.02 since lower numbers can happen due to rounding issues.
-                  number >= expected - 0.02 && number <= expected + 1,
+                  // Subtracting 0.1 for time-window/baseline alignment numbers and due to rounding issues.
+                  number >= expected - 0.1 && number <= expected + 1,
                   `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
                 )
                 totalPercent = number

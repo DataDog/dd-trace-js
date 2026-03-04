@@ -641,7 +641,7 @@ describe('Plugin', () => {
             })
             const listener = server.listen({ port: 0 })
             listener.on('listening', () => {
-              connection = client.connect(Object.assign({ reconnect: false }, listener.address()))
+              connection = client.connect({ reconnect: false, ...listener.address() })
               connection.open_receiver({ autoaccept: false })
               connection.open_sender()
               expectedServerPort = listener.address().port

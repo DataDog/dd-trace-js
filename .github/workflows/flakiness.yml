@@ -1,9 +1,9 @@
-name: '[Flakiness Report]'
+name: "[Flakiness Report]"
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * 1'
+    - cron: "0 6 * * 1"
 
 jobs:
   flakiness:
@@ -12,8 +12,8 @@ jobs:
       actions: read
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      DAYS: '7'
-      OCCURRENCES: '2'
+      DAYS: "7"
+      OCCURRENCES: "2"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:

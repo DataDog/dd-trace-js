@@ -17,7 +17,11 @@ withVersions('passport-http', 'passport-http', version => {
     let port, server, subscriberStub
 
     before(() => {
-      return agent.load(['http', 'express', 'passport', 'passport-http'], { client: false })
+      return agent.load(
+        ['http', 'express', 'passport', 'passport-http'],
+        { client: false },
+        { appsec: { enabled: true } }
+      )
     })
 
     before((done) => {

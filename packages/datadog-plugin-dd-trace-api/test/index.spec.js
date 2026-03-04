@@ -4,10 +4,34 @@ const assert = require('node:assert')
 
 const dc = require('dc-polyfill')
 const { after, before, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const agent = require('../../dd-trace/test/plugins/agent')
+const {
+  supportedConfigurations,
+} = require('../../dd-trace/src/config/supported-configurations.json')
+
 const SELF = Symbol('self')
+const supportedConfigurationsWithDdTraceApi = {
+  ...supportedConfigurations,
+  DD_TRACE_DD_TRACE_API_ENABLED: [
+    {
+      implementation: 'A',
+      type: 'boolean',
+      default: 'true',
+    },
+  ],
+}
+
+const configHelperPath = require.resolve('../../dd-trace/src/config/helper')
+const reloadedConfigHelper = proxyquire.noPreserveCache()(configHelperPath, {
+  './supported-configurations.json': {
+    supportedConfigurations: supportedConfigurationsWithDdTraceApi,
+  },
+})
+Object.assign(require(configHelperPath), reloadedConfigHelper)
+
+const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('Plugin', () => {
   describe('dd-trace-api', () => {

@@ -29,7 +29,7 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
 
       if (statusCode !== 200) {
         body = '{}'
-      } if (stream) {
+      } else if (stream) {
         body = fs.createReadStream(path.join(__dirname, 'resources', `${scenario}.txt`))
       } else {
         const contents = require(`./resources/${scenario}.json`)

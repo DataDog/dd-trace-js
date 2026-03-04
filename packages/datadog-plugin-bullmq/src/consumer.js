@@ -11,6 +11,12 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     ctx.currentStore?.span?.finish()
   }
 
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { span } = ctx.currentStore
+    this.setConsumerCheckpoint(span, ctx)
+  }
+
   bindStart (ctx) {
     const job = ctx.arguments?.[0]
     const queueName = job?.queueName || job?.queue?.name || 'bullmq'
@@ -26,7 +32,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
       }
     }
 
-    const span = this.startSpan({
+    this.startSpan({
       childOf,
       resource: queueName,
       meta: {
@@ -37,10 +43,6 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
         'messaging.operation': 'process',
       },
     }, ctx)
-
-    if (this.config.dsmEnabled) {
-      this.setConsumerCheckpoint(span, ctx)
-    }
 
     return ctx.currentStore
   }

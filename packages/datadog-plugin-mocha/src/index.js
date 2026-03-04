@@ -23,8 +23,6 @@ const {
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   MOCHA_IS_PARALLEL,
-  TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -95,12 +93,15 @@ class MochaPlugin extends CiPlugin {
         return
       }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'mocha'
-      )
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'mocha'
+        ),
+        ...this.getSessionRequestErrorTags(),
+      }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
@@ -236,16 +237,10 @@ class MochaPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atf)
         }
 
-        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          {
-            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-            isNew: spanTags[TEST_IS_NEW] === 'true',
-            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-            browserDriver: spanTags[TEST_BROWSER_DRIVER],
-          }
+          this.getTestTelemetryTags(span)
         )
 
         span.finish()
@@ -310,16 +305,10 @@ class MochaPlugin extends CiPlugin {
           span.setTag('error', err)
         }
 
-        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          {
-            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-            isNew: spanTags[TEST_IS_NEW] === 'true',
-            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-            browserDriver: spanTags[TEST_BROWSER_DRIVER],
-          }
+          this.getTestTelemetryTags(span)
         )
         if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const probeInformation = this.addDiProbe(err)
@@ -402,7 +391,9 @@ class MochaPlugin extends CiPlugin {
         this.testModuleSpan.finish()
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
         this.testSessionSpan.finish()
-        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+          hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+        })
         finishAllTraceSpans(this.testSessionSpan)
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,

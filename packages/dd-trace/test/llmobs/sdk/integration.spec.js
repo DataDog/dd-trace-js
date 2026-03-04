@@ -142,8 +142,12 @@ describe('end to end sdk integration tests', () => {
       assert.equal(llmobsEvaluationMetrics.length, 1)
 
       assertLlmObsEvaluationMetric(llmobsEvaluationMetrics[0], {
-        traceId: llmobsSpans[0].trace_id,
-        spanId: llmobsSpans[0].span_id,
+        joinOn: {
+          span: {
+            traceId: llmobsSpans[0].trace_id,
+            spanId: llmobsSpans[0].span_id,
+          },
+        },
         label: 'foo',
         metricType: 'categorical',
         mlApp: 'test',

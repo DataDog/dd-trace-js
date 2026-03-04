@@ -153,7 +153,7 @@ describe('Plugin Structure Validation', () => {
 
     for (const hook of Object.values(hooks)) {
       let hookFn = hook
-      if (typeof hook === 'object' && hook.fn) {
+      if (hook !== null && typeof hook === 'object' && hook.fn) {
         hookFn = hook.fn
       }
       const hookString = hookFn.toString()

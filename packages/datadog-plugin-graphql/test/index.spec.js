@@ -1352,7 +1352,7 @@ describe('Plugin', () => {
 
           return agent.load('graphql', {
             service: 'custom',
-            variables: variables => Object.assign({}, variables, { who: 'REDACTED' }),
+            variables: variables => ({ ...variables, who: 'REDACTED' }),
             source: true,
           })
         })

@@ -7,6 +7,14 @@ const FormData = require('../../exporters/common/form-data')
 const request = require('../../exporters/common/request')
 const log = require('../../log')
 const { getValueFromEnvSources } = require('../../config/helper')
+const {
+  incrementCountMetric,
+  distributionMetric,
+  TELEMETRY_COVERAGE_UPLOAD,
+  TELEMETRY_COVERAGE_UPLOAD_MS,
+  TELEMETRY_COVERAGE_UPLOAD_ERRORS,
+  TELEMETRY_COVERAGE_UPLOAD_BYTES,
+} = require('../telemetry')
 
 const UPLOAD_TIMEOUT_MS = 30_000
 
@@ -79,8 +87,15 @@ function uploadCoverageReport (
 
   log.debug('Uploading coverage report %s to %s%s', filePath, url, options.path)
 
+  incrementCountMetric(TELEMETRY_COVERAGE_UPLOAD)
+  distributionMetric(TELEMETRY_COVERAGE_UPLOAD_BYTES, {}, compressedCoverage.length)
+
+  const startTime = Date.now()
+
   request(form, options, (err, res, statusCode) => {
+    distributionMetric(TELEMETRY_COVERAGE_UPLOAD_MS, {}, Date.now() - startTime)
     if (err) {
+      incrementCountMetric(TELEMETRY_COVERAGE_UPLOAD_ERRORS, { statusCode })
       log.error('Error uploading coverage report: %s', err.message)
       return callback(err)
     }
