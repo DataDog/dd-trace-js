@@ -11,6 +11,7 @@
     js-tokens "^4.0.0"
     picocolors "^1.1.1"
 
+
 "@babel/compat-data@^7.28.6":
   version "7.29.0"
   resolved "https://registry.yarnpkg.com/@babel/compat-data/-/compat-data-7.29.0.tgz#00d03e8c0ac24dd9be942c5370990cbe1f17d88d"
