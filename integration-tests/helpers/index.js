@@ -28,6 +28,7 @@ let shouldKill
 const ANY_STRING = Symbol('test.ANY_STRING')
 const ANY_NUMBER = Symbol('test.ANY_NUMBER')
 const ANY_VALUE = Symbol('test.ANY_VALUE')
+const defaultStopProcTimeoutMs = 2_000
 
 /**
  * @param {string} filename
@@ -65,7 +66,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
 
   if (expectedSource) {
     assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
-    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
+      `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid
 }
@@ -258,6 +259,60 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
         }
         resolve()
       })
+  })
+}
+
+/**
+ * Stop a process and wait for it to fully exit.
+ *
+ * Sends `SIGTERM` first, waits up to `timeoutMs`, and escalates to `SIGKILL` if needed.
+ *
+ * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
+ * @param {object} [options] - Stop options.
+ * @param {number} [options.timeoutMs=defaultStopProcTimeoutMs] - Max wait per signal in milliseconds.
+ * @returns {Promise<void>}
+ */
+async function stopProc (proc, { timeoutMs = defaultStopProcTimeoutMs } = {}) {
+  if (!proc) return
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+
+  proc.kill()
+
+  const exitedAfterSigterm = await waitForProcExit(proc, timeoutMs)
+  if (exitedAfterSigterm) return
+
+  proc.kill('SIGKILL')
+  const exitedAfterSigkill = await waitForProcExit(proc, timeoutMs)
+
+  if (!exitedAfterSigkill) {
+    throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
+  }
+}
+
+/**
+ * Wait for a process to exit for up to `timeoutMs`.
+ *
+ * @param {childProcess.ChildProcess} proc - Process to wait for.
+ * @param {number} timeoutMs - Max time to wait in milliseconds.
+ * @returns {Promise<boolean>} `true` if the process exited before timeout.
+ */
+function waitForProcExit (proc, timeoutMs) {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return Promise.resolve(true)
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      proc.removeListener('exit', onExit)
+      resolve(false)
+    }, timeoutMs)
+
+    proc.once('exit', onExit)
+
+    function onExit () {
+      clearTimeout(timeout)
+      resolve(true)
+    }
   })
 }
 
@@ -954,6 +1009,7 @@ module.exports = {
   hookFile,
   assertObjectContains,
   assertUUID,
+  stopProc,
   spawnProc,
   spawnProcAndExpectExit,
   telemetryForwarder,
