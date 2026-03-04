@@ -22,17 +22,10 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     const queueName = job?.queueName || job?.queue?.name || 'bullmq'
 
     let childOf
-    const metadata = job?.opts?.telemetry?.metadata
-    if (metadata) {
-      ctx._ddMetadata = metadata
-      try {
-        const carrier = JSON.parse(metadata)
-        childOf = this.tracer.extract('text_map', carrier)
-      } catch {
-        // Ignore malformed metadata
-      }
-      // Clean up trace metadata so it doesn't leak to user code
-      delete job.opts.telemetry.metadata
+    const ddCarrier = this._extractDatadog(job)
+    if (ddCarrier) {
+      ctx._ddCarrier = ddCarrier
+      childOf = this.tracer.extract('text_map', ddCarrier)
     }
 
     this.startSpan({
@@ -57,18 +50,32 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     const queueName = job.queueName || job.queue?.name || 'bullmq'
     const payloadSize = job.data ? getMessageSize(job.data) : 0
 
-    const metadata = ctx._ddMetadata
-    if (metadata) {
-      try {
-        const carrier = JSON.parse(metadata)
-        this.tracer.decodeDataStreamsContext(carrier)
-      } catch {
-        // Ignore malformed metadata
-      }
+    const ddCarrier = ctx._ddCarrier
+    if (ddCarrier) {
+      this.tracer.decodeDataStreamsContext(ddCarrier)
     }
 
     const edgeTags = ['direction:in', `topic:${queueName}`, 'type:bullmq']
     this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+  }
+
+  _extractDatadog (job) {
+    const metadataStr = job?.opts?.telemetry?.metadata
+    if (!metadataStr) return undefined
+
+    try {
+      const metadata = JSON.parse(metadataStr)
+      const ddCarrier = metadata._datadog
+      if (!ddCarrier) return undefined
+
+      // Clean up only our _datadog key, preserve other metadata
+      delete metadata._datadog
+      job.opts.telemetry.metadata = JSON.stringify(metadata)
+
+      return ddCarrier
+    } catch {
+      return undefined
+    }
   }
 }
 
