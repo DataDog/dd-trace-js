@@ -52,7 +52,7 @@ Each entry in the instrumentations array:
 
   // Option A: functionQuery (recommended)
   functionQuery: {
-    kind: 'Async' | 'Callback' | 'Sync',  // transform type (see below)
+    kind: 'Async' | 'AsyncIterator' | 'Callback' | 'Sync',  // transform type (see below)
     methodName: string,      // class method or property method name
     className?: string,      // scope to a specific class
     functionName?: string,   // target a FunctionDeclaration (alternative to methodName)
@@ -119,17 +119,44 @@ Example with `module.name: "@langchain/core"` and `channelName: "RunnableSequenc
 
 ## Function Kinds and Transforms
 
-Orchestrion supports three transform types, selected by the `kind` field:
+Orchestrion supports four transform types, selected by the `kind` field:
 
 | Kind | Transform | Behavior |
 |------|-----------|----------|
 | `Async` | `tracePromise` | Wraps in async arrow, calls `channel.tracePromise()` — handles promise resolution/rejection |
+| `AsyncIterator` | `traceAsyncIterator` | Wraps async generators/iterators — creates TWO channels: base and `_next` (**see [async-iterator-pattern.md](./async-iterator-pattern.md)**) |
 | `Callback` | `traceCallback` | Intercepts callback at `arguments[index]` (default: last arg, i.e. `-1`), wraps it to publish `asyncStart`/`asyncEnd`/`error` events |
 | `Sync` | `traceSync` | Wraps in non-async arrow, calls `channel.traceSync()` — handles synchronous return/throw. **Note:** `Sync` is the default when `kind` is omitted or unrecognized. |
 
-All three transforms dispatch to `traceFunction` (for standalone functions) or `traceInstanceMethod` (for class methods, including inherited ones via constructor patching).
+All transforms dispatch to `traceFunction` (for standalone functions) or `traceInstanceMethod` (for class methods, including inherited ones via constructor patching).
 
 For `Callback` kind, use the `index` field to specify which argument is the callback (defaults to `-1`, meaning the last argument).
+
+### AsyncIterator Pattern (Two Plugins Required)
+
+**⚠️ CRITICAL:** `AsyncIterator` is a special transform that requires **TWO plugins** and has specific implementation requirements.
+
+**When to use:**
+- Method returns `Promise<AsyncIterable>`, `Promise<AsyncIterableIterator>`, or `Promise<IterableReadableStream>`
+- Async generator functions: `async *methodName()`
+
+**How it works:**
+- Orchestrion creates **TWO channels**: base channel and `{channelName}_next` channel
+- **Main plugin**: Creates span when method is called
+- **Next plugin**: Finishes span when `result.done === true` (after all iterations complete)
+
+**📖 REQUIRED READING:** If you are implementing an AsyncIterator integration, you **MUST** read the complete guide:
+
+👉 **[AsyncIterator Pattern Reference](./async-iterator-pattern.md)** 👈
+
+This pattern is complex and easy to get wrong. The reference document covers:
+- Two-channel pattern details
+- Complete plugin implementation examples
+- Common mistakes and how to avoid them
+- Testing strategies
+- Full working example (LangGraph)
+
+**DO NOT** attempt to implement AsyncIterator without reading the full reference.
 
 ## Finding the Right filePath
 
