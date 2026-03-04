@@ -2980,7 +2980,7 @@
     ],
     "DD_TRACE_LANGGRAPH_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
