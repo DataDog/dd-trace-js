@@ -182,9 +182,10 @@ class JestPlugin extends CiPlugin {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
-        config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
+        config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
@@ -208,6 +209,7 @@ class JestPlugin extends CiPlugin {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
         _ddTestModuleId: testModuleId,
+        _ddRequestErrorTags: requestErrorTags,
         _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
         _ddUnskippable,
@@ -219,7 +221,11 @@ class JestPlugin extends CiPlugin {
         'x-datadog-parent-id': testModuleId,
       })
 
-      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
+        // requestErrorTags from test env options may be undefined
+        ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
+      }
 
       if (_ddUnskippable) {
         const unskippableSuites = this.getUnskippableSuites(_ddUnskippable)
@@ -389,6 +395,7 @@ class JestPlugin extends CiPlugin {
       attemptToFixFailed,
       isAtrRetry,
       finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       span.setTag(TEST_STATUS, status)
       if (finalStatus) {
@@ -408,6 +415,9 @@ class JestPlugin extends CiPlugin {
       if (isAtrRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
 
       this.telemetry.ciVisEvent(

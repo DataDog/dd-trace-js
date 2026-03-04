@@ -89,7 +89,7 @@ jobs:
       - run: node scripts/release/notes --latest
 
   docs:
-    needs: 'publish-latest'
+    needs: "publish-latest"
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -147,11 +147,7 @@ jobs:
           git push origin --tags
 
   status:
-    needs: [
-      'publish-v3',
-      'publish-v4',
-      'publish-latest',
-    ]
+    needs: ["publish-v3", "publish-v4", "publish-latest"]
     if: always() && contains(needs.*.result, 'success')
     runs-on: ubuntu-latest
     permissions:

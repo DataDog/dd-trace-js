@@ -3,6 +3,7 @@
 
 const log = require('../../../../log')
 const vulnerabilities = require('../../vulnerabilities')
+const defaults = require('../../../../config/defaults')
 
 const { contains, intersects, remove } = require('./range-utils')
 
@@ -14,14 +15,12 @@ const sqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyz
 const taintedRangeBasedSensitiveAnalyzer = require('./sensitive-analyzers/tainted-range-based-sensitive-analyzer')
 const urlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
 
-const { DEFAULT_IAST_REDACTION_NAME_PATTERN, DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./sensitive-regex')
-
 const REDACTED_SOURCE_BUFFER = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 class SensitiveHandler {
   constructor () {
-    this._namePattern = new RegExp(DEFAULT_IAST_REDACTION_NAME_PATTERN, 'gmi')
-    this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
+    this._namePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionNamePattern']), 'gmi')
+    this._valuePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionValuePattern']), 'gmi')
 
     this._sensitiveAnalyzers = new Map()
     this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, taintedRangeBasedSensitiveAnalyzer)

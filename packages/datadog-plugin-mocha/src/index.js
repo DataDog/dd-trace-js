@@ -93,12 +93,15 @@ class MochaPlugin extends CiPlugin {
         return
       }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'mocha'
-      )
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'mocha'
+        ),
+        ...this.getSessionRequestErrorTags(),
+      }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
