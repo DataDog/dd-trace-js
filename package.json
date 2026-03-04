@@ -140,15 +140,10 @@
     "@datadog/native-iast-taint-tracking": "4.1.0",
     "@datadog/native-metrics": "3.1.1",
     "@datadog/openfeature-node-server": "^0.3.3",
-<<<<<<< munir/make-otel-api-a-peer-dependency
-    "@datadog/pprof": "5.13.3",
+    "@datadog/pprof": "5.13.4",
     "@datadog/wasm-js-rewriter": "5.0.1"
   },
   "peerDependencies": {
-=======
-    "@datadog/pprof": "5.13.4",
-    "@datadog/wasm-js-rewriter": "5.0.1",
->>>>>>> master
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0"
   },
@@ -167,14 +162,11 @@
     "@msgpack/msgpack": "^3.1.3",
     "@openfeature/core": "^1.8.1",
     "@openfeature/server-sdk": "~1.20.0",
-<<<<<<< munir/make-otel-api-a-peer-dependency
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",
     "@opentelemetry/core": ">=1.14.0 <1.31.0",
     "@opentelemetry/resources": ">=1.0.0 <1.31.0",
-=======
     "@snyk/github-codeowners": "^1.1.0",
->>>>>>> master
     "@stylistic/eslint-plugin": "^5.7.1",
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.106",
