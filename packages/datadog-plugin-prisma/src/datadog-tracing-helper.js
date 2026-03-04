@@ -1,6 +1,6 @@
 'use strict'
 
-const tracingChannel = require('dc-polyfill').tracingChannel
+const { tracingChannel } = /** @type {import('node:diagnostics_channel')} */ (require('dc-polyfill'))
 const clientCH = tracingChannel('apm:prisma')
 const { storage } = require('../../datadog-core')
 
@@ -10,21 +10,12 @@ const allowedClientSpanOperations = new Set([
   'transaction',
 ])
 
-/**
- * @typedef {object} DbConfig
- * @property {string} [user]
- * @property {string} [password]
- * @property {string} [host]
- * @property {string} [port]
- * @property {string} [database]
- */
-
 class DatadogTracingHelper {
   #prismaClient
   #dbConfig
 
   /**
-   * @param {DbConfig|undefined} dbConfig
+   * @param {import('../../datadog-instrumentations/src/prisma').DbConfig|undefined} dbConfig
    * @param {import('./index')} prismaClient
    */
   constructor (dbConfig, prismaClient) {
@@ -36,7 +27,12 @@ class DatadogTracingHelper {
     return true
   }
 
-  // needs a sampled tracecontext to generate engine spans
+  /**
+   * Needs a sampled tracecontext to generate engine spans
+   *
+   * @param {object} [context]
+   * @returns {string}
+   */
   getTraceParent (context) {
     const store = storage('legacy').getStore()
     const span = store?.span
@@ -57,11 +53,30 @@ class DatadogTracingHelper {
     return '00-00000000000000000000000000000000-0000000000000000-01'
   }
 
+  /**
+   * @param {object[]} spans
+   */
   dispatchEngineSpans (spans) {
+    if (!spans?.length) {
+      return
+    }
+    const childrenByParent = new Map()
     for (const span of spans) {
-      if (span.parentId === null) {
-        this.#prismaClient.startEngineSpan({ engineSpan: span, allEngineSpans: spans, dbConfig: this.#dbConfig })
+      const parentId = span.parentId
+      const children = childrenByParent.get(parentId)
+      if (children) {
+        children.push(span)
+      } else {
+        childrenByParent.set(parentId, [span])
       }
+    }
+
+    const roots = childrenByParent.get(null)
+    if (!roots) {
+      return
+    }
+    for (const span of roots) {
+      this.#prismaClient.startEngineSpan({ engineSpan: span, childrenByParent, dbConfig: this.#dbConfig })
     }
   }
 
@@ -70,7 +85,15 @@ class DatadogTracingHelper {
     return store?.span?._spanContext
   }
 
+  /**
+   * @param {object} options
+   * @param {Function} callback
+   * @returns {unknown}
+   */
   runInChildSpan (options, callback) {
+    if (!clientCH.start?.hasSubscribers) {
+      return callback.apply(this, arguments)
+    }
     if (typeof options === 'string') {
       options = {
         name: options,

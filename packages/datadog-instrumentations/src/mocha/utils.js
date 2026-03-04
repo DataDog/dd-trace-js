@@ -271,6 +271,7 @@ function getOnTestEndHandler (config) {
     const testStatuses = testsStatuses.get(testName)
 
     const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
+    const isLastEfdRetry = testStatuses.length === config.earlyFlakeDetectionNumRetries + 1
 
     if (test._ddIsAttemptToFix && isLastAttempt) {
       if (testStatuses.includes('fail')) {
@@ -281,6 +282,11 @@ function getOnTestEndHandler (config) {
       } else if (testStatuses.every(status => status === 'pass')) {
         attemptToFixPassed = true
       }
+    }
+
+    if (test._ddIsEfdRetry && isLastEfdRetry &&
+      testStatuses.every(status => status === 'fail')) {
+      hasFailedAllRetries = true
     }
 
     const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1

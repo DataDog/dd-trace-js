@@ -23,7 +23,7 @@ describe('express-mongo-sanitize', () => {
 
       before((done) => {
         // Highest version of express that supports express-mongo-sanitize is <5
-        // This is defined in externals.json
+        // This is defined in externals.js
         const express = require('../../../versions/express').get()
         const expressMongoSanitize = require(`../../../versions/express-mongo-sanitize@${version}`).get()
         const app = express()

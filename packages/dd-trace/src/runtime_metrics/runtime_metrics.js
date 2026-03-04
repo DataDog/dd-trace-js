@@ -238,7 +238,7 @@ function captureHeapSpace () {
   const stats = v8.getHeapSpaceStatistics()
 
   for (let i = 0, l = stats.length; i < l; i++) {
-    const tags = [`space:${stats[i].space_name}`]
+    const tags = [`heap_space:${stats[i].space_name}`]
 
     client.gauge('runtime.node.heap.size.by.space', stats[i].space_size, tags)
     client.gauge('runtime.node.heap.used_size.by.space', stats[i].space_used_size, tags)

@@ -85,6 +85,7 @@ describe('onPause', function () {
       './redaction': redaction,
     })
     const snapshot = proxyquire('../../../src/debugger/devtools_client/snapshot', {
+      '../session': session,
       './collector': collector,
       './processor': processor,
     })

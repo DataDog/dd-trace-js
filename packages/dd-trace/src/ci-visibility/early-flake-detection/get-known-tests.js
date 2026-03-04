@@ -1,6 +1,6 @@
 'use strict'
 
-const request = require('../../exporters/common/request')
+const request = require('../requests/request')
 const id = require('../../id')
 const log = require('../../log')
 const { getValueFromEnvSources } = require('../../config/helper')
@@ -95,7 +95,7 @@ function getKnownTests ({
 
         const numTests = getNumFromKnownTests(knownTests)
 
-        incrementCountMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
 
         log.debug('Number of received known tests:', numTests)

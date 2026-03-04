@@ -30,6 +30,7 @@ fastify.get('/:name', function handler (request) {
     bar: true,
   }
   const emptyObj = {}
+  const map = new Map([[1, 2], [3, 4]])
   const p = Promise.resolve()
   const arrowFn = () => {}
   /* eslint-enable no-unused-vars */

@@ -697,7 +697,7 @@ function loadUpstreamPluginNames (repoRoot) {
  * @returns {Record<string, Array<{ name?: string }>>}
  */
 function loadUpstreamExternals (repoRoot) {
-  const file = path.join(repoRoot, 'packages', 'dd-trace', 'test', 'plugins', 'externals.json')
+  const file = path.join(repoRoot, 'packages', 'dd-trace', 'test', 'plugins', 'externals.js')
   try {
     /** @type {unknown} */
     const doc = JSON.parse(fs.readFileSync(file, 'utf8'))
@@ -998,7 +998,7 @@ function main () {
             if (!dep || typeof dep !== 'string') continue
             if (!versionsDeps.has(dep)) {
               pushError(
-                `${i.workflowFile}#${i.jobId}: upstream dependency "${dep}" (from externals.json "${p}") ` +
+                `${i.workflowFile}#${i.jobId}: upstream dependency "${dep}" (from externals.js "${p}") ` +
                 'is not listed in packages/dd-trace/test/plugins/versions/package.json'
               )
             }
