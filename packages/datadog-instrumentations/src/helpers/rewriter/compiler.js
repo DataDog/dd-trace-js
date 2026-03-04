@@ -5,7 +5,7 @@ const log = require('../../../../dd-trace/src/log')
 // eslint-disable-next-line camelcase, no-undef
 const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
 
-const compiler = module.exports = {
+const compiler = {
   parse: (sourceText, options) => {
     try {
       // TODO: Figure out ESBuild `createRequire` issue and remove this hack.
@@ -64,4 +64,11 @@ const compiler = module.exports = {
 
     return compiler.query(ast, query)
   },
+}
+
+module.exports = {
+  parse: (...args) => compiler.parse(...args),
+  generate: (...args) => compiler.generate(...args),
+  traverse: (...args) => compiler.traverse(...args),
+  query: (...args) => compiler.query(...args),
 }
