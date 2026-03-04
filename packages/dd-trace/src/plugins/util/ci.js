@@ -1,6 +1,7 @@
 'use strict'
 
 const { readFileSync, readdirSync } = require('fs')
+const path = require('path')
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
@@ -33,7 +34,6 @@ const {
   GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
 } = require('./tags')
 const { filterSensitiveInfoFromRepository } = require('./url')
-const path = require("path")
 
 // Receives a string with the form 'John Doe <john.doe@gmail.com>'
 // and returns { name: 'John Doe', email: 'john.doe@gmail.com' }
@@ -104,7 +104,6 @@ function getGitHubEventPayload () {
 }
 
 function getJobIDFromDiagFile (homePath) {
-  
   // There should be an if statement here for checking wether the env job id var is available or not.
   // If it is available, just return that... This could be added whenever Github decides to (check out https://github.com/actions/runner/pull/4053)
 
@@ -112,41 +111,44 @@ function getJobIDFromDiagFile (homePath) {
 
   const possibleDiagsPaths = [
     path.posix.join(homePath, 'actions-runner', '_diag'),
-    path.posix.join(homePath, 'actions-runner', 'cached', '_diag')
+    path.posix.join(homePath, 'actions-runner', 'cached', '_diag'),
   ]
-  
-  let workerLogFiles = [] // This will hold the names of the worker log files that (potentially) contain the Job ID
-  let chosenDiagPath = '' // This will hold the chosen diagnostics path (between the ones that are contemplated in possibleDiagsPath)
+  // This will hold the names of the worker log files that (potentially) contain the Job ID
+  let workerLogFiles = []
 
-  for (const diagPath of possibleDiagsPaths)
-  {
+  // This will hold the chosen diagnostics path (between the ones that are contemplated in possibleDiagsPath)
+  let chosenDiagPath = ''
+
+  for (const diagPath of possibleDiagsPaths) {
     try {
       // Obtain a list of fs.Dirent objects of the files in diagPath
-      const files = readdirSync(diagPath, {withFileTypes: true})
+      const files = readdirSync(diagPath, { withFileTypes: true })
 
       // Check if there are valid pontential log files
       const potentialLogs = files
         .filter((file) => file.isFile() && file.name.startsWith('Worker_')) // && file.name.endsWith('.log'))
         .map((file) => file.name)
 
-      if (potentialLogs.length > 0) { chosenDiagPath = diagPath; workerLogFiles = potentialLogs; break }
-      else { return null }
-    }
-    catch (error) { 
+      if (potentialLogs.length > 0) {
+        chosenDiagPath = diagPath
+        workerLogFiles = potentialLogs
+        break
+      } else { return null }
+    } catch (error) {
       // If the directory was not found, just look in the next one
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
         continue
       }
 
       // Any other kind of error must force a return
-      return null 
+      return null
     }
   }
 
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
     const filePath = path.posix.join(chosenDiagPath, logFile)
-    const content = readFileSync(filePath, 'utf-8')
+    const content = readFileSync(filePath, 'utf8')
 
     const match = content.match(/"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
 
@@ -336,7 +338,7 @@ module.exports = {
         GITHUB_RUN_ATTEMPT,
         GITHUB_JOB,
         GITHUB_BASE_REF,
-        HOME
+        HOME,
       } = env
 
       const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
@@ -348,7 +350,10 @@ module.exports = {
 
       // Build the job url extracting the job ID. If extraction fails, job url is constructed as a generalized url
       const GITHUB_JOB_ID = getJobIDFromDiagFile(HOME)
-      const jobUrl = GITHUB_JOB_ID === null ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks` : `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/job/${GITHUB_JOB_ID}`
+      const jobUrl =
+        GITHUB_JOB_ID === null
+          ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
+          : `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/job/${GITHUB_JOB_ID}`
 
       const ref = GITHUB_HEAD_REF || GITHUB_REF || ''
       const refKey = ref.includes('tags/') ? GIT_TAG : GIT_BRANCH
