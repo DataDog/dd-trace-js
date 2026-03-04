@@ -130,7 +130,7 @@ function getJobIDFromDiagFile (homePath) {
   }
   catch (error) { 
     console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); 
-    const entradas = readdirSync(path.posix.join(homePath, 'actions-runner', 'cached'), { withFileTypes: true });
+    const entradas = readdirSync(path.posix.join(homePath, 'actions-runner', 'cached', '_diag'), { withFileTypes: true });
 
     entradas.forEach(e => {
       if (e.isDirectory()) {
