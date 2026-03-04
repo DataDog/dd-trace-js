@@ -148,10 +148,6 @@ function getJobIDFromDiagFile (homePath) {
     const filePath = path.posix.join(chosenDiagPath, logFile)
     const content = readFileSync(filePath, 'utf-8')
 
-    console.log("%%%%%%%%%%%%%%%%%% PRINTING FILE CONTENT %%%%%%%%%%%%%%%%%%");  
-    console.log(content);
-    console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");  
-
     const match = content.match(/"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
 
     // match[1] is the captured group with the display name
@@ -350,11 +346,9 @@ module.exports = {
         pipelineURL = `${pipelineURL}/attempts/${GITHUB_RUN_ATTEMPT}`
       }
 
-      console.log("%%%%%%%%%%%%%%%%%% PRINTING JOB ID %%%%%%%%%%%%%%%%%%")
-      console.log(getJobIDFromDiagFile(HOME))
-      console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-
-      const jobUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
+      // Build the job url extracting the job ID. If extraction fails, job url is constructed as a generalized url
+      const JOB_ID = getJobIDFromDiagFile(HOME)
+      const jobUrl = JOB_ID === null ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks` : `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/job/${JOB_ID}`
 
       const ref = GITHUB_HEAD_REF || GITHUB_REF || ''
       const refKey = ref.includes('tags/') ? GIT_TAG : GIT_BRANCH
