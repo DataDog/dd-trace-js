@@ -17,18 +17,18 @@ const getResponsePreview = (body) => {
 
 const parseGitHubJsonResponse = ({ body, endpoint, res }) => {
   const statusCode = res.statusCode || 0
-  const contentType = String(res.headers['content-type'] || '')
-  const responsePreview = getResponsePreview(body)
-
   if (statusCode < 200 || statusCode >= 300) {
     throw new Error(
-      `GitHub API ${endpoint} returned status ${statusCode}. Body preview: ${responsePreview}`
+      `GitHub API ${endpoint} returned status ${statusCode}. Body preview: ${getResponsePreview(body)}`
     )
   }
 
+  const contentType = String(res.headers['content-type'] || '')
   if (!contentType.includes('application/json')) {
     throw new Error(
-      `GitHub API ${endpoint} returned unexpected content-type "${contentType}". Body preview: ${responsePreview}`
+      `GitHub API ${endpoint} returned unexpected content-type "${contentType}". Body preview: ${
+        getResponsePreview(body)
+      }`
     )
   }
 
@@ -36,7 +36,7 @@ const parseGitHubJsonResponse = ({ body, endpoint, res }) => {
     return JSON.parse(body)
   } catch (e) {
     throw new Error(
-      `GitHub API ${endpoint} returned invalid JSON. Body preview: ${responsePreview}`
+      `GitHub API ${endpoint} returned invalid JSON. Body preview: ${getResponsePreview(body)}`
     )
   }
 }
