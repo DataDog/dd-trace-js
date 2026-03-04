@@ -1,6 +1,6 @@
 'use strict'
 
-const { readFileSync, readdirSync, existsSync } = require('fs') // TODO: DELETE existsSync
+const { readFileSync, readdirSync } = require('fs')
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
@@ -103,13 +103,13 @@ function getGitHubEventPayload () {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
-function getJobIDFromDiagFile () {
+function getJobIDFromDiagFile (homePath) {
   
   // There should be an if statement here for checking wether the env job id var is available or not.
   // If it is available, just return that... 
 
   // Extract the Job ID from a Github diagnostic file
-  const diagPath = '/home/runner/actions-runner/_diag'
+  const diagPath = path.posix.join(homePath, 'actions-runner', '_diag')
 
   let workerLogFiles = []
 
@@ -123,35 +123,18 @@ function getJobIDFromDiagFile () {
       .map((file) => file.name)
 
     if (potentialLogs.length > 0) { workerLogFiles = potentialLogs }
-    else { console.log("%%%%%%%%%%%%%%%%%% NULL IN POTENTIAL LOGS %%%%%%%%%%%%%%%%%%"); return null }
+    else { return null }
   }
-  catch (error) { 
-    console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%");
-    console.log(error);
-
-    const fsss = fs.readdirSync('/home/');
-
-    fsss.forEach(file => {
-    const fullPath = path.join(dir, file);
-    const stats = fs.statSync(fullPath);
-
-    if (stats.isDirectory()) {
-      console.log(`📁 ${file}`);
-    } else {
-      console.log(`📄 ${file}`);
-    }})
-
-    return null 
-  }
+  catch (error) { console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); return null }
 
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
     const filePath = path.posix.join(diagPath, logFile)
     const content = readFileSync(filePath, 'utf-8')
 
-  console.log("%%%%%%%%%%%%%%%%%% PRINTING FILE CONTENT %%%%%%%%%%%%%%%%%%");  
-  console.log(content);
-  console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");  
+    console.log("%%%%%%%%%%%%%%%%%% PRINTING FILE CONTENT %%%%%%%%%%%%%%%%%%");  
+    console.log(content);
+    console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");  
 
     const match = content.match(/"job"\s*:\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
 
@@ -341,6 +324,7 @@ module.exports = {
         GITHUB_RUN_ATTEMPT,
         GITHUB_JOB,
         GITHUB_BASE_REF,
+        HOME
       } = env
 
       const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
@@ -351,7 +335,7 @@ module.exports = {
       }
 
       console.log("%%%%%%%%%%%%%%%%%% PRINTING JOB ID %%%%%%%%%%%%%%%%%%")
-      console.log(getJobIDFromDiagFile())
+      console.log(getJobIDFromDiagFile(HOME))
       console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
 
       const jobUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
