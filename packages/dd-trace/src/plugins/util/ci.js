@@ -152,7 +152,7 @@ function getJobIDFromDiagFile (homePath) {
     console.log(content);
     console.log("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%");  
 
-    const match = content.match(/"job"\s*:\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
+    const match = content.match(/"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
 
     // match[1] is the captured group with the display name
     if (match && match[1]) { return match[1] }
