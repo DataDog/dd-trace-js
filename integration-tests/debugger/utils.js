@@ -9,13 +9,12 @@ const { randomUUID } = require('crypto')
 const Axios = require('axios')
 
 const { assertObjectContains, assertUUID } = require('../helpers')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 const { version } = require('../../package.json')
 
 const BREAKPOINT_TOKEN = '// BREAKPOINT'
 const pollInterval = 0.1
-const procExitTimeoutMs = 2_000
 
 /**
  * @typedef {import('../../packages/dd-trace/test/debugger/devtools_client/utils').ProbeConfig} ProbeConfig
@@ -228,58 +227,6 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   })
 
   return t
-}
-
-/**
- * Stop a spawned process and wait for it to fully exit before continuing.
- *
- * @param {import('../helpers').SpawnedProcess|undefined} proc - Process to stop.
- * @returns {Promise<void>}
- */
-async function stopProc (proc) {
-  if (!proc) return
-  if (proc.exitCode !== null || proc.signalCode !== null) return
-
-  proc.kill()
-
-  if (proc.exitCode !== null || proc.signalCode !== null) return
-
-  const exitedAfterSigterm = await waitForExit(proc, procExitTimeoutMs)
-  if (exitedAfterSigterm) return
-
-  proc.kill('SIGKILL')
-  const exitedAfterSigkill = await waitForExit(proc, procExitTimeoutMs)
-
-  if (!exitedAfterSigkill) {
-    throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
-  }
-}
-
-/**
- * Wait for a process to exit for up to `timeoutMs`.
- *
- * @param {import('../helpers').SpawnedProcess} proc - Process to wait for.
- * @param {number} timeoutMs - Max time to wait in milliseconds.
- * @returns {Promise<boolean>} `true` if the process exited before timeout.
- */
-function waitForExit (proc, timeoutMs) {
-  if (proc.exitCode !== null || proc.signalCode !== null) {
-    return Promise.resolve(true)
-  }
-
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      proc.removeListener('exit', onExit)
-      resolve(false)
-    }, timeoutMs)
-
-    proc.once('exit', onExit)
-
-    function onExit () {
-      clearTimeout(timeout)
-      resolve(true)
-    }
-  })
 }
 
 /**
