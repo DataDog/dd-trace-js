@@ -347,8 +347,8 @@ module.exports = {
       }
 
       // Build the job url extracting the job ID. If extraction fails, job url is constructed as a generalized url
-      const JOB_ID = getJobIDFromDiagFile(HOME)
-      const jobUrl = JOB_ID === null ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks` : `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/job/${JOB_ID}`
+      const GITHUB_JOB_ID = getJobIDFromDiagFile(HOME)
+      const jobUrl = GITHUB_JOB_ID === null ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks` : `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/job/${GITHUB_JOB_ID}`
 
       const ref = GITHUB_HEAD_REF || GITHUB_REF || ''
       const refKey = ref.includes('tags/') ? GIT_TAG : GIT_BRANCH
