@@ -504,6 +504,7 @@ function addResponseTags (context) {
 
 function applyRouteOrEndpointTag (context) {
   const { paths, span, config } = context
+  if (!span) return
   const tags = span.context()._tags
   const route = paths.join('')
 
