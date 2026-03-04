@@ -24,12 +24,15 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     let childOf
     const metadata = job?.opts?.telemetry?.metadata
     if (metadata) {
+      ctx._ddMetadata = metadata
       try {
         const carrier = JSON.parse(metadata)
         childOf = this.tracer.extract('text_map', carrier)
       } catch {
         // Ignore malformed metadata
       }
+      // Clean up trace metadata so it doesn't leak to user code
+      delete job.opts.telemetry.metadata
     }
 
     this.startSpan({
@@ -54,7 +57,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     const queueName = job.queueName || job.queue?.name || 'bullmq'
     const payloadSize = job.data ? getMessageSize(job.data) : 0
 
-    const metadata = job.opts?.telemetry?.metadata
+    const metadata = ctx._ddMetadata
     if (metadata) {
       try {
         const carrier = JSON.parse(metadata)
