@@ -252,8 +252,8 @@ describe('API Security Sampler', () => {
       const spanWithEndpoint = {
         context: sinon.stub().returns({
           _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/users' }
-        })
+          _tags: { 'http.endpoint': '/api/users' },
+        }),
       }
       webStub.root.returns(spanWithEndpoint)
       webStub.getContext.returns({ paths: [], span: spanWithEndpoint })
@@ -267,8 +267,8 @@ describe('API Security Sampler', () => {
       const spanWithEndpoint = {
         context: sinon.stub().returns({
           _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/users' }
-        })
+          _tags: { 'http.endpoint': '/api/users' },
+        }),
       }
       webStub.root.returns(spanWithEndpoint)
       webStub.getContext.returns({ paths: [], span: spanWithEndpoint })
@@ -281,8 +281,8 @@ describe('API Security Sampler', () => {
       const spanWithBoth = {
         context: sinon.stub().returns({
           _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/users' }
-        })
+          _tags: { 'http.endpoint': '/api/users' },
+        }),
       }
       webStub.root.returns(spanWithBoth)
       webStub.getContext.returns({ paths: ['/users/:id'], span: spanWithBoth })
@@ -295,8 +295,8 @@ describe('API Security Sampler', () => {
       const spanWithoutEndpoint = {
         context: sinon.stub().returns({
           _sampling: { priority: AUTO_KEEP },
-          _tags: {}
-        })
+          _tags: {},
+        }),
       }
       webStub.root.returns(spanWithoutEndpoint)
       webStub.getContext.returns({ paths: [], span: spanWithoutEndpoint })
@@ -316,23 +316,23 @@ describe('API Security Sampler', () => {
       const span1 = {
         context: sinon.stub().returns({
           _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/users' }
-        })
+          _tags: { 'http.endpoint': '/api/users' },
+        }),
       }
       const span2 = {
         context: sinon.stub().returns({
           _sampling: { priority: AUTO_KEEP },
-          _tags: { 'http.endpoint': '/api/products' }
-        })
+          _tags: { 'http.endpoint': '/api/products' },
+        }),
       }
 
       webStub.root.returns(span1)
       webStub.getContext.returns({ paths: [], span: span1 })
-      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+      assert.ok(apiSecuritySampler.sampleRequest(req, res, true))
 
       webStub.root.returns(span2)
       webStub.getContext.returns({ paths: [], span: span2 })
-      assert.isTrue(apiSecuritySampler.sampleRequest(req, res, true))
+      assert.ok(apiSecuritySampler.sampleRequest(req, res, true))
 
       const key1 = apiSecuritySampler.computeKey(req, res)
       webStub.getContext.returns({ paths: [], span: span1 })
