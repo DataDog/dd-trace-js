@@ -11,6 +11,36 @@ const GET_WORKFLOWS_URL = `${API_REPOSITORY_URL}/actions/runs`
 
 const MAX_ATTEMPTS = 30 * 60 / 5 // 30 minutes, polling every 5 seconds = 360 attempts
 
+const getResponsePreview = (body) => {
+  return body.replace(/\s+/g, ' ').slice(0, 200)
+}
+
+const parseGitHubJsonResponse = ({ body, endpoint, res }) => {
+  const statusCode = res.statusCode || 0
+  if (statusCode < 200 || statusCode >= 300) {
+    throw new Error(
+      `GitHub API ${endpoint} returned status ${statusCode}. Body preview: ${getResponsePreview(body)}`
+    )
+  }
+
+  const contentType = String(res.headers['content-type'] || '')
+  if (!contentType.includes('application/json')) {
+    throw new Error(
+      `GitHub API ${endpoint} returned unexpected content-type "${contentType}". Body preview: ${
+        getResponsePreview(body)
+      }`
+    )
+  }
+
+  try {
+    return JSON.parse(body)
+  } catch (e) {
+    throw new Error(
+      `GitHub API ${endpoint} returned invalid JSON. Body preview: ${getResponsePreview(body)}`
+    )
+  }
+}
+
 function getBranchUnderTest () {
   /**
    * GITHUB_HEAD_REF is only set for `pull_request` events
@@ -72,7 +102,15 @@ const getWorkflowRunsInProgress = () => {
           response += chunk
         })
         res.on('end', () => {
-          resolve(JSON.parse(response))
+          try {
+            resolve(parseGitHubJsonResponse({
+              body: response,
+              endpoint: `${GET_WORKFLOWS_URL}?event=workflow_dispatch`,
+              res,
+            }))
+          } catch (e) {
+            reject(e)
+          }
         })
       })
     request.on('error', err => {
@@ -99,7 +137,15 @@ const getCurrentWorkflowJobs = (runId) => {
           body += chunk
         })
         res.on('end', () => {
-          resolve(JSON.parse(body))
+          try {
+            resolve(parseGitHubJsonResponse({
+              body,
+              endpoint: `${GET_WORKFLOWS_URL}/${runId}/jobs`,
+              res,
+            }))
+          } catch (e) {
+            reject(e)
+          }
         })
       })
     request.on('error', err => {
@@ -142,7 +188,14 @@ async function main () {
 
   // Poll every 5 seconds until we have a finished status, up to 30 minutes
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-    const currentWorkflow = await getCurrentWorkflowJobs(runId)
+    let currentWorkflow
+    try {
+      currentWorkflow = await getCurrentWorkflowJobs(runId)
+    } catch (e) {
+      console.error('Workflow check failed (%s). Retry in 5 seconds.', e.message)
+      await setTimeout(5000)
+      continue
+    }
     const { jobs } = currentWorkflow
     if (!jobs) {
       console.error('Workflow check returned unknown object %o. Retry in 5 seconds.', currentWorkflow)
