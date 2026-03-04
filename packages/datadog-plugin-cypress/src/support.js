@@ -92,6 +92,10 @@ function getRetriedTests (test, numRetries, tags) {
   return retriedTests
 }
 
+function isDatadogSupportSource (sourcePath) {
+  return typeof sourcePath === 'string' && sourcePath.includes('datadog-plugin-cypress/src/support.js')
+}
+
 const oldRunTests = Cypress.mocha.getRunner().runTests
 Cypress.mocha.getRunner().runTests = function (suite, fn) {
   if (!isKnownTestsEnabled && !isTestManagementEnabled && !isImpactedTestsEnabled) {
@@ -258,6 +262,7 @@ afterEach(function () {
 
   const testInfo = {
     testName,
+    testTitle: currentTest.title,
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
     // For quarantined tests, report the actual state (failed) to Datadog, not what Cypress thinks (passed)
@@ -272,7 +277,20 @@ afterEach(function () {
     isQuarantined: isQuarantinedTestThatFailed,
   }
   try {
-    testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+    const invocationDetails = Cypress.mocha.getRunner().currentRunnable.invocationDetails
+    if (invocationDetails) {
+      testInfo.testSourceLine = invocationDetails.line
+      testInfo.testSourceColumn = invocationDetails.column
+      const testSourceAbsolutePath = invocationDetails.absoluteFile || invocationDetails.file
+      if (!isDatadogSupportSource(testSourceAbsolutePath)) {
+        testInfo.testSourceAbsolutePath = testSourceAbsolutePath
+      }
+      const testSourceOriginalFile = invocationDetails.originalFile || invocationDetails.relativeFile
+      if (!isDatadogSupportSource(testSourceOriginalFile)) {
+        testInfo.testSourceOriginalFile = testSourceOriginalFile
+      }
+      testInfo.testSourceOriginalLine = invocationDetails.originalLine
+    }
   } catch {}
 
   const rum = safeGetRum(originalWindow)

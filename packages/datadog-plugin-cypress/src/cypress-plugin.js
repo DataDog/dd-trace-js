@@ -1,5 +1,7 @@
 'use strict'
 
+const { dirname, isAbsolute, resolve } = require('path')
+
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -91,6 +93,11 @@ const {
   RUNTIME_VERSION,
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
+const {
+  findTestDeclarationLine,
+  resolveTestSourceFileFromMap,
+  resolveTestSourceFromMap,
+} = require('./resolve-test-source')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -230,6 +237,87 @@ function getSuiteStatus (suiteStats) {
     return 'skip'
   }
   return 'pass'
+}
+
+/**
+ * Resolve the best source file and line for a Cypress test.
+ *
+ * @param {{
+ *   testSourceLine?: number,
+ *   testSourceColumn?: number,
+ *   testSourceAbsolutePath?: string,
+ *   testSourceOriginalFile?: string,
+ *   testSourceOriginalLine?: number,
+ *   testSuiteAbsolutePath?: string,
+ *   testTitle?: string
+ * }} test
+ * @returns {{ sourceAbsolutePath?: string, sourceLine?: number } | null}
+ */
+function getResolvedTestSourceLocation (test) {
+  const {
+    testSourceLine,
+    testSourceColumn,
+    testSourceAbsolutePath,
+    testSourceOriginalFile,
+    testSourceOriginalLine,
+    testSuiteAbsolutePath,
+    testTitle,
+  } = test
+
+  let sourceAbsolutePath
+  let sourceLine
+
+  if (testSourceOriginalFile) {
+    sourceAbsolutePath = isAbsolute(testSourceOriginalFile)
+      ? testSourceOriginalFile
+      : testSourceAbsolutePath
+        ? resolve(dirname(testSourceAbsolutePath), testSourceOriginalFile)
+        : testSuiteAbsolutePath
+          ? resolve(dirname(testSuiteAbsolutePath), testSourceOriginalFile)
+          : undefined
+    sourceLine = testSourceOriginalLine || testSourceLine
+  }
+
+  if (!sourceAbsolutePath && testSourceAbsolutePath && testSourceLine) {
+    const resolvedSource = resolveTestSourceFromMap(testSourceAbsolutePath, testSourceLine, testSourceColumn || 0)
+    if (resolvedSource) {
+      sourceAbsolutePath = resolvedSource.sourceAbsolutePath
+      sourceLine = resolvedSource.sourceLine
+    }
+  }
+
+  if (!sourceAbsolutePath && testSuiteAbsolutePath && testSourceLine) {
+    const resolvedSource = resolveTestSourceFromMap(testSuiteAbsolutePath, testSourceLine, testSourceColumn || 0)
+    if (resolvedSource) {
+      sourceAbsolutePath = resolvedSource.sourceAbsolutePath
+      sourceLine = resolvedSource.sourceLine
+    }
+  }
+
+  if (!sourceAbsolutePath && testSourceAbsolutePath) {
+    sourceAbsolutePath = resolveTestSourceFileFromMap(testSourceAbsolutePath)
+  }
+
+  if (!sourceAbsolutePath && testSuiteAbsolutePath) {
+    sourceAbsolutePath = resolveTestSourceFileFromMap(testSuiteAbsolutePath)
+  }
+
+  if (!sourceAbsolutePath && testSuiteAbsolutePath) {
+    sourceAbsolutePath = testSuiteAbsolutePath
+  }
+
+  if (sourceAbsolutePath && !sourceLine) {
+    sourceLine = findTestDeclarationLine(sourceAbsolutePath, testTitle)
+  }
+
+  if (sourceAbsolutePath || sourceLine) {
+    return {
+      sourceAbsolutePath,
+      sourceLine,
+    }
+  }
+
+  return testSourceLine ? { sourceLine: testSourceLine } : null
 }
 
 class CypressPlugin {
@@ -902,6 +990,11 @@ class CypressPlugin {
           error,
           isRUMActive,
           testSourceLine,
+          testSourceColumn,
+          testSourceAbsolutePath,
+          testSourceOriginalFile,
+          testSourceOriginalLine,
+          testTitle,
           testSuite,
           testSuiteAbsolutePath,
           testName,
@@ -946,8 +1039,26 @@ class CypressPlugin {
         if (isRUMActive) {
           this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
         }
-        if (testSourceLine) {
-          this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
+        const rootDir = this.repositoryRoot || this.rootDir
+        const resolvedSource = getResolvedTestSourceLocation({
+          testSourceLine,
+          testSourceColumn,
+          testSourceAbsolutePath,
+          testSourceOriginalFile,
+          testSourceOriginalLine,
+          testSuiteAbsolutePath,
+          testTitle,
+        })
+        if (resolvedSource) {
+          if (resolvedSource.sourceAbsolutePath) {
+            const sourceFile = rootDir
+              ? getTestSuitePath(resolvedSource.sourceAbsolutePath, rootDir)
+              : resolvedSource.sourceAbsolutePath
+            this.activeTestSpan.setTag(TEST_SOURCE_FILE, sourceFile)
+          }
+          if (resolvedSource.sourceLine) {
+            this.activeTestSpan.setTag(TEST_SOURCE_START, resolvedSource.sourceLine)
+          }
         }
         if (isNew) {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')

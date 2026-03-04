@@ -74,6 +74,7 @@ const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
 
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
+const over10It = (version === 'latest' || semver.gte(version, '10.0.0')) ? it : it.skip
 
 const moduleTypes = [
   {
@@ -134,7 +135,7 @@ moduleTypes.forEach(({
     let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
 
     // cypress-fail-fast is required as an incompatible plugin
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
       // Note: Cypress binary is already installed during useSandbox() via the postinstall script
@@ -614,6 +615,108 @@ moduleTypes.forEach(({
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
             DD_TEST_SESSION_NAME: 'my-test-session',
             DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
+    over10It('reports test.source.start from a TypeScript Cypress spec', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tsTestEvent = events.find((event) => {
+            return event.type === 'test' &&
+              event.content.meta[TEST_SUITE] === 'cypress/e2e/spec-source-line.cy.ts' &&
+              event.content.meta[TEST_NAME] ===
+                'typescript source line reports source line from ts'
+          })
+
+          assert.ok(tsTestEvent, 'expected TypeScript Cypress test event')
+          assert.strictEqual(tsTestEvent.content.metrics[TEST_SOURCE_START], 7)
+        }, 25000)
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/spec-source-line.cy.ts',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
+    // Reproduces customer issue: test.source.start is wrong when the spec is compiled from
+    // TypeScript (e.g. tsc) and Cypress runs the compiled .js. invocationDetails.line from
+    // Mocha refers to the compiled output, not the source .ts file.
+    over10It('reports test.source.start from a precompiled TypeScript Cypress spec (*.cy.ts → *.cy.js)', async () => {
+      const compiledSpec = 'cypress/e2e/dist/spec-source-line.cy.js'
+      const sourceLineInTs = 7 // line of it('reports source line from ts', ...) in spec-source-line.cy.ts
+
+      try {
+        execSync('npx tsc -p cypress/tsconfig.cypress.json', { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+      } catch (err) {
+        const out = [err.message, err.stdout, err.stderr].filter(Boolean).join('\n')
+        throw new Error(`tsc failed: ${out}`)
+      }
+      assert.ok(fs.existsSync(path.join(cwd, compiledSpec)), 'compiled spec should exist')
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tsTestEvent = events.find((event) => {
+            const suite = event.content?.meta?.[TEST_SUITE] ?? ''
+            return event.type === 'test' &&
+              (suite === compiledSpec || suite.endsWith('spec-source-line.cy.js')) &&
+              event.content.meta[TEST_NAME] === 'typescript source line reports source line from ts'
+          })
+
+          assert.ok(tsTestEvent, 'expected test event from compiled TypeScript spec')
+          // Expect the start line to match the SOURCE .ts file (customer expectation).
+          // Current implementation uses invocationDetails.line from Mocha, which points at the
+          // compiled .js file, so this test FAILS until we fix source-line reporting for compiled TS.
+          assert.strictEqual(
+            tsTestEvent.content.metrics[TEST_SOURCE_START],
+            sourceLineInTs,
+            'test.source.start should be the line in the source .ts file ' +
+              '(invocationDetails often wrong for compiled TS)'
+          )
+        }, 25000)
+
+      const {
+        NODE_OPTIONS,
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const runCommand = version === '6.7.0'
+        ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${compiledSpec}"`
+        : `${testCommand} --spec ${compiledSpec}`
+
+      childProcess = exec(
+        runCommand,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: compiledSpec,
           },
         }
       )
