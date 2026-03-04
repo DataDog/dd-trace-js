@@ -106,41 +106,41 @@ function getGitHubEventPayload () {
 function getJobIDFromDiagFile (homePath) {
   
   // There should be an if statement here for checking wether the env job id var is available or not.
-  // If it is available, just return that... 
+  // If it is available, just return that... This could be added whenever Github decides to (check out https://github.com/actions/runner/pull/4053)
 
-  // Extract the Job ID from a Github diagnostic file
-  const diagPath = path.posix.join(homePath, 'actions-runner', '_diag')
-  const diagPathOtro = path.posix.join(homePath, 'actions-runner', 'cached', '_diag')
-  console.log(diagPath)
-  console.log(diagPathOtro)
+  // Since said env variable is not available, we'll extract the Job ID from a diagnostics file
 
-  let workerLogFiles = []
+  const possibleDiagsPaths = [
+    path.posix.join(homePath, 'actions-runner', '_diag'),
+    path.posix.join(homePath, 'actions-runner', 'cached', '_diag')
+  ]
+  
+  let workerLogFiles = [] // This will hold the names of the worker log files that (potentially) contain the Job ID
+  let chosenDiagPath = '' // This will hold the chosen diagnostics path (between the ones that are contemplated in possibleDiagsPath)
 
-  try {
-    // Obtain a list of fs.Dirent objects of the files in diagPath
-    const files = readdirSync(diagPath, {withFileTypes: true})
+  for (const diagPath of possibleDiagsPaths)
+  {
+    try {
+      // Obtain a list of fs.Dirent objects of the files in diagPath
+      const files = readdirSync(diagPath, {withFileTypes: true})
 
-    // Check if there are valid pontential log files
-    const potentialLogs = files
-      .filter((file) => file.isFile() && file.name.startsWith('Worker_')) // && file.name.endsWith('.log'))
-      .map((file) => file.name)
+      // Check if there are valid pontential log files
+      const potentialLogs = files
+        .filter((file) => file.isFile() && file.name.startsWith('Worker_')) // && file.name.endsWith('.log'))
+        .map((file) => file.name)
 
-    if (potentialLogs.length > 0) { workerLogFiles = potentialLogs }
-    else { return null }
-  }
-  catch (error) { 
-    console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); 
-    const entradas = readdirSync(path.posix.join(homePath, 'actions-runner', 'cached', '_diag'), { withFileTypes: true });
-
-    entradas.forEach(e => {
-      if (e.isDirectory()) {
-        console.log('📁', e.name);
-      } else {
-        console.log('📄', e.name);
+      if (potentialLogs.length > 0) { chosenDiagPath = diagPath; workerLogFiles = potentialLogs; break }
+      else { return null }
+    }
+    catch (error) { 
+      // If the directory was not found, just look in the next one
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        continue
       }
-    });
 
-    return null 
+      // Any other kind of error must force a return
+      return null 
+    }
   }
 
   // Get the job ID via regex
