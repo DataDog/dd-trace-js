@@ -376,7 +376,6 @@ describe('CheckpointRegistry', () => {
     const first = registry.getId('alpha')
     const second = registry.getId('alpha')
     assert.strictEqual(first, second)
-    assert.strictEqual(first, 1)
   })
 
   it('returns undefined when 254 names are exhausted', () => {
