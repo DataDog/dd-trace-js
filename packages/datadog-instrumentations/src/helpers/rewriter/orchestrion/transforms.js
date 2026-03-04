@@ -8,13 +8,13 @@ const tracingChannelPredicate = (node) => (
 )
 
 const transforms = module.exports = {
-  tracingChannelImport ({ sourceType }, node) {
+  tracingChannelImport ({ dcModule, sourceType }, node) {
     if (node.body.some(tracingChannelPredicate)) return
 
     const index = node.body.findIndex(child => child.directive === 'use strict')
     const code = sourceType === 'module'
-      ? 'import { tracingChannel as tr_ch_apm_tracingChannel } from "diagnostics_channel"'
-      : 'const {tracingChannel: tr_ch_apm_tracingChannel} = require("diagnostics_channel")'
+      ? `import { tracingChannel as tr_ch_apm_tracingChannel } from "${dcModule}"`
+      : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
 
     node.body.splice(index + 1, 0, parse(code, { sourceType }).body[0])
   },

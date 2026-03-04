@@ -1,7 +1,7 @@
 'use strict'
 
 const { readFileSync } = require('node:fs')
-const { resolve, join } = require('node:path')
+const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
 const assert = require('node:assert')
 const { beforeEach, describe, it } = require('mocha')
@@ -23,6 +23,8 @@ describe('check-require-cache', () => {
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, format)
 
+    mod.filename = filename
+    mod.paths = Module._nodeModulePaths(dirname(filename))
     mod._compile(content, filename, format)
 
     return mod.exports
@@ -36,6 +38,8 @@ describe('check-require-cache', () => {
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, format)
 
+    mod.filename = filename
+    mod.paths = Module._nodeModulePaths(dirname(filename))
     mod._compile(content, filename, format)
 
     return mod.exports
