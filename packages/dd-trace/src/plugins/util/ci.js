@@ -110,6 +110,9 @@ function getJobIDFromDiagFile (homePath) {
 
   // Extract the Job ID from a Github diagnostic file
   const diagPath = path.posix.join(homePath, 'actions-runner', '_diag')
+  const diagPathOtro = path.posix.join(homePath, 'actions-runner', 'cached', '_diag')
+  console.log(diagPath)
+  console.log(diagPathOtro)
 
   let workerLogFiles = []
 
@@ -125,7 +128,7 @@ function getJobIDFromDiagFile (homePath) {
     if (potentialLogs.length > 0) { workerLogFiles = potentialLogs }
     else { return null }
   }
-  catch (error) { console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); return null }
+  catch (error) { console.log("%%%%%%%%%%%%%%%%%% NULL IN CATCH %%%%%%%%%%%%%%%%%%"); console.log(error); return null }
 
   // Get the job ID via regex
   for (const logFile of workerLogFiles) {
