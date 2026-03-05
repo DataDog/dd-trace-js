@@ -175,7 +175,6 @@ describe('Plugin', () => {
 
             it('should run the consumer in the context of the consumer span', done => {
               const firstSpan = tracer.scope().active()
-              let consumerReceiveMessagePromise
               let eachMessage = async ({ topic, partition, message }) => {
                 const currentSpan = tracer.scope().active()
 
@@ -192,7 +191,6 @@ describe('Plugin', () => {
 
               consumer.run({ eachMessage: (...args) => eachMessage(...args) })
                 .then(() => sendMessages(kafka, testTopic, messages))
-                .then(() => consumerReceiveMessagePromise)
                 .catch(done)
             })
 
