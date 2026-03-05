@@ -2,6 +2,7 @@
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 
 class Sns extends BaseAwsSdkPlugin {
   static id = 'sns'
@@ -102,7 +103,7 @@ class Sns extends BaseAwsSdkPlugin {
       DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
     }
 
-    if (Object.keys(ddInfo).length !== 0) {
+    if (!isEmptyObject(ddInfo)) {
       // BINARY types are automatically base64 encoded
       params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
     } else if (params.MessageAttributes._datadog) {

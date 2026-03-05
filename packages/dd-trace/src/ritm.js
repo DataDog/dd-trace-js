@@ -8,6 +8,7 @@ const dc = require('dc-polyfill')
 
 const parse = require('../../../vendor/dist/module-details-from-path')
 const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 
 const origRequire = Module.prototype.require
@@ -205,7 +206,7 @@ Hook.prototype.unhook = function () {
     }
   }
 
-  if (Object.keys(moduleHooks).length === 0) {
+  if (isEmptyObject(moduleHooks)) {
     Hook.reset()
   }
 }

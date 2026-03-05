@@ -8,6 +8,7 @@ const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
 const { DD_MAJOR } = require('../../../version')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
@@ -285,7 +286,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
   sendLog (methodName, span, tags, openaiStore, error) {
     if (!openaiStore) return
-    if (!Object.keys(openaiStore).length) return
+    if (isEmptyObject(openaiStore)) return
     if (!this.sampler.isSampled(span)) return
 
     const log = {

@@ -21,6 +21,7 @@ const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../
 const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
+const isEmptyObject = require('../../../../datadog-core/src/utils/src/is-empty-object')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -1114,7 +1115,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     )
   }
 
-  if (Object.keys(metrics).length === 0) {
+  if (isEmptyObject(metrics)) {
     return null
   }
   // Find branch with smallest "ahead" value, preferring default branch on tie
@@ -1175,7 +1176,7 @@ function getModifiedFilesFromDiff (diff) {
     linesRegex.lastIndex = 0
   }
 
-  if (Object.keys(result).length === 0) {
+  if (isEmptyObject(result)) {
     return null
   }
   return result

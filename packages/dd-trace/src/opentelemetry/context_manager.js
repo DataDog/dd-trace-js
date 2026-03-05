@@ -5,6 +5,7 @@ const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('../baggage')
 
 const tracer = require('../../')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 const SpanContext = require('./span_context')
 
 class ContextManager {
@@ -22,7 +23,7 @@ class ContextManager {
 
     // Convert DD baggage to OTel format
     const baggages = getAllBaggageItems()
-    const hasBaggage = Object.keys(baggages).length > 0
+    const hasBaggage = !isEmptyObject(baggages)
     let otelBaggages
     if (hasBaggage) {
       const entries = {}

@@ -1,6 +1,7 @@
 'use strict'
 
 const tags = require('../../../ext/tags')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 const constants = require('./constants')
 const id = require('./id')
 const { isError } = require('./util')
@@ -82,7 +83,7 @@ function extractSpanLinks (formattedSpan, span) {
       span_id: context.toSpanId(true),
     }
 
-    if (attributes && Object.keys(attributes).length > 0) {
+    if (attributes && !isEmptyObject(attributes)) {
       formattedLink.attributes = attributes
     }
     if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
@@ -101,7 +102,7 @@ function extractSpanEvents (formattedSpan, span) {
     return {
       name: event.name,
       time_unix_nano: Math.round(event.startTime * 1e6),
-      attributes: event.attributes && Object.keys(event.attributes).length > 0 ? event.attributes : undefined,
+      attributes: event.attributes && !isEmptyObject(event.attributes) ? event.attributes : undefined,
     }
   })
   formattedSpan.span_events = events

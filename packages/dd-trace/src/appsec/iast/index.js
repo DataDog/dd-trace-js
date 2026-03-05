@@ -5,6 +5,7 @@ const web = require('../../plugins/util/web')
 const { storage } = require('../../../../datadog-core')
 const { enable: enableFsPlugin, disable: disableFsPlugin, IAST_MODULE } = require('../rasp/fs-plugin')
 const { incomingHttpRequestStart, incomingHttpRequestEnd, responseWriteHead } = require('../channels')
+const isEmptyObject = require('../../../../datadog-core/src/utils/src/is-empty-object')
 const vulnerabilityReporter = require('./vulnerability-reporter')
 const { enableAllAnalyzers, disableAllAnalyzers } = require('./analyzers')
 const overheadController = require('./overhead-controller')
@@ -96,7 +97,7 @@ function onIncomingHttpRequestEnd (data) {
 
       iastResponseEnd.publish({ ...data, storedHeaders })
 
-      if (Object.keys(storedHeaders).length) {
+      if (!isEmptyObject(storedHeaders)) {
         collectedResponseHeaders.delete(data.res)
       }
 
@@ -118,7 +119,7 @@ function onIncomingHttpRequestEnd (data) {
 function onResponseWriteHeadCollect ({ res, responseHeaders = {} }) {
   if (!res) return
 
-  if (Object.keys(responseHeaders).length) {
+  if (!isEmptyObject(responseHeaders)) {
     collectedResponseHeaders.set(res, responseHeaders)
   }
 }

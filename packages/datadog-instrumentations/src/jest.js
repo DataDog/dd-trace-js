@@ -23,6 +23,7 @@ const {
   getJestSuitesToRun,
   getEfdRetryCount,
 } = require('../../datadog-plugin-jest/src/util')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -243,7 +244,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       if (this.isImpactedTestsEnabled) {
         try {
-          const hasImpactedTests = Object.keys(modifiedFiles).length > 0
+          const hasImpactedTests = !isEmptyObject(modifiedFiles)
           this.modifiedFiles = hasImpactedTests ? modifiedFiles : this.testEnvironmentOptions._ddModifiedFiles
         } catch (e) {
           log.error('Error parsing impacted tests', e)

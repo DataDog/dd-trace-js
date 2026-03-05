@@ -2,6 +2,7 @@
 
 const web = require('../plugins/util/web')
 const log = require('../log')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 const {
   HTTP_OUTGOING_METHOD,
   HTTP_OUTGOING_HEADERS,
@@ -137,7 +138,7 @@ function extractRequestData (ctx) {
   addresses[HTTP_OUTGOING_METHOD] = getMethod(options.method)
 
   const headers = options?.headers
-  if (headers && Object.keys(headers).length > 0) {
+  if (headers && !isEmptyObject(headers)) {
     addresses[HTTP_OUTGOING_HEADERS] = lowercaseHeaderKeys(headers)
   }
 
@@ -177,7 +178,7 @@ function extractResponseData (res, responseBody) {
   }
 
   const headers = res.headers
-  if (headers && Object.keys(headers).length > 0) {
+  if (headers && !isEmptyObject(headers)) {
     addresses[HTTP_OUTGOING_RESPONSE_HEADERS] = headers
   }
 

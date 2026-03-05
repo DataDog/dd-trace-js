@@ -18,7 +18,7 @@ function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttri
   assert.strictEqual(event.flag.key, expectedFlag)
   assert.strictEqual(event.subject.id, expectedUser)
 
-  if (Object.keys(expectedAttributes).length > 0) {
+  if (Object.keys(expectedAttributes).length > 0) { // eslint-disable-line eslint-rules/eslint-no-object-keys-length
     assert.deepStrictEqual(event.subject.attributes, expectedAttributes)
   }
 

@@ -1,6 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 const { addHook, channel } = require('./helpers/instrument')
 
 const errorChannel = channel('apm:fastify:middleware:error')
@@ -67,7 +68,7 @@ function wrapAddHook (addHook) {
             ctx.error = err
             publishError(ctx)
 
-            const hasCookies = request.cookies && Object.keys(request.cookies).length > 0
+            const hasCookies = request.cookies && !isEmptyObject(request.cookies)
 
             if (cookieParserReadCh.hasSubscribers && hasCookies && !cookiesPublished.has(req)) {
               ctx.res = getRes(reply)
@@ -134,7 +135,7 @@ function preHandler (request, reply, done) {
   const res = getRes(reply)
   const ctx = { req, res }
 
-  const hasBody = request.body && Object.keys(request.body).length > 0
+  const hasBody = request.body && !isEmptyObject(request.body)
 
   // For multipart/form-data, the body is not available until after preValidation hook
   if (bodyParserReadCh.hasSubscribers && hasBody && !bodyPublished.has(req)) {

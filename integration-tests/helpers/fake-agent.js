@@ -379,7 +379,7 @@ function buildExpressServer (agent) {
       return
     }
 
-    if (Object.keys(agent._rcFiles).length === 0) {
+    if (Object.keys(agent._rcFiles).length === 0) { // eslint-disable-line eslint-rules/eslint-no-object-keys-length
       // All config files have been removed, but the client has not yet been informed.
       // Return this custom result to let the client know.
       res.json({ client_configs: [] })

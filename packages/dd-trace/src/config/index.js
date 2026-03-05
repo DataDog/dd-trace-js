@@ -23,6 +23,7 @@ const {
 } = require('../serverless')
 const { ORIGIN_KEY } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
   require('./git_properties')
 const { getEnvironmentVariable: getEnv, getEnvironmentVariables, getStableConfigSources } = require('./helper')
@@ -1197,7 +1198,7 @@ class Config {
 
     const tags = {}
     tagger.add(tags, options.tracing_tags)
-    if (Object.keys(tags).length) {
+    if (!isEmptyObject(tags)) {
       tags['runtime-id'] = RUNTIME_ID
     }
     setTags(opts, 'tags', tags)
@@ -1606,7 +1607,7 @@ function setString (obj, name, value) {
 }
 
 function setTags (obj, name, value) {
-  if (!value || Object.keys(value).length === 0) {
+  if (!value || isEmptyObject(value)) {
     obj[name] = null
     return
   }

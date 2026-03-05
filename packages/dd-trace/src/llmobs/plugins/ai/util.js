@@ -1,5 +1,7 @@
 'use strict'
 
+const isEmptyObject = require('../../../../../datadog-core/src/utils/src/is-empty-object')
+
 const MODEL_METADATA_KEYS = new Set([
   'frequency_penalty',
   'max_tokens',
@@ -121,7 +123,7 @@ function getModelMetadata (tags) {
     }
   }
 
-  return Object.keys(modelMetadata).length ? modelMetadata : null
+  return isEmptyObject(modelMetadata) ? null : modelMetadata
 }
 
 /**
@@ -144,7 +146,7 @@ function getGenerationMetadata (tags) {
     metadata[settingKey] = settingValue
   }
 
-  return Object.keys(metadata).length ? metadata : null
+  return isEmptyObject(metadata) ? null : metadata
 }
 
 /**

@@ -4,6 +4,7 @@ const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const { extractQueueMetadata } = require('../util')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 
 class Sqs extends BaseAwsSdkPlugin {
   static id = 'sqs'
@@ -277,7 +278,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
     }
 
-    if (params.MessageAttributes._datadog && Object.keys(ddInfo).length === 0) {
+    if (params.MessageAttributes._datadog && isEmptyObject(ddInfo)) {
       // let's avoid adding any additional information to payload if we failed to inject
       delete params.MessageAttributes._datadog
     }

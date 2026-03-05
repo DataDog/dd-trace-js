@@ -16,6 +16,7 @@ import globals from 'globals'
 
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
+import eslintNoObjectKeysLength from './eslint-rules/eslint-no-object-keys-length.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
@@ -377,6 +378,7 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-object-keys-length': eslintNoObjectKeysLength,
           'eslint-require-export-exists': eslintRequireExportExists,
         },
       },
@@ -412,6 +414,7 @@ export default [
         importAttributes: 'always-multiline',
         dynamicImports: 'always-multiline',
       }],
+      'eslint-rules/eslint-no-object-keys-length': 'error',
       'eslint-rules/eslint-safe-typeof-object': 'error',
       'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',

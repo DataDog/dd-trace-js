@@ -10,6 +10,7 @@ const addresses = require('../addresses')
 const waf = require('../waf')
 const downstream = require('../downstream_requests')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
+const isEmptyObject = require('../../../../datadog-core/src/utils/src/is-empty-object')
 const { RULE_TYPES, handleResult } = require('./utils')
 
 let config
@@ -86,7 +87,7 @@ function handleResponseFinish ({ ctx, res, body }) {
 function runResponseEvaluation (res, req, responseBody) {
   const responseAddresses = downstream.extractResponseData(res, responseBody)
 
-  if (!Object.keys(responseAddresses).length) return
+  if (isEmptyObject(responseAddresses)) return
 
   const raspRule = { type: RULE_TYPES.SSRF, variant: 'response' }
   const result = waf.run({ ephemeral: responseAddresses }, req, raspRule)

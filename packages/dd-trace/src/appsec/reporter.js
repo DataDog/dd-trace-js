@@ -8,6 +8,7 @@ const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
@@ -167,7 +168,7 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   // Basic collection
   if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
 
-  const responseHeaders = Object.keys(storedResponseHeaders).length === 0
+  const responseHeaders = isEmptyObject(storedResponseHeaders)
     ? res.getHeaders()
     : { ...storedResponseHeaders, ...res.getHeaders() }
 
@@ -429,7 +430,7 @@ function truncateRequestBody (target, depth = 0) {
 }
 
 function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) {
-  if (!requestBody || Object.keys(requestBody).length === 0) return
+  if (!requestBody || isEmptyObject(requestBody)) return
 
   if (!rootSpan.meta_struct) {
     rootSpan.meta_struct = {}

@@ -6,6 +6,7 @@ const zlib = require('zlib')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
@@ -35,7 +36,7 @@ function findWebSpan (startedSpans, spanId) {
 }
 
 function processInfo (infos, info, type) {
-  if (Object.keys(info).length > 0) {
+  if (!isEmptyObject(info)) {
     infos[type] = info
   }
 }

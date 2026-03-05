@@ -82,7 +82,7 @@ describe('reporter', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
 
-      assert.ok(Object.keys(result).length === 0)
+      assert.ok(Object.keys(result).length === 0) // eslint-disable-line eslint-rules/eslint-no-object-keys-length
     })
 
     it('should filter and format headers from passlist', () => {

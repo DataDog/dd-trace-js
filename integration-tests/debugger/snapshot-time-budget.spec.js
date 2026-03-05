@@ -182,6 +182,7 @@ describe('Dynamic Instrumentation', function () {
               // To make this test more future-proof, we also assert that the snapshot contains at least one local
               // property, though currently this is not necessary.
               assert.ok(
+                // eslint-disable-next-line eslint-rules/eslint-no-object-keys-length
                 Object.keys(captures.lines[t.breakpoint.line].locals).length > 0,
                 'expected snapshot to contain at least one local property'
               )

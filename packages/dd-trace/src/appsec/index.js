@@ -1,5 +1,6 @@
 'use strict'
 
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 const log = require('../log')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
@@ -530,16 +531,6 @@ function disable () {
   if (stripeCheckoutSessionCreate.hasSubscribers) stripeCheckoutSessionCreate.unsubscribe(onStripeCheckoutSessionCreate)
   if (stripePaymentIntentCreate.hasSubscribers) stripePaymentIntentCreate.unsubscribe(onStripePaymentIntentCreate)
   if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)
-}
-
-// this is faster than Object.keys().length === 0
-function isEmptyObject (obj) {
-  // eslint-disable-next-line no-unreachable-loop
-  for (const _ in obj) {
-    return false
-  }
-
-  return true
 }
 
 module.exports = {

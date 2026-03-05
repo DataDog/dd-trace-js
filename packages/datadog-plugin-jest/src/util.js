@@ -5,6 +5,7 @@ const { parse } = require('../../../vendor/dist/jest-docblock')
 
 const { getTestSuitePath, getEfdRetryCount } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 
 /**
  * There are two ways to call `test.each` in `jest`:
@@ -142,8 +143,8 @@ function getJestSuitesToRun (skippableSuites, originalTests, rootDir) {
     }
   }
 
-  const hasUnskippableSuites = Object.keys(unskippableSuites).length > 0
-  const hasForcedToRunSuites = Object.keys(forcedToRunSuites).length > 0
+  const hasUnskippableSuites = !isEmptyObject(unskippableSuites)
+  const hasForcedToRunSuites = !isEmptyObject(forcedToRunSuites)
 
   if (originalTests.length) {
     // The config object is shared by all tests, so we can just take the first one

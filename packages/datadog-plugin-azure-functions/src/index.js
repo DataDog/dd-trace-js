@@ -2,6 +2,7 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const web = require('../../dd-trace/src/plugins/util/web')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 
 const triggerMap = {
   deleteRequest: 'Http',
@@ -152,7 +153,7 @@ function setSpanLinks (triggerType, tracer, span, ctx) {
     : triggerMetadata.propertiesArray
 
   const addLinkFromProperties = (props) => {
-    if (!props || Object.keys(props).length === 0) return
+    if (!props || isEmptyObject(props)) return
     const spanContext = tracer.extract('text_map', props)
     if (spanContext) {
       span.addLink(spanContext)

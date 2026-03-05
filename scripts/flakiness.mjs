@@ -167,7 +167,7 @@ await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 const dateRange = startDate === endDate ? `on ${endDate}` : `from ${startDate} to ${endDate}`
 const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRange} (UTC)`
 
-if (Object.keys(flaky).length === 0) {
+if (Object.keys(flaky).length === 0) { // eslint-disable-line eslint-rules/eslint-no-object-keys-length
   console.log(`*No flaky ${logString}`)
 } else {
   const workflowSuccessRate = Number(((1 - flakeCount / totalCount) * 100).toFixed(1))

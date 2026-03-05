@@ -2,6 +2,7 @@
 
 const dc = require('dc-polyfill')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 
 const collapsedPathSym = Symbol('collapsedPaths')
 
@@ -166,7 +167,7 @@ function getResolverInfo (info, args) {
     }
   }
 
-  if (hasResolvers || args && Object.keys(resolverVars).length) {
+  if (hasResolvers || args && !isEmptyObject(resolverVars)) {
     resolverInfo = { [info.fieldName]: resolverVars }
   }
 

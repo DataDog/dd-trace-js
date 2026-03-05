@@ -5,6 +5,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../../../datadog-core')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
+const isEmptyObject = require('../../../../datadog-core/src/utils/src/is-empty-object')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 
 const {
@@ -396,7 +397,7 @@ class NativeWallProfiler {
     if (rootSpanId !== undefined) {
       labels[LOCAL_ROOT_SPAN_ID_LABEL] = toBigInt(rootSpanId)
     }
-    if (webTags !== undefined && Object.keys(webTags).length !== 0) {
+    if (webTags !== undefined && !isEmptyObject(webTags)) {
       labels[TRACE_ENDPOINT_LABEL] = endpointNameFromTags(webTags)
     } else if (endpoint) {
       // fallback to endpoint computed when sample was taken

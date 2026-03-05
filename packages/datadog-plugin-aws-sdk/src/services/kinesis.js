@@ -2,6 +2,7 @@
 const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
 
 class Kinesis extends BaseAwsSdkPlugin {
   static id = 'kinesis'
@@ -188,7 +189,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
     }
 
-    if (Object.keys(ddInfo).length !== 0) {
+    if (!isEmptyObject(ddInfo)) {
       parsedData._datadog = ddInfo
       const finalData = Buffer.from(JSON.stringify(parsedData))
       const byteSize = finalData.length

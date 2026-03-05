@@ -3,6 +3,7 @@
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 const pathToRegExp = require('../../../vendor/dist/path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
+const isEmptyObject = require('../../datadog-core/src/utils/src/is-empty-object')
 const { addHook, channel } = require('./helpers/instrument')
 
 const {
@@ -263,7 +264,7 @@ const visitedParams = new WeakSet()
 
 function wrapHandleRequest (original) {
   return function wrappedHandleRequest (req, res, next) {
-    if (routerParamStartCh.hasSubscribers && !visitedParams.has(req.params) && Object.keys(req.params).length) {
+    if (routerParamStartCh.hasSubscribers && !visitedParams.has(req.params) && !isEmptyObject(req.params)) {
       visitedParams.add(req.params)
 
       const abortController = new AbortController()
@@ -293,7 +294,7 @@ function wrapParam (original) {
   return function wrappedProcessParams () {
     arguments[1] = shimmer.wrapFunction(arguments[1], (originalFn) => {
       return function wrappedFn (req, res) {
-        if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
+        if (routerParamStartCh.hasSubscribers && !isEmptyObject(req.params) && !visitedParams.has(req.params)) {
           visitedParams.add(req.params)
 
           const abortController = new AbortController()
