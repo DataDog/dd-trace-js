@@ -1,6 +1,5 @@
 'use strict'
 
-const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -58,11 +57,11 @@ describe('Hardcoded Secret Analyzer', () => {
     })
 
     it('should not fail with an malformed secrets', () => {
-      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze(undefined))
-      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file: undefined }))
-      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: undefined }))
-      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: undefined }] }))
-      assert.doesNotThrow(() => hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: 'test' }] }))
+      hardcodedSecretAnalyzer.analyze(undefined)
+      hardcodedSecretAnalyzer.analyze({ file: undefined })
+      hardcodedSecretAnalyzer.analyze({ file, literals: undefined })
+      hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: undefined }] })
+      hardcodedSecretAnalyzer.analyze({ file, literals: [{ value: 'test' }] })
     })
 
     it('should not report secrets in line 0', () => {
