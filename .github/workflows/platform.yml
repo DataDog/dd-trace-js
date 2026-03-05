@@ -199,15 +199,37 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  # TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
+  # ./.github/actions/instrumentations/test once fixed upstream.
   instrumentation-http:
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - name: Run instrumentation tests (oldest-maintenance, with retries)
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          max_attempts: 3
+          timeout_minutes: 15
+          command: yarn test:instrumentations:ci
+      - uses: ./.github/actions/node/latest
+      - name: Run instrumentation tests (latest, with retries)
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 3
+          timeout_minutes: 15
+          command: yarn test:instrumentations:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: instrumentations-${{ github.job }}
+      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
+        if: always() && github.actor != 'dependabot[bot]'
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
 
   instrumentation-knex:
     runs-on: ubuntu-latest
