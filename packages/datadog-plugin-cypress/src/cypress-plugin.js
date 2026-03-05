@@ -1,5 +1,9 @@
 'use strict'
 
+const path = require('path')
+
+const { resolveOriginalSourcePosition, resolveSourceLineForTest } = require('./source-map-utils')
+
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -391,7 +395,9 @@ class CypressPlugin {
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
 
     if (testSuiteAbsolutePath) {
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const resolvedSuitePosition = resolveOriginalSourcePosition(testSuiteAbsolutePath, 1)
+      const resolvedSuiteAbsolutePath = resolvedSuitePosition ? resolvedSuitePosition.sourceFile : testSuiteAbsolutePath
+      const testSourceFile = getTestSuitePath(resolvedSuiteAbsolutePath, this.repositoryRoot)
       testSuiteSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
       testSuiteSpanMetadata[TEST_SOURCE_START] = 1
       const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
@@ -804,8 +810,10 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        const testSourceFile = spec.absolute && this.repositoryRoot
-          ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+        const resolvedSpecPosition = spec.absolute ? resolveOriginalSourcePosition(spec.absolute, 1) : null
+        const resolvedSpecAbsolutePath = resolvedSpecPosition ? resolvedSpecPosition.sourceFile : spec.absolute
+        const testSourceFile = resolvedSpecAbsolutePath && this.repositoryRoot
+          ? getTestSuitePath(resolvedSpecAbsolutePath, this.repositoryRoot)
           : spec.relative
         if (testSourceFile) {
           finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
@@ -905,6 +913,7 @@ class CypressPlugin {
           testSuite,
           testSuiteAbsolutePath,
           testName,
+          testItTitle,
           isNew,
           isEfdRetry,
           isAttemptToFix,
@@ -947,7 +956,10 @@ class CypressPlugin {
           this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
         }
         if (testSourceLine) {
-          this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
+          const resolvedLine = testSuiteAbsolutePath && testItTitle
+            ? resolveSourceLineForTest(testSuiteAbsolutePath, testSourceLine, testItTitle) ?? testSourceLine
+            : testSourceLine
+          this.activeTestSpan.setTag(TEST_SOURCE_START, resolvedLine)
         }
         if (isNew) {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')

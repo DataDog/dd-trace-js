@@ -134,7 +134,7 @@ moduleTypes.forEach(({
     let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
 
     // cypress-fail-fast is required as an incompatible plugin
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0'], true)
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
       // Note: Cypress binary is already installed during useSandbox() via the postinstall script
@@ -299,6 +299,96 @@ moduleTypes.forEach(({
         once(childProcess, 'exit'),
         receiverPromise,
       ])
+    })
+
+    over12It('reports correct source file and line for pre-compiled typescript test files', async function () {
+      this.retries(0)
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tsTestEvent = events.find(event =>
+            event.type === 'test' &&
+            event.content.resource.includes('spec source line')
+          )
+
+          assert.ok(tsTestEvent, 'typescript test event should exist')
+          // 'it' is defined at line 11 in the TypeScript source file spec-source-line.cy.ts
+          assert.strictEqual(
+            tsTestEvent.content.metrics[TEST_SOURCE_START],
+            11,
+            'should report the correct source line mapped from the TypeScript source file'
+          )
+          assert.ok(
+            tsTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
+            `TEST_SOURCE_FILE should point to TypeScript source, got: ${tsTestEvent.content.meta[TEST_SOURCE_FILE]}`
+          )
+        }, 60000)
+
+      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+      // Compile the TypeScript spec to JS + source map so the plugin can resolve
+      // the original TypeScript source file and line via the adjacent .js.map file.
+      // tsc exits with code 1 when there are type errors (e.g. missing Cypress type
+      // declarations) but still emits files because noEmitOnError is false.
+      try {
+        execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd })
+      } catch {
+        // tsc emits files even on type errors (noEmitOnError: false), so this is expected
+      }
+
+      // Run Cypress with the pre-compiled JS spec (compiled from spec-source-line.cy.ts).
+      childProcess = exec(testCommand, {
+        cwd,
+        env: {
+          ...restEnvVars,
+          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line.cy.js',
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), receiverPromise])
+    })
+
+    over12It('reports correct source file and line for typescript test files compiled by cypress', async function () {
+      this.retries(0)
+      // Remove any pre-compiled dist files to ensure Cypress compiles the .ts file itself
+      fs.rmSync(path.join(cwd, 'cypress/e2e/dist'), { recursive: true, force: true })
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tsTestEvent = events.find(event =>
+            event.type === 'test' &&
+            event.content.resource.includes('spec source line')
+          )
+
+          assert.ok(tsTestEvent, 'typescript test event should exist')
+          // 'it' is defined at line 11 in the TypeScript source file spec-source-line.cy.ts
+          assert.strictEqual(
+            tsTestEvent.content.metrics[TEST_SOURCE_START],
+            11,
+            'should report the correct source line for typescript test files compiled by cypress'
+          )
+          assert.ok(
+            tsTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
+            `TEST_SOURCE_FILE should point to TypeScript source, got: ${tsTestEvent.content.meta[TEST_SOURCE_FILE]}`
+          )
+        }, 60000)
+
+      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+      // Run Cypress directly with the TypeScript spec file — no manual compilation step.
+      // Cypress compiles .cy.ts files on the fly via its own preprocessor/bundler.
+      childProcess = exec(testCommand, {
+        cwd,
+        env: {
+          ...restEnvVars,
+          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          SPEC_PATTERN: 'cypress/e2e/spec-source-line.cy.ts',
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), receiverPromise])
     })
 
     if (version === '6.7.0') {

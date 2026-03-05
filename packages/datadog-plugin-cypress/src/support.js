@@ -258,6 +258,7 @@ afterEach(function () {
 
   const testInfo = {
     testName,
+    testItTitle: currentTest.title,
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
     // For quarantined tests, report the actual state (failed) to Datadog, not what Cypress thinks (passed)
