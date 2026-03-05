@@ -30,7 +30,7 @@ withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        const proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await axios.get(`${proc.url}/?param=paramvalue`)
         assert.equal(response.headers['x-counter'], '1')
       })

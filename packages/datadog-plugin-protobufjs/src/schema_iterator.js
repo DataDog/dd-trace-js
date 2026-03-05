@@ -47,7 +47,6 @@ class SchemaExtractor {
 
   static extractProperty (field, schemaName, fieldName, builder, depth) {
     let array = false
-    let description
     let ref
     let enumValues
 
@@ -85,7 +84,7 @@ class SchemaExtractor {
         i += 1
       }
     }
-    return builder.addProperty(schemaName, fieldName, array, type, description, ref, format, enumValues)
+    return builder.addProperty(schemaName, fieldName, array, type, ref, format, enumValues)
   }
 
   static extractSchema (schema, builder, depth, extractor) {

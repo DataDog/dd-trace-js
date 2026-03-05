@@ -34,9 +34,10 @@ const parseGitHubJsonResponse = ({ body, endpoint, res }) => {
 
   try {
     return JSON.parse(body)
-  } catch (e) {
+  } catch (error) {
     throw new Error(
-      `GitHub API ${endpoint} returned invalid JSON. Body preview: ${getResponsePreview(body)}`
+      `GitHub API ${endpoint} returned invalid JSON. Body preview: ${getResponsePreview(body)}`,
+      { cause: error }
     )
   }
 }

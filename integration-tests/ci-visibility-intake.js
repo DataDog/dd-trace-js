@@ -410,10 +410,9 @@ class FakeCiVisIntake extends FakeAgent {
   assertPayloadReceived (fn, messageMatch, timeout) {
     let resultResolve
     let resultReject
-    let error
 
     const timeoutObj = setTimeout(() => {
-      resultReject([error, new Error('timeout')])
+      resultReject(new Error('timeout'))
     }, timeout || 15000)
 
     const messageHandler = (message) => {
@@ -421,8 +420,8 @@ class FakeCiVisIntake extends FakeAgent {
         try {
           fn(message)
           resultResolve()
-        } catch (e) {
-          resultReject(e)
+        } catch (error) {
+          resultReject(error)
         }
         this.off('message', messageHandler)
       }
@@ -434,9 +433,9 @@ class FakeCiVisIntake extends FakeAgent {
         clearTimeout(timeoutObj)
         resolve()
       }
-      resultReject = (e) => {
+      resultReject = (error) => {
         clearTimeout(timeoutObj)
-        reject(e)
+        reject(error)
       }
     })
   }

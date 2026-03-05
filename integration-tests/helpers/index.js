@@ -676,11 +676,11 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
       let parsed
       try {
         parsed = JSON.parse(data)
-      } catch (e) {
+      } catch (error) {
         if (!data && retries < 10) {
           return tryAgain()
         }
-        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`)
+        throw new SyntaxError(`Parsing data failed: ${error.message}\n${data}`, { cause: error })
       }
       msgs.push([telemetryType, parsed])
     }
