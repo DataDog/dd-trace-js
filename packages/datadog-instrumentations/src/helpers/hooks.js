@@ -135,7 +135,7 @@ module.exports = {
   router: () => require('../router'),
   'selenium-webdriver': () => require('../selenium'),
   sequelize: () => require('../sequelize'),
-  sharedb: () => require('../sharedb'),
+  ...require('../../../datadog-integrations/src/registry').hookEntries,
   stripe: () => require('../stripe'),
   tedious: () => require('../tedious'),
   tinypool: { esmFirst: true, fn: () => require('../vitest') },

@@ -106,11 +106,17 @@ const plugins = {
   get rhea () { return require('../../../datadog-plugin-rhea/src') },
   get router () { return require('../../../datadog-plugin-router/src') },
   get 'selenium-webdriver' () { return require('../../../datadog-plugin-selenium/src') },
-  get sharedb () { return require('../../../datadog-plugin-sharedb/src') },
   get tedious () { return require('../../../datadog-plugin-tedious/src') },
   get undici () { return require('../../../datadog-plugin-undici/src') },
   get winston () { return require('../../../datadog-plugin-winston/src') },
   get ws () { return require('../../../datadog-plugin-ws/src') },
+}
+
+const builderPlugins = require('../../../datadog-integrations/src/registry').plugins
+for (const id of Object.keys(builderPlugins)) {
+  if (!(id in plugins)) {
+    plugins[id] = builderPlugins[id]
+  }
 }
 
 module.exports = plugins
