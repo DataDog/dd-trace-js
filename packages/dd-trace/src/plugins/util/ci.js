@@ -104,11 +104,8 @@ function getGitHubEventPayload () {
 }
 
 function getJobIDFromDiagFile (homePath) {
-  // There should be an if statement here for checking wether the env job id var is available or not.
-  // If it is available, just return that... This could be added whenever Github decides to (check out https://github.com/actions/runner/pull/4053)
-
-  // Since said env variable is not available, we'll extract the Job ID from a diagnostics file
-
+  // Until an environment variable for the job id is available, we'll extract it from a diagnostics file. 
+  // Check https://github.com/actions/runner/pull/4053 for updates on the availability of the env var.
   const possibleDiagsPaths = [
     path.posix.join(homePath, 'actions-runner', '_diag'),
     path.posix.join(homePath, 'actions-runner', 'cached', '_diag'),
@@ -126,7 +123,7 @@ function getJobIDFromDiagFile (homePath) {
 
       // Check if there are valid pontential log files
       const potentialLogs = files
-        .filter((file) => file.isFile() && file.name.startsWith('Worker_')) // && file.name.endsWith('.log'))
+        .filter((file) => file.isFile() && file.name.startsWith('Worker_'))
         .map((file) => file.name)
 
       if (potentialLogs.length > 0) {
