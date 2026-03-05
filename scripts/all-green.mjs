@@ -64,7 +64,7 @@ async function checkCompleted () {
     await setTimeout(POLLING_INTERVAL * 60_000)
     console.log('Retrying.')
     retries++
-    return checkCompleted()
+    await checkCompleted()
   }
 }
 
@@ -72,7 +72,7 @@ async function checkAllGreen () {
   let checkRuns
 
   try {
-    checkCompleted()
+    await checkCompleted()
   } finally {
     checkRuns = await octokit.paginate(
       'GET /repos/:owner/:repo/commits/:ref/check-runs',
