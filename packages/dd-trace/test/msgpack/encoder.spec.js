@@ -7,6 +7,7 @@ const msgpack = require('@msgpack/msgpack')
 
 require('../setup/core')
 const { MsgpackEncoder } = require('../../src/msgpack/encoder')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 function randString (length) {
   return Array.from({ length }, () => {
@@ -54,17 +55,27 @@ describe('msgpack/encoder', () => {
     assert.ok(typeof decoded[1] === 'object' && decoded[1] !== null)
     assert.strictEqual(decoded[1].fixstr, 'foo')
     assert.ok(Object.hasOwn(decoded[1], 'str'))
-    assert.strictEqual(decoded[1].str.length, 1000)
-    assert.strictEqual(decoded[1].fixuint, 127)
-    assert.strictEqual(decoded[1].fixint, -31)
-    assert.strictEqual(decoded[1].uint8, 255)
-    assert.strictEqual(decoded[1].uint16, 65535)
-    assert.strictEqual(decoded[1].uint32, 4294967295)
+    assertObjectContains(decoded, {
+      1: {
+        str: {
+          length: 1000,
+        },
+        fixuint: 127,
+        fixint: -31,
+        uint8: 255,
+        uint16: 65535,
+        uint32: 4294967295,
+      },
+    })
     assert.ok(Object.hasOwn(decoded[1], 'uint53'))
     assert.strictEqual(decoded[1].uint53.toString(), '9007199254740991')
-    assert.strictEqual(decoded[1].int8, -15)
-    assert.strictEqual(decoded[1].int16, -32767)
-    assert.strictEqual(decoded[1].int32, -2147483647)
+    assertObjectContains(decoded, {
+      1: {
+        int8: -15,
+        int16: -32767,
+        int32: -2147483647,
+      },
+    })
     assert.ok(Object.hasOwn(decoded[1], 'int53'))
     assert.strictEqual(decoded[1].int53.toString(), '-9007199254740991')
     assert.strictEqual(decoded[1].float, 12345.6789)
@@ -77,9 +88,15 @@ describe('msgpack/encoder', () => {
     assert.ok(Object.hasOwn(decoded[1], 'buffer'))
     assert.strictEqual(decoded[1].buffer.toString('utf8'), 'test')
     assert.ok(Object.hasOwn(decoded[1], 'uint8array'))
-    assert.strictEqual(decoded[1].uint8array[0], 1)
-    assert.strictEqual(decoded[1].uint8array[1], 2)
-    assert.strictEqual(decoded[1].uint8array[2], 3)
-    assert.strictEqual(decoded[1].uint8array[3], 4)
+    assertObjectContains(decoded, {
+      1: {
+        uint8array: {
+          0: 1,
+          1: 2,
+          2: 3,
+          3: 4,
+        },
+      },
+    })
   })
 })

@@ -7,6 +7,7 @@ const { describe, it, beforeEach } = require('mocha')
 require('../setup/core')
 const id = require('../../src/id')
 const { AgentlessJSONEncoder } = require('../../src/encode/agentless-json')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('AgentlessJSONEncoder', () => {
   let encoder
@@ -54,9 +55,11 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
       const span = decoded.spans[0]
 
-      assert.strictEqual(span.trace_id, '1234abcd1234abcd')
-      assert.strictEqual(span.span_id, '5678efab5678efab')
-      assert.strictEqual(span.parent_id, '0000000000000000')
+      assertObjectContains(span, {
+        trace_id: '1234abcd1234abcd',
+        span_id: '5678efab5678efab',
+        parent_id: '0000000000000000',
+      })
     })
 
     it('should encode 128-bit trace IDs correctly', () => {
@@ -81,14 +84,15 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
       const span = decoded.spans[0]
 
-      assert.strictEqual(span.name, 'test')
-      assert.strictEqual(span.resource, 'test-resource')
-      assert.strictEqual(span.service, 'test-service')
-      assert.strictEqual(span.type, 'web')
-      assert.strictEqual(span.error, 0)
-      // Start time is converted from nanoseconds to seconds for intake format
-      assert.strictEqual(span.start, 1234567890)
-      assert.strictEqual(span.duration, 5000000)
+      assertObjectContains(span, {
+        name: 'test',
+        resource: 'test-resource',
+        service: 'test-service',
+        type: 'web',
+        error: 0,
+        start: 1234567890,
+        duration: 5000000,
+      })
       assert.deepStrictEqual(span.meta, { foo: 'bar' })
       assert.deepStrictEqual(span.metrics, { example: 1.5 })
     })
@@ -114,9 +118,11 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
       const span = decoded.spans[0]
 
-      assert.strictEqual(span.type, undefined)
-      assert.strictEqual(span.meta_struct, undefined)
-      assert.strictEqual(span.links, undefined)
+      assertObjectContains(span, {
+        type: undefined,
+        meta_struct: undefined,
+        links: undefined,
+      })
     })
 
     it('should convert span_events to meta.events JSON string', () => {

@@ -5,6 +5,7 @@ const os = require('os')
 const path = require('path')
 
 const proxyquire = require('proxyquire')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 class CallSiteMock {
   constructor (fileName, lineNumber, columnNumber = 0) {
@@ -94,15 +95,19 @@ describe('path-line', function () {
 
         const results = pathLine.getCallSiteFramesForLocation(callsites)
 
-        assert.strictEqual(results.length, 2)
-
-        assert.strictEqual(results[0].path, expectedFilePaths[0])
-        assert.strictEqual(results[0].line, 13)
-        assert.strictEqual(results[0].column, 42)
-
-        assert.strictEqual(results[1].path, expectedFilePaths[1])
-        assert.strictEqual(results[1].line, 20)
-        assert.strictEqual(results[1].column, 15)
+        assertObjectContains(results, {
+          length: 2,
+          0: {
+            path: expectedFilePaths[0],
+            line: 13,
+            column: 42,
+          },
+          1: {
+            path: expectedFilePaths[1],
+            line: 20,
+            column: 15,
+          },
+        })
       })
 
       it('should fallback to all processed frames when all stack frames are in dd trace', () => {
@@ -129,11 +134,14 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(firstFileOutOfDD, 13, 42))
 
           const results = pathLine.getCallSiteFramesForLocation(callsites)
-          assert.strictEqual(results.length, 1)
-
-          assert.strictEqual(results[0].path, expectedFilePath)
-          assert.strictEqual(results[0].line, 13)
-          assert.strictEqual(results[0].column, 42)
+          assertObjectContains(results, {
+            length: 1,
+            0: {
+              path: expectedFilePath,
+              line: 13,
+              column: 42,
+            },
+          })
         })
       })
     })
@@ -171,15 +179,19 @@ describe('path-line', function () {
         callsites.push(new CallSiteMock(secondFileOutOfDD, 20, 15))
 
         const results = pathLine.getCallSiteFramesForLocation(callsites)
-        assert.strictEqual(results.length, 2)
-
-        assert.strictEqual(results[0].path, expectedFilePaths[0])
-        assert.strictEqual(results[0].line, 13)
-        assert.strictEqual(results[0].column, 42)
-
-        assert.strictEqual(results[1].path, expectedFilePaths[1])
-        assert.strictEqual(results[1].line, 20)
-        assert.strictEqual(results[1].column, 15)
+        assertObjectContains(results, {
+          length: 2,
+          0: {
+            path: expectedFilePaths[0],
+            line: 13,
+            column: 42,
+          },
+          1: {
+            path: expectedFilePaths[1],
+            line: 20,
+            column: 15,
+          },
+        })
       })
     })
 
@@ -234,15 +246,19 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(path.join(PROJECT_PATH, bundleOutFile), 4, 71))
 
           const results = pathLine.getCallSiteFramesForLocation(callsites)
-          assert.strictEqual(results.length, 2)
-
-          assert.strictEqual(results[0].path, 'file.js')
-          assert.strictEqual(results[0].line, 2)
-          assert.strictEqual(results[0].column, 14)
-
-          assert.strictEqual(results[1].path, 'file.js')
-          assert.strictEqual(results[1].line, 4)
-          assert.strictEqual(results[1].column, 71)
+          assertObjectContains(results, {
+            length: 2,
+            0: {
+              path: 'file.js',
+              line: 2,
+              column: 14,
+            },
+            1: {
+              path: 'file.js',
+              line: 4,
+              column: 71,
+            },
+          })
         })
       })
 
@@ -279,21 +295,27 @@ describe('path-line', function () {
           callsites.push(new CallSiteMock(path.join(OUT_BUILD_PATH, bundleOutFile), 2, 71))
 
           const results = pathLine.getCallSiteFramesForLocation(callsites)
-          assert.strictEqual(results.length, 4)
-
-          assert.strictEqual(results[0].path, bundleOutFile)
-          assert.strictEqual(results[0].line, 11)
-
-          assert.strictEqual(results[1].path, bundleOutFile)
-          assert.strictEqual(results[1].line, 42)
-
-          assert.strictEqual(results[2].path, bundleOutFile)
-          assert.strictEqual(results[2].line, 3)
-          assert.strictEqual(results[2].column, 14)
-
-          assert.strictEqual(results[3].path, bundleOutFile)
-          assert.strictEqual(results[3].line, 2)
-          assert.strictEqual(results[3].column, 71)
+          assertObjectContains(results, {
+            length: 4,
+            0: {
+              path: bundleOutFile,
+              line: 11,
+            },
+            1: {
+              path: bundleOutFile,
+              line: 42,
+            },
+            2: {
+              path: bundleOutFile,
+              line: 3,
+              column: 14,
+            },
+            3: {
+              path: bundleOutFile,
+              line: 2,
+              column: 71,
+            },
+          })
         })
       })
     })

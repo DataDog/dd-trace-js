@@ -10,6 +10,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../../../datadog-core')
 const { AppsecFsPlugin } = require('../../../src/appsec/rasp/fs-plugin')
 const agent = require('../../plugins/agent')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const opStartCh = dc.channel('apm:fs:operation:start')
 const opFinishCh = dc.channel('apm:fs:operation:finish')
@@ -128,9 +129,13 @@ describe('AppsecFsPlugin', () => {
       let store = appsecFsPlugin._onFsOperationStart()
 
       assert.ok(Object.hasOwn(store, 'fs'))
-      assert.strictEqual(store.fs.parentStore, rootStore)
-      assert.strictEqual(store.fs.root, false)
-      assert.strictEqual(store.orig, true)
+      assertObjectContains(store, {
+        fs: {
+          parentStore: rootStore,
+          root: false,
+        },
+        orig: true,
+      })
 
       storage('legacy').enterWith(store)
 

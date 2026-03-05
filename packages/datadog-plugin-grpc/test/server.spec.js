@@ -122,14 +122,24 @@ describe('Plugin', () => {
                 resource: '/test.TestService/getUnary',
                 type: 'web',
               })
-              assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getUnary')
-              assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
-              assert.strictEqual(traces[0][0].meta['grpc.method.package'], 'test')
-              assert.strictEqual(traces[0][0].meta['grpc.method.path'], '/test.TestService/getUnary')
-              assert.strictEqual(traces[0][0].meta['grpc.method.kind'], 'unary')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
-              assert.strictEqual(traces[0][0].meta.component, 'grpc')
-              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 0)
+              assertObjectContains(traces, {
+                0: {
+                  0: {
+                    meta: {
+                      'grpc.method.name': 'getUnary',
+                      'grpc.method.service': 'TestService',
+                      'grpc.method.package': 'test',
+                      'grpc.method.path': '/test.TestService/getUnary',
+                      'grpc.method.kind': 'unary',
+                      'span.kind': 'server',
+                      component: 'grpc',
+                    },
+                    metrics: {
+                      'grpc.status.code': 0,
+                    },
+                  },
+                },
+              })
             })
         })
 
@@ -148,13 +158,23 @@ describe('Plugin', () => {
                 resource: '/test.TestService/getServerStream',
                 type: 'web',
               })
-              assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getServerStream')
-              assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
-              assert.strictEqual(traces[0][0].meta['grpc.method.path'], '/test.TestService/getServerStream')
-              assert.strictEqual(traces[0][0].meta['grpc.method.kind'], 'server_streaming')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
-              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 0)
-              assert.strictEqual(traces[0][0].meta.component, 'grpc')
+              assertObjectContains(traces, {
+                0: {
+                  0: {
+                    meta: {
+                      'grpc.method.name': 'getServerStream',
+                      'grpc.method.service': 'TestService',
+                      'grpc.method.path': '/test.TestService/getServerStream',
+                      'grpc.method.kind': 'server_streaming',
+                      'span.kind': 'server',
+                      component: 'grpc',
+                    },
+                    metrics: {
+                      'grpc.status.code': 0,
+                    },
+                  },
+                },
+              })
             })
         })
 
@@ -174,13 +194,23 @@ describe('Plugin', () => {
                 resource: '/test.TestService/getBidi',
                 type: 'web',
               })
-              assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getBidi')
-              assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
-              assert.strictEqual(traces[0][0].meta['grpc.method.path'], '/test.TestService/getBidi')
-              assert.strictEqual(traces[0][0].meta['grpc.method.kind'], 'bidi_streaming')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
-              assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 0)
-              assert.strictEqual(traces[0][0].meta.component, 'grpc')
+              assertObjectContains(traces, {
+                0: {
+                  0: {
+                    meta: {
+                      'grpc.method.name': 'getBidi',
+                      'grpc.method.service': 'TestService',
+                      'grpc.method.path': '/test.TestService/getBidi',
+                      'grpc.method.kind': 'bidi_streaming',
+                      'span.kind': 'server',
+                      component: 'grpc',
+                    },
+                    metrics: {
+                      'grpc.status.code': 0,
+                    },
+                  },
+                },
+              })
             })
         })
 

@@ -68,10 +68,16 @@ describe('Plugin', () => {
 
           it('should do automatic instrumentation when using callbacks', done => {
             agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-              assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
-              assert.strictEqual(traces[0][0].type, 'sql')
+              assertObjectContains(traces, {
+                0: {
+                  0: {
+                    name: expectedSchema.outbound.opName,
+                    service: expectedSchema.outbound.serviceName,
+                    resource: 'SELECT $1::text as message',
+                    type: 'sql',
+                  },
+                },
+              })
               assertObjectContains(traces[0][0], {
                 meta: {
                   'span.kind': 'client',
@@ -122,10 +128,16 @@ describe('Plugin', () => {
             // initial promise support
             it('should do automatic instrumentation when using promises', done => {
               agent.assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                assert.strictEqual(traces[0][0].resource, 'SELECT $1::text as message')
-                assert.strictEqual(traces[0][0].type, 'sql')
+                assertObjectContains(traces, {
+                  0: {
+                    0: {
+                      name: expectedSchema.outbound.opName,
+                      service: expectedSchema.outbound.serviceName,
+                      resource: 'SELECT $1::text as message',
+                      type: 'sql',
+                    },
+                  },
+                })
                 assertObjectContains(traces[0][0], {
                   meta: {
                     'span.kind': 'client',
@@ -252,10 +264,16 @@ describe('Plugin', () => {
 
                 it('should instrument cursor-based streaming with pg-cursor', async () => {
                   const tracingPromise = agent.assertSomeTraces(traces => {
-                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
-                    assert.strictEqual(traces[0][0].type, 'sql')
+                    assertObjectContains(traces, {
+                      0: {
+                        0: {
+                          name: expectedSchema.outbound.opName,
+                          service: expectedSchema.outbound.serviceName,
+                          resource: 'SELECT * FROM generate_series(0, 1) num',
+                          type: 'sql',
+                        },
+                      },
+                    })
                     assertObjectContains(traces[0][0], {
                       meta: {
                         'span.kind': 'client',
@@ -288,11 +306,17 @@ describe('Plugin', () => {
 
                 it('should instrument stream-based queries with pg-query-stream', async () => {
                   const agentPromise = agent.assertSomeTraces(traces => {
-                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
-                    assert.strictEqual(traces[0][0].type, 'sql')
-                    assert.strictEqual(traces[0][0].error, 0)
+                    assertObjectContains(traces, {
+                      0: {
+                        0: {
+                          name: expectedSchema.outbound.opName,
+                          service: expectedSchema.outbound.serviceName,
+                          resource: 'SELECT * FROM generate_series(0, 1) num',
+                          type: 'sql',
+                          error: 0,
+                        },
+                      },
+                    })
                     assertObjectContains(traces[0][0], {
                       meta: {
                         'span.kind': 'client',
@@ -323,11 +347,17 @@ describe('Plugin', () => {
 
                 it('should instrument stream-based queries with pg-query-stream and catch errors', async () => {
                   const agentPromise = agent.assertSomeTraces(traces => {
-                    assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                    assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                    assert.strictEqual(traces[0][0].resource, 'SELECT * FROM generate_series(0, 1) num')
-                    assert.strictEqual(traces[0][0].type, 'sql')
-                    assert.strictEqual(traces[0][0].error, 1)
+                    assertObjectContains(traces, {
+                      0: {
+                        0: {
+                          name: expectedSchema.outbound.opName,
+                          service: expectedSchema.outbound.serviceName,
+                          resource: 'SELECT * FROM generate_series(0, 1) num',
+                          type: 'sql',
+                          error: 1,
+                        },
+                      },
+                    })
                     assertObjectContains(traces[0][0], {
                       meta: {
                         'span.kind': 'client',
@@ -389,9 +419,15 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-            assert.strictEqual(traces[0][0].service, 'custom')
-            assert.strictEqual(traces[0][0].resource, 'SELECT $1...')
+            assertObjectContains(traces, {
+              0: {
+                0: {
+                  name: expectedSchema.outbound.opName,
+                  service: 'custom',
+                  resource: 'SELECT $1...',
+                },
+              },
+            })
           })
             .then(done)
             .catch(done)

@@ -7,6 +7,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Legacy Plugin', () => {
@@ -56,17 +57,25 @@ describe('Legacy Plugin', () => {
           client.on('error', done)
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-              assert.strictEqual(traces[0][0].resource, 'get')
-              assert.strictEqual(traces[0][0].type, 'redis')
-              assert.strictEqual(traces[0][0].meta['db.name'], '0')
-              assert.strictEqual(traces[0][0].meta['db.type'], 'redis')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['out.host'], '127.0.0.1')
-              assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'GET foo')
-              assert.strictEqual(traces[0][0].meta.component, 'redis')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'redis')
+              assertObjectContains(traces, {
+                0: {
+                  0: {
+                    name: expectedSchema.outbound.opName,
+                    service: expectedSchema.outbound.serviceName,
+                    resource: 'get',
+                    type: 'redis',
+                    meta: {
+                      'db.name': '0',
+                      'db.type': 'redis',
+                      'span.kind': 'client',
+                      'out.host': '127.0.0.1',
+                      'redis.raw_command': 'GET foo',
+                      component: 'redis',
+                      '_dd.integration': 'redis',
+                    },
+                  },
+                },
+              })
             })
             .then(done)
             .catch(done)

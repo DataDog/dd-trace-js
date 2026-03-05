@@ -12,6 +12,7 @@ const sinon = require('sinon')
 
 require('./setup/core')
 const { DogStatsDClient } = require('../src/dogstatsd')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -467,10 +468,24 @@ function createGarbage (count = 50) {
             call.args[0] === 'runtime.node.event_loop.utilization'
           )
 
-          assert.strictEqual(eluCalls.length, 3)
-          assert.strictEqual(eluCalls[0].args[1], 0.2)
-          assert.strictEqual(eluCalls[1].args[1], 0.75)
-          assert.strictEqual(eluCalls[2].args[1], 0)
+          assertObjectContains(eluCalls, {
+            length: 3,
+            0: {
+              args: {
+                1: 0.2,
+              },
+            },
+            1: {
+              args: {
+                1: 0.75,
+              },
+            },
+            2: {
+              args: {
+                1: 0,
+              },
+            },
+          })
         })
       })
 
@@ -659,12 +674,14 @@ function createGarbage (count = 50) {
             return acc
           }, {})
 
-          assert.strictEqual(metrics['runtime.node.mem.heap_total'], stats.heapTotal)
-          assert.strictEqual(metrics['runtime.node.mem.heap_used'], stats.heapUsed)
-          assert.strictEqual(metrics['runtime.node.mem.rss'], stats.rss)
-          assert.strictEqual(metrics['runtime.node.mem.total'], totalmem)
-          assert.strictEqual(metrics['runtime.node.mem.free'], freemem)
-          assert.strictEqual(metrics['runtime.node.mem.external'], stats.external)
+          assertObjectContains(metrics, {
+            'runtime.node.mem.heap_total': stats.heapTotal,
+            'runtime.node.mem.heap_used': stats.heapUsed,
+            'runtime.node.mem.rss': stats.rss,
+            'runtime.node.mem.total': totalmem,
+            'runtime.node.mem.free': freemem,
+            'runtime.node.mem.external': stats.external,
+          })
         })
       })
 

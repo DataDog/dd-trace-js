@@ -1,6 +1,5 @@
 'use strict'
 
-const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -12,6 +11,7 @@ const {
   HTTP_REQUEST_PATH_PARAM,
   HTTP_REQUEST_URI,
 } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
 describe('unvalidated-redirect-analyzer', () => {
   const NOT_TAINTED_LOCATION = 'url.com'
@@ -100,12 +100,21 @@ describe('unvalidated-redirect-analyzer', () => {
   unvalidatedRedirectAnalyzer.configure(true)
 
   it('should subscribe to set-header:finish channel', () => {
-    assert.strictEqual(unvalidatedRedirectAnalyzer._subscriptions.length, 2)
-    assert.strictEqual(
-      unvalidatedRedirectAnalyzer._subscriptions[0]._channel.name,
-      'datadog:http:server:response:set-header:finish'
-    )
-    assert.strictEqual(unvalidatedRedirectAnalyzer._subscriptions[1]._channel.name, 'datadog:fastify:set-header:finish')
+    assertObjectContains(unvalidatedRedirectAnalyzer, {
+      _subscriptions: {
+        length: 2,
+        0: {
+          _channel: {
+            name: 'datadog:http:server:response:set-header:finish',
+          },
+        },
+        1: {
+          _channel: {
+            name: 'datadog:fastify:set-header:finish',
+          },
+        },
+      },
+    })
   })
 
   it('should not report headers other than Location', () => {

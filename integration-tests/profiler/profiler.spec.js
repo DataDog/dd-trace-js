@@ -725,9 +725,15 @@ describe('profiler', () => {
         const pp = payload.payload
         assert.strictEqual(pp.namespace, 'profilers')
         const series = pp.series
-        assert.strictEqual(series.length, 2)
-        assert.strictEqual(series[0].metric, 'profile_api.bytes')
-        assert.strictEqual(series[1].metric, 'profile_api.ms')
+        assertObjectContains(series, {
+          length: 2,
+          0: {
+            metric: 'profile_api.bytes',
+          },
+          1: {
+            metric: 'profile_api.ms',
+          },
+        })
 
         // Same number of points
         pointsCount = series[0].points.length

@@ -121,11 +121,13 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.trace_id.toString(), span.context()._traceId.toString())
       assert.strictEqual(trace.span_id.toString(), span.context()._spanId.toString())
       assert.strictEqual(trace.parent_id.toString(), span.context()._parentId.toString())
-      assert.strictEqual(trace.name, span.context()._name)
-      assert.strictEqual(trace.resource, span.context()._name)
-      assert.strictEqual(trace.error, 0)
-      assert.strictEqual(trace.start, span._startTime * 1e6)
-      assert.strictEqual(trace.duration, span._duration * 1e6)
+      assertObjectContains(trace, {
+        name: span.context()._name,
+        resource: span.context()._name,
+        error: 0,
+        start: span._startTime * 1e6,
+        duration: span._duration * 1e6,
+      })
     })
 
     it('should always set a parent ID', () => {
@@ -136,11 +138,13 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.trace_id.toString(), span.context()._traceId.toString())
       assert.strictEqual(trace.span_id.toString(), span.context()._spanId.toString())
       assert.strictEqual(trace.parent_id.toString(), '0000000000000000')
-      assert.strictEqual(trace.name, span.context()._name)
-      assert.strictEqual(trace.resource, span.context()._name)
-      assert.strictEqual(trace.error, 0)
-      assert.strictEqual(trace.start, span._startTime * 1e6)
-      assert.strictEqual(trace.duration, span._duration * 1e6)
+      assertObjectContains(trace, {
+        name: span.context()._name,
+        resource: span.context()._name,
+        error: 0,
+        start: span._startTime * 1e6,
+        duration: span._duration * 1e6,
+      })
     })
 
     describe('_dd.base_service', () => {
@@ -176,9 +180,11 @@ describe('spanFormat', () => {
 
       trace = spanFormat(span)
 
-      assert.strictEqual(trace.service, 'service')
-      assert.strictEqual(trace.type, 'type')
-      assert.strictEqual(trace.resource, 'resource')
+      assertObjectContains(trace, {
+        service: 'service',
+        type: 'type',
+        resource: 'resource',
+      })
     })
 
     it('should extract Datadog specific root tags', () => {
@@ -352,10 +358,14 @@ describe('spanFormat', () => {
 
       trace = spanFormat(span)
 
-      assert.strictEqual(trace.meta['service.name'], undefined)
-      assert.strictEqual(trace.meta['span.type'], undefined)
-      assert.strictEqual(trace.meta['resource.name'], undefined)
-      assert.strictEqual(trace.meta['foo.bar'], 'foobar')
+      assertObjectContains(trace, {
+        meta: {
+          'service.name': undefined,
+          'span.type': undefined,
+          'resource.name': undefined,
+          'foo.bar': 'foobar',
+        },
+      })
     })
 
     it('should extract numeric tags as metrics', () => {
@@ -539,10 +549,14 @@ describe('spanFormat', () => {
       spanContext._tags.nested = tag
       trace = spanFormat(span)
 
-      assert.strictEqual(trace.meta['nested.num'], '1')
-      assert.strictEqual(trace.meta['nested.A'], undefined)
-      assert.strictEqual(trace.meta['nested.A.B'], undefined)
-      assert.strictEqual(trace.meta['nested.A.num'], undefined)
+      assertObjectContains(trace, {
+        meta: {
+          'nested.num': '1',
+          'nested.A': undefined,
+          'nested.A.B': undefined,
+          'nested.A.num': undefined,
+        },
+      })
     })
 
     it('should accept a boolean for measured', () => {

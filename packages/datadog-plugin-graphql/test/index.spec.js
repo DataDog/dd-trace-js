@@ -283,16 +283,26 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-                assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-                assert.strictEqual(spans[0].type, 'graphql')
-                assert.strictEqual(spans[0].error, 0)
+                assertObjectContains(spans, {
+                  0: {
+                    service: expectedSchema.server.serviceName,
+                    name: expectedSchema.server.opName,
+                    resource: 'query MyQuery{hello(name:"")}',
+                    type: 'graphql',
+                    error: 0,
+                  },
+                })
                 assert.ok(!('graphql.source' in spans[0].meta))
-                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
-                assert.strictEqual(spans[0].meta.component, 'graphql')
-                assert.strictEqual(spans[0].meta['_dd.integration'], 'graphql')
+                assertObjectContains(spans, {
+                  0: {
+                    meta: {
+                      'graphql.operation.type': 'query',
+                      'graphql.operation.name': 'MyQuery',
+                      component: 'graphql',
+                      '_dd.integration': 'graphql',
+                    },
+                  },
+                })
               })
               .then(done)
 
@@ -346,11 +356,13 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(span.service, 'test')
-              assert.strictEqual(span.name, 'graphql.parse')
-              assert.strictEqual(span.resource, 'graphql.parse')
-              assert.strictEqual(span.type, 'graphql')
-              assert.strictEqual(span.error, 0)
+              assertObjectContains(span, {
+                service: 'test',
+                name: 'graphql.parse',
+                resource: 'graphql.parse',
+                type: 'graphql',
+                error: 0,
+              })
               assert.ok(!('graphql.source' in span.meta))
               assert.strictEqual(span.meta.component, 'graphql')
             })
@@ -368,11 +380,13 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(span.service, 'test')
-              assert.strictEqual(span.name, 'graphql.validate')
-              assert.strictEqual(span.resource, 'graphql.validate')
-              assert.strictEqual(span.type, 'graphql')
-              assert.strictEqual(span.error, 0)
+              assertObjectContains(span, {
+                service: 'test',
+                name: 'graphql.validate',
+                resource: 'graphql.validate',
+                type: 'graphql',
+                error: 0,
+              })
               assert.ok(!('graphql.source' in span.meta))
               assert.strictEqual(span.meta.component, 'graphql')
             })
@@ -390,15 +404,25 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-              assert.strictEqual(spans[0].type, 'graphql')
-              assert.strictEqual(spans[0].error, 0)
+              assertObjectContains(spans, {
+                0: {
+                  service: expectedSchema.server.serviceName,
+                  name: expectedSchema.server.opName,
+                  resource: 'query MyQuery{hello(name:"")}',
+                  type: 'graphql',
+                  error: 0,
+                },
+              })
               assert.ok(!('graphql.source' in spans[0].meta))
-              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+              assertObjectContains(spans, {
+                0: {
+                  meta: {
+                    'graphql.operation.type': 'query',
+                    'graphql.operation.name': 'MyQuery',
+                    component: 'graphql',
+                  },
+                },
+              })
             })
             .then(done)
 
@@ -427,16 +451,26 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[1].service, 'test')
-              assert.strictEqual(spans[1].name, 'graphql.resolve')
-              assert.strictEqual(spans[1].resource, 'hello:String')
-              assert.strictEqual(spans[1].type, 'graphql')
-              assert.strictEqual(spans[1].error, 0)
+              assertObjectContains(spans, {
+                length: 2,
+                1: {
+                  service: 'test',
+                  name: 'graphql.resolve',
+                  resource: 'hello:String',
+                  type: 'graphql',
+                  error: 0,
+                },
+              })
               assert.ok(Number(spans[1].duration) > 0)
-              assert.strictEqual(spans[1].meta['graphql.field.name'], 'hello')
-              assert.strictEqual(spans[1].meta['graphql.field.path'], 'hello')
-              assert.strictEqual(spans[1].meta['graphql.field.type'], 'String')
+              assertObjectContains(spans, {
+                1: {
+                  meta: {
+                    'graphql.field.name': 'hello',
+                    'graphql.field.path': 'hello',
+                    'graphql.field.type': 'String',
+                  },
+                },
+              })
               assert.ok(!('graphql.source' in spans[1].meta))
               assert.strictEqual(spans[1].meta.component, 'graphql')
             })
@@ -541,34 +575,54 @@ describe('Plugin', () => {
               assert.strictEqual(execute.name, expectedSchema.server.opName)
               assert.strictEqual(execute.error, 0)
 
-              assert.strictEqual(human.name, 'graphql.resolve')
-              assert.strictEqual(human.resource, 'human:Human')
-              assert.strictEqual(human.error, 0)
-              assert.strictEqual(human.meta['graphql.field.path'], 'human')
+              assertObjectContains(human, {
+                name: 'graphql.resolve',
+                resource: 'human:Human',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human',
+                },
+              })
               assert.strictEqual(human.parent_id.toString(), execute.span_id.toString())
 
-              assert.strictEqual(humanName.name, 'graphql.resolve')
-              assert.strictEqual(humanName.resource, 'name:String')
-              assert.strictEqual(humanName.error, 0)
-              assert.strictEqual(humanName.meta['graphql.field.path'], 'human.name')
+              assertObjectContains(humanName, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human.name',
+                },
+              })
               assert.strictEqual(humanName.parent_id.toString(), human.span_id.toString())
 
-              assert.strictEqual(address.name, 'graphql.resolve')
-              assert.strictEqual(address.resource, 'address:Address')
-              assert.strictEqual(address.error, 0)
-              assert.strictEqual(address.meta['graphql.field.path'], 'human.address')
+              assertObjectContains(address, {
+                name: 'graphql.resolve',
+                resource: 'address:Address',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human.address',
+                },
+              })
               assert.strictEqual(address.parent_id.toString(), human.span_id.toString())
 
-              assert.strictEqual(addressCivicNumber.name, 'graphql.resolve')
-              assert.strictEqual(addressCivicNumber.resource, 'civicNumber:String')
-              assert.strictEqual(addressCivicNumber.error, 0)
-              assert.strictEqual(addressCivicNumber.meta['graphql.field.path'], 'human.address.civicNumber')
+              assertObjectContains(addressCivicNumber, {
+                name: 'graphql.resolve',
+                resource: 'civicNumber:String',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human.address.civicNumber',
+                },
+              })
               assert.strictEqual(addressCivicNumber.parent_id.toString(), address.span_id.toString())
 
-              assert.strictEqual(addressStreet.name, 'graphql.resolve')
-              assert.strictEqual(addressStreet.resource, 'street:String')
-              assert.strictEqual(addressStreet.error, 0)
-              assert.strictEqual(addressStreet.meta['graphql.field.path'], 'human.address.street')
+              assertObjectContains(addressStreet, {
+                name: 'graphql.resolve',
+                resource: 'street:String',
+                error: 0,
+                meta: {
+                  'graphql.field.path': 'human.address.street',
+                },
+              })
               assert.strictEqual(addressStreet.parent_id.toString(), address.span_id.toString())
             })
             .then(done)
@@ -601,24 +655,40 @@ describe('Plugin', () => {
 
               assert.strictEqual(execute.name, expectedSchema.server.opName)
 
-              assert.strictEqual(friends.name, 'graphql.resolve')
-              assert.strictEqual(friends.resource, 'friends:[Human]')
-              assert.strictEqual(friends.meta['graphql.field.path'], 'friends')
+              assertObjectContains(friends, {
+                name: 'graphql.resolve',
+                resource: 'friends:[Human]',
+                meta: {
+                  'graphql.field.path': 'friends',
+                },
+              })
               assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
-              assert.strictEqual(friendsName.name, 'graphql.resolve')
-              assert.strictEqual(friendsName.resource, 'name:String')
-              assert.strictEqual(friendsName.meta['graphql.field.path'], 'friends.*.name')
+              assertObjectContains(friendsName, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                meta: {
+                  'graphql.field.path': 'friends.*.name',
+                },
+              })
               assert.strictEqual(friendsName.parent_id.toString(), friends.span_id.toString())
 
-              assert.strictEqual(pets.name, 'graphql.resolve')
-              assert.strictEqual(pets.resource, 'pets:[Pet!]')
-              assert.strictEqual(pets.meta['graphql.field.path'], 'friends.*.pets')
+              assertObjectContains(pets, {
+                name: 'graphql.resolve',
+                resource: 'pets:[Pet!]',
+                meta: {
+                  'graphql.field.path': 'friends.*.pets',
+                },
+              })
               assert.strictEqual(pets.parent_id.toString(), friends.span_id.toString())
 
-              assert.strictEqual(petsName.name, 'graphql.resolve')
-              assert.strictEqual(petsName.resource, 'name:String')
-              assert.strictEqual(petsName.meta['graphql.field.path'], 'friends.*.pets.*.name')
+              assertObjectContains(petsName, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                meta: {
+                  'graphql.field.path': 'friends.*.pets.*.name',
+                },
+              })
               assert.strictEqual(petsName.parent_id.toString(), pets.span_id.toString())
             })
             .then(done)
@@ -682,9 +752,15 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[1].name, 'graphql.resolve')
+              assertObjectContains(spans, {
+                length: 2,
+                0: {
+                  name: expectedSchema.server.opName,
+                },
+                1: {
+                  name: 'graphql.resolve',
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -711,9 +787,15 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[1].name, 'graphql.resolve')
+              assertObjectContains(spans, {
+                length: 2,
+                0: {
+                  name: expectedSchema.server.opName,
+                },
+                1: {
+                  name: 'graphql.resolve',
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -749,23 +831,30 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 5)
-
-              assert.strictEqual(spans[0].name, 'test.request')
-
-              assert.strictEqual(spans[1].service, 'test')
-              assert.strictEqual(spans[1].name, 'graphql.parse')
-
-              assert.strictEqual(spans[2].service, 'test')
-              assert.strictEqual(spans[2].name, 'graphql.validate')
-
-              assert.strictEqual(spans[3].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[3].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[3].resource, 'query MyQuery{hello(name:"")}')
-
-              assert.strictEqual(spans[4].service, 'test')
-              assert.strictEqual(spans[4].name, 'graphql.resolve')
-              assert.strictEqual(spans[4].resource, 'hello:String')
+              assertObjectContains(spans, {
+                length: 5,
+                0: {
+                  name: 'test.request',
+                },
+                1: {
+                  service: 'test',
+                  name: 'graphql.parse',
+                },
+                2: {
+                  service: 'test',
+                  name: 'graphql.validate',
+                },
+                3: {
+                  service: expectedSchema.server.serviceName,
+                  name: expectedSchema.server.opName,
+                  resource: 'query MyQuery{hello(name:"")}',
+                },
+                4: {
+                  service: 'test',
+                  name: 'graphql.resolve',
+                  resource: 'hello:String',
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -881,10 +970,14 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
+              assertObjectContains(spans, {
+                length: 2,
+                0: {
+                  service: expectedSchema.server.serviceName,
+                  name: expectedSchema.server.opName,
+                  resource: 'query MyQuery{hello(name:"")}',
+                },
+              })
               assert.ok(!('graphql.source' in spans[0].meta))
               assert.strictEqual(spans[0].meta.component, 'graphql')
             })
@@ -970,10 +1063,18 @@ describe('Plugin', () => {
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
               assert.ok(('stacktrace' in spanEvents[0].attributes))
-              assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
-                'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
-              assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
-              assert.strictEqual(spanEvents[0].attributes.locations[0], '1:11')
+              assertObjectContains(spanEvents, {
+                0: {
+                  attributes: {
+                    message: 'Field "address" of ' +
+                'type "Address" must have a selection of subfields. Did you mean "address { ... }"?',
+                    locations: {
+                      length: 1,
+                      0: '1:11',
+                    },
+                  },
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -1048,11 +1149,21 @@ describe('Plugin', () => {
               assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
               assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
               assert.ok(Object.hasOwn(spanEvents[0].attributes, 'stacktrace'))
-              assert.strictEqual(spanEvents[0].attributes.message, 'test')
-              assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
-              assert.strictEqual(spanEvents[0].attributes.locations[0], '1:3')
-              assert.strictEqual(spanEvents[0].attributes.path.length, 1)
-              assert.strictEqual(spanEvents[0].attributes.path[0], 'hello')
+              assertObjectContains(spanEvents, {
+                0: {
+                  attributes: {
+                    message: 'test',
+                    locations: {
+                      length: 1,
+                      0: '1:3',
+                    },
+                    path: {
+                      length: 1,
+                      0: 'hello',
+                    },
+                  },
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -1203,13 +1314,23 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, 'query SecondQuery{hello(name:"")}')
+              assertObjectContains(spans, {
+                0: {
+                  service: expectedSchema.server.serviceName,
+                  name: expectedSchema.server.opName,
+                  resource: 'query SecondQuery{hello(name:"")}',
+                },
+              })
               assert.ok(!('graphql.source' in spans[0].meta))
-              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'SecondQuery')
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+              assertObjectContains(spans, {
+                0: {
+                  meta: {
+                    'graphql.operation.type': 'query',
+                    'graphql.operation.name': 'SecondQuery',
+                    component: 'graphql',
+                  },
+                },
+              })
             })
             .then(() => done())
             .catch(done)
@@ -1235,13 +1356,23 @@ describe('Plugin', () => {
 
               const resource = 'query WithFragments{human{...firstFields}}fragment firstFields on Human{name}'
 
-              assert.strictEqual(spans[0].service, 'test')
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, resource)
+              assertObjectContains(spans, {
+                0: {
+                  service: 'test',
+                  name: expectedSchema.server.opName,
+                  resource,
+                },
+              })
               assert.ok(!('graphql.source' in spans[0].meta))
-              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'WithFragments')
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+              assertObjectContains(spans, {
+                0: {
+                  meta: {
+                    'graphql.operation.type': 'query',
+                    'graphql.operation.name': 'WithFragments',
+                    component: 'graphql',
+                  },
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -1260,9 +1391,13 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].service, 'test')
-              assert.strictEqual(spans[0].name, 'graphql.parse')
-              assert.strictEqual(spans[0].resource, 'graphql.parse')
+              assertObjectContains(spans, {
+                0: {
+                  service: 'test',
+                  name: 'graphql.parse',
+                  resource: 'graphql.parse',
+                },
+              })
               assert.ok(!('graphql.source' in spans[0].meta))
               assert.ok(!('graphql.operation.type' in spans[0].meta))
               assert.ok(!('graphql.operation.name' in spans[0].meta))
@@ -1284,14 +1419,24 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-                assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-                assert.strictEqual(spans[0].type, 'graphql')
+                assertObjectContains(spans, {
+                  0: {
+                    service: expectedSchema.server.serviceName,
+                    name: expectedSchema.server.opName,
+                    resource: 'query MyQuery{hello(name:"")}',
+                    type: 'graphql',
+                  },
+                })
                 assert.ok(!('graphql.source' in spans[0].meta))
-                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
-                assert.strictEqual(spans[0].meta.component, 'graphql')
+                assertObjectContains(spans, {
+                  0: {
+                    meta: {
+                      'graphql.operation.type': 'query',
+                      'graphql.operation.name': 'MyQuery',
+                      component: 'graphql',
+                    },
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -1373,13 +1518,23 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].service, 'custom')
-              assert.strictEqual(spans[1].service, 'custom')
-              assert.strictEqual(spans[0].meta['graphql.source'], '{ hello(name: "world") }')
-              assert.strictEqual(spans[0].meta.component, 'graphql')
-              assert.strictEqual(spans[1].meta['graphql.source'], 'hello(name: "world")')
-              assert.strictEqual(spans[1].meta.component, 'graphql')
+              assertObjectContains(spans, {
+                length: 2,
+                0: {
+                  service: 'custom',
+                  meta: {
+                    'graphql.source': '{ hello(name: "world") }',
+                    component: 'graphql',
+                  },
+                },
+                1: {
+                  service: 'custom',
+                  meta: {
+                    'graphql.source': 'hello(name: "world")',
+                    component: 'graphql',
+                  },
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -1399,10 +1554,20 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].meta['graphql.variables.title'], 'planet')
-              assert.strictEqual(spans[0].meta['graphql.variables.who'], 'REDACTED')
-              assert.strictEqual(spans[1].meta['graphql.variables.title'], 'planet')
-              assert.strictEqual(spans[1].meta['graphql.variables.who'], 'REDACTED')
+              assertObjectContains(spans, {
+                0: {
+                  meta: {
+                    'graphql.variables.title': 'planet',
+                    'graphql.variables.who': 'REDACTED',
+                  },
+                },
+                1: {
+                  meta: {
+                    'graphql.variables.title': 'planet',
+                    'graphql.variables.who': 'REDACTED',
+                  },
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -1605,19 +1770,31 @@ describe('Plugin', () => {
 
               assert.strictEqual(execute.name, expectedSchema.server.opName)
 
-              assert.strictEqual(friends.name, 'graphql.resolve')
-              assert.strictEqual(friends.resource, 'friends:[Human]')
-              assert.strictEqual(friends.meta['graphql.field.path'], 'friends')
+              assertObjectContains(friends, {
+                name: 'graphql.resolve',
+                resource: 'friends:[Human]',
+                meta: {
+                  'graphql.field.path': 'friends',
+                },
+              })
               assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
-              assert.strictEqual(friend0Name.name, 'graphql.resolve')
-              assert.strictEqual(friend0Name.resource, 'name:String')
-              assert.strictEqual(friend0Name.meta['graphql.field.path'], 'friends.0.name')
+              assertObjectContains(friend0Name, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                meta: {
+                  'graphql.field.path': 'friends.0.name',
+                },
+              })
               assert.strictEqual(friend0Name.parent_id.toString(), friends.span_id.toString())
 
-              assert.strictEqual(friend1Name.name, 'graphql.resolve')
-              assert.strictEqual(friend1Name.resource, 'name:String')
-              assert.strictEqual(friend1Name.meta['graphql.field.path'], 'friends.1.name')
+              assertObjectContains(friend1Name, {
+                name: 'graphql.resolve',
+                resource: 'name:String',
+                meta: {
+                  'graphql.field.path': 'friends.1.name',
+                },
+              })
               assert.strictEqual(friend1Name.parent_id.toString(), friends.span_id.toString())
             })
             .then(done)
@@ -1843,16 +2020,24 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans.length, 3)
-
-                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-                assert.strictEqual(spans[0].resource, 'query MyQuery{hello}')
+                assertObjectContains(spans, {
+                  length: 3,
+                  0: {
+                    name: expectedSchema.server.opName,
+                    resource: 'query MyQuery{hello}',
+                  },
+                })
                 assert.ok(!('graphql.source' in spans[0].meta))
 
-                assert.strictEqual(spans[1].name, 'graphql.resolve')
-                assert.strictEqual(spans[1].resource, 'hello:String')
-
-                assert.strictEqual(spans[2].name, 'graphql.validate')
+                assertObjectContains(spans, {
+                  1: {
+                    name: 'graphql.resolve',
+                    resource: 'hello:String',
+                  },
+                  2: {
+                    name: 'graphql.validate',
+                  },
+                })
                 assert.ok(!('graphql.source' in spans[2].meta))
               })
               .then(done)

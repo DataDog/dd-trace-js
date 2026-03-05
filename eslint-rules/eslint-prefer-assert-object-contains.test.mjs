@@ -1,4 +1,5 @@
 import { RuleTester } from 'eslint'
+
 import rule from './eslint-prefer-assert-object-contains.mjs'
 
 const ruleTester = new RuleTester({
@@ -45,6 +46,13 @@ ruleTester.run('prefer-assert-object-contains', /** @type {import('eslint').Rule
         assert.strictEqual(obj.b, 2)
         assert.strictEqual(obj.c, 3)
       `,
+      output: `
+        assertObjectContains(obj, {
+          a: 1,
+          b: 2,
+          c: 3,
+        })
+      `,
       errors: [
         {
           messageId: 'preferObjectContains',
@@ -59,6 +67,16 @@ ruleTester.run('prefer-assert-object-contains', /** @type {import('eslint').Rule
         assert.strictEqual(span.meta.key3, 'v3')
         assert.strictEqual(span.meta.key4, 'v4')
       `,
+      output: `
+        assertObjectContains(span, {
+          meta: {
+            key1: 'v1',
+            key2: 'v2',
+            key3: 'v3',
+            key4: 'v4',
+          },
+        })
+      `,
       errors: [
         {
           messageId: 'preferObjectContains',
@@ -71,6 +89,15 @@ ruleTester.run('prefer-assert-object-contains', /** @type {import('eslint').Rule
         assert.strictEqual(x.a, 1)
         assert.strictEqual(x.b.c, 2)
         assert.strictEqual(x.d, 3)
+      `,
+      output: `
+        assertObjectContains(x, {
+          a: 1,
+          b: {
+            c: 2,
+          },
+          d: 3,
+        })
       `,
       errors: [
         {

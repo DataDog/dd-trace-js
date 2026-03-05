@@ -10,6 +10,8 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
   ? '<17 || >18'
   : ''
@@ -98,13 +100,21 @@ describe('Plugin', () => {
 
         agent
           .assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].name, 'hapi.request')
-            assert.strictEqual(traces[0][0].service, 'test')
-            assert.strictEqual(traces[0][0].type, 'web')
-            assert.strictEqual(traces[0][0].resource, 'GET /user/{id}')
-            assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
-            assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
-            assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+            assertObjectContains(traces, {
+              0: {
+                0: {
+                  name: 'hapi.request',
+                  service: 'test',
+                  type: 'web',
+                  resource: 'GET /user/{id}',
+                  meta: {
+                    'span.kind': 'server',
+                    'http.url': `http://localhost:${port}/user/123`,
+                    'http.method': 'GET',
+                  },
+                },
+              },
+            })
             assert.ok(Object.hasOwn(traces[0][0].meta, 'http.status_code'))
             assert.strictEqual(traces[0][0].meta.component, 'hapi')
             assert.strictEqual(traces[0][0].meta['_dd.integration'], 'hapi')

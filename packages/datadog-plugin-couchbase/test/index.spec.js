@@ -9,6 +9,7 @@ const sinon = require('sinon')
 
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -84,14 +85,18 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.query.opName)
-                assert.strictEqual(span.service, expectedSchema.query.serviceName)
-                assert.strictEqual(span.resource, query)
-                assert.strictEqual(span.type, 'sql')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
-                assert.strictEqual(span.meta.component, 'couchbase')
-                assert.strictEqual(span.meta['_dd.integration'], 'couchbase')
+                assertObjectContains(span, {
+                  name: expectedSchema.query.opName,
+                  service: expectedSchema.query.serviceName,
+                  resource: query,
+                  type: 'sql',
+                  meta: {
+                    'span.kind': 'client',
+                    'couchbase.bucket.name': 'datadog-test',
+                    component: 'couchbase',
+                    '_dd.integration': 'couchbase',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -114,12 +119,16 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.upsert.opName)
-                assert.strictEqual(span.service, expectedSchema.upsert.serviceName)
-                assert.strictEqual(span.resource, 'couchbase.upsert')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
-                assert.strictEqual(span.meta.component, 'couchbase')
+                assertObjectContains(span, {
+                  name: expectedSchema.upsert.opName,
+                  service: expectedSchema.upsert.serviceName,
+                  resource: 'couchbase.upsert',
+                  meta: {
+                    'span.kind': 'client',
+                    'couchbase.bucket.name': 'datadog-test',
+                    component: 'couchbase',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -146,13 +155,17 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.query.opName)
-                assert.strictEqual(span.service, expectedSchema.query.serviceName)
-                assert.strictEqual(span.resource, query)
-                assert.strictEqual(span.type, 'sql')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
-                assert.strictEqual(span.meta.component, 'couchbase')
+                assertObjectContains(span, {
+                  name: expectedSchema.query.opName,
+                  service: expectedSchema.query.serviceName,
+                  resource: query,
+                  type: 'sql',
+                  meta: {
+                    'span.kind': 'client',
+                    'couchbase.bucket.name': 'datadog-test',
+                    component: 'couchbase',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -227,12 +240,16 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.query.opName)
-                assert.strictEqual(span.service, expectedSchema.query.serviceName)
-                assert.strictEqual(span.resource, query)
-                assert.strictEqual(span.type, 'sql')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta.component, 'couchbase')
+                assertObjectContains(span, {
+                  name: expectedSchema.query.opName,
+                  service: expectedSchema.query.serviceName,
+                  resource: query,
+                  type: 'sql',
+                  meta: {
+                    'span.kind': 'client',
+                    component: 'couchbase',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -244,13 +261,17 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.upsert.opName)
-                assert.strictEqual(span.service, expectedSchema.upsert.serviceName)
-                assert.strictEqual(span.resource, 'couchbase.upsert')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
-                assert.strictEqual(span.meta['couchbase.collection.name'], '_default')
-                assert.strictEqual(span.meta.component, 'couchbase')
+                assertObjectContains(span, {
+                  name: expectedSchema.upsert.opName,
+                  service: expectedSchema.upsert.serviceName,
+                  resource: 'couchbase.upsert',
+                  meta: {
+                    'span.kind': 'client',
+                    'couchbase.bucket.name': 'datadog-test',
+                    'couchbase.collection.name': '_default',
+                    component: 'couchbase',
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -282,12 +303,16 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.query.opName)
-                assert.strictEqual(span.service, expectedSchema.query.serviceName)
-                assert.strictEqual(span.resource, query)
-                assert.strictEqual(span.type, 'sql')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta.component, 'couchbase')
+                assertObjectContains(span, {
+                  name: expectedSchema.query.opName,
+                  service: expectedSchema.query.serviceName,
+                  resource: query,
+                  type: 'sql',
+                  meta: {
+                    'span.kind': 'client',
+                    component: 'couchbase',
+                  },
+                })
               })
               .then(done)
               .catch(done)

@@ -186,10 +186,16 @@ describe('Plugin', () => {
             it('should do automatic instrumentation', done => {
               agent
                 .assertSomeTraces(traces => {
-                  assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                  assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                  assert.strictEqual(traces[0][0].resource, 'HEAD /')
-                  assert.strictEqual(traces[0][0].type, 'elasticsearch')
+                  assertObjectContains(traces, {
+                    0: {
+                      0: {
+                        name: expectedSchema.outbound.opName,
+                        service: expectedSchema.outbound.serviceName,
+                        resource: 'HEAD /',
+                        type: 'elasticsearch',
+                      },
+                    },
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -252,10 +258,16 @@ describe('Plugin', () => {
           it('should do automatic instrumentation', done => {
             agent
               .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-                assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-                assert.strictEqual(traces[0][0].resource, 'HEAD /')
-                assert.strictEqual(traces[0][0].type, 'elasticsearch')
+                assertObjectContains(traces, {
+                  0: {
+                    0: {
+                      name: expectedSchema.outbound.opName,
+                      service: expectedSchema.outbound.serviceName,
+                      resource: 'HEAD /',
+                      type: 'elasticsearch',
+                    },
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -317,9 +329,15 @@ describe('Plugin', () => {
           it('should work with userland promises', done => {
             agent
               .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].service, 'test-elasticsearch')
-                assert.strictEqual(traces[0][0].resource, 'HEAD /')
-                assert.strictEqual(traces[0][0].type, 'elasticsearch')
+                assertObjectContains(traces, {
+                  0: {
+                    0: {
+                      service: 'test-elasticsearch',
+                      resource: 'HEAD /',
+                      type: 'elasticsearch',
+                    },
+                  },
+                })
               })
               .then(done)
               .catch(done)

@@ -261,10 +261,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(test.meta[COMPONENT], 'jest')
             assert.match(test.meta[TEST_CODE_OWNERS], /@datadog-dd-trace-js/)
 
-            assert.strictEqual(test.type, 'test')
-            assert.strictEqual(test.name, 'jest.test')
-            assert.strictEqual(test.service, 'plugin-tests')
-            assert.strictEqual(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
+            assertObjectContains(test, {
+              type: 'test',
+              name: 'jest.test',
+              service: 'plugin-tests',
+              resource: `ci-visibility/jest-plugin-tests/jest-test.js.${name}`,
+            })
 
             assert.ok(test.metrics[TEST_SOURCE_START])
             assert.ok(test.meta[TEST_FRAMEWORK_VERSION])
@@ -1542,9 +1544,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
+        assertObjectContains(coveragePayload, {
+          name: 'coverage1',
+          filename: 'coverage1.msgpack',
+          type: 'application/msgpack',
+        })
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)

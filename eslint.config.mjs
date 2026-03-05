@@ -639,8 +639,7 @@ export default [
       n: eslintPluginN,
     },
     rules: {
-      // TODO: enable after adding disable comments to existing violations
-      'eslint-rules/eslint-prefer-assert-object-contains': 'off',
+      'eslint-rules/eslint-prefer-assert-object-contains': 'error',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',

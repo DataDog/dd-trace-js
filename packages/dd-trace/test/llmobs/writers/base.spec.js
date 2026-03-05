@@ -7,7 +7,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/core')
-const { useEnv } = require('../../../../../integration-tests/helpers')
+const { assertObjectContains, useEnv } = require('../../../../../integration-tests/helpers')
 const { removeDestroyHandler } = require('../util')
 
 describe('BaseLLMObsWriter', () => {
@@ -187,10 +187,16 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      assert.strictEqual(requestOptions.url.href, 'https://intake.site.com/')
-      assert.strictEqual(requestOptions.path, '/endpoint')
-      assert.strictEqual(requestOptions.headers['Content-Type'], 'application/json')
-      assert.strictEqual(requestOptions.headers['DD-API-KEY'], 'test')
+      assertObjectContains(requestOptions, {
+        url: {
+          href: 'https://intake.site.com/',
+        },
+        path: '/endpoint',
+        headers: {
+          'Content-Type': 'application/json',
+          'DD-API-KEY': 'test',
+        },
+      })
     })
 
     it('flushes a buffer in agent proxy mode', () => {
@@ -202,10 +208,16 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      assert.strictEqual(requestOptions.url.href, 'http://localhost:8126/')
-      assert.strictEqual(requestOptions.path, '/evp_proxy/v2/endpoint')
-      assert.strictEqual(requestOptions.headers['Content-Type'], 'application/json')
-      assert.strictEqual(requestOptions.headers['X-Datadog-EVP-Subdomain'], 'intake')
+      assertObjectContains(requestOptions, {
+        url: {
+          href: 'http://localhost:8126/',
+        },
+        path: '/evp_proxy/v2/endpoint',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Datadog-EVP-Subdomain': 'intake',
+        },
+      })
     })
 
     it('flushes routed buffers directly to intake in agent proxy mode', () => {
@@ -217,9 +229,15 @@ describe('BaseLLMObsWriter', () => {
       writer.flush()
 
       const requestOptions = request.getCall(0).args[1]
-      assert.strictEqual(requestOptions.url.href, 'https://intake.site-a.com/')
-      assert.strictEqual(requestOptions.path, '/endpoint')
-      assert.strictEqual(requestOptions.headers['DD-API-KEY'], 'key-a')
+      assertObjectContains(requestOptions, {
+        url: {
+          href: 'https://intake.site-a.com/',
+        },
+        path: '/endpoint',
+        headers: {
+          'DD-API-KEY': 'key-a',
+        },
+      })
     })
 
     it('does not flush when agentless property is not set', () => {

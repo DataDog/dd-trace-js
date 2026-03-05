@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -71,16 +72,24 @@ describe('Plugin', () => {
           agent
             .assertSomeTraces(traces => {
               sinon.assert.notCalled(app) // request should be cancelled before call to app
-              assert.strictEqual(traces[0][0].name, 'web.request')
-              assert.strictEqual(traces[0][0].service, 'test')
-              assert.strictEqual(traces[0][0].type, 'web')
-              assert.strictEqual(traces[0][0].resource, 'GET')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
-              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              assert.strictEqual(traces[0][0].meta.component, 'http')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'http')
+              assertObjectContains(traces, {
+                0: {
+                  0: {
+                    name: 'web.request',
+                    service: 'test',
+                    type: 'web',
+                    resource: 'GET',
+                    meta: {
+                      'span.kind': 'server',
+                      'http.url': `http://localhost:${port}/user`,
+                      'http.method': 'GET',
+                      'http.status_code': '200',
+                      component: 'http',
+                      '_dd.integration': 'http',
+                    },
+                  },
+                },
+              })
             })
             .then(done)
             .catch(done)
@@ -115,15 +124,23 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, 'web.request')
-              assert.strictEqual(traces[0][0].service, 'test')
-              assert.strictEqual(traces[0][0].type, 'web')
-              assert.strictEqual(traces[0][0].resource, 'GET')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
-              assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-              assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-              assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-              assert.strictEqual(traces[0][0].meta.component, 'http')
+              assertObjectContains(traces, {
+                0: {
+                  0: {
+                    name: 'web.request',
+                    service: 'test',
+                    type: 'web',
+                    resource: 'GET',
+                    meta: {
+                      'span.kind': 'server',
+                      'http.url': `http://localhost:${port}/user`,
+                      'http.method': 'GET',
+                      'http.status_code': '200',
+                      component: 'http',
+                    },
+                  },
+                },
+              })
             })
             .then(done)
             .catch(done)

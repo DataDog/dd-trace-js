@@ -7,6 +7,7 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 require('../../setup/mocha')
 
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const MAX_SAFE_SIGNED_INTEGER = 2 ** 31 - 1
 
@@ -239,10 +240,12 @@ describe('JSONBuffer', () => {
       jsonBuffer.write(JSON.stringify({ c: 3 })) // 8 + 10 + 2 = 20 > 15, flush b, buffer c
       jsonBuffer.write(JSON.stringify({ d: 4 })) // 8 + 10 + 2 = 20 > 15, flush c, buffer d
 
-      assert.strictEqual(flushedPayloads.length, 3)
-      assert.strictEqual(flushedPayloads[0], '[{"a":1}]')
-      assert.strictEqual(flushedPayloads[1], '[{"b":2}]')
-      assert.strictEqual(flushedPayloads[2], '[{"c":3}]')
+      assertObjectContains(flushedPayloads, {
+        length: 3,
+        0: '[{"a":1}]',
+        1: '[{"b":2}]',
+        2: '[{"c":3}]',
+      })
     })
   })
 })

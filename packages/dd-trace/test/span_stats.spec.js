@@ -25,6 +25,7 @@ const {
   DEFAULT_SERVICE_NAME,
 } = require('../src/encode/tags-processors')
 const processTags = require('../src/process-tags')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 // Mock spans
 const basicSpan = {
@@ -305,9 +306,11 @@ describe('SpanStatsProcessor', () => {
     }))
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
-    assert.strictEqual(processor.hostname, hostname())
-    assert.strictEqual(processor.enabled, config.stats.enabled)
-    assert.strictEqual(processor.env, config.env)
+    assertObjectContains(processor, {
+      hostname: hostname(),
+      enabled: config.stats.enabled,
+      env: config.env,
+    })
     assert.deepStrictEqual(processor.tags, config.tags)
     assert.strictEqual(processor.version, config.version)
   })

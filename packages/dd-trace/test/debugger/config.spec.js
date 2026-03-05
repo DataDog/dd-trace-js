@@ -7,6 +7,7 @@ const getDebuggerConfig = require('../../src/debugger/config')
 const getConfig = require('../../src/config')
 
 require('../setup/mocha')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('getDebuggerConfig', function () {
   it('should only contain the allowed properties', function () {
@@ -30,13 +31,15 @@ describe('getDebuggerConfig', function () {
     assert.strictEqual(config.commitSHA, tracerConfig.commitSHA)
     assert.strictEqual(config.debug, tracerConfig.debug)
     assert.deepStrictEqual(config.dynamicInstrumentation, tracerConfig.dynamicInstrumentation)
-    assert.strictEqual(config.hostname, tracerConfig.hostname)
-    assert.strictEqual(config.logLevel, tracerConfig.logLevel)
-    assert.strictEqual(config.port, tracerConfig.port)
-    assert.strictEqual(config.repositoryUrl, tracerConfig.repositoryUrl)
-    assert.strictEqual(config.runtimeId, tracerConfig.tags['runtime-id'])
-    assert.strictEqual(config.service, tracerConfig.service)
-    assert.strictEqual(config.url, tracerConfig.url.toString())
+    assertObjectContains(config, {
+      hostname: tracerConfig.hostname,
+      logLevel: tracerConfig.logLevel,
+      port: tracerConfig.port,
+      repositoryUrl: tracerConfig.repositoryUrl,
+      runtimeId: tracerConfig.tags['runtime-id'],
+      service: tracerConfig.service,
+      url: tracerConfig.url.toString(),
+    })
   })
 
   it('should be able to send the config over a MessageChannel', function () {

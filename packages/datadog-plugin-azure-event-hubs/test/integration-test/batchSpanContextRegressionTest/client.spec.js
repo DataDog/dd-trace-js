@@ -2,6 +2,7 @@
 
 const assert = require('assert')
 const {
+  assertObjectContains,
   FakeAgent,
   sandboxCwd,
   useSandbox,
@@ -32,11 +33,24 @@ describe('esm', () => {
     it('tryAdd does not set context in the Azure eventDataBatch._spanContext', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(Array.isArray(payload))
-        assert.strictEqual(payload.length, 3)
-        // Verify we got the expected spans from the test
-        assert.strictEqual(payload[0][0].name, 'azure.eventhubs.create')
-        assert.strictEqual(payload[1][0].name, 'azure.eventhubs.create')
-        assert.strictEqual(payload[2][0].name, 'azure.eventhubs.send')
+        assertObjectContains(payload, {
+          length: 3,
+          0: {
+            0: {
+              name: 'azure.eventhubs.create',
+            },
+          },
+          1: {
+            0: {
+              name: 'azure.eventhubs.create',
+            },
+          },
+          2: {
+            0: {
+              name: 'azure.eventhubs.send',
+            },
+          },
+        })
       })
 
       // This test file will throw an error if tryAdd returns a Promise instead of a boolean

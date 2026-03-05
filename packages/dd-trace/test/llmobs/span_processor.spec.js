@@ -250,10 +250,14 @@ describe('span processor', () => {
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      assert.strictEqual(payload.meta['error.message'], 'error message')
-      assert.strictEqual(payload.meta['error.type'], 'error type')
-      assert.strictEqual(payload.meta['error.stack'], 'error stack')
-      assert.strictEqual(payload.status, 'error')
+      assertObjectContains(payload, {
+        meta: {
+          'error.message': 'error message',
+          'error.type': 'error type',
+          'error.stack': 'error stack',
+        },
+        status: 'error',
+      })
 
       assertObjectContains(payload.tags, ['error_type:error type'])
     })

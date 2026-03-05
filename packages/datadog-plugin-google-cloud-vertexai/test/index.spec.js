@@ -9,6 +9,8 @@ const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
 /**
  * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
@@ -101,11 +103,14 @@ describe('Plugin', () => {
           const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            assert.strictEqual(span.name, 'vertexai.request')
-            assert.strictEqual(span.resource, 'GenerativeModel.generateContent')
-            assert.strictEqual(span.meta['span.kind'], 'client')
-
-            assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
+            assertObjectContains(span, {
+              name: 'vertexai.request',
+              resource: 'GenerativeModel.generateContent',
+              meta: {
+                'span.kind': 'client',
+                'vertexai.request.model': 'gemini-1.5-flash-002',
+              },
+            })
           })
 
           const { response } = await model.generateContent({
@@ -152,11 +157,14 @@ describe('Plugin', () => {
           const checkTraces = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
-            assert.strictEqual(span.name, 'vertexai.request')
-            assert.strictEqual(span.resource, 'GenerativeModel.generateContentStream')
-            assert.strictEqual(span.meta['span.kind'], 'client')
-
-            assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
+            assertObjectContains(span, {
+              name: 'vertexai.request',
+              resource: 'GenerativeModel.generateContentStream',
+              meta: {
+                'span.kind': 'client',
+                'vertexai.request.model': 'gemini-1.5-flash-002',
+              },
+            })
           })
 
           const { stream, response } = await model.generateContentStream('Hello, how are you?')
@@ -186,11 +194,14 @@ describe('Plugin', () => {
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(span.name, 'vertexai.request')
-              assert.strictEqual(span.resource, 'ChatSession.sendMessage')
-              assert.strictEqual(span.meta['span.kind'], 'client')
-
-              assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
+              assertObjectContains(span, {
+                name: 'vertexai.request',
+                resource: 'ChatSession.sendMessage',
+                meta: {
+                  'span.kind': 'client',
+                  'vertexai.request.model': 'gemini-1.5-flash-002',
+                },
+              })
             })
 
             const chat = model.startChat({
@@ -240,11 +251,14 @@ describe('Plugin', () => {
             const checkTraces = agent.assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(span.name, 'vertexai.request')
-              assert.strictEqual(span.resource, 'ChatSession.sendMessageStream')
-              assert.strictEqual(span.meta['span.kind'], 'client')
-
-              assert.strictEqual(span.meta['vertexai.request.model'], 'gemini-1.5-flash-002')
+              assertObjectContains(span, {
+                name: 'vertexai.request',
+                resource: 'ChatSession.sendMessageStream',
+                meta: {
+                  'span.kind': 'client',
+                  'vertexai.request.model': 'gemini-1.5-flash-002',
+                },
+              })
             })
 
             const chat = model.startChat({})
