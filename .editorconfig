@@ -14,3 +14,7 @@ insert_final_newline = true
 charset = unset
 end_of_line = unset
 insert_final_newline = unset
+
+# TODO: fix OpenAI tests
+[packages/datadog-plugin-openai/test/fine-tune.jsonl]
+insert_final_newline = unset
