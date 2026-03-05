@@ -196,11 +196,11 @@ function wrapSuper (_state, node) {
 }
 
 function wrapCallback (state, node) {
-  const { channelName, functionQuery: { index = -1 } } = state
+  const { channelName, functionQuery: { callbackIndex = -1 } } = state
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
   const wrapper = parse(`
     function wrapper () {
-      const __apm$cb = Array.prototype.at.call(arguments, ${index});
+      const __apm$cb = Array.prototype.at.call(arguments, ${callbackIndex});
       const __apm$ctx = {
         arguments,
         self: this,
@@ -235,7 +235,7 @@ function wrapCallback (state, node) {
       if (typeof __apm$cb !== 'function') {
         return __apm$traced();
       }
-      Array.prototype.splice.call(arguments, ${index}, 1, __apm$wrappedCb);
+      Array.prototype.splice.call(arguments, ${callbackIndex}, 1, __apm$wrappedCb);
 
       return ${channelVariable}.start.runStores(__apm$ctx, () => {
         try {

@@ -40,10 +40,10 @@ class Transformer {
 
       const query = astQuery || this.#fromFunctionQuery(functionQuery)
       const state = { ...config, dcModule: this.#dc_module, sourceType, functionQuery }
-      const operator = state.operator = this.#getOperator(state)
-      const transform = transforms[operator]
 
-      traverse(ast, query, (...args) => transform(state, ...args))
+      state.operator = this.#getOperator(state)
+
+      traverse(ast, query, (...args) => this.#visit(state, ...args))
     }
 
     if (ast) {
@@ -62,6 +62,19 @@ class Transformer {
     return { code }
   }
 
+  #visit (state, ...args) {
+    const transform = transforms[state.operator]
+    const { index } = state.functionQuery
+
+    if (index !== undefined) {
+      state.functionIndex = ++state.functionIndex || 0
+
+      if (index !== state.functionIndex) return
+    }
+
+    transform(state, ...args)
+  }
+
   #getOperator ({ functionQuery: { kind } }) {
     switch (kind) {
       case 'Async': return 'tracePromise'
@@ -72,7 +85,6 @@ class Transformer {
     }
   }
 
-  // TODO: Support index
   #fromFunctionQuery (functionQuery) {
     const { methodName, functionName, expressionName, className } = functionQuery
     const queries = []
