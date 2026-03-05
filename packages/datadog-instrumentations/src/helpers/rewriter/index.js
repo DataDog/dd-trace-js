@@ -43,6 +43,7 @@ const instrumentations = require('./instrumentations')
 
 const NODE_OPTIONS = getEnvironmentVariable('NODE_OPTIONS')
 
+/** @type {Record<string, Set<string>>} map of module base name to supported function query versions */
 const supported = {}
 const disabled = new Set()
 
@@ -54,6 +55,8 @@ let SourceMapGenerator
 
 function rewrite (content, filename, format) {
   if (!content) return content
+
+  const sourceType = format === 'module' ? 'module' : 'script'
 
   try {
     let ast
@@ -67,10 +70,10 @@ function rewrite (content, filename, format) {
       if (!filename.endsWith(`${name}/${filePath}`)) continue
       if (!satisfies(filename, filePath, versionRange)) continue
 
-      ast ??= parse(content.toString(), { loc: true, ranges: true, module: format === 'module' })
+      ast ??= parse(content.toString(), { range: true, sourceType })
 
       const query = astQuery || fromFunctionQuery(functionQuery)
-      const state = { ...inst, format, functionQuery }
+      const state = { ...inst, sourceType, functionQuery }
 
       traverse(ast, query, (...args) => transform(state, ...args))
     }
@@ -101,19 +104,21 @@ function disable (instrumentation) {
 function satisfies (filename, filePath, versions) {
   const [basename] = filename.split(filePath)
 
-  if (supported[basename] === undefined) {
+  supported[basename] ??= new Set()
+
+  if (!supported[basename].has(versions)) {
     try {
       const pkg = JSON.parse(readFileSync(
         join(basename, 'package.json'), 'utf8'
       ))
 
-      supported[basename] = semifies(pkg.version, versions)
-    } catch {
-      supported[basename] = false
-    }
+      if (semifies(pkg.version, versions)) {
+        supported[basename].add(versions)
+      }
+    } catch {}
   }
 
-  return supported[basename]
+  return supported[basename].has(versions)
 }
 
 // TODO: Support index

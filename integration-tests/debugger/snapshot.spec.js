@@ -4,7 +4,12 @@ const assert = require('node:assert/strict')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
-  const t = setup({ dependencies: ['fastify'] })
+  const t = setup({
+    dependencies: ['fastify'],
+    env: {
+      DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS: '100',
+    },
+  })
 
   describe('input messages', function () {
     describe('with snapshot', function () {
