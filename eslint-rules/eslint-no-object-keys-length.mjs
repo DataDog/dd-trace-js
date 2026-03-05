@@ -284,18 +284,24 @@ function findUseStrictNode (sourceCode) {
 
 /**
  * Compute the relative require path from the current file to the shared
- * isEmptyObject utility. Returns null if the file is outside the packages/
- * directory (auto-fix not supported).
+ * isEmptyObject utility.
  */
 function computeRequirePath (context) {
   const filename = context.filename ?? context.getFilename()
   if (!filename || filename === '<input>') return null
 
-  const packagesIdx = filename.lastIndexOf('/packages/')
-  if (packagesIdx === -1) return null
-
   const fromDir = path.dirname(filename)
-  const root = filename.slice(0, packagesIdx)
+
+  // Find repo root: look for /packages/ in the path, fall back to
+  // walking up to find eslint.config.mjs (i.e. the CWD ESLint runs from)
+  let root
+  const packagesIdx = filename.lastIndexOf('/packages/')
+  if (packagesIdx !== -1) {
+    root = filename.slice(0, packagesIdx)
+  } else {
+    root = context.cwd ?? context.getCwd()
+  }
+
   const utilAbsolute = path.join(root, 'packages', UTIL_MODULE)
   const relative = path.relative(fromDir, utilAbsolute)
 

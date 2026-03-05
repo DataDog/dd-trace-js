@@ -8,7 +8,6 @@
  * @returns {boolean}
  */
 module.exports = function isEmptyObject (obj) {
-  // eslint-disable-next-line no-restricted-syntax
   for (const key in obj) {
     if (Object.hasOwn(obj, key)) return false
   }

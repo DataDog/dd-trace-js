@@ -12,6 +12,8 @@ const { USER_KEEP } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
 const { getConfigFresh } = require('../helpers/config')
+const isEmptyObject = require('../../../datadog-core/src/utils/src/is-empty-object')
+
 function getAppSecConfig (options) {
   return getConfigFresh({ appsec: options }).appsec
 }
@@ -82,7 +84,7 @@ describe('reporter', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
 
-      assert.ok(Object.keys(result).length === 0) // eslint-disable-line eslint-rules/eslint-no-object-keys-length
+      assert.ok(isEmptyObject(result))
     })
 
     it('should filter and format headers from passlist', () => {

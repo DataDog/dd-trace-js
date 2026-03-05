@@ -1,9 +1,13 @@
 /* eslint-disable no-console */
 
+import { createRequire } from 'node:module'
 import { writeFileSync } from 'fs'
 import { inspect } from 'util'
 import { Octokit } from 'octokit'
 import pLimit from 'p-limit'
+
+const require = createRequire(import.meta.url)
+const isEmptyObject = require('../packages/datadog-core/src/utils/src/is-empty-object')
 
 const {
   BRANCH,
@@ -167,7 +171,7 @@ await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 const dateRange = startDate === endDate ? `on ${endDate}` : `from ${startDate} to ${endDate}`
 const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRange} (UTC)`
 
-if (Object.keys(flaky).length === 0) { // eslint-disable-line eslint-rules/eslint-no-object-keys-length
+if (isEmptyObject(flaky)) {
   console.log(`*No flaky ${logString}`)
 } else {
   const workflowSuccessRate = Number(((1 - flakeCount / totalCount) * 100).toFixed(1))

@@ -5,7 +5,9 @@ const assert = require('node:assert/strict')
 const path = require('path')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
+const isEmptyObject = require('../../packages/datadog-core/src/utils/src/is-empty-object')
 const ufcPayloads = require('./fixtures/ufc-payloads')
+
 const RC_PRODUCT = 'FFE_FLAGS'
 
 // Helper function to check exposure event structure
@@ -18,7 +20,7 @@ function validateExposureEvent (event, expectedFlag, expectedUser, expectedAttri
   assert.strictEqual(event.flag.key, expectedFlag)
   assert.strictEqual(event.subject.id, expectedUser)
 
-  if (Object.keys(expectedAttributes).length > 0) { // eslint-disable-line eslint-rules/eslint-no-object-keys-length
+  if (!isEmptyObject(expectedAttributes)) {
     assert.deepStrictEqual(event.subject.attributes, expectedAttributes)
   }
 

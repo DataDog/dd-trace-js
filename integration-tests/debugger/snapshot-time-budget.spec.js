@@ -5,6 +5,7 @@ const {
   DEFAULT_MAX_COLLECTION_SIZE,
   LARGE_OBJECT_SKIP_THRESHOLD,
 } = require('../../packages/dd-trace/src/debugger/devtools_client/snapshot/constants')
+const isEmptyObject = require('../../packages/datadog-core/src/utils/src/is-empty-object')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -182,8 +183,7 @@ describe('Dynamic Instrumentation', function () {
               // To make this test more future-proof, we also assert that the snapshot contains at least one local
               // property, though currently this is not necessary.
               assert.ok(
-                // eslint-disable-next-line eslint-rules/eslint-no-object-keys-length
-                Object.keys(captures.lines[t.breakpoint.line].locals).length > 0,
+                !isEmptyObject(captures.lines[t.breakpoint.line].locals),
                 'expected snapshot to contain at least one local property'
               )
             })

@@ -6,7 +6,9 @@ const http = require('http')
 const express = require('express')
 const bodyParser = require('body-parser')
 const msgpack = require('@msgpack/msgpack')
+
 const upload = require('multer')()
+const isEmptyObject = require('../../packages/datadog-core/src/utils/src/is-empty-object')
 
 const noop = () => {}
 
@@ -379,7 +381,7 @@ function buildExpressServer (agent) {
       return
     }
 
-    if (Object.keys(agent._rcFiles).length === 0) { // eslint-disable-line eslint-rules/eslint-no-object-keys-length
+    if (isEmptyObject(agent._rcFiles)) {
       // All config files have been removed, but the client has not yet been informed.
       // Return this custom result to let the client know.
       res.json({ client_configs: [] })
