@@ -35,7 +35,7 @@ function rewrite (content, filename, format) {
     // TODO: pass existing sourcemap as input for remapping
     const { code, map } = transformer.transform(content, moduleType)
 
-    if (!map) return { code }
+    if (!map) return code
 
     const inlineMap = Buffer.from(map).toString('base64')
 
