@@ -13,6 +13,9 @@
 /packages/dd-trace/*/standalone @DataDog/asm-js
 
 # Dynamic Instrumentation
+/benchmark/sirun/debugger @DataDog/debugger-nodejs
+
+/integration-tests/code-origin/ @DataDog/debugger-nodejs
 /integration-tests/code-origin-remote-config.spec.js @DataDog/debugger-nodejs
 /integration-tests/code-origin.spec.js @DataDog/debugger-nodejs
 /integration-tests/debugger/ @DataDog/debugger-nodejs
