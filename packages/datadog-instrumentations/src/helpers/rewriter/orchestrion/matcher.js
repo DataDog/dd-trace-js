@@ -10,7 +10,6 @@ const { Transformer } = require('./transformer')
 class InstrumentationMatcher {
   #configs = []
   #dc_module = null
-  #disabled = new Set()
   #transformers = {}
 
   constructor (configs, dc_module) {
@@ -18,17 +17,11 @@ class InstrumentationMatcher {
     this.#dc_module = dc_module || 'diagnostics_channel'
   }
 
-  disable (module_name) {
-    this.#disabled.add(module_name)
-  }
-
   free () {
     this.#transformers = {}
   }
 
   getTransformer (module_name, version, file_path) {
-    if (this.#disabled.has(module_name)) return
-
     const id = `${module_name}/${file_path}@${version}`
 
     if (this.#transformers[id]) return this.#transformers[id]
