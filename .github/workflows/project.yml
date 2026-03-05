@@ -228,10 +228,12 @@ jobs:
 
           test -f "${{ runner.temp }}/yarn-lock-artifact/yarn.lock"
           sha="$(gh api -q '.sha' "repos/${OWNER}/${REPO}/contents/yarn.lock?ref=${BRANCH}")"
-          content="$(base64 -w 0 "${{ runner.temp }}/yarn-lock-artifact/yarn.lock")"
+          base64 -w 0 "${{ runner.temp }}/yarn-lock-artifact/yarn.lock" > "${{ runner.temp }}/yarn-lock-b64.txt"
 
-          gh api -X PUT "repos/${OWNER}/${REPO}/contents/yarn.lock" \
-            -f message="chore: deduplicate yarn.lock" \
-            -f content="${content}" \
-            -f sha="${sha}" \
-            -f branch="${BRANCH}"
+          jq -n \
+            --arg message "chore: deduplicate yarn.lock" \
+            --rawfile content "${{ runner.temp }}/yarn-lock-b64.txt" \
+            --arg sha "$sha" \
+            --arg branch "$BRANCH" \
+            '{message: $message, content: $content, sha: $sha, branch: $branch}' \
+          | gh api -X PUT "repos/${OWNER}/${REPO}/contents/yarn.lock" --input -
