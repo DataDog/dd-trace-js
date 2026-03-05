@@ -298,18 +298,25 @@ function wrapIterator (state, node, program) {
         return iter.then(result => {
           ctx.result = result;
 
-          ${channelVariable}.asyncStart.publish(ctx);
-          ${channelVariable}.asyncEnd.publish(ctx);
-
-          return wrap(result);
+          return ${channelVariable}.asyncStart.runStores(ctx, () => {
+            try {
+              return wrap(result);
+            } finally {
+              ${channelVariable}.asyncEnd.publish(ctx);
+            }
+          });
         }, err => {
           ctx.error = err;
 
           ${channelVariable}.error.publish(ctx);
-          ${channelVariable}.asyncStart.publish(ctx);
-          ${channelVariable}.asyncEnd.publish(ctx);
 
-          return Promise.reject(err);
+          return ${channelVariable}.asyncStart.runStores(ctx, () => {
+            try {
+              return Promise.reject(err);
+            } finally {
+              ${channelVariable}.asyncEnd.publish(ctx);
+            }
+          });
         });
       };
     }

@@ -51,6 +51,7 @@
     "@langchain/cohere": "1.0.1",
     "@langchain/core": "1.1.15",
     "@langchain/google-genai": "2.1.10",
+    "@langchain/langgraph": "1.2.0",
     "@langchain/openai": "1.2.2",
     "@node-redis/client": "1.0.6",
     "@openai/agents": "0.3.9",

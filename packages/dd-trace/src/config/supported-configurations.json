@@ -25,6 +25,7 @@
         "default": null
       }
     ],
+    "DD_TRACE_LANGCHAIN_LANGGRAPH_ENABLED": ["A"],
     "_DD_APM_TRACING_AGENTLESS_ENABLED": [
       {
         "implementation": "A",

@@ -698,4 +698,13 @@ export default [
       'import/no-extraneous-dependencies': 'off',
     },
   },
+  {
+    name: 'dd-trace/opentelemetry',
+    files: [
+      'packages/dd-trace/src/opentelemetry/**/*.js',
+    ],
+    rules: {
+      'n/no-missing-require': 'off',
+    },
+  },
 ]

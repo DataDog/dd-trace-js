@@ -131,6 +131,8 @@
     "version.js"
   ],
   "dependencies": {
+    "@langchain/core": "^1.1.30",
+    "@langchain/langgraph": "^1.2.0",
     "dc-polyfill": "^0.1.10",
     "import-in-the-middle": "^2.0.6"
   },
