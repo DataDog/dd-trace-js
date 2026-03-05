@@ -78,7 +78,7 @@ jobs:
         run: |
           set -e
 
-          echo "head_oid=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "head_oid=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
 
           if git diff --ignore-space-at-eol --exit-code LICENSE-3rdparty.csv; then
             echo "✅ LICENSE-3rdparty.csv is already up to date"
