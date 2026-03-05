@@ -6,7 +6,8 @@ import { getOwnership } from '@snyk/github-codeowners/dist/lib/ownership/index.j
 const dir = resolve(import.meta.dirname, '..')
 const strategy = FILE_DISCOVERY_STRATEGY.FILE_SYSTEM
 const filePaths = await getFilePaths(dir, strategy)
-const files = await getOwnership('CODEOWNERS', filePaths)
+const codeownersPath = resolve(dir, '.github/CODEOWNERS')
+const files = await getOwnership(codeownersPath, filePaths)
 
 const unloved = files.filter(f => f.owners.length === 0)
 const unlovedSpecs = unloved.filter(f => f.path.endsWith('.spec.js'))
