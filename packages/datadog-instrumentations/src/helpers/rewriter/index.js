@@ -48,7 +48,7 @@ function rewrite (content, filename, format) {
 }
 
 function disable (instrumentation) {
-  disabled.add(instrumentation.module.name)
+  disabled.add(instrumentation)
 }
 
 function getVersion (filename, filePath) {
