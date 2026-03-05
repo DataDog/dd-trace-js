@@ -191,6 +191,7 @@
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging
 
 # CI
+/.github/chainguard @DataDog/sdlc-security
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
 /.github/workflows/aiguard.yml @DataDog/asm-js
