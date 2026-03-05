@@ -115,7 +115,7 @@ async function printSummary (checkRuns) {
 
   await summary
     .addHeading('Checks Summary')
-    .addTable([header, body])
+    .addTable([header, ...body])
     .write()
 }
 
