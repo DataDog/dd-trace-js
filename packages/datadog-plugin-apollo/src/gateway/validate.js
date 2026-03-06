@@ -6,9 +6,9 @@ class ApolloGatewayValidatePlugin extends ApolloBasePlugin {
   static operation = 'validate'
   static prefix = 'tracing:apm:apollo:gateway:validate'
 
-  end (ctx) {
+  onEnd (ctx) {
     const result = ctx.result
-    const span = ctx.currentStore?.span
+    const span = ctx?.currentStore?.span
 
     if (!span) return
 
@@ -17,8 +17,6 @@ class ApolloGatewayValidatePlugin extends ApolloBasePlugin {
     }
 
     this.config.hooks.validate(span, ctx)
-
-    super.end(ctx)
   }
 }
 

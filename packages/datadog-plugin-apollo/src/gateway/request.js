@@ -52,7 +52,7 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     return ctx.currentStore
   }
 
-  asyncStart (ctx) {
+  onAsyncStart (ctx) {
     const errors = ctx?.result?.errors
     // apollo gateway catches certain errors and returns them in the result object
     // we want to capture these errors as spans
@@ -62,8 +62,6 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
 
     const span = ctx?.currentStore?.span
     this.config.hooks.request(span, ctx)
-
-    return super.asyncStart(ctx)
   }
 }
 

@@ -30,11 +30,9 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
     return ctx.currentStore
   }
 
-  asyncStart (ctx) {
+  onAsyncStart (ctx) {
     const span = ctx?.currentStore?.span
     this.config.hooks.fetch(span, ctx)
-
-    return super.asyncStart(ctx)
   }
 }
 

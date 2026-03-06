@@ -6,11 +6,12 @@ class ApolloGatewayExecutePlugin extends ApolloBasePlugin {
   static operation = 'execute'
   static prefix = 'tracing:apm:apollo:gateway:execute'
 
-  asyncStart (ctx) {
+  onAsyncStart (ctx) {
     const span = ctx?.currentStore?.span
-    this.config.hooks.execute(span, ctx)
 
-    return super.asyncStart(ctx)
+    if (!span) return
+
+    this.config.hooks.execute(span, ctx)
   }
 }
 

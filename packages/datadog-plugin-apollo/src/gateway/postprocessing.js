@@ -6,11 +6,9 @@ class ApolloGatewayPostProcessingPlugin extends ApolloBasePlugin {
   static operation = 'postprocessing'
   static prefix = 'tracing:apm:apollo:gateway:postprocessing'
 
-  asyncStart (ctx) {
+  onAsyncStart (ctx) {
     const span = ctx?.currentStore?.span
     this.config.hooks.postprocessing(span, ctx)
-
-    return super.asyncStart(ctx)
   }
 }
 
