@@ -252,6 +252,13 @@ jobs:
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Copy emulator config file
+        run: |
+          docker cp \
+          ${{ github.workspace }}/packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json \
+          ${{ job.services.azureservicebusemulator.id }}:/ServiceBus_Emulator/ConfigFiles/Config.json
+      - name: Restart emulator to pick up config changes
+        run: docker restart ${{ job.services.azureservicebusemulator.id }}
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
