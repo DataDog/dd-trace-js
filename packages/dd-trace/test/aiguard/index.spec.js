@@ -189,6 +189,64 @@ describe('AIGuard SDK', () => {
     })
   }
 
+  it('test evaluate with sds_findings', async () => {
+    const sdsFindings = [
+      {
+        rule_display_name: 'Email Address',
+        rule_tag: 'email_address',
+        category: 'pii',
+        matched_text: 'john.smith@acmebank.com',
+        location: { start_index: 35, end_index_exclusive: 58, path: 'messages[0].content' },
+      },
+      {
+        rule_display_name: 'Social Security Number',
+        rule_tag: 'social_security_number',
+        category: 'pii',
+        matched_text: '456-78-9012',
+        location: { start_index: 73, end_index_exclusive: 84, path: 'messages[0].content' },
+      },
+    ]
+    const messages = [{ role: 'user', content: 'My SSN is 456-78-9012 and email john.smith@acmebank.com' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ALLOW',
+            reason: 'No rule match.',
+            tags: [],
+            sds_findings: sdsFindings,
+            is_blocking_enabled: true,
+          },
+        },
+      },
+    })
+
+    await aiguard.evaluate(messages)
+
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
+      { messages, sds: sdsFindings }
+    )
+  })
+
+  it('test evaluate with empty sds_findings', async () => {
+    const messages = [{ role: 'user', content: 'Hello' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: { action: 'ALLOW', reason: 'OK', tags: [], sds_findings: [], is_blocking_enabled: false },
+        },
+      },
+    })
+
+    await aiguard.evaluate(messages)
+
+    await assertAIGuardSpan(
+      { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
+      { messages }
+    )
+  })
+
   it('test evaluate with API error', async () => {
     const errors = [{ status: 400, title: 'Internal server error' }]
     mockFetch({
