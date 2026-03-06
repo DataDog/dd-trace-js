@@ -16,6 +16,7 @@ const SAMPLING_KNUTH_FACTOR = 1_111_111_111_111_111_111n
  * This class uses a deterministic sampling algorithm that is consistent across all languages.
  */
 class Sampler {
+  #rate = 0
   #threshold = 0n
 
   /**
@@ -24,7 +25,7 @@ class Sampler {
   constructor (rate) {
     // TODO: Should this be moved up to the calling parts?
     rate = Math.min(Math.max(rate, 0), 1)
-    this._rate = rate
+    this.#rate = rate
     this.#threshold = BigInt(Math.floor(rate * MAX_TRACE_ID))
   }
 
@@ -32,7 +33,7 @@ class Sampler {
    * @returns {number}
    */
   rate () {
-    return this._rate
+    return this.#rate
   }
 
   get threshold () {
@@ -46,11 +47,11 @@ class Sampler {
    * @returns {boolean} `true` if the trace/span should be sampled, otherwise `false`.
    */
   isSampled (span) {
-    if (this._rate === 1) {
+    if (this.#rate === 1) {
       return true
     }
 
-    if (this._rate === 0) {
+    if (this.#rate === 0) {
       return false
     }
 

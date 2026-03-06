@@ -10,18 +10,19 @@
  * it uses a deterministic sampling algorithm consistent across all languages.
  */
 class RandomSampler {
+  #rate
   /**
    * @param {number} rate
    */
   constructor (rate) {
-    this._rate = rate
+    this.#rate = rate
   }
 
   /**
    * @returns {number}
    */
   rate () {
-    return this._rate
+    return this.#rate
   }
 
   /**
@@ -33,7 +34,7 @@ class RandomSampler {
    * @returns {boolean} `true` if the operation should be sampled, otherwise `false`.
    */
   isSampled () {
-    return this._rate === 1 || Math.random() < this._rate
+    return this.#rate === 1 || Math.random() < this.#rate
   }
 }
 

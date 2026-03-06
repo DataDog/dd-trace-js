@@ -3,32 +3,34 @@
 const { DDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 
 class Histogram {
+  #sketch
+
   constructor () {
     this.reset()
   }
 
-  get min () { return this._sketch.count === 0 ? 0 : this._sketch.min }
-  get max () { return this._sketch.count === 0 ? 0 : this._sketch.max }
-  get avg () { return this._sketch.count === 0 ? 0 : this._sketch.sum / this._sketch.count }
-  get sum () { return this._sketch.sum }
-  get count () { return this._sketch.count }
+  get min () { return this.#sketch.count === 0 ? 0 : this.#sketch.min }
+  get max () { return this.#sketch.count === 0 ? 0 : this.#sketch.max }
+  get avg () { return this.#sketch.count === 0 ? 0 : this.#sketch.sum / this.#sketch.count }
+  get sum () { return this.#sketch.sum }
+  get count () { return this.#sketch.count }
   get median () { return this.percentile(50) }
   get p95 () { return this.percentile(95) }
 
   percentile (percentile) {
-    return this._sketch.getValueAtQuantile(percentile / 100) || 0
+    return this.#sketch.getValueAtQuantile(percentile / 100) || 0
   }
 
   merge (histogram) {
-    return this._sketch.merge(histogram._sketch)
+    return this.#sketch.merge(histogram.#sketch)
   }
 
   record (value) {
-    this._sketch.accept(value)
+    this.#sketch.accept(value)
   }
 
   reset () {
-    this._sketch = new DDSketch()
+    this.#sketch = new DDSketch()
   }
 }
 
