@@ -276,6 +276,14 @@ class SensitiveHandler {
     }
   }
 
+  get _namePattern () {
+    return this.#namePattern
+  }
+
+  get _valuePattern () {
+    return this.#valuePattern
+  }
+
   setRedactionPatterns (redactionNamePattern, redactionValuePattern) {
     if (redactionNamePattern) {
       try {

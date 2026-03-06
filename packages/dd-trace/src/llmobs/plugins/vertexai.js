@@ -11,8 +11,6 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
   static id = 'vertexai'
   static prefix = 'tracing:apm:vertexai:request'
 
-  #tagger
-
   getLLMObsSpanRegisterOptions (ctx) {
     const history = ctx.instance?.historyInternal || []
     ctx.history = history
@@ -38,9 +36,9 @@ class VertexAILLMObsPlugin extends LLMObsPlugin {
     const outputMessages = extractOutputMessages(result)
     const metrics = extractMetrics(result)
 
-    this.#tagger.tagLLMIO(span, inputMessages, outputMessages)
-    this.#tagger.tagMetadata(span, metadata)
-    this.#tagger.tagMetrics(span, metrics)
+    this._tagger.tagLLMIO(span, inputMessages, outputMessages)
+    this._tagger.tagMetadata(span, metadata)
+    this._tagger.tagMetrics(span, metrics)
   }
 }
 

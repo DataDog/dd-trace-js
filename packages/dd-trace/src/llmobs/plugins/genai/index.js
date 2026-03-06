@@ -17,8 +17,6 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
   static integration = 'google_genai'
   static prefix = 'tracing:apm:google:genai:request'
 
-  #tagger
-
   constructor () {
     super(...arguments)
 
@@ -69,7 +67,7 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
     if (!error && response) {
       const metrics = extractMetrics(response)
-      this.#tagger.tagMetrics(span, metrics)
+      this._tagger.tagMetrics(span, metrics)
     }
   }
 
@@ -79,27 +77,27 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
     const inputMessages = formatInputMessages(inputs.contents)
 
     const metadata = extractMetadata(config)
-    this.#tagger.tagMetadata(span, metadata)
+    this._tagger.tagMetadata(span, metadata)
 
     if (error) {
-      this.#tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
     const outputMessages = formatOutputMessages(response, isStreaming)
-    this.#tagger.tagLLMIO(span, inputMessages, outputMessages)
+    this._tagger.tagLLMIO(span, inputMessages, outputMessages)
   }
 
   #tagEmbedding (span, inputs, response, error) {
     const embeddingInput = formatEmbeddingInput(inputs.contents)
 
     if (error) {
-      this.#tagger.tagEmbeddingIO(span, embeddingInput)
+      this._tagger.tagEmbeddingIO(span, embeddingInput)
       return
     }
 
     const embeddingOutput = formatEmbeddingOutput(response)
-    this.#tagger.tagEmbeddingIO(span, embeddingInput, embeddingOutput)
+    this._tagger.tagEmbeddingIO(span, embeddingInput, embeddingOutput)
   }
 }
 
