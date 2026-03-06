@@ -36,6 +36,11 @@ const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
 
 class CiVisibilityExporter extends BufferingExporter {
+  #canUseCiVisProtocol
+  #gitUploadPromise
+  #canUseCiVisProtocolPromise
+  #libraryConfig
+
   constructor (config) {
     super(config)
     this._timer = undefined
@@ -44,7 +49,7 @@ class CiVisibilityExporter extends BufferingExporter {
     this._coverageBuffer = []
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
-    this._canUseCiVisProtocol = false
+    this.#canUseCiVisProtocol = false
 
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
@@ -54,17 +59,17 @@ class CiVisibilityExporter extends BufferingExporter {
       this._resolveCanUseCiVisProtocol(false)
     }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT).unref()
 
-    this._gitUploadPromise = new Promise(resolve => {
+    this.#gitUploadPromise = new Promise(resolve => {
       this._resolveGit = (err) => {
         clearTimeout(gitUploadTimeoutId)
         resolve(err)
       }
     })
 
-    this._canUseCiVisProtocolPromise = new Promise(resolve => {
+    this.#canUseCiVisProtocolPromise = new Promise(resolve => {
       this._resolveCanUseCiVisProtocol = (canUseCiVisProtocol) => {
         clearTimeout(canUseCiVisProtocolTimeoutId)
-        this._canUseCiVisProtocol = canUseCiVisProtocol
+        this.#canUseCiVisProtocol = canUseCiVisProtocol
         resolve(canUseCiVisProtocol)
       }
     })
@@ -85,31 +90,31 @@ class CiVisibilityExporter extends BufferingExporter {
 
   shouldRequestSkippableSuites () {
     return !!(this._config.isIntelligentTestRunnerEnabled &&
-      this._canUseCiVisProtocol &&
-      this._libraryConfig?.isSuitesSkippingEnabled)
+      this.#canUseCiVisProtocol &&
+      this.#libraryConfig?.isSuitesSkippingEnabled)
   }
 
   shouldRequestKnownTests () {
     return !!(
-      this._canUseCiVisProtocol &&
-      this._libraryConfig?.isKnownTestsEnabled
+      this.#canUseCiVisProtocol &&
+      this.#libraryConfig?.isKnownTestsEnabled
     )
   }
 
   shouldRequestTestManagementTests () {
     return !!(
-      this._canUseCiVisProtocol &&
+      this.#canUseCiVisProtocol &&
       this._config.isTestManagementEnabled &&
-      this._libraryConfig?.isTestManagementEnabled
+      this.#libraryConfig?.isTestManagementEnabled
     )
   }
 
   canReportSessionTraces () {
-    return this._canUseCiVisProtocol
+    return this.#canUseCiVisProtocol
   }
 
   canReportCodeCoverage () {
-    return this._canUseCiVisProtocol
+    return this.#canUseCiVisProtocol
   }
 
   getRequestConfiguration (testConfiguration) {
@@ -126,12 +131,12 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   // We can't call the skippable endpoint until git upload has finished,
-  // hence the this._gitUploadPromise.then
+  // hence the this.#gitUploadPromise.then
   getSkippableSuites (testConfiguration, callback) {
     if (!this.shouldRequestSkippableSuites()) {
       return callback(null, [])
     }
-    this._gitUploadPromise.then(gitUploadError => {
+    this.#gitUploadPromise.then(gitUploadError => {
       if (gitUploadError) {
         return callback(gitUploadError, [])
       }
@@ -155,12 +160,12 @@ class CiVisibilityExporter extends BufferingExporter {
 
   /**
    * We can't request library configuration until we know whether we can use the
-   * CI Visibility Protocol, hence the this._canUseCiVisProtocol promise.
+   * CI Visibility Protocol, hence the this.#canUseCiVisProtocol promise.
    */
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
     this.sendGitMetadata(repositoryUrl)
-    this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
+    this.#canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
         return callback(null, {})
       }
@@ -168,27 +173,27 @@ class CiVisibilityExporter extends BufferingExporter {
 
       getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
         /**
-         * **Important**: this._libraryConfig remains empty in testing frameworks
+         * **Important**: this.#libraryConfig remains empty in testing frameworks
          * where the tests run in a subprocess, like Jest,
          * because `getLibraryConfiguration` is called only once in the main process.
          */
-        this._libraryConfig = this.filterConfiguration(libraryConfig)
+        this.#libraryConfig = this.filterConfiguration(libraryConfig)
 
         if (err) {
           callback(err, {})
         } else if (libraryConfig?.requireGit) {
           // If the backend requires git, we'll wait for the upload to finish and request settings again
-          this._gitUploadPromise.then(gitUploadError => {
+          this.#gitUploadPromise.then(gitUploadError => {
             if (gitUploadError) {
               return callback(gitUploadError, {})
             }
             getLibraryConfigurationRequest(configuration, (err, finalLibraryConfig) => {
-              this._libraryConfig = this.filterConfiguration(finalLibraryConfig)
-              callback(err, this._libraryConfig)
+              this.#libraryConfig = this.filterConfiguration(finalLibraryConfig)
+              callback(err, this.#libraryConfig)
             })
           })
         } else {
-          callback(null, this._libraryConfig)
+          callback(null, this.#libraryConfig)
         }
       })
     })
@@ -241,7 +246,7 @@ class CiVisibilityExporter extends BufferingExporter {
     if (!this._config.isGitUploadEnabled) {
       return
     }
-    this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
+    this.#canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
         return
       }
@@ -384,7 +389,7 @@ class CiVisibilityExporter extends BufferingExporter {
     if (this._writer?.addMetadataTags) {
       this._writer.addMetadataTags(tags)
     } else {
-      this._canUseCiVisProtocolPromise.then(() => {
+      this.#canUseCiVisProtocolPromise.then(() => {
         if (this._writer?.addMetadataTags) {
           this._writer.addMetadataTags(tags)
         }

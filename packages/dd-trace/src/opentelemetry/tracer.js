@@ -48,18 +48,20 @@ function normalizeLinkContext (context) {
 }
 
 class Tracer {
+  #tracerProvider
+  #spanLimits
+
   constructor (library, config, tracerProvider) {
     this._sampler = new Sampler()
-    this._config = config
-    this._tracerProvider = tracerProvider
+    this.#tracerProvider = tracerProvider
     // Is there a reason this is public?
     this.instrumentationLibrary = library
     this._isOtelLibrary = library?.name?.startsWith('@opentelemetry/instrumentation-')
-    this._spanLimits = {}
+    this.#spanLimits = {}
   }
 
   get resource () {
-    return this._tracerProvider.resource
+    return this.#tracerProvider.resource
   }
 
   _createSpanContextFromParent (parentSpanContext) {
@@ -214,12 +216,12 @@ class Tracer {
   }
 
   getActiveSpanProcessor () {
-    return this._tracerProvider.getActiveSpanProcessor()
+    return this.#tracerProvider.getActiveSpanProcessor()
   }
 
   // not used in our codebase but needed for compatibility. See issue #1244
   getSpanLimits () {
-    return this._spanLimits
+    return this.#spanLimits
   }
 }
 

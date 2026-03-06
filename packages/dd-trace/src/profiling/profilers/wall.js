@@ -106,6 +106,11 @@ function ensureChannelsActivated (asyncContextFrameEnabled) {
 }
 
 class NativeWallProfiler {
+  #profilerState
+  #lastSampleCount
+  #currentContext
+  #contextCountGaugeUpdater
+
   #asyncContextFrameEnabled = false
   #captureSpanData = false
   #codeHotspotsEnabled = false
@@ -192,8 +197,8 @@ class NativeWallProfiler {
       }
 
       if (this.#captureSpanData) {
-        this._profilerState = this.#pprof.time.getState()
-        this._lastSampleCount = 0
+        this.#profilerState = this.#pprof.time.getState()
+        this.#lastSampleCount = 0
 
         ensureChannelsActivated(this.#asyncContextFrameEnabled)
 
@@ -214,12 +219,12 @@ class NativeWallProfiler {
     const asyncContextsLiveGauge = profilerTelemetryMetrics.gauge('wall.async_contexts_live')
     const asyncContextsUsedGauge = profilerTelemetryMetrics.gauge('wall.async_contexts_used')
 
-    this._contextCountGaugeUpdater = setInterval(() => {
+    this.#contextCountGaugeUpdater = setInterval(() => {
       const { totalAsyncContextCount, usedAsyncContextCount } = this.#pprof.time.getMetrics()
       asyncContextsLiveGauge.mark(totalAsyncContextCount)
       asyncContextsUsedGauge.mark(usedAsyncContextCount)
     }, this.#telemetryHeartbeatIntervalMillis)
-    this._contextCountGaugeUpdater.unref()
+    this.#contextCountGaugeUpdater.unref()
   }
 
   #enter () {
@@ -245,16 +250,16 @@ class NativeWallProfiler {
     if (this.#asyncContextFrameEnabled) {
       this.#pprof.time.setContext(sampleContext)
     } else {
-      const sampleCount = this._profilerState[kSampleCount]
-      if (sampleCount !== this._lastSampleCount) {
-        this._lastSampleCount = sampleCount
-        const context = this._currentContext.ref
+      const sampleCount = this.#profilerState[kSampleCount]
+      if (sampleCount !== this.#lastSampleCount) {
+        this.#lastSampleCount = sampleCount
+        const context = this.#currentContext.ref
         this.#setNewContext()
 
         updateContext(context)
       }
 
-      this._currentContext.ref = sampleContext
+      this.#currentContext.ref = sampleContext
     }
   }
 
@@ -297,7 +302,7 @@ class NativeWallProfiler {
 
   #setNewContext () {
     this.#pprof.time.setContext(
-      this._currentContext = {
+      this.#currentContext = {
         ref: {},
       }
     )
@@ -325,7 +330,7 @@ class NativeWallProfiler {
     if (this.#captureSpanData && !this.#asyncContextFrameEnabled) {
       // update last sample context if needed
       this.#enter()
-      this._lastSampleCount = 0
+      this.#lastSampleCount = 0
     }
 
     // Mark thread labels and trace endpoint label as good deduplication candidates
@@ -340,14 +345,14 @@ class NativeWallProfiler {
         this.#reportV8bug(v8BugDetected === 1)
       }
     } else {
-      clearInterval(this._contextCountGaugeUpdater)
+      clearInterval(this.#contextCountGaugeUpdater)
       if (this.#captureSpanData) {
         if (!this.#asyncContextFrameEnabled) {
           beforeCh.unsubscribe(this.#boundEnter)
         }
         enterCh.unsubscribe(this.#boundEnter)
         spanFinishCh.unsubscribe(this.#boundSpanFinished)
-        this._profilerState = undefined
+        this.#profilerState = undefined
       }
       this.#started = false
     }

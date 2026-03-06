@@ -65,8 +65,10 @@ const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
 
 class TextMapPropagator {
+  #config
+
   constructor (config) {
-    this._config = config
+    this.#config = config
   }
 
   inject (spanContext, carrier) {
@@ -99,7 +101,7 @@ class TextMapPropagator {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => {
       const keys = JSON.stringify(pick(carrier, logKeys))
-      const styles = this._config.tracePropagationStyle.extract.join(', ')
+      const styles = this.#config.tracePropagationStyle.extract.join(', ')
 
       return `Extract from carrier (${styles}): ${keys}.`
     })
@@ -135,7 +137,7 @@ class TextMapPropagator {
   }
 
   _injectBaggageItems (spanContext, carrier) {
-    if (this._config.legacyBaggageEnabled) {
+    if (this.#config.legacyBaggageEnabled) {
       const baggageItems = spanContext?._baggageItems
       if (baggageItems) {
         for (const key of Object.keys(baggageItems)) {
@@ -176,13 +178,13 @@ class TextMapPropagator {
         byteCounter += Buffer.byteLength(item)
 
         // Check for item count limit exceeded
-        if (itemCounter > this._config.baggageMaxItems) {
+        if (itemCounter > this.#config.baggageMaxItems) {
           tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_item_count_exceeded']).inc()
           break
         }
 
         // Check for byte count limit exceeded
-        if (byteCounter > this._config.baggageMaxBytes) {
+        if (byteCounter > this.#config.baggageMaxBytes) {
           tracerMetrics.count('context_header.truncated', ['truncation_reason:baggage_byte_count_exceeded']).inc()
           break
         }
@@ -201,7 +203,7 @@ class TextMapPropagator {
   _injectTags (spanContext, carrier) {
     const trace = spanContext._trace
 
-    if (this._config.tagsHeaderMaxLength === 0) {
+    if (this.#config.tagsHeaderMaxLength === 0) {
       log.debug('Trace tag propagation is disabled, skipping injection.')
       return
     }
@@ -220,7 +222,7 @@ class TextMapPropagator {
 
     const header = tags.join(',')
 
-    if (header.length > this._config.tagsHeaderMaxLength) {
+    if (header.length > this.#config.tagsHeaderMaxLength) {
       log.error('Trace tags from span are too large, skipping injection.')
     } else if (header) {
       carrier[tagsKey] = header
@@ -311,7 +313,7 @@ class TextMapPropagator {
   }
 
   _hasPropagationStyle (mode, name) {
-    return this._config.tracePropagationStyle[mode].includes(name)
+    return this.#config.tracePropagationStyle[mode].includes(name)
   }
 
   _hasTraceIdConflict (w3cSpanContext, firstSpanContext) {
@@ -350,7 +352,7 @@ class TextMapPropagator {
   _extractSpanContext (carrier) {
     let context = null
     let style = ''
-    for (const extractor of this._config.tracePropagationStyle.extract) {
+    for (const extractor of this.#config.tracePropagationStyle.extract) {
       let extractedContext = null
       switch (extractor) {
         case 'datadog':
@@ -363,7 +365,7 @@ class TextMapPropagator {
           extractedContext = this._extractB3SingleContext(carrier)
           break
         case 'b3':
-          extractedContext = this._config.tracePropagationStyle.otelPropagators
+          extractedContext = this.#config.tracePropagationStyle.otelPropagators
             // TODO: should match "b3 single header" in next major
             ? this._extractB3SingleContext(carrier)
             : this._extractB3MultiContext(carrier)
@@ -382,7 +384,7 @@ class TextMapPropagator {
       if (context === null) {
         context = extractedContext
         style = extractor
-        if (this._config.tracePropagationExtractFirst) {
+        if (this.#config.tracePropagationExtractFirst) {
           break
         }
       } else {
@@ -402,10 +404,10 @@ class TextMapPropagator {
       }
     }
 
-    if (this._config.tracePropagationBehaviorExtract === 'ignore') {
+    if (this.#config.tracePropagationBehaviorExtract === 'ignore') {
       context._links = []
     } else {
-      if (this._config.tracePropagationBehaviorExtract === 'restart') {
+      if (this.#config.tracePropagationBehaviorExtract === 'restart') {
         context._links = []
         context._links.push({
           context,
@@ -431,7 +433,7 @@ class TextMapPropagator {
     this._extractSamplingPriority(carrier, spanContext)
     this._extractTags(carrier, spanContext)
 
-    if (this._config.tracePropagationExtractFirst) return spanContext
+    if (this.#config.tracePropagationExtractFirst) return spanContext
 
     const tc = this._extractTraceparentContext(carrier)
 
@@ -655,7 +657,7 @@ class TextMapPropagator {
   }
 
   _extractLegacyBaggageItems (carrier, spanContext) {
-    if (this._config.legacyBaggageEnabled) {
+    if (this.#config.legacyBaggageEnabled) {
       for (const key of Object.keys(carrier)) {
         const match = key.match(baggageExpr)
 
@@ -670,7 +672,7 @@ class TextMapPropagator {
     if (!this._hasPropagationStyle('extract', 'baggage')) return
     if (!carrier?.baggage) return
     const baggages = carrier.baggage.split(',')
-    const baggageTagKeys = new Set(this._config.baggageTagKeys)
+    const baggageTagKeys = new Set(this.#config.baggageTagKeys)
     const tagAllKeys = baggageTagKeys.has('*')
     for (const keyValue of baggages) {
       if (!keyValue) continue
@@ -728,9 +730,9 @@ class TextMapPropagator {
 
     const trace = spanContext._trace
 
-    if (this._config.tagsHeaderMaxLength === 0) {
+    if (this.#config.tagsHeaderMaxLength === 0) {
       log.debug('Trace tag propagation is disabled, skipping extraction.')
-    } else if (carrier[tagsKey].length > this._config.tagsHeaderMaxLength) {
+    } else if (carrier[tagsKey].length > this.#config.tagsHeaderMaxLength) {
       log.error('Trace tags from carrier are too large, skipping extraction.')
     } else {
       const pairs = carrier[tagsKey].split(',')

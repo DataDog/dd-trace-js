@@ -9,13 +9,20 @@ const { availableParallelism, libuvThreadPoolSize } = require('../libuv-size')
 const processTags = require('../../process-tags')
 
 class EventSerializer {
+  #env
+  #host
+  #service
+  #appVersion
+  #libraryInjected
+  #activation
+
   constructor ({ env, host, service, version, libraryInjected, activation } = {}) {
-    this._env = env
-    this._host = host
-    this._service = service
-    this._appVersion = version
-    this._libraryInjected = !!libraryInjected
-    this._activation = activation || 'unknown'
+    this.#env = env
+    this.#host = host
+    this.#service = service
+    this.#appVersion = version
+    this.#libraryInjected = !!libraryInjected
+    this.#activation = activation || 'unknown'
   }
 
   typeToFile (type) {
@@ -43,21 +50,21 @@ class EventSerializer {
       endpoint_counts: endpointCounts,
       info: {
         application: {
-          env: this._env,
-          service: this._service,
+          env: this.#env,
+          service: this.#service,
           start_time: new Date(perf.nodeTiming.nodeStart + perf.timeOrigin).toISOString(),
-          version: this._appVersion,
+          version: this.#appVersion,
         },
         platform: {
-          hostname: this._host,
+          hostname: this.#host,
           kernel_name: os.type(),
           kernel_release: os.release(),
           kernel_version: os.version(),
         },
         profiler: {
-          activation: this._activation,
+          activation: this.#activation,
           ssi: {
-            mechanism: this._libraryInjected ? 'injected_agent' : 'none',
+            mechanism: this.#libraryInjected ? 'injected_agent' : 'none',
           },
           version,
           ...infos,

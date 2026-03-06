@@ -12,22 +12,26 @@ const { checkUserAndSetUser, blockRequest } = require('./user_blocking')
 const { setUser } = require('./set_user')
 
 class EventTrackingV2 {
+  #tracer
+
   constructor (tracer) {
-    this._tracer = tracer
+    this.#tracer = tracer
   }
 
   trackUserLoginSuccess (login, user, metadata) {
-    trackUserLoginSuccessV2(this._tracer, login, user, metadata)
+    trackUserLoginSuccessV2(this.#tracer, login, user, metadata)
   }
 
   trackUserLoginFailure (login, exists, metadata) {
-    trackUserLoginFailureV2(this._tracer, login, exists, metadata)
+    trackUserLoginFailureV2(this.#tracer, login, exists, metadata)
   }
 }
 
 class AppsecSdk {
+  #tracer
+
   constructor (tracer, config) {
-    this._tracer = tracer
+    this.#tracer = tracer
     if (config) {
       setTemplates(config)
     }
@@ -36,27 +40,27 @@ class AppsecSdk {
   }
 
   trackUserLoginSuccessEvent (user, metadata) {
-    return trackUserLoginSuccessEvent(this._tracer, user, metadata)
+    return trackUserLoginSuccessEvent(this.#tracer, user, metadata)
   }
 
   trackUserLoginFailureEvent (userId, exists, metadata) {
-    return trackUserLoginFailureEvent(this._tracer, userId, exists, metadata)
+    return trackUserLoginFailureEvent(this.#tracer, userId, exists, metadata)
   }
 
   trackCustomEvent (eventName, metadata) {
-    return trackCustomEvent(this._tracer, eventName, metadata)
+    return trackCustomEvent(this.#tracer, eventName, metadata)
   }
 
   isUserBlocked (user) {
-    return checkUserAndSetUser(this._tracer, user)
+    return checkUserAndSetUser(this.#tracer, user)
   }
 
   blockRequest (req, res) {
-    return blockRequest(this._tracer, req, res)
+    return blockRequest(this.#tracer, req, res)
   }
 
   setUser (user) {
-    return setUser(this._tracer, user)
+    return setUser(this.#tracer, user)
   }
 }
 

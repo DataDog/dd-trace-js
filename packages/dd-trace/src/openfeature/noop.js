@@ -8,12 +8,14 @@ const { NOOP_REASON } = require('./constants/constants')
  * https://openfeature.dev/docs/reference/concepts/provider/
  */
 class NoopFlaggingProvider {
+  #config
+
   /**
    * @param {object} [noopTracer] - Optional noop tracer instance
    */
   constructor (noopTracer) {
     this._tracer = noopTracer
-    this._config = {}
+    this.#config = {}
     this.metadata = { name: 'NoopFlaggingProvider' }
     this.status = 'NOT_READY'
     this.runsOn = 'server'
@@ -79,14 +81,14 @@ class NoopFlaggingProvider {
    * @returns {object} Current configuration
    */
   getConfiguration () {
-    return this._config
+    return this.#config
   }
 
   /**
    * @param {object} config - Configuration to set
    */
   setConfiguration (config) {
-    this._config = config
+    this.#config = config
   }
 
   /**

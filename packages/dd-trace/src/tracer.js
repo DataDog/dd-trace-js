@@ -17,12 +17,15 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
+  #dataStreamsProcessor
+  #dataStreamsManager
+  #scope
   constructor (config, prioritySampler) {
     super(config, prioritySampler)
-    this._dataStreamsProcessor = new DataStreamsProcessor(config)
-    this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
+    this.#dataStreamsProcessor = new DataStreamsProcessor(config)
+    this.#dataStreamsManager = new DataStreamsManager(this.#dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
-    this._scope = new Scope()
+    this.#scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
 
@@ -46,15 +49,15 @@ class DatadogTracer extends Tracer {
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
   setCheckpoint (edgeTags, span, payloadSize = 0) {
-    return this._dataStreamsManager.setCheckpoint(edgeTags, span, payloadSize)
+    return this.#dataStreamsManager.setCheckpoint(edgeTags, span, payloadSize)
   }
 
   decodeDataStreamsContext (carrier) {
-    return this._dataStreamsManager.decodeDataStreamsContext(carrier)
+    return this.#dataStreamsManager.decodeDataStreamsContext(carrier)
   }
 
   setOffset (offsetData) {
-    return this._dataStreamsProcessor.setOffset(offsetData)
+    return this.#dataStreamsProcessor.setOffset(offsetData)
   }
 
   trace (name, options, fn) {
@@ -126,11 +129,11 @@ class DatadogTracer extends Tracer {
 
   setUrl (url) {
     this._exporter.setUrl(url)
-    this._dataStreamsProcessor.setUrl(url)
+    this.#dataStreamsProcessor.setUrl(url)
   }
 
   scope () {
-    return this._scope
+    return this.#scope
   }
 
   getRumData () {

@@ -4,14 +4,17 @@ const { getAgentUrl } = require('../../agent/url')
 const { Writer } = require('./writer')
 
 class SpanStatsExporter {
+  #url
+  #writer
+
   constructor (config) {
-    this._url = getAgentUrl(config)
-    this._writer = new Writer({ url: this._url })
+    this.#url = getAgentUrl(config)
+    this.#writer = new Writer({ url: this.#url })
   }
 
   export (payload) {
-    this._writer.append(payload)
-    this._writer.flush()
+    this.#writer.append(payload)
+    this.#writer.flush()
   }
 }
 

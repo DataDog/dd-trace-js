@@ -11,64 +11,69 @@ const propagationHash = require('../../propagation-hash')
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 class AgentWriter extends BaseWriter {
+  #prioritySampler
+  #lookup
+  #protocolVersion
+  #headers
+
   constructor (...args) {
     super(...args)
-    const { prioritySampler, lookup, protocolVersion, headers, config = {} } = args[0]
+    const { prioritySampler, lookup, protocolVersion, headers } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 
-    this._prioritySampler = prioritySampler
-    this._lookup = lookup
-    this._protocolVersion = protocolVersion
-    this._headers = headers
-    this._config = config
+    this.#prioritySampler = prioritySampler
+    this.#lookup = lookup
+    this.#protocolVersion = protocolVersion
+    this.#headers = headers
     this._encoder = new AgentEncoder(this)
   }
 
   _sendPayload (data, count, done) {
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
-    const { _headers, _lookup, _protocolVersion, _url } = this
-    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status, headers) => {
-      if (status) {
-        runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
-        runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
-      } else if (err) {
-        runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
+    makeRequest(
+      this.#protocolVersion, data, count, this._url,
+      this.#headers, this.#lookup, true, (err, res, status, headers) => {
+        if (status) {
+          runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
+          runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
+        } else if (err) {
+          runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
+          runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
 
-        if (err.code) {
-          runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+          if (err.code) {
+            runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+          }
         }
-      }
 
-      if (err) {
-        log.errorWithoutTelemetry('Error sending payload to the agent (status code: %s)', err.status, err)
+        if (err) {
+          log.errorWithoutTelemetry('Error sending payload to the agent (status code: %s)', err.status, err)
+          done()
+          return
+        }
+
+        log.debug('Response from the agent: %s', res)
+
+        // Capture container tags hash from agent response headers
+        // The hash is sent by the agent only when Datadog-Container-ID is present in the request
+        // (Datadog-Container-ID is automatically injected by docker.inject() in exporters/common/request.js)
+        if (headers) {
+          const containerTagsHash = headers['Datadog-Container-Tags-Hash']
+          if (containerTagsHash) {
+            propagationHash.updateContainerTagsHash(containerTagsHash)
+          }
+        }
+
+        try {
+          this.#prioritySampler.update(JSON.parse(res).rate_by_service)
+        } catch (e) {
+          log.error('Error updating prioritySampler rates', e)
+
+          runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
+          runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
+        }
         done()
-        return
-      }
-
-      log.debug('Response from the agent: %s', res)
-
-      // Capture container tags hash from agent response headers
-      // The hash is sent by the agent only when Datadog-Container-ID is present in the request
-      // (Datadog-Container-ID is automatically injected by docker.inject() in exporters/common/request.js)
-      if (headers) {
-        const containerTagsHash = headers['Datadog-Container-Tags-Hash']
-        if (containerTagsHash) {
-          propagationHash.updateContainerTagsHash(containerTagsHash)
-        }
-      }
-
-      try {
-        this._prioritySampler.update(JSON.parse(res).rate_by_service)
-      } catch (e) {
-        log.error('Error updating prioritySampler rates', e)
-
-        runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
-        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${e.name}`, true)
-      }
-      done()
-    })
+      })
   }
 }
 

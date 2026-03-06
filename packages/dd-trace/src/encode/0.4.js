@@ -24,32 +24,39 @@ function formatSpan (span, config) {
 }
 
 class AgentEncoder {
+  #msgpack
+  #limit
+  #writer
+  #debugEncoding
+  #config
+  #traceCount
+
   constructor (writer, limit = SOFT_LIMIT) {
-    this._msgpack = new MsgpackEncoder()
-    this._limit = limit
+    this.#msgpack = new MsgpackEncoder()
+    this.#limit = limit
     this._traceBytes = new MsgpackChunk()
     this._stringBytes = new MsgpackChunk()
-    this._writer = writer
+    this.#writer = writer
     this._reset()
-    this._debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))
-    this._config = this._writer?._config
+    this.#debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))
+    this.#config = this.#writer?._config
   }
 
   count () {
-    return this._traceCount
+    return this.#traceCount
   }
 
   encode (trace) {
     const bytes = this._traceBytes
     const start = bytes.length
 
-    this._traceCount++
+    this.#traceCount++
 
     this._encode(bytes, trace)
 
     const end = bytes.length
 
-    if (this._debugEncoding) {
+    if (this.#debugEncoding) {
       // eslint-disable-next-line eslint-rules/eslint-log-printf-style
       log.debug(() => {
         const hex = bytes.buffer.subarray(start, end).toString('hex').match(/../g).join(' ')
@@ -59,9 +66,9 @@ class AgentEncoder {
     }
 
     // we can go over the soft limit since the agent has a 50MB hard limit
-    if (this._traceBytes.length > this._limit || this._stringBytes.length > this._limit) {
+    if (this._traceBytes.length > this.#limit || this._stringBytes.length > this.#limit) {
       log.debug('Buffer went over soft limit, flushing')
-      this._writer.flush()
+      this.#writer.flush()
     }
   }
 
@@ -84,7 +91,7 @@ class AgentEncoder {
     this._encodeArrayPrefix(bytes, trace)
 
     for (let span of trace) {
-      span = formatSpan(span, this._config)
+      span = formatSpan(span, this.#config)
       bytes.reserve(1)
 
       // this is the original size of the fixed map for span attributes that always exist
@@ -136,7 +143,7 @@ class AgentEncoder {
   }
 
   _reset () {
-    this._traceCount = 0
+    this.#traceCount = 0
     this._traceBytes.length = 0
     this._stringCount = 0
     this._stringBytes.length = 0
@@ -146,23 +153,23 @@ class AgentEncoder {
   }
 
   _encodeBuffer (bytes, buffer) {
-    this._msgpack.encodeBin(bytes, buffer)
+    this.#msgpack.encodeBin(bytes, buffer)
   }
 
   _encodeBool (bytes, value) {
-    this._msgpack.encodeBoolean(bytes, value)
+    this.#msgpack.encodeBoolean(bytes, value)
   }
 
   _encodeArrayPrefix (bytes, value) {
-    this._msgpack.encodeArrayPrefix(bytes, value)
+    this.#msgpack.encodeArrayPrefix(bytes, value)
   }
 
   _encodeMapPrefix (bytes, keysLength) {
-    this._msgpack.encodeMapPrefix(bytes, keysLength)
+    this.#msgpack.encodeMapPrefix(bytes, keysLength)
   }
 
   _encodeByte (bytes, value) {
-    this._msgpack.encodeByte(bytes, value)
+    this.#msgpack.encodeByte(bytes, value)
   }
 
   // TODO: Use BigInt instead.
@@ -185,15 +192,15 @@ class AgentEncoder {
   }
 
   _encodeNumber (bytes, value) {
-    this._msgpack.encodeNumber(bytes, value)
+    this.#msgpack.encodeNumber(bytes, value)
   }
 
   _encodeInteger (bytes, value) {
-    this._msgpack.encodeInteger(bytes, value)
+    this.#msgpack.encodeInteger(bytes, value)
   }
 
   _encodeLong (bytes, value) {
-    this._msgpack.encodeLong(bytes, value)
+    this.#msgpack.encodeLong(bytes, value)
   }
 
   _encodeMap (bytes, value) {
@@ -233,7 +240,7 @@ class AgentEncoder {
   }
 
   _encodeFloat (bytes, value) {
-    this._msgpack.encodeFloat(bytes, value)
+    this.#msgpack.encodeFloat(bytes, value)
   }
 
   _encodeMetaStruct (bytes, value) {
@@ -331,7 +338,7 @@ class AgentEncoder {
   }
 
   _writeTraces (buffer, offset = 0) {
-    offset = this._writeArrayPrefix(buffer, offset, this._traceCount)
+    offset = this._writeArrayPrefix(buffer, offset, this.#traceCount)
     offset += this._traceBytes.buffer.copy(buffer, offset, 0, this._traceBytes.length)
 
     return offset

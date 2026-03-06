@@ -15,17 +15,19 @@ const Writer = require('./writer')
  * we avoid this limitation entirely. -- bengl
  */
 class AgentlessExporter {
+  #url
+  #writer
+
   /**
    * @param {object} config - Configuration object
    * @param {string} [config.site='datadoghq.com'] - The Datadog site
    * @param {string} [config.url] - Override intake URL
    */
   constructor (config) {
-    this._config = config
     const { site = 'datadoghq.com', url } = config
 
     try {
-      this._url = url ? new URL(url) : new URL(`https://public-trace-http-intake.logs.${site}`)
+      this.#url = url ? new URL(url) : new URL(`https://public-trace-http-intake.logs.${site}`)
     } catch (err) {
       log.error(
         'Invalid URL configuration for agentless exporter. url=%s, site=%s. Error: %s',
@@ -33,11 +35,11 @@ class AgentlessExporter {
         site,
         err.message
       )
-      this._url = null
+      this.#url = null
     }
 
-    this._writer = new Writer({
-      url: this._url,
+    this.#writer = new Writer({
+      url: this.#url,
       site,
     })
 
@@ -57,11 +59,11 @@ class AgentlessExporter {
   setUrl (urlString) {
     try {
       const url = new URL(urlString)
-      this._url = url
-      this._writer.setUrl(url)
+      this.#url = url
+      this.#writer.setUrl(url)
       return true
     } catch {
-      log.error('Invalid URL for agentless exporter: %s. Using previous URL: %s', urlString, this._url?.href || 'none')
+      log.error('Invalid URL for agentless exporter: %s. Using previous URL: %s', urlString, this.#url?.href || 'none')
       return false
     }
   }
@@ -72,8 +74,8 @@ class AgentlessExporter {
    * @param {object[]} spans - Array of spans (all from the same trace)
    */
   export (spans) {
-    this._writer.append(spans)
-    this._writer.flush()
+    this.#writer.append(spans)
+    this.#writer.flush()
   }
 
   /**
@@ -82,7 +84,7 @@ class AgentlessExporter {
    * @param {Function} [done] - Callback when flush is complete
    */
   flush (done = () => {}) {
-    this._writer.flush(done)
+    this.#writer.flush(done)
   }
 }
 

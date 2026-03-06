@@ -8,13 +8,15 @@ const tracer = require('../../')
 const SpanContext = require('./span_context')
 
 class ContextManager {
+  #store
+
   constructor () {
-    this._store = storage('opentelemetry')
+    this.#store = storage('opentelemetry')
   }
 
   // converts dd to otel
   active () {
-    const store = this._store.getStore()
+    const store = this.#store.getStore()
     const baseContext = store || ROOT_CONTEXT
     const activeSpan = tracer.scope().active()
 
@@ -63,7 +65,7 @@ class ContextManager {
     const ddScope = tracer.scope()
     const run = () => {
       const cb = thisArg == null ? fn : fn.bind(thisArg)
-      return this._store.run(context, cb, ...args)
+      return this.#store.run(context, cb, ...args)
     }
     const baggages = propagation.getBaggage(context)
     let baggageItems = []

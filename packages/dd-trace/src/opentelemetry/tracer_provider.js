@@ -10,46 +10,51 @@ const { MultiSpanProcessor, NoopSpanProcessor } = require('./span_processor')
 const Tracer = require('./tracer')
 
 class TracerProvider {
+  #processors
+  #tracers
+  #activeProcessor
+  #contextManager
+
   constructor (config = {}) {
     this.config = config
     this.resource = config.resource
 
-    this._processors = []
-    this._tracers = new Map()
-    this._activeProcessor = new NoopSpanProcessor()
-    this._contextManager = new ContextManager()
+    this.#processors = []
+    this.#tracers = new Map()
+    this.#activeProcessor = new NoopSpanProcessor()
+    this.#contextManager = new ContextManager()
   }
 
   getTracer (name = 'opentelemetry', version = '0.0.0', options) {
     const key = `${name}@${version}`
-    if (!this._tracers.has(key)) {
-      this._tracers.set(key, new Tracer(
+    if (!this.#tracers.has(key)) {
+      this.#tracers.set(key, new Tracer(
         { ...options, name, version },
         this.config,
         this
       ))
     }
-    return this._tracers.get(key)
+    return this.#tracers.get(key)
   }
 
   addSpanProcessor (spanProcessor) {
-    if (!this._processors.length) {
-      this._activeProcessor.shutdown()
+    if (!this.#processors.length) {
+      this.#activeProcessor.shutdown()
     }
-    this._processors.push(spanProcessor)
-    this._activeProcessor = new MultiSpanProcessor(
-      this._processors
+    this.#processors.push(spanProcessor)
+    this.#activeProcessor = new MultiSpanProcessor(
+      this.#processors
     )
   }
 
   getActiveSpanProcessor () {
-    return this._activeProcessor
+    return this.#activeProcessor
   }
 
   // Not actually required by the SDK spec, but the official Node.js SDK does
   // this and the docs reflect that so we should do this too for familiarity.
   register (config = {}) {
-    context.setGlobalContextManager(this._contextManager)
+    context.setGlobalContextManager(this.#contextManager)
     if (!trace.setGlobalTracerProvider(this)) {
       trace.getTracerProvider().setDelegate(this)
     }
@@ -69,11 +74,11 @@ class TracerProvider {
     }
 
     exporter._writer.flush()
-    return this._activeProcessor.forceFlush()
+    return this.#activeProcessor.forceFlush()
   }
 
   shutdown () {
-    return this._activeProcessor.shutdown()
+    return this.#activeProcessor.shutdown()
   }
 }
 

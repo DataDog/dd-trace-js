@@ -4,8 +4,10 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 
 class LogPropagator {
+  #config
+
   constructor (config) {
-    this._config = config
+    this.#config = config
   }
 
   inject (spanContext, carrier) {
@@ -14,17 +16,17 @@ class LogPropagator {
     carrier.dd = {}
 
     if (spanContext) {
-      carrier.dd.trace_id = this._config.traceId128BitGenerationEnabled &&
-        this._config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']
+      carrier.dd.trace_id = this.#config.traceId128BitGenerationEnabled &&
+        this.#config.traceId128BitLoggingEnabled && spanContext._trace.tags['_dd.p.tid']
         ? spanContext.toTraceId(true)
         : spanContext.toTraceId()
 
       carrier.dd.span_id = spanContext.toSpanId()
     }
 
-    if (this._config.service) carrier.dd.service = this._config.service
-    if (this._config.version) carrier.dd.version = this._config.version
-    if (this._config.env) carrier.dd.env = this._config.env
+    if (this.#config.service) carrier.dd.service = this.#config.service
+    if (this.#config.version) carrier.dd.version = this.#config.version
+    if (this.#config.env) carrier.dd.env = this.#config.env
   }
 
   extract (carrier) {

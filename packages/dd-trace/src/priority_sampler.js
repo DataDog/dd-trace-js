@@ -50,6 +50,10 @@ const defaultSampler = new Sampler(AUTO_KEEP)
  * @typedef {import('./sampling_rule')|Record<string, unknown>} SamplingRuleLike
  */
 class PrioritySampler {
+  #env
+  #rules
+  #samplers
+
   /**
    * Creates an instance of PrioritySampler.
    *
@@ -74,12 +78,12 @@ class PrioritySampler {
    */
   configure (env, config = {}) {
     const { sampleRate, provenance, rateLimit = 100, rules } = config
-    this._env = env
-    this._rules = this.#normalizeRules(rules || [], sampleRate, rateLimit, provenance)
+    this.#env = env
+    this.#rules = this.#normalizeRules(rules || [], sampleRate, rateLimit, provenance)
     this._limiter = new RateLimiter(rateLimit)
 
     log.trace(env, config)
-    setSamplingRules(this._rules)
+    setSamplingRules(this.#rules)
   }
 
   /**
@@ -141,7 +145,7 @@ class PrioritySampler {
 
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
 
-    this._samplers = samplers
+    this.#samplers = samplers
 
     log.trace(rates)
   }
@@ -286,9 +290,8 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    */
   #getPriorityByAgent (context) {
-    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
-    // TODO: Change underscored properties to private ones.
-    const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
+    const key = `service:${context._tags[SERVICE_NAME]},env:${this.#env}`
+    const sampler = this.#samplers[key] || this.#samplers[DEFAULT_KEY]
 
     context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
 
@@ -351,8 +354,7 @@ class PrioritySampler {
    * @returns {import('./sampling_rule')|undefined}
    */
   #findRule (span) {
-    // TODO: Change underscored properties to private ones.
-    for (const rule of this._rules) {
+    for (const rule of this.#rules) {
       // Rule is a special object with a .match() property.
       // It has nothing to do with a regular expression.
       // eslint-disable-next-line unicorn/prefer-regexp-test

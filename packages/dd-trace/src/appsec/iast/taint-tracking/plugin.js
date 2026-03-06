@@ -21,10 +21,12 @@ const REQ_HEADER_TAGS = EXECUTED_SOURCE.formatTags(HTTP_REQUEST_HEADER_VALUE, HT
 const REQ_URI_TAGS = EXECUTED_SOURCE.formatTags(HTTP_REQUEST_URI)
 
 class TaintTrackingPlugin extends SourceIastPlugin {
+  #taintedURLs
+  #rowsToTaint
+
   constructor () {
     super()
-    this._type = 'taint-tracking'
-    this._taintedURLs = new WeakMap()
+    this.#taintedURLs = new WeakMap()
   }
 
   configure (config) {
@@ -34,7 +36,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     if (typeof rowsToTaint !== 'number') {
       rowsToTaint = 1
     }
-    this._rowsToTaint = rowsToTaint
+    this.#rowsToTaint = rowsToTaint
   }
 
   onConfigure () {
@@ -199,7 +201,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
 
         if (ranges?.length) {
           if (isURL) {
-            this._taintedURLs.set(parsed, ranges[0])
+            this.#taintedURLs.set(parsed, ranges[0])
           } else {
             for (const param of urlResultTaintedProperties) {
               this._taintTrackingHandler(ranges[0].iinfo.type, parsed, param, iastContext)
@@ -214,7 +216,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       (context) => {
         if (!urlResultTaintedProperties.includes(context.property)) return
 
-        const origRange = this._taintedURLs.get(context.urlObject)
+        const origRange = this.#taintedURLs.get(context.urlObject)
         if (!origRange) return
 
         const iastContext = getIastContext(storage('legacy').getStore())
@@ -266,10 +268,10 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   _taintDatabaseResult (result, dbOrigin, iastContext, name) {
     if (!iastContext) return result
 
-    if (this._rowsToTaint === 0) return result
+    if (this.#rowsToTaint === 0) return result
 
     if (Array.isArray(result)) {
-      for (let i = 0; i < result.length && i < this._rowsToTaint; i++) {
+      for (let i = 0; i < result.length && i < this.#rowsToTaint; i++) {
         const nextName = name ? `${name}.${i}` : String(i)
         result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
       }

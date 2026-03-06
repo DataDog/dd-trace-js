@@ -42,6 +42,10 @@ const BaseFFEWriter = require('./base')
  * ExposuresWriter is responsible for sending exposure events to the Datadog Agent.
  */
 class ExposuresWriter extends BaseFFEWriter {
+  #enabled
+  #pendingEvents
+  #context
+
   /**
    * @param {import('../../config')} config - Tracer configuration object
    */
@@ -60,21 +64,21 @@ class ExposuresWriter extends BaseFFEWriter {
         [EVP_SUBDOMAIN_HEADER_NAME]: EVP_SUBDOMAIN_VALUE,
       },
     })
-    this._enabled = false // Start disabled until agent strategy is set
-    this._pendingEvents = [] // Buffer events until enabled
-    this._context = this._buildContext()
+    this.#enabled = false // Start disabled until agent strategy is set
+    this.#pendingEvents = [] // Buffer events until enabled
+    this.#context = this._buildContext()
   }
 
   /**
    * @param {boolean} enabled - Whether to enable the writer
    */
   setEnabled (enabled) {
-    this._enabled = enabled
+    this.#enabled = enabled
 
-    if (enabled && this._pendingEvents.length > 0) {
+    if (enabled && this.#pendingEvents.length > 0) {
       // Flush all pending events as a batch
-      super.append(this._pendingEvents)
-      this._pendingEvents = []
+      super.append(this.#pendingEvents)
+      this.#pendingEvents = []
     }
   }
 
@@ -83,12 +87,12 @@ class ExposuresWriter extends BaseFFEWriter {
    * @param {ExposureEvent|ExposureEvent[]} events - Exposure event(s) to append
    */
   append (events) {
-    if (!this._enabled) {
+    if (!this.#enabled) {
       // Buffer events until writer is ready
       if (Array.isArray(events)) {
-        this._pendingEvents.push(...events)
+        this.#pendingEvents.push(...events)
       } else {
-        this._pendingEvents.push(events)
+        this.#pendingEvents.push(events)
       }
       return
     }
@@ -99,7 +103,7 @@ class ExposuresWriter extends BaseFFEWriter {
    * Flushes buffered exposure events to the agent
    */
   flush () {
-    if (!this._enabled) {
+    if (!this.#enabled) {
       // Don't flush when disabled
       return
     }
@@ -115,7 +119,7 @@ class ExposuresWriter extends BaseFFEWriter {
     const formattedEvents = events.map(event => this._formatExposureEvent(event))
 
     return {
-      context: this._context,
+      context: this.#context,
       exposures: formattedEvents,
     }
   }

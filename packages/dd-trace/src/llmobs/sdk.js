@@ -28,17 +28,22 @@ class LLMObs extends NoopLLMObs {
    * @type {boolean}
    */
   #hasUserSpanProcessor = false
+  #tracer
+  #config
+  #llmobsModule
+  #tagger
 
   constructor (tracer, llmobsModule, config) {
     super(tracer)
 
-    this._config = config
-    this._llmobsModule = llmobsModule
-    this._tagger = new LLMObsTagger(config)
+    this.#tracer = tracer
+    this.#config = config
+    this.#llmobsModule = llmobsModule
+    this.#tagger = new LLMObsTagger(config)
   }
 
   get enabled () {
-    return this._config.llmobs.enabled
+    return this.#config.llmobs.enabled
   }
 
   enable (options = {}) {
@@ -62,10 +67,10 @@ class LLMObs extends NoopLLMObs {
     }
     // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
     // based on `APM_TRACING` RC product updates.
-    this._config.updateOptions({ llmobs })
+    this.#config.updateOptions({ llmobs })
 
     // configure writers and channel subscribers
-    this._llmobsModule.enable(this._config)
+    this.#llmobsModule.enable(this.#config)
   }
 
   disable () {
@@ -76,10 +81,10 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Disabling LLMObs')
 
-    this._config.llmobs.enabled = false
+    this.#config.llmobs.enabled = false
 
     // disable writers and channel subscribers
-    this._llmobsModule.disable()
+    this.#llmobsModule.disable()
   }
 
   trace (options = {}, fn) {
@@ -105,12 +110,12 @@ class LLMObs extends NoopLLMObs {
     } = this._extractOptions(options)
 
     if (fn.length > 1) {
-      return this._tracer.trace(name, spanOptions, (span, cb) =>
+      return this.#tracer.trace(name, spanOptions, (span, cb) =>
         this._activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
-    return this._tracer.trace(name, spanOptions, span =>
+    return this.#tracer.trace(name, spanOptions, span =>
       this._activate(span, { kind, ...llmobsOptions }, () => fn(span))
     )
   }
@@ -139,7 +144,7 @@ class LLMObs extends NoopLLMObs {
     function wrapped () {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
-      const span = llmobs._tracer.scope().active()
+      const span = llmobs.#tracer.scope().active()
       const fnArgs = arguments
 
       const lastArgId = fnArgs.length - 1
@@ -199,7 +204,7 @@ class LLMObs extends NoopLLMObs {
       }
     }
 
-    return this._tracer.wrap(name, spanOptions, wrapped)
+    return this.#tracer.wrap(name, spanOptions, wrapped)
   }
 
   annotate (span, options, autoinstrumented = false) {
@@ -245,27 +250,27 @@ class LLMObs extends NoopLLMObs {
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
-          this._tagger.tagLLMIO(span, inputData, outputData)
+          this.#tagger.tagLLMIO(span, inputData, outputData)
         } else if (spanKind === 'embedding') {
-          this._tagger.tagEmbeddingIO(span, inputData, outputData)
+          this.#tagger.tagEmbeddingIO(span, inputData, outputData)
         } else if (spanKind === 'retrieval') {
-          this._tagger.tagRetrievalIO(span, inputData, outputData)
+          this.#tagger.tagRetrievalIO(span, inputData, outputData)
         } else {
-          this._tagger.tagTextIO(span, inputData, outputData)
+          this.#tagger.tagTextIO(span, inputData, outputData)
         }
       }
 
       if (metadata) {
-        this._tagger.tagMetadata(span, metadata)
+        this.#tagger.tagMetadata(span, metadata)
       }
       if (metrics) {
-        this._tagger.tagMetrics(span, metrics)
+        this.#tagger.tagMetrics(span, metrics)
       }
       if (tags) {
-        this._tagger.tagSpanTags(span, tags)
+        this.#tagger.tagSpanTags(span, tags)
       }
       if (prompt) {
-        this._tagger.tagPrompt(span, prompt)
+        this.#tagger.tagPrompt(span, prompt)
       }
     } catch (e) {
       if (e.ddErrorTag) {

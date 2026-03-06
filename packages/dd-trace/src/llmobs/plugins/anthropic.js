@@ -15,6 +15,8 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
   static id = 'anthropic'
   static prefix = 'tracing:apm:anthropic:request'
 
+  #tagger
+
   constructor () {
     super(...arguments)
 
@@ -182,7 +184,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
       }
     }
 
-    this._tagger.tagLLMIO(span, inputMessages)
+    this.#tagger.tagLLMIO(span, inputMessages)
   }
 
   #tagAnthropicOutputMessages (span, result) {
@@ -191,7 +193,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     const { content, role } = result
 
     if (typeof content === 'string') {
-      this._tagger.tagLLMIO(span, null, [{ content, role }])
+      this.#tagger.tagLLMIO(span, null, [{ content, role }])
       return
     }
 
@@ -217,7 +219,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
       }
     }
 
-    this._tagger.tagLLMIO(span, null, outputMessages)
+    this.#tagger.tagLLMIO(span, null, outputMessages)
   }
 
   #tagAnthropicMetadata (span, options) {
@@ -228,7 +230,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
       }
     }
 
-    this._tagger.tagMetadata(span, metadata)
+    this.#tagger.tagMetadata(span, metadata)
   }
 
   #tagAnthropicUsage (span, result) {
@@ -253,7 +255,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
     if (cacheReadTokens != null) metrics.cacheReadTokens = cacheReadTokens
 
-    this._tagger.tagMetrics(span, metrics)
+    this.#tagger.tagMetrics(span, metrics)
   }
 
   // maybe can make into a util file

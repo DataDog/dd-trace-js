@@ -7,19 +7,22 @@ const Writer = require('./writer')
 
 class AgentExporter {
   #timer
+  #config
+  #url
+  #writer
 
   constructor (config, prioritySampler) {
-    this._config = config
+    this.#config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
-    this._url = getAgentUrl(config)
+    this.#url = getAgentUrl(config)
 
     const headers = {}
     if (stats.enabled || apmTracingEnabled === false) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 
-    this._writer = new Writer({
-      url: this._url,
+    this.#writer = new Writer({
+      url: this.#url,
       prioritySampler,
       lookup,
       protocolVersion,
@@ -33,23 +36,23 @@ class AgentExporter {
   setUrl (url) {
     try {
       url = new URL(url)
-      this._url = url
-      this._writer.setUrl(url)
+      this.#url = url
+      this.#writer.setUrl(url)
     } catch (e) {
       log.warn(e.stack)
     }
   }
 
   export (spans) {
-    this._writer.append(spans)
+    this.#writer.append(spans)
 
-    const { flushInterval } = this._config
+    const { flushInterval } = this.#config
 
     if (flushInterval === 0) {
-      this._writer.flush()
+      this.#writer.flush()
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
-        this._writer.flush()
+        this.#writer.flush()
         this.#timer = undefined
       }, flushInterval).unref()
     }
@@ -58,7 +61,7 @@ class AgentExporter {
   flush (done = () => {}) {
     clearTimeout(this.#timer)
     this.#timer = undefined
-    this._writer.flush(done)
+    this.#writer.flush(done)
   }
 }
 
