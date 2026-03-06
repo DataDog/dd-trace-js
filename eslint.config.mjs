@@ -632,6 +632,7 @@ export default [
       'n/no-extraneous-require': ['error', {
         allowModules: [
           ...Object.keys(dependencies),
+          'ai',
           'mocha',
         ],
       }],
