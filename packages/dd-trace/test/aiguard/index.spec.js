@@ -210,8 +210,13 @@ describe('AIGuard SDK', () => {
     mockFetch({
       body: {
         data: {
-          attributes: { action: 'ALLOW', reason: 'No rule match.', tags: [], sds_findings: sdsFindings,
-            is_blocking_enabled: true },
+          attributes: {
+            action: 'ALLOW',
+            reason: 'No rule match.',
+            tags: [],
+            sds_findings: sdsFindings,
+            is_blocking_enabled: true,
+          },
         },
       },
     })
