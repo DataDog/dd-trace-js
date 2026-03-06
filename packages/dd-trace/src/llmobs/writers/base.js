@@ -72,7 +72,7 @@ class BaseLLMObsWriter {
     return this.#buildUrl(this._baseUrl.href, this._endpoint)
   }
 
-  _getBuffer (routing) {
+  #getBuffer (routing) {
     if (!routing?.apiKey) {
       return this._buffer
     }
@@ -86,7 +86,7 @@ class BaseLLMObsWriter {
   }
 
   append (event, routing, byteLength) {
-    const buffer = this._getBuffer(routing)
+    const buffer = this.#getBuffer(routing)
 
     if (buffer.events.length >= buffer.limit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
@@ -110,11 +110,11 @@ class BaseLLMObsWriter {
       const events = this._buffer.events
       this._buffer.clear()
 
-      const payload = this._encode(this.makePayload(events))
+      const payload = this.#encode(this.makePayload(events))
 
       log.debug('Encoded LLMObs payload: %s', payload)
 
-      const options = this._getOptions()
+      const options = this.#getOptions()
 
       request(payload, options, (err, resp, code) => {
         parseResponseAndLog(err, code, events.length, this.url, this._eventType)
@@ -128,7 +128,7 @@ class BaseLLMObsWriter {
       const events = buffer.events
       buffer.clear()
 
-      const payload = this._encode(this.makePayload(events))
+      const payload = this.#encode(this.makePayload(events))
       const site = buffer.routing.site || this._config.site
       const options = {
         headers: {
@@ -179,7 +179,7 @@ class BaseLLMObsWriter {
 
   setAgentless (agentless) {
     this._agentless = agentless
-    const { url, endpoint } = this._getUrlAndPath()
+    const { url, endpoint } = this.#getUrlAndPath()
 
     this._baseUrl = url
     this._endpoint = endpoint
@@ -187,7 +187,7 @@ class BaseLLMObsWriter {
     logger.debug(`Configuring ${this.constructor.name} to ${this.url}`)
   }
 
-  _getUrlAndPath () {
+  #getUrlAndPath () {
     if (this._agentless) {
       const site = this._config.site
       return {
@@ -209,7 +209,7 @@ class BaseLLMObsWriter {
     }
   }
 
-  _getOptions () {
+  #getOptions () {
     const options = {
       headers: {
         'Content-Type': 'application/json',
@@ -229,7 +229,7 @@ class BaseLLMObsWriter {
     return options
   }
 
-  _encode (payload) {
+  #encode (payload) {
     return JSON.stringify(payload, (key, value) => {
       if (typeof value === 'string') {
         return encodeUnicode(value) // serialize unicode characters

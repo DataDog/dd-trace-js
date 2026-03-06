@@ -162,7 +162,7 @@ class DataStreamsProcessor {
   }
 
   onInterval () {
-    const { Stats } = this._serializeBuckets()
+    const { Stats } = this.#serializeBuckets()
     if (Stats.length === 0) return
 
     const payload = {
@@ -294,7 +294,7 @@ class DataStreamsProcessor {
     this.recordOffset(backlogData)
   }
 
-  _serializeBuckets () {
+  #serializeBuckets () {
     // TimeBuckets
     const serializedBuckets = []
 

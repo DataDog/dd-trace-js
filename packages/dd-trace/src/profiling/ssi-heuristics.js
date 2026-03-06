@@ -35,14 +35,14 @@ class SSIHeuristics {
     // tracer is initialized early in the process lifetime.
     setTimeout(() => {
       this.shortLived = false
-      this._maybeTriggered()
+      this.#maybeTriggered()
     }, this.longLivedThreshold).unref()
 
-    this._onSpanCreated = this._onSpanCreated.bind(this)
-    dc.subscribe('dd-trace:span:start', this._onSpanCreated)
+    this.#onSpanCreated = this.#onSpanCreated.bind(this)
+    dc.subscribe('dd-trace:span:start', this.#onSpanCreated)
 
-    this._onAppClosing = this._onAppClosing.bind(this)
-    dc.subscribe('datadog:telemetry:app-closing', this._onAppClosing)
+    this.#onAppClosing = this.#onAppClosing.bind(this)
+    dc.subscribe('datadog:telemetry:app-closing', this.#onAppClosing)
   }
 
   onTriggered (callback) {
@@ -51,7 +51,7 @@ class SSIHeuristics {
       case 'function':
         this.triggeredCallback = callback
         process.nextTick(() => {
-          this._maybeTriggered()
+          this.#maybeTriggered()
         })
         break
       default:
@@ -61,22 +61,22 @@ class SSIHeuristics {
     }
   }
 
-  _maybeTriggered () {
+  #maybeTriggered () {
     if (!this.shortLived && !this.noSpan && typeof this.triggeredCallback === 'function') {
       this.triggeredCallback.call(null)
     }
   }
 
-  _onSpanCreated () {
+  #onSpanCreated () {
     this.noSpan = false
-    this._maybeTriggered()
-    dc.unsubscribe('dd-trace:span:start', this._onSpanCreated)
+    this.#maybeTriggered()
+    dc.unsubscribe('dd-trace:span:start', this.#onSpanCreated)
   }
 
-  _onAppClosing () {
-    dc.unsubscribe('datadog:telemetry:app-closing', this._onAppClosing)
+  #onAppClosing () {
+    dc.unsubscribe('datadog:telemetry:app-closing', this.#onAppClosing)
     if (this.noSpan) {
-      dc.unsubscribe('dd-trace:span:start', this._onSpanCreated)
+      dc.unsubscribe('dd-trace:span:start', this.#onSpanCreated)
     }
   }
 }

@@ -174,7 +174,7 @@ class Tracer extends NoopProxy {
       }
 
       if (config.profiling.enabled === 'true') {
-        this._profilerStarted = this._startProfiler(config)
+        this._profilerStarted = this.#startProfiler(config)
       } else {
         this._profilerStarted = Promise.resolve(false)
         if (config.profiling.enabled === 'auto') {
@@ -182,7 +182,7 @@ class Tracer extends NoopProxy {
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
           ssiHeuristics.onTriggered(() => {
-            this._startProfiler(config)
+            this.#startProfiler(config)
             ssiHeuristics.onTriggered() // deregister this callback
           })
         }
@@ -239,7 +239,7 @@ class Tracer extends NoopProxy {
     return this
   }
 
-  _startProfiler (config) {
+  #startProfiler (config) {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
       return require('./profiler').start(config)

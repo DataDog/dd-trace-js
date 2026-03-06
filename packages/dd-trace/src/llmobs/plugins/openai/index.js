@@ -41,7 +41,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const operation = getOperation(methodName)
     const kind = operation === 'embedding' ? 'embedding' : 'llm'
 
-    const { modelProvider, client } = this._getModelProviderAndClient(ctx.basePath)
+    const { modelProvider, client } = this.#getModelProviderAndClient(ctx.basePath)
 
     const name = `${client}.${methodName}`
 
@@ -66,17 +66,17 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     const operation = getOperation(methodName)
 
     if (operation === 'completion') {
-      this._tagCompletion(span, inputs, response, error)
+      this.#tagCompletion(span, inputs, response, error)
     } else if (operation === 'chat') {
-      this._tagChatCompletion(span, inputs, response, error)
+      this.#tagChatCompletion(span, inputs, response, error)
     } else if (operation === 'embedding') {
-      this._tagEmbedding(span, inputs, response, error)
+      this.#tagEmbedding(span, inputs, response, error)
     } else if (operation === 'response') {
       this.#tagResponse(span, inputs, response, error)
     }
 
     if (!error) {
-      const metrics = this._extractMetrics(response)
+      const metrics = this.#extractMetrics(response)
       this._tagger.tagMetrics(span, metrics)
 
       const responseModel = response.model
@@ -87,7 +87,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
-  _getModelProviderAndClient (baseUrl = '') {
+  #getModelProviderAndClient (baseUrl = '') {
     if (baseUrl.includes('azure')) {
       return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
     } else if (baseUrl.includes('deepseek')) {
@@ -96,7 +96,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     return { modelProvider: 'openai', client: 'OpenAI' }
   }
 
-  _extractMetrics (response) {
+  #extractMetrics (response) {
     const metrics = {}
     const tokenUsage = response.usage
 
@@ -135,7 +135,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     return metrics
   }
 
-  _tagEmbedding (span, inputs, response, error) {
+  #tagEmbedding (span, inputs, response, error) {
     const { model, ...parameters } = inputs
 
     const metadata = {
@@ -165,7 +165,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagEmbeddingIO(span, embeddingInput, embeddingOutput)
   }
 
-  _tagCompletion (span, inputs, response, error) {
+  #tagCompletion (span, inputs, response, error) {
     let { prompt, model, ...parameters } = inputs
     if (!Array.isArray(prompt)) prompt = [prompt]
 
@@ -177,7 +177,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagMetadata(span, parameters)
   }
 
-  _tagChatCompletion (span, inputs, response, error) {
+  #tagChatCompletion (span, inputs, response, error) {
     const { messages, model, ...parameters } = inputs
 
     const metadata = Object.entries(parameters).reduce((obj, [key, value]) => {

@@ -238,7 +238,7 @@ function getSuiteStatus (suiteStats) {
 }
 
 class CypressPlugin {
-  _isInit = false
+  #isInit = false
   testEnvironmentMetadata = getTestEnvironmentMetadata(TEST_FRAMEWORK_NAME)
 
   finishedTestsByFile = {}
@@ -306,7 +306,7 @@ class CypressPlugin {
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
-    this._isInit = true
+    this.#isInit = true
     this.tracer = tracer
     this.cypressConfig = cypressConfig
 
@@ -644,7 +644,7 @@ class CypressPlugin {
   }
 
   afterRun (suiteStats) {
-    if (!this._isInit) {
+    if (!this.#isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
     }

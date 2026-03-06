@@ -13,18 +13,18 @@ const log = require('../log')
  * data stream pathways (DSM) for enhanced observability.
  */
 class PropagationHashManager {
-  _containerTagsHash = null
-  _cachedHash = null
-  _cachedHashString = null
-  _cachedHashBase64 = null
-  _config = null
+  #containerTagsHash = null
+  #cachedHash = null
+  #cachedHashString = null
+  #cachedHashBase64 = null
+  #config = null
 
   /**
    * Configure the propagation hash manager with tracer config
    * @param {object} config - Tracer configuration
    */
   configure (config) {
-    this._config = config
+    this.#config = config
   }
 
   /**
@@ -32,7 +32,7 @@ class PropagationHashManager {
    * @returns {boolean}
    */
   isEnabled () {
-    return this._config?.propagateProcessTags?.enabled === true
+    return this.#config?.propagateProcessTags?.enabled === true
   }
 
   /**
@@ -40,10 +40,10 @@ class PropagationHashManager {
    * @param {string} hash - Container tags hash from agent response
    */
   updateContainerTagsHash (hash) {
-    if (hash !== this._containerTagsHash) {
+    if (hash !== this.#containerTagsHash) {
       log.debug('Updating container tags hash: %s', hash)
-      this._containerTagsHash = hash
-      this._invalidateCache()
+      this.#containerTagsHash = hash
+      this.#invalidateCache()
     }
   }
 
@@ -55,11 +55,11 @@ class PropagationHashManager {
     if (!this.isEnabled()) {
       return null
     }
-    if (this._cachedHash) {
-      return this._cachedHash
+    if (this.#cachedHash) {
+      return this.#cachedHash
     }
-    this._computeHash()
-    return this._cachedHash
+    this.#computeHash()
+    return this.#cachedHash
   }
 
   /**
@@ -71,10 +71,10 @@ class PropagationHashManager {
     if (!hash) {
       return null
     }
-    if (!this._cachedHashString) {
-      this._cachedHashString = hash.toString(16)
+    if (!this.#cachedHashString) {
+      this.#cachedHashString = hash.toString(16)
     }
-    return this._cachedHashString
+    return this.#cachedHashString
   }
 
   /**
@@ -86,47 +86,47 @@ class PropagationHashManager {
     if (!hash) {
       return null
     }
-    if (!this._cachedHashBase64) {
+    if (!this.#cachedHashBase64) {
       // Convert BigInt to 8-byte buffer (64-bit hash)
       const buffer = Buffer.allocUnsafe(8)
       // Write as big-endian 64-bit unsigned integer
       buffer.writeBigUInt64BE(hash, 0)
-      this._cachedHashBase64 = buffer.toString('base64')
+      this.#cachedHashBase64 = buffer.toString('base64')
     }
-    return this._cachedHashBase64
+    return this.#cachedHashBase64
   }
 
   /**
    * Compute the propagation hash using FNV-1a algorithm
    * @private
    */
-  _computeHash () {
+  #computeHash () {
     try {
       const processTags = require('../process-tags')
 
       // Combine process tags and container tags hash
       // Process tags are already serialized as a comma-separated string
-      const input = processTags.serialized + (this._containerTagsHash || '')
+      const input = processTags.serialized + (this.#containerTagsHash || '')
 
       if (!input) {
         // If both are empty, don't compute a hash
-        this._cachedHash = null
-        this._cachedHashString = null
-        this._cachedHashBase64 = null
+        this.#cachedHash = null
+        this.#cachedHashString = null
+        this.#cachedHashBase64 = null
         return
       }
 
       // Compute FNV-1a 64-bit hash
-      this._cachedHash = fnv64(input)
-      this._cachedHashString = null // Will be computed on demand
-      this._cachedHashBase64 = null // Will be computed on demand
+      this.#cachedHash = fnv64(input)
+      this.#cachedHashString = null // Will be computed on demand
+      this.#cachedHashBase64 = null // Will be computed on demand
 
-      log.debug('Computed propagation hash from input (length=%s): "%s"', input.length, this._cachedHash.toString(16))
+      log.debug('Computed propagation hash from input (length=%s): "%s"', input.length, this.#cachedHash.toString(16))
     } catch (e) {
       log.error('Error computing propagation hash', e)
-      this._cachedHash = null
-      this._cachedHashString = null
-      this._cachedHashBase64 = null
+      this.#cachedHash = null
+      this.#cachedHashString = null
+      this.#cachedHashBase64 = null
     }
   }
 
@@ -134,10 +134,10 @@ class PropagationHashManager {
    * Invalidate the cached hash
    * @private
    */
-  _invalidateCache () {
-    this._cachedHash = null
-    this._cachedHashString = null
-    this._cachedHashBase64 = null
+  #invalidateCache () {
+    this.#cachedHash = null
+    this.#cachedHashString = null
+    this.#cachedHashBase64 = null
   }
 }
 

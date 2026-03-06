@@ -28,7 +28,7 @@ class MissingHeaderAnalyzer extends Analyzer {
     }, (data) => this.analyze(data))
   }
 
-  _getHeaderValues (res, storedHeaders, headerName) {
+  #getHeaderValues (res, storedHeaders, headerName) {
     headerName = headerName.toLowerCase()
     const headerValue = res.getHeader(headerName) || storedHeaders[headerName]
     if (Array.isArray(headerValue)) {
@@ -48,7 +48,7 @@ class MissingHeaderAnalyzer extends Analyzer {
   }
 
   _getEvidence ({ res, storedHeaders }) {
-    const headerValues = this._getHeaderValues(res, storedHeaders, this.headerName)
+    const headerValues = this.#getHeaderValues(res, storedHeaders, this.headerName)
     let value
     if (headerValues.length === 1) {
       value = headerValues[0]
@@ -59,18 +59,18 @@ class MissingHeaderAnalyzer extends Analyzer {
   }
 
   _isVulnerable ({ req, res, storedHeaders }, context) {
-    if (!IGNORED_RESPONSE_STATUS_LIST.has(res.statusCode) && this._isResponseHtml(res, storedHeaders)) {
-      return this._isVulnerableFromRequestAndResponse(req, res, storedHeaders)
+    if (!IGNORED_RESPONSE_STATUS_LIST.has(res.statusCode) && this.#isResponseHtml(res, storedHeaders)) {
+      return this.#isVulnerableFromRequestAndResponse(req, res, storedHeaders)
     }
     return false
   }
 
-  _isVulnerableFromRequestAndResponse (req, res, storedHeaders) {
+  #isVulnerableFromRequestAndResponse (req, res, storedHeaders) {
     return false
   }
 
-  _isResponseHtml (res, storedHeaders) {
-    const contentTypes = this._getHeaderValues(res, storedHeaders, 'content-type')
+  #isResponseHtml (res, storedHeaders) {
+    const contentTypes = this.#getHeaderValues(res, storedHeaders, 'content-type')
     return contentTypes.some(contentType => {
       return contentType && HTML_CONTENT_TYPES.some(htmlContentType => {
         return htmlContentType === contentType || contentType.startsWith(htmlContentType + ';')

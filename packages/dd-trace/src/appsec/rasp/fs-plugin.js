@@ -31,10 +31,10 @@ function getStoreToStart (fsProps, store = storage('legacy').getStore()) {
 
 class AppsecFsPlugin extends Plugin {
   enable () {
-    this.addBind('apm:fs:operation:start', this._onFsOperationStart)
-    this.addBind('apm:fs:operation:finish', this._onFsOperationFinishOrRenderEnd)
-    this.addBind('tracing:datadog:express:response:render:start', this._onResponseRenderStart)
-    this.addBind('tracing:datadog:express:response:render:end', this._onFsOperationFinishOrRenderEnd)
+    this.addBind('apm:fs:operation:start', this.#onFsOperationStart)
+    this.addBind('apm:fs:operation:finish', this.#onFsOperationFinishOrRenderEnd)
+    this.addBind('tracing:datadog:express:response:render:start', this.#onResponseRenderStart)
+    this.addBind('tracing:datadog:express:response:render:end', this.#onFsOperationFinishOrRenderEnd)
     // We might have to add the same subscribers for fastify later
 
     super.configure(true)
@@ -44,18 +44,18 @@ class AppsecFsPlugin extends Plugin {
     super.configure(false)
   }
 
-  _onFsOperationStart () {
+  #onFsOperationStart () {
     const store = storage('legacy').getStore()
     if (store) {
       return getStoreToStart({ root: store.fs?.root === undefined }, store)
     }
   }
 
-  _onResponseRenderStart () {
+  #onResponseRenderStart () {
     return getStoreToStart({ opExcluded: true })
   }
 
-  _onFsOperationFinishOrRenderEnd () {
+  #onFsOperationFinishOrRenderEnd () {
     const store = storage('legacy').getStore()
     if (store?.fs) {
       return store.fs.parentStore

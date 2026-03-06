@@ -14,18 +14,18 @@ function createAgentClass (BaseAgent) {
     }
 
     createConnection (...args) {
-      return this._noop(() => super.createConnection(...args))
+      return this.#noop(() => super.createConnection(...args))
     }
 
     keepSocketAlive (...args) {
-      return this._noop(() => super.keepSocketAlive(...args))
+      return this.#noop(() => super.keepSocketAlive(...args))
     }
 
     reuseSocket (...args) {
-      return this._noop(() => super.reuseSocket(...args))
+      return this.#noop(() => super.reuseSocket(...args))
     }
 
-    _noop (callback) {
+    #noop (callback) {
       return storage('legacy').run({ noop: true }, callback)
     }
   }

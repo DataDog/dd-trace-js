@@ -8,7 +8,7 @@ class NoopSpan {
   constructor (tracer, parent) {
     this._store = storage('legacy').getHandle()
     this._noopTracer = tracer
-    this._noopContext = this._createContext(parent)
+    this._noopContext = this.#createContext(parent)
   }
 
   context () { return this._noopContext }
@@ -28,7 +28,7 @@ class NoopSpan {
   logEvent () {}
   finish (finishTime) {}
 
-  _createContext (parent) {
+  #createContext (parent) {
     const spanId = id()
 
     return parent

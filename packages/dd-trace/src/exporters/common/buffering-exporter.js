@@ -8,9 +8,9 @@ const { getAgentUrl } = require('../../agent/url')
  * Provides common export logic with flush intervals.
  */
 class BufferingExporter {
-  _traceBuffer = []
-  _isInitialized = false
-  _writer
+  #traceBuffer = []
+  #isInitialized = false
+  #writer
 
   constructor (tracerConfig) {
     this._config = tracerConfig
@@ -18,14 +18,14 @@ class BufferingExporter {
   }
 
   export (trace) {
-    if (!this._isInitialized) {
-      this._traceBuffer.push(trace)
+    if (!this.#isInitialized) {
+      this.#traceBuffer.push(trace)
       return
     }
-    this._export(trace)
+    this.#export(trace)
   }
 
-  _export (payload, writer = this._writer, timerKey = '_timer') {
+  #export (payload, writer = this.#writer, timerKey = '_timer') {
     if (this._config.isCiVisibility) {
       incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
     }
@@ -44,7 +44,7 @@ class BufferingExporter {
   }
 
   getUncodedTraces () {
-    return this._traceBuffer
+    return this.#traceBuffer
   }
 
   exportUncodedTraces () {
@@ -55,7 +55,7 @@ class BufferingExporter {
   }
 
   resetUncodedTraces () {
-    this._traceBuffer = []
+    this.#traceBuffer = []
   }
 }
 

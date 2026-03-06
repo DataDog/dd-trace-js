@@ -87,26 +87,26 @@ class LLMObsTagger {
       )
     }
 
-    this._register(span)
+    this.#register(span)
 
-    this._setTag(span, ML_APP, spanMlApp)
+    this.#setTag(span, ML_APP, spanMlApp)
 
-    if (name) this._setTag(span, NAME, name)
+    if (name) this.#setTag(span, NAME, name)
 
-    this._setTag(span, SPAN_KIND, kind)
+    this.#setTag(span, SPAN_KIND, kind)
     if (modelName) this.tagModelName(span, modelName)
-    if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
+    if (modelProvider) this.#setTag(span, MODEL_PROVIDER, modelProvider)
 
     sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
-    if (sessionId) this._setTag(span, SESSION_ID, sessionId)
-    if (integration) this._setTag(span, INTEGRATION, integration)
-    if (_decorator) this._setTag(span, DECORATOR, _decorator)
+    if (sessionId) this.#setTag(span, SESSION_ID, sessionId)
+    if (integration) this.#setTag(span, INTEGRATION, integration)
+    if (_decorator) this.#setTag(span, DECORATOR, _decorator)
 
     const parentId =
       parent?.context().toSpanId() ??
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
       ROOT_PARENT_ID
-    this._setTag(span, PARENT_ID_KEY, parentId)
+    this.#setTag(span, PARENT_ID_KEY, parentId)
 
     // apply annotation context
     const annotationContext = storage.getStore()?.annotationContext
@@ -117,7 +117,7 @@ class LLMObsTagger {
 
     // apply annotation context name
     const annotationContextName = annotationContext?.name
-    if (annotationContextName) this._setTag(span, NAME, annotationContextName)
+    if (annotationContextName) this.#setTag(span, NAME, annotationContextName)
 
     // apply annotation context prompt
     const annotationContextPrompt = annotationContext?.prompt
@@ -125,9 +125,9 @@ class LLMObsTagger {
 
     const routing = storage.getStore()?.routingContext
     if (routing) {
-      this._setTag(span, ROUTING_API_KEY, routing.apiKey)
+      this.#setTag(span, ROUTING_API_KEY, routing.apiKey)
       if (routing.site) {
-        this._setTag(span, ROUTING_SITE, routing.site)
+        this.#setTag(span, ROUTING_SITE, routing.site)
       }
     }
   }
@@ -159,7 +159,7 @@ class LLMObsTagger {
     if (existingMetadata) {
       Object.assign(existingMetadata, metadata)
     } else {
-      this._setTag(span, METADATA, metadata)
+      this.#setTag(span, METADATA, metadata)
     }
   }
 
@@ -201,7 +201,7 @@ class LLMObsTagger {
     if (existingMetrics) {
       Object.assign(existingMetrics, filterdMetrics)
     } else {
-      this._setTag(span, METRICS, filterdMetrics)
+      this.#setTag(span, METRICS, filterdMetrics)
     }
   }
 
@@ -210,7 +210,7 @@ class LLMObsTagger {
     if (currentTags) {
       Object.assign(currentTags, tags)
     } else {
-      this._setTag(span, TAGS, tags)
+      this.#setTag(span, TAGS, tags)
     }
   }
 
@@ -362,27 +362,27 @@ class LLMObsTagger {
     if (currentPrompt) {
       Object.assign(currentPrompt, validatedPrompt)
     } else {
-      this._setTag(span, INPUT_PROMPT, validatedPrompt)
+      this.#setTag(span, INPUT_PROMPT, validatedPrompt)
     }
 
     this.tagSpanTags(span, { [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_ANNOTATED })
   }
 
   changeKind (span, newKind) {
-    this._setTag(span, SPAN_KIND, newKind)
+    this.#setTag(span, SPAN_KIND, newKind)
   }
 
   tagModelName (span, modelName) {
-    this._setTag(span, MODEL_NAME, modelName)
+    this.#setTag(span, MODEL_NAME, modelName)
   }
 
   #tagText (span, data, key) {
     if (data) {
       if (typeof data === 'string') {
-        this._setTag(span, key, data)
+        this.#setTag(span, key, data)
       } else {
         try {
-          this._setTag(span, key, JSON.stringify(data))
+          this.#setTag(span, key, JSON.stringify(data))
         } catch {
           const type = key === INPUT_VALUE ? 'input' : 'output'
           this.#handleFailure(`Failed to parse ${type} value, must be JSON serializable.`, 'invalid_io_text')
@@ -431,7 +431,7 @@ class LLMObsTagger {
     }
 
     if (documents.length) {
-      this._setTag(span, key, documents)
+      this.#setTag(span, key, documents)
     }
   }
 
@@ -567,7 +567,7 @@ class LLMObsTagger {
     }
 
     if (messages.length) {
-      this._setTag(span, key, messages)
+      this.#setTag(span, key, messages)
     }
   }
 
@@ -615,7 +615,7 @@ class LLMObsTagger {
     }
   }
 
-  _register (span) {
+  #register (span) {
     if (!this._config.llmobs.enabled) return
     if (registry.has(span)) {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
@@ -625,7 +625,7 @@ class LLMObsTagger {
     registry.set(span, {})
   }
 
-  _setTag (span, key, value) {
+  #setTag (span, key, value) {
     if (!this._config.llmobs.enabled) return
     if (!registry.has(span)) {
       this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)

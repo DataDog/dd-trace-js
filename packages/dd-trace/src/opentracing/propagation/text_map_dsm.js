@@ -16,7 +16,7 @@ class DSMTextMapPropagator {
   inject (ctx, carrier) {
     if (!this.config.dsmEnabled) return
 
-    this._injectDatadogDSMContext(ctx, carrier)
+    this.#injectDatadogDSMContext(ctx, carrier)
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Inject into carrier (DSM): ${JSON.stringify(pick(carrier, logKeys))}.`)
@@ -25,7 +25,7 @@ class DSMTextMapPropagator {
   extract (carrier) {
     if (!this.config.dsmEnabled) return
 
-    const dsmContext = this._extractDatadogDSMContext(carrier)
+    const dsmContext = this.#extractDatadogDSMContext(carrier)
 
     if (!dsmContext) return dsmContext
 
@@ -34,11 +34,11 @@ class DSMTextMapPropagator {
     return dsmContext
   }
 
-  _injectDatadogDSMContext (ctx, carrier) {
+  #injectDatadogDSMContext (ctx, carrier) {
     DsmPathwayCodec.encode(ctx, carrier)
   }
 
-  _extractDatadogDSMContext (carrier) {
+  #extractDatadogDSMContext (carrier) {
     const ctx = DsmPathwayCodec.decode(carrier)
     return ctx
   }

@@ -20,14 +20,14 @@ class FlareFile extends Writable {
   _write (chunk, encoding, callback) {
     const length = Buffer.byteLength(chunk)
 
-    this._reserve(length)
+    this.#reserve(length)
 
     this.length += Buffer.isBuffer(chunk) ? chunk.copy(this._buffer, this.length) : this._buffer.write(chunk, encoding)
 
     callback()
   }
 
-  _reserve (length) {
+  #reserve (length) {
     while (this.length + length > this._buffer.length) {
       const buffer = Buffer.alloc(this.length * 2)
 

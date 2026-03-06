@@ -114,7 +114,7 @@ class CiVisibilityExporter extends BufferingExporter {
 
   getRequestConfiguration (testConfiguration) {
     return {
-      url: this._getApiUrl(),
+      url: this.#getApiUrl(),
       env: this._config.env,
       service: this._config.service,
       isEvpProxy: !!this._isUsingEvpProxy,
@@ -246,7 +246,7 @@ class CiVisibilityExporter extends BufferingExporter {
         return
       }
       sendGitMetadataRequest(
-        this._getApiUrl(),
+        this.#getApiUrl(),
         { isEvpProxy: !!this._isUsingEvpProxy, evpProxyPrefix: this.evpProxyPrefix },
         repositoryUrl,
         (err) => {
@@ -375,7 +375,7 @@ class CiVisibilityExporter extends BufferingExporter {
     }
   }
 
-  _getApiUrl () {
+  #getApiUrl () {
     return this._url
   }
 

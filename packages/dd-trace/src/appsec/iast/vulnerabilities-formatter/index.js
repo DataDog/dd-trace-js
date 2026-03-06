@@ -4,10 +4,10 @@ const sensitiveHandler = require('./evidence-redaction/sensitive-handler')
 const { stringifyWithRanges } = require('./utils')
 
 class VulnerabilityFormatter {
-  _redactVulnearbilities = true
+  #redactVulnearbilities = true
 
   setRedactVulnerabilities (shouldRedactVulnerabilities, redactionNamePattern, redactionValuePattern) {
-    this._redactVulnearbilities = shouldRedactVulnerabilities
+    this.#redactVulnearbilities = shouldRedactVulnerabilities
     sensitiveHandler.setRedactionPatterns(redactionNamePattern, redactionValuePattern)
   }
 
@@ -75,7 +75,7 @@ class VulnerabilityFormatter {
       return
     }
 
-    return this._redactVulnearbilities
+    return this.#redactVulnearbilities
       ? this.getRedactedValueParts(type, evidence, sourcesIndexes, sources)
       : this.getUnredactedValueParts(evidence, sourcesIndexes)
   }

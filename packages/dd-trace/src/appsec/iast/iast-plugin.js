@@ -68,7 +68,7 @@ class IastPlugin extends Plugin {
     this.pluginSubs = []
   }
 
-  _getTelemetryHandler (iastSub) {
+  #getTelemetryHandler (iastSub) {
     return () => {
       const iastContext = getIastContext(storage('legacy').getStore())
       iastSub.increaseExecuted(iastContext)
@@ -102,7 +102,7 @@ class IastPlugin extends Plugin {
         super.addSub(iastSub.channelName, handler)
 
         if (iastTelemetry.isEnabled()) {
-          super.addSub(iastSub.channelName, this._getTelemetryHandler(iastSub))
+          super.addSub(iastSub.channelName, this.#getTelemetryHandler(iastSub))
         }
       }
     }
@@ -163,13 +163,13 @@ class IastPlugin extends Plugin {
   enableTelemetry () {
     if (this.onInstrumentationLoadedListener) return
 
-    this.onInstrumentationLoadedListener = ({ name }) => this._onInstrumentationLoaded(name)
+    this.onInstrumentationLoadedListener = ({ name }) => this.#onInstrumentationLoaded(name)
     const loadChannel = channel('dd-trace:instrumentation:load')
     loadChannel.subscribe(this.onInstrumentationLoadedListener)
 
     // check for already instrumented modules
     for (const name in instrumentations) {
-      this._onInstrumentationLoaded(name)
+      this.#onInstrumentationLoaded(name)
     }
   }
 
@@ -183,7 +183,7 @@ class IastPlugin extends Plugin {
     this.onInstrumentationLoadedListener = null
   }
 
-  _onInstrumentationLoaded (name) {
+  #onInstrumentationLoaded (name) {
     for (const sub of this.pluginSubs) {
       if (sub.matchesModuleInstrumented(name)) {
         sub.increaseInstrumented()

@@ -39,32 +39,32 @@ class DogStatsDClient {
     this._queue = []
     this._buffer = ''
     this._offset = 0
-    this._udp4 = this._socket('udp4')
-    this._udp6 = this._socket('udp6')
+    this._udp4 = this.#socket('udp4')
+    this._udp6 = this.#socket('udp6')
   }
 
   increment (stat, value, tags) {
-    this._add(stat, value, TYPE_COUNTER, tags)
+    this.#add(stat, value, TYPE_COUNTER, tags)
   }
 
   decrement (stat, value, tags) {
-    this._add(stat, -value, TYPE_COUNTER, tags)
+    this.#add(stat, -value, TYPE_COUNTER, tags)
   }
 
   gauge (stat, value, tags) {
-    this._add(stat, value, TYPE_GAUGE, tags)
+    this.#add(stat, value, TYPE_GAUGE, tags)
   }
 
   distribution (stat, value, tags) {
-    this._add(stat, value, TYPE_DISTRIBUTION, tags)
+    this.#add(stat, value, TYPE_DISTRIBUTION, tags)
   }
 
   histogram (stat, value, tags) {
-    this._add(stat, value, TYPE_HISTOGRAM, tags)
+    this.#add(stat, value, TYPE_HISTOGRAM, tags)
   }
 
   flush () {
-    const queue = this._enqueue()
+    const queue = this.#enqueue()
 
     log.debug('Flushing %s metrics via', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
@@ -73,13 +73,13 @@ class DogStatsDClient {
     this._queue = []
 
     if (this._httpOptions) {
-      this._sendHttp(queue)
+      this.#sendHttp(queue)
     } else {
-      this._sendUdp(queue)
+      this.#sendUdp(queue)
     }
   }
 
-  _sendHttp (queue) {
+  #sendHttp (queue) {
     const buffer = Buffer.concat(queue)
     request(buffer, this._httpOptions, (err) => {
       if (err) {
@@ -91,23 +91,23 @@ class DogStatsDClient {
           // options. Either way, we can give UDP a try.
           this._httpOptions = undefined
         }
-        this._sendUdp(queue)
+        this.#sendUdp(queue)
       }
     })
   }
 
-  _sendUdp (queue) {
+  #sendUdp (queue) {
     if (this._family === 0) {
       lookup(this._host, (err, address, family) => {
         if (err) return log.error('DogStatsDClient: Host not found', err)
-        this._sendUdpFromQueue(queue, address, family)
+        this.#sendUdpFromQueue(queue, address, family)
       })
     } else {
-      this._sendUdpFromQueue(queue, this._host, this._family)
+      this.#sendUdpFromQueue(queue, this._host, this._family)
     }
   }
 
-  _sendUdpFromQueue (queue, address, family) {
+  #sendUdpFromQueue (queue, address, family) {
     const socket = family === 6 ? this._udp6 : this._udp4
 
     for (const buffer of queue) {
@@ -116,7 +116,7 @@ class DogStatsDClient {
     }
   }
 
-  _add (stat, value, type, tags) {
+  #add (stat, value, type, tags) {
     let message = `${this._prefix + stat}:${value}|${type}`
 
     // Don't manipulate this._tags as it is still used
@@ -130,21 +130,21 @@ class DogStatsDClient {
       message += `|c:${entityId}`
     }
 
-    this._write(`${message}\n`)
+    this.#write(`${message}\n`)
   }
 
-  _write (message) {
+  #write (message) {
     const offset = Buffer.byteLength(message)
 
     if (this._offset + offset > MAX_BUFFER_SIZE) {
-      this._enqueue()
+      this.#enqueue()
     }
 
     this._offset += offset
     this._buffer += message
   }
 
-  _enqueue () {
+  #enqueue () {
     if (this._offset > 0) {
       this._queue.push(Buffer.from(this._buffer))
       this._buffer = ''
@@ -154,7 +154,7 @@ class DogStatsDClient {
     return this._queue
   }
 
-  _socket (type) {
+  #socket (type) {
     const socket = dgram.createSocket(type)
 
     socket.on('error', () => {})
@@ -200,9 +200,9 @@ class MetricsAggregationClient {
   }
 
   flush () {
-    this._captureCounters()
-    this._captureGauges()
-    this._captureHistograms()
+    this.#captureCounters()
+    this.#captureGauges()
+    this.#captureHistograms()
 
     this._client.flush()
   }
@@ -223,7 +223,7 @@ class MetricsAggregationClient {
   }
 
   histogram (name, value, tags) {
-    const node = this._ensureTree(this._histograms, name, tags, null)
+    const node = this.#ensureTree(this._histograms, name, tags, null)
 
     if (!node.value) {
       node.value = new Histogram()
@@ -239,13 +239,13 @@ class MetricsAggregationClient {
     }
 
     const container = monotonic ? this._counters : this._gauges
-    const node = this._ensureTree(container, name, tags, 0)
+    const node = this.#ensureTree(container, name, tags, 0)
 
     node.value += count
   }
 
   gauge (name, value, tags) {
-    const node = this._ensureTree(this._gauges, name, tags, 0)
+    const node = this.#ensureTree(this._gauges, name, tags, 0)
 
     node.value = value
   }
@@ -258,22 +258,22 @@ class MetricsAggregationClient {
     this.count(name, -count, tags)
   }
 
-  _captureGauges () {
-    this._captureTree(this._gauges, (node, name, tags) => {
+  #captureGauges () {
+    this.#captureTree(this._gauges, (node, name, tags) => {
       this._client.gauge(name, node.value, tags)
     })
   }
 
-  _captureCounters () {
-    this._captureTree(this._counters, (node, name, tags) => {
+  #captureCounters () {
+    this.#captureTree(this._counters, (node, name, tags) => {
       this._client.increment(name, node.value, tags)
     })
 
     this._counters.clear()
   }
 
-  _captureHistograms () {
-    this._captureTree(this._histograms, (node, name, tags) => {
+  #captureHistograms () {
+    this.#captureTree(this._histograms, (node, name, tags) => {
       let stats = node.value
 
       // Stats can contain garbage data when a value was never recorded.
@@ -294,33 +294,33 @@ class MetricsAggregationClient {
     })
   }
 
-  _captureTree (tree, fn) {
+  #captureTree (tree, fn) {
     for (const [name, root] of tree) {
-      this._captureNode(root, name, [], fn)
+      this.#captureNode(root, name, [], fn)
     }
   }
 
-  _captureNode (node, name, tags, fn) {
+  #captureNode (node, name, tags, fn) {
     if (node.touched) {
       fn(node, name, tags)
     }
 
     for (const [tag, next] of node.nodes) {
       tags.push(tag)
-      this._captureNode(next, name, tags, fn)
+      this.#captureNode(next, name, tags, fn)
       tags.pop()
     }
   }
 
-  _ensureTree (tree, name, tags = [], value) {
+  #ensureTree (tree, name, tags = [], value) {
     if (!Array.isArray(tags)) {
       tags = [tags]
     }
 
-    let node = this._ensureNode(tree, name, value)
+    let node = this.#ensureNode(tree, name, value)
 
     for (const tag of tags) {
-      node = this._ensureNode(node.nodes, tag, value)
+      node = this.#ensureNode(node.nodes, tag, value)
     }
 
     node.touched = true
@@ -328,7 +328,7 @@ class MetricsAggregationClient {
     return node
   }
 
-  _ensureNode (container, key, value) {
+  #ensureNode (container, key, value) {
     let node = container.get(key)
 
     if (!node) {
