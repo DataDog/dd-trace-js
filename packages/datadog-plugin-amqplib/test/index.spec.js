@@ -9,6 +9,7 @@ const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/c
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -72,15 +73,23 @@ describe('Plugin', () => {
               agent
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
-                  assert.strictEqual(span.name, expectedSchema.controlPlane.opName)
-                  assert.strictEqual(span.service, expectedSchema.controlPlane.serviceName)
-                  assert.strictEqual(span.resource, `queue.declare ${queue}`)
+                  assertObjectContains(span, {
+                    name: expectedSchema.controlPlane.opName,
+                    service: expectedSchema.controlPlane.serviceName,
+                    resource: `queue.declare ${queue}`,
+                  })
                   assert.ok(!('type' in span))
-                  assert.strictEqual(span.meta['span.kind'], 'client')
-                  assert.strictEqual(span.meta['out.host'], 'localhost')
-                  assert.strictEqual(span.meta.component, 'amqplib')
-                  assert.strictEqual(span.meta['_dd.integration'], 'amqplib')
-                  assert.strictEqual(span.metrics['network.destination.port'], 5672)
+                  assertObjectContains(span, {
+                    meta: {
+                      'span.kind': 'client',
+                      'out.host': 'localhost',
+                      component: 'amqplib',
+                      '_dd.integration': 'amqplib',
+                    },
+                    metrics: {
+                      'network.destination.port': 5672,
+                    },
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -93,14 +102,22 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
-                  assert.strictEqual(span.name, expectedSchema.controlPlane.opName)
-                  assert.strictEqual(span.service, expectedSchema.controlPlane.serviceName)
-                  assert.strictEqual(span.resource, `queue.delete ${queue}`)
+                  assertObjectContains(span, {
+                    name: expectedSchema.controlPlane.opName,
+                    service: expectedSchema.controlPlane.serviceName,
+                    resource: `queue.delete ${queue}`,
+                  })
                   assert.ok(!('type' in span))
-                  assert.strictEqual(span.meta['span.kind'], 'client')
-                  assert.strictEqual(span.meta['out.host'], 'localhost')
-                  assert.strictEqual(span.meta.component, 'amqplib')
-                  assert.strictEqual(span.metrics['network.destination.port'], 5672)
+                  assertObjectContains(span, {
+                    meta: {
+                      'span.kind': 'client',
+                      'out.host': 'localhost',
+                      component: 'amqplib',
+                    },
+                    metrics: {
+                      'network.destination.port': 5672,
+                    },
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -152,15 +169,23 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
 
-                  assert.strictEqual(span.name, expectedSchema.send.opName)
-                  assert.strictEqual(span.service, expectedSchema.send.serviceName)
-                  assert.strictEqual(span.resource, 'basic.publish exchange routingKey')
+                  assertObjectContains(span, {
+                    name: expectedSchema.send.opName,
+                    service: expectedSchema.send.serviceName,
+                    resource: 'basic.publish exchange routingKey',
+                  })
                   assert.ok(!('type' in span))
-                  assert.strictEqual(span.meta['out.host'], 'localhost')
-                  assert.strictEqual(span.meta['span.kind'], 'producer')
-                  assert.strictEqual(span.meta['amqp.routingKey'], 'routingKey')
-                  assert.strictEqual(span.meta.component, 'amqplib')
-                  assert.strictEqual(span.metrics['network.destination.port'], 5672)
+                  assertObjectContains(span, {
+                    meta: {
+                      'out.host': 'localhost',
+                      'span.kind': 'producer',
+                      'amqp.routingKey': 'routingKey',
+                      component: 'amqplib',
+                    },
+                    metrics: {
+                      'network.destination.port': 5672,
+                    },
+                  })
                 })
                 .then(done)
                 .catch(done)
@@ -209,13 +234,17 @@ describe('Plugin', () => {
               agent
                 .assertSomeTraces(traces => {
                   const span = traces[0][0]
-                  assert.strictEqual(span.name, expectedSchema.receive.opName)
-                  assert.strictEqual(span.service, expectedSchema.receive.serviceName)
-                  assert.strictEqual(span.resource, `basic.deliver ${queue}`)
-                  assert.strictEqual(span.type, 'worker')
-                  assert.strictEqual(span.meta['span.kind'], 'consumer')
-                  assert.strictEqual(span.meta['amqp.consumerTag'], consumerTag)
-                  assert.strictEqual(span.meta.component, 'amqplib')
+                  assertObjectContains(span, {
+                    name: expectedSchema.receive.opName,
+                    service: expectedSchema.receive.serviceName,
+                    resource: `basic.deliver ${queue}`,
+                    type: 'worker',
+                    meta: {
+                      'span.kind': 'consumer',
+                      'amqp.consumerTag': consumerTag,
+                      component: 'amqplib',
+                    },
+                  })
                 })
                 .then(done)
                 .catch(done)

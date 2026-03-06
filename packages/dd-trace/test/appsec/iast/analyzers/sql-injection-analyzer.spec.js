@@ -11,6 +11,7 @@ const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tr
 const log = require('../../../../src/log')
 const { SQL_INJECTION_MARK, COMMAND_INJECTION_MARK } =
  require('../../../../src/appsec/iast/taint-tracking/secure-marks')
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
 describe('sql-injection-analyzer', () => {
   const NOT_TAINTED_QUERY = 'no vulnerable query'
@@ -68,21 +69,74 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions.length, 7)
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[0]._channel.name, 'apm:mysql:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[1]._channel.name, 'datadog:mysql2:outerquery:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[2]._channel.name, 'apm:pg:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[3]._channel.name, 'datadog:sequelize:query:finish')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[4]._channel.name, 'datadog:pg:pool:query:finish')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[5]._channel.name, 'datadog:mysql:pool:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[6]._channel.name, 'datadog:mysql:pool:query:finish')
-
-    assert.strictEqual(sqlInjectionAnalyzer._bindings.length, 5)
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[0]._channel.name, 'datadog:sequelize:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[1]._channel.name, 'datadog:pg:pool:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[2]._channel.name, 'datadog:knex:raw:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[3]._channel.name, 'datadog:knex:raw:subscribes')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[4]._channel.name, 'datadog:knex:raw:finish')
+    assertObjectContains(sqlInjectionAnalyzer, {
+      _subscriptions: {
+        length: 7,
+        0: {
+          _channel: {
+            name: 'apm:mysql:query:start',
+          },
+        },
+        1: {
+          _channel: {
+            name: 'datadog:mysql2:outerquery:start',
+          },
+        },
+        2: {
+          _channel: {
+            name: 'apm:pg:query:start',
+          },
+        },
+        3: {
+          _channel: {
+            name: 'datadog:sequelize:query:finish',
+          },
+        },
+        4: {
+          _channel: {
+            name: 'datadog:pg:pool:query:finish',
+          },
+        },
+        5: {
+          _channel: {
+            name: 'datadog:mysql:pool:query:start',
+          },
+        },
+        6: {
+          _channel: {
+            name: 'datadog:mysql:pool:query:finish',
+          },
+        },
+      },
+      _bindings: {
+        length: 5,
+        0: {
+          _channel: {
+            name: 'datadog:sequelize:query:start',
+          },
+        },
+        1: {
+          _channel: {
+            name: 'datadog:pg:pool:query:start',
+          },
+        },
+        2: {
+          _channel: {
+            name: 'datadog:knex:raw:start',
+          },
+        },
+        3: {
+          _channel: {
+            name: 'datadog:knex:raw:subscribes',
+          },
+        },
+        4: {
+          _channel: {
+            name: 'datadog:knex:raw:finish',
+          },
+        },
+      },
+    })
   })
 
   it('should not detect vulnerability when no query', () => {

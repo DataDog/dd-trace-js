@@ -361,9 +361,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.ok(test.metrics[TEST_SOURCE_START])
             assert.ok(test.meta[ERROR_STACK])
             assert.strictEqual(test.parent_id.toString(), '0')
-            assert.strictEqual(test.type, 'test')
-            assert.strictEqual(test.name, 'mocha.test')
-            assert.strictEqual(test.resource, 'ci-visibility/mocha-plugin-tests/failing.js.mocha-test-fail can fail')
+            assertObjectContains(test, {
+              type: 'test',
+              name: 'mocha.test',
+              resource: 'ci-visibility/mocha-plugin-tests/failing.js.mocha-test-fail can fail',
+            })
           })
 
         childProcess = exec(
@@ -1626,9 +1628,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
+        assertObjectContains(coveragePayload, {
+          name: 'coverage1',
+          filename: 'coverage1.msgpack',
+          type: 'application/msgpack',
+        })
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)

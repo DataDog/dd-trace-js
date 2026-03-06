@@ -145,12 +145,15 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         await agent.assertSomeTraces(traces => {
           const spans = traces[0]
 
-          assert.strictEqual(spans.length, 2)
-
-          assert.strictEqual(spans[0].name, config.expectedSpanName)
-          assert.strictEqual(spans[0].service, config.expectedService)
-          assert.strictEqual(spans[0].resource, 'GET /test')
-          assert.strictEqual(spans[0].type, 'web')
+          assertObjectContains(spans, {
+            length: 2,
+            0: {
+              name: config.expectedSpanName,
+              service: config.expectedService,
+              resource: 'GET /test',
+              type: 'web',
+            },
+          })
           assertObjectContains(spans[0], {
             meta: {
               'http.url': config.expectedUrl,

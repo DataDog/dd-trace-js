@@ -8,6 +8,7 @@ const { describe, it } = require('mocha')
 require('../setup/core')
 const { getAgentUrl } = require('../../src/agent/url')
 const defaults = require('../../src/config/defaults')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('agent/url', () => {
   describe('getAgentUrl', () => {
@@ -29,9 +30,11 @@ describe('agent/url', () => {
       const result = getAgentUrl(config)
 
       assert.ok(result instanceof URL)
-      assert.strictEqual(result.hostname, 'custom-host')
-      assert.strictEqual(result.port, '9999')
-      assert.strictEqual(result.protocol, 'http:')
+      assertObjectContains(result, {
+        hostname: 'custom-host',
+        port: '9999',
+        protocol: 'http:',
+      })
     })
 
     it('should use default hostname when not provided', () => {
@@ -52,9 +55,11 @@ describe('agent/url', () => {
 
       const result = getAgentUrl(config)
 
-      assert.strictEqual(result.hostname, 'custom-host')
-      assert.strictEqual(result.port, defaults.port)
-      assert.strictEqual(result.protocol, 'http:')
+      assertObjectContains(result, {
+        hostname: 'custom-host',
+        port: defaults.port,
+        protocol: 'http:',
+      })
     })
 
     it('should use defaults when hostname and port not provided', () => {
@@ -62,9 +67,11 @@ describe('agent/url', () => {
 
       const result = getAgentUrl(config)
 
-      assert.strictEqual(result.hostname, defaults.hostname)
-      assert.strictEqual(result.port, defaults.port)
-      assert.strictEqual(result.protocol, 'http:')
+      assertObjectContains(result, {
+        hostname: defaults.hostname,
+        port: defaults.port,
+        protocol: 'http:',
+      })
     })
 
     it('should prioritize url over hostname and port', () => {

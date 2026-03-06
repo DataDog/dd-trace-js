@@ -78,10 +78,14 @@ describe('config', () => {
     assert.ok(config.profilers[0] instanceof SpaceProfiler)
     assert.ok(config.profilers[1] instanceof WallProfiler)
     assert.strictEqual(config.profilers[1].codeHotspotsEnabled(), samplingContextsAvailable)
-    assert.strictEqual(config.v8ProfilerBugWorkaroundEnabled, true)
-    assert.strictEqual(config.cpuProfilingEnabled, samplingContextsAvailable)
-    assert.strictEqual(config.uploadCompression.method, zstdOrGzip)
-    assert.strictEqual(config.uploadCompression.level, undefined)
+    assertObjectContains(config, {
+      v8ProfilerBugWorkaroundEnabled: true,
+      cpuProfilingEnabled: samplingContextsAvailable,
+      uploadCompression: {
+        method: zstdOrGzip,
+        level: undefined,
+      },
+    })
   })
 
   it('should support configuration options', () => {
@@ -103,9 +107,13 @@ describe('config', () => {
     assert.strictEqual(config.version, options.version)
     assert.ok(typeof config.tags === 'object' && config.tags !== null)
     assert.strictEqual(typeof config.tags.host, 'string')
-    assert.strictEqual(config.tags.service, options.service)
-    assert.strictEqual(config.tags.version, options.version)
-    assert.strictEqual(config.flushInterval, 65 * 1000)
+    assertObjectContains(config, {
+      tags: {
+        service: options.service,
+        version: options.version,
+      },
+      flushInterval: 65 * 1000,
+    })
     assert.ok(Array.isArray(config.exporters))
     assert.strictEqual(config.exporters.length, 2)
     assert.ok(config.exporters[0] instanceof AgentExporter)
@@ -162,9 +170,11 @@ describe('config', () => {
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 0)
 
-    assert.strictEqual(errors.length, 2)
-    assert.strictEqual(errors[0], 'Unknown profiler "nope"')
-    assert.strictEqual(errors[1], 'Unknown profiler "also_nope"')
+    assertObjectContains(errors, {
+      length: 2,
+      0: 'Unknown profiler "nope"',
+      1: 'Unknown profiler "also_nope"',
+    })
   })
 
   it('should support profiler config with empty DD_PROFILING_PROFILERS', () => {
@@ -272,11 +282,13 @@ describe('config', () => {
     }
 
     const config = new Config(options)
-    assert.strictEqual(config.debugSourceMaps, true)
-    assert.strictEqual(config.heapSamplingInterval, 1000)
-    assert.strictEqual(config.pprofPrefix, 'test-prefix')
-    assert.strictEqual(config.uploadTimeout, 10000)
-    assert.strictEqual(config.timelineEnabled, false)
+    assertObjectContains(config, {
+      debugSourceMaps: true,
+      heapSamplingInterval: 1000,
+      pprofPrefix: 'test-prefix',
+      uploadTimeout: 10000,
+      timelineEnabled: false,
+    })
 
     process.env = oldenv
   })

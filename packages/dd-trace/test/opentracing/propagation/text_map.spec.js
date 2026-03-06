@@ -121,11 +121,13 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.strictEqual(carrier['ot-baggage-number'], '1.23')
-      assert.strictEqual(carrier['ot-baggage-bool'], 'true')
-      assert.strictEqual(carrier['ot-baggage-array'], 'foo,bar')
-      assert.strictEqual(carrier['ot-baggage-object'], '[object Object]')
-      assert.strictEqual(carrier.baggage, undefined)
+      assertObjectContains(carrier, {
+        'ot-baggage-number': '1.23',
+        'ot-baggage-bool': 'true',
+        'ot-baggage-array': 'foo,bar',
+        'ot-baggage-object': '[object Object]',
+        baggage: undefined,
+      })
     })
 
     it('should skip legacy baggage items that cannot be encoded as a valid HTTP header name', () => {

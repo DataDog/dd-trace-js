@@ -5,6 +5,7 @@ const {
   DEFAULT_MAX_COLLECTION_SIZE,
   LARGE_OBJECT_SKIP_THRESHOLD,
 } = require('../../packages/dd-trace/src/debugger/devtools_client/snapshot/constants')
+const { assertObjectContains } = require('../helpers')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -117,36 +118,72 @@ describe('Dynamic Instrumentation', function () {
             const notCapturedReason = `Large collection with too many elements (skip threshold: ${
               LARGE_OBJECT_SKIP_THRESHOLD
             })`
-            assert.strictEqual(locals.arrOfPrimitives.notCapturedReason, notCapturedReason)
-            assert.strictEqual(locals.arrOfPrimitives.size, 1_000_000)
-            assert.strictEqual(locals.arrOfPrimitives.elements.length, 0)
-            assert.strictEqual(locals.arrOfObjects.notCapturedReason, notCapturedReason)
-            assert.strictEqual(locals.arrOfObjects.size, 1_000_000)
-            assert.strictEqual(locals.arrOfObjects.elements.length, 0)
-            assert.strictEqual(locals.map.notCapturedReason, notCapturedReason)
-            assert.strictEqual(locals.map.size, 1_000_000)
-            assert.strictEqual(locals.map.entries.length, 0)
-            assert.strictEqual(locals.set.notCapturedReason, notCapturedReason)
-            assert.strictEqual(locals.set.size, 1_000_000)
-            assert.strictEqual(locals.set.elements.length, 0)
+            assertObjectContains(locals, {
+              arrOfPrimitives: {
+                notCapturedReason,
+                size: 1_000_000,
+                elements: {
+                  length: 0,
+                },
+              },
+              arrOfObjects: {
+                notCapturedReason,
+                size: 1_000_000,
+                elements: {
+                  length: 0,
+                },
+              },
+              map: {
+                notCapturedReason,
+                size: 1_000_000,
+                entries: {
+                  length: 0,
+                },
+              },
+              set: {
+                notCapturedReason,
+                size: 1_000_000,
+                elements: {
+                  length: 0,
+                },
+              },
+            })
           })
         )
 
         it(
           'should keep budget when state includes collections with less than the size threshold',
           test({ t, maxPausedTime: budget, breakpointIndex: 3, maxReferenceDepth: 1 }, (locals) => {
-            assert.strictEqual(locals.arrOfPrimitives.notCapturedReason, 'collectionSize')
-            assert.strictEqual(locals.arrOfPrimitives.size, LARGE_OBJECT_SKIP_THRESHOLD - 1)
-            assert.strictEqual(locals.arrOfPrimitives.elements.length, DEFAULT_MAX_COLLECTION_SIZE)
-            assert.strictEqual(locals.arrOfObjects.notCapturedReason, 'collectionSize')
-            assert.strictEqual(locals.arrOfObjects.size, LARGE_OBJECT_SKIP_THRESHOLD - 1)
-            assert.strictEqual(locals.arrOfObjects.elements.length, DEFAULT_MAX_COLLECTION_SIZE)
-            assert.strictEqual(locals.map.notCapturedReason, 'collectionSize')
-            assert.strictEqual(locals.map.size, LARGE_OBJECT_SKIP_THRESHOLD - 1)
-            assert.strictEqual(locals.map.entries.length, DEFAULT_MAX_COLLECTION_SIZE)
-            assert.strictEqual(locals.set.notCapturedReason, 'collectionSize')
-            assert.strictEqual(locals.set.size, LARGE_OBJECT_SKIP_THRESHOLD - 1)
-            assert.strictEqual(locals.set.elements.length, DEFAULT_MAX_COLLECTION_SIZE)
+            assertObjectContains(locals, {
+              arrOfPrimitives: {
+                notCapturedReason: 'collectionSize',
+                size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
+                elements: {
+                  length: DEFAULT_MAX_COLLECTION_SIZE,
+                },
+              },
+              arrOfObjects: {
+                notCapturedReason: 'collectionSize',
+                size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
+                elements: {
+                  length: DEFAULT_MAX_COLLECTION_SIZE,
+                },
+              },
+              map: {
+                notCapturedReason: 'collectionSize',
+                size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
+                entries: {
+                  length: DEFAULT_MAX_COLLECTION_SIZE,
+                },
+              },
+              set: {
+                notCapturedReason: 'collectionSize',
+                size: LARGE_OBJECT_SKIP_THRESHOLD - 1,
+                elements: {
+                  length: DEFAULT_MAX_COLLECTION_SIZE,
+                },
+              },
+            })
           })
         )
       })

@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const semver = require('semver')
 const {
   FakeAgent,
+  assertObjectContains,
   curlAndAssertMessage,
   spawnPluginIntegrationTestProc,
   sandboxCwd,
@@ -48,9 +49,17 @@ describe('esm', () => {
             assert.ok(Array.isArray(payload))
             assert.strictEqual(payload.length, 1)
             assert.ok(Array.isArray(payload[0]))
-            assert.strictEqual(payload[0].length, numberOfSpans)
-            assert.strictEqual(payload[0][0].name, 'express.request')
-            assert.strictEqual(payload[0][1].name, `${whichMiddleware}.middleware`)
+            assertObjectContains(payload, {
+              0: {
+                length: numberOfSpans,
+                0: {
+                  name: 'express.request',
+                },
+                1: {
+                  name: `${whichMiddleware}.middleware`,
+                },
+              },
+            })
           })
         }).timeout(50000)
       })

@@ -9,6 +9,7 @@ const nock = require('nock')
 
 require('../setup/core')
 const tracerLogger = require('../../src/log')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('External Logger', () => {
   let externalLogger
@@ -70,13 +71,17 @@ describe('External Logger', () => {
 
     externalLogger.flush((err) => {
       try {
-        assert.strictEqual(request[0].message, 'oh no, something is up')
-        assert.strictEqual(request[0].custom, 'field')
-        assert.strictEqual(request[0].attribute, 'funky')
-        assert.strictEqual(request[0].service, 'outer_space')
-        assert.strictEqual(request[0].level, 'info')
-        assert.strictEqual(request[0]['dd.trace_id'], '000001000')
-        assert.strictEqual(request[0]['dd.span_id'], '9999991999')
+        assertObjectContains(request, {
+          0: {
+            message: 'oh no, something is up',
+            custom: 'field',
+            attribute: 'funky',
+            service: 'outer_space',
+            level: 'info',
+            'dd.trace_id': '000001000',
+            'dd.span_id': '9999991999',
+          },
+        })
         assert.ok(request[0].timestamp >= currentTime)
         assert.strictEqual(request[0].ddsource, 'logging_from_space')
         assert.strictEqual(request[0].ddtags, 'env:external_logger,version:1.2.3,service:external')

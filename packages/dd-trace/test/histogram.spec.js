@@ -6,6 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 
 require('./setup/core')
 const Histogram = require('../src/histogram')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Histogram', () => {
   let histogram
@@ -23,10 +24,12 @@ describe('Histogram', () => {
     const p50 = histogram.percentile(50)
     const p95 = histogram.percentile(95)
 
-    assert.strictEqual(histogram.min, 1)
-    assert.strictEqual(histogram.max, 99)
-    assert.strictEqual(histogram.sum, 4950)
-    assert.strictEqual(histogram.avg, 50)
+    assertObjectContains(histogram, {
+      min: 1,
+      max: 99,
+      sum: 4950,
+      avg: 50,
+    })
     assert.ok(typeof histogram.median === 'number')
     assert.strictEqual(histogram.count, 99)
     assert.ok(typeof histogram.p95 === 'number')
@@ -45,13 +48,15 @@ describe('Histogram', () => {
 
     histogram.reset()
 
-    assert.strictEqual(histogram.min, 0)
-    assert.strictEqual(histogram.max, 0)
-    assert.strictEqual(histogram.sum, 0)
-    assert.strictEqual(histogram.avg, 0)
-    assert.strictEqual(histogram.median, 0)
-    assert.strictEqual(histogram.count, 0)
-    assert.strictEqual(histogram.p95, 0)
+    assertObjectContains(histogram, {
+      min: 0,
+      max: 0,
+      sum: 0,
+      avg: 0,
+      median: 0,
+      count: 0,
+      p95: 0,
+    })
     assert.strictEqual(histogram.percentile(50), 0)
   })
 })

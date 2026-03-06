@@ -12,6 +12,7 @@ const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
 const cert = fs.readFileSync(path.join(__dirname, './ssl/test.crt'))
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./naming')
 
 const HTTP_REQUEST_HEADERS = tags.HTTP_REQUEST_HEADERS
@@ -107,17 +108,27 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-                assert.strictEqual(traces[0][0].type, 'http')
-                assert.strictEqual(traces[0][0].resource, 'GET')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['http.url'], `${protocol}://localhost:${port}/user`)
-                assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta.component, 'http2')
-                assert.strictEqual(traces[0][0].meta['_dd.integration'], 'http2')
-                assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
-                assert.strictEqual(traces[0][0].metrics['network.destination.port'], port)
+                assertObjectContains(traces, {
+                  0: {
+                    0: {
+                      service: SERVICE_NAME,
+                      type: 'http',
+                      resource: 'GET',
+                      meta: {
+                        'span.kind': 'client',
+                        'http.url': `${protocol}://localhost:${port}/user`,
+                        'http.method': 'GET',
+                        'http.status_code': '200',
+                        component: 'http2',
+                        '_dd.integration': 'http2',
+                        'out.host': 'localhost',
+                      },
+                      metrics: {
+                        'network.destination.port': port,
+                      },
+                    },
+                  },
+                })
               })
               .then(done)
               .catch(done)

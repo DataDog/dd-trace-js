@@ -6,6 +6,7 @@ const { describe, it, afterEach } = require('mocha')
 
 require('../../setup/core')
 const { ddBasePath } = require('../../../src/util')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const EOL = '\n'
 
@@ -196,9 +197,15 @@ describe('telemetry log collector', () => {
       logCollector.add(err1)
 
       const drainedErrors = logCollector.drain()
-      assert.strictEqual(drainedErrors.length, 2)
-      assert.strictEqual(drainedErrors[0].count, 3)
-      assert.strictEqual(drainedErrors[1].count, 2)
+      assertObjectContains(drainedErrors, {
+        length: 2,
+        0: {
+          count: 3,
+        },
+        1: {
+          count: 2,
+        },
+      })
     })
   })
 })

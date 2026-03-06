@@ -13,6 +13,8 @@ const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@d
 const HIGH_ACCURACY_DISTRIBUTION = 0.0075
 
 const pkg = require('../../../../package.json')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+
 const DEFAULT_TIMESTAMP = Number(new Date('2023-04-20T16:20:00.000Z'))
 const DEFAULT_LATENCY = 100000000
 const DEFAULT_PARENT_HASH = Buffer.from('e858292fd15a41e4', 'hex')
@@ -226,9 +228,11 @@ describe('DataStreamsProcessor', () => {
       url: config.url,
     })
     assert.ok(processor.buckets instanceof TimeBuckets)
-    assert.strictEqual(processor.hostname, hostname())
-    assert.strictEqual(processor.enabled, config.dsmEnabled)
-    assert.strictEqual(processor.env, config.env)
+    assertObjectContains(processor, {
+      hostname: hostname(),
+      enabled: config.dsmEnabled,
+      env: config.env,
+    })
     assert.deepStrictEqual(processor.tags, config.tags)
   })
 

@@ -89,9 +89,13 @@ describe('agentless-ci-visibility-encode', () => {
       service: 'test-s',
       type: 'foo',
     })
-    assert.strictEqual(spanEvent.content.error, 0)
-    assert.strictEqual(spanEvent.content.start, 123)
-    assert.strictEqual(spanEvent.content.duration, 456)
+    assertObjectContains(spanEvent, {
+      content: {
+        error: 0,
+        start: 123,
+        duration: 456,
+      },
+    })
 
     assert.deepStrictEqual(spanEvent.content.meta, {
       bar: 'baz',
@@ -152,11 +156,22 @@ describe('agentless-ci-visibility-encode', () => {
 
     assert.ok(decodedTrace)
     const spanEvent = decodedTrace.events[0]
-    assert.strictEqual(spanEvent.content.type.length, MAX_TYPE_LENGTH)
-    assert.strictEqual(spanEvent.content.name.length, MAX_NAME_LENGTH)
-    assert.strictEqual(spanEvent.content.service.length, MAX_SERVICE_LENGTH)
-    // ellipsis is added
-    assert.strictEqual(spanEvent.content.resource.length, MAX_RESOURCE_NAME_LENGTH + 3)
+    assertObjectContains(spanEvent, {
+      content: {
+        type: {
+          length: MAX_TYPE_LENGTH,
+        },
+        name: {
+          length: MAX_NAME_LENGTH,
+        },
+        service: {
+          length: MAX_SERVICE_LENGTH,
+        },
+        resource: {
+          length: MAX_RESOURCE_NAME_LENGTH + 3,
+        },
+      },
+    })
   })
 
   it('should fallback to a default name and service if they are not present', () => {

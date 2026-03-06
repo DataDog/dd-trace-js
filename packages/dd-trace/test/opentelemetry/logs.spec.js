@@ -16,6 +16,7 @@ const { trace, context } = require('@opentelemetry/api')
 require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
@@ -119,10 +120,16 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(scopeLogs.length, 1)
 
         const scope = scopeLogs[0]
-        assert.strictEqual(scope.scope.name, 'test-logger')
-        assert.strictEqual(scope.scope.version, '1.0.0')
-        assert.strictEqual(scope.schemaUrl, 'https://opentelemetry.io/schemas/1.27.0')
-        assert.strictEqual(scope.logRecords.length, 2)
+        assertObjectContains(scope, {
+          scope: {
+            name: 'test-logger',
+            version: '1.0.0',
+          },
+          schemaUrl: 'https://opentelemetry.io/schemas/1.27.0',
+          logRecords: {
+            length: 2,
+          },
+        })
 
         const log1 = scope.logRecords[0]
         assert.strictEqual(log1.severityText, 'INFO')
@@ -131,9 +138,13 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(log1.spanId.toString('hex'), '1234567890abcdef')
 
         const log2 = scope.logRecords[1]
-        assert.strictEqual(log2.severityText, 'ERROR')
-        assert.strictEqual(log2.severityNumber, 17)
-        assert.strictEqual(log2.body.stringValue, 'Test error message')
+        assertObjectContains(log2, {
+          severityText: 'ERROR',
+          severityNumber: 17,
+          body: {
+            stringValue: 'Test error message',
+          },
+        })
         assert.strictEqual(log2.traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
         assert.strictEqual(log2.spanId.toString('hex'), '1234567890abcdef')
       })
@@ -312,19 +323,39 @@ describe('OpenTelemetry Logs', () => {
 
         // First scope: logger1@1.0.0
         const scope1 = scopeLogs[0]
-        assert.strictEqual(scope1.scope.name, 'logger1')
-        assert.strictEqual(scope1.scope.version, '1.0.0')
-        assert.strictEqual(scope1.logRecords.length, 1)
-        assert.strictEqual(scope1.logRecords[0].severityText, 'INFO')
-        assert.strictEqual(scope1.logRecords[0].body.stringValue, 'Message from logger1')
+        assertObjectContains(scope1, {
+          scope: {
+            name: 'logger1',
+            version: '1.0.0',
+          },
+          logRecords: {
+            length: 1,
+            0: {
+              severityText: 'INFO',
+              body: {
+                stringValue: 'Message from logger1',
+              },
+            },
+          },
+        })
 
         // Second scope: logger2@2.0.0
         const scope2 = scopeLogs[1]
-        assert.strictEqual(scope2.scope.name, 'logger2')
-        assert.strictEqual(scope2.scope.version, '2.0.0')
-        assert.strictEqual(scope2.logRecords.length, 1)
-        assert.strictEqual(scope2.logRecords[0].severityText, 'ERROR')
-        assert.strictEqual(scope2.logRecords[0].body.stringValue, 'Message from logger2')
+        assertObjectContains(scope2, {
+          scope: {
+            name: 'logger2',
+            version: '2.0.0',
+          },
+          logRecords: {
+            length: 1,
+            0: {
+              severityText: 'ERROR',
+              body: {
+                stringValue: 'Message from logger2',
+              },
+            },
+          },
+        })
       })
 
       setupTracer(true, '2')
@@ -391,10 +422,26 @@ describe('OpenTelemetry Logs', () => {
 
         // Object body - tests Object.entries().map() transformation
         assert(logRecords[4].body.kvlistValue)
-        assert.strictEqual(logRecords[4].body.kvlistValue.values.length, 2)
-        assert.strictEqual(logRecords[4].body.kvlistValue.values[0].key, 'foo')
-        assert.strictEqual(logRecords[4].body.kvlistValue.values[0].value.stringValue, 'bar')
-        assert.strictEqual(logRecords[4].body.kvlistValue.values[1].key, 'baz')
+        assertObjectContains(logRecords, {
+          4: {
+            body: {
+              kvlistValue: {
+                values: {
+                  length: 2,
+                  0: {
+                    key: 'foo',
+                    value: {
+                      stringValue: 'bar',
+                    },
+                  },
+                  1: {
+                    key: 'baz',
+                  },
+                },
+              },
+            },
+          },
+        })
         const bazValue = logRecords[4].body.kvlistValue.values[1].value.intValue
         assert.strictEqual(bazValue !== null && typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
 
@@ -441,10 +488,12 @@ describe('OpenTelemetry Logs', () => {
         const resourceAttrs = {}
         resource.attributes.forEach(attr => { resourceAttrs[attr.key] = attr.value.stringValue })
 
-        assert.strictEqual(resourceAttrs['service.name'], 'my-service')
-        assert.strictEqual(resourceAttrs['service.version'], 'v1.2.3')
-        assert.strictEqual(resourceAttrs['deployment.environment'], 'production')
-        assert.strictEqual(resourceAttrs['host.name'], os.hostname())
+        assertObjectContains(resourceAttrs, {
+          'service.name': 'my-service',
+          'service.version': 'v1.2.3',
+          'deployment.environment': 'production',
+          'host.name': os.hostname(),
+        })
         done()
       })
 
@@ -506,18 +555,34 @@ describe('OpenTelemetry Logs', () => {
     it('configures OTLP endpoint from environment variable', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4321/v1/logs'
       const { loggerProvider } = setupTracer()
-      assert.strictEqual(loggerProvider.processor.exporter.options.path, '/v1/logs')
-      assert.strictEqual(loggerProvider.processor.exporter.options.hostname, 'custom')
-      assert.strictEqual(loggerProvider.processor.exporter.options.port, '4321')
+      assertObjectContains(loggerProvider, {
+        processor: {
+          exporter: {
+            options: {
+              path: '/v1/logs',
+              hostname: 'custom',
+              port: '4321',
+            },
+          },
+        },
+      })
     })
 
     it('prioritizes logs-specific endpoint over generic endpoint', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318/v1/logs'
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://generic:4318/v1/logs'
       const { loggerProvider } = setupTracer()
-      assert.strictEqual(loggerProvider.processor.exporter.options.path, '/v1/logs')
-      assert.strictEqual(loggerProvider.processor.exporter.options.hostname, 'custom')
-      assert.strictEqual(loggerProvider.processor.exporter.options.port, '4318')
+      assertObjectContains(loggerProvider, {
+        processor: {
+          exporter: {
+            options: {
+              path: '/v1/logs',
+              hostname: 'custom',
+              port: '4318',
+            },
+          },
+        },
+      })
     })
 
     it('appends /v1/logs to endpoint if not provided', () => {
@@ -539,9 +604,15 @@ describe('OpenTelemetry Logs', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'logs-specific=value,shared=logs'
       const { loggerProvider } = setupTracer()
       const exporter = loggerProvider.processor.exporter
-      assert.strictEqual(exporter.options.headers['logs-specific'], 'value')
-      assert.strictEqual(exporter.options.headers.shared, 'logs')
-      assert.strictEqual(exporter.options.headers.generic, undefined)
+      assertObjectContains(exporter, {
+        options: {
+          headers: {
+            'logs-specific': 'value',
+            shared: 'logs',
+            generic: undefined,
+          },
+        },
+      })
     })
 
     it('configures OTLP timeout from environment variable', () => {

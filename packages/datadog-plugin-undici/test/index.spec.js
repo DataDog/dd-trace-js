@@ -97,16 +97,24 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].service, 'test')
-                assert.strictEqual(traces[0][0].type, 'http')
-                assert.strictEqual(traces[0][0].resource, 'GET')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-                assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta.component, 'undici')
-                assert.strictEqual(traces[0][0].meta['_dd.integration'], 'undici')
-                assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+                assertObjectContains(traces, {
+                  0: {
+                    0: {
+                      service: 'test',
+                      type: 'http',
+                      resource: 'GET',
+                      meta: {
+                        'span.kind': 'client',
+                        'http.url': `http://localhost:${port}/user`,
+                        'http.method': 'GET',
+                        'http.status_code': '200',
+                        component: 'undici',
+                        '_dd.integration': 'undici',
+                        'out.host': 'localhost',
+                      },
+                    },
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -123,15 +131,23 @@ describe('Plugin', () => {
           appListener = server(app, port => {
             agent
               .assertSomeTraces(traces => {
-                assert.strictEqual(traces[0][0].service, SERVICE_NAME)
-                assert.strictEqual(traces[0][0].type, 'http')
-                assert.strictEqual(traces[0][0].resource, 'POST')
-                assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
-                assert.strictEqual(traces[0][0].meta['http.method'], 'POST')
-                assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
-                assert.strictEqual(traces[0][0].meta.component, 'undici')
-                assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+                assertObjectContains(traces, {
+                  0: {
+                    0: {
+                      service: SERVICE_NAME,
+                      type: 'http',
+                      resource: 'POST',
+                      meta: {
+                        'span.kind': 'client',
+                        'http.url': `http://localhost:${port}/user`,
+                        'http.method': 'POST',
+                        'http.status_code': '200',
+                        component: 'undici',
+                        'out.host': 'localhost',
+                      },
+                    },
+                  },
+                })
               })
               .then(done)
               .catch(done)
@@ -711,9 +727,11 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                assert.strictEqual(span.service, 'test')
-                assert.strictEqual(span.type, 'http')
-                assert.strictEqual(span.resource, 'GET')
+                assertObjectContains(span, {
+                  service: 'test',
+                  type: 'http',
+                  resource: 'GET',
+                })
               })
               .then(done)
               .catch(done)

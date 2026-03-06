@@ -186,10 +186,22 @@ describe('Plugin', () => {
         { id: '3', parentId: null, name: 'prisma:engine:connect' },
       ])
 
-      assert.strictEqual(started.length, 2)
-      assert.strictEqual(started[0].engineSpan.id, '1')
-      assert.strictEqual(started[1].engineSpan.id, '3')
-      assert.strictEqual(started[0].dbConfig.database, 'db')
+      assertObjectContains(started, {
+        length: 2,
+        0: {
+          engineSpan: {
+            id: '1',
+          },
+          dbConfig: {
+            database: 'db',
+          },
+        },
+        1: {
+          engineSpan: {
+            id: '3',
+          },
+        },
+      })
     })
 
     it('dispatchEngineSpans should ignore empty span arrays', () => {
@@ -255,9 +267,15 @@ describe('Plugin', () => {
       )
 
       assert.strictEqual(result, 'ok')
-      assert.strictEqual(calls.length, 1)
-      assert.strictEqual(calls[0].type, 'sync')
-      assert.strictEqual(calls[0].ctx.resourceName, 'serialize')
+      assertObjectContains(calls, {
+        length: 1,
+        0: {
+          type: 'sync',
+          ctx: {
+            resourceName: 'serialize',
+          },
+        },
+      })
     })
 
     it('runInChildSpan should bypass tracing when there are no subscribers', () => {
@@ -427,18 +445,30 @@ describe('Plugin', () => {
 
           it('should generate engine span from array of spans', async () => {
             const tracingPromise = agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0].length, 2)
-              assert.strictEqual(traces[0][0].span_id, traces[0][1].parent_id)
-              assert.strictEqual(traces[0][0].name, 'prisma.engine')
-              assert.strictEqual(traces[0][0].resource, 'query')
-              assert.strictEqual(traces[0][0].meta['prisma.type'], 'engine')
-              assert.strictEqual(traces[0][0].meta['prisma.name'], 'query')
-              assert.strictEqual(traces[0][1].name, 'prisma.engine')
-              assert.strictEqual(traces[0][1].resource, 'SELECT 1')
-              assert.strictEqual(traces[0][1].type, 'sql')
-              assert.strictEqual(traces[0][1].meta['prisma.type'], 'engine')
-              assert.strictEqual(traces[0][1].meta['prisma.name'], 'db_query')
-              assert.strictEqual(traces[0][1].meta['db.type'], 'postgres')
+              assertObjectContains(traces, {
+                0: {
+                  length: 2,
+                  0: {
+                    span_id: traces[0][1].parent_id,
+                    name: 'prisma.engine',
+                    resource: 'query',
+                    meta: {
+                      'prisma.type': 'engine',
+                      'prisma.name': 'query',
+                    },
+                  },
+                  1: {
+                    name: 'prisma.engine',
+                    resource: 'SELECT 1',
+                    type: 'sql',
+                    meta: {
+                      'prisma.type': 'engine',
+                      'prisma.name': 'db_query',
+                      'db.type': 'postgres',
+                    },
+                  },
+                },
+              })
             })
 
             const engineSpans = [

@@ -93,12 +93,17 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans.length, 3)
-
-                assert.strictEqual(spans[0].resource, 'GET /app/user')
-                assert.strictEqual(spans[0].name, 'connect.request')
-                assert.strictEqual(spans[1].resource, 'named')
-                assert.strictEqual(spans[1].name, 'connect.middleware')
+                assertObjectContains(spans, {
+                  length: 3,
+                  0: {
+                    resource: 'GET /app/user',
+                    name: 'connect.request',
+                  },
+                  1: {
+                    resource: 'named',
+                    name: 'connect.middleware',
+                  },
+                })
                 assert.strictEqual(spans[1].parent_id.toString(), spans[0].trace_id.toString())
                 assert.strictEqual(spans[2].resource, '<anonymous>')
                 assert.strictEqual(spans[2].name, 'connect.middleware')
@@ -803,9 +808,13 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assert.strictEqual(spans.length, 1)
-                assert.strictEqual(spans[0].resource, 'GET /app/user')
-                assert.strictEqual(spans[0].name, 'connect.request')
+                assertObjectContains(spans, {
+                  length: 1,
+                  0: {
+                    resource: 'GET /app/user',
+                    name: 'connect.request',
+                  },
+                })
               })
               .then(done)
               .catch(done)

@@ -1555,9 +1555,13 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  assert.strictEqual(spans[4].name, 'express.middleware')
-                  assert.strictEqual(spans[4].service, 'test')
-                  assert.strictEqual(spans[4].resource, 'handleDD')
+                  assertObjectContains(spans, {
+                    4: {
+                      name: 'express.middleware',
+                      service: 'test',
+                      resource: 'handleDD',
+                    },
+                  })
                 })
                 .then(done)
                 .catch(done)

@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const { before, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
+const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 describe('Endpoints collection', () => {
   let cwd
@@ -176,9 +176,11 @@ describe('Endpoints collection', () => {
         )
 
         assert.ok(found)
-        assert.strictEqual(found.type, 'REST')
-        assert.strictEqual(found.operation_name, expectedOperationName)
-        assert.strictEqual(found.resource_name, `${expected.method} ${expected.path}`)
+        assertObjectContains(found, {
+          type: 'REST',
+          operation_name: expectedOperationName,
+          resource_name: `${expected.method} ${expected.path}`,
+        })
       })
 
       // check that no additional endpoints were found

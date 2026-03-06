@@ -82,32 +82,53 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].type, 'web')
-              assert.strictEqual(spans[0].resource, 'math.add')
-              assert.strictEqual(spans[0].meta['span.kind'], 'server')
-              assert.strictEqual(spans[0].meta['moleculer.context.action'], 'math.add')
-              assert.strictEqual(spans[0].meta['moleculer.context.node_id'], `server-${process.pid}`)
+              assertObjectContains(spans, {
+                0: {
+                  name: expectedSchema.server.opName,
+                  service: expectedSchema.server.serviceName,
+                  type: 'web',
+                  resource: 'math.add',
+                  meta: {
+                    'span.kind': 'server',
+                    'moleculer.context.action': 'math.add',
+                    'moleculer.context.node_id': `server-${process.pid}`,
+                  },
+                },
+              })
               assert.ok(Object.hasOwn(spans[0].meta, 'moleculer.context.request_id'))
-              assert.strictEqual(spans[0].meta['moleculer.context.service'], 'math')
-              assert.strictEqual(spans[0].meta['moleculer.namespace'], 'multi')
-              assert.strictEqual(spans[0].meta['moleculer.node_id'], `server-${process.pid}`)
-              assert.strictEqual(spans[0].meta.component, 'moleculer')
-              assert.strictEqual(spans[0].meta['_dd.integration'], 'moleculer')
-
-              assert.strictEqual(spans[1].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[1].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[1].type, 'web')
-              assert.strictEqual(spans[1].resource, 'math.numerify')
-              assert.strictEqual(spans[1].meta['span.kind'], 'server')
-              assert.strictEqual(spans[1].meta['moleculer.context.action'], 'math.numerify')
-              assert.strictEqual(spans[1].meta['moleculer.context.node_id'], `server-${process.pid}`)
+              assertObjectContains(spans, {
+                0: {
+                  meta: {
+                    'moleculer.context.service': 'math',
+                    'moleculer.namespace': 'multi',
+                    'moleculer.node_id': `server-${process.pid}`,
+                    component: 'moleculer',
+                    '_dd.integration': 'moleculer',
+                  },
+                },
+                1: {
+                  name: expectedSchema.server.opName,
+                  service: expectedSchema.server.serviceName,
+                  type: 'web',
+                  resource: 'math.numerify',
+                  meta: {
+                    'span.kind': 'server',
+                    'moleculer.context.action': 'math.numerify',
+                    'moleculer.context.node_id': `server-${process.pid}`,
+                  },
+                },
+              })
               assert.ok(Object.hasOwn(spans[1].meta, 'moleculer.context.request_id'))
-              assert.strictEqual(spans[1].meta['moleculer.context.service'], 'math')
-              assert.strictEqual(spans[1].meta['moleculer.namespace'], 'multi')
-              assert.strictEqual(spans[1].meta['moleculer.node_id'], `server-${process.pid}`)
-              assert.strictEqual(spans[1].meta.component, 'moleculer')
+              assertObjectContains(spans, {
+                1: {
+                  meta: {
+                    'moleculer.context.service': 'math',
+                    'moleculer.namespace': 'multi',
+                    'moleculer.node_id': `server-${process.pid}`,
+                    component: 'moleculer',
+                  },
+                },
+              })
             }).then(done, done)
 
             broker.call('math.add', { a: 5, b: 3 }).catch(done)
@@ -367,9 +388,15 @@ describe('Plugin', () => {
           const clientPromise = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
 
-            assert.strictEqual(spans[0].name, expectedSchema.client.opName)
-            assert.strictEqual(spans[0].meta['moleculer.context.node_id'], `server-${process.pid}`)
-            assert.strictEqual(spans[0].meta['moleculer.node_id'], `client-${process.pid}`)
+            assertObjectContains(spans, {
+              0: {
+                name: expectedSchema.client.opName,
+                meta: {
+                  'moleculer.context.node_id': `server-${process.pid}`,
+                  'moleculer.node_id': `client-${process.pid}`,
+                },
+              },
+            })
 
             spanId = spans[0].span_id
           })

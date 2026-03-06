@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('OpenFeature Exposures Writer', () => {
   let ExposuresWriter
@@ -73,9 +74,11 @@ describe('OpenFeature Exposures Writer', () => {
 
   describe('constructor', () => {
     it('should initialize with correct defaults', () => {
-      assert.strictEqual(writer._interval, 1000)
-      assert.strictEqual(writer._timeout, 5000)
-      assert.strictEqual(writer._bufferLimit, 1000)
+      assertObjectContains(writer, {
+        _interval: 1000,
+        _timeout: 5000,
+        _bufferLimit: 1000,
+      })
       assert.deepStrictEqual(writer._buffer, [])
     })
 
@@ -238,12 +241,22 @@ describe('OpenFeature Exposures Writer', () => {
       const payload = writer.makePayload([flatEvent])
       const formattedEvent = payload.exposures[0]
 
-      assert.strictEqual(formattedEvent.allocation.key, 'allocation_123')
-      assert.strictEqual(formattedEvent.flag.key, 'test_flag')
-      assert.strictEqual(formattedEvent.variant.key, 'A')
-      assert.strictEqual(formattedEvent.subject.id, 'user_123')
-      assert.strictEqual(formattedEvent.subject.type, undefined)
-      assert.strictEqual(formattedEvent.subject.attributes, undefined)
+      assertObjectContains(formattedEvent, {
+        allocation: {
+          key: 'allocation_123',
+        },
+        flag: {
+          key: 'test_flag',
+        },
+        variant: {
+          key: 'A',
+        },
+        subject: {
+          id: 'user_123',
+          type: undefined,
+          attributes: undefined,
+        },
+      })
     })
   })
 
