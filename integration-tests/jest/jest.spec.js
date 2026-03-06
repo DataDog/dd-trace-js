@@ -250,18 +250,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
             assert.ok(test)
 
-            assert.strictEqual(test.meta.language, 'javascript')
-            assert.strictEqual(test.meta.service, 'plugin-tests')
-            assert.strictEqual(test.meta[ORIGIN_KEY], CI_APP_ORIGIN)
-            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'jest')
-            assert.strictEqual(test.meta[TEST_NAME], name)
-            assert.strictEqual(test.meta[TEST_STATUS], status)
-            assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test.js')
-            assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/jest-plugin-tests/jest-test.js')
-            assert.strictEqual(test.meta[TEST_TYPE], 'test')
-            assert.strictEqual(test.meta[JEST_TEST_RUNNER], 'jest-circus')
-            assert.strictEqual(test.meta[LIBRARY_VERSION], ddTraceVersion)
-            assert.strictEqual(test.meta[COMPONENT], 'jest')
             assert.match(test.meta[TEST_CODE_OWNERS], /@datadog-dd-trace-js/)
 
             assertObjectContains(test, {
@@ -269,6 +257,19 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               name: 'jest.test',
               service: 'plugin-tests',
               resource: `ci-visibility/jest-plugin-tests/jest-test.js.${name}`,
+              meta: {
+                language: 'javascript',
+                [ORIGIN_KEY]: CI_APP_ORIGIN,
+                [TEST_FRAMEWORK]: 'jest',
+                [TEST_NAME]: name,
+                [TEST_STATUS]: status,
+                [TEST_SUITE]: 'ci-visibility/jest-plugin-tests/jest-test.js',
+                [TEST_SOURCE_FILE]: 'ci-visibility/jest-plugin-tests/jest-test.js',
+                [TEST_TYPE]: 'test',
+                [JEST_TEST_RUNNER]: 'jest-circus',
+                [LIBRARY_VERSION]: ddTraceVersion,
+                [COMPONENT]: 'jest',
+              },
             })
 
             assert.ok(test.metrics[TEST_SOURCE_START])

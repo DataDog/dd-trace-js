@@ -9,7 +9,6 @@ const sinon = require('sinon')
 
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -83,20 +82,17 @@ describe('Plugin', () => {
             const query = 'SELECT 1+1'
 
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assertObjectContains(span, {
-                  name: expectedSchema.query.opName,
-                  service: expectedSchema.query.serviceName,
-                  resource: query,
-                  type: 'sql',
-                  meta: {
-                    'span.kind': 'client',
-                    'couchbase.bucket.name': 'datadog-test',
-                    component: 'couchbase',
-                    '_dd.integration': 'couchbase',
-                  },
-                })
+              .assertFirstTraceSpan({
+                name: expectedSchema.query.opName,
+                service: expectedSchema.query.serviceName,
+                resource: query,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  'couchbase.bucket.name': 'datadog-test',
+                  component: 'couchbase',
+                  '_dd.integration': 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -117,18 +113,15 @@ describe('Plugin', () => {
 
           it('should handle storage queries', done => {
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assertObjectContains(span, {
-                  name: expectedSchema.upsert.opName,
-                  service: expectedSchema.upsert.serviceName,
-                  resource: 'couchbase.upsert',
-                  meta: {
-                    'span.kind': 'client',
-                    'couchbase.bucket.name': 'datadog-test',
-                    component: 'couchbase',
-                  },
-                })
+              .assertFirstTraceSpan({
+                name: expectedSchema.upsert.opName,
+                service: expectedSchema.upsert.serviceName,
+                resource: 'couchbase.upsert',
+                meta: {
+                  'span.kind': 'client',
+                  'couchbase.bucket.name': 'datadog-test',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -153,19 +146,16 @@ describe('Plugin', () => {
             const query = 'SELECT 1+2'
 
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assertObjectContains(span, {
-                  name: expectedSchema.query.opName,
-                  service: expectedSchema.query.serviceName,
-                  resource: query,
-                  type: 'sql',
-                  meta: {
-                    'span.kind': 'client',
-                    'couchbase.bucket.name': 'datadog-test',
-                    component: 'couchbase',
-                  },
-                })
+              .assertFirstTraceSpan({
+                name: expectedSchema.query.opName,
+                service: expectedSchema.query.serviceName,
+                resource: query,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  'couchbase.bucket.name': 'datadog-test',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -238,18 +228,15 @@ describe('Plugin', () => {
             const query = 'SELECT 1+1'
 
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assertObjectContains(span, {
-                  name: expectedSchema.query.opName,
-                  service: expectedSchema.query.serviceName,
-                  resource: query,
-                  type: 'sql',
-                  meta: {
-                    'span.kind': 'client',
-                    component: 'couchbase',
-                  },
-                })
+              .assertFirstTraceSpan({
+                name: expectedSchema.query.opName,
+                service: expectedSchema.query.serviceName,
+                resource: query,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -259,19 +246,16 @@ describe('Plugin', () => {
 
           it('should handle storage queries', done => {
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assertObjectContains(span, {
-                  name: expectedSchema.upsert.opName,
-                  service: expectedSchema.upsert.serviceName,
-                  resource: 'couchbase.upsert',
-                  meta: {
-                    'span.kind': 'client',
-                    'couchbase.bucket.name': 'datadog-test',
-                    'couchbase.collection.name': '_default',
-                    component: 'couchbase',
-                  },
-                })
+              .assertFirstTraceSpan({
+                name: expectedSchema.upsert.opName,
+                service: expectedSchema.upsert.serviceName,
+                resource: 'couchbase.upsert',
+                meta: {
+                  'span.kind': 'client',
+                  'couchbase.bucket.name': 'datadog-test',
+                  'couchbase.collection.name': '_default',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -300,24 +284,21 @@ describe('Plugin', () => {
 
         describe('operations still work with callbacks', () => {
           it('should perform normal cluster query operation with callback', done => {
+            const query = 'SELECT 1+1'
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assertObjectContains(span, {
-                  name: expectedSchema.query.opName,
-                  service: expectedSchema.query.serviceName,
-                  resource: query,
-                  type: 'sql',
-                  meta: {
-                    'span.kind': 'client',
-                    component: 'couchbase',
-                  },
-                })
+              .assertFirstTraceSpan({
+                name: expectedSchema.query.opName,
+                service: expectedSchema.query.serviceName,
+                resource: query,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
 
-            const query = 'SELECT 1+1'
             cluster.query(query, (err, rows) => {
               if (err) done(err)
             })

@@ -76,7 +76,6 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
         // Listen for exposure events
         agent.on('exposures', ({ payload, headers }) => {
-          assert.ok(Object.hasOwn(payload, 'context'))
           assert.ok(Object.hasOwn(payload, 'exposures'))
           assertObjectContains(payload, {
             context: {
@@ -174,7 +173,6 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         const exposureEvents = []
 
         agent.on('exposures', ({ payload }) => {
-          assert.ok(Object.hasOwn(payload, 'context'))
           assert.ok(Object.hasOwn(payload, 'exposures'))
           assertObjectContains(payload, {
             context: {

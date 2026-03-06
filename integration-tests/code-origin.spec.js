@@ -38,10 +38,10 @@ describe('Code Origin for Spans', function () {
       await Promise.all([
         agent.assertMessageReceived(({ payload }) => {
           const [span] = payload.flatMap(p => p.filter(span => span.name === 'fastify.request'))
-          assert.strictEqual(span.meta['_dd.code_origin.type'], 'entry')
           assert.ok(span.meta['_dd.code_origin.frames.0.file'].endsWith(`${cwd}/code-origin/typescript.ts`))
           assertObjectContains(span, {
             meta: {
+              '_dd.code_origin.type': 'entry',
               '_dd.code_origin.frames.0.line': '10',
               '_dd.code_origin.frames.0.column': '5',
               '_dd.code_origin.frames.0.method': '<anonymous>',

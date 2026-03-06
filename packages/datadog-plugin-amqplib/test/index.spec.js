@@ -77,9 +77,6 @@ describe('Plugin', () => {
                     name: expectedSchema.controlPlane.opName,
                     service: expectedSchema.controlPlane.serviceName,
                     resource: `queue.declare ${queue}`,
-                  })
-                  assert.ok(!('type' in span))
-                  assertObjectContains(span, {
                     meta: {
                       'span.kind': 'client',
                       'out.host': 'localhost',
@@ -90,6 +87,7 @@ describe('Plugin', () => {
                       'network.destination.port': 5672,
                     },
                   })
+                  assert.ok(!('type' in span))
                 })
                 .then(done)
                 .catch(done)
@@ -106,9 +104,6 @@ describe('Plugin', () => {
                     name: expectedSchema.controlPlane.opName,
                     service: expectedSchema.controlPlane.serviceName,
                     resource: `queue.delete ${queue}`,
-                  })
-                  assert.ok(!('type' in span))
-                  assertObjectContains(span, {
                     meta: {
                       'span.kind': 'client',
                       'out.host': 'localhost',
@@ -118,6 +113,7 @@ describe('Plugin', () => {
                       'network.destination.port': 5672,
                     },
                   })
+                  assert.ok(!('type' in span))
                 })
                 .then(done)
                 .catch(done)
@@ -173,9 +169,6 @@ describe('Plugin', () => {
                     name: expectedSchema.send.opName,
                     service: expectedSchema.send.serviceName,
                     resource: 'basic.publish exchange routingKey',
-                  })
-                  assert.ok(!('type' in span))
-                  assertObjectContains(span, {
                     meta: {
                       'out.host': 'localhost',
                       'span.kind': 'producer',
@@ -186,6 +179,7 @@ describe('Plugin', () => {
                       'network.destination.port': 5672,
                     },
                   })
+                  assert.ok(!('type' in span))
                 })
                 .then(done)
                 .catch(done)
@@ -232,8 +226,7 @@ describe('Plugin', () => {
               let queue
 
               agent
-                .assertSomeTraces(traces => {
-                  const span = traces[0][0]
+                .assertFirstTraceSpan(span => {
                   assertObjectContains(span, {
                     name: expectedSchema.receive.opName,
                     service: expectedSchema.receive.serviceName,

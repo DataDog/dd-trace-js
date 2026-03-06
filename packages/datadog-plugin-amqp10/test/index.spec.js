@@ -86,9 +86,6 @@ describe('Plugin', () => {
                   name: expectedSchema.send.opName,
                   service: expectedSchema.send.serviceName,
                   resource: 'send amq.topic',
-                })
-                assert.ok(!('type' in span))
-                assertObjectContains(span, {
                   meta: {
                     'span.kind': 'producer',
                     'out.host': 'localhost',
@@ -96,11 +93,6 @@ describe('Plugin', () => {
                     'amqp.connection.user': 'admin',
                     'amqp.link.target.address': 'amq.topic',
                     'amqp.link.role': 'sender',
-                  },
-                })
-                assert.match(span.meta['amqp.link.name'], /^amq\.topic_[0-9a-f-]+$/)
-                assertObjectContains(span, {
-                  meta: {
                     component: 'amqp10',
                     '_dd.integration': 'amqp10',
                   },
@@ -110,6 +102,8 @@ describe('Plugin', () => {
                     'amqp.link.handle': 1,
                   },
                 })
+                assert.ok(!('type' in span))
+                assert.match(span.meta['amqp.link.name'], /^amq\.topic_[0-9a-f-]+$/)
               })
               .then(done)
               .catch(done)
@@ -178,11 +172,6 @@ describe('Plugin', () => {
                     'amqp.connection.user': 'admin',
                     'amqp.link.source.address': 'amq.topic',
                     'amqp.link.role': 'receiver',
-                  },
-                })
-                assert.match(span.meta['amqp.link.name'], /^amq\.topic_[0-9a-f-]+$/)
-                assertObjectContains(span, {
-                  meta: {
                     component: 'amqp10',
                   },
                   metrics: {
@@ -190,6 +179,7 @@ describe('Plugin', () => {
                     'amqp.link.handle': 0,
                   },
                 })
+                assert.match(span.meta['amqp.link.name'], /^amq\.topic_[0-9a-f-]+$/)
               })
               .then(done)
               .catch(done)

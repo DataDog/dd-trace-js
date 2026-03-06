@@ -128,7 +128,6 @@ describe('AppsecFsPlugin', () => {
 
       let store = appsecFsPlugin._onFsOperationStart()
 
-      assert.ok(Object.hasOwn(store, 'fs'))
       assertObjectContains(store, {
         fs: {
           parentStore: rootStore,

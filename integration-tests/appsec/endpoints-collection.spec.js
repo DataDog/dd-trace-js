@@ -175,7 +175,6 @@ describe('Endpoints collection', () => {
           e.method === expected.method && e.path === expected.path
         )
 
-        assert.ok(found)
         assertObjectContains(found, {
           type: 'REST',
           operation_name: expectedOperationName,

@@ -100,17 +100,13 @@ describe('Plugin', () => {
         useScenario({ scenario: 'generate-content-single-response' })
 
         it('makes a successful call', async () => {
-          const checkTraces = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-
-            assertObjectContains(span, {
-              name: 'vertexai.request',
-              resource: 'GenerativeModel.generateContent',
-              meta: {
-                'span.kind': 'client',
-                'vertexai.request.model': 'gemini-1.5-flash-002',
-              },
-            })
+          const checkTraces = agent.assertFirstTraceSpan({
+            name: 'vertexai.request',
+            resource: 'GenerativeModel.generateContent',
+            meta: {
+              'span.kind': 'client',
+              'vertexai.request.model': 'gemini-1.5-flash-002',
+            },
           })
 
           const { response } = await model.generateContent({
@@ -154,17 +150,13 @@ describe('Plugin', () => {
         useScenario({ scenario: 'generate-content-stream-single-response', statusCode: 200, stream: true })
 
         it('makes a successful call', async () => {
-          const checkTraces = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-
-            assertObjectContains(span, {
-              name: 'vertexai.request',
-              resource: 'GenerativeModel.generateContentStream',
-              meta: {
-                'span.kind': 'client',
-                'vertexai.request.model': 'gemini-1.5-flash-002',
-              },
-            })
+          const checkTraces = agent.assertFirstTraceSpan({
+            name: 'vertexai.request',
+            resource: 'GenerativeModel.generateContentStream',
+            meta: {
+              'span.kind': 'client',
+              'vertexai.request.model': 'gemini-1.5-flash-002',
+            },
           })
 
           const { stream, response } = await model.generateContentStream('Hello, how are you?')
@@ -191,17 +183,13 @@ describe('Plugin', () => {
           useScenario({ scenario: 'generate-content-single-response' })
 
           it('makes a successful call', async () => {
-            const checkTraces = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assertObjectContains(span, {
-                name: 'vertexai.request',
-                resource: 'ChatSession.sendMessage',
-                meta: {
-                  'span.kind': 'client',
-                  'vertexai.request.model': 'gemini-1.5-flash-002',
-                },
-              })
+            const checkTraces = agent.assertFirstTraceSpan({
+              name: 'vertexai.request',
+              resource: 'ChatSession.sendMessage',
+              meta: {
+                'span.kind': 'client',
+                'vertexai.request.model': 'gemini-1.5-flash-002',
+              },
             })
 
             const chat = model.startChat({

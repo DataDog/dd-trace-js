@@ -348,16 +348,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 1)
             const [test] = tests
-            assert.strictEqual(test.meta[COMPONENT], 'mocha')
-            assert.strictEqual(test.meta.language, 'javascript')
-            assert.strictEqual(test.meta[TEST_NAME], 'mocha-test-fail can fail')
-            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(test.meta[TEST_TYPE], 'test')
-            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'mocha')
-            assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/failing.js')
-            assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/failing.js')
-            assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
-            assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
             assert.ok(test.metrics[TEST_SOURCE_START])
             assert.ok(test.meta[ERROR_STACK])
             assert.strictEqual(test.parent_id.toString(), '0')
@@ -365,6 +355,18 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               type: 'test',
               name: 'mocha.test',
               resource: 'ci-visibility/mocha-plugin-tests/failing.js.mocha-test-fail can fail',
+              meta: {
+                [COMPONENT]: 'mocha',
+                language: 'javascript',
+                [TEST_NAME]: 'mocha-test-fail can fail',
+                [TEST_STATUS]: 'fail',
+                [TEST_TYPE]: 'test',
+                [TEST_FRAMEWORK]: 'mocha',
+                [TEST_SUITE]: 'ci-visibility/mocha-plugin-tests/failing.js',
+                [TEST_SOURCE_FILE]: 'ci-visibility/mocha-plugin-tests/failing.js',
+                [ERROR_TYPE]: 'AssertionError',
+                [ERROR_MESSAGE]: 'Expected values to be strictly equal:\n\ntrue !== false\n',
+              },
             })
           })
 
