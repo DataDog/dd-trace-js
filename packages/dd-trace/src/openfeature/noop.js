@@ -77,6 +77,9 @@ class NoopFlaggingProvider {
     })
   }
 
+  // Exposed for test access
+  get _config () { return this.#config }
+
   /**
    * @returns {object} Current configuration
    */
