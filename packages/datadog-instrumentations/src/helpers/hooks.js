@@ -89,6 +89,7 @@ module.exports = {
   'limitd-client': () => require('../limitd-client'),
   lodash: () => require('../lodash'),
   mariadb: () => require('../mariadb'),
+  'mcp-client': { esmFirst: true, fn: () => require('../mcp-client') },
   memcached: () => require('../memcached'),
   'microgateway-core': () => require('../microgateway-core'),
   mocha: () => require('../mocha'),

@@ -398,6 +398,28 @@ module.exports = {
       versions: ['3.7.2'],
     },
   ],
+  'mcp-client': [
+    {
+      name: 'mcp-client',
+      versions: ['1.13.1'],
+    },
+    {
+      name: '@modelcontextprotocol/sdk',
+      versions: ['>=1.17.1'],
+    },
+    {
+      name: 'reconnecting-eventsource',
+      versions: ['>=1.6.4'],
+    },
+    {
+      name: 'strict-event-emitter-types',
+      versions: ['>=2.0.0'],
+    },
+    {
+      name: 'zod',
+      versions: ['>=3.25.67'],
+    },
+  ],
   'mongodb-core': [
     {
       name: 'bson',

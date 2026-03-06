@@ -262,6 +262,7 @@ interface Plugins {
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
   "mariadb": tracer.plugins.mariadb;
+  "mcp-client": tracer.plugins.mcp_client;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
   "mocha": tracer.plugins.mocha;
@@ -2562,6 +2563,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [memcached](https://github.com/3rd-Eden/memcached) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [mcp-client](https://github.com/npmjs/package/mcp-client) library.
+     */
+    interface mcp_client extends Instrumentation {}
+
     interface memcached extends Instrumentation {}
 
     /**

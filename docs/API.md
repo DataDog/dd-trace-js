@@ -68,6 +68,7 @@ tracer.use('pg', {
 <h5 id="koa"></h5>
 <h5 id="langchain"></h5>
 <h5 id="mariadb"></h5>
+<h5 id="mcp-client"></h5>
 <h5 id="memcached"></h5>
 <h5 id="microgateway-core"></h5>
 <h5 id="mocha"></h5>
@@ -146,6 +147,7 @@ tracer.use('pg', {
 * [koa](./interfaces/export_.plugins.koa.html)
 * [langchain](./interfaces/export_.plugins.langchain.html)
 * [mariadb](./interfaces/export_.plugins.mariadb.html)
+* [mcp-client](./interfaces/export_.plugins.mcp_client.html)
 * [memcached](./interfaces/export_.plugins.memcached.html)
 * [microgateway-core](./interfaces/export_.plugins.microgateway_core.html)
 * [mocha](./interfaces/export_.plugins.mocha.html)

@@ -73,6 +73,7 @@ const plugins = {
   },
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
+  get 'mcp-client' () { return require('../../../datadog-plugin-mcp-client/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },
   get 'microgateway-core' () { return require('../../../datadog-plugin-microgateway-core/src') },
   get mocha () { return require('../../../datadog-plugin-mocha/src') },
