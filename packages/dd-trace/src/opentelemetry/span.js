@@ -165,7 +165,7 @@ class Span {
     // math for computing opentracing timestamps is apparently lossy...
     this.startTime = hrStartTime
     this.kind = kind
-    this.#spanProcessor.onStart(this, context)
+    this._spanProcessor.onStart(this, context)
   }
 
   get parentSpanId () {
@@ -182,7 +182,7 @@ class Span {
     return this._parentTracer.instrumentationLibrary
   }
 
-  get #spanProcessor () {
+  get _spanProcessor () {
     return this._parentTracer.getActiveSpanProcessor()
   }
 
@@ -274,7 +274,7 @@ class Span {
     const endTime = hrTimeToMilliseconds(hrEndTime)
 
     this._ddSpan.finish(endTime)
-    this.#spanProcessor.onEnd(this)
+    this._spanProcessor.onEnd(this)
   }
 
   isRecording () {

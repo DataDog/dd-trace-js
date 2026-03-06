@@ -22,10 +22,10 @@ class BufferingExporter {
       this.#traceBuffer.push(trace)
       return
     }
-    this.#export(trace)
+    this._export(trace)
   }
 
-  #export (payload, writer = this.#writer, timerKey = '_timer') {
+  _export (payload, writer = this.#writer, timerKey = '_timer') {
     if (this._config.isCiVisibility) {
       incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
     }

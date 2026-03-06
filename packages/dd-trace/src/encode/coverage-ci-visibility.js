@@ -67,10 +67,10 @@ class CoverageCIVisibilityEncoder extends AgentEncoder {
       this._coverageBytes.length = 0
     }
     this._coveragesCount = 0
-    this.#encodePayloadStart(this._coverageBytes)
+    this._encodePayloadStart(this._coverageBytes)
   }
 
-  #encodePayloadStart (bytes) {
+  _encodePayloadStart (bytes) {
     const payload = {
       version: COVERAGE_PAYLOAD_VERSION,
       coverages: [],

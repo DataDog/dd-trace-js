@@ -125,7 +125,7 @@ class NativeWallProfiler {
   // Bind these to this so they can be used as callbacks
   #boundEnter = this.#enter.bind(this)
   #boundSpanFinished = this.#spanFinished.bind(this)
-  #boundGenerateLabels = this.#generateLabels.bind(this)
+  #boundGenerateLabels = this._generateLabels.bind(this)
 
   get type () { return 'wall' }
 
@@ -355,7 +355,7 @@ class NativeWallProfiler {
     return profile
   }
 
-  #generateLabels ({ node, context }) {
+  _generateLabels ({ node, context }) {
     // check for special node that represents CPU time all non-JS threads.
     // In that case only return a special thread name label since we cannot associate any timestamp/span/endpoint to it.
     if (node.name === this.#pprof.time.constants.NON_JS_THREADS_FUNCTION_NAME) {

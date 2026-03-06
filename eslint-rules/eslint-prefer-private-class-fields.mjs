@@ -6,10 +6,12 @@
  * while underscore convention (_prop) is advisory only.
  *
  * The rule is intentionally conservative:
- * - Only flags when an explicit class field declaration (`_foo = value`) or method definition
- *   (`_foo() {}`) exists. Constructor-only assignments (`this._foo = 1`) without a class
- *   field declaration are not flagged, since the auto-fix would produce invalid JavaScript
- *   without also synthesizing a new `#foo` field declaration.
+ * - Only flags when an explicit class field declaration (`_foo = value`) exists.
+ *   Constructor-only assignments (`this._foo = 1`) and method definitions (`_foo() {}`)
+ *   are not flagged. For constructor-only assignments, the auto-fix would produce invalid
+ *   JavaScript without also synthesizing a new `#foo` field declaration. For methods,
+ *   test files often use sinon.stub(instance, '_methodName') which cannot stub private
+ *   methods — privatizing methods would break test stubs.
  * - Only flags when ALL accesses to that name in the file are within the body of exactly
  *   one class. Any external access, access in a different class, or destructuring use
  *   (incompatible with private fields) suppresses the warning for that property name.
@@ -117,21 +119,6 @@ export default {
       },
 
       /**
-       * Track method definitions: _foo() {}, get _foo() {}, set _foo(v) {}.
-       *
-       * @param {import('eslint').Rule.Node} node
-       */
-      MethodDefinition (node) {
-        if (node.computed) return
-        if (node.key.type !== 'Identifier') return
-        const { name } = node.key
-        if (!name.startsWith('_') || name === '_') return
-
-        const enclosingClass = getEnclosingClass(node)
-        recordSource(name, node, enclosingClass)
-      },
-
-      /**
        * Block properties that appear as destructuring keys.
        * Private fields cannot be destructured, so `const { _foo } = this` cannot be
        * automatically fixed to `const { #foo } = this`.
@@ -161,12 +148,12 @@ export default {
           const classes = new Set(sources.map(s => s.enclosingClass))
           if (classes.size !== 1) continue
 
-          // Only flag when an explicit class field or method definition exists.
+          // Only flag when an explicit class field declaration exists (PropertyDefinition).
           // Without a PropertyDefinition, replacing this._foo with this.#foo produces a
           // SyntaxError because private fields must be declared in the class body.
-          const hasDefinition = sources.some(
-            s => s.node.type === 'PropertyDefinition' || s.node.type === 'MethodDefinition'
-          )
+          // MethodDefinition (methods) are intentionally excluded: test files often use
+          // sinon.stub(instance, '_methodName') which cannot stub private methods.
+          const hasDefinition = sources.some(s => s.node.type === 'PropertyDefinition')
           if (!hasDefinition) continue
 
           // Only flag when there is at least one MemberExpression access (this._foo, obj._foo).

@@ -134,7 +134,7 @@ module.exports = class CiPlugin extends Plugin {
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {
         if (err) {
           log.error('Library configuration could not be fetched. %s', err.message)
-          this.#addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR, err)
+          this._addRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR, err)
         } else {
           this.libraryConfig = libraryConfig
         }
@@ -452,7 +452,7 @@ module.exports = class CiPlugin extends Plugin {
    * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR)
    * @param {Error} err - Request error
    */
-  #addRequestErrorTag (tag, err) {
+  _addRequestErrorTag (tag, err) {
     const value = 'true'
     if (this.testSessionSpan) {
       this.testSessionSpan.setTag(tag, value)

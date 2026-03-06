@@ -70,7 +70,7 @@ class AgentlessWriter extends BaseWriter {
       return
     }
 
-    this.#sendPayload(payload, count, done)
+    this._sendPayload(payload, count, done)
   }
 
   /**
@@ -79,7 +79,7 @@ class AgentlessWriter extends BaseWriter {
    * @param {number} count - Number of spans in the payload
    * @param {Function} done - Callback when complete
    */
-  #sendPayload (data, count, done) {
+  _sendPayload (data, count, done) {
     if (!data || data.length === 0) {
       log.debug('Skipping send of empty payload')
       done()
@@ -123,7 +123,7 @@ class AgentlessWriter extends BaseWriter {
 
     request(data, options, (err, res, statusCode) => {
       if (err) {
-        this.#logRequestError(err, statusCode, count)
+        this._logRequestError(err, statusCode, count)
         done()
         return
       }
@@ -139,7 +139,7 @@ class AgentlessWriter extends BaseWriter {
    * @param {number} statusCode - HTTP status code (if available)
    * @param {number} count - Number of spans that were being sent
    */
-  #logRequestError (err, statusCode, count) {
+  _logRequestError (err, statusCode, count) {
     if (statusCode === 401 || statusCode === 403) {
       log.error(
         'Authentication failed sending %d span(s) (status %s). Verify DD_API_KEY is valid.',

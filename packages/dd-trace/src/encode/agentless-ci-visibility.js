@@ -59,7 +59,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     }
   }
 
-  #encodeTestSuite (bytes, content) {
+  _encodeTestSuite (bytes, content) {
     let keysLength = TEST_SUITE_KEYS_LENGTH
     const itrCorrelationId = content.meta[ITR_CORRELATION_ID]
     if (itrCorrelationId) {
@@ -103,7 +103,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMap(bytes, content.metrics)
   }
 
-  #encodeTestModule (bytes, content) {
+  _encodeTestModule (bytes, content) {
     this._encodeMapPrefix(bytes, TEST_MODULE_KEYS_LENGTH)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
@@ -132,7 +132,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMap(bytes, content.metrics)
   }
 
-  #encodeTestSession (bytes, content) {
+  _encodeTestSession (bytes, content) {
     this._encodeMapPrefix(bytes, TEST_SESSION_KEYS_LENGTH)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, content.type)
@@ -158,7 +158,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMap(bytes, content.metrics)
   }
 
-  #encodeEventContent (bytes, content) {
+  _encodeEventContent (bytes, content) {
     let totalKeysLength = TEST_AND_SPAN_KEYS_LENGTH
     if (content.meta.test_session_id) {
       totalKeysLength += 1
@@ -238,7 +238,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._encodeMap(bytes, content.metrics)
   }
 
-  #encodeEvent (bytes, event) {
+  _encodeEvent (bytes, event) {
     this._encodeMapPrefix(bytes, Object.keys(event).length)
     this._encodeString(bytes, 'type')
     this._encodeString(bytes, event.type)
@@ -248,19 +248,19 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'content')
     if (event.type === 'span' || event.type === 'test') {
-      this.#encodeEventContent(bytes, event.content)
+      this._encodeEventContent(bytes, event.content)
     } else if (event.type === 'test_suite_end') {
-      this.#encodeTestSuite(bytes, event.content)
+      this._encodeTestSuite(bytes, event.content)
     } else if (event.type === 'test_module_end') {
-      this.#encodeTestModule(bytes, event.content)
+      this._encodeTestModule(bytes, event.content)
     } else if (event.type === 'test_session_end') {
-      this.#encodeTestSession(bytes, event.content)
+      this._encodeTestSession(bytes, event.content)
     }
   }
 
   _encode (bytes, trace) {
     if (this._isReset) {
-      this.#encodePayloadStart(bytes)
+      this._encodePayloadStart(bytes)
       this._isReset = false
     }
     const startTime = Date.now()
@@ -277,7 +277,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     this._eventCount += events.length
 
     for (const event of events) {
-      this.#encodeEvent(bytes, event)
+      this._encodeEvent(bytes, event)
     }
     distributionMetric(
       TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
@@ -308,7 +308,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     return buffer
   }
 
-  #encodePayloadStart (bytes) {
+  _encodePayloadStart (bytes) {
     // encodes the payload up to `events`. `events` will be encoded via _encode
     const payload = {
       version: ENCODING_VERSION,

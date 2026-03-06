@@ -65,9 +65,17 @@ ruleTester.run('prefer-private-class-fields', /** @type {import('eslint').Rule.R
     // No class body at all (free variable)
     'function f(_x) { return _x + 1 }',
 
-    // Method definition with no in-file accesses — may be a public API used externally;
-    // privatizing it would break external callers and trigger no-unused-private-class-members.
+    // Method definition — not flagged because sinon.stub(instance, '_method') in test files
+    // cannot stub private methods; privatizing methods would break external test stubs.
     'class Service { _helper() { return 42 } }',
+
+    // Method definition with in-file access — methods are not privatized (same reason above).
+    `
+      class Service {
+        _helper() { return 42 }
+        run() { return this._helper() }
+      }
+    `,
 
     // super._foo is a cross-class call; super.#foo is syntactically invalid.
     `
@@ -99,26 +107,6 @@ ruleTester.run('prefer-private-class-fields', /** @type {import('eslint').Rule.R
           #count = 0
           increment() { this.#count++ }
           get value() { return this.#count }
-        }
-      `,
-    },
-
-    // Private method (1 definition + 1 access = 2 errors).
-    {
-      code: `
-        class Service {
-          _helper() { return 42 }
-          run() { return this._helper() }
-        }
-      `,
-      errors: [
-        { messageId: 'preferPrivate', data: { name: '_helper', className: 'Service', privateName: 'helper' } },
-        { messageId: 'preferPrivate', data: { name: '_helper', className: 'Service', privateName: 'helper' } },
-      ],
-      output: `
-        class Service {
-          #helper() { return 42 }
-          run() { return this.#helper() }
         }
       `,
     },
@@ -174,8 +162,8 @@ ruleTester.run('prefer-private-class-fields', /** @type {import('eslint').Rule.R
     },
 
     // Getter and setter methods accessing a private field.
-    // _val is defined as getter/setter but has no MemberExpression accesses — it could be a
-    // public API, so it is left as-is. _value is flagged (PropDef + 2 MEs in getter/setter).
+    // _val is a getter/setter (MethodDefinition) — not flagged because methods are excluded.
+    // _value is a PropertyDefinition with MemberExpression accesses — flagged (PropDef + 2 MEs).
     {
       code: `
         class Box {
@@ -198,7 +186,8 @@ ruleTester.run('prefer-private-class-fields', /** @type {import('eslint').Rule.R
       `,
     },
 
-    // Getter and setter are flagged when accessed internally via MemberExpression.
+    // _val accessed via this._val — but _val has no PropertyDefinition, only MethodDefinitions.
+    // So _val is not flagged. _value is flagged (PropDef + 2 MEs in getter/setter body).
     {
       code: `
         class Box {
@@ -211,20 +200,16 @@ ruleTester.run('prefer-private-class-fields', /** @type {import('eslint').Rule.R
       `,
       errors: [
         { messageId: 'preferPrivate', data: { name: '_value', className: 'Box', privateName: 'value' } },
-        { messageId: 'preferPrivate', data: { name: '_val', className: 'Box', privateName: 'val' } },
         { messageId: 'preferPrivate', data: { name: '_value', className: 'Box', privateName: 'value' } },
-        { messageId: 'preferPrivate', data: { name: '_val', className: 'Box', privateName: 'val' } },
         { messageId: 'preferPrivate', data: { name: '_value', className: 'Box', privateName: 'value' } },
-        { messageId: 'preferPrivate', data: { name: '_val', className: 'Box', privateName: 'val' } },
-        { messageId: 'preferPrivate', data: { name: '_val', className: 'Box', privateName: 'val' } },
       ],
       output: `
         class Box {
           #value = null
-          get #val() { return this.#value }
-          set #val(v) { this.#value = v }
-          clear() { this.#val = null }
-          display() { return this.#val }
+          get _val() { return this.#value }
+          set _val(v) { this.#value = v }
+          clear() { this._val = null }
+          display() { return this._val }
         }
       `,
     },

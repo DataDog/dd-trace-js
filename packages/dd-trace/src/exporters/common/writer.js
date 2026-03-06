@@ -34,10 +34,10 @@ class Writer {
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Encoding payload: ${safeJSONStringify(payload)}`)
 
-    this.#encode(payload)
+    this._encode(payload)
   }
 
-  #encode (payload) {
+  _encode (payload) {
     this._encoder.encode(payload)
   }
 

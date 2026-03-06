@@ -38,7 +38,7 @@ class Scope {
     if (typeof fn !== 'function') return fn
 
     const scope = this
-    const spanOrActive = this.#spanOrActive(span)
+    const spanOrActive = this._spanOrActive(span)
 
     const bound = function () {
       return scope.activate(spanOrActive, () => {
@@ -51,7 +51,7 @@ class Scope {
     return bound
   }
 
-  #spanOrActive (span) {
+  _spanOrActive (span) {
     return span === undefined ? this.active() : span
   }
 

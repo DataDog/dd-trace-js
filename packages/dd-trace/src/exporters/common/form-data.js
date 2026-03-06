@@ -12,12 +12,12 @@ class FormData extends Readable {
   }
 
   append (key, value, options = {}) {
-    this.#appendBoundary()
+    this._appendBoundary()
 
     if (options.filename) {
-      this.#appendFile(key, value, options)
+      this._appendFile(key, value, options)
     } else {
-      this.#appendMetadata(key, value, options)
+      this._appendMetadata(key, value, options)
     }
   }
 
@@ -29,15 +29,15 @@ class FormData extends Readable {
     return { 'Content-Type': 'multipart/form-data; boundary=' + this._boundary }
   }
 
-  #appendBoundary () {
+  _appendBoundary () {
     this._data.push(`--${this._boundary}\r\n`)
   }
 
-  #appendMetadata (key, value) {
+  _appendMetadata (key, value) {
     this._data.push(`Content-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`)
   }
 
-  #appendFile (key, value, { filename, contentType = 'application/octet-stream' }) {
+  _appendFile (key, value, { filename, contentType = 'application/octet-stream' }) {
     this._data.push(
       `Content-Disposition: form-data; name="${key}"; filename="${filename}"\r\n`,
       `Content-Type: ${contentType}\r\n\r\n`,

@@ -25,7 +25,7 @@ class RateLimiter {
   isAllowed () {
     const curIntervalStart = this._limiter.curIntervalStart
     const curIntervalTokens = this._limiter.tokensThisInterval
-    const allowed = this.#isAllowed()
+    const allowed = this._isAllowed()
 
     if (curIntervalStart === this._limiter.curIntervalStart) {
       this._tokensRequested++
@@ -59,7 +59,7 @@ class RateLimiter {
    * Internal token consumption without counter side-effects.
    * @returns {boolean}
    */
-  #isAllowed () {
+  _isAllowed () {
     if (this._rateLimit < 0) return true
     if (this._rateLimit === 0) return false
 

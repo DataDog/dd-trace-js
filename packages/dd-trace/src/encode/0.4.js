@@ -30,7 +30,7 @@ class AgentEncoder {
     this._traceBytes = new MsgpackChunk()
     this._stringBytes = new MsgpackChunk()
     this._writer = writer
-    this.#reset()
+    this._reset()
     this._debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))
     this._config = this._writer?._config
   }
@@ -45,7 +45,7 @@ class AgentEncoder {
 
     this._traceCount++
 
-    this.#encode(bytes, trace)
+    this._encode(bytes, trace)
 
     const end = bytes.length
 
@@ -69,19 +69,19 @@ class AgentEncoder {
     const traceSize = this._traceBytes.length + 5
     const buffer = Buffer.allocUnsafe(traceSize)
 
-    this.#writeTraces(buffer)
+    this._writeTraces(buffer)
 
-    this.#reset()
+    this._reset()
 
     return buffer
   }
 
   reset () {
-    this.#reset()
+    this._reset()
   }
 
-  #encode (bytes, trace) {
-    this.#encodeArrayPrefix(bytes, trace)
+  _encode (bytes, trace) {
+    this._encodeArrayPrefix(bytes, trace)
 
     for (let span of trace) {
       span = formatSpan(span, this._config)
@@ -98,66 +98,66 @@ class AgentEncoder {
       bytes.buffer[bytes.length - 1] = 0x80 + mapSize
 
       if (span.type) {
-        this.#encodeString(bytes, 'type')
-        this.#encodeString(bytes, span.type)
+        this._encodeString(bytes, 'type')
+        this._encodeString(bytes, span.type)
       }
 
-      this.#encodeString(bytes, 'trace_id')
-      this.#encodeId(bytes, span.trace_id)
-      this.#encodeString(bytes, 'span_id')
-      this.#encodeId(bytes, span.span_id)
-      this.#encodeString(bytes, 'parent_id')
-      this.#encodeId(bytes, span.parent_id)
-      this.#encodeString(bytes, 'name')
-      this.#encodeString(bytes, span.name)
-      this.#encodeString(bytes, 'resource')
-      this.#encodeString(bytes, span.resource)
-      this.#encodeString(bytes, 'service')
-      this.#encodeString(bytes, span.service)
-      this.#encodeString(bytes, 'error')
-      this.#encodeInteger(bytes, span.error)
-      this.#encodeString(bytes, 'start')
-      this.#encodeLong(bytes, span.start)
-      this.#encodeString(bytes, 'duration')
-      this.#encodeLong(bytes, span.duration)
-      this.#encodeString(bytes, 'meta')
-      this.#encodeMap(bytes, span.meta)
-      this.#encodeString(bytes, 'metrics')
-      this.#encodeMap(bytes, span.metrics)
+      this._encodeString(bytes, 'trace_id')
+      this._encodeId(bytes, span.trace_id)
+      this._encodeString(bytes, 'span_id')
+      this._encodeId(bytes, span.span_id)
+      this._encodeString(bytes, 'parent_id')
+      this._encodeId(bytes, span.parent_id)
+      this._encodeString(bytes, 'name')
+      this._encodeString(bytes, span.name)
+      this._encodeString(bytes, 'resource')
+      this._encodeString(bytes, span.resource)
+      this._encodeString(bytes, 'service')
+      this._encodeString(bytes, span.service)
+      this._encodeString(bytes, 'error')
+      this._encodeInteger(bytes, span.error)
+      this._encodeString(bytes, 'start')
+      this._encodeLong(bytes, span.start)
+      this._encodeString(bytes, 'duration')
+      this._encodeLong(bytes, span.duration)
+      this._encodeString(bytes, 'meta')
+      this._encodeMap(bytes, span.meta)
+      this._encodeString(bytes, 'metrics')
+      this._encodeMap(bytes, span.metrics)
       if (span.span_events) {
-        this.#encodeString(bytes, 'span_events')
-        this.#encodeObjectAsArray(bytes, span.span_events, new Set())
+        this._encodeString(bytes, 'span_events')
+        this._encodeObjectAsArray(bytes, span.span_events, new Set())
       }
       if (span.meta_struct) {
-        this.#encodeString(bytes, 'meta_struct')
-        this.#encodeMetaStruct(bytes, span.meta_struct)
+        this._encodeString(bytes, 'meta_struct')
+        this._encodeMetaStruct(bytes, span.meta_struct)
       }
     }
   }
 
-  #reset () {
+  _reset () {
     this._traceCount = 0
     this._traceBytes.length = 0
     this._stringCount = 0
     this._stringBytes.length = 0
     this._stringMap = {}
 
-    this.#cacheString('')
+    this._cacheString('')
   }
 
   _encodeBuffer (bytes, buffer) {
     this._msgpack.encodeBin(bytes, buffer)
   }
 
-  #encodeBool (bytes, value) {
+  _encodeBool (bytes, value) {
     this._msgpack.encodeBoolean(bytes, value)
   }
 
-  #encodeArrayPrefix (bytes, value) {
+  _encodeArrayPrefix (bytes, value) {
     this._msgpack.encodeArrayPrefix(bytes, value)
   }
 
-  #encodeMapPrefix (bytes, keysLength) {
+  _encodeMapPrefix (bytes, keysLength) {
     this._msgpack.encodeMapPrefix(bytes, keysLength)
   }
 
@@ -166,7 +166,7 @@ class AgentEncoder {
   }
 
   // TODO: Use BigInt instead.
-  #encodeId (bytes, id) {
+  _encodeId (bytes, id) {
     const offset = bytes.length
 
     bytes.reserve(9)
@@ -188,55 +188,55 @@ class AgentEncoder {
     this._msgpack.encodeNumber(bytes, value)
   }
 
-  #encodeInteger (bytes, value) {
+  _encodeInteger (bytes, value) {
     this._msgpack.encodeInteger(bytes, value)
   }
 
-  #encodeLong (bytes, value) {
+  _encodeLong (bytes, value) {
     this._msgpack.encodeLong(bytes, value)
   }
 
-  #encodeMap (bytes, value) {
+  _encodeMap (bytes, value) {
     const keys = Object.keys(value)
     const validKeys = keys.filter(key => typeof value[key] === 'string' || typeof value[key] === 'number')
 
-    this.#encodeMapPrefix(bytes, validKeys.length)
+    this._encodeMapPrefix(bytes, validKeys.length)
 
     for (const key of validKeys) {
-      this.#encodeString(bytes, key)
-      this.#encodeValue(bytes, value[key])
+      this._encodeString(bytes, key)
+      this._encodeValue(bytes, value[key])
     }
   }
 
-  #encodeValue (bytes, value) {
+  _encodeValue (bytes, value) {
     switch (typeof value) {
       case 'string':
-        this.#encodeString(bytes, value)
+        this._encodeString(bytes, value)
         break
       case 'number':
-        this.#encodeFloat(bytes, value)
+        this._encodeFloat(bytes, value)
         break
       case 'boolean':
-        this.#encodeBool(bytes, value)
+        this._encodeBool(bytes, value)
         break
       default:
         // should not happen
     }
   }
 
-  #encodeString (bytes, value = '') {
-    this.#cacheString(value)
+  _encodeString (bytes, value = '') {
+    this._cacheString(value)
 
     const { start, end } = this._stringMap[value]
 
     this._stringBytes.copy(bytes, start, end)
   }
 
-  #encodeFloat (bytes, value) {
+  _encodeFloat (bytes, value) {
     this._msgpack.encodeFloat(bytes, value)
   }
 
-  #encodeMetaStruct (bytes, value) {
+  _encodeMetaStruct (bytes, value) {
     const keys = Array.isArray(value) ? [] : Object.keys(value)
     const validKeys = keys.filter(key => {
       const v = value[key]
@@ -245,22 +245,22 @@ class AgentEncoder {
         (v !== null && typeof v === 'object')
     })
 
-    this.#encodeMapPrefix(bytes, validKeys.length)
+    this._encodeMapPrefix(bytes, validKeys.length)
 
     for (const key of validKeys) {
       const v = value[key]
-      this.#encodeString(bytes, key)
-      this.#encodeObjectAsByteArray(bytes, v)
+      this._encodeString(bytes, key)
+      this._encodeObjectAsByteArray(bytes, v)
     }
   }
 
-  #encodeObjectAsByteArray (bytes, value) {
+  _encodeObjectAsByteArray (bytes, value) {
     const prefixLength = 5
     const offset = bytes.length
 
     bytes.reserve(prefixLength)
 
-    this.#encodeObject(bytes, value)
+    this._encodeObject(bytes, value)
 
     // we should do it after encoding the object to know the real length
     const length = bytes.length - offset - prefixLength
@@ -271,18 +271,18 @@ class AgentEncoder {
     bytes.buffer[offset + 4] = length
   }
 
-  #encodeObject (bytes, value, circularReferencesDetector = new Set()) {
+  _encodeObject (bytes, value, circularReferencesDetector = new Set()) {
     circularReferencesDetector.add(value)
     if (Array.isArray(value)) {
-      this.#encodeObjectAsArray(bytes, value, circularReferencesDetector)
+      this._encodeObjectAsArray(bytes, value, circularReferencesDetector)
     } else if (value !== null && typeof value === 'object') {
-      this.#encodeObjectAsMap(bytes, value, circularReferencesDetector)
+      this._encodeObjectAsMap(bytes, value, circularReferencesDetector)
     } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-      this.#encodeValue(bytes, value)
+      this._encodeValue(bytes, value)
     }
   }
 
-  #encodeObjectAsMap (bytes, value, circularReferencesDetector) {
+  _encodeObjectAsMap (bytes, value, circularReferencesDetector) {
     const keys = Object.keys(value)
     const validKeys = keys.filter(key => {
       const v = value[key]
@@ -291,29 +291,29 @@ class AgentEncoder {
         (v !== null && typeof v === 'object' && !circularReferencesDetector.has(v))
     })
 
-    this.#encodeMapPrefix(bytes, validKeys.length)
+    this._encodeMapPrefix(bytes, validKeys.length)
 
     for (const key of validKeys) {
       const v = value[key]
-      this.#encodeString(bytes, key)
-      this.#encodeObject(bytes, v, circularReferencesDetector)
+      this._encodeString(bytes, key)
+      this._encodeObject(bytes, v, circularReferencesDetector)
     }
   }
 
-  #encodeObjectAsArray (bytes, value, circularReferencesDetector) {
+  _encodeObjectAsArray (bytes, value, circularReferencesDetector) {
     const validValue = value.filter(item =>
       typeof item === 'string' ||
       typeof item === 'number' ||
       (item !== null && typeof item === 'object' && !circularReferencesDetector.has(item)))
 
-    this.#encodeArrayPrefix(bytes, validValue)
+    this._encodeArrayPrefix(bytes, validValue)
 
     for (const item of validValue) {
-      this.#encodeObject(bytes, item, circularReferencesDetector)
+      this._encodeObject(bytes, item, circularReferencesDetector)
     }
   }
 
-  #cacheString (value) {
+  _cacheString (value) {
     if (!(value in this._stringMap)) {
       this._stringCount++
       this._stringMap[value] = {
@@ -323,15 +323,15 @@ class AgentEncoder {
     }
   }
 
-  #writeArrayPrefix (buffer, offset, count) {
+  _writeArrayPrefix (buffer, offset, count) {
     buffer[offset++] = 0xDD
     buffer.writeUInt32BE(count, offset)
 
     return offset + 4
   }
 
-  #writeTraces (buffer, offset = 0) {
-    offset = this.#writeArrayPrefix(buffer, offset, this._traceCount)
+  _writeTraces (buffer, offset = 0) {
+    offset = this._writeArrayPrefix(buffer, offset, this._traceCount)
     offset += this._traceBytes.buffer.copy(buffer, offset, 0, this._traceBytes.length)
 
     return offset
