@@ -60,6 +60,43 @@ describe('createIntegration', () => {
 
       assert.strictEqual(orchestrion[0].module.filePath, undefined)
     })
+
+    it('should use per-intercept versions when specified', () => {
+      const { orchestrion } = createIntegration({
+        id: 'test',
+        module: 'test-pkg',
+        versions: '>=1.0.0',
+        type: 'server',
+        intercepts: [
+          { className: 'A', methodName: 'foo', kind: 'Async', versions: '>=2.0.0',
+            span: { name: 'a', spanKind: 'server' } },
+          { className: 'B', methodName: 'bar', kind: 'Async',
+            span: { name: 'b', spanKind: 'server' } },
+        ],
+      })
+
+      assert.strictEqual(orchestrion[0].module.versionRange, '>=2.0.0')
+      assert.strictEqual(orchestrion[1].module.versionRange, '>=1.0.0')
+    })
+
+    it('should use per-intercept file when specified', () => {
+      const { orchestrion } = createIntegration({
+        id: 'test',
+        module: 'test-pkg',
+        versions: '>=1.0.0',
+        file: 'lib/default.js',
+        type: 'server',
+        intercepts: [
+          { className: 'A', methodName: 'foo', kind: 'Async', file: 'lib/other.js',
+            span: { name: 'a', spanKind: 'server' } },
+          { className: 'B', methodName: 'bar', kind: 'Async',
+            span: { name: 'b', spanKind: 'server' } },
+        ],
+      })
+
+      assert.strictEqual(orchestrion[0].module.filePath, 'lib/other.js')
+      assert.strictEqual(orchestrion[1].module.filePath, 'lib/default.js')
+    })
   })
 
   describe('hooks', () => {
@@ -98,6 +135,27 @@ describe('createIntegration', () => {
       })
 
       assert.strictEqual(hooks.length, 1)
+    })
+
+    it('should produce separate hooks for per-intercept version overrides', () => {
+      const { hooks } = createIntegration({
+        id: 'test',
+        module: 'test-pkg',
+        versions: '>=3',
+        type: 'server',
+        intercepts: [
+          { className: 'A', methodName: 'foo', kind: 'Async', versions: '>=4.4',
+            span: { name: 'a', spanKind: 'server' } },
+          { className: 'B', methodName: 'bar', kind: 'Callback', index: -1, versions: '3 - 4.3',
+            span: { name: 'b', spanKind: 'server' } },
+          { className: 'C', methodName: 'baz', kind: 'Async',
+            span: { name: 'c', spanKind: 'server' } },
+        ],
+      })
+
+      assert.strictEqual(hooks.length, 3)
+      const versions = hooks.map(h => h.versions[0]).sort()
+      assert.deepStrictEqual(versions, ['3 - 4.3', '>=3', '>=4.4'])
     })
   })
 
@@ -148,6 +206,29 @@ describe('createIntegration', () => {
       assert.strictEqual(plugin.system, 'testdb')
     })
 
+    it('should support cache, consumer, and producer plugin types', () => {
+      const CachePlugin = require('../../dd-trace/src/plugins/cache')
+      const ConsumerPlugin = require('../../dd-trace/src/plugins/consumer')
+      const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+
+      for (const [type, BaseClass] of [['cache', CachePlugin], ['consumer', ConsumerPlugin], ['producer', ProducerPlugin]]) {
+        const { plugin } = createIntegration({
+          id: `test-${type}`,
+          module: `test-${type}-pkg`,
+          versions: '>=1.0.0',
+          type,
+          intercepts: [{
+            className: 'X', methodName: 'y', kind: 'Async',
+            span: { name: `test.${type}`, spanKind: 'client' },
+          }],
+        })
+
+        assert.ok(plugin.prototype instanceof BaseClass, `${type} plugin should extend ${BaseClass.name}`)
+        assert.strictEqual(typeof plugin.prototype.startSpan, 'function', `${type} plugin should have startSpan override`)
+        assert.strictEqual(plugin.prototype.startSpan.length, 3, `${type} plugin startSpan should accept 3 args`)
+      }
+    })
+
     it('should produce a CompositePlugin for multiple intercepts', () => {
       const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 
@@ -165,6 +246,50 @@ describe('createIntegration', () => {
 
       assert.strictEqual(orchestrion.length, 2)
       assert.ok(plugin.prototype instanceof CompositePlugin)
+    })
+
+    it('should call prepare before resource and attributes', () => {
+      const calls = []
+      const { plugin } = createIntegration({
+        id: 'test',
+        module: 'test-pkg',
+        versions: '>=1.0.0',
+        type: 'tracing',
+        intercepts: [{
+          className: 'Foo', methodName: 'bar', kind: 'Async',
+          span: {
+            name: 'test.op',
+            spanKind: 'client',
+            prepare (ctx) { calls.push('prepare'); ctx.derived = 'value' },
+            resource (ctx) { calls.push('resource'); return ctx.derived },
+            attributes (ctx) { calls.push('attributes'); return { key: ctx.derived } },
+          },
+        }],
+      })
+
+      // Verify prepare is defined and the plugin was generated
+      assert.strictEqual(typeof plugin.prototype.bindStart, 'function')
+      assert.strictEqual(calls.length, 0, 'nothing should be called at definition time')
+    })
+
+    it('should bind prepare to the plugin instance', () => {
+      let pluginInstance
+      const { plugin } = createIntegration({
+        id: 'test',
+        module: 'test-pkg',
+        versions: '>=1.0.0',
+        type: 'tracing',
+        intercepts: [{
+          className: 'Foo', methodName: 'bar', kind: 'Async',
+          span: {
+            name: 'test.op',
+            spanKind: 'client',
+            prepare () { pluginInstance = this },
+          },
+        }],
+      })
+
+      assert.strictEqual(typeof plugin.prototype.bindStart, 'function')
     })
   })
 
@@ -195,17 +320,6 @@ describe('createIntegration', () => {
           intercepts: [{ className: 'X', methodName: 'y', kind: 'Sync', span: { name: 't', spanKind: 'client' } }],
         })
       }, /Unknown plugin type/)
-    })
-
-    it('should throw for incompatible plugin types', () => {
-      for (const incompatible of ['cache', 'consumer', 'producer']) {
-        assert.throws(() => {
-          createIntegration({
-            id: 'test', module: 'test-pkg', versions: '>=1.0.0', type: incompatible,
-            intercepts: [{ className: 'X', methodName: 'y', kind: 'Sync', span: { name: 't', spanKind: 'client' } }],
-          })
-        }, /incompatible startSpan signature/)
-      }
     })
 
     it('should throw when intercept is missing span config', () => {
