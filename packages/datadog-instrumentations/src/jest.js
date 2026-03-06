@@ -23,6 +23,7 @@ const {
   getJestSuitesToRun,
   getEfdRetryCount,
 } = require('../../datadog-plugin-jest/src/util')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -69,6 +70,7 @@ const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 let skippableSuites = []
 let knownTests = {}
 let isCodeCoverageEnabled = false
+let isCodeCoverageEnabledBecauseOfUs = false
 let isSuitesSkippingEnabled = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
@@ -109,6 +111,7 @@ const testSuiteJestObjects = new Map()
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
 const atrSuppressedErrors = new Map()
+const isKeepingCoverageConfiguration = getEnvironmentVariable('DD_TEST_TIA_KEEP_COV_CONFIG') === 'true'
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -1327,9 +1330,10 @@ function coverageReporterWrapper (coverageReporter) {
    */
   // `_addUntestedFiles` is an async function
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
-    // If the user has added coverage manually, they're willing to pay the price of this execution, so
-    // we will not skip it.
-    if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
+    if (isKeepingCoverageConfiguration) {
+      return addUntestedFiles.apply(this, arguments)
+    }
+    if (isCodeCoverageEnabledBecauseOfUs) {
       return Promise.resolve()
     }
     return addUntestedFiles.apply(this, arguments)
@@ -1509,12 +1513,13 @@ function configureTestEnvironment (readConfigsResult) {
   }
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
+  isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
 
   if (readConfigsResult.globalConfig.forceExit) {
     log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
 
-  if (isCodeCoverageEnabled) {
+  if (isCodeCoverageEnabledBecauseOfUs) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
       collectCoverage: true,
@@ -1522,13 +1527,16 @@ function configureTestEnvironment (readConfigsResult) {
     readConfigsResult.globalConfig = globalConfig
   }
   if (isSuitesSkippingEnabled) {
-    // If suite skipping is enabled, the code coverage results are not going to be relevant,
-    // so we do not show them.
-    // Also, we might skip every test, so we need to pass `passWithNoTests`
+    // If suite skipping is enabled, we pass `passWithNoTests` in case every test gets skipped.
     const globalConfig = {
       ...readConfigsResult.globalConfig,
-      coverageReporters: ['none'],
       passWithNoTests: true,
+    }
+    if (isCodeCoverageEnabledBecauseOfUs && !isKeepingCoverageConfiguration) {
+      globalConfig.coverageReporters = ['none']
+      for (const config of configs) {
+        config.coverageReporters = ['none']
+      }
     }
     readConfigsResult.globalConfig = globalConfig
   }
