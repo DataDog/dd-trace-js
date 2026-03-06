@@ -167,6 +167,33 @@ class BaseFFEWriter {
     }
   }
 
+  // Exposed for test access
+  get _interval () { return this.#interval }
+
+  // Exposed for test access
+  get _timeout () { return this.#timeout }
+
+  // Exposed for test access
+  get _buffer () { return this.#buffer }
+
+  // Exposed for test access
+  get _bufferSize () { return this.#bufferSize }
+
+  // Exposed for test access
+  get _bufferLimit () { return this.#bufferLimit }
+
+  // Exposed for test access
+  set _bufferLimit (value) { this.#bufferLimit = value }
+
+  // Exposed for test access
+  get _periodic () { return this.#periodic }
+
+  // Exposed for test access
+  get _droppedEvents () { return this.#droppedEvents }
+
+  // Exposed for test access
+  set _droppedEvents (value) { this.#droppedEvents = value }
+
   /**
    * @private
    * @returns {URL} Constructs agent URL from config

@@ -69,6 +69,9 @@ class ExposuresWriter extends BaseFFEWriter {
     this.#context = this._buildContext()
   }
 
+  // Exposed for test access
+  get _pendingEvents () { return this.#pendingEvents }
+
   /**
    * @param {boolean} enabled - Whether to enable the writer
    */
