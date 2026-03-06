@@ -111,7 +111,7 @@ const testSuiteJestObjects = new Map()
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
 const atrSuppressedErrors = new Map()
-const isKeepingCoverageConfiguration = getEnvironmentVariable('DD_TEST_TIA_KEEP_COV_CONFIG') === 'true'
+const isKeepingCoverageConfiguration = isTrue(getEnvironmentVariable('DD_TEST_TIA_KEEP_COV_CONFIG'))
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
