@@ -15,10 +15,6 @@ runs:
             echo "Fixing $xml_file"
             tmp_file="$(mktemp)"
             xsltproc --output "$tmp_file" ".github/actions/push_to_test_optim/add_final_status.xsl" "$xml_file"
-            echo "before $xml_file"
-            cat "$xml_file"
-            echo "after $tmp_file"
-            cat "$tmp_file"
             mv "$tmp_file" "$xml_file"
         done
 
