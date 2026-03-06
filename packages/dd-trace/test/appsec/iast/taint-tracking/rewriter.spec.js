@@ -17,7 +17,7 @@ const iastEnabledConfig = {
 describe('IAST Rewriter', () => {
   it('Addon should return a rewritter instance', () => {
     const rewriter = require('@datadog/wasm-js-rewriter')
-    assert.notStrictEqual(rewriter, null)
+    assert.ok(rewriter)
   })
 
   describe('Enabling rewriter', () => {
