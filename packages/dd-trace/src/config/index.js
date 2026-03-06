@@ -1126,6 +1126,7 @@ class Config {
       setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(isCiVisibilityItrEnabled()))
       setBoolean(calc, 'isManualApiEnabled', !isFalse(getEnv('DD_CIVISIBILITY_MANUAL_API_ENABLED')))
       setString(calc, 'ciVisibilityTestSessionName', getEnv('DD_TEST_SESSION_NAME'))
+      setBoolean(calc, 'isKeepingCoverageConfiguration', isTrue(getEnv('DD_TEST_TIA_KEEP_COV_CONFIG')))
       setBoolean(calc, 'ciVisAgentlessLogSubmissionEnabled',
         isTrue(getEnv('DD_AGENTLESS_LOG_SUBMISSION_ENABLED')))
       setBoolean(calc, 'isTestDynamicInstrumentationEnabled',

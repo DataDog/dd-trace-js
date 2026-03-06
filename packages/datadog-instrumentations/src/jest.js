@@ -23,7 +23,6 @@ const {
   getJestSuitesToRun,
   getEfdRetryCount,
 } = require('../../datadog-plugin-jest/src/util')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -72,6 +71,7 @@ let knownTests = {}
 let isCodeCoverageEnabled = false
 let isCodeCoverageEnabledBecauseOfUs = false
 let isSuitesSkippingEnabled = false
+let isKeepingCoverageConfiguration = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -111,7 +111,6 @@ const testSuiteJestObjects = new Map()
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
 const atrSuppressedErrors = new Map()
-const isKeepingCoverageConfiguration = isTrue(getEnvironmentVariable('DD_TEST_TIA_KEEP_COV_CONFIG'))
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -997,6 +996,8 @@ function getCliWrapper (isNewJestVersion) {
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+          isKeepingCoverageConfiguration =
+            libraryConfig.isKeepingCoverageConfiguration ?? isKeepingCoverageConfiguration
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
           earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
