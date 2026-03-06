@@ -16,6 +16,9 @@ class SpanStatsExporter {
     this.#writer.append(payload)
     this.#writer.flush()
   }
+
+  // Exposed for test access
+  get _url () { return this.#url }
 }
 
 module.exports = {

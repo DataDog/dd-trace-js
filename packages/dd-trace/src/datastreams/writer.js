@@ -57,6 +57,9 @@ class DataStreamsWriter {
     })
   }
 
+  // Exposed for test access
+  get _url () { return this.#url }
+
   setUrl (url) {
     try {
       url = new URL(url)

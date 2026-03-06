@@ -160,6 +160,7 @@ class Span {
     }
 
     this.#parentTracer = parentTracer
+    this._context = context
 
     this.#hasStatus = false
 

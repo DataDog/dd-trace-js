@@ -80,6 +80,9 @@ class TracerProvider {
   shutdown () {
     return this.#activeProcessor.shutdown()
   }
+
+  // Exposed for test access
+  get _processors () { return this.#processors }
 }
 
 module.exports = TracerProvider

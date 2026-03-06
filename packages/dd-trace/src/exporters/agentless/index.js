@@ -86,6 +86,9 @@ class AgentlessExporter {
   flush (done = () => {}) {
     this.#writer.flush(done)
   }
+
+  // Exposed for test access
+  get _url () { return this.#url }
 }
 
 module.exports = AgentlessExporter

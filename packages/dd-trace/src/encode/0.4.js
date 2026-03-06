@@ -343,6 +343,9 @@ class AgentEncoder {
 
     return offset
   }
+
+  // Exposed for test access
+  set _debugEncoding (value) { this.#debugEncoding = value }
 }
 
 const memoizedLogDebug = memoize((key, message) => {

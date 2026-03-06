@@ -24,6 +24,7 @@ class FormData extends Readable {
     }
   }
 
+  get _boundary () { return this.#boundary }
   get _data () {
     return this.#data
   }
