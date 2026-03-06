@@ -84,6 +84,10 @@
 /packages/dd-trace/src/encode/tags-processors.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/exporters/agentless/index.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/exporters/agentless/writer.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/git_metadata_tagger.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/ci.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/env.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/git-cache.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/tags.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/test.js @DataDog/ci-app-libraries
 /packages/dd-trace/src/plugins/util/user-provided-git.js @DataDog/ci-app-libraries
