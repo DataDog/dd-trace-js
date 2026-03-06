@@ -75,15 +75,13 @@ class Backlog {
  * Scope is per-processor so IDs are stable across bucket boundaries within a process lifetime.
  */
 class CheckpointRegistry {
-  constructor () {
-    /** @type {Map<string, number>} */
-    this._nameToId = new Map()
-    this._nextId = 1
-    /** @type {Buffer[]} Pre-built [id uint8][nameLen uint8][name bytes] entries, one per registered name. */
-    this._entryBuffers = []
-    /** @type {Buffer | null} Cached concat of _entryBuffers; reset when a new name is added. */
-    this._encodedKeysCache = null
-  }
+  /** @type {Map<string, number>} */
+  #nameToId = new Map()
+  #nextId = 1
+  /** @type {Buffer[]} Pre-built [id uint8][nameLen uint8][name bytes] entries, one per registered name. */
+  #entryBuffers = []
+  /** @type {Buffer | null} Cached concat of #entryBuffers; reset when a new name is added. */
+  #encodedKeysCache = null
 
   /**
    * Returns the byte ID for the given checkpoint name, assigning one if not seen before.
@@ -92,11 +90,11 @@ class CheckpointRegistry {
    * @returns {number | undefined}
    */
   getId (name) {
-    const existing = this._nameToId.get(name)
+    const existing = this.#nameToId.get(name)
     if (existing !== undefined) return existing
-    if (this._nextId > 254) return
-    const id = this._nextId++
-    this._nameToId.set(name, id)
+    if (this.#nextId > 254) return
+    const id = this.#nextId++
+    this.#nameToId.set(name, id)
     // Build the wire entry now with a bounded write so long names never materialise
     // their full UTF-8 encoding — buf.write() stops at the supplied byte limit.
     const nameBuf = Buffer.allocUnsafe(255)
@@ -105,8 +103,8 @@ class CheckpointRegistry {
     entry.writeUInt8(id, 0)
     entry.writeUInt8(nameByteLen, 1)
     nameBuf.copy(entry, 2, 0, nameByteLen)
-    this._entryBuffers.push(entry)
-    this._encodedKeysCache = null
+    this.#entryBuffers.push(entry)
+    this.#encodedKeysCache = null
     return id
   }
 
@@ -117,11 +115,11 @@ class CheckpointRegistry {
    * @returns {Buffer}
    */
   get encodedKeys () {
-    if (this._encodedKeysCache !== null) return this._encodedKeysCache
-    this._encodedKeysCache = this._entryBuffers.length > 0
-      ? Buffer.concat(this._entryBuffers)
+    if (this.#encodedKeysCache !== null) return this.#encodedKeysCache
+    this.#encodedKeysCache = this.#entryBuffers.length > 0
+      ? Buffer.concat(this.#entryBuffers)
       : Buffer.alloc(0)
-    return this._encodedKeysCache
+    return this.#encodedKeysCache
   }
 }
 
