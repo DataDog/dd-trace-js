@@ -148,6 +148,8 @@
     "oxc-parser": "^0.115.0"
   },
   "devDependencies": {
+    "@actions/core": "^3.0.0",
+    "@actions/github": "^9.0.0",
     "@babel/helpers": "^7.28.6",
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.39.2",
