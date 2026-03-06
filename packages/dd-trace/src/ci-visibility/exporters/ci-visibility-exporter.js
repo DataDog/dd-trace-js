@@ -419,6 +419,12 @@ class CiVisibilityExporter extends BufferingExporter {
       evpProxyPrefix: this.evpProxyPrefix,
     }, callback)
   }
+
+  // Exposed for test access
+  get _canUseCiVisProtocol () { return this.#canUseCiVisProtocol }
+  get _canUseCiVisProtocolPromise () { return this.#canUseCiVisProtocolPromise }
+  get _gitUploadPromise () { return this.#gitUploadPromise }
+  get _libraryConfig () { return this.#libraryConfig }
 }
 
 module.exports = CiVisibilityExporter
