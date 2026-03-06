@@ -6,6 +6,8 @@ const pkg = require('../../../../package.json')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
 const { PATHWAY_HASH } = require('../../../../ext/tags')
 const log = require('../log')
+const processTags = require('../process-tags')
+const propagationHash = require('../propagation-hash')
 const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
@@ -162,6 +164,7 @@ class DataStreamsProcessor {
   onInterval () {
     const { Stats } = this._serializeBuckets()
     if (Stats.length === 0) return
+
     const payload = {
       Env: this.env,
       Service: this.service,
@@ -171,6 +174,12 @@ class DataStreamsProcessor {
       Lang: 'javascript',
       Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`),
     }
+
+    // Add ProcessTags only if feature is enabled and process tags exist
+    if (propagationHash.isEnabled() && processTags.serialized) {
+      payload.ProcessTags = processTags.serialized.split(',')
+    }
+
     this.writer.flush(payload)
   }
 
@@ -234,7 +243,11 @@ class DataStreamsProcessor {
         edgeTags
       )
     }
-    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
+
+    // Get propagation hash if enabled
+    const propagationHashValue = propagationHash.isEnabled() ? propagationHash.getHash() : null
+
+    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash, propagationHashValue)
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {

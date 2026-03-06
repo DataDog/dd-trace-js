@@ -69,6 +69,7 @@ const {
   TEST_FRAMEWORK_VERSION,
   LIBRARY_VERSION,
   TEST_PARAMETERS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const {
@@ -2028,6 +2029,26 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
+  context('error tags', () => {
+    it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
+      receiver.setSettingsResponseCode(404)
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+          const testEvent = events.find(event => event.type === 'test')
+          assert.ok(testEvent, 'should have test event')
+          assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+        })
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      await Promise.all([eventsPromise, once(childProcess, 'exit')])
+    })
+  })
+
   context('early flake detection', () => {
     it('retries new tests', (done) => {
       // Tests from ci-visibility/test/ci-visibility-test-2.js will be considered new
@@ -2506,11 +2527,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         known_tests_enabled: true,
       })
 
+      // Request module waits before retrying — need longer gather timeout
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEnd = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+          const testSession = testSessionEnd.content
           assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2520,7 +2544,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test => test.meta[TEST_IS_NEW] === 'true'
           )
           assert.strictEqual(newTests.length, 0)
-        })
+        }, 60000)
 
       childProcess = exec(
         runTestsCommand,
@@ -4052,15 +4076,18 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
       receiver.setTestManagementTestsResponseCode(500)
 
+      // Request module waits before retrying — need longer gather timeout
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEnd = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+          const testSession = testSessionEnd.content
           assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
-        })
+        }, 60000)
 
       childProcess = exec(
         runTestsCommand,

@@ -53,6 +53,7 @@ const {
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
   DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -133,6 +134,34 @@ versions.forEach((version) => {
 
     reportMethods.forEach((reportMethod) => {
       context(`reporting via ${reportMethod}`, () => {
+        it('tags session and children with _dd.ci.library_configuration_error when settings fail 4xx', async () => {
+          const envVars = reportMethod === 'agentless'
+            ? getCiVisAgentlessConfig(receiver.port)
+            : getCiVisEvpProxyConfig(receiver.port)
+          receiver.setSettingsResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+              const testEvent = events.find(event => event.type === 'test')
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+            })
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...envVars,
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                DD_TEST_SESSION_NAME: 'my-test-session',
+              },
+            }
+          )
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        })
+
         it('can run and report tests', (done) => {
           const envVars = reportMethod === 'agentless'
             ? getCiVisAgentlessConfig(receiver.port)
@@ -618,13 +647,16 @@ versions.forEach((version) => {
           playwright: {},
         })
 
+        // Request module waits before retrying; browser runs are slow — need longer gather timeout
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
             assert.strictEqual(tests.length, 7)
-            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testSessionEnd = events.find(event => event.type === 'test_session_end')
+            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+            const testSession = testSessionEnd.content
             assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
@@ -632,7 +664,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          })
+          }, 120000)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -1922,17 +1954,24 @@ versions.forEach((version) => {
         })
         receiver.setTestManagementTestsResponseCode(500)
 
+        // Playwright runs are slow (browser startup); need longer than default 15s to receive test_session_end
         const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            // they are not retried
-            assert.strictEqual(tests.length, 2)
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-          })
+          .gatherPayloadsMaxTimeout(
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSessionEnd = events.find(event => event.type === 'test_session_end')
+              assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+              const testSession = testSessionEnd.content
+              assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              // they are not retried
+              assert.strictEqual(tests.length, 2)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retriedTests.length, 0)
+            },
+            120000
+          )
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',

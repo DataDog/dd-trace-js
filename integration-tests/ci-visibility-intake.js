@@ -44,6 +44,7 @@ const DEFAULT_TEST_MANAGEMENT_TESTS = {}
 const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 
 let settings = DEFAULT_SETTINGS
+let settingsResponseStatusCode = 200
 let suitesToSkip = DEFAULT_SUITES_TO_SKIP
 let gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
 let infoResponse = DEFAULT_INFO_RESPONSE
@@ -81,6 +82,10 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSettings (newSettings) {
     settings = newSettings
+  }
+
+  setSettingsResponseCode (statusCode) {
+    settingsResponseStatusCode = statusCode
   }
 
   setWaitingTime (newWaitingTime) {
@@ -204,11 +209,16 @@ class FakeCiVisIntake extends FakeAgent {
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
     ], (req, res) => {
-      res.status(200).send(JSON.stringify({
-        data: {
-          attributes: settings,
-        },
-      }))
+      res.status(settingsResponseStatusCode)
+      if (settingsResponseStatusCode >= 200 && settingsResponseStatusCode < 300) {
+        res.send(JSON.stringify({
+          data: {
+            attributes: settings,
+          },
+        }))
+      } else {
+        res.send(JSON.stringify({ errors: ['error'] }))
+      }
       this.emit('message', {
         headers: req.headers,
         url: req.url,
@@ -312,6 +322,7 @@ class FakeCiVisIntake extends FakeAgent {
 
   stop () {
     settings = DEFAULT_SETTINGS
+    settingsResponseStatusCode = 200
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
