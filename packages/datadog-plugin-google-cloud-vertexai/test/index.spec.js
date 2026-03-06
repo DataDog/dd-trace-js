@@ -9,7 +9,6 @@ const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 /**
  * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
@@ -236,17 +235,13 @@ describe('Plugin', () => {
           useScenario({ scenario: 'generate-content-stream-single-response', statusCode: 200, stream: true })
 
           it('makes a successful call', async () => {
-            const checkTraces = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
-
-              assertObjectContains(span, {
-                name: 'vertexai.request',
-                resource: 'ChatSession.sendMessageStream',
-                meta: {
-                  'span.kind': 'client',
-                  'vertexai.request.model': 'gemini-1.5-flash-002',
-                },
-              })
+            const checkTraces = agent.assertFirstTraceSpan({
+              name: 'vertexai.request',
+              resource: 'ChatSession.sendMessageStream',
+              meta: {
+                'span.kind': 'client',
+                'vertexai.request.model': 'gemini-1.5-flash-002',
+              },
             })
 
             const chat = model.startChat({})

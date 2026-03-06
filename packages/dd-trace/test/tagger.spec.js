@@ -35,9 +35,9 @@ describe('tagger', () => {
       baz: 'qux:quxx',
       def: '',
       abc: '',
+      valid: '',
     })
     assert.ok(!('' in carrier))
-    assert.strictEqual(carrier.valid, '')
 
     tagger.add(carrier, ':')
 

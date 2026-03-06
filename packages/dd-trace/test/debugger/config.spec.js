@@ -28,10 +28,10 @@ describe('getDebuggerConfig', function () {
       'service',
       'url',
     ])
-    assert.strictEqual(config.commitSHA, tracerConfig.commitSHA)
-    assert.strictEqual(config.debug, tracerConfig.debug)
-    assert.deepStrictEqual(config.dynamicInstrumentation, tracerConfig.dynamicInstrumentation)
     assertObjectContains(config, {
+      commitSHA: tracerConfig.commitSHA,
+      debug: tracerConfig.debug,
+      dynamicInstrumentation: tracerConfig.dynamicInstrumentation,
       hostname: tracerConfig.hostname,
       logLevel: tracerConfig.logLevel,
       port: tracerConfig.port,

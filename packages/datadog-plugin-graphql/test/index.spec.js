@@ -343,18 +343,16 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
-
+            .assertFirstTraceSpan(span => {
               assertObjectContains(span, {
                 service: 'test',
                 name: 'graphql.parse',
                 resource: 'graphql.parse',
                 type: 'graphql',
                 error: 0,
+                meta: { component: 'graphql' },
               })
               assert.ok(!('graphql.source' in span.meta))
-              assert.strictEqual(span.meta.component, 'graphql')
             })
             .then(done)
             .catch(done)
@@ -367,18 +365,16 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
 
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
-
+            .assertFirstTraceSpan(span => {
               assertObjectContains(span, {
                 service: 'test',
                 name: 'graphql.validate',
                 resource: 'graphql.validate',
                 type: 'graphql',
                 error: 0,
+                meta: { component: 'graphql' },
               })
               assert.ok(!('graphql.source' in span.meta))
-              assert.strictEqual(span.meta.component, 'graphql')
             })
             .then(done)
             .catch(done)

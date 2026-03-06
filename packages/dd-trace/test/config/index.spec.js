@@ -1377,9 +1377,7 @@ describe('Config', () => {
       logLevel,
       logger,
       middlewareTracingEnabled: false,
-    })
-    assert.deepStrictEqual(config.peerServiceMapping, { d: 'dd' })
-    assertObjectContains(config, {
+      peerServiceMapping: { d: 'dd' },
       plugins: false,
       port: '6218',
       protocolVersion: '0.5',
@@ -2247,7 +2245,6 @@ describe('Config', () => {
   it('should set telemetry default values', () => {
     const config = getConfig()
 
-    assert.notStrictEqual(config.telemetry, undefined)
     assertObjectContains(config, {
       telemetry: {
         enabled: true,

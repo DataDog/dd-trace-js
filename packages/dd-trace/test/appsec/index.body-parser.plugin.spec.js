@@ -11,7 +11,6 @@ const { json } = require('../../src/appsec/blocked_templates')
 const { getConfigFresh } = require('../helpers/config')
 const agent = require('../plugins/agent')
 const { withVersions } = require('../setup/mocha')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 withVersions('body-parser', 'body-parser', version => {
   describe('Suspicious request blocking - body-parser', () => {
@@ -101,15 +100,12 @@ withVersions('body-parser', 'body-parser', version => {
         assert.deepStrictEqual(e.response.data, JSON.parse(json))
         sinon.assert.notCalled(requestBody)
 
-        await agent.assertSomeTraces((traces) => {
-          const span = traces[0][0]
-          assertObjectContains(span, {
-            metrics: {
-              '_dd.appsec.truncated.string_length': 5000,
-              '_dd.appsec.truncated.container_size': 300,
-              '_dd.appsec.truncated.container_depth': 20,
-            },
-          })
+        await agent.assertFirstTraceSpan({
+          metrics: {
+            '_dd.appsec.truncated.string_length': 5000,
+            '_dd.appsec.truncated.container_size': 300,
+            '_dd.appsec.truncated.container_depth': 20,
+          },
         })
       }
     })

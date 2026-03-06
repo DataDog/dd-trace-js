@@ -257,9 +257,8 @@ describe('span processor', () => {
           'error.stack': 'error stack',
         },
         status: 'error',
+        tags: ['error_type:error type'],
       })
-
-      assertObjectContains(payload.tags, ['error_type:error type'])
     })
 
     it('uses the error itself if the span does not have specific error fields', () => {

@@ -709,13 +709,10 @@ describe('Plugin', () => {
             })
 
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assertObjectContains(span, {
-                  service: 'test',
-                  type: 'http',
-                  resource: 'GET',
-                })
+              .assertFirstTraceSpan({
+                service: 'test',
+                type: 'http',
+                resource: 'GET',
               })
               .then(done)
               .catch(done)

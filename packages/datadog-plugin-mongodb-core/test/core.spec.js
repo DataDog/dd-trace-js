@@ -11,7 +11,6 @@ const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mo
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
@@ -91,23 +90,18 @@ describe('Plugin', () => {
         describe('server', () => {
           it('should do automatic instrumentation', done => {
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `insert test.${collection}`
-
-                assertObjectContains(span, {
-                  name: expectedSchema.outbound.opName,
-                  service: expectedSchema.outbound.serviceName,
-                  resource,
-                  type: 'mongodb',
-                  meta: {
-                    'span.kind': 'client',
-                    'db.name': `test.${collection}`,
-                    'out.host': '127.0.0.1',
-                    component: 'mongodb',
-                    '_dd.integration': 'mongodb',
-                  },
-                })
+              .assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: `insert test.${collection}`,
+                type: 'mongodb',
+                meta: {
+                  'span.kind': 'client',
+                  'db.name': `test.${collection}`,
+                  'out.host': '127.0.0.1',
+                  component: 'mongodb',
+                  '_dd.integration': 'mongodb',
+                },
               })
               .then(done)
               .catch(done)
