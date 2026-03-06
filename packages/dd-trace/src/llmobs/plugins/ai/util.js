@@ -125,7 +125,7 @@ function getModelMetadata (tags) {
 
     if (isModelMetadata) {
       const lastCommaPosition = tag.lastIndexOf('.')
-      const metadataKey = lastCommaPosition === -1 ? tag :  tag.slice(lastCommaPosition + 1)
+      const metadataKey = lastCommaPosition === -1 ? tag : tag.slice(lastCommaPosition + 1)
       if (metadataKey && MODEL_METADATA_KEYS.has(metadataKey)) {
         modelMetadata[metadataKey] = tags[tag]
       }
@@ -157,7 +157,7 @@ function getGenerationMetadata (tags) {
 
     if (isGenerationMetadata) {
       const lastCommaPosition = tag.lastIndexOf('.')
-      const settingKey = lastCommaPosition === -1 ? tag :  tag.slice(lastCommaPosition + 1)
+      const settingKey = lastCommaPosition === -1 ? tag : tag.slice(lastCommaPosition + 1)
       const transformedKey = settingKey.replaceAll(/[A-Z]/g, letter => '_' + letter.toLowerCase())
       if (MODEL_METADATA_KEYS.has(transformedKey)) continue
 
