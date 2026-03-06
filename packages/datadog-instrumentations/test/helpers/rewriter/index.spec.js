@@ -1,11 +1,12 @@
 'use strict'
 
 const { readFileSync } = require('node:fs')
-const { resolve, join } = require('node:path')
+const { resolve, join, dirname } = require('node:path')
 const Module = require('node:module')
 const assert = require('node:assert')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 const { tracingChannel } = require('dc-polyfill')
 
 // TODO: Test actual functionality and not just the start channel.
@@ -23,6 +24,8 @@ describe('check-require-cache', () => {
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, format)
 
+    mod.filename = filename
+    mod.paths = Module._nodeModulePaths(dirname(filename))
     mod._compile(content, filename, format)
 
     return mod.exports
@@ -36,6 +39,8 @@ describe('check-require-cache', () => {
     content = readFileSync(filename, 'utf8')
     content = rewriter.rewrite(content, filename, format)
 
+    mod.filename = filename
+    mod.paths = Module._nodeModulePaths(dirname(filename))
     mod._compile(content, filename, format)
 
     return mod.exports
@@ -229,6 +234,32 @@ describe('check-require-cache', () => {
             kind: 'Sync',
           },
           channelName: 'test_invoke',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-function-index.js',
+          },
+          functionQuery: {
+            functionName: 'dupe',
+            kind: 'Sync',
+            index: 1,
+          },
+          channelName: 'trace_function_index',
+        },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-class-private-method.js',
+          },
+          functionQuery: {
+            className: 'Foo',
+            privateMethodName: 'internal',
+            kind: 'Sync',
+          },
+          channelName: 'trace_class_private_method',
         },
       ],
     })
@@ -451,5 +482,37 @@ describe('check-require-cache', () => {
     ch.subscribe(subs)
 
     test.test()
+  })
+
+  it('should auto instrument using a function index', () => {
+    const test = compileFile('trace-function-index')
+
+    subs = {
+      start: sinon.spy(),
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_function_index')
+    ch.subscribe(subs)
+
+    test.test()
+
+    assert.ok(subs.start.called)
+    assert.ok(subs.start.calledOnce)
+    assert.equal(subs.start.firstCall.args[0].result, 'b')
+  })
+
+  it('should auto instrument using a class private method', () => {
+    const test = compileFile('trace-class-private-method')
+
+    subs = {
+      start: sinon.spy(),
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_class_private_method')
+    ch.subscribe(subs)
+
+    test.test()
+
+    assert.ok(subs.start.called)
   })
 })

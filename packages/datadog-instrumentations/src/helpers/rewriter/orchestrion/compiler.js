@@ -1,6 +1,6 @@
 'use strict'
 
-const log = require('../../../../dd-trace/src/log')
+const log = require('../../../../../dd-trace/src/log')
 
 // eslint-disable-next-line camelcase, no-undef
 const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
@@ -25,7 +25,7 @@ const compiler = {
       log.error(e)
 
       // Fallback for when OXC is not available.
-      const meriyah = require('../../../../../vendor/dist/meriyah')
+      const meriyah = require('../../../../../../vendor/dist/meriyah')
 
       compiler.parse = (sourceText, { range, sourceType } = {}) => {
         return meriyah.parse(sourceText.toString(), {
@@ -40,7 +40,7 @@ const compiler = {
   },
 
   generate: (...args) => {
-    const astring = require('../../../../../vendor/dist/astring')
+    const astring = require('../../../../../../vendor/dist/astring')
 
     compiler.generate = astring.generate
 
@@ -48,7 +48,7 @@ const compiler = {
   },
 
   traverse: (ast, query, visitor) => {
-    const esquery = require('../../../../../vendor/dist/esquery').default
+    const esquery = require('../../../../../../vendor/dist/esquery').default
 
     compiler.traverse = (ast, query, visitor) => {
       return esquery.traverse(ast, esquery.parse(query), visitor)
@@ -58,7 +58,7 @@ const compiler = {
   },
 
   query: (ast, query) => {
-    const esquery = require('../../../../../vendor/dist/esquery').default
+    const esquery = require('../../../../../../vendor/dist/esquery').default
 
     compiler.query = esquery.query
 
