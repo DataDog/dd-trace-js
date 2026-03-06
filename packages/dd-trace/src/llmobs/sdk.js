@@ -46,6 +46,12 @@ class LLMObs extends NoopLLMObs {
     return this.#config.llmobs.enabled
   }
 
+  // Exposed for test access
+  get _config () { return this.#config }
+
+  // Exposed for test access
+  get _llmobsModule () { return this.#llmobsModule }
+
   enable (options = {}) {
     if (this.enabled) {
       logger.debug('LLMObs is already enabled.')
@@ -350,7 +356,7 @@ class LLMObs extends NoopLLMObs {
           'spanId and traceId must both be specified for the given evaluation metric to be submitted.'
         )
       }
-      const mlApp = options.mlApp || this._config.llmobs.mlApp
+      const mlApp = options.mlApp || this.#config.llmobs.mlApp
       if (!mlApp) {
         err = 'missing_ml_app'
         throw new Error(
