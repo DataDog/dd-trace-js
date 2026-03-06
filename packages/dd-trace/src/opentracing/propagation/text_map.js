@@ -670,10 +670,8 @@ class TextMapPropagator {
     if (!this._hasPropagationStyle('extract', 'baggage')) return
     if (!carrier?.baggage) return
     const baggages = carrier.baggage.split(',')
-    const tagAllKeys = this._config.baggageTagKeys === '*'
-    const keysToSpanTag = tagAllKeys
-      ? undefined
-      : new Set(this._config.baggageTagKeys.split(','))
+    const baggageTagKeys = new Set(this._config.baggageTagKeys)
+    const tagAllKeys = baggageTagKeys.has('*')
     for (const keyValue of baggages) {
       if (!keyValue) continue
 
@@ -707,7 +705,7 @@ class TextMapPropagator {
         return
       }
 
-      if (spanContext && (tagAllKeys || keysToSpanTag?.has(key))) {
+      if (spanContext && (tagAllKeys || baggageTagKeys.has(key))) {
         spanContext._trace.tags['baggage.' + key] = value
       }
       setBaggageItem(key, value)

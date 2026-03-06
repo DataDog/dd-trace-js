@@ -201,8 +201,8 @@ function checkVulnerabilityInRequest (
       assert.notStrictEqual(vulnerabilitiesTrace, null)
       const vulnerabilitiesCount = new Map()
       vulnerabilitiesTrace.vulnerabilities.forEach(v => {
-        let count = vulnerabilitiesCount.get(v.type) || 0
-        vulnerabilitiesCount.set(v.type, ++count)
+        const count = (vulnerabilitiesCount.get(v.type) || 0) + 1
+        vulnerabilitiesCount.set(v.type, count)
       })
 
       assert.ok(((vulnerabilitiesCount.get(vulnerability)) > (0)))

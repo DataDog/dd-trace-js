@@ -1,6 +1,5 @@
 'use strict'
 
-const request = require('../../exporters/common/request')
 const id = require('../../id')
 const log = require('../../log')
 const { getValueFromEnvSources } = require('../../config/helper')
@@ -13,8 +12,10 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
 const { writeSettingsToCache } = require('../test-optimization-cache')
+const request = require('./request')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
+const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
 
 function getLibraryConfiguration ({
@@ -115,6 +116,8 @@ function getLibraryConfiguration ({
           isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
           earlyFlakeDetectionNumRetries:
             earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
+          earlyFlakeDetectionSlowTestRetries:
+            earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
           earlyFlakeDetectionFaultyThreshold:
             earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
           isFlakyTestRetriesEnabled,

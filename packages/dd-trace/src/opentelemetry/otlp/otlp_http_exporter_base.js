@@ -20,7 +20,7 @@ class OtlpHttpExporterBase {
    * Creates a new OtlpHttpExporterBase instance.
    *
    * @param {string} url - OTLP endpoint URL
-   * @param {string} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {string|undefined} headers - Additional HTTP headers as comma-separated key=value string
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {string} defaultPath - Default path to use if URL has no path
@@ -117,11 +117,10 @@ class OtlpHttpExporterBase {
 
   /**
    * Parses additional HTTP headers from a comma-separated string.
-   * @param {string} headersString - Comma-separated key=value pairs
+   * @param {string} [headersString=''] - Comma-separated key=value pairs
    * @returns {Record<string, string>} Parsed headers object
-   * @private
    */
-  #parseAdditionalHeaders (headersString) {
+  #parseAdditionalHeaders (headersString = '') {
     const headers = {}
     let key = ''
     let value = ''
