@@ -128,7 +128,7 @@ function formatJestError (errors) {
 }
 
 function getTestEnvironmentOptions (config) {
-  if (config.projectConfig && config.projectConfig.testEnvironmentOptions) { // newer versions
+  if (config.projectConfig?.testEnvironmentOptions) { // newer versions
     return config.projectConfig.testEnvironmentOptions
   }
   if (config.testEnvironmentOptions) {
@@ -561,7 +561,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (event.name === 'test_done') {
         const originalError = event.test?.errors?.[0]
         let status = 'pass'
-        if (event.test.errors && event.test.errors.length) {
+        if (event.test.errors?.length) {
           status = 'fail'
         }
         // restore in case it is retried
@@ -766,7 +766,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (isEfdActive && isFinalEfdTestExecution) {
         // For EFD: The framework reports 'pass' if ANY attempt passed (flaky but not failing)
         const testStatuses = newTestsTestStatuses.get(testName)
-        finalStatus = testStatuses && testStatuses.includes('pass') ? 'pass' : 'fail'
+        finalStatus = testStatuses?.includes('pass') ? 'pass' : 'fail'
       }
 
       return { isEfdEnabled, isEfdActive, isFinalEfdTestExecution, finalStatus }
@@ -798,7 +798,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (isAttemptToFixEnabled && isFinalAttemptToFixExecution) {
         // For Attempt to Fix: 'pass' only if ALL attempts passed, 'fail' if ANY failed
         const testStatuses = attemptToFixRetriedTestsStatuses.get(testName)
-        finalStatus = testStatuses && testStatuses.every(status => status === 'pass') ? 'pass' : 'fail'
+        finalStatus = testStatuses?.every(status => status === 'pass') ? 'pass' : 'fail'
       }
 
       return { isAttemptToFixEnabled, isFinalAttemptToFixExecution, finalStatus }
@@ -1421,7 +1421,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
-    if (!environment || !environment.testEnvironmentOptions) {
+    if (!environment?.testEnvironmentOptions) {
       return adapter.apply(this, arguments)
     }
     testSuiteStartCh.publish({

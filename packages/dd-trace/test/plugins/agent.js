@@ -111,7 +111,7 @@ function dsmStatsExistWithParentHash (agent, expectedParentHash) {
  * @returns {import('../../src/opentracing/span')[]}
  */
 function unformatSpanEvents (span) {
-  if (span.meta && span.meta.events) {
+  if (span.meta?.events) {
     // Parse the JSON string back into an object
     const events = JSON.parse(span.meta.events)
 
@@ -146,7 +146,7 @@ function addEnvironmentVariablesToHeaders (headers) {
   // add plugin name and plugin version to headers, this is used for verifying tested
   // integration version ranges
   const currentPlugin = testedPlugins[testedPlugins.length - 1]
-  if (currentPlugin && currentPlugin.pluginName && currentPlugin.pluginVersion) {
+  if (currentPlugin?.pluginName && currentPlugin.pluginVersion) {
     ddEnvVars.set('DD_INTEGRATION', currentPlugin.pluginName)
     ddEnvVars.set('DD_INTEGRATION_VERSION', currentPlugin.pluginVersion)
   }

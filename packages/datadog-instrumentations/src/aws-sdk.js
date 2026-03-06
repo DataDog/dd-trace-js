@@ -17,8 +17,8 @@ function wrapRequest (send) {
     const ctx = {
       serviceIdentifier,
       operation: this.operation,
-      awsRegion: this.service.config && this.service.config.region,
-      awsService: this.service.api && this.service.api.className,
+      awsRegion: this.service.config?.region,
+      awsService: this.service.api?.className,
       request: this,
       cbExists: typeof cb === 'function',
     }
@@ -175,7 +175,7 @@ function wrapCb (cb, serviceName, ctx) {
       const finishChannel = channel(`apm:aws:response:finish:${serviceName}`)
       try {
         let result = cb.apply(this, arguments)
-        if (result && result.then) {
+        if (result?.then) {
           result = result.then(x => {
             finishChannel.publish(ctx)
             return x
@@ -201,7 +201,7 @@ function addResponse (ctx, error, result) {
   const request = ctx.request
   const response = { request, error, ...result }
 
-  if (result && result.$metadata) {
+  if (result?.$metadata) {
     response.requestId = result.$metadata.requestId
   }
 

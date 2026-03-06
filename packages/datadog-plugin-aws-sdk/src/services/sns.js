@@ -11,7 +11,7 @@ class Sns extends BaseAwsSdkPlugin {
   generateTags (params, operation, response) {
     if (!params) return {}
 
-    if (!params.TopicArn && !(response.data && response.data.TopicArn)) return {}
+    if (!params.TopicArn && !(response.data?.TopicArn)) return {}
     const TopicArn = params.TopicArn || response.data.TopicArn
 
     // Split the ARN into its parts

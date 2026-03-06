@@ -32,7 +32,7 @@ describe('data streams checkpointer manual api', () => {
       let statsPointsReceived = 0
       // we should have 1 dsm stats points
       for (const timeStatsBucket of dsmStats) {
-        if (timeStatsBucket && timeStatsBucket.Stats) {
+        if (timeStatsBucket?.Stats) {
           for (const statsBucket of timeStatsBucket.Stats) {
             statsPointsReceived += statsBucket.Stats.length
           }
@@ -57,7 +57,7 @@ describe('data streams checkpointer manual api', () => {
       let statsPointsReceived = 0
       // we should have 2 dsm stats points because of the earlier produce
       for (const timeStatsBucket of dsmStats) {
-        if (timeStatsBucket && timeStatsBucket.Stats) {
+        if (timeStatsBucket?.Stats) {
           for (const statsBucket of timeStatsBucket.Stats) {
             statsPointsReceived += statsBucket.Stats.length
           }

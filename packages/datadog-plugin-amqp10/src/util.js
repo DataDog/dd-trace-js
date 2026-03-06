@@ -1,13 +1,13 @@
 'use strict'
 
 function getAddress (link) {
-  if (!link || !link.session || !link.session.connection) return {}
+  if (!link?.session?.connection) return {}
 
   return link.session.connection.address || {}
 }
 
 function getShortName (link) {
-  if (!link || !link.name) return null
+  if (!link?.name) return null
 
   return link.name.split('_').slice(0, -1).join('_')
 }

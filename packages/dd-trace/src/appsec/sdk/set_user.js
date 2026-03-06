@@ -14,7 +14,7 @@ function setUserTags (user, rootSpan) {
 }
 
 function setUser (tracer, user) {
-  if (!user || !user.id) {
+  if (!user?.id) {
     log.warn('[ASM] Invalid user provided to setUser')
     return
   }

@@ -273,7 +273,7 @@ describe('RASP - lfi', () => {
         describe('test open', () => {
           runFsMethodTestThreeWay('open', {
             onfinish: (fd) => {
-              if (fd && fd.close) {
+              if (fd?.close) {
                 fd.close()
               } else {
                 fs.close(fd, () => {

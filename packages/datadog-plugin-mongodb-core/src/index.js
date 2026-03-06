@@ -196,7 +196,7 @@ function isObject (val) {
 }
 
 function isBSON (val) {
-  return val && val._bsontype && !isBinary(val)
+  return val?._bsontype && !isBinary(val)
 }
 
 function isBinary (val) {

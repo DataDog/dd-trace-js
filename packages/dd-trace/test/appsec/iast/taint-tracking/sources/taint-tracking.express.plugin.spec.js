@@ -51,7 +51,7 @@ describe('URI sourcing with express', () => {
     })
 
     afterEach(() => {
-      appListener && appListener.close()
+      appListener?.close()
       appListener = null
 
       iast.disable()
@@ -130,7 +130,7 @@ describe('Path params sourcing with express', () => {
     })
 
     afterEach(() => {
-      appListener && appListener.close()
+      appListener?.close()
       appListener = null
 
       iast.disable()

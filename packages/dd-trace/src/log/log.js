@@ -18,7 +18,7 @@ class Log {
     const { message, args } = this
 
     let formatted = message
-    if (message && args && args.length) {
+    if (message && args?.length) {
       formatted = format(message, ...args)
     }
     return formatted

@@ -13,7 +13,7 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
 
     if (!this.config.dsmEnabled) return
     for (const message of messages) {
-      if (!message || !message.headers) continue
+      if (!message?.headers) continue
       const payloadSize = getMessageSize(message)
       this.tracer.decodeDataStreamsContext(convertToTextMap(message.headers))
       const edgeTags = ['direction:in', `group:${groupId}`, `topic:${topic}`, 'type:kafka']

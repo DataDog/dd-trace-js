@@ -88,12 +88,12 @@ class WSServerPlugin extends TracingPlugin {
 
 function getRequestProtocol (req, fallback = 'ws') {
   // 1. Check if the underlying TLS socket has 'encrypted'
-  if (req.socket && req.socket.encrypted) {
+  if (req.socket?.encrypted) {
     return 'wss'
   }
 
   // 2. Check for a trusted header set by a proxy
-  if (req.headers && req.headers['x-forwarded-proto']) {
+  if (req.headers?.['x-forwarded-proto']) {
     const proto = req.headers['x-forwarded-proto'].split(',')[0].trim()
     if (proto === 'https') return 'wss'
     if (proto === 'http') return 'ws'

@@ -50,10 +50,10 @@ class RheaConsumerPlugin extends ConsumerPlugin {
 function getResourceNameFromMessage (msgObj) {
   let resourceName = 'amq.topic'
   let options = {}
-  if (msgObj.receiver && msgObj.receiver.options) {
+  if (msgObj.receiver?.options) {
     options = msgObj.receiver.options
   }
-  if (options.source && options.source.address) {
+  if (options.source?.address) {
     resourceName = options.source.address
   }
   return resourceName

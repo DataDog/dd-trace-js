@@ -28,7 +28,7 @@ if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
 const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
-  DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
+  DD_TRACE_DISABLED_PLUGINS?.split(',').map(plugin => plugin.trim())
 )
 
 // TODO actually ... should we be looking at environment variables this deep down in the code?
@@ -199,7 +199,7 @@ module.exports = class PluginManager {
       sharedConfig.queryStringObfuscation = queryStringObfuscation
     }
 
-    if (serviceMapping && serviceMapping[name]) {
+    if (serviceMapping?.[name]) {
       sharedConfig.service = serviceMapping[name]
     }
 

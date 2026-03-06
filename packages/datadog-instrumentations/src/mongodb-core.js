@@ -155,7 +155,7 @@ function instrument (operation, command, instance, args, server, ns, ops, option
 
   if (typeof callback !== 'function') return command.apply(instance, args)
 
-  const serverInfo = server && server.s && server.s.options
+  const serverInfo = server?.s?.options
 
   const ctx = {
     ns,
@@ -187,7 +187,7 @@ function instrument (operation, command, instance, args, server, ns, ops, option
 function instrumentPromise (operation, command, instance, args, server, ns, ops, options = {}) {
   const name = options.name || (ops && Object.keys(ops)[0])
 
-  const serverInfo = server && server.s && server.s.options
+  const serverInfo = server?.s?.options
 
   const ctx = {
     ns,

@@ -33,7 +33,7 @@ function createWrapGetConnection (name) {
   return function wrapRequest (request) {
     return function () {
       const connection = request.apply(this, arguments)
-      if (connectCh.hasSubscribers && connection && connection.url) {
+      if (connectCh.hasSubscribers && connection?.url) {
         connectCh.publish(connection.url)
       }
       return connection
@@ -48,7 +48,7 @@ function createWrapSelect () {
       if (arguments.length === 1) {
         const cb = arguments[0]
         arguments[0] = shimmer.wrapFunction(cb, cb => function (err, connection) {
-          if (connectCh.hasSubscribers && connection && connection.host) {
+          if (connectCh.hasSubscribers && connection?.host) {
             connectCh.publish({ hostname: connection.host.host, port: connection.host.port })
           }
           cb(err, connection)

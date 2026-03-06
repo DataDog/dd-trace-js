@@ -222,7 +222,7 @@ function parseHookInstrumentationFileName (packageName) {
   const match = hookString.match(regex)
 
   // try to capture the hook require file location.
-  if (match && match[1]) {
+  if (match?.[1]) {
     let moduleName = match[1]
     // Remove leading '../' if present
     if (moduleName.startsWith('../')) {

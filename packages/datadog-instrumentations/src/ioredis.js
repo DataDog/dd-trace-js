@@ -14,7 +14,7 @@ function wrapRedis (Redis) {
   shimmer.wrap(Redis.prototype, 'sendCommand', sendCommand => function (command, stream) {
     if (!startCh.hasSubscribers) return sendCommand.apply(this, arguments)
 
-    if (!command || !command.promise) return sendCommand.apply(this, arguments)
+    if (!command?.promise) return sendCommand.apply(this, arguments)
 
     const options = this.options || {}
     const connectionName = options.connectionName

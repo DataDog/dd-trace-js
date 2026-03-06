@@ -113,7 +113,7 @@ function removeConfig (configPath) {
 function run (data, req, raspRule) {
   if (!req) {
     const store = storage('legacy').getStore()
-    if (!store || !store.req) {
+    if (!store?.req) {
       log.warn('[ASM] Request object not available in waf.run')
       return
     }

@@ -67,7 +67,7 @@ class DatadogSpanContext {
     const flags = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
     const traceId = this.toTraceId(true)
     const spanId = this.toSpanId(true)
-    const version = (this._traceparent && this._traceparent.version) || '00'
+    const version = (this._traceparent?.version) || '00'
     return `${version}-${traceId}-${spanId}-${flags}`
   }
 }

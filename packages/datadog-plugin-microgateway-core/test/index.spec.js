@@ -51,9 +51,9 @@ describe('Plugin', () => {
   }
 
   const stopGateway = () => {
-    gateway && gateway.stop(() => {})
-    api && api.close()
-    proxy && proxy.close()
+    gateway?.stop(() => {})
+    api?.close()
+    proxy?.close()
   }
 
   describe('microgateway-core', () => {

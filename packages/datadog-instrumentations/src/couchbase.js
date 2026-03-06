@@ -208,7 +208,7 @@ addHook({ name: 'couchbase', file: 'lib/bucket.js', versions: ['^2.6.12'] }, Buc
       return _n1qlReq.apply(this, arguments)
     }
 
-    if (!emitter || !emitter.once) return _n1qlReq.apply(this, arguments)
+    if (!emitter?.once) return _n1qlReq.apply(this, arguments)
 
     const n1qlQuery = getQueryResource(q)
 

@@ -43,7 +43,7 @@ function getBody (body) {
 }
 
 function quantizePath (path) {
-  return path && path.replaceAll(/[0-9]+/g, '?')
+  return path?.replaceAll(/[0-9]+/g, '?')
 }
 
 module.exports = ElasticsearchPlugin

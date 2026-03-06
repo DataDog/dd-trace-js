@@ -14,7 +14,7 @@ export default (req, res) => {
   }
 
   const span = tracer.scope().active()
-  const name = span && span.context()._name
+  const name = span?.context()._name
 
   res.status(200).json({ name })
 }

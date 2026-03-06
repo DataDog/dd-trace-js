@@ -14,7 +14,7 @@ function isUserBlocked (user) {
 }
 
 function checkUserAndSetUser (tracer, user) {
-  if (!user || !user.id) {
+  if (!user?.id) {
     log.warn('[ASM] Invalid user provided to isUserBlocked')
     return false
   }

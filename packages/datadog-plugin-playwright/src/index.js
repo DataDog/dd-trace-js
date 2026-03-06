@@ -177,7 +177,7 @@ class PlaywrightPlugin extends CiPlugin {
       page,
     }) => {
       const store = storage('legacy').getStore()
-      const span = store && store.span
+      const span = store?.span
       if (!span) {
         log.error('ci:playwright:test:page-goto: test span not found')
         return

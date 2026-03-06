@@ -14,8 +14,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
   bindStart (ctx) {
     const { operation, args, docSource } = ctx
 
-    const type = operation && operation.operation
-    const name = operation && operation.name && operation.name.value
+    const type = operation?.operation
+    const name = operation?.name?.value
     const document = args.document
     const source = this.config.source && document && docSource
 

@@ -73,7 +73,7 @@ describe('Flare', () => {
     handler = null
     flare.disable()
     listener.close()
-    socket && socket.end()
+    socket?.end()
     server.on('close', () => {
       server = null
       listener = null

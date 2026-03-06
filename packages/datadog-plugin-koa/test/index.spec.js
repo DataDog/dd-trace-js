@@ -699,7 +699,7 @@ describe('Plugin', () => {
             })
 
             afterEach(() => {
-              ws && ws.close()
+              ws?.close()
             })
 
             it('should skip instrumentation', done => {

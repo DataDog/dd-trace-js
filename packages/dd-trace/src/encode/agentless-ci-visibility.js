@@ -22,7 +22,7 @@ const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
 
 function formatSpan (span) {
   let encodingVersion = ENCODING_VERSION
-  if (span.type === 'test' && span.meta && span.meta.test_session_id) {
+  if (span.type === 'test' && span.meta?.test_session_id) {
     encodingVersion = 2
   }
   return {

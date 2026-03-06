@@ -32,7 +32,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill('SIGINT')
+      proc?.kill('SIGINT')
       await agent.stop()
     })
 

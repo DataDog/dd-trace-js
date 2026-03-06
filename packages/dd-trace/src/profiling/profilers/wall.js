@@ -28,7 +28,7 @@ let kSampleCount
 
 function getActiveSpan () {
   const store = storage('legacy').getStore()
-  return store && store.span
+  return store?.span
 }
 
 function toBigInt (spanId) {

@@ -121,7 +121,7 @@ function isFirstMethodReturningFileHandle (original) {
 function wrapFileHandle (fh) {
   const fileHandlePrototype = getFileHandlePrototype(fh)
   const desc = Reflect.getOwnPropertyDescriptor(fileHandlePrototype, kHandle)
-  if (!desc || !desc.get) {
+  if (!desc?.get) {
     Reflect.defineProperty(fileHandlePrototype, kHandle, {
       get () {
         return this[ddFhSym]

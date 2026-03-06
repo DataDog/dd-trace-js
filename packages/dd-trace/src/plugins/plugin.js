@@ -29,7 +29,7 @@ class Subscription {
     this._channel = dc.channel(event)
     this._handler = (message, name) => {
       const store = storage('legacy').getStore()
-      if (!store || !store.noop) {
+      if (!store?.noop) {
         handler(message, name)
       }
     }
@@ -52,7 +52,7 @@ class StoreBinding {
     this._transform = data => {
       const store = storage('legacy').getStore()
 
-      return !store || !store.noop || (data && Object.hasOwn(data, 'currentStore'))
+      return !store?.noop || (data && Object.hasOwn(data, 'currentStore'))
         ? transform(data)
         : store
     }
@@ -153,7 +153,7 @@ module.exports = class Plugin {
   addError (error) {
     const store = storage('legacy').getStore()
 
-    if (!store || !store.span) return
+    if (!store?.span) return
 
     if (!store.span._spanContext._tags.error) {
       store.span.setTag('error', error || 1)

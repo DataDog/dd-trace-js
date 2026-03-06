@@ -151,7 +151,7 @@ module.exports = {
         }
       }
 
-      const isTag = JENKINS_GIT_BRANCH && JENKINS_GIT_BRANCH.includes('tags/')
+      const isTag = JENKINS_GIT_BRANCH?.includes('tags/')
       const refKey = isTag ? GIT_TAG : GIT_BRANCH
       const ref = normalizeRef(JENKINS_GIT_BRANCH)
 
@@ -471,7 +471,7 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/{|}/gm, ''),
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID?.replaceAll(/{|}/gm, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH,
         [PR_NUMBER]: BITBUCKET_PR_ID,
       }
@@ -681,7 +681,7 @@ module.exports = {
         [GIT_PULL_REQUEST_BASE_BRANCH]: CF_PULL_REQUEST_TARGET,
       }
 
-      const isTag = CF_BRANCH && CF_BRANCH.includes('tags/')
+      const isTag = CF_BRANCH?.includes('tags/')
       const refKey = isTag ? GIT_TAG : GIT_BRANCH
       const ref = normalizeRef(CF_BRANCH)
 

@@ -137,7 +137,7 @@ const DsmPathwayCodec = {
    * @param {object} carrier
    */
   encode (dataStreamsContext, carrier) {
-    if (!dataStreamsContext || !dataStreamsContext.hash) {
+    if (!dataStreamsContext?.hash) {
       return
     }
     carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)

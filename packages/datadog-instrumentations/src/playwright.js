@@ -577,7 +577,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           test,
           annotations,
           testStatus: STATUS_TO_TEST_STATUS[status],
-          error: errors && errors[0],
+          error: errors?.[0],
           isTimeout,
           shouldCreateTestSpan,
           projects,
@@ -1095,10 +1095,10 @@ addHook({
       if (page) {
         const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(() => {
           const isRumInstrumented = !!window.DD_RUM
-          const isRumActive = window.DD_RUM && window.DD_RUM.getInternalContext
+          const isRumActive = window.DD_RUM?.getInternalContext
             ? !!window.DD_RUM.getInternalContext()
             : false
-          const rumSamplingRate = window.DD_RUM && window.DD_RUM.getInitConfiguration
+          const rumSamplingRate = window.DD_RUM?.getInitConfiguration
             ? window.DD_RUM.getInitConfiguration().sessionSampleRate
             : null
           return { isRumInstrumented, isRumActive, rumSamplingRate }
@@ -1184,7 +1184,7 @@ addHook({
             try {
               if (page) {
                 const isRumActive = await page.evaluate(() => {
-                  if (window.DD_RUM && window.DD_RUM.stopSession) {
+                  if (window.DD_RUM?.stopSession) {
                     window.DD_RUM.stopSession()
                     return true
                   }

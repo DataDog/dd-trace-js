@@ -9,7 +9,7 @@ const errorChannel = channel('apm:moleculer:action:error')
 
 function wrapRegisterMiddlewares (registerMiddlewares) {
   return function (userMiddlewares) {
-    if (this.middlewares && this.middlewares.add) {
+    if (this.middlewares?.add) {
       this.middlewares.add(createMiddleware())
     }
 

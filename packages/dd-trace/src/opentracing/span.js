@@ -335,7 +335,7 @@ class DatadogSpan {
     let startTime
 
     let baggage = {}
-    if (parent && parent._isRemote && this._parentTracer?._config?.tracePropagationBehaviorExtract !== 'continue') {
+    if (parent?._isRemote && this._parentTracer?._config?.tracePropagationBehaviorExtract !== 'continue') {
       baggage = parent._baggageItems
       parent = null
     }

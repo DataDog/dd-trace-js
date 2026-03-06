@@ -365,7 +365,7 @@ describe('Plugin', () => {
             })
 
             afterEach(() => {
-              if (spy && spy.restore) {
+              if (spy?.restore) {
                 spy.restore()
               }
             })

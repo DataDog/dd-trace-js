@@ -18,7 +18,7 @@ describe('AgentlessExporter', () => {
   beforeEach(() => {
     writer = {
       append: sinon.stub(),
-      flush: sinon.stub().callsFake((cb) => cb && cb()),
+      flush: sinon.stub().callsFake((cb) => cb?.()),
       setUrl: sinon.stub(),
     }
 

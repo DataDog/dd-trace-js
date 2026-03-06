@@ -41,7 +41,7 @@ function wrapFn (fn) {
       arguments[2] = wrapNext(req, next)
     }
 
-    const route = req.route && req.route.path
+    const route = req.route?.path
 
     enterChannel.publish({ req, route })
 

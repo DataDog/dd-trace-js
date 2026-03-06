@@ -17,7 +17,7 @@ class SharedbPlugin extends ServerPlugin {
       },
     }, ctx)
 
-    if (this.config.hooks && this.config.hooks.receive) {
+    if (this.config.hooks?.receive) {
       this.config.hooks.receive(span, request)
     }
 
@@ -28,7 +28,7 @@ class SharedbPlugin extends ServerPlugin {
     const { request, res } = ctx
 
     const span = ctx.currentStore.span
-    if (this.config.hooks && this.config.hooks.reply) {
+    if (this.config.hooks?.reply) {
       this.config.hooks.reply(span, request, res)
     }
     super.finish(ctx)

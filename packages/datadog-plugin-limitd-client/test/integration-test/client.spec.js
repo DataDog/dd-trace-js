@@ -29,7 +29,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      proc?.kill()
       await agent.stop()
     })
     for (const variant of varySandbox.VARIANTS) {

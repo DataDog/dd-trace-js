@@ -106,7 +106,7 @@ function createWrapEmit (call, ctx, onCancel) {
 }
 
 function wrapStream (call, ctx, onCancel) {
-  if (call.call && call.call.sendStatus) {
+  if (call.call?.sendStatus) {
     call.call.sendStatus = wrapSendStatus(call.call.sendStatus, ctx)
   }
 

@@ -87,7 +87,7 @@ describe('Plugin', () => {
             let statsPointsReceived = []
             // we should have 1 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
+              if (timeStatsBucket?.Stats) {
                 timeStatsBucket.Stats.forEach((statsBuckets) => {
                   statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
                 })
@@ -115,7 +115,7 @@ describe('Plugin', () => {
             let statsPointsReceived = []
             // we should have 1 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
+              if (timeStatsBucket?.Stats) {
                 timeStatsBucket.Stats.forEach((statsBuckets) => {
                   statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
                 })
@@ -143,7 +143,7 @@ describe('Plugin', () => {
             let statsPointsReceived = []
             // we should have 2 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
+              if (timeStatsBucket?.Stats) {
                 timeStatsBucket.Stats.forEach((statsBuckets) => {
                   statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
                 })
@@ -170,7 +170,7 @@ describe('Plugin', () => {
             let statsPointsReceived = []
             // we should have 1 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
+              if (timeStatsBucket?.Stats) {
                 timeStatsBucket.Stats.forEach((statsBuckets) => {
                   statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
                 })
@@ -198,7 +198,7 @@ describe('Plugin', () => {
             let statsPointsReceived = []
             // we should have 2 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
+              if (timeStatsBucket?.Stats) {
                 timeStatsBucket.Stats.forEach((statsBuckets) => {
                   statsPointsReceived = statsPointsReceived.concat(statsBuckets.Stats)
                 })

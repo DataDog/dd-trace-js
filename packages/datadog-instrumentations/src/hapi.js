@@ -103,7 +103,7 @@ function wrapHandler (handler) {
 }
 
 function onPreResponse (request, h) {
-  if (!request || !request.raw) return reply(request, h)
+  if (!request?.raw) return reply(request, h)
 
   const req = request.raw.req
 

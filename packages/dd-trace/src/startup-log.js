@@ -69,7 +69,7 @@ function tracerInfo () {
     sample_rate: config.sampler.sampleRate,
     sampling_rules: samplingRules,
     tags: config.tags,
-    ...(config.tags && config.tags.version && { dd_version: config.tags.version }),
+    ...(config.tags?.version && { dd_version: config.tags.version }),
     log_injection_enabled: !!config.logInjection,
     runtime_metrics_enabled: !!config.runtimeMetrics,
     profiling_enabled: config.profiling?.enabled === 'true' || config.profiling?.enabled === 'auto',

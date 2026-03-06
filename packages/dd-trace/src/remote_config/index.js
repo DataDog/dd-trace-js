@@ -543,7 +543,7 @@ const configPathRegex = /^(?:datadog\/\d+|employee)\/([^/]+)\/([^/]+)\/[^/]+$/
 function parseConfigPath (configPath) {
   const match = configPathRegex.exec(configPath)
 
-  if (!match || !match[1] || !match[2]) {
+  if (!match?.[1] || !match[2]) {
     throw new Error(`Unable to parse path ${configPath}`)
   }
 

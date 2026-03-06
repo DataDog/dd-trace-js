@@ -147,7 +147,7 @@ describe('Kinesis', function () {
           let statsPointsReceived = 0
           // we should have only have 1 stats point since we only had 1 put operation
           dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
+            if (timeStatsBucket?.Stats) {
               timeStatsBucket.Stats.forEach((statsBuckets) => {
                 statsPointsReceived += statsBuckets.Stats.length
               })
@@ -165,7 +165,7 @@ describe('Kinesis', function () {
           let statsPointsReceived = 0
           // we should have only have 1 stats point since we only had 1 put operation
           dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
+            if (timeStatsBucket?.Stats) {
               timeStatsBucket.Stats.forEach((statsBuckets) => {
                 statsPointsReceived += statsBuckets.Stats.length
               })
@@ -188,7 +188,7 @@ describe('Kinesis', function () {
           let statsPointsReceived = 0
           // we should have only have 1 stats point since we only had 1 put operation
           dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
+            if (timeStatsBucket?.Stats) {
               timeStatsBucket.Stats.forEach((statsBuckets) => {
                 statsPointsReceived += statsBuckets.Stats.length
               })
@@ -223,7 +223,7 @@ describe('Kinesis', function () {
           let statsPointsReceived = 0
           // we should have only have 3 stats points since we only had 3 records published
           dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
+            if (timeStatsBucket?.Stats) {
               timeStatsBucket.Stats.forEach((statsBuckets) => {
                 statsPointsReceived += statsBuckets.Stats.length
               })

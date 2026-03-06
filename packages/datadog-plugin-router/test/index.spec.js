@@ -41,7 +41,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        appListener && appListener.close()
+        appListener?.close()
       })
 
       describe('without configuration', () => {

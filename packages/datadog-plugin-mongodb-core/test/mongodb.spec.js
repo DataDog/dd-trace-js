@@ -442,7 +442,7 @@ describe('Plugin', () => {
               assert.strictEqual(tracer.scope().active(), null)
               done()
             })
-            if (insertPromise && insertPromise.then) {
+            if (insertPromise?.then) {
               insertPromise.then(() => {
                 assert.strictEqual(tracer.scope().active(), null)
                 done()

@@ -34,7 +34,7 @@ function testInRequest (app, tests) {
 
   beforeEach(() => {
     listener = (req, res) => {
-      const appResult = app && app(req, res)
+      const appResult = app?.(req, res)
       if (appResult && typeof appResult.then === 'function') {
         appResult.then(() => {
           res.writeHead(200)
@@ -57,7 +57,7 @@ function testInRequest (app, tests) {
   })
 
   afterEach(() => {
-    appListener && appListener.close()
+    appListener?.close()
   })
 
   after(() => {
@@ -258,7 +258,7 @@ function prepareTestServerForIast (description, tests, iastConfig, pluginsToConf
 
     before(() => {
       listener = (req, res) => {
-        endResponse(res, app && app(req, res))
+        endResponse(res, app?.(req, res))
       }
     })
 
@@ -287,7 +287,7 @@ function prepareTestServerForIast (description, tests, iastConfig, pluginsToConf
     })
 
     after(() => {
-      appListener && appListener.close()
+      appListener?.close()
       return agent.close({ ritmReset: false })
     })
 
@@ -340,7 +340,7 @@ function prepareTestServerForIastInExpress (
 
     before(() => {
       listener = (req, res) => {
-        endResponse(res, app && app(req, res))
+        endResponse(res, app?.(req, res))
       }
     })
 
@@ -449,7 +449,7 @@ function prepareTestServerForIastInFastify (description, fastifyVersion, tests, 
         }
 
         try {
-          const result = app && app(request, reply.raw)
+          const result = app?.(request, reply.raw)
 
           const finish = () => {
             if (!headersSent()) {

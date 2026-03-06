@@ -65,7 +65,7 @@ describe('OpenFeature Exposures Writer', () => {
   })
 
   afterEach(() => {
-    if (writer && writer.destroy) {
+    if (writer?.destroy) {
       writer.destroy()
     }
     clock.restore()

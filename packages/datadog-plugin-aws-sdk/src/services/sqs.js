@@ -24,7 +24,7 @@ class Sqs extends BaseAwsSdkPlugin {
       let store = this._parentMap.get(request)
       let span
       let parsedMessageAttributes = null
-      if (contextExtraction && contextExtraction.datadogContext) {
+      if (contextExtraction?.datadogContext) {
         ctx.needsFinish = true
         const options = {
           childOf: contextExtraction.datadogContext,
@@ -124,7 +124,7 @@ class Sqs extends BaseAwsSdkPlugin {
   responseExtract (params, operation, response) {
     if (operation !== 'receiveMessage') return
     if (params.MaxNumberOfMessages && params.MaxNumberOfMessages !== 1) return
-    if (!response || !response.Messages || !response.Messages[0]) return
+    if (!response?.Messages?.[0]) return
 
     let message = response.Messages[0]
 
@@ -141,7 +141,7 @@ class Sqs extends BaseAwsSdkPlugin {
       }
     }
 
-    if (!message.MessageAttributes || !message.MessageAttributes._datadog) return
+    if (!message.MessageAttributes?._datadog) return
 
     const datadogAttribute = message.MessageAttributes._datadog
 
@@ -172,7 +172,7 @@ class Sqs extends BaseAwsSdkPlugin {
     let { parsedAttributes } = kwargs
     if (!this.config.dsmEnabled) return
     if (operation !== 'receiveMessage') return
-    if (!response || !response.Messages || !response.Messages[0]) return
+    if (!response?.Messages?.[0]) return
 
     // we only want to set the payloadSize on the span if we have one message
     span = response.Messages.length > 1 ? null : span
@@ -192,7 +192,7 @@ class Sqs extends BaseAwsSdkPlugin {
             // SQS to SQS
           }
         }
-        if (!parsedAttributes && message.MessageAttributes && message.MessageAttributes._datadog) {
+        if (!parsedAttributes && message.MessageAttributes?._datadog) {
           parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
         }
       }

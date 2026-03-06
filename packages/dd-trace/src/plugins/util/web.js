@@ -575,7 +575,7 @@ function getHooks (config) {
 function getMiddlewareSetting (config) {
   if (config && typeof config.middleware === 'boolean') {
     return config.middleware
-  } else if (config && config.hasOwnProperty('middleware')) {
+  } else if (config?.hasOwnProperty('middleware')) {
     log.error('Expected `middleware` to be a boolean.')
   }
 

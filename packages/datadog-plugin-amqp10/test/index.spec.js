@@ -28,8 +28,8 @@ describe('Plugin', () => {
 
       afterEach(() => {
         return Promise.all([
-          receiver && receiver.detach(),
-          sender && sender.detach(),
+          receiver?.detach(),
+          sender?.detach(),
         ])
       })
 

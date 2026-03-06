@@ -37,7 +37,7 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        appListener && appListener.close()
+        appListener?.close()
         appListener = null
       })
 

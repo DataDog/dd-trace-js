@@ -215,7 +215,7 @@ class SamplingRule {
    * @returns {number|undefined}
    */
   get effectiveRate () {
-    return this._limiter && this._limiter.effectiveRate()
+    return this._limiter?.effectiveRate()
   }
 
   /**
@@ -223,7 +223,7 @@ class SamplingRule {
    * @returns {number|undefined}
    */
   get maxPerSecond () {
-    return this._limiter && this._limiter._rateLimit
+    return this._limiter?._rateLimit
   }
 
   /**

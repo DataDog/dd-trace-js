@@ -45,7 +45,7 @@ function isNewTest (test) {
 function getTestProperties (testName) {
   // TODO: Use optional chaining when we drop support for older Cypress versions, which will happen when dd-trace@5 is
   // EoL. Until then, this files needs to support Node.js 16.
-  const properties = testManagementTests[testName] && testManagementTests[testName].properties || {}
+  const properties = testManagementTests[testName]?.properties || {}
 
   const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } = properties
 
@@ -213,7 +213,7 @@ beforeEach(function () {
 before(function () {
   cy.task('dd:testSuiteStart', {
     testSuite: Cypress.mocha.getRootSuite().file,
-    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
+    testSuiteAbsolutePath: Cypress.spec?.absolute,
   }).then((suiteConfig) => {
     if (suiteConfig) {
       isEarlyFlakeDetectionEnabled = suiteConfig.isEarlyFlakeDetectionEnabled
@@ -259,7 +259,7 @@ afterEach(function () {
   const testInfo = {
     testName,
     testSuite: Cypress.mocha.getRootSuite().file,
-    testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
+    testSuiteAbsolutePath: Cypress.spec?.absolute,
     // For quarantined tests, report the actual state (failed) to Datadog, not what Cypress thinks (passed)
     state: isQuarantinedTestThatFailed ? 'failed' : currentTest.state,
     // For quarantined tests, include the actual error that was suppressed

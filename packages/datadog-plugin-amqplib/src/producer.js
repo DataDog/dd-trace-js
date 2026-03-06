@@ -37,7 +37,7 @@ class AmqplibProducerPlugin extends ProducerPlugin {
 
     if (method !== 'basic.publish') return
 
-    const stream = (channel.connection && channel.connection.stream) || {}
+    const stream = (channel.connection?.stream) || {}
     const span = this.startSpan({
       resource: getResourceName(method, fields),
       meta: {

@@ -59,14 +59,14 @@ describe('Plugin', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         listener = (req, res) => {
-          app && app(req, res)
+          app?.(req, res)
           res.writeHead(200)
           res.end()
         }
       })
 
       afterEach(() => {
-        appListener && appListener.close()
+        appListener?.close()
         app = null
         return agent.close({ ritmReset: false })
       })
@@ -111,7 +111,7 @@ describe('Plugin', () => {
 
             allowHandler.then(() => {
               if (closed) return
-              app && app(req, res)
+              app?.(req, res)
               res.writeHead(200)
               res.end()
             })
@@ -176,7 +176,7 @@ describe('Plugin', () => {
           // Ensure the server has received the request before we cancel it.
           await requestReceived
 
-          const cancelCode = http2.constants && http2.constants.NGHTTP2_CANCEL
+          const cancelCode = http2.constants?.NGHTTP2_CANCEL
           if (typeof req.close === 'function' && cancelCode !== undefined) {
             req.close(cancelCode)
           } else {

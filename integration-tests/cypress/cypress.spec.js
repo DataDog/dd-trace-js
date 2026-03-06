@@ -168,7 +168,7 @@ moduleTypes.forEach(({
     // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
     // because there are pending connections.
     afterEach(async () => {
-      if (childProcess && childProcess.pid) {
+      if (childProcess?.pid) {
         try {
           childProcess.kill('SIGKILL')
         } catch (error) {

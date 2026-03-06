@@ -17,7 +17,7 @@ const log = require('../../dd-trace/src/log')
  * [{ a: 1, b: 2, expected: 3 }, { a: 2, b: 3, expected: 5}]
  */
 function getFormattedJestTestParameters (testParameters) {
-  if (!testParameters || !testParameters.length) {
+  if (!testParameters?.length) {
     return
   }
   const [parameterArray, ...parameterValues] = testParameters

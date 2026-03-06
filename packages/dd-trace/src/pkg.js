@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 function findRoot () {
-  return require.main && require.main.filename
+  return require.main?.filename
     ? path.dirname(require.main.filename)
     : process.cwd()
 }

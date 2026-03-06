@@ -44,7 +44,7 @@ describe('OpenTelemetry Logs', () => {
 
     sinon.stub(http, 'request').callsFake((options, callback) => {
       // Only intercept OTLP logs requests
-      if (options.path && options.path.includes('/v1/logs')) {
+      if (options.path?.includes('/v1/logs')) {
         capturedHeaders = options.headers
         const mockReq = {
           write: (data) => { capturedPayload = data },

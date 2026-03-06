@@ -231,7 +231,7 @@ describe('exporters/agent', function () {
 
       startSpan.getCalls().forEach(call => {
         const [name, { tags }] = call.args
-        if (name === 'http.request' && tags && tags['http.url'] && tags['http.url'].endsWith('/profiling/v1/input')) {
+        if (name === 'http.request' && tags?.['http.url']?.endsWith('/profiling/v1/input')) {
           throw new Error('traced profiling endpoint call')
         }
       })

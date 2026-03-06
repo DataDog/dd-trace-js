@@ -74,7 +74,7 @@ class ContextManager {
     for (const baggage of baggageItems) {
       setBaggageItem(baggage[0], baggage[1].value)
     }
-    if (span && span._ddSpan) return ddScope.activate(span._ddSpan, run)
+    if (span?._ddSpan) return ddScope.activate(span._ddSpan, run)
     return run()
   }
 

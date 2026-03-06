@@ -523,13 +523,13 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
 
   const metadata = {
     [TEST_FRAMEWORK]: testFramework,
-    [DD_TEST_IS_USER_PROVIDED_SERVICE]: (config && config.isServiceUserProvided) ? 'true' : 'false',
+    [DD_TEST_IS_USER_PROVIDED_SERVICE]: (config?.isServiceUserProvided) ? 'true' : 'false',
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
     ...runtimeAndOSMetadata,
   }
-  if (config && config.service) {
+  if (config?.service) {
     metadata['service.name'] = config.service
   }
   return removeInvalidMetadata(metadata)
@@ -1154,7 +1154,7 @@ function getModifiedFilesFromDiff (diff) {
   for (const line of lines) {
     // Check for new file
     const fileMatch = filesRegex.exec(line)
-    if (fileMatch && fileMatch.groups.file) {
+    if (fileMatch?.groups.file) {
       currentFile = fileMatch.groups.file
       result[currentFile] = []
       continue

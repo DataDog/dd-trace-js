@@ -184,7 +184,7 @@ function ensureMetadata (client, args, index) {
     normalized.push(args[i])
   }
 
-  if (!meta || !meta.constructor || meta.constructor.name !== 'Metadata') {
+  if (!meta?.constructor || meta.constructor.name !== 'Metadata') {
     normalized.push(new grpc.Metadata())
   }
 

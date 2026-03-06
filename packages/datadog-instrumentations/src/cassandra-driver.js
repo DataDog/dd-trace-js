@@ -21,7 +21,7 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
     const lastIndex = arguments.length - 1
     const cb = arguments[lastIndex]
 
-    startCtx = { keyspace: this.keyspace, query: queries, contactPoints: this.options && this.options.contactPoints }
+    startCtx = { keyspace: this.keyspace, query: queries, contactPoints: this.options?.contactPoints }
     return startCh.runStores(startCtx, () => {
       if (typeof cb === 'function') {
         arguments[lastIndex] = wrapCallback(finishCh, errorCh, startCtx, cb)
@@ -50,7 +50,7 @@ addHook({ name: 'cassandra-driver', versions: ['>=4.4'], patchDefault: false }, 
     if (!startCh.hasSubscribers) {
       return _execute.apply(this, arguments)
     }
-    startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
+    startCtx = { keyspace: this.keyspace, query, contactPoints: this.options?.contactPoints }
     return startCh.runStores(startCtx, () => {
       const promise = _execute.apply(this, arguments)
 
@@ -78,7 +78,7 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'], patchDefault: false }
         return _innerExecute.apply(this, arguments)
       }
 
-      startCtx = { keyspace: this.keyspace, query, contactPoints: this.options && this.options.contactPoints }
+      startCtx = { keyspace: this.keyspace, query, contactPoints: this.options?.contactPoints }
       return startCh.runStores(startCtx, () => {
         const lastIndex = arguments.length - 1
         const cb = arguments[lastIndex]

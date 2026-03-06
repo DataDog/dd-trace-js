@@ -28,9 +28,7 @@ class EventBridge extends BaseAwsSdkPlugin {
    */
   requestInject (span, request) {
     const operation = request.operation
-    if (operation === 'putEvents' &&
-      request.params &&
-      request.params.Entries &&
+    if (operation === 'putEvents' && request.params?.Entries &&
       request.params.Entries.length > 0 &&
       request.params.Entries[0].Detail) {
       try {

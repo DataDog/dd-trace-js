@@ -170,7 +170,7 @@ describe('Sns', function () {
           let statsPointsReceived = 0
           // we should have 1 dsm stats points
           dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
+            if (timeStatsBucket?.Stats) {
               timeStatsBucket.Stats.forEach((statsBuckets) => {
                 statsPointsReceived += statsBuckets.Stats.length
               })
@@ -190,7 +190,7 @@ describe('Sns', function () {
           let statsPointsReceived = 0
           // we should have 2 dsm stats points
           dsmStats.forEach((timeStatsBucket) => {
-            if (timeStatsBucket && timeStatsBucket.Stats) {
+            if (timeStatsBucket?.Stats) {
               timeStatsBucket.Stats.forEach((statsBuckets) => {
                 statsPointsReceived += statsBuckets.Stats.length
               })
@@ -228,7 +228,7 @@ describe('Sns', function () {
             let statsPointsReceived = 0
             // we should have 3 dsm stats points
             dsmStats.forEach((timeStatsBucket) => {
-              if (timeStatsBucket && timeStatsBucket.Stats) {
+              if (timeStatsBucket?.Stats) {
                 timeStatsBucket.Stats.forEach((statsBuckets) => {
                   statsPointsReceived += statsBuckets.Stats.length
                 })

@@ -23,7 +23,7 @@ describe('recursion regression test', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      proc?.kill()
       await agent.stop()
     })
 

@@ -83,7 +83,7 @@ describe('typescript', () => {
       })
 
       afterEach(async () => {
-        proc && proc.kill()
+        proc?.kill()
         await agent.stop()
       })
 
@@ -111,7 +111,7 @@ describe('typescript', () => {
           await Promise.all(waiters)
 
           // some tests just need the file to run, not assert payloads
-          test.runTest && test.runTest(results)
+          test.runTest?.(results)
         })
       }
     })

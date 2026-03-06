@@ -54,7 +54,7 @@ function wrapCommandQueueClass (cls) {
 
 function wrapCreateClient (request) {
   return function (opts) {
-    createClientUrl = opts && opts.url
+    createClientUrl = opts?.url
     const ret = request.apply(this, arguments)
     createClientUrl = undefined
     return ret

@@ -61,7 +61,7 @@ describe('OpenTelemetry Meter Provider', () => {
       const baseMockReq = { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       const baseMockRes = { statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} }
 
-      if (options.path && options.path.includes('/v1/metrics')) {
+      if (options.path?.includes('/v1/metrics')) {
         capturedHeaders = options.headers
         const responseHandlers = {}
         const mockRes = {
@@ -75,7 +75,7 @@ describe('OpenTelemetry Meter Provider', () => {
           write: (data) => { capturedPayload = data },
           end: () => {
             const contentType = capturedHeaders['Content-Type']
-            const isJson = contentType && contentType.includes('application/json')
+            const isJson = contentType?.includes('application/json')
 
             const decoded = isJson
               ? JSON.parse(capturedPayload.toString())
@@ -109,7 +109,7 @@ describe('OpenTelemetry Meter Provider', () => {
     process.env = originalEnv
 
     const provider = metrics.getMeterProvider()
-    if (provider && provider.reader) {
+    if (provider?.reader) {
       provider.reader.shutdown()
     }
     metrics.disable()
@@ -1043,10 +1043,10 @@ describe('OpenTelemetry Meter Provider', () => {
         }
 
         if (requestCount === 1) {
-          setTimeout(() => { handlers.timeout && handlers.timeout(); results.timeout = true }, 10)
+          setTimeout(() => { handlers.timeout?.(); results.timeout = true }, 10)
         } else {
           setTimeout(() => {
-            handlers.error && handlers.error(new Error('Refused'))
+            handlers.error?.(new Error('Refused'))
             results.error = true
           }, 10)
         }

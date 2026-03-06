@@ -14,7 +14,7 @@ const { getRootSpan } = require('./utils')
  */
 function trackUserLoginSuccessEvent (tracer, user, metadata) {
   // TODO: better user check here and in _setUser() ?
-  if (!user || !user.id) {
+  if (!user?.id) {
     log.warn('[ASM] Invalid user provided to trackUserLoginSuccessEvent')
     return
   }

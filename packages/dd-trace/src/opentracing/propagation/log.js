@@ -28,7 +28,7 @@ class LogPropagator {
   }
 
   extract (carrier) {
-    if (!carrier || !carrier.dd || !carrier.dd.trace_id || !carrier.dd.span_id) {
+    if (!carrier?.dd?.trace_id || !carrier.dd.span_id) {
       return null
     }
 

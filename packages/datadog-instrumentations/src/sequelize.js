@@ -17,9 +17,9 @@ addHook({ name: 'sequelize', versions: ['>=4'], file: ['lib/sequelize.js'] }, Se
       }
 
       let dialect
-      if (this.options && this.options.dialect) {
+      if (this.options?.dialect) {
         dialect = this.options.dialect
-      } else if (this.dialect && this.dialect.name) {
+      } else if (this.dialect?.name) {
         dialect = this.dialect.name
       }
 

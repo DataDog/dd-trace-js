@@ -41,7 +41,7 @@ class DatadogTracingHelper {
 
       const traceId = context.toTraceId(true)
       const spanId = context.toSpanId(true)
-      const version = (context._traceparent && context._traceparent.version) || '00'
+      const version = (context._traceparent?.version) || '00'
 
       // always sampled a sampled traceparent due to the following reasons:
       // 1. Datadog spans are sampled on span.finish

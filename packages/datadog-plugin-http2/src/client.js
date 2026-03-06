@@ -99,7 +99,7 @@ class Http2ClientPlugin extends ClientPlugin {
   }
 
   _onResponse (store, headers) {
-    const status = headers && headers[HTTP2_HEADER_STATUS]
+    const status = headers?.[HTTP2_HEADER_STATUS]
 
     store.span.setTag(HTTP_STATUS_CODE, status)
 

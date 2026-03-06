@@ -54,7 +54,7 @@ class Http2ServerPlugin extends ServerPlugin {
 
     const context = web.getContext(req)
 
-    if (!context || !context.res) return // Not created by a http.Server instance.
+    if (!context?.res) return // Not created by a http.Server instance.
 
     web.finishAll(context)
 

@@ -774,7 +774,7 @@ class CypressPlugin {
         // by early flake detection. Cypress is unaware of this so .attempts does not necessarily have
         // the same length as `finishedTestAttempts`
         let cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.state]
-        if (cypressTest.attempts && cypressTest.attempts[attemptIndex]) {
+        if (cypressTest.attempts?.[attemptIndex]) {
           cypressTestStatus = CYPRESS_STATUS_TO_TEST_STATUS[cypressTest.attempts[attemptIndex].state]
           const isAtrRetry = attemptIndex > 0 &&
             this.isFlakyTestRetriesEnabled &&

@@ -170,7 +170,7 @@ class Span {
 
   get parentSpanId () {
     const { _parentId } = this._ddSpan.context()
-    return _parentId && _parentId.toString(16)
+    return _parentId?.toString(16)
   }
 
   // Expected by OTel

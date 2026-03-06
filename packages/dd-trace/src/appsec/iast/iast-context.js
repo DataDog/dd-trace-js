@@ -4,9 +4,9 @@ const IAST_CONTEXT_KEY = Symbol('_dd.iast.context')
 const IAST_TRANSACTION_ID = Symbol('_dd.iast.transactionId')
 
 function getIastContext (store, topContext) {
-  let iastContext = store && store[IAST_CONTEXT_KEY]
+  let iastContext = store?.[IAST_CONTEXT_KEY]
   if (!iastContext) {
-    iastContext = topContext && topContext[IAST_CONTEXT_KEY]
+    iastContext = topContext?.[IAST_CONTEXT_KEY]
   }
   return iastContext
 }

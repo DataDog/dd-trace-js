@@ -25,14 +25,14 @@ describe('Plugin', () => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         listener = (req, res) => {
-          app && app(req, res)
+          app?.(req, res)
           res.writeHead(200)
           res.end()
         }
       })
 
       afterEach(() => {
-        appListener && appListener.close()
+        appListener?.close()
         app = null
         clearTimeout(timeout)
         timeout = null
@@ -43,7 +43,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           listener = (req, res) => {
             timeout = setTimeout(() => {
-              app && app(req, res)
+              app?.(req, res)
               res.writeHead(200)
               res.end()
             }, 500)

@@ -16,7 +16,7 @@ class AmqplibClientPlugin extends ClientPlugin {
     if (method === 'basic.deliver' || method === 'basic.get') return
     if (method === 'basic.publish') return
 
-    const stream = (channel.connection && channel.connection.stream) || {}
+    const stream = (channel.connection?.stream) || {}
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
       resource: getResourceName(method, fields),

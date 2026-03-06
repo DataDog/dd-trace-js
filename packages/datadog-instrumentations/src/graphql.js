@@ -128,8 +128,8 @@ function wrapValidate (validate) {
       let errors
       try {
         errors = validate.apply(this, arguments)
-        if (errors && errors[0]) {
-          ctx.error = errors && errors[0]
+        if (errors?.[0]) {
+          ctx.error = errors?.[0]
           validateErrorCh.publish(ctx)
         }
         return errors
@@ -186,7 +186,7 @@ function wrapExecute (execute) {
         return callInAsyncScope(exe, this, arguments, ctx.abortController, (err, res) => {
           if (finishResolveCh.hasSubscribers) finishResolvers(ctx)
 
-          const error = err || (res && res.errors && res.errors[0])
+          const error = err || (res?.errors?.[0])
 
           if (error) {
             ctx.error = error
@@ -267,7 +267,7 @@ function pathToArray (path) {
 }
 
 function assertField (rootCtx, info, args) {
-  const pathInfo = info && info.path
+  const pathInfo = info?.path
 
   const path = pathToArray(pathInfo)
 
@@ -289,7 +289,7 @@ function assertField (rootCtx, info, args) {
 }
 
 function wrapFields (type) {
-  if (!type || !type._fields || patchedTypes.has(type)) {
+  if (!type?._fields || patchedTypes.has(type)) {
     return
   }
 
@@ -304,12 +304,12 @@ function wrapFields (type) {
 }
 
 function wrapFieldResolve (field) {
-  if (!field || !field.resolve) return
+  if (!field?.resolve) return
   field.resolve = wrapResolve(field.resolve)
 }
 
 function wrapFieldType (field) {
-  if (!field || !field.type) return
+  if (!field?.type) return
 
   let unwrappedType = field.type
 

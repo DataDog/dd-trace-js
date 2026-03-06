@@ -55,7 +55,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
             const orig = args[i]
             args[i] = (...fnArgs) => {
               for (let j = 0; j < fnArgs.length; j++) {
-                if (revProxy && revProxy[j]) {
+                if (revProxy?.[j]) {
                   const proxyVal = revProxy[j]()
                   objectMap.set(proxyVal, fnArgs[j])
                   fnArgs[j] = proxyVal

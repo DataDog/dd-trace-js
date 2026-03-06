@@ -88,7 +88,7 @@ describe('dogstatsd', () => {
       req.on('end', () => {
         res.statusCode = statusCode
         res.end()
-        setTimeout(() => assertData && assertData(httpData))
+        setTimeout(() => assertData?.(httpData))
       })
     }).listen(0, () => {
       httpPort = httpServer.address().port
@@ -102,7 +102,7 @@ describe('dogstatsd', () => {
         req.on('data', d => httpData.push(d))
         req.on('end', () => {
           res.end()
-          setTimeout(() => assertData && assertData(httpData))
+          setTimeout(() => assertData?.(httpData))
         })
       }).listen(udsPath, () => {
         done()

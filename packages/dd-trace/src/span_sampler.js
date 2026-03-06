@@ -45,7 +45,7 @@ class SpanSampler {
     const { started } = spanContext._trace
     for (const span of started) {
       const rule = this.findRule(span)
-      if (rule && rule.sample(spanContext)) {
+      if (rule?.sample(spanContext)) {
         span.context()._spanSampling = {
           sampleRate: rule.sampleRate,
           maxPerSecond: rule.maxPerSecond,

@@ -27,7 +27,7 @@ describe('ip extractor', () => {
   })
 
   after(() => {
-    appListener && appListener.close()
+    appListener?.close()
   })
 
   function testIp (headers, expected, done) {

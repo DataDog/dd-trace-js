@@ -24,7 +24,7 @@ class TestApiManualPlugin extends CiPlugin {
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
       const store = storage('legacy').getStore()
-      const testSpan = store && store.span
+      const testSpan = store?.span
       if (testSpan) {
         testSpan.setTag(TEST_STATUS, status)
         if (error) {
@@ -36,7 +36,7 @@ class TestApiManualPlugin extends CiPlugin {
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:addTags', (tags) => {
       const store = storage('legacy').getStore()
-      const testSpan = store && store.span
+      const testSpan = store?.span
       if (testSpan) {
         testSpan.addTags(tags)
       }

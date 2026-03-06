@@ -27,7 +27,7 @@ describe('Plugin (ESM)', () => {
       })
 
       afterEach(async () => {
-        proc && proc.kill()
+        proc?.kill()
         await agent.stop()
       })
 

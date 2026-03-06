@@ -11,7 +11,7 @@ describe('RASP', () => {
   let axios, cwd, appFile, agent, proc, stdioHandler
 
   function stdOutputHandler (data) {
-    stdioHandler && stdioHandler(data)
+    stdioHandler?.(data)
   }
 
   useSandbox(['express', 'axios'])

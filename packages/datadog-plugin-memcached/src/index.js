@@ -48,7 +48,7 @@ function getAddress (client, server, query) {
     }
   }
 
-  return server && server.split(':')
+  return server?.split(':')
 }
 
 module.exports = MemcachedPlugin

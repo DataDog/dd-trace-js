@@ -32,14 +32,14 @@ describe('Plugin', () => {
         })
 
         afterEach(() => {
-          appListener && appListener.close()
+          appListener?.close()
           return agent.close({ ritmReset: false })
         })
 
         beforeEach(() => {
           app = null
           listener = (req, res) => {
-            app && app(req, res)
+            app?.(req, res)
             res.writeHead(200)
             res.end()
           }

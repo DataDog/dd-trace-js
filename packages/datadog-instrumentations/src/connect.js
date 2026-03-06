@@ -36,7 +36,7 @@ function wrapUse (use) {
     const index = this.stack.length - 1
     const layer = this.stack[index]
 
-    if (layer && layer.handle) {
+    if (layer?.handle) {
       this.stack[index].handle = wrapLayerHandle(layer)
     }
 

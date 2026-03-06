@@ -953,7 +953,7 @@ class Config {
     setArray(opts, 'headerTags', options.headerTags)
     setString(opts, 'hostname', options.hostname)
     opts['iast.dbRowsToTaint'] = maybeInt(options.iast?.dbRowsToTaint)
-    setBoolean(opts, 'iast.deduplicationEnabled', options.iast && options.iast.deduplicationEnabled)
+    setBoolean(opts, 'iast.deduplicationEnabled', options.iast?.deduplicationEnabled)
     setBoolean(opts, 'iast.enabled',
       options.iast && (options.iast === true || options.iast.enabled === true))
     opts['iast.maxConcurrentRequests'] = maybeInt(options.iast?.maxConcurrentRequests)
@@ -972,7 +972,7 @@ class Config {
       opts['iast.securityControlsConfiguration'] = options.iast?.securityControlsConfiguration
     }
     setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
-    setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
+    setString(opts, 'iast.telemetryVerbosity', options.iast?.telemetryVerbosity)
     setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)

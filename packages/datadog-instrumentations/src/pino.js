@@ -74,7 +74,7 @@ function wrapPrettyFactory (prettyFactory) {
 }
 
 addHook({ name: 'pino', versions: ['2 - 3', '4'], patchDefault: true }, (pino) => {
-  const asJsonSym = (pino.symbols && pino.symbols.asJsonSym) || 'asJson'
+  const asJsonSym = (pino.symbols?.asJsonSym) || 'asJson'
 
   const wrapped = shimmer.wrapFunction(pino, pino => wrapPino(asJsonSym, wrapAsJson, pino))
 

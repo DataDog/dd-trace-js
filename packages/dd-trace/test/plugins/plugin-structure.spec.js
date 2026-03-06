@@ -158,7 +158,7 @@ describe('Plugin Structure Validation', () => {
       }
       const hookString = hookFn.toString()
       const match = hookString.match(/require\('([^']*)'\)/)
-      if (match && match[1]) {
+      if (match?.[1]) {
         const instrumentationName = match[1].replace('../', '')
         instrumentationsRequired.add(instrumentationName)
       }

@@ -5,7 +5,7 @@ const log = require('../log')
 
 function getDataStreamsContext () {
   const store = storage('legacy').getStore()
-  return (store && store.dataStreamsContext) || null
+  return (store?.dataStreamsContext) || null
 }
 
 function setDataStreamsContext (dataStreamsContext) {

@@ -98,7 +98,7 @@ function getHeaders (config, application, reqType) {
     'dd-client-library-language': application.language_name,
     'dd-client-library-version': application.tracer_version,
   }
-  const debug = config.telemetry && config.telemetry.debug
+  const debug = config.telemetry?.debug
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }

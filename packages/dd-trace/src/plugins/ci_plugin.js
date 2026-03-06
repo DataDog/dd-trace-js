@@ -128,7 +128,7 @@ module.exports = class CiPlugin extends Plugin {
       const { onDone, isParallel, frameworkVersion } = ctx
       ctx.currentStore = storage('legacy').getStore()
 
-      if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
+      if (!this.tracer._exporter?.getLibraryConfiguration) {
         return onDone({ err: new Error('Test optimization was not initialized correctly') })
       }
       this.tracer._exporter.getLibraryConfiguration(this.testConfiguration, (err, libraryConfig) => {

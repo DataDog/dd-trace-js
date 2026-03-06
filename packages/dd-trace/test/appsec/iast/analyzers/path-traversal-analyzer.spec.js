@@ -379,7 +379,7 @@ prepareTestServerForIast('integration test', (testThatRequestHasVulnerability, t
 
   describe('test open', () => {
     runFsMethodTestThreeWay('open', 0, (fd) => {
-      if (fd && fd.close) {
+      if (fd?.close) {
         fd.close()
       } else {
         fs.close(fd, () => {})

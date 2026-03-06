@@ -324,7 +324,7 @@ describe('Plugin', () => {
 
             const runResult = consumer.run({ eachBatch: (...args) => eachBatch(...args) })
 
-            if (!runResult || !runResult.then) {
+            if (!runResult?.then) {
               throw new Error('Consumer.run returned invalid result')
             }
 

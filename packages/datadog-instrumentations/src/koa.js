@@ -91,7 +91,7 @@ function wrapMiddleware (fn, layer) {
 
     const req = ctx.req
 
-    const path = layer && layer.path
+    const path = layer?.path
     const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') &&
       !path.includes('(?:') && path
 

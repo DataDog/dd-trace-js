@@ -30,7 +30,7 @@ class Kinesis extends BaseAwsSdkPlugin {
       if (request.operation === 'getRecords') {
         let span
         const responseExtraction = this.responseExtract(request.params, request.operation, response)
-        if (responseExtraction && responseExtraction.maybeChildOf) {
+        if (responseExtraction?.maybeChildOf) {
           ctx.needsFinish = true
           const options = {
             childOf: responseExtraction.maybeChildOf,
@@ -63,7 +63,7 @@ class Kinesis extends BaseAwsSdkPlugin {
   }
 
   generateTags (params, operation, response) {
-    if (!params || !params.StreamName) return {}
+    if (!params?.StreamName) return {}
 
     return {
       'resource.name': `${operation} ${params.StreamName}`,
@@ -75,7 +75,7 @@ class Kinesis extends BaseAwsSdkPlugin {
   storeStreamName (params, operation, store) {
     if (!operation) return store
     if (operation !== 'getShardIterator' && operation !== 'listShards') return store
-    if (!params || !params.StreamName) return store
+    if (!params?.StreamName) return store
 
     const streamName = params.StreamName
     return { ...store, streamName }
@@ -84,7 +84,7 @@ class Kinesis extends BaseAwsSdkPlugin {
   responseExtract (params, operation, response) {
     if (operation !== 'getRecords') return
     if (params.Limit && params.Limit !== 1) return
-    if (!response || !response.Records || !response.Records[0]) return
+    if (!response?.Records?.[0]) return
 
     const record = response.Records[0]
 
@@ -104,7 +104,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     const { streamName } = kwargs
     if (!this.config.dsmEnabled) return
     if (operation !== 'getRecords') return
-    if (!response || !response.Records || !response.Records[0]) return
+    if (!response?.Records?.[0]) return
 
     // we only want to set the payloadSize on the span if we have one message, not repeatedly
     span = response.Records.length > 1 ? null : span

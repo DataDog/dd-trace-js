@@ -11,7 +11,7 @@ let logger = null
 let interval = null
 
 module.exports.init = function (tracerConfig) {
-  metrics = tracerConfig && tracerConfig.dogstatsd
+  metrics = tracerConfig?.dogstatsd
     ? new DogStatsDClient({
       host: tracerConfig.dogstatsd.hostname,
       port: tracerConfig.dogstatsd.port,
@@ -23,7 +23,7 @@ module.exports.init = function (tracerConfig) {
     })
     : new NoopDogStatsDClient()
 
-  logger = tracerConfig && tracerConfig.apiKey
+  logger = tracerConfig?.apiKey
     ? new ExternalLogger({
       ddsource: 'openai',
       hostname: tracerConfig.hostname,

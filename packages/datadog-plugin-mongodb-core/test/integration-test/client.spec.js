@@ -29,7 +29,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      proc?.kill()
       await agent.stop()
     })
 
@@ -62,7 +62,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      proc?.kill()
       await agent.stop()
     })
 

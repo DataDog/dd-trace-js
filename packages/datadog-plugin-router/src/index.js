@@ -58,11 +58,11 @@ class RouterPlugin extends WebPlugin {
 
     this.addSub(`apm:${this.constructor.id}:middleware:exit`, ({ req }) => {
       const storeStack = this.#storeStacks.get(req)
-      const savedStore = storeStack && storeStack.pop()
+      const savedStore = storeStack?.pop()
       if (storeStack && storeStack.length === 0) {
         this.#storeStacks.delete(req)
       }
-      const span = savedStore && savedStore.span
+      const span = savedStore?.span
       this.enter(span, savedStore)
     })
 
@@ -103,7 +103,7 @@ class RouterPlugin extends WebPlugin {
   #getStoreSpan () {
     const store = storage('legacy').getStore()
 
-    return store && store.span
+    return store?.span
   }
 
   #getMiddlewareSpan (name, childOf) {

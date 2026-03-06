@@ -16,7 +16,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
-    const parentField = getParentField(rootCtx, pathToArray(info && info.path))
+    const parentField = getParentField(rootCtx, pathToArray(info?.path))
     const childOf = parentField?.ctx?.currentStore?.span
 
     fieldCtx.parent = parentField
@@ -38,7 +38,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
     const document = rootCtx.source
     const fieldNode = info.fieldNodes.find(fieldNode => fieldNode.kind === 'Field')
-    const loc = this.config.source && document && fieldNode && fieldNode.loc
+    const loc = this.config.source && document && fieldNode?.loc
     const source = loc && document.slice(loc.start, loc.end)
 
     const span = this.startSpan('graphql.resolve', {
@@ -122,7 +122,7 @@ function getPath (info, config) {
   const responsePathAsArray = config.collapse
     ? withCollapse(pathToArray)
     : pathToArray
-  return responsePathAsArray(info && info.path)
+  return responsePathAsArray(info?.path)
 }
 
 function pathToArray (path) {

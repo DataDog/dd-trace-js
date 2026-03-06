@@ -43,10 +43,7 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/link.js' }, obj => {
 
     const { host, port } = getHostAndPort(this.connection)
 
-    const targetAddress = this.options && this.options.target &&
-      this.options.target.address
-      ? this.options.target.address
-      : undefined
+    const targetAddress = this.options?.target?.address
 
     const ctx = { targetAddress, host, port, msg, connection: this.connection }
     return startSendCh.runStores(ctx, () => {
@@ -123,13 +120,13 @@ addHook({ name: 'rhea', versions: ['>=1'], file: 'lib/session.js' }, (Session) =
 })
 
 function canTrace (link) {
-  return link.connection && link.session && link.session.outgoing
+  return link.connection && link.session?.outgoing
 }
 
 function getHostAndPort (connection) {
   let host
   let port
-  if (connection && connection.options) {
+  if (connection?.options) {
     host = connection.options.host
     port = connection.options.port
   }
@@ -176,7 +173,7 @@ function patchCircularBuffer (proto, Session) {
 
               if (shouldPop) {
                 const remoteState = entry.remote_state
-                const state = remoteState && remoteState.constructor
+                const state = remoteState?.constructor
                   ? entry.remote_state.constructor.composite_type
                   : undefined
                 ctx.state = state
@@ -215,14 +212,14 @@ function beforeFinish (delivery, state) {
       ctx.state = state
       dispatchReceiveCh.publish(ctx)
     }
-    if (ctx.connection && ctx.connection[inFlightDeliveries]) {
+    if (ctx.connection?.[inFlightDeliveries]) {
       ctx.connection[inFlightDeliveries].delete(delivery)
     }
   }
 }
 
 function getStateFromData (stateData) {
-  if (stateData && stateData.descriptor && stateData.descriptor) {
+  if (stateData?.descriptor && stateData.descriptor) {
     switch (stateData.descriptor.value) {
       case 0x24: return 'accepted'
       case 0x25: return 'rejected'

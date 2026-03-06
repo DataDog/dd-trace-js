@@ -10,7 +10,7 @@ class Scope {
   active () {
     const store = storage('legacy').getStore()
 
-    return (store && store.span) || null
+    return (store?.span) || null
   }
 
   activate (span, callback) {

@@ -50,7 +50,7 @@ function wrapNext (req, res, next) {
       errorChannel.publish(ctx)
     }
 
-    if (res.proxy && res.proxy.base_path) {
+    if (res.proxy?.base_path) {
       ctx.req = req
       ctx.res = res
       ctx.route = res.proxy.base_path

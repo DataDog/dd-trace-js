@@ -14,7 +14,7 @@ class HapiPlugin extends RouterPlugin {
 
     this.addSub('apm:hapi:request:handle', ({ req }) => {
       const store = storage('legacy').getStore()
-      const span = store && store.span
+      const span = store?.span
 
       this.setFramework(req, 'hapi', this.config)
       this._requestSpans.set(req, span)
@@ -25,7 +25,7 @@ class HapiPlugin extends RouterPlugin {
     })
 
     this.addSub('apm:hapi:request:error', error => {
-      if (!error || !error.isBoom || !this.config.validateStatus(error.output.statusCode)) {
+      if (!error?.isBoom || !this.config.validateStatus(error.output.statusCode)) {
         this.addError(error)
       }
     })
