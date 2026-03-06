@@ -65,14 +65,14 @@ class CouchBasePlugin extends StoragePlugin {
     this.addBind('apm:couchbase:cluster:maybeInvoke:callback:start', callbackStart)
     this.addBind('apm:couchbase:cluster:maybeInvoke:callback:finish', callbackFinish)
 
-    this._addCommandSubs('upsert')
-    this._addCommandSubs('insert')
-    this._addCommandSubs('replace')
-    this._addCommandSubs('append')
-    this._addCommandSubs('prepend')
+    this.#addCommandSubs('upsert')
+    this.#addCommandSubs('insert')
+    this.#addCommandSubs('replace')
+    this.#addCommandSubs('append')
+    this.#addCommandSubs('prepend')
   }
 
-  _addCommandSubs (name) {
+  #addCommandSubs (name) {
     this.addBinds(name, (ctx) => {
       const { bucket, collection, seedNodes } = ctx
 

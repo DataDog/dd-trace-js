@@ -116,7 +116,7 @@ class Profiler extends EventEmitter {
       reportHostname,
     }
 
-    return this._start(options).catch((err) => {
+    return this.#start(options).catch((err) => {
       logError(logger, 'Error starting profiler. For troubleshooting tips, see ' +
         '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
       return false
@@ -131,7 +131,7 @@ class Profiler extends EventEmitter {
     logError(this.#logger, err)
   }
 
-  async _start (options) {
+  async #start (options) {
     if (this.enabled) return true
 
     const config = this.#config = new Config(options)

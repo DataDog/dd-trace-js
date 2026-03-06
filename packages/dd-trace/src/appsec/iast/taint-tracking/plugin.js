@@ -60,7 +60,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     const onRequestBody = ({ req }) => {
       const iastContext = getIastContext(storage('legacy').getStore())
       if (iastContext && iastContext.body !== req.body) {
-        this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
+        this.#taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
         iastContext.body = req.body
       }
     }
@@ -80,7 +80,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       ({ body }) => {
         const iastContext = getIastContext(storage('legacy').getStore())
         if (iastContext && iastContext.body !== body) {
-          this._taintTrackingHandler(HTTP_REQUEST_BODY, body)
+          this.#taintTrackingHandler(HTTP_REQUEST_BODY, body)
           iastContext.body = body
         }
       }
@@ -92,7 +92,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         if (req && req.body !== null && typeof req.body === 'object') {
           const iastContext = getIastContext(storage('legacy').getStore())
           if (iastContext && iastContext.body !== req.body) {
-            this._taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
+            this.#taintTrackingHandler(HTTP_REQUEST_BODY, req, 'body', iastContext)
             iastContext.body = req.body
           }
         }
@@ -103,13 +103,13 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   addQueryParameterSubscriptions () {
     this.addSub(
       { channelName: 'datadog:query:read:finish', tag: HTTP_REQUEST_PARAMETER },
-      ({ query }) => this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
+      ({ query }) => this.#taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
     )
 
     this.addSub(
       { channelName: 'datadog:fastify:query-params:finish', tag: HTTP_REQUEST_PARAMETER },
       ({ query }) => {
-        this._taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
+        this.#taintTrackingHandler(HTTP_REQUEST_PARAMETER, query)
       }
     )
 
@@ -127,31 +127,31 @@ class TaintTrackingPlugin extends SourceIastPlugin {
   addCookieSubscriptions () {
     this.addSub(
       { channelName: 'datadog:cookie:parse:finish', tag: [HTTP_REQUEST_COOKIE_VALUE, HTTP_REQUEST_COOKIE_NAME] },
-      ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
+      ({ cookies }) => this.#cookiesTaintTrackingHandler(cookies)
     )
 
     this.addSub(
       { channelName: 'datadog:fastify-cookie:read:finish', tag: [HTTP_REQUEST_COOKIE_VALUE, HTTP_REQUEST_COOKIE_NAME] },
-      ({ cookies }) => this._cookiesTaintTrackingHandler(cookies)
+      ({ cookies }) => this.#cookiesTaintTrackingHandler(cookies)
     )
   }
 
   addDatabaseSubscriptions () {
     this.addSub(
       { channelName: 'datadog:sequelize:query:finish', tag: SQL_ROW_VALUE },
-      ({ result }) => this._taintDatabaseResult(result, 'sequelize', getIastContext(storage('legacy').getStore()))
+      ({ result }) => this.#taintDatabaseResult(result, 'sequelize', getIastContext(storage('legacy').getStore()))
     )
 
     this.addSub(
       { channelName: 'apm:pg:query:finish', tag: SQL_ROW_VALUE },
-      ({ result, currentStore }) => this._taintDatabaseResult(result, 'pg', getIastContext(currentStore))
+      ({ result, currentStore }) => this.#taintDatabaseResult(result, 'pg', getIastContext(currentStore))
     )
   }
 
   addPathParameterSubscriptions () {
     const pathParamHandler = ({ req }) => {
       if (req && req.params !== null && typeof req.params === 'object') {
-        this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
+        this.#taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, req, 'params')
       }
     }
 
@@ -169,7 +169,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       { channelName: 'datadog:fastify:path-params:finish', tag: HTTP_REQUEST_PATH_PARAM },
       ({ req, params }) => {
         if (req) {
-          this._taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, params)
+          this.#taintTrackingHandler(HTTP_REQUEST_PATH_PARAM, params)
         }
       }
     )
@@ -183,7 +183,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
         const source = data.rootCtx?.source
         const ranges = source && getRanges(iastContext, source)
         if (ranges?.length) {
-          this._taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
+          this.#taintTrackingHandler(ranges[0].iinfo.type, data.args, null, iastContext)
         }
       }
     )
@@ -202,7 +202,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
             this._taintedURLs.set(parsed, ranges[0])
           } else {
             for (const param of urlResultTaintedProperties) {
-              this._taintTrackingHandler(ranges[0].iinfo.type, parsed, param, iastContext)
+              this.#taintTrackingHandler(ranges[0].iinfo.type, parsed, param, iastContext)
             }
           }
         }
@@ -225,7 +225,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
       })
   }
 
-  _taintTrackingHandler (type, target, property, iastContext = getIastContext(storage('legacy').getStore())) {
+  #taintTrackingHandler (type, target, property, iastContext = getIastContext(storage('legacy').getStore())) {
     if (!property) {
       taintObject(iastContext, target, type)
     } else if (target[property]) {
@@ -233,7 +233,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     }
   }
 
-  _cookiesTaintTrackingHandler (target) {
+  #cookiesTaintTrackingHandler (target) {
     const iastContext = getIastContext(storage('legacy').getStore())
     // Prevent tainting cookie names since it leads to taint literal string with same value.
     taintObject(iastContext, target, HTTP_REQUEST_COOKIE_VALUE)
@@ -263,7 +263,7 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     this.taintUrl(req, iastContext)
   }
 
-  _taintDatabaseResult (result, dbOrigin, iastContext, name) {
+  #taintDatabaseResult (result, dbOrigin, iastContext, name) {
     if (!iastContext) return result
 
     if (this._rowsToTaint === 0) return result
@@ -271,15 +271,15 @@ class TaintTrackingPlugin extends SourceIastPlugin {
     if (Array.isArray(result)) {
       for (let i = 0; i < result.length && i < this._rowsToTaint; i++) {
         const nextName = name ? `${name}.${i}` : String(i)
-        result[i] = this._taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
+        result[i] = this.#taintDatabaseResult(result[i], dbOrigin, iastContext, nextName)
       }
     } else if (result && typeof result === 'object') {
       if (dbOrigin === 'sequelize' && result.dataValues) {
-        result.dataValues = this._taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name)
+        result.dataValues = this.#taintDatabaseResult(result.dataValues, dbOrigin, iastContext, name)
       } else {
         for (const key in result) {
           const nextName = name ? `${name}.${key}` : key
-          result[key] = this._taintDatabaseResult(result[key], dbOrigin, iastContext, nextName)
+          result[key] = this.#taintDatabaseResult(result[key], dbOrigin, iastContext, nextName)
         }
       }
     } else if (typeof result === 'string') {

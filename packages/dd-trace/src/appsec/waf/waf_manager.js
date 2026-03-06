@@ -23,14 +23,14 @@ class WAFManager {
   constructor (rules, config) {
     this.config = config
     this.wafTimeout = config.wafTimeout
-    this.ddwaf = this._loadDDWAF(rules)
+    this.ddwaf = this.#loadDDWAF(rules)
     this.rulesVersion = this.ddwaf.diagnostics.ruleset_version
     this.defaultRules = rules
 
     Reporter.reportWafInit(this.ddwafVersion, this.rulesVersion, this.ddwaf.diagnostics.rules, true)
   }
 
-  _loadDDWAF (rules) {
+  #loadDDWAF (rules) {
     try {
       // require in `try/catch` because this can throw at require time
       const { DDWAF } = require('@datadog/native-appsec')

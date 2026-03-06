@@ -127,7 +127,7 @@ class Kinesis extends BaseAwsSdkPlugin {
   // AWS-SDK will b64 kinesis payloads
   // or will accept an already b64 encoded payload
   // This method handles both
-  _tryParse (body) {
+  #tryParse (body) {
     try {
       return JSON.parse(body)
     } catch {
@@ -170,7 +170,7 @@ class Kinesis extends BaseAwsSdkPlugin {
 
     let parsedData
     if (injectTraceContext || this.config.dsmEnabled) {
-      parsedData = this._tryParse(params.Data)
+      parsedData = this.#tryParse(params.Data)
       if (!parsedData) {
         log.error('Unable to parse payload, unable to pass trace context or set DSM checkpoint (if enabled)')
         return

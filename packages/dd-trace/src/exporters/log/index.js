@@ -21,7 +21,7 @@ class LogExporter {
         continue
       }
       if (spanStr.length + size > MAX_SIZE) {
-        this._printSpans(queue)
+        this.#printSpans(queue)
         queue = []
         size = TRACE_FORMAT_OVERHEAD
       }
@@ -29,11 +29,11 @@ class LogExporter {
       queue.push(spanStr)
     }
     if (queue.length > 0) {
-      this._printSpans(queue)
+      this.#printSpans(queue)
     }
   }
 
-  _printSpans (queue) {
+  #printSpans (queue) {
     let logLine = TRACE_PREFIX
     let firstTrace = true
     for (const spanStr of queue) {

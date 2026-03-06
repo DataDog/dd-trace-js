@@ -22,7 +22,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     const queueName = job?.queueName || job?.queue?.name || 'bullmq'
 
     let childOf
-    const ddCarrier = this._extractDatadog(job)
+    const ddCarrier = this.#extractDatadog(job)
     if (ddCarrier) {
       ctx._ddCarrier = ddCarrier
       childOf = this.tracer.extract('text_map', ddCarrier)
@@ -59,7 +59,7 @@ class BullmqConsumerPlugin extends ConsumerPlugin {
     this.tracer.setCheckpoint(edgeTags, span, payloadSize)
   }
 
-  _extractDatadog (job) {
+  #extractDatadog (job) {
     const metadataStr = job?.opts?.telemetry?.metadata
     if (!metadataStr) return
 

@@ -20,7 +20,7 @@ class Writer {
     if (count > 0) {
       const payload = this._encoder.makePayload()
 
-      this._sendPayload(payload, onDone)
+      this.#sendPayload(payload, onDone)
     }
   }
 
@@ -28,7 +28,7 @@ class Writer {
     this._encoder.encode(payload)
   }
 
-  _sendPayload (data, onDone = () => {}) {
+  #sendPayload (data, onDone = () => {}) {
     // ## Jest
     // Only available when `child_process` is used for the jest worker.
     // If worker_threads is used, this will not work

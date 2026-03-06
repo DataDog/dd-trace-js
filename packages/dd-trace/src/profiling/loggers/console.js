@@ -16,22 +16,22 @@ class ConsoleLogger {
   }
 
   debug (message) {
-    this._log('debug', message)
+    this.#log('debug', message)
   }
 
   info (message) {
-    this._log('info', message)
+    this.#log('info', message)
   }
 
   warn (message) {
-    this._log('warn', message)
+    this.#log('warn', message)
   }
 
   error (message) {
-    this._log('error', message)
+    this.#log('error', message)
   }
 
-  _log (level, message) {
+  #log (level, message) {
     if (mapping[level] > this._level) return
 
     console[level](message)

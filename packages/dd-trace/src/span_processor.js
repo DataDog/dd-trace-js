@@ -47,7 +47,7 @@ class SpanProcessor {
 
     if (trace.record === false) return
     if (tracing === false) {
-      this._erase(trace, active)
+      this.#erase(trace, active)
       return
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
@@ -71,7 +71,7 @@ class SpanProcessor {
         this._exporter.export(formatted)
       }
 
-      this._erase(trace, active)
+      this.#erase(trace, active)
     }
 
     if (this._killAll) {
@@ -87,7 +87,7 @@ class SpanProcessor {
     this._killAll = true
   }
 
-  _erase (trace, active) {
+  #erase (trace, active) {
     if (getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING') === 'true') {
       const started = new Set()
       const startedIds = new Set()

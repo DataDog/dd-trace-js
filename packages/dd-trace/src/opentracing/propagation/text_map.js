@@ -71,13 +71,13 @@ class TextMapPropagator {
 
   inject (spanContext, carrier) {
     if (!carrier) return
-    this._injectBaggageItems(spanContext, carrier)
+    this.#injectBaggageItems(spanContext, carrier)
     if (!spanContext) return
 
-    this._injectDatadog(spanContext, carrier)
-    this._injectB3MultipleHeaders(spanContext, carrier)
-    this._injectB3SingleHeader(spanContext, carrier)
-    this._injectTraceparent(spanContext, carrier)
+    this.#injectDatadog(spanContext, carrier)
+    this.#injectB3MultipleHeaders(spanContext, carrier)
+    this.#injectB3SingleHeader(spanContext, carrier)
+    this.#injectTraceparent(spanContext, carrier)
 
     if (injectCh.hasSubscribers) {
       injectCh.publish({ spanContext, carrier })
@@ -88,7 +88,7 @@ class TextMapPropagator {
   }
 
   extract (carrier) {
-    const spanContext = this._extractSpanContext(carrier)
+    const spanContext = this.#extractSpanContext(carrier)
 
     if (!spanContext) return spanContext
 
@@ -107,18 +107,18 @@ class TextMapPropagator {
     return spanContext
   }
 
-  _injectDatadog (spanContext, carrier) {
-    if (!this._hasPropagationStyle('inject', 'datadog')) return
+  #injectDatadog (spanContext, carrier) {
+    if (!this.#hasPropagationStyle('inject', 'datadog')) return
 
     carrier[traceKey] = spanContext.toTraceId()
     carrier[spanKey] = spanContext.toSpanId()
 
-    this._injectOrigin(spanContext, carrier)
-    this._injectSamplingPriority(spanContext, carrier)
-    this._injectTags(spanContext, carrier)
+    this.#injectOrigin(spanContext, carrier)
+    this.#injectSamplingPriority(spanContext, carrier)
+    this.#injectTags(spanContext, carrier)
   }
 
-  _injectOrigin (spanContext, carrier) {
+  #injectOrigin (spanContext, carrier) {
     const origin = spanContext._trace.origin
 
     if (origin) {
@@ -126,7 +126,7 @@ class TextMapPropagator {
     }
   }
 
-  _injectSamplingPriority (spanContext, carrier) {
+  #injectSamplingPriority (spanContext, carrier) {
     const priority = spanContext._sampling.priority
 
     if (Number.isInteger(priority)) {
@@ -134,7 +134,7 @@ class TextMapPropagator {
     }
   }
 
-  _injectBaggageItems (spanContext, carrier) {
+  #injectBaggageItems (spanContext, carrier) {
     if (this._config.legacyBaggageEnabled) {
       const baggageItems = spanContext?._baggageItems
       if (baggageItems) {
@@ -157,7 +157,7 @@ class TextMapPropagator {
         }
       }
     }
-    if (this._hasPropagationStyle('inject', 'baggage')) {
+    if (this.#hasPropagationStyle('inject', 'baggage')) {
       let baggage = ''
       let itemCounter = 0
       let byteCounter = 0
@@ -198,7 +198,7 @@ class TextMapPropagator {
     }
   }
 
-  _injectTags (spanContext, carrier) {
+  #injectTags (spanContext, carrier) {
     const trace = spanContext._trace
 
     if (this._config.tagsHeaderMaxLength === 0) {
@@ -210,7 +210,7 @@ class TextMapPropagator {
 
     for (const key in trace.tags) {
       if (!trace.tags[key] || !key.startsWith('_dd.p.')) continue
-      if (!this._validateTagKey(key) || !this._validateTagValue(trace.tags[key])) {
+      if (!this.#validateTagKey(key) || !this.#validateTagValue(trace.tags[key])) {
         log.error('Trace tags from span are invalid, skipping injection.')
         return
       }
@@ -227,12 +227,12 @@ class TextMapPropagator {
     }
   }
 
-  _injectB3MultipleHeaders (spanContext, carrier) {
-    const hasB3 = this._hasPropagationStyle('inject', 'b3')
-    const hasB3multi = this._hasPropagationStyle('inject', 'b3multi')
+  #injectB3MultipleHeaders (spanContext, carrier) {
+    const hasB3 = this.#hasPropagationStyle('inject', 'b3')
+    const hasB3multi = this.#hasPropagationStyle('inject', 'b3multi')
     if (!(hasB3 || hasB3multi)) return
 
-    carrier[b3TraceKey] = this._getB3TraceId(spanContext)
+    carrier[b3TraceKey] = this.#getB3TraceId(spanContext)
     carrier[b3SpanKey] = spanContext._spanId.toString(16)
     carrier[b3SampledKey] = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
@@ -245,11 +245,11 @@ class TextMapPropagator {
     }
   }
 
-  _injectB3SingleHeader (spanContext, carrier) {
-    const hasB3SingleHeader = this._hasPropagationStyle('inject', 'b3 single header')
+  #injectB3SingleHeader (spanContext, carrier) {
+    const hasB3SingleHeader = this.#hasPropagationStyle('inject', 'b3 single header')
     if (!hasB3SingleHeader) return null
 
-    const traceId = this._getB3TraceId(spanContext)
+    const traceId = this.#getB3TraceId(spanContext)
     const spanId = spanContext._spanId.toString(16)
     const sampled = spanContext._sampling.priority >= AUTO_KEEP ? '1' : '0'
 
@@ -259,8 +259,8 @@ class TextMapPropagator {
     }
   }
 
-  _injectTraceparent (spanContext, carrier) {
-    if (!this._hasPropagationStyle('inject', 'tracecontext')) return
+  #injectTraceparent (spanContext, carrier) {
+    if (!this.#hasPropagationStyle('inject', 'tracecontext')) return
 
     const {
       _sampling: { priority, mechanism },
@@ -310,66 +310,66 @@ class TextMapPropagator {
     carrier.tracestate = ts.toString()
   }
 
-  _hasPropagationStyle (mode, name) {
+  #hasPropagationStyle (mode, name) {
     return this._config.tracePropagationStyle[mode].includes(name)
   }
 
-  _hasTraceIdConflict (w3cSpanContext, firstSpanContext) {
+  #hasTraceIdConflict (w3cSpanContext, firstSpanContext) {
     return w3cSpanContext !== null &&
            firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
            firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()
   }
 
-  _hasParentIdInTags (spanContext) {
+  #hasParentIdInTags (spanContext) {
     return tags.DD_PARENT_ID in spanContext._trace.tags
   }
 
-  _updateParentIdFromDdHeaders (carrier, firstSpanContext) {
-    const ddCtx = this._extractDatadogContext(carrier)
+  #updateParentIdFromDdHeaders (carrier, firstSpanContext) {
+    const ddCtx = this.#extractDatadogContext(carrier)
     if (ddCtx !== null) {
       firstSpanContext._trace.tags[tags.DD_PARENT_ID] = ddCtx._spanId.toString().padStart(16, '0')
     }
   }
 
-  _resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier) {
-    if (!this._hasTraceIdConflict(w3cSpanContext, firstSpanContext)) {
+  #resolveTraceContextConflicts (w3cSpanContext, firstSpanContext, carrier) {
+    if (!this.#hasTraceIdConflict(w3cSpanContext, firstSpanContext)) {
       return firstSpanContext
     }
-    if (this._hasParentIdInTags(w3cSpanContext)) {
+    if (this.#hasParentIdInTags(w3cSpanContext)) {
       // tracecontext headers contain a p value, ensure this value is sent to backend
       firstSpanContext._trace.tags[tags.DD_PARENT_ID] = w3cSpanContext._trace.tags[tags.DD_PARENT_ID]
     } else {
       // if p value is not present in tracestate, use the parent id from the datadog headers
-      this._updateParentIdFromDdHeaders(carrier, firstSpanContext)
+      this.#updateParentIdFromDdHeaders(carrier, firstSpanContext)
     }
     // the span_id in tracecontext takes precedence over the first extracted propagation style
     firstSpanContext._spanId = w3cSpanContext._spanId
     return firstSpanContext
   }
 
-  _extractSpanContext (carrier) {
+  #extractSpanContext (carrier) {
     let context = null
     let style = ''
     for (const extractor of this._config.tracePropagationStyle.extract) {
       let extractedContext = null
       switch (extractor) {
         case 'datadog':
-          extractedContext = this._extractDatadogContext(carrier)
+          extractedContext = this.#extractDatadogContext(carrier)
           break
         case 'tracecontext':
-          extractedContext = this._extractTraceparentContext(carrier)
+          extractedContext = this.#extractTraceparentContext(carrier)
           break
         case 'b3 single header': // TODO: delete in major after singular "b3"
-          extractedContext = this._extractB3SingleContext(carrier)
+          extractedContext = this.#extractB3SingleContext(carrier)
           break
         case 'b3':
           extractedContext = this._config.tracePropagationStyle.otelPropagators
             // TODO: should match "b3 single header" in next major
-            ? this._extractB3SingleContext(carrier)
-            : this._extractB3MultiContext(carrier)
+            ? this.#extractB3SingleContext(carrier)
+            : this.#extractB3MultiContext(carrier)
           break
         case 'b3multi':
-          extractedContext = this._extractB3MultiContext(carrier)
+          extractedContext = this.#extractB3MultiContext(carrier)
           break
         default:
           if (extractor !== 'baggage') log.warn('Unknown propagation style:', extractor)
@@ -388,8 +388,8 @@ class TextMapPropagator {
       } else {
         // If extractor is tracecontext, add tracecontext specific information to the context
         if (extractor === 'tracecontext') {
-          context = this._resolveTraceContextConflicts(
-            this._extractTraceparentContext(carrier), context, carrier)
+          context = this.#resolveTraceContextConflicts(
+            this.#extractTraceparentContext(carrier), context, carrier)
         }
         if (extractedContext._traceId && extractedContext._spanId &&
           extractedContext.toTraceId(true) !== context.toTraceId(true)) {
@@ -415,25 +415,25 @@ class TextMapPropagator {
           },
         })
       }
-      this._extractBaggageItems(carrier, context)
+      this.#extractBaggageItems(carrier, context)
     }
 
-    return context || this._extractSqsdContext(carrier)
+    return context || this.#extractSqsdContext(carrier)
   }
 
-  _extractDatadogContext (carrier) {
-    const spanContext = this._extractGenericContext(carrier, traceKey, spanKey, 10)
+  #extractDatadogContext (carrier) {
+    const spanContext = this.#extractGenericContext(carrier, traceKey, spanKey, 10)
 
     if (!spanContext) return spanContext
 
-    this._extractOrigin(carrier, spanContext)
-    this._extractLegacyBaggageItems(carrier, spanContext)
-    this._extractSamplingPriority(carrier, spanContext)
-    this._extractTags(carrier, spanContext)
+    this.#extractOrigin(carrier, spanContext)
+    this.#extractLegacyBaggageItems(carrier, spanContext)
+    this.#extractSamplingPriority(carrier, spanContext)
+    this.#extractTags(carrier, spanContext)
 
     if (this._config.tracePropagationExtractFirst) return spanContext
 
-    const tc = this._extractTraceparentContext(carrier)
+    const tc = this.#extractTraceparentContext(carrier)
 
     if (tc && spanContext._traceId.equals(tc._traceId)) {
       spanContext._traceparent = tc._traceparent
@@ -443,23 +443,23 @@ class TextMapPropagator {
     return spanContext
   }
 
-  _extractB3MultiContext (carrier) {
-    const b3 = this._extractB3MultipleHeaders(carrier)
+  #extractB3MultiContext (carrier) {
+    const b3 = this.#extractB3MultipleHeaders(carrier)
     if (!b3) return null
-    return this._extractB3Context(b3)
+    return this.#extractB3Context(b3)
   }
 
-  _extractB3SingleContext (carrier) {
+  #extractB3SingleContext (carrier) {
     if (!b3HeaderExpr.test(carrier[b3HeaderKey])) return null
-    const b3 = this._extractB3SingleHeader(carrier)
+    const b3 = this.#extractB3SingleHeader(carrier)
     if (!b3) return null
-    return this._extractB3Context(b3)
+    return this.#extractB3Context(b3)
   }
 
-  _extractB3Context (b3) {
+  #extractB3Context (b3) {
     const debug = b3[b3FlagsKey] === '1'
-    const priority = this._getPriority(b3[b3SampledKey], debug)
-    const spanContext = this._extractGenericContext(b3, b3TraceKey, b3SpanKey, 16)
+    const priority = this.#getPriority(b3[b3SampledKey], debug)
+    const spanContext = this.#extractGenericContext(b3, b3TraceKey, b3SpanKey, 16)
 
     if (priority !== undefined) {
       if (!spanContext) {
@@ -475,12 +475,12 @@ class TextMapPropagator {
       spanContext._sampling.priority = priority
     }
 
-    this._extract128BitTraceId(b3[b3TraceKey], spanContext)
+    this.#extract128BitTraceId(b3[b3TraceKey], spanContext)
 
     return spanContext
   }
 
-  _extractSqsdContext (carrier) {
+  #extractSqsdContext (carrier) {
     const headerValue = carrier[sqsdHeaderHey]
     if (!headerValue) {
       return null
@@ -491,10 +491,10 @@ class TextMapPropagator {
     } catch {
       return null
     }
-    return this._extractDatadogContext(parsed)
+    return this.#extractDatadogContext(parsed)
   }
 
-  _extractTraceparentContext (carrier) {
+  #extractTraceparentContext (carrier) {
     const headerValue = carrier[traceparentKey]
     if (!headerValue) {
       return null
@@ -522,7 +522,7 @@ class TextMapPropagator {
         tracestate,
       })
 
-      this._extract128BitTraceId(traceId, spanContext)
+      this.#extract128BitTraceId(traceId, spanContext)
 
       tracestate.forVendor('dd', state => {
         for (const [key, value] of state.entries()) {
@@ -571,13 +571,13 @@ class TextMapPropagator {
         }
       })
 
-      this._extractLegacyBaggageItems(carrier, spanContext)
+      this.#extractLegacyBaggageItems(carrier, spanContext)
       return spanContext
     }
     return null
   }
 
-  _extractGenericContext (carrier, traceKey, spanKey, radix) {
+  #extractGenericContext (carrier, traceKey, spanKey, radix) {
     if (carrier && carrier[traceKey] && carrier[spanKey]) {
       if (invalidSegment.test(carrier[traceKey])) return null
 
@@ -591,7 +591,7 @@ class TextMapPropagator {
     return null
   }
 
-  _extractB3MultipleHeaders (carrier) {
+  #extractB3MultipleHeaders (carrier) {
     let empty = true
     const b3 = {}
 
@@ -614,7 +614,7 @@ class TextMapPropagator {
     return empty ? null : b3
   }
 
-  _extractB3SingleHeader (carrier) {
+  #extractB3SingleHeader (carrier) {
     const header = carrier[b3HeaderKey]
     if (!header) return null
 
@@ -646,7 +646,7 @@ class TextMapPropagator {
     return b3
   }
 
-  _extractOrigin (carrier, spanContext) {
+  #extractOrigin (carrier, spanContext) {
     const origin = carrier[originKey]
 
     if (typeof carrier[originKey] === 'string') {
@@ -654,7 +654,7 @@ class TextMapPropagator {
     }
   }
 
-  _extractLegacyBaggageItems (carrier, spanContext) {
+  #extractLegacyBaggageItems (carrier, spanContext) {
     if (this._config.legacyBaggageEnabled) {
       for (const key of Object.keys(carrier)) {
         const match = key.match(baggageExpr)
@@ -666,8 +666,8 @@ class TextMapPropagator {
     }
   }
 
-  _extractBaggageItems (carrier, spanContext) {
-    if (!this._hasPropagationStyle('extract', 'baggage')) return
+  #extractBaggageItems (carrier, spanContext) {
+    if (!this.#hasPropagationStyle('extract', 'baggage')) return
     if (!carrier?.baggage) return
     const baggages = carrier.baggage.split(',')
     const baggageTagKeys = new Set(this._config.baggageTagKeys)
@@ -715,7 +715,7 @@ class TextMapPropagator {
     tracerMetrics.count('context_header_style.extracted', ['header_style:baggage']).inc()
   }
 
-  _extractSamplingPriority (carrier, spanContext) {
+  #extractSamplingPriority (carrier, spanContext) {
     const priority = Number.parseInt(carrier[samplingKey], 10)
 
     if (Number.isInteger(priority)) {
@@ -723,7 +723,7 @@ class TextMapPropagator {
     }
   }
 
-  _extractTags (carrier, spanContext) {
+  #extractTags (carrier, spanContext) {
     if (!carrier[tagsKey]) return
 
     const trace = spanContext._trace
@@ -740,7 +740,7 @@ class TextMapPropagator {
         const [key, ...rest] = pair.split('=')
         const value = rest.join('=')
 
-        if (!this._validateTagKey(key) || !this._validateTagValue(value)) {
+        if (!this.#validateTagKey(key) || !this.#validateTagValue(value)) {
           log.error('Trace tags from carrier are invalid, skipping extraction.')
           return
         }
@@ -756,7 +756,7 @@ class TextMapPropagator {
     }
   }
 
-  _extract128BitTraceId (traceId, spanContext) {
+  #extract128BitTraceId (traceId, spanContext) {
     if (!spanContext) return
 
     const buffer = spanContext._traceId.toBuffer()
@@ -770,15 +770,15 @@ class TextMapPropagator {
     spanContext._trace.tags['_dd.p.tid'] = tid
   }
 
-  _validateTagKey (key) {
+  #validateTagKey (key) {
     return tagKeyExpr.test(key)
   }
 
-  _validateTagValue (value) {
+  #validateTagValue (value) {
     return tagValueExpr.test(value)
   }
 
-  _getPriority (sampled, debug) {
+  #getPriority (sampled, debug) {
     if (debug) {
       return USER_KEEP
     } else if (sampled === '1') {
@@ -788,7 +788,7 @@ class TextMapPropagator {
     }
   }
 
-  _getB3TraceId (spanContext) {
+  #getB3TraceId (spanContext) {
     if (spanContext._traceId.toBuffer().length <= 8 && spanContext._trace.tags['_dd.p.tid']) {
       return spanContext._trace.tags['_dd.p.tid'] + spanContext._traceId.toString(16)
     }

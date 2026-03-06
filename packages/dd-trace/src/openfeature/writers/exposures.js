@@ -62,7 +62,7 @@ class ExposuresWriter extends BaseFFEWriter {
     })
     this._enabled = false // Start disabled until agent strategy is set
     this._pendingEvents = [] // Buffer events until enabled
-    this._context = this._buildContext()
+    this._context = this.#buildContext()
   }
 
   /**
@@ -112,7 +112,7 @@ class ExposuresWriter extends BaseFFEWriter {
    * @returns {ExposureEventPayload} Formatted payload with service context
    */
   makePayload (events) {
-    const formattedEvents = events.map(event => this._formatExposureEvent(event))
+    const formattedEvents = events.map(event => this.#formatExposureEvent(event))
 
     return {
       context: this._context,
@@ -125,7 +125,7 @@ class ExposuresWriter extends BaseFFEWriter {
    * @private
    * @returns {ExposureContext} Service context
    */
-  _buildContext () {
+  #buildContext () {
     const context = {
       service: this._config.service || 'unknown',
     }
@@ -147,7 +147,7 @@ class ExposuresWriter extends BaseFFEWriter {
    * @param {ExposureEvent} event - Raw exposure event
    * @returns {ExposureEvent} Formatted exposure event
    */
-  _formatExposureEvent (event) {
+  #formatExposureEvent (event) {
     // Ensure the event matches the expected schema
     const formattedEvent = {
       timestamp: event.timestamp || Date.now(),

@@ -101,14 +101,14 @@ module.exports = class PluginManager {
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
-      ...this._getSharedConfig(name),
+      ...this.#getSharedConfig(name),
       ...pluginConfig,
     })
   }
 
   // TODO: merge config instead of replacing
   configurePlugin (name, pluginConfig) {
-    const enabled = this._isEnabled(pluginConfig)
+    const enabled = this.#isEnabled(pluginConfig)
 
     this._configsByName[name] = {
       ...pluginConfig,
@@ -137,7 +137,7 @@ module.exports = class PluginManager {
     loadChannel.unsubscribe(this._loadedSubscriber)
   }
 
-  _isEnabled (pluginConfig) {
+  #isEnabled (pluginConfig) {
     if (typeof pluginConfig === 'boolean') return pluginConfig
     if (!pluginConfig) return true
 
@@ -145,7 +145,7 @@ module.exports = class PluginManager {
   }
 
   // TODO: figure out a better way to handle this
-  _getSharedConfig (name) {
+  #getSharedConfig (name) {
     const {
       logInjection,
       serviceMapping,

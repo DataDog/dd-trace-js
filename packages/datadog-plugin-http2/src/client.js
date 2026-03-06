@@ -81,13 +81,13 @@ class Http2ClientPlugin extends ClientPlugin {
 
     switch (eventName) {
       case 'response':
-        this._onResponse(currentStore, eventData)
+        this.#onResponse(currentStore, eventData)
         return parentStore
       case 'error':
-        this._onError(currentStore, eventData, ctx)
+        this.#onError(currentStore, eventData, ctx)
         return parentStore
       case 'close':
-        this._onClose(ctx)
+        this.#onClose(ctx)
         return parentStore
     }
 
@@ -98,7 +98,7 @@ class Http2ClientPlugin extends ClientPlugin {
     return super.configure(normalizeConfig(config))
   }
 
-  _onResponse (store, headers) {
+  #onResponse (store, headers) {
     const status = headers && headers[HTTP2_HEADER_STATUS]
 
     store.span.setTag(HTTP_STATUS_CODE, status)
@@ -110,12 +110,12 @@ class Http2ClientPlugin extends ClientPlugin {
     addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)
   }
 
-  _onError ({ span }, error, ctx) {
+  #onError ({ span }, error, ctx) {
     span.setTag('error', error)
     super.finish(ctx)
   }
 
-  _onClose (ctx) {
+  #onClose (ctx) {
     super.finish(ctx)
   }
 }
