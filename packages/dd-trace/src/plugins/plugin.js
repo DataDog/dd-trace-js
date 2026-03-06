@@ -38,6 +38,16 @@ class Subscription {
     }
   }
 
+  // Exposed for test access
+  get _channel () {
+    return this.#channel
+  }
+
+  // Exposed for test access
+  get _handler () {
+    return this.#handler
+  }
+
   enable () {
     // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.subscribe(event, handler)` instead
     this.#channel.subscribe(this.#handler)
@@ -62,6 +72,11 @@ class StoreBinding {
         ? transform(data)
         : store
     }
+  }
+
+  // Exposed for test access
+  get _channel () {
+    return this.#channel
   }
 
   enable () {
@@ -170,6 +185,16 @@ module.exports = class Plugin {
   // Exposed for external access by telemetry and llmobs modules
   get _enabled () {
     return this.#enabled
+  }
+
+  // Exposed for test access
+  get _subscriptions () {
+    return this.#subscriptions
+  }
+
+  // Exposed for test access
+  get _bindings () {
+    return this.#bindings
   }
 
   /**
