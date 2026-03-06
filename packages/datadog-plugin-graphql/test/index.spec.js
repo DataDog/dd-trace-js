@@ -1155,10 +1155,8 @@ describe('Plugin', () => {
         it('should support multiple executions on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
-          assert.doesNotThrow(() => {
-            graphql.execute({ schema, document })
-            graphql.execute({ schema, document })
-          })
+          graphql.execute({ schema, document })
+          graphql.execute({ schema, document })
         })
 
         it('should not fail without directives in the document ' +
@@ -1172,9 +1170,7 @@ describe('Plugin', () => {
           dc.channel('datadog:graphql:resolver:start').subscribe(noop)
 
           try {
-            assert.doesNotThrow(() => {
-              graphql.execute({ schema, document })
-            })
+            graphql.execute({ schema, document })
           } finally {
             dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
           }
@@ -1184,10 +1180,8 @@ describe('Plugin', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
 
-          assert.doesNotThrow(() => {
-            graphql.validate(schema, document)
-            graphql.validate(schema, document)
-          })
+          graphql.validate(schema, document)
+          graphql.validate(schema, document)
         })
 
         it('should support multi-operations documents', done => {
