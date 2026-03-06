@@ -71,11 +71,11 @@ describe('tagger', () => {
   })
 
   it('should handle missing key/value pairs', () => {
-    assert.doesNotThrow(() => tagger.add(carrier))
+    tagger.add(carrier)
   })
 
   it('should handle missing carrier', () => {
-    assert.doesNotThrow(() => tagger.add())
+    tagger.add()
   })
 
   it('should set trace error', () => {

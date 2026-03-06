@@ -79,7 +79,7 @@ withVersions('express', 'express', version => {
       // Router does not exist in Express 5
       it('should work correctly when router[method] is called without handler', () => {
         const router = express.Router()
-        assert.doesNotThrow(() => { router.bind('/test') })
+        router.bind('/test')
       })
     }
   })
