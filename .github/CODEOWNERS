@@ -13,6 +13,9 @@
 /packages/dd-trace/*/standalone @DataDog/asm-js
 
 # Dynamic Instrumentation
+/benchmark/sirun/debugger @DataDog/debugger-nodejs
+
+/integration-tests/code-origin/ @DataDog/debugger-nodejs
 /integration-tests/code-origin-remote-config.spec.js @DataDog/debugger-nodejs
 /integration-tests/code-origin.spec.js @DataDog/debugger-nodejs
 /integration-tests/debugger/ @DataDog/debugger-nodejs
@@ -75,6 +78,23 @@
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/test.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/test-environment.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/agentless-ci-visibility.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/agentless-json.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/coverage-ci-visibility.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/encode/tags-processors.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/exporters/agentless/index.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/exporters/agentless/writer.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/git_metadata_tagger.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/ci.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/env.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/git-cache.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/tags.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/test.js @DataDog/ci-app-libraries
+/packages/dd-trace/src/plugins/util/user-provided-git.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/__test__/CODEOWNERS @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/github_event_payload_malformed.json @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/github_event_payload.json @DataDog/ci-app-libraries
+/packages/dd-trace/test/plugins/util/fixtures/istanbul-map-fixture.json @DataDog/ci-app-libraries
 
 /packages/datadog-instrumentations/src/jest.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/mocha/ @DataDog/ci-app-libraries
@@ -95,6 +115,18 @@
 /integration-tests/vitest/vitest.spec.js @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
 /integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
+/integration-tests/ci-visibility-intake.js @DataDog/ci-app-libraries
+/integration-tests/CODEOWNERS @DataDog/ci-app-libraries
+/integration-tests/config-jest-multiproject.js @DataDog/ci-app-libraries
+/integration-tests/config-jest.js @DataDog/ci-app-libraries
+/integration-tests/cypress-config.json @DataDog/ci-app-libraries
+/integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress.config.js @DataDog/ci-app-libraries
+/integration-tests/my-nyc.config.js @DataDog/ci-app-libraries
+/integration-tests/playwright.config.js @DataDog/ci-app-libraries
+/integration-tests/playwright.config.ts @DataDog/ci-app-libraries
+
+/benchmark/e2e-test-optimization/benchmark-run.js @DataDog/ci-app-libraries
 
 # LLM Observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
@@ -166,6 +198,7 @@
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging
 
 # CI
+/.github/chainguard @DataDog/sdlc-security
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
 /.github/workflows/aiguard.yml @DataDog/asm-js
