@@ -1,0 +1,31 @@
+name: Push to Test Optimization
+description: Upload JUnit XML test results to Datadog Test Optimization
+inputs:
+  dd_api_key:
+    description: DD_API_KEY used to push test results
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Adds
+      shell: bash
+      run: |
+        which xsltproc || sudo apt-get install -y xsltproc
+        find . -name '*.xml' | while read -r xml_file; do
+            echo "Fixing $xml_file"
+            tmp_file="$(mktemp)"
+            xsltproc --output "$tmp_file" ".github/actions/push_to_test_optimization/add_final_status.xsl" "$xml_file"
+            mv "$tmp_file" "$xml_file"
+        done
+
+    - if: github.actor != 'dependabot[bot]'
+      # see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull-request-events-for-forked-repositories
+      #
+      # > Workflows triggered by Dependabot pull requests are treated as though they are
+      # >  from a forked repository, and are also subject to these restrictions.
+      #
+      # Which means they do not have access to secrets.
+      uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
+      with:
+        api_key: ${{ inputs.dd_api_key }}
+        service: dd-trace-js-tests
