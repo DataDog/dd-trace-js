@@ -352,6 +352,7 @@ class Config {
       DD_TELEMETRY_HEARTBEAT_INTERVAL,
       DD_TELEMETRY_LOG_COLLECTION_ENABLED,
       DD_TELEMETRY_METRICS_ENABLED,
+      DD_TEST_TIA_KEEP_COV_CONFIG,
       DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
       DD_TRACE_AGENT_PORT,
@@ -757,6 +758,7 @@ class Config {
     unprocessedTarget['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL
     setBoolean(target, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     setBoolean(target, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
+    setBoolean(target, 'isKeepingCoverageConfiguration', isTrue(DD_TEST_TIA_KEEP_COV_CONFIG))
     setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     warnIfPropagationStyleConflict(
@@ -1126,7 +1128,6 @@ class Config {
       setBoolean(calc, 'isIntelligentTestRunnerEnabled', isTrue(isCiVisibilityItrEnabled()))
       setBoolean(calc, 'isManualApiEnabled', !isFalse(getEnv('DD_CIVISIBILITY_MANUAL_API_ENABLED')))
       setString(calc, 'ciVisibilityTestSessionName', getEnv('DD_TEST_SESSION_NAME'))
-      setBoolean(calc, 'isKeepingCoverageConfiguration', isTrue(getEnv('DD_TEST_TIA_KEEP_COV_CONFIG')))
       setBoolean(calc, 'ciVisAgentlessLogSubmissionEnabled',
         isTrue(getEnv('DD_AGENTLESS_LOG_SUBMISSION_ENABLED')))
       setBoolean(calc, 'isTestDynamicInstrumentationEnabled',
