@@ -175,7 +175,7 @@ class AIGuard extends NoopAIGuard {
           `AI Guard service call failed, status ${response.status}`,
           { errors: response.body?.errors })
       }
-      let action, reason, tags, blockingEnabled
+      let action, reason, tags, sdsFindings, blockingEnabled
       try {
         const attr = response.body.data.attributes
         if (!attr.action) {
@@ -184,6 +184,7 @@ class AIGuard extends NoopAIGuard {
         action = attr.action
         reason = attr.reason
         tags = attr.tags
+        sdsFindings = attr.sds_findings
         blockingEnabled = attr.is_blocking_enabled ?? false
       } catch (e) {
         appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
@@ -197,6 +198,9 @@ class AIGuard extends NoopAIGuard {
       }
       if (tags?.length > 0) {
         metaStruct.attack_categories = tags
+      }
+      if (sdsFindings?.length > 0) {
+        metaStruct.sds = sdsFindings
       }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
