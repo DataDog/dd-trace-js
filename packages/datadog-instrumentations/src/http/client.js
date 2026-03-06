@@ -102,7 +102,8 @@ function setupResponseInstrumentation (ctx, res) {
             // A data listener was added while we were in a readable+read() loop. In Node.js 24,
             // calling read() in the same tick after the stream begins transitioning to flowing
             // mode causes fromList to crash. Return null once to safely exit the current loop;
-            // re-emit readable on the next tick so the stream continues draining.
+            // re-emit readable on the next tick so the stream continues draining. By the next
+            // tick the transition to flowing mode has stabilised and it is safe to call read().
             skipNextRead = true
             const self = this
             process.nextTick(() => {
@@ -114,7 +115,11 @@ function setupResponseInstrumentation (ctx, res) {
           }
           dataReadStarted = true
           const chunk = originalRead.apply(this, arguments)
-          collectChunk(chunk)
+          // Only collect if there is no data listener already collecting chunks to avoid
+          // double-collection when res.on('data', collectChunk) was also added.
+          if (!dataListenerAdded) {
+            collectChunk(chunk)
+          }
           return chunk
         }
       }
