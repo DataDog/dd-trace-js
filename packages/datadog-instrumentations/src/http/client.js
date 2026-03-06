@@ -83,20 +83,38 @@ function setupResponseInstrumentation (ctx, res) {
       bodyConsumed = true
 
       // For 'data' events, add our own listener to collect chunks
-      if (eventName === 'data' && !dataListenerAdded && !dataReadStarted) {
+      if (eventName === 'data' && !dataListenerAdded) {
         dataListenerAdded = true
-        res.on('data', collectChunk)
+        // Only add a data listener if we are not already collecting via the read() wrapper.
+        // When both readable and data listeners exist, the stream stays in paused mode and
+        // data events do not fire, so the read wrapper remains the collection path.
+        if (!dataReadStarted) {
+          res.on('data', collectChunk)
+        }
       }
 
       // For 'readable' events, wrap the read() method
       if (eventName === 'readable' && !originalRead && !dataListenerAdded && typeof res.read === 'function') {
         originalRead = res.read
+        let skipNextRead = false
         res.read = function () {
-          const chunk = originalRead.apply(this, arguments)
-          if (!dataListenerAdded) {
-            dataReadStarted = true
-            collectChunk(chunk)
+          if (dataListenerAdded && !skipNextRead) {
+            // A data listener was added while we were in a readable+read() loop. In Node.js 24,
+            // calling read() in the same tick after the stream begins transitioning to flowing
+            // mode causes fromList to crash. Return null once to safely exit the current loop;
+            // re-emit readable on the next tick so the stream continues draining.
+            skipNextRead = true
+            const self = this
+            process.nextTick(() => {
+              if (self.readable && self.readableLength > 0) {
+                self.emit('readable')
+              }
+            })
+            return null
           }
+          dataReadStarted = true
+          const chunk = originalRead.apply(this, arguments)
+          collectChunk(chunk)
           return chunk
         }
       }
