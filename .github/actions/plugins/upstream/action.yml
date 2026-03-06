@@ -22,8 +22,7 @@ runs:
       uses: ./.github/actions/testagent/logs
       with:
         suffix: upstream-${{ github.job }}
-    - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
-      if: always() && github.actor != 'dependabot[bot]'
+    - uses: ./.github/actions/push_to_test_optim
+      if: "!cancelled()"
       with:
-        api_key: ${{ inputs.dd_api_key }}
-        service: dd-trace-js-tests
+        dd_api_key: ${{ inputs.dd_api_key }}
