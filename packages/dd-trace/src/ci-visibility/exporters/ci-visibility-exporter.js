@@ -422,9 +422,11 @@ class CiVisibilityExporter extends BufferingExporter {
 
   // Exposed for test access
   get _canUseCiVisProtocol () { return this.#canUseCiVisProtocol }
+  set _canUseCiVisProtocol (value) { this.#canUseCiVisProtocol = value }
   get _canUseCiVisProtocolPromise () { return this.#canUseCiVisProtocolPromise }
   get _gitUploadPromise () { return this.#gitUploadPromise }
   get _libraryConfig () { return this.#libraryConfig }
+  set _libraryConfig (value) { this.#libraryConfig = value }
 }
 
 module.exports = CiVisibilityExporter
