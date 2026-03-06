@@ -1534,9 +1534,10 @@ function configureTestEnvironment (readConfigsResult) {
     }
     if (isCodeCoverageEnabledBecauseOfUs && !isKeepingCoverageConfiguration) {
       globalConfig.coverageReporters = ['none']
-      for (const config of configs) {
-        config.coverageReporters = ['none']
-      }
+      readConfigsResult.configs = configs.map(config => ({
+        ...config,
+        coverageReporters: ['none'],
+      }))
     }
     readConfigsResult.globalConfig = globalConfig
   }
