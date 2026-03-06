@@ -156,7 +156,8 @@ function getGenerationMetadata (tags) {
     if (!isGenerationMetadata && !isTelemetryMetadata) continue
 
     if (isGenerationMetadata) {
-      const settingKey = tag.split('.').pop()
+      const lastCommaPosition = tag.lastIndexOf('.')
+      const settingKey = lastCommaPosition === -1 ? tag :  tag.slice(lastCommaPosition + 1)
       const transformedKey = settingKey.replaceAll(/[A-Z]/g, letter => '_' + letter.toLowerCase())
       if (MODEL_METADATA_KEYS.has(transformedKey)) continue
 
