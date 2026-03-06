@@ -1774,7 +1774,10 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "configurationNames": [
+          "isKeepingCoverageConfiguration"
+        ]
       }
     ],
     "DD_TEST_SESSION_NAME": [
