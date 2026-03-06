@@ -33,6 +33,16 @@ class AgentExporter {
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }
 
+  // Exposed for external access by opentracing/tracer.js and opentelemetry/tracer_provider.js
+  get _url () {
+    return this.#url
+  }
+
+  // Exposed for external access by opentelemetry/tracer_provider.js and cypress plugin
+  get _writer () {
+    return this.#writer
+  }
+
   setUrl (url) {
     try {
       url = new URL(url)

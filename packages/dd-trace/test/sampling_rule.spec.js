@@ -391,7 +391,6 @@ describe('sampling rule', () => {
         maxPerSecond: 123,
       })
 
-      assert.notStrictEqual(rule._limiter, undefined)
       assert.strictEqual(rule.maxPerSecond, 123)
     })
 

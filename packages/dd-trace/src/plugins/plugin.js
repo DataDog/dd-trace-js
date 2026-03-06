@@ -167,6 +167,11 @@ module.exports = class Plugin {
     }
   }
 
+  // Exposed for external access by telemetry and llmobs modules
+  get _enabled () {
+    return this.#enabled
+  }
+
   /**
    * Enable or disable the plugin and (re)apply its configuration.
    *

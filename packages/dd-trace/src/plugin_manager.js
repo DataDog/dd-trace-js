@@ -134,6 +134,11 @@ module.exports = class PluginManager {
     }
   }
 
+  // Exposed for external access by startup-log, telemetry, llmobs, and test infrastructure
+  get _pluginsByName () {
+    return this.#pluginsByName
+  }
+
   // This is basically just for testing. like intrumenter.disable()
   destroy () {
     for (const name in this.#pluginsByName) {
