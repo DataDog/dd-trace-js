@@ -19,13 +19,14 @@ class AgentWriter extends BaseWriter {
 
   constructor (...args) {
     super(...args)
-    const { prioritySampler, lookup, protocolVersion, headers } = args[0]
+    const { prioritySampler, lookup, protocolVersion, headers, config = {} } = args[0]
     const AgentEncoder = getEncoder(protocolVersion)
 
     this.#prioritySampler = prioritySampler
     this.#lookup = lookup
     this.#protocolVersion = protocolVersion
     this.#headers = headers
+    this._config = config
     this._encoder = new AgentEncoder(this)
   }
 
