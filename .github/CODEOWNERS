@@ -41,19 +41,12 @@
 /packages/datadog-esbuild @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
-/packages/ddtrace/src/plugins/ @DataDog/apm-idm-js
-/packages/ddtrace/test/plugins/ @DataDog/apm-idm-js
+/packages/dd-trace/src/plugins/ @DataDog/apm-idm-js
+/packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/src/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/service-naming/ @DataDog/apm-idm-js
 /packages/dd-trace/test/payload_tagging.spec.js @DataDog/apm-idm-js
 /packages/dd-trace/test/payload-tagging/index.spec.js @DataDog/apm-idm-js
-/packages/dd-trace/test/plugins/database-dbm-hash.spec.js @DataDog/apm-idm-js
-/packages/dd-trace/test/plugins/log_plugin.spec.js @DataDog/apm-idm-js
-/packages/dd-trace/test/plugins/outbound.spec.js @DataDog/apm-idm-js
-/packages/dd-trace/test/plugins/plugin-structure.spec.js @DataDog/apm-idm-js
-/packages/dd-trace/test/plugins/tracing.spec.js @DataDog/apm-idm-js
-/packages/dd-trace/test/plugins/util/url.spec.js @DataDog/apm-idm-js
-/packages/dd-trace/test/plugins/util/web.spec.js @DataDog/apm-idm-js
 /packages/dd-trace/test/propagation-hash.spec.js @DataDog/apm-idm-js
 
 # Test Optimization
@@ -114,7 +107,6 @@
 /integration-tests/cypress/cypress.spec.js @DataDog/ci-app-libraries
 /integration-tests/vitest/vitest.spec.js @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
-/integration-tests/test-api-manual.spec.js @DataDog/ci-app-libraries
 /integration-tests/ci-visibility-intake.js @DataDog/ci-app-libraries
 /integration-tests/CODEOWNERS @DataDog/ci-app-libraries
 /integration-tests/config-jest-multiproject.js @DataDog/ci-app-libraries
@@ -219,6 +211,7 @@
 # Language Platform
 /* @DataDog/lang-platform-js
 
+/integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
