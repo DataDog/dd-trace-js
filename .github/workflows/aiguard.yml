@@ -48,6 +48,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: aiguard-ubuntu
+      - uses: ./.github/actions/push_to_test_optim
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   windows:
     name: ${{ github.workflow }} / windows
