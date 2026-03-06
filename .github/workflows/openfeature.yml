@@ -36,7 +36,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-unit-${{ matrix.version }}
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -49,7 +49,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -68,7 +68,7 @@ jobs:
       - run: yarn test:integration:openfeature
       - uses: ./.github/actions/node/latest
       - run: yarn test:integration:openfeature
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -83,7 +83,7 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:integration:openfeature
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}

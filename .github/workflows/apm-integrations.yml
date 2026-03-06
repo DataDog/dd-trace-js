@@ -80,7 +80,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -222,7 +222,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-child-process
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -290,7 +290,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -351,7 +351,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-couchbase-${{ matrix.node-version }}
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -389,7 +389,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-dns
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -419,7 +419,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-elasticsearch
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -567,7 +567,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http-${{ matrix.node-version }}
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -595,7 +595,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http2
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -646,7 +646,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-kafkajs-${{ matrix.node-version }}
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -897,7 +897,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-net
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -954,7 +954,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-next-${{ matrix.range_clean }}
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1032,7 +1032,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-oracledb
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1058,7 +1058,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-pino
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1150,7 +1150,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1306,7 +1306,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-sharedb
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -1339,7 +1339,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-tedious
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}

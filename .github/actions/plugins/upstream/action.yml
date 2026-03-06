@@ -22,7 +22,7 @@ runs:
       uses: ./.github/actions/testagent/logs
       with:
         suffix: upstream-${{ github.job }}
-    - uses: ./.github/actions/push_to_test_optim
+    - uses: ./.github/actions/push_to_test_optimization
       if: "!cancelled()"
       with:
         dd_api_key: ${{ inputs.dd_api_key }}

@@ -32,7 +32,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-macos
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -53,7 +53,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-ubuntu
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
@@ -70,7 +70,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-windows
-      - uses: ./.github/actions/push_to_test_optim
+      - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}

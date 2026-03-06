@@ -14,7 +14,7 @@ runs:
         find . -name '*.xml' | while read -r xml_file; do
             echo "Fixing $xml_file"
             tmp_file="$(mktemp)"
-            xsltproc --output "$tmp_file" ".github/actions/push_to_test_optim/add_final_status.xsl" "$xml_file"
+            xsltproc --output "$tmp_file" ".github/actions/push_to_test_optimization/add_final_status.xsl" "$xml_file"
             mv "$tmp_file" "$xml_file"
         done
 
