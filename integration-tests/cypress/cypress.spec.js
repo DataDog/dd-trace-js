@@ -133,7 +133,8 @@ moduleTypes.forEach(({
     this.timeout(80000)
     let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
 
-    // cypress-fail-fast is required as an incompatible plugin
+    // cypress-fail-fast is required as an incompatible plugin.
+    // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
@@ -306,21 +307,42 @@ moduleTypes.forEach(({
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const tsTestEvent = events.find(event =>
+          const tsTestEvents = events.filter(event =>
             event.type === 'test' &&
             event.content.resource.includes('spec source line')
           )
 
-          assert.ok(tsTestEvent, 'typescript test event should exist')
+          assert.strictEqual(tsTestEvents.length, 2, 'should have two typescript test events')
+
+          const itTestEvent = tsTestEvents.find(e => e.content.resource.includes('reports correct line number'))
+          const testTestEvent = tsTestEvents.find(
+            e => e.content.resource.includes('template interpolated string test name')
+          )
+
+          assert.ok(itTestEvent, 'it() test event should exist')
           // 'it' is defined at line 11 in the TypeScript source file spec-source-line.cy.ts
           assert.strictEqual(
-            tsTestEvent.content.metrics[TEST_SOURCE_START],
+            itTestEvent.content.metrics[TEST_SOURCE_START],
             11,
-            'should report the correct source line mapped from the TypeScript source file'
+            'should report the correct source line for it() test'
           )
           assert.ok(
-            tsTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
-            `TEST_SOURCE_FILE should point to TypeScript source, got: ${tsTestEvent.content.meta[TEST_SOURCE_FILE]}`
+            itTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
+            `TEST_SOURCE_FILE should point to TypeScript source, got: ${itTestEvent.content.meta[TEST_SOURCE_FILE]}`
+          )
+
+          // 'specify' with a template literal test name is defined at line 16.
+          // The plugin resolves the TS line by scanning the compiled JS for the template literal
+          // call (fuzzy-matching ${expr} placeholders) and mapping via the adjacent .js.map.
+          assert.ok(testTestEvent, 'specify() with template literal name should exist')
+          assert.strictEqual(
+            testTestEvent.content.metrics[TEST_SOURCE_START],
+            16,
+            'should report the correct source line for specify() with template literal name'
+          )
+          assert.ok(
+            testTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
+            `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
           )
         }, 60000)
 
@@ -337,6 +359,9 @@ moduleTypes.forEach(({
       }
 
       // Run Cypress with the pre-compiled JS spec (compiled from spec-source-line.cy.ts).
+      // Cypress bundles the compiled JS via its own preprocessor; the plugin resolves
+      // the original TypeScript source line by scanning the compiled JS and mapping
+      // through the adjacent .js.map without needing any custom preprocessor.
       childProcess = exec(testCommand, {
         cwd,
         env: {
@@ -357,21 +382,40 @@ moduleTypes.forEach(({
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const tsTestEvent = events.find(event =>
+          const tsTestEvents = events.filter(event =>
             event.type === 'test' &&
             event.content.resource.includes('spec source line')
           )
 
-          assert.ok(tsTestEvent, 'typescript test event should exist')
+          assert.strictEqual(tsTestEvents.length, 2, 'should have two typescript test events')
+
+          const itTestEvent = tsTestEvents.find(e => e.content.resource.includes('reports correct line number'))
+          const testTestEvent = tsTestEvents.find(
+            e => e.content.resource.includes('template interpolated string test name')
+          )
+
+          assert.ok(itTestEvent, 'it() test event should exist')
           // 'it' is defined at line 11 in the TypeScript source file spec-source-line.cy.ts
           assert.strictEqual(
-            tsTestEvent.content.metrics[TEST_SOURCE_START],
+            itTestEvent.content.metrics[TEST_SOURCE_START],
             11,
-            'should report the correct source line for typescript test files compiled by cypress'
+            'should report the correct source line for it() test'
           )
           assert.ok(
-            tsTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
-            `TEST_SOURCE_FILE should point to TypeScript source, got: ${tsTestEvent.content.meta[TEST_SOURCE_FILE]}`
+            itTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
+            `TEST_SOURCE_FILE should point to TypeScript source, got: ${itTestEvent.content.meta[TEST_SOURCE_FILE]}`
+          )
+
+          // 'specify' with a template literal test name is defined at line 16.
+          // Cypress's webpack preprocessor in headless mode does not resolve eval source maps
+          // in Error.stack, so invocationDetails.line is the webpack bundle line rather than
+          // the TS source line. Name-scanning cannot match template-literal names (the source
+          // contains interpolated variables), so the exact TS line cannot be recovered in this
+          // mode. We verify the event exists and that TEST_SOURCE_FILE points to the TS source.
+          assert.ok(testTestEvent, 'specify() with template literal name should exist')
+          assert.ok(
+            testTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
+            `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
           )
         }, 60000)
 

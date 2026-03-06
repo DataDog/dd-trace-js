@@ -6,9 +6,14 @@
 interface TypeScriptOnlyInterface {
   field: string
 }
-
+const SOME_VARIABLE = 'interpolated'
 describe('spec source line', () => {
   it('reports correct line number', () => {
+    cy.visit('/')
+      .get('.hello-world')
+      .should('have.text', 'Hello World')
+  })
+  specify(`template ${SOME_VARIABLE} string test name`, () => {
     cy.visit('/')
       .get('.hello-world')
       .should('have.text', 'Hello World')

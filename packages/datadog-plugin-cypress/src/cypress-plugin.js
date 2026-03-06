@@ -1,9 +1,5 @@
 'use strict'
 
-const path = require('path')
-
-const { resolveOriginalSourcePosition, resolveSourceLineForTest } = require('./source-map-utils')
-
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -95,6 +91,7 @@ const {
   RUNTIME_VERSION,
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
+const { resolveOriginalSourcePosition, resolveSourceLineForTest } = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -242,7 +239,6 @@ class CypressPlugin {
 
   finishedTestsByFile = {}
   testStatuses = {}
-
   isTestsSkipped = false
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
@@ -956,6 +952,9 @@ class CypressPlugin {
           this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
         }
         if (testSourceLine) {
+          // resolveSourceLineForTest maps the bundler line from invocationDetails back to the
+          // original source line by scanning the spec file for the test call by name and
+          // then applying the adjacent source map (if any). Falls back to testSourceLine as-is.
           const resolvedLine = testSuiteAbsolutePath && testItTitle
             ? resolveSourceLineForTest(testSuiteAbsolutePath, testSourceLine, testItTitle) ?? testSourceLine
             : testSourceLine
