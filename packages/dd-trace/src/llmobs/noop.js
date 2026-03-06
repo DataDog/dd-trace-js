@@ -1,8 +1,10 @@
 'use strict'
 
 class NoopLLMObs {
+  #tracer
+
   constructor (noopTracer) {
-    this._tracer = noopTracer
+    this.#tracer = noopTracer
   }
 
   get enabled () {
@@ -21,7 +23,7 @@ class NoopLLMObs {
 
     const name = options.name || options.kind || fn.name
 
-    return this._tracer.trace(name, options, fn)
+    return this.#tracer.trace(name, options, fn)
   }
 
   wrap (options = {}, fn) {
@@ -32,7 +34,7 @@ class NoopLLMObs {
 
     const name = options.name || options.kind || fn.name
 
-    return this._tracer.wrap(name, options, fn)
+    return this.#tracer.wrap(name, options, fn)
   }
 
   decorate (options = {}) {

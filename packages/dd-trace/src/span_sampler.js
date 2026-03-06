@@ -7,11 +7,13 @@ const SamplingRule = require('./sampling_rule')
  * Samples individual spans within a trace using span-level rules.
  */
 class SpanSampler {
+  #rules
+
   /**
    * @param {{ spanSamplingRules?: Array<import('./sampling_rule')>|Array<Record<string, unknown>> }} [config]
    */
   constructor ({ spanSamplingRules = [] } = {}) {
-    this._rules = spanSamplingRules.map(SamplingRule.from)
+    this.#rules = spanSamplingRules.map(SamplingRule.from)
   }
 
   /**
@@ -21,7 +23,7 @@ class SpanSampler {
    * @returns {import('./sampling_rule')|undefined}
    */
   findRule (context) {
-    for (const rule of this._rules) {
+    for (const rule of this.#rules) {
       // Rule is a special object with a .match() property.
       // It has nothing to do with a regular expression.
       // eslint-disable-next-line unicorn/prefer-regexp-test

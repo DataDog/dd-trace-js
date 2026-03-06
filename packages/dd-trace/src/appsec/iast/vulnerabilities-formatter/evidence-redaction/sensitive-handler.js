@@ -18,33 +18,37 @@ const urlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyz
 const REDACTED_SOURCE_BUFFER = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 class SensitiveHandler {
-  constructor () {
-    this._namePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionNamePattern']), 'gmi')
-    this._valuePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionValuePattern']), 'gmi')
+  #namePattern
+  #valuePattern
+  #sensitiveAnalyzers
 
-    this._sensitiveAnalyzers = new Map()
-    this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, commandSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.HARDCODED_PASSWORD, (evidence) => {
-      return hardcodedPasswordAnalyzer(evidence, this._valuePattern)
+  constructor () {
+    this.#namePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionNamePattern']), 'gmi')
+    this.#valuePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionValuePattern']), 'gmi')
+
+    this.#sensitiveAnalyzers = new Map()
+    this.#sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.COMMAND_INJECTION, commandSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.HARDCODED_PASSWORD, (evidence) => {
+      return hardcodedPasswordAnalyzer(evidence, this.#valuePattern)
     })
-    this._sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.TEMPLATE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.UNTRUSTED_DESERIALIZATION, taintedRangeBasedSensitiveAnalyzer)
-    this._sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.LDAP_INJECTION, ldapSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.NOSQL_MONGODB_INJECTION, jsonSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.SQL_INJECTION, sqlSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.SSRF, urlSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.TEMPLATE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.UNTRUSTED_DESERIALIZATION, taintedRangeBasedSensitiveAnalyzer)
+    this.#sensitiveAnalyzers.set(vulnerabilities.UNVALIDATED_REDIRECT, urlSensitiveAnalyzer)
   }
 
   isSensibleName (name) {
-    this._namePattern.lastIndex = 0
-    return this._namePattern.test(name)
+    this.#namePattern.lastIndex = 0
+    return this.#namePattern.test(name)
   }
 
   isSensibleValue (value) {
-    this._valuePattern.lastIndex = 0
-    return this._valuePattern.test(value)
+    this.#valuePattern.lastIndex = 0
+    return this.#valuePattern.test(value)
   }
 
   isSensibleSource (source) {
@@ -52,7 +56,7 @@ class SensitiveHandler {
   }
 
   scrubEvidence (vulnerabilityType, evidence, sourcesIndexes, sources) {
-    const sensitiveAnalyzer = this._sensitiveAnalyzers.get(vulnerabilityType)
+    const sensitiveAnalyzer = this.#sensitiveAnalyzers.get(vulnerabilityType)
     if (sensitiveAnalyzer) {
       const sensitiveRanges = sensitiveAnalyzer(evidence)
       if (evidence.ranges || sensitiveRanges?.length) {
@@ -275,7 +279,7 @@ class SensitiveHandler {
   setRedactionPatterns (redactionNamePattern, redactionValuePattern) {
     if (redactionNamePattern) {
       try {
-        this._namePattern = new RegExp(redactionNamePattern, 'gmi')
+        this.#namePattern = new RegExp(redactionNamePattern, 'gmi')
       } catch {
         log.warn('[ASM] Redaction name pattern is not valid')
       }
@@ -283,7 +287,7 @@ class SensitiveHandler {
 
     if (redactionValuePattern) {
       try {
-        this._valuePattern = new RegExp(redactionValuePattern, 'gmi')
+        this.#valuePattern = new RegExp(redactionValuePattern, 'gmi')
       } catch {
         log.warn('[ASM] Redaction value pattern is not valid')
       }

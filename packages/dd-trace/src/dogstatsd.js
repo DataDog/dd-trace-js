@@ -23,24 +23,36 @@ const TYPE_HISTOGRAM = 'h'
  * @implements {DogStatsD}
  */
 class DogStatsDClient {
+  #httpOptions
+  #host
+  #family
+  #port
+  #prefix
+  #tags
+  #queue
+  #buffer
+  #offset
+  #udp4
+  #udp6
+
   constructor (options = {}) {
     if (options.metricsProxyUrl) {
-      this._httpOptions = {
+      this.#httpOptions = {
         url: options.metricsProxyUrl.toString(),
         path: '/dogstatsd/v2/proxy',
       }
     }
 
-    this._host = options.host || defaults['dogstatsd.hostname']
-    this._family = isIP(this._host)
-    this._port = options.port || defaults['dogstatsd.port']
-    this._prefix = options.prefix || ''
-    this._tags = options.tags || []
-    this._queue = []
-    this._buffer = ''
-    this._offset = 0
-    this._udp4 = this._socket('udp4')
-    this._udp6 = this._socket('udp6')
+    this.#host = options.host || defaults['dogstatsd.hostname']
+    this.#family = isIP(this.#host)
+    this.#port = options.port || defaults['dogstatsd.port']
+    this.#prefix = options.prefix || ''
+    this.#tags = options.tags || []
+    this.#queue = []
+    this.#buffer = ''
+    this.#offset = 0
+    this.#udp4 = this._socket('udp4')
+    this.#udp6 = this._socket('udp6')
   }
 
   increment (stat, value, tags) {
@@ -66,13 +78,13 @@ class DogStatsDClient {
   flush () {
     const queue = this._enqueue()
 
-    log.debug('Flushing %s metrics via', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
+    log.debug('Flushing %s metrics via', queue.length, this.#httpOptions ? 'HTTP' : 'UDP')
 
-    if (this._queue.length === 0) return
+    if (this.#queue.length === 0) return
 
-    this._queue = []
+    this.#queue = []
 
-    if (this._httpOptions) {
+    if (this.#httpOptions) {
       this._sendHttp(queue)
     } else {
       this._sendUdp(queue)
@@ -81,7 +93,7 @@ class DogStatsDClient {
 
   _sendHttp (queue) {
     const buffer = Buffer.concat(queue)
-    request(buffer, this._httpOptions, (err) => {
+    request(buffer, this.#httpOptions, (err) => {
       if (err) {
         log.error('DogStatsDClient: HTTP error from agent: %s', err.message, err)
         if (err.status === 404) {
@@ -89,7 +101,7 @@ class DogStatsDClient {
           // we're not getting a 200 from the proxy endpoint. If it's a 404,
           // then we know we'll never have the endpoint, so just clear out the
           // options. Either way, we can give UDP a try.
-          this._httpOptions = undefined
+          this.#httpOptions = undefined
         }
         this._sendUdp(queue)
       }
@@ -97,30 +109,30 @@ class DogStatsDClient {
   }
 
   _sendUdp (queue) {
-    if (this._family === 0) {
-      lookup(this._host, (err, address, family) => {
+    if (this.#family === 0) {
+      lookup(this.#host, (err, address, family) => {
         if (err) return log.error('DogStatsDClient: Host not found', err)
         this._sendUdpFromQueue(queue, address, family)
       })
     } else {
-      this._sendUdpFromQueue(queue, this._host, this._family)
+      this._sendUdpFromQueue(queue, this.#host, this.#family)
     }
   }
 
   _sendUdpFromQueue (queue, address, family) {
-    const socket = family === 6 ? this._udp6 : this._udp4
+    const socket = family === 6 ? this.#udp6 : this.#udp4
 
     for (const buffer of queue) {
       log.debug('Sending to DogStatsD: %s', buffer)
-      socket.send(buffer, 0, buffer.length, this._port, address)
+      socket.send(buffer, 0, buffer.length, this.#port, address)
     }
   }
 
   _add (stat, value, type, tags) {
-    let message = `${this._prefix + stat}:${value}|${type}`
+    let message = `${this.#prefix + stat}:${value}|${type}`
 
-    // Don't manipulate this._tags as it is still used
-    tags = tags ? [...this._tags, ...tags] : this._tags
+    // Don't manipulate this.#tags as it is still used
+    tags = tags ? [...this.#tags, ...tags] : this.#tags
 
     if (tags.length > 0) {
       message += `|#${tags.join(',')}`
@@ -136,22 +148,22 @@ class DogStatsDClient {
   _write (message) {
     const offset = Buffer.byteLength(message)
 
-    if (this._offset + offset > MAX_BUFFER_SIZE) {
+    if (this.#offset + offset > MAX_BUFFER_SIZE) {
       this._enqueue()
     }
 
-    this._offset += offset
-    this._buffer += message
+    this.#offset += offset
+    this.#buffer += message
   }
 
   _enqueue () {
-    if (this._offset > 0) {
-      this._queue.push(Buffer.from(this._buffer))
-      this._buffer = ''
-      this._offset = 0
+    if (this.#offset > 0) {
+      this.#queue.push(Buffer.from(this.#buffer))
+      this.#buffer = ''
+      this.#offset = 0
     }
 
-    return this._queue
+    return this.#queue
   }
 
   _socket (type) {
@@ -193,8 +205,13 @@ class DogStatsDClient {
 }
 
 class MetricsAggregationClient {
+  #client
+  #counters
+  #gauges
+  #histograms
+
   constructor (client) {
-    this._client = client
+    this.#client = client
 
     this.reset()
   }
@@ -204,18 +221,18 @@ class MetricsAggregationClient {
     this._captureGauges()
     this._captureHistograms()
 
-    this._client.flush()
+    this.#client.flush()
   }
 
   reset () {
-    this._counters = new Map()
-    this._gauges = new Map()
-    this._histograms = new Map()
+    this.#counters = new Map()
+    this.#gauges = new Map()
+    this.#histograms = new Map()
   }
 
   // TODO: Aggregate with a histogram and send the buckets to the client.
   distribution (name, value, tags) {
-    this._client.distribution(name, value, tags)
+    this.#client.distribution(name, value, tags)
   }
 
   boolean (name, value, tags) {
@@ -223,7 +240,7 @@ class MetricsAggregationClient {
   }
 
   histogram (name, value, tags) {
-    const node = this._ensureTree(this._histograms, name, tags, null)
+    const node = this._ensureTree(this.#histograms, name, tags, null)
 
     if (!node.value) {
       node.value = new Histogram()
@@ -238,14 +255,14 @@ class MetricsAggregationClient {
       tags = []
     }
 
-    const container = monotonic ? this._counters : this._gauges
+    const container = monotonic ? this.#counters : this.#gauges
     const node = this._ensureTree(container, name, tags, 0)
 
     node.value += count
   }
 
   gauge (name, value, tags) {
-    const node = this._ensureTree(this._gauges, name, tags, 0)
+    const node = this._ensureTree(this.#gauges, name, tags, 0)
 
     node.value = value
   }
@@ -259,21 +276,21 @@ class MetricsAggregationClient {
   }
 
   _captureGauges () {
-    this._captureTree(this._gauges, (node, name, tags) => {
-      this._client.gauge(name, node.value, tags)
+    this._captureTree(this.#gauges, (node, name, tags) => {
+      this.#client.gauge(name, node.value, tags)
     })
   }
 
   _captureCounters () {
-    this._captureTree(this._counters, (node, name, tags) => {
-      this._client.increment(name, node.value, tags)
+    this._captureTree(this.#counters, (node, name, tags) => {
+      this.#client.increment(name, node.value, tags)
     })
 
-    this._counters.clear()
+    this.#counters.clear()
   }
 
   _captureHistograms () {
-    this._captureTree(this._histograms, (node, name, tags) => {
+    this._captureTree(this.#histograms, (node, name, tags) => {
       let stats = node.value
 
       // Stats can contain garbage data when a value was never recorded.
@@ -281,14 +298,14 @@ class MetricsAggregationClient {
         stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
       }
 
-      this._client.gauge(`${name}.min`, stats.min, tags)
-      this._client.gauge(`${name}.max`, stats.max, tags)
-      this._client.increment(`${name}.sum`, stats.sum, tags)
-      this._client.increment(`${name}.total`, stats.sum, tags)
-      this._client.gauge(`${name}.avg`, stats.avg, tags)
-      this._client.increment(`${name}.count`, stats.count, tags)
-      this._client.gauge(`${name}.median`, stats.median, tags)
-      this._client.gauge(`${name}.95percentile`, stats.p95, tags)
+      this.#client.gauge(`${name}.min`, stats.min, tags)
+      this.#client.gauge(`${name}.max`, stats.max, tags)
+      this.#client.increment(`${name}.sum`, stats.sum, tags)
+      this.#client.increment(`${name}.total`, stats.sum, tags)
+      this.#client.gauge(`${name}.avg`, stats.avg, tags)
+      this.#client.increment(`${name}.count`, stats.count, tags)
+      this.#client.gauge(`${name}.median`, stats.median, tags)
+      this.#client.gauge(`${name}.95percentile`, stats.p95, tags)
 
       node.value.reset()
     })

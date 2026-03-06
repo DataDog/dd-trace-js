@@ -29,10 +29,12 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
   static id = 'langchain'
   static prefix = 'tracing:apm:langchain:invoke'
 
+  #handlers
+
   constructor () {
     super(...arguments)
 
-    this._handlers = {
+    this.#handlers = {
       chain: new ChainHandler(this._tagger),
       chat_model: new ChatModelHandler(this._tagger),
       llm: new LlmHandler(this._tagger),
@@ -51,7 +53,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const kind = this.getKind(ctx.type, modelProvider)
 
     const instance = ctx.instance || ctx.self
-    const handler = this._handlers[ctx.type]
+    const handler = this.#handlers[ctx.type]
     const name = handler?.getName({ span, instance })
 
     return {
@@ -69,7 +71,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     const type = ctx.type = this.constructor.lcType // langchain operation type (oneof chain,chat_model,llm,embedding)
 
-    if (!Object.keys(this._handlers).includes(type)) {
+    if (!Object.keys(this.#handlers).includes(type)) {
       log.warn('Unsupported LangChain operation type:', type)
       return
     }
@@ -82,7 +84,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const options = ctx.args?.[1]
     const results = ctx.result
 
-    this._handlers[type].setMetaTags({ span, inputs, results, options, integrationName })
+    this.#handlers[type].setMetaTags({ span, inputs, results, options, integrationName })
   }
 
   setMetadata (span, provider) {

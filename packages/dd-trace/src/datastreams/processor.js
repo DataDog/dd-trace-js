@@ -49,17 +49,21 @@ class StatsPoint {
 }
 
 class Backlog {
+  #tags
+  #hash
+  #offset
+
   constructor ({ offset, ...tags }) {
-    this._tags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`)
-    this._hash = this._tags.join(',')
-    this._offset = offset
+    this.#tags = Object.keys(tags).sort().map(key => `${key}:${tags[key]}`)
+    this.#hash = this.#tags.join(',')
+    this.#offset = offset
   }
 
-  get hash () { return this._hash }
+  get hash () { return this.#hash }
 
-  get offset () { return this._offset }
+  get offset () { return this.#offset }
 
-  get tags () { return this._tags }
+  get tags () { return this.#tags }
 
   encode () {
     return {
@@ -126,6 +130,8 @@ class TimeBuckets extends Map {
 }
 
 class DataStreamsProcessor {
+  #schemaSamplers
+
   constructor ({
     dsmEnabled,
     hostname,
@@ -152,7 +158,7 @@ class DataStreamsProcessor {
     this.version = version || ''
     this.sequence = 0
     this.flushInterval = flushInterval
-    this._schemaSamplers = {}
+    this.#schemaSamplers = {}
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
@@ -333,22 +339,22 @@ class DataStreamsProcessor {
   trySampleSchema (topic) {
     const nowMs = Date.now()
 
-    if (!this._schemaSamplers[topic]) {
-      this._schemaSamplers[topic] = new SchemaSampler()
+    if (!this.#schemaSamplers[topic]) {
+      this.#schemaSamplers[topic] = new SchemaSampler()
     }
 
-    const sampler = this._schemaSamplers[topic]
+    const sampler = this.#schemaSamplers[topic]
     return sampler.trySample(nowMs)
   }
 
   canSampleSchema (topic) {
     const nowMs = Date.now()
 
-    if (!this._schemaSamplers[topic]) {
-      this._schemaSamplers[topic] = new SchemaSampler()
+    if (!this.#schemaSamplers[topic]) {
+      this.#schemaSamplers[topic] = new SchemaSampler()
     }
 
-    const sampler = this._schemaSamplers[topic]
+    const sampler = this.#schemaSamplers[topic]
     return sampler.canSample(nowMs)
   }
 

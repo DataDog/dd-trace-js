@@ -11,8 +11,10 @@ const mapping = {
 }
 
 class ConsoleLogger {
+  #level
+
   constructor (options = {}) {
-    this._level = mapping[options.level] || mapping.error
+    this.#level = mapping[options.level] || mapping.error
   }
 
   debug (message) {
@@ -32,7 +34,7 @@ class ConsoleLogger {
   }
 
   _log (level, message) {
-    if (mapping[level] > this._level) return
+    if (mapping[level] > this.#level) return
 
     console[level](message)
   }

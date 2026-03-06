@@ -11,10 +11,13 @@ const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointRemove = new Map()
 
 class TestVisDynamicInstrumentation {
+  #config
+  #readyPromise
+
   constructor (config) {
-    this._config = config
+    this.#config = config
     this.worker = null
-    this._readyPromise = new Promise(resolve => {
+    this.#readyPromise = new Promise(resolve => {
       this._onReady = resolve
     })
     this.breakpointSetChannel = new MessageChannel()
@@ -55,7 +58,7 @@ class TestVisDynamicInstrumentation {
   }
 
   isReady () {
-    return this._readyPromise
+    return this.#readyPromise
   }
 
   start () {
@@ -87,7 +90,7 @@ class TestVisDynamicInstrumentation {
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
         },
         workerData: {
-          config: getDebuggerConfig(this._config),
+          config: getDebuggerConfig(this.#config),
           parentThreadId,
           probePort: probeChannel.port1,
           configPort: configChannel.port1,

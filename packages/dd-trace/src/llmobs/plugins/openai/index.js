@@ -32,6 +32,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   static integration = 'openai'
   static prefix = 'tracing:apm:openai:request'
 
+  #tagger
+
   getLLMObsSpanRegisterOptions (ctx) {
     const resource = ctx.methodName
     const methodName = gateResource(normalizeOpenAIResourceName(resource))
@@ -77,12 +79,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     if (!error) {
       const metrics = this._extractMetrics(response)
-      this._tagger.tagMetrics(span, metrics)
+      this.#tagger.tagMetrics(span, metrics)
 
       const responseModel = response.model
       if (responseModel) {
         // override the model name with the response model (more accurate)
-        this._tagger.tagModelName(span, responseModel)
+        this.#tagger.tagModelName(span, responseModel)
       }
     }
   }
@@ -142,14 +144,14 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       encoding_format: parameters.encoding_format || 'float',
     }
     if (inputs.dimensions) metadata.dimensions = inputs.dimensions
-    this._tagger.tagMetadata(span, metadata)
+    this.#tagger.tagMetadata(span, metadata)
 
     let embeddingInputs = inputs.input
     if (!Array.isArray(embeddingInputs)) embeddingInputs = [embeddingInputs]
     const embeddingInput = embeddingInputs.map(input => ({ text: input }))
 
     if (error) {
-      this._tagger.tagEmbeddingIO(span, embeddingInput)
+      this.#tagger.tagEmbeddingIO(span, embeddingInput)
       return
     }
 
@@ -162,7 +164,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       embeddingOutput = `[${response.data.length} embedding(s) returned]`
     }
 
-    this._tagger.tagEmbeddingIO(span, embeddingInput, embeddingOutput)
+    this.#tagger.tagEmbeddingIO(span, embeddingInput, embeddingOutput)
   }
 
   _tagCompletion (span, inputs, response, error) {
@@ -173,8 +175,8 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
 
     const completionOutput = error ? [{ content: '' }] : response.choices.map(choice => ({ content: choice.text }))
 
-    this._tagger.tagLLMIO(span, completionInput, completionOutput)
-    this._tagger.tagMetadata(span, parameters)
+    this.#tagger.tagLLMIO(span, completionInput, completionOutput)
+    this.#tagger.tagMetadata(span, parameters)
   }
 
   _tagChatCompletion (span, inputs, response, error) {
@@ -188,17 +190,17 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       return obj
     }, {})
 
-    this._tagger.tagMetadata(span, metadata)
+    this.#tagger.tagMetadata(span, metadata)
 
     if (error) {
-      this._tagger.tagLLMIO(span, messages, [{ content: '' }])
+      this.#tagger.tagLLMIO(span, messages, [{ content: '' }])
       return
     }
 
     const outputMessages = []
     const { choices } = response
     if (!isIterable(choices)) {
-      this._tagger.tagLLMIO(span, messages, [{ content: '' }])
+      this.#tagger.tagLLMIO(span, messages, [{ content: '' }])
       return
     }
 
@@ -230,7 +232,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       }
     }
 
-    this._tagger.tagLLMIO(span, messages, outputMessages)
+    this.#tagger.tagLLMIO(span, messages, outputMessages)
   }
 
   #tagResponse (span, inputs, response, error) {
@@ -321,10 +323,10 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       return obj
     }, {})
 
-    this._tagger.tagMetadata(span, inputMetadata)
+    this.#tagger.tagMetadata(span, inputMetadata)
 
     if (error) {
-      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
+      this.#tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
       return
     }
 
@@ -417,7 +419,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       outputMessages.push({ role: 'assistant', content: '' })
     }
 
-    this._tagger.tagLLMIO(span, inputMessages, outputMessages)
+    this.#tagger.tagLLMIO(span, inputMessages, outputMessages)
 
     // Handle prompt tracking for reusable prompts
     if (inputs.prompt && response?.prompt) {
@@ -425,7 +427,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       if (id && version) {
         const normalizedVariables = normalizePromptVariables(inputs.prompt.variables)
         const chatTemplate = extractChatTemplateFromInstructions(response.instructions, normalizedVariables)
-        this._tagger.tagPrompt(span, {
+        this.#tagger.tagPrompt(span, {
           id,
           version,
           variables: normalizedVariables,
@@ -435,7 +437,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
         if (hasMultimodalInputs(inputs.prompt.variables)) {
           tags[PROMPT_MULTIMODAL] = 'true'
         }
-        this._tagger.tagSpanTags(span, tags)
+        this.#tagger.tagSpanTags(span, tags)
       }
     }
 
@@ -448,7 +450,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     if (response.truncation !== undefined) outputMetadata.truncation = response.truncation
     if (response.text !== undefined) outputMetadata.text = response.text
 
-    this._tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
+    this.#tagger.tagMetadata(span, outputMetadata) // update the metadata with the output metadata
   }
 }
 

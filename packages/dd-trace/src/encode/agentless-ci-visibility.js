@@ -33,6 +33,10 @@ function formatSpan (span) {
 }
 
 class AgentlessCiVisibilityEncoder extends AgentEncoder {
+  #eventCount
+  #eventsOffset
+  #isReset
+
   constructor (writer, { runtimeId, service, env }) {
     super(writer, INTAKE_SOFT_LIMIT)
     this.runtimeId = runtimeId
@@ -41,7 +45,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     // Used to keep track of the number of encoded events to update the
     // length of `payload.events` when calling `makePayload`
-    this._eventCount = 0
+    this.#eventCount = 0
 
     this.metadataTags = {}
 
@@ -259,9 +263,9 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   _encode (bytes, trace) {
-    if (this._isReset) {
+    if (this.#isReset) {
       this._encodePayloadStart(bytes)
-      this._isReset = false
+      this.#isReset = false
     }
     const startTime = Date.now()
 
@@ -274,7 +278,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     const isTestSessionTrace = !!testSessionEvents.length
     const events = isTestSessionTrace ? testSessionEvents : rawEvents
 
-    this._eventCount += events.length
+    this.#eventCount += events.length
 
     for (const event of events) {
       this._encodeEvent(bytes, event)
@@ -287,10 +291,10 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   makePayload () {
-    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT, { endpoint: 'test_cycle' }, this._eventCount)
+    distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT, { endpoint: 'test_cycle' }, this.#eventCount)
     const bytes = this._traceBytes
-    const eventsOffset = this._eventsOffset
-    const eventsCount = this._eventCount
+    const eventsOffset = this.#eventsOffset
+    const eventsCount = this.#eventCount
 
     bytes.buffer[eventsOffset] = 0xDD
     bytes.buffer[eventsOffset + 1] = eventsCount >> 24
@@ -354,14 +358,14 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     }
     this._encodeString(bytes, 'events')
     // Get offset of the events list to update the length of the array when calling `makePayload`
-    this._eventsOffset = bytes.length
+    this.#eventsOffset = bytes.length
     bytes.reserve(5)
   }
 
   reset () {
     this._reset()
-    this._eventCount = 0
-    this._isReset = true
+    this.#eventCount = 0
+    this.#isReset = true
   }
 }
 

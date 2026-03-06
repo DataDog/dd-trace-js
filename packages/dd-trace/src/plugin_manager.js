@@ -62,13 +62,19 @@ function getEnabled (Plugin) {
 
 // TODO this must always be a singleton.
 module.exports = class PluginManager {
-  constructor (tracer) {
-    this._tracer = tracer
-    this._tracerConfig = null
-    this._pluginsByName = {}
-    this._configsByName = {}
+  #tracer
+  #tracerConfig = null
+  #pluginsByName = {}
+  #configsByName = {}
+  #loadedSubscriber
 
-    this._loadedSubscriber = ({ name }) => {
+  constructor (tracer) {
+    this.#tracer = tracer
+    this.#tracerConfig = null
+    this.#pluginsByName = {}
+    this.#configsByName = {}
+
+    this.#loadedSubscriber = ({ name }) => {
       const Plugin = plugins[name]
 
       if (!Plugin || typeof Plugin !== 'function') return
@@ -76,31 +82,31 @@ module.exports = class PluginManager {
       this.loadPlugin(Plugin.id)
     }
 
-    loadChannel.subscribe(this._loadedSubscriber)
+    loadChannel.subscribe(this.#loadedSubscriber)
   }
 
   loadPlugin (name) {
     const Plugin = pluginClasses[name]
 
     if (!Plugin) return
-    if (!this._tracerConfig) return // TODO: don't wait for tracer to be initialized
+    if (!this.#tracerConfig) return // TODO: don't wait for tracer to be initialized
 
     // Check if this is a Test Optimization plugin and Test Optimization is not enabled
-    if (TEST_OPTIMIZATION_PLUGINS.has(name) && !this._tracerConfig.isCiVisibility) {
+    if (TEST_OPTIMIZATION_PLUGINS.has(name) && !this.#tracerConfig.isCiVisibility) {
       log.debug('Plugin "%s" is not initialized because Test Optimization mode is not enabled.', name)
       return
     }
 
-    if (!this._pluginsByName[name]) {
-      this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
+    if (!this.#pluginsByName[name]) {
+      this.#pluginsByName[name] = new Plugin(this.#tracer, this.#tracerConfig)
     }
-    const pluginConfig = this._configsByName[name] || {
-      enabled: this._tracerConfig.plugins !== false &&
+    const pluginConfig = this.#configsByName[name] || {
+      enabled: this.#tracerConfig.plugins !== false &&
         (!Plugin.experimental || isTrue(getEnabled(Plugin))),
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
-    this._pluginsByName[name].configure({
+    this.#pluginsByName[name].configure({
       ...this._getSharedConfig(name),
       ...pluginConfig,
     })
@@ -110,7 +116,7 @@ module.exports = class PluginManager {
   configurePlugin (name, pluginConfig) {
     const enabled = this._isEnabled(pluginConfig)
 
-    this._configsByName[name] = {
+    this.#configsByName[name] = {
       ...pluginConfig,
       enabled,
     }
@@ -120,8 +126,8 @@ module.exports = class PluginManager {
 
   // like instrumenter.enable()
   configure (config = {}) {
-    this._tracerConfig = config
-    this._tracer._nomenclature.configure(config)
+    this.#tracerConfig = config
+    this.#tracer._nomenclature.configure(config)
 
     for (const name in pluginClasses) {
       this.loadPlugin(name)
@@ -130,11 +136,11 @@ module.exports = class PluginManager {
 
   // This is basically just for testing. like intrumenter.disable()
   destroy () {
-    for (const name in this._pluginsByName) {
-      this._pluginsByName[name].configure({ enabled: false })
+    for (const name in this.#pluginsByName) {
+      this.#pluginsByName[name].configure({ enabled: false })
     }
 
-    loadChannel.unsubscribe(this._loadedSubscriber)
+    loadChannel.unsubscribe(this.#loadedSubscriber)
   }
 
   _isEnabled (pluginConfig) {
@@ -169,7 +175,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       experimental,
       resourceRenamingEnabled,
-    } = this._tracerConfig
+    } = this.#tracerConfig
 
     const sharedConfig = {
       codeOriginForSpans,

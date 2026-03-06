@@ -8,10 +8,12 @@ const TracingPlugin = require('../../plugins/tracing')
 const LLMObsTagger = require('../tagger')
 
 class LLMObsPlugin extends TracingPlugin {
+  #tagger
+
   constructor (...args) {
     super(...args)
 
-    this._tagger = new LLMObsTagger(this._tracerConfig, true)
+    this.#tagger = new LLMObsTagger(this._tracerConfig, true)
   }
 
   setLLMObsTags (ctx) {
@@ -43,7 +45,7 @@ class LLMObsPlugin extends TracingPlugin {
       llmobsStorage.enterWith({ ...parentStore, span })
       ctx.llmobs.parent = parentStore
 
-      this._tagger.registerLLMObsSpan(span, {
+      this.#tagger.registerLLMObsSpan(span, {
         parent: parentStore?.span,
         integration: this.constructor.integration,
         ...registerOptions,

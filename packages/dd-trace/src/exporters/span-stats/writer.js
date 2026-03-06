@@ -9,14 +9,16 @@ const request = require('../common/request')
 const log = require('../../log')
 
 class Writer extends BaseWriter {
+  #url
+
   constructor ({ url }) {
     super(...arguments)
-    this._url = url
+    this.#url = url
     this._encoder = new SpanStatsEncoder(this)
   }
 
   _sendPayload (data, _, done) {
-    makeRequest(data, this._url, (err, res) => {
+    makeRequest(data, this.#url, (err, res) => {
       if (err) {
         log.error('Error sending span stats', err)
         done()

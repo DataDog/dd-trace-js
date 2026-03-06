@@ -66,15 +66,24 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
+  #initialized = false
+  #pluginManager
+  #tracingInitialized = false
+  #flare
+  #modules
+  #profilerStarted
+  #tracer
+  #testApiManualPlugin
+
   constructor () {
     super()
 
-    this._initialized = false
+    this.#initialized = false
     this._nomenclature = nomenclature
-    this._pluginManager = new PluginManager(this)
+    this.#pluginManager = new PluginManager(this)
     this.dogstatsd = new NoopDogStatsDClient()
-    this._tracingInitialized = false
-    this._flare = new LazyModule(() => require('./flare'))
+    this.#tracingInitialized = false
+    this.#flare = new LazyModule(() => require('./flare'))
     this.setBaggageItem = setBaggageItem
     this.getBaggageItem = getBaggageItem
     this.getAllBaggageItems = getAllBaggageItems
@@ -82,7 +91,7 @@ class Tracer extends NoopProxy {
     this.removeAllBaggageItems = removeAllBaggageItems
 
     // these requires must work with esm bundler
-    this._modules = {
+    this.#modules = {
       appsec: new LazyModule(() => require('./appsec')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
@@ -95,9 +104,9 @@ class Tracer extends NoopProxy {
    * @override
    */
   init (options) {
-    if (this._initialized) return this
+    if (this.#initialized) return this
 
-    this._initialized = true
+    this.#initialized = true
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
@@ -114,7 +123,7 @@ class Tracer extends NoopProxy {
         require('./heap_snapshots').start(config)
       }
 
-      telemetry.start(config, this._pluginManager)
+      telemetry.start(config, this.#pluginManager)
 
       if (config.dogstatsd) {
         // Custom Metrics
@@ -145,10 +154,10 @@ class Tracer extends NoopProxy {
           if (!conf?.name?.startsWith('flare-log-level.')) return
 
           if (action === 'unapply') {
-            this._flare.disable()
+            this.#flare.disable()
           } else if (conf.config?.log_level) {
-            this._flare.enable(config)
-            this._flare.module.prepare(conf.config.log_level)
+            this.#flare.enable(config)
+            this.#flare.module.prepare(conf.config.log_level)
           }
         })
 
@@ -156,13 +165,13 @@ class Tracer extends NoopProxy {
           if (action === 'unapply' || !conf) return
           if (conf.task_type !== 'tracer_flare' || !conf.args) return
 
-          this._flare.enable(config)
-          this._flare.module.send(conf.args)
+          this.#flare.enable(config)
+          this.#flare.module.send(conf.args)
         })
 
-        if (this._modules.appsec) {
+        if (this.#modules.appsec) {
           const appsecRemoteConfig = require('./appsec/remote_config')
-          appsecRemoteConfig.enable(rc, config, this._modules.appsec)
+          appsecRemoteConfig.enable(rc, config, this.#modules.appsec)
         }
 
         if (config.dynamicInstrumentation.enabled) {
@@ -174,9 +183,9 @@ class Tracer extends NoopProxy {
       }
 
       if (config.profiling.enabled === 'true') {
-        this._profilerStarted = this._startProfiler(config)
+        this.#profilerStarted = this._startProfiler(config)
       } else {
-        this._profilerStarted = Promise.resolve(false)
+        this.#profilerStarted = Promise.resolve(false)
         if (config.profiling.enabled === 'auto') {
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
@@ -194,15 +203,15 @@ class Tracer extends NoopProxy {
 
       this.#updateTracing(config)
 
-      this._modules.rewriter.enable(config)
+      this.#modules.rewriter.enable(config)
 
       if (config.tracing && config.isManualApiEnabled) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
-        this._testApiManualPlugin = new TestApiManualPlugin(this)
+        this.#testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
         // This is the only place where we need to do this because the rest of the plugins
         // are lazily configured when the library is imported.
-        this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
+        this.#testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
         if (getValueFromEnvSources('DD_API_KEY')) {
@@ -254,44 +263,44 @@ class Tracer extends NoopProxy {
   #updateTracing (config) {
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
-        this._modules.appsec.enable(config)
+        this.#modules.appsec.enable(config)
       }
       if (config.llmobs.enabled) {
-        this._modules.llmobs.enable(config)
+        this.#modules.llmobs.enable(config)
       }
-      if (!this._tracingInitialized) {
+      if (!this.#tracingInitialized) {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
-        this._tracer = new DatadogTracer(config, prioritySampler)
-        this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        this.#tracer = new DatadogTracer(config, prioritySampler)
+        this.dataStreamsCheckpointer = this.#tracer.dataStreamsCheckpointer
+        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this.#tracer, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this.#tracer, this.#modules.llmobs, config)
         if (config.experimental?.aiguard?.enabled) {
-          lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
+          lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this.#tracer, config)
         }
-        this._tracingInitialized = true
+        this.#tracingInitialized = true
       }
       if (config.experimental.flaggingProvider.enabled) {
-        this._modules.openfeature.enable(config)
-        lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
+        this.#modules.openfeature.enable(config)
+        lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this.#tracer, config)
       }
       if (config.iast.enabled) {
-        this._modules.iast.enable(config, this._tracer)
+        this.#modules.iast.enable(config, this.#tracer)
       }
       // This needs to be after the IAST module is enabled
-    } else if (this._tracingInitialized) {
-      this._modules.appsec.disable()
-      this._modules.iast.disable()
-      this._modules.llmobs.disable()
-      this._modules.openfeature.disable()
+    } else if (this.#tracingInitialized) {
+      this.#modules.appsec.disable()
+      this.#modules.iast.disable()
+      this.#modules.llmobs.disable()
+      this.#modules.openfeature.disable()
     }
 
-    if (this._tracingInitialized) {
-      this._tracer.configure(config)
-      this._pluginManager.configure(config)
+    if (this.#tracingInitialized) {
+      this.#tracer.configure(config)
+      this.#pluginManager.configure(config)
       DynamicInstrumentation.configure(config)
-      setStartupLogPluginManager(this._pluginManager)
+      setStartupLogPluginManager(this.#pluginManager)
       startupLog()
     }
   }
@@ -325,18 +334,18 @@ class Tracer extends NoopProxy {
    * @override
    */
   profilerStarted () {
-    if (!this._profilerStarted) {
+    if (!this.#profilerStarted) {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
-    return this._profilerStarted
+    return this.#profilerStarted
   }
 
   /**
    * @override
    */
   use () {
-    this._pluginManager.configurePlugin(...arguments)
+    this.#pluginManager.configurePlugin(...arguments)
     return this
   }
 

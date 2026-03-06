@@ -16,8 +16,10 @@ const noopAIGuard = new NoopAIGuardSDK()
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {
+  #tracer
+
   constructor () {
-    this._tracer = noop
+    this.#tracer = noop
     this.appsec = noopAppsec
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
@@ -52,7 +54,7 @@ class NoopProxy {
 
     options = options || {}
 
-    return this._tracer.trace(name, options, fn)
+    return this.#tracer.trace(name, options, fn)
   }
 
   wrap (name, options, fn) {
@@ -65,32 +67,32 @@ class NoopProxy {
 
     options = options || {}
 
-    return this._tracer.wrap(name, options, fn)
+    return this.#tracer.wrap(name, options, fn)
   }
 
   setUrl () {
-    this._tracer.setUrl.apply(this._tracer, arguments)
+    this.#tracer.setUrl.apply(this.#tracer, arguments)
     return this
   }
 
   startSpan () {
-    return this._tracer.startSpan.apply(this._tracer, arguments)
+    return this.#tracer.startSpan.apply(this.#tracer, arguments)
   }
 
   inject () {
-    return this._tracer.inject.apply(this._tracer, arguments)
+    return this.#tracer.inject.apply(this.#tracer, arguments)
   }
 
   extract () {
-    return this._tracer.extract.apply(this._tracer, arguments)
+    return this.#tracer.extract.apply(this.#tracer, arguments)
   }
 
   scope () {
-    return this._tracer.scope.apply(this._tracer, arguments)
+    return this.#tracer.scope.apply(this.#tracer, arguments)
   }
 
   getRumData () {
-    return this._tracer.getRumData.apply(this._tracer, arguments)
+    return this.#tracer.getRumData.apply(this.#tracer, arguments)
   }
 
   setUser (user) {

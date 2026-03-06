@@ -123,6 +123,9 @@ function spanNameMapper (spanName, kind, attributes) {
 }
 
 class Span {
+  #parentTracer
+  #hasStatus
+
   constructor (
     parentTracer,
     context,
@@ -156,10 +159,9 @@ class Span {
       this.setAttributes(attributes)
     }
 
-    this._parentTracer = parentTracer
-    this._context = context
+    this.#parentTracer = parentTracer
 
-    this._hasStatus = false
+    this.#hasStatus = false
 
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
@@ -175,15 +177,15 @@ class Span {
 
   // Expected by OTel
   get resource () {
-    return this._parentTracer.resource
+    return this.#parentTracer.resource
   }
 
   get instrumentationLibrary () {
-    return this._parentTracer.instrumentationLibrary
+    return this.#parentTracer.instrumentationLibrary
   }
 
   get _spanProcessor () {
-    return this._parentTracer.getActiveSpanProcessor()
+    return this.#parentTracer.getActiveSpanProcessor()
   }
 
   get name () {
@@ -245,8 +247,8 @@ class Span {
   }
 
   setStatus ({ code, message }) {
-    if (!this.ended && !this._hasStatus && code) {
-      this._hasStatus = true
+    if (!this.ended && !this.#hasStatus && code) {
+      this.#hasStatus = true
       if (code === 2) {
         this._ddSpan.addTags({
           [ERROR_MESSAGE]: message,

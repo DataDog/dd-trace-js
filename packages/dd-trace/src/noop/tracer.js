@@ -4,15 +4,18 @@ const Scope = require('../noop/scope')
 const Span = require('./span')
 
 class NoopTracer {
+  #scope
+  #span
+
   constructor (config) {
-    this._scope = new Scope()
-    this._span = new Span(this)
+    this.#scope = new Scope()
+    this.#span = new Span(this)
   }
 
   configure (options) {}
 
   trace (name, options, fn) {
-    return fn(this._span, () => {})
+    return fn(this.#span, () => {})
   }
 
   wrap (name, options, fn) {
@@ -20,7 +23,7 @@ class NoopTracer {
   }
 
   scope () {
-    return this._scope
+    return this.#scope
   }
 
   getRumData () {
@@ -30,13 +33,13 @@ class NoopTracer {
   setUrl () {}
 
   startSpan (name, options) {
-    return this._span
+    return this.#span
   }
 
   inject (spanContext, format, carrier) {}
 
   extract (format, carrier) {
-    return this._span.context()
+    return this.#span.context()
   }
 
   setUser () {

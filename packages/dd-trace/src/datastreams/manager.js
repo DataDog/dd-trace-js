@@ -4,12 +4,14 @@ const { DsmPathwayCodec } = require('./pathway')
 const DataStreamsContext = require('./context')
 
 class DataStreamsManager {
+  #dataStreamsProcessor
+
   constructor (processor) {
-    this._dataStreamsProcessor = processor
+    this.#dataStreamsProcessor = processor
   }
 
   setCheckpoint (edgeTags, span, payloadSize = 0) {
-    const ctx = this._dataStreamsProcessor.setCheckpoint(
+    const ctx = this.#dataStreamsProcessor.setCheckpoint(
       edgeTags, span, DataStreamsContext.getDataStreamsContext(), payloadSize
     )
     DataStreamsContext.setDataStreamsContext(ctx)

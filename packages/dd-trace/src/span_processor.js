@@ -11,30 +11,38 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
+  #exporter
+  #prioritySampler
+  #config
+  #killAll = false
+  #stats
+  #spanSampler
+  #gitMetadataTagger
+  #processTags
+
   constructor (exporter, prioritySampler, config) {
-    this._exporter = exporter
-    this._prioritySampler = prioritySampler
-    this._config = config
-    this._killAll = false
+    this.#exporter = exporter
+    this.#prioritySampler = prioritySampler
+    this.#config = config
 
     // TODO: This should already have been calculated in `config.js`.
     if (config.stats?.enabled && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
-      this._stats = new SpanStatsProcessor(config)
+      this.#stats = new SpanStatsProcessor(config)
     }
 
-    this._spanSampler = new SpanSampler(config.sampler)
-    this._gitMetadataTagger = new GitMetadataTagger(config)
+    this.#spanSampler = new SpanSampler(config.sampler)
+    this.#gitMetadataTagger = new GitMetadataTagger(config)
 
-    this._processTags = config.propagateProcessTags?.enabled
+    this.#processTags = config.propagateProcessTags?.enabled
       ? processTags.serialized
       : false
   }
 
   sample (span) {
     const spanContext = span.context()
-    this._prioritySampler.sample(spanContext)
-    this._spanSampler.sample(spanContext)
+    this.#prioritySampler.sample(spanContext)
+    this.#spanSampler.sample(spanContext)
   }
 
   process (span) {
@@ -42,7 +50,7 @@ class SpanProcessor {
     const active = []
     const formatted = []
     const trace = spanContext._trace
-    const { flushMinSpans, tracing } = this._config
+    const { flushMinSpans, tracing } = this.#config
     const { started, finished } = trace
 
     if (trace.record === false) return
@@ -52,7 +60,7 @@ class SpanProcessor {
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this.sample(span)
-      this._gitMetadataTagger.tagGitMetadata(spanContext)
+      this.#gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true
 
@@ -60,21 +68,21 @@ class SpanProcessor {
         if (span._duration === undefined) {
           active.push(span)
         } else {
-          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+          const formattedSpan = spanFormat(span, isFirstSpanInChunk, this.#processTags)
           isFirstSpanInChunk = false
-          this._stats?.onSpanFinished(formattedSpan)
+          this.#stats?.onSpanFinished(formattedSpan)
           formatted.push(formattedSpan)
         }
       }
 
       if (formatted.length !== 0 && trace.isRecording !== false) {
-        this._exporter.export(formatted)
+        this.#exporter.export(formatted)
       }
 
       this._erase(trace, active)
     }
 
-    if (this._killAll) {
+    if (this.#killAll) {
       for (const startedSpan of started) {
         if (!startedSpan._finished) {
           startedSpan.finish()
@@ -84,7 +92,7 @@ class SpanProcessor {
   }
 
   killAll () {
-    this._killAll = true
+    this.#killAll = true
   }
 
   _erase (trace, active) {

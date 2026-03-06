@@ -25,9 +25,12 @@ const { storage } = require('../../../datadog-core')
  */
 
 class Subscription {
+  #channel
+  #handler
+
   constructor (event, handler) {
-    this._channel = dc.channel(event)
-    this._handler = (message, name) => {
+    this.#channel = dc.channel(event)
+    this.#handler = (message, name) => {
       const store = storage('legacy').getStore()
       if (!store || !store.noop) {
         handler(message, name)
@@ -37,19 +40,22 @@ class Subscription {
 
   enable () {
     // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.subscribe(event, handler)` instead
-    this._channel.subscribe(this._handler)
+    this.#channel.subscribe(this.#handler)
   }
 
   disable () {
     // TODO: Once Node.js v18.6.0 is no longer supported, we should use `dc.unsubscribe(event, handler)` instead
-    this._channel.unsubscribe(this._handler)
+    this.#channel.unsubscribe(this.#handler)
   }
 }
 
 class StoreBinding {
+  #channel
+  #transform
+
   constructor (event, transform) {
-    this._channel = dc.channel(event)
-    this._transform = data => {
+    this.#channel = dc.channel(event)
+    this.#transform = data => {
       const store = storage('legacy').getStore()
 
       return !store || !store.noop || (data && Object.hasOwn(data, 'currentStore'))
@@ -59,15 +65,19 @@ class StoreBinding {
   }
 
   enable () {
-    this._channel.bindStore(storage('legacy'), this._transform)
+    this.#channel.bindStore(storage('legacy'), this.#transform)
   }
 
   disable () {
-    this._channel.unbindStore(storage('legacy'))
+    this.#channel.unbindStore(storage('legacy'))
   }
 }
 
 module.exports = class Plugin {
+  #subscriptions = []
+  #bindings = []
+  #enabled = false
+
   /**
    * Create a new plugin instance.
    *
@@ -75,9 +85,6 @@ module.exports = class Plugin {
    * @param {object} tracerConfig Global tracer configuration object.
    */
   constructor (tracer, tracerConfig) {
-    this._subscriptions = []
-    this._bindings = []
-    this._enabled = false
     this._tracer = tracer
     this.config = {} // plugin-specific configuration, unset until .configure() is called
     this._tracerConfig = tracerConfig // global tracer configuration
@@ -130,7 +137,7 @@ module.exports = class Plugin {
         this.configure(false)
       }
     }
-    this._subscriptions.push(new Subscription(channelName, wrappedHandler))
+    this.#subscriptions.push(new Subscription(channelName, wrappedHandler))
   }
 
   /**
@@ -141,7 +148,7 @@ module.exports = class Plugin {
    * @returns {void}
    */
   addBind (channelName, transform) {
-    this._bindings.push(new StoreBinding(channelName, transform))
+    this.#bindings.push(new StoreBinding(channelName, transform))
   }
 
   /**
@@ -173,21 +180,21 @@ module.exports = class Plugin {
     }
     this.config = config
     if (config.enabled) {
-      if (!this._enabled) {
-        this._enabled = true
-        for (const sub of this._subscriptions) {
+      if (!this.#enabled) {
+        this.#enabled = true
+        for (const sub of this.#subscriptions) {
           sub.enable()
         }
-        for (const sub of this._bindings) {
+        for (const sub of this.#bindings) {
           sub.enable()
         }
       }
-    } else if (this._enabled) {
-      this._enabled = false
-      for (const sub of this._subscriptions) {
+    } else if (this.#enabled) {
+      this.#enabled = false
+      for (const sub of this.#subscriptions) {
         sub.disable()
       }
-      for (const sub of this._bindings) {
+      for (const sub of this.#bindings) {
         sub.disable()
       }
     }

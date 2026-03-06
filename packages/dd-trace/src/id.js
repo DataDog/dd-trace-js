@@ -14,12 +14,14 @@ let batch = 0
 
 // Internal representation of a trace or span ID.
 class Identifier {
+  #buffer
+
   /**
    * @param {string} value
    * @param {number} [radix]
    */
   constructor (value, radix = 16) {
-    this._buffer = radix === 16
+    this.#buffer = radix === 16
       ? createBuffer(value)
       : fromString(value, radix)
   }
@@ -30,32 +32,32 @@ class Identifier {
    */
   toString (radix = 16) {
     return radix === 16
-      ? toHexString(this._buffer)
-      : toNumberString(this._buffer, radix)
+      ? toHexString(this.#buffer)
+      : toNumberString(this.#buffer, radix)
   }
 
   /**
    * @returns {bigint}
    */
   toBigInt () {
-    return Buffer.from(this._buffer).readBigUInt64BE(0)
+    return Buffer.from(this.#buffer).readBigUInt64BE(0)
   }
 
   /**
    * @returns {number[] | Uint8Array}
    */
   toBuffer () {
-    return this._buffer
+    return this.#buffer
   }
 
   /**
    * @returns {number[] | Uint8Array}
    */
   toArray () {
-    if (this._buffer.length === 8) {
-      return this._buffer
+    if (this.#buffer.length === 8) {
+      return this.#buffer
     }
-    return this._buffer.slice(-8)
+    return this.#buffer.slice(-8)
   }
 
   /**
@@ -70,12 +72,12 @@ class Identifier {
    * @returns {boolean}
    */
   equals (other) {
-    const length = this._buffer.length
-    const otherLength = other._buffer.length
+    const length = this.#buffer.length
+    const otherLength = other.#buffer.length
 
     // Only compare the bytes available in both IDs.
     for (let i = length, j = otherLength; i >= 0 && j >= 0; i--, j--) {
-      if (this._buffer[i] !== other._buffer[j]) return false
+      if (this.#buffer[i] !== other.#buffer[j]) return false
     }
 
     return true

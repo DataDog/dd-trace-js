@@ -27,24 +27,26 @@ function getChannelLogLevel (level) {
 }
 
 class LogChannel {
+  #level
+
   constructor (level) {
-    this._level = getChannelLogLevel(level)
+    this.#level = getChannelLogLevel(level)
   }
 
   subscribe (logger) {
-    if (Level.trace >= this._level) {
+    if (Level.trace >= this.#level) {
       traceChannel.subscribe(logger.trace)
     }
-    if (Level.debug >= this._level) {
+    if (Level.debug >= this.#level) {
       debugChannel.subscribe(logger.debug)
     }
-    if (Level.info >= this._level) {
+    if (Level.info >= this.#level) {
       infoChannel.subscribe(logger.info)
     }
-    if (Level.warn >= this._level) {
+    if (Level.warn >= this.#level) {
       warnChannel.subscribe(logger.warn)
     }
-    if (Level.error >= this._level) {
+    if (Level.error >= this.#level) {
       errorChannel.subscribe(logger.error)
     }
   }

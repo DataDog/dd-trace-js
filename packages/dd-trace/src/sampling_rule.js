@@ -165,6 +165,9 @@ function resourceLocator (span) {
  * to decide whether a span should be sampled.
  */
 class SamplingRule {
+  #sampler
+  #limiter
+
   /**
    * @param {SamplingRuleConfig} [config]
    */
@@ -184,12 +187,12 @@ class SamplingRule {
       this.matchers.push(matcher(value, makeTagLocator(key)))
     }
 
-    this._sampler = new Sampler(sampleRate)
-    this._limiter = undefined
+    this.#sampler = new Sampler(sampleRate)
+    this.#limiter = undefined
     this.provenance = provenance
 
     if (Number.isFinite(maxPerSecond)) {
-      this._limiter = new RateLimiter(maxPerSecond)
+      this.#limiter = new RateLimiter(maxPerSecond)
     }
   }
 
@@ -207,7 +210,7 @@ class SamplingRule {
    * @returns {number}
    */
   get sampleRate () {
-    return this._sampler.rate()
+    return this.#sampler.rate()
   }
 
   /**
@@ -215,7 +218,7 @@ class SamplingRule {
    * @returns {number|undefined}
    */
   get effectiveRate () {
-    return this._limiter && this._limiter.effectiveRate()
+    return this.#limiter && this.#limiter.effectiveRate()
   }
 
   /**
@@ -223,7 +226,7 @@ class SamplingRule {
    * @returns {number|undefined}
    */
   get maxPerSecond () {
-    return this._limiter && this._limiter.rateLimit
+    return this.#limiter && this.#limiter.rateLimit
   }
 
   /**
@@ -252,12 +255,12 @@ class SamplingRule {
    * @returns {boolean} `true` if the span should be sampled, otherwise `false`.
    */
   sample (span) {
-    if (!this._sampler.isSampled(span)) {
+    if (!this.#sampler.isSampled(span)) {
       return false
     }
 
-    if (this._limiter) {
-      return this._limiter.isAllowed()
+    if (this.#limiter) {
+      return this.#limiter.isAllowed()
     }
 
     return true
