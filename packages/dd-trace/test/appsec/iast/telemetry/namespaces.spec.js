@@ -14,6 +14,7 @@ const {
 } = require('../../../../src/appsec/iast/telemetry/namespaces')
 
 const { Namespace } = require('../../../../src/telemetry/metrics')
+const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
 const REQUEST_TAINTED = 'request.tainted'
 const EXECUTED_SINK = 'executed.sink'
@@ -150,9 +151,11 @@ describe('IastNamespace', () => {
       const metric = namespace.getMetric('metric.name', ['key:tag1'])
 
       assert.notStrictEqual(metric, undefined)
-      assert.strictEqual(metric.metric, 'metric.name')
-      assert.strictEqual(metric.namespace, 'iast')
-      assert.strictEqual(metric.type, 'count')
+      assertObjectContains(metric, {
+        metric: 'metric.name',
+        namespace: 'iast',
+        type: 'count',
+      })
       assert.deepStrictEqual(metric.tags, ['key:tag1'])
     })
 
@@ -162,9 +165,11 @@ describe('IastNamespace', () => {
       const metric = namespace.getMetric('metric.name', { key: 'tag1' })
 
       assert.notStrictEqual(metric, undefined)
-      assert.strictEqual(metric.metric, 'metric.name')
-      assert.strictEqual(metric.namespace, 'iast')
-      assert.strictEqual(metric.type, 'count')
+      assertObjectContains(metric, {
+        metric: 'metric.name',
+        namespace: 'iast',
+        type: 'count',
+      })
       assert.deepStrictEqual(metric.tags, ['key:tag1'])
     })
 
@@ -174,9 +179,11 @@ describe('IastNamespace', () => {
       const metric = namespace.getMetric('metric.name', ['key:tag1'], 'distribution')
 
       assert.notStrictEqual(metric, undefined)
-      assert.strictEqual(metric.metric, 'metric.name')
-      assert.strictEqual(metric.namespace, 'iast')
-      assert.strictEqual(metric.type, 'distribution')
+      assertObjectContains(metric, {
+        metric: 'metric.name',
+        namespace: 'iast',
+        type: 'distribution',
+      })
       assert.deepStrictEqual(metric.tags, ['key:tag1'])
     })
 
