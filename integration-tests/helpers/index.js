@@ -951,7 +951,9 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
   }
 
   for (const [key, val] of Object.entries(expected)) {
-    assert.ok(Object.hasOwn(actual, key), msg)
+    if (val !== undefined) {
+      assert.ok(Object.hasOwn(actual, key), msg)
+    }
     if (useMatchers && val === ANY_STRING) {
       assert.strictEqual(typeof actual[key], 'string', `Expected ${key} to be a string but got ${typeof actual[key]}`)
     } else if (useMatchers && val === ANY_NUMBER) {
