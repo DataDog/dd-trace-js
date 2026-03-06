@@ -75,8 +75,6 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
   static integration = 'ai'
   static prefix = 'tracing:dd-trace:vercel-ai'
 
-  #tagger
-
   /**
    * The available tools within the runtime scope of this integration.
    * This essentially acts as a global registry for all tools made through the Vercel AI SDK.
@@ -155,8 +153,8 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const tags = getSpanTags(ctx)
 
     if (['embedding', 'llm'].includes(kind)) {
-      this.#tagger._setTag(span, MODEL_NAME, tags['ai.model.id'])
-      this.#tagger._setTag(span, MODEL_PROVIDER, getModelProvider(tags))
+      this._tagger._setTag(span, MODEL_NAME, tags['ai.model.id'])
+      this._tagger._setTag(span, MODEL_PROVIDER, getModelProvider(tags))
     }
 
     switch (operation) {
@@ -199,10 +197,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const embeddingsLength = getJsonStringValue(isSingleEmbedding ? embeddingsOutput : embeddingsOutput?.[0], []).length
     const output = `[${numberOfEmbeddings} embedding(s) returned with size ${embeddingsLength}]`
 
-    this.#tagger.tagTextIO(span, parsedInputs, output)
+    this._tagger.tagTextIO(span, parsedInputs, output)
 
     const metadata = getGenerationMetadata(tags)
-    this.#tagger.tagMetadata(span, metadata)
+    this._tagger.tagMetadata(span, metadata)
   }
 
   setEmbeddingTags (span, tags) {
@@ -216,10 +214,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const embeddingsLength = getJsonStringValue(embeddingsOutput?.[0], []).length
     const output = `[${numberOfEmbeddings} embedding(s) returned with size ${embeddingsLength}]`
 
-    this.#tagger.tagEmbeddingIO(span, parsedInputs, output)
+    this._tagger.tagEmbeddingIO(span, parsedInputs, output)
 
     const usage = tags['ai.usage.tokens']
-    this.#tagger.tagMetrics(span, {
+    this._tagger.tagMetrics(span, {
       inputTokens: usage,
       totalTokens: usage,
     })
@@ -234,11 +232,11 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     const output = tags['ai.response.object']
 
-    this.#tagger.tagTextIO(span, prompt, output)
+    this._tagger.tagTextIO(span, prompt, output)
 
     const metadata = getGenerationMetadata(tags) ?? {}
     metadata.schema = getJsonStringValue(tags['ai.schema'], {})
-    this.#tagger.tagMetadata(span, metadata)
+    this._tagger.tagMetadata(span, metadata)
   }
 
   setTextGenerationTags (span, tags) {
@@ -250,10 +248,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     const output = tags['ai.response.text']
 
-    this.#tagger.tagTextIO(span, prompt, output)
+    this._tagger.tagTextIO(span, prompt, output)
 
     const metadata = getGenerationMetadata(tags)
-    this.#tagger.tagMetadata(span, metadata)
+    this._tagger.tagMetadata(span, metadata)
   }
 
   /**
@@ -272,24 +270,24 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     const outputMessage = this.formatOutputMessage(tags, toolsForModel)
 
-    this.#tagger.tagLLMIO(span, parsedInputMessages, outputMessage)
+    this._tagger.tagLLMIO(span, parsedInputMessages, outputMessage)
 
     const metadata = getModelMetadata(tags)
-    this.#tagger.tagMetadata(span, metadata)
+    this._tagger.tagMetadata(span, metadata)
 
     const usage = getUsage(tags)
-    this.#tagger.tagMetrics(span, usage)
+    this._tagger.tagMetrics(span, usage)
   }
 
   setToolTags (span, tags) {
     const toolCallId = tags['ai.toolCall.id']
     const name = getToolNameFromTags(tags) ?? this.#toolCallIdsToName[toolCallId]
-    if (name) this.#tagger._setTag(span, NAME, name)
+    if (name) this._tagger._setTag(span, NAME, name)
 
     const input = tags['ai.toolCall.args']
     const output = tags['ai.toolCall.result']
 
-    this.#tagger.tagTextIO(span, input, output)
+    this._tagger.tagTextIO(span, input, output)
   }
 
   formatOutputMessage (tags, toolsForModel) {

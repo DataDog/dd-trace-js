@@ -24,6 +24,10 @@ class FormData extends Readable {
     }
   }
 
+  get _data () {
+    return this.#data
+  }
+
   size () {
     return this.#data.reduce((size, chunk) => size + chunk.length, 0)
   }

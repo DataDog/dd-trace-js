@@ -17,8 +17,6 @@ const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStrea
 const requestIdsToTokens = {}
 
 class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
-  #tagger
-
   constructor () {
     super(...arguments)
 
@@ -67,7 +65,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
 
     const parent = llmobsStore.getStore()?.span
-    this.#tagger.registerLLMObsSpan(span, {
+    this._tagger.registerLLMObsSpan(span, {
       parent,
       modelName: modelName.toLowerCase(),
       modelProvider: modelProvider.toLowerCase(),
@@ -83,13 +81,13 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       : extractTextAndResponseReason(response, modelProvider, modelName)
 
     // add metadata tags
-    this.#tagger.tagMetadata(span, {
+    this._tagger.tagMetadata(span, {
       temperature: Number.parseFloat(requestParams.temperature) || 0,
       max_tokens: Number.parseInt(requestParams.maxTokens) || 0,
     })
 
     // add I/O tags
-    this.#tagger.tagLLMIO(
+    this._tagger.tagLLMIO(
       span,
       requestParams.prompt,
       [{ content: textAndResponseReason.message, role: textAndResponseReason.role }]
@@ -100,7 +98,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       requestId: response.$metadata.requestId,
       usage: textAndResponseReason.usage,
     })
-    this.#tagger.tagMetrics(span, {
+    this._tagger.tagMetrics(span, {
       inputTokens,
       outputTokens,
       totalTokens,

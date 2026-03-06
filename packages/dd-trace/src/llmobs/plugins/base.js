@@ -16,6 +16,10 @@ class LLMObsPlugin extends TracingPlugin {
     this.#tagger = new LLMObsTagger(this._tracerConfig, true)
   }
 
+  get _tagger () {
+    return this.#tagger
+  }
+
   setLLMObsTags (ctx) {
     throw new Error('setLLMObsTags must be implemented by the subclass')
   }

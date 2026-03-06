@@ -130,8 +130,6 @@ class TimeBuckets extends Map {
 }
 
 class DataStreamsProcessor {
-  #schemaSamplers
-
   constructor ({
     dsmEnabled,
     hostname,
@@ -158,7 +156,7 @@ class DataStreamsProcessor {
     this.version = version || ''
     this.sequence = 0
     this.flushInterval = flushInterval
-    this.#schemaSamplers = {}
+    this._schemaSamplers = {}
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
@@ -339,22 +337,22 @@ class DataStreamsProcessor {
   trySampleSchema (topic) {
     const nowMs = Date.now()
 
-    if (!this.#schemaSamplers[topic]) {
-      this.#schemaSamplers[topic] = new SchemaSampler()
+    if (!this._schemaSamplers[topic]) {
+      this._schemaSamplers[topic] = new SchemaSampler()
     }
 
-    const sampler = this.#schemaSamplers[topic]
+    const sampler = this._schemaSamplers[topic]
     return sampler.trySample(nowMs)
   }
 
   canSampleSchema (topic) {
     const nowMs = Date.now()
 
-    if (!this.#schemaSamplers[topic]) {
-      this.#schemaSamplers[topic] = new SchemaSampler()
+    if (!this._schemaSamplers[topic]) {
+      this._schemaSamplers[topic] = new SchemaSampler()
     }
 
-    const sampler = this.#schemaSamplers[topic]
+    const sampler = this._schemaSamplers[topic]
     return sampler.canSample(nowMs)
   }
 

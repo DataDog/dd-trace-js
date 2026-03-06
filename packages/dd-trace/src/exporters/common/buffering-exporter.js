@@ -9,30 +9,30 @@ const { getAgentUrl } = require('../../agent/url')
  */
 class BufferingExporter {
   #traceBuffer = []
-  #isInitialized = false
-  #writer
-  #config
+  _isInitialized = false
+  _writer
+  _config
 
   constructor (tracerConfig) {
-    this.#config = tracerConfig
+    this._config = tracerConfig
     this._url = getAgentUrl(tracerConfig)
   }
 
   export (trace) {
-    if (!this.#isInitialized) {
+    if (!this._isInitialized) {
       this.#traceBuffer.push(trace)
       return
     }
     this._export(trace)
   }
 
-  _export (payload, writer = this.#writer, timerKey = '_timer') {
-    if (this.#config.isCiVisibility) {
+  _export (payload, writer = this._writer, timerKey = '_timer') {
+    if (this._config.isCiVisibility) {
       incrementCountMetric(TELEMETRY_EVENTS_ENQUEUED_FOR_SERIALIZATION, {}, payload.length)
     }
     writer.append(payload)
 
-    const { flushInterval } = this.#config
+    const { flushInterval } = this._config
 
     if (flushInterval === 0) {
       writer.flush()
