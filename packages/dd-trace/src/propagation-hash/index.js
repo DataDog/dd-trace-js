@@ -43,7 +43,7 @@ class PropagationHashManager {
     if (hash !== this.#containerTagsHash) {
       log.debug('Updating container tags hash: %s', hash)
       this.#containerTagsHash = hash
-      this.#invalidateCache()
+      this._invalidateCache()
     }
   }
 
@@ -58,7 +58,7 @@ class PropagationHashManager {
     if (this.#cachedHash) {
       return this.#cachedHash
     }
-    this.#computeHash()
+    this._computeHash()
     return this.#cachedHash
   }
 
@@ -100,7 +100,7 @@ class PropagationHashManager {
    * Compute the propagation hash using FNV-1a algorithm
    * @private
    */
-  #computeHash () {
+  _computeHash () {
     try {
       const processTags = require('../process-tags')
 
@@ -134,7 +134,7 @@ class PropagationHashManager {
    * Invalidate the cached hash
    * @private
    */
-  #invalidateCache () {
+  _invalidateCache () {
     this.#cachedHash = null
     this.#cachedHashString = null
     this.#cachedHashBase64 = null

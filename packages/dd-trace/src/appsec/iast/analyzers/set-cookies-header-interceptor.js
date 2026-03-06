@@ -9,25 +9,25 @@ class SetCookiesHeaderInterceptor extends Plugin {
     this.cookiesInRequest = new WeakMap()
 
     this.addSub('datadog:http:server:response:set-header:finish',
-      ({ name, value, res }) => this.#handleCookies(name, value, res))
+      ({ name, value, res }) => this._handleCookies(name, value, res))
 
     this.addSub('datadog:fastify:set-header:finish',
-      ({ name, value, res }) => this.#handleCookies(name, value, res))
+      ({ name, value, res }) => this._handleCookies(name, value, res))
   }
 
-  #handleCookies (name, value, res) {
+  _handleCookies (name, value, res) {
     if (name.toLowerCase() === 'set-cookie') {
       let allCookies = value
       if (typeof value === 'string') {
         allCookies = [value]
       }
-      const alreadyCheckedCookies = this.#getAlreadyCheckedCookiesInResponse(res)
+      const alreadyCheckedCookies = this._getAlreadyCheckedCookiesInResponse(res)
 
       let location
       for (const cookieString of allCookies) {
         if (!alreadyCheckedCookies.includes(cookieString)) {
           alreadyCheckedCookies.push(cookieString)
-          const parsedCookie = this.#parseCookie(cookieString, location)
+          const parsedCookie = this._parseCookie(cookieString, location)
           setCookieChannel.publish(parsedCookie)
           location = parsedCookie.location
         }
@@ -35,7 +35,7 @@ class SetCookiesHeaderInterceptor extends Plugin {
     }
   }
 
-  #parseCookie (cookieString, location) {
+  _parseCookie (cookieString, location) {
     const cookieParts = cookieString.split(';')
     const nameValueParts = cookieParts[0].split('=')
     const cookieName = nameValueParts[0]
@@ -45,7 +45,7 @@ class SetCookiesHeaderInterceptor extends Plugin {
     return { cookieName, cookieValue, cookieProperties, cookieString, location }
   }
 
-  #getAlreadyCheckedCookiesInResponse (res) {
+  _getAlreadyCheckedCookiesInResponse (res) {
     let alreadyCheckedCookies = this.cookiesInRequest.get(res)
     if (!alreadyCheckedCookies) {
       alreadyCheckedCookies = []

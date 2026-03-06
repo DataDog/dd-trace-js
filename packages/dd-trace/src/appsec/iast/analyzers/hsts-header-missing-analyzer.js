@@ -12,13 +12,13 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
 
   _isVulnerableFromRequestAndResponse (req, res, storedHeaders) {
     const headerValues = this._getHeaderValues(res, storedHeaders, HSTS_HEADER_NAME)
-    return this.#isHttpsProtocol(req) && (
+    return this._isHttpsProtocol(req) && (
       headerValues.length === 0 ||
-      headerValues.some(headerValue => !this.#isHeaderValid(headerValue))
+      headerValues.some(headerValue => !this._isHeaderValid(headerValue))
     )
   }
 
-  #isHeaderValid (headerValue) {
+  _isHeaderValid (headerValue) {
     headerValue = headerValue.trim()
 
     if (!headerValue?.startsWith(HEADER_VALID_PREFIX)) {
@@ -36,7 +36,7 @@ class HstsHeaderMissingAnalyzer extends MissingHeaderAnalyzer {
     return timestamp > 0 && timestamp == timestampString
   }
 
-  #isHttpsProtocol (req) {
+  _isHttpsProtocol (req) {
     return req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https'
   }
 }

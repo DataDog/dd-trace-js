@@ -50,13 +50,13 @@ class MsgpackChunk {
 
   reserve (size) {
     if (this.length + size > this.buffer.length) {
-      this.#resize(this._minSize * Math.ceil((this.length + size) / this._minSize))
+      this._resize(this._minSize * Math.ceil((this.length + size) / this._minSize))
     }
 
     this.length += size
   }
 
-  #resize (size) {
+  _resize (size) {
     const oldBuffer = this.buffer
 
     this.buffer = Buffer.allocUnsafe(size)

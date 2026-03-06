@@ -37,7 +37,7 @@ class BaseFFEWriter {
 
     this._config = config
     this._endpoint = endpoint
-    this._baseUrl = agentUrl ?? this.#getAgentUrl()
+    this._baseUrl = agentUrl ?? this._getAgentUrl()
     this._payloadSizeLimit = payloadSizeLimit
     this._eventSizeLimit = eventSizeLimit
     this._headers = headers || {}
@@ -110,7 +110,7 @@ class BaseFFEWriter {
     this._buffer = []
     this._bufferSize = 0
 
-    const payload = this.#encode(this.makePayload(events))
+    const payload = this._encode(this.makePayload(events))
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `${this.constructor.name} flushing payload: ${safeJSONStringify(payload)}`)
@@ -157,7 +157,7 @@ class BaseFFEWriter {
    * @private
    * @returns {URL} Constructs agent URL from config
    */
-  #getAgentUrl () {
+  _getAgentUrl () {
     return getAgentUrl(this._config)
   }
 
@@ -166,7 +166,7 @@ class BaseFFEWriter {
    * @param {Array<object>} payload - Payload to encode
    * @returns {string} JSON-stringified payload
    */
-  #encode (payload) {
+  _encode (payload) {
     return JSON.stringify(payload)
   }
 }

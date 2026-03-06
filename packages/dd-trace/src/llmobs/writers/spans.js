@@ -33,7 +33,7 @@ class LLMObsSpanWriter extends BaseWriter {
 
     if (shouldTruncate) {
       logger.warn(`Dropping event input/output because its size (${eventSizeBytes}) exceeds the 1MB event size limit`)
-      event = this.#truncateSpanEvent(event)
+      event = this._truncateSpanEvent(event)
       processedEventSizeBytes = Buffer.byteLength(JSON.stringify(event))
     }
 
@@ -57,7 +57,7 @@ class LLMObsSpanWriter extends BaseWriter {
     }))
   }
 
-  #truncateSpanEvent (event) {
+  _truncateSpanEvent (event) {
     event.meta.input = { value: DROPPED_VALUE_TEXT }
     event.meta.output = { value: DROPPED_VALUE_TEXT }
 

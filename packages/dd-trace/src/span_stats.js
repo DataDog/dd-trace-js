@@ -166,7 +166,7 @@ class SpanStatsProcessor {
   }
 
   onInterval () {
-    const serialized = this.#serializeBuckets()
+    const serialized = this._serializeBuckets()
     if (!serialized) return
 
     this.exporter.export({
@@ -194,7 +194,7 @@ class SpanStatsProcessor {
       .record(span)
   }
 
-  #serializeBuckets () {
+  _serializeBuckets () {
     const { bucketSizeNs } = this
     const serializedBuckets = []
 

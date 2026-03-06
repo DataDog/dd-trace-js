@@ -62,7 +62,7 @@ class Tracer {
     return this._tracerProvider.resource
   }
 
-  #createSpanContextFromParent (parentSpanContext) {
+  _createSpanContextFromParent (parentSpanContext) {
     return new SpanContext({
       traceId: parentSpanContext._traceId,
       spanId: id(),
@@ -75,12 +75,12 @@ class Tracer {
   }
 
   // Extracted method to create span context for a new span
-  #createSpanContextForNewSpan (context) {
+  _createSpanContextForNewSpan (context) {
     const { traceId, spanId, traceFlags, traceState } = context
-    return this.#convertOtelContextToDatadog(traceId, spanId, traceFlags, traceState)
+    return this._convertOtelContextToDatadog(traceId, spanId, traceFlags, traceState)
   }
 
-  #convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
+  _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
     const origin = null
     let samplingPriority = traceFlag
 
@@ -136,8 +136,8 @@ class Tracer {
     let spanContext
     if (parentSpanContext && api.trace.isSpanContextValid(parentSpanContext)) {
       spanContext = parentSpanContext._ddContext
-        ? this.#createSpanContextFromParent(parentSpanContext._ddContext)
-        : this.#createSpanContextForNewSpan(parentSpanContext)
+        ? this._createSpanContextFromParent(parentSpanContext._ddContext)
+        : this._createSpanContextForNewSpan(parentSpanContext)
     } else {
       spanContext = new SpanContext()
     }

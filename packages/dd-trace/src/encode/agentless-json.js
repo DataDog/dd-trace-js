@@ -65,7 +65,7 @@ function spanToJSON (span) {
  */
 class AgentlessJSONEncoder {
   constructor () {
-    this.#reset()
+    this._reset()
   }
 
   /**
@@ -106,13 +106,13 @@ class AgentlessJSONEncoder {
    */
   makePayload () {
     if (this._spans.length === 0) {
-      this.#reset()
+      this._reset()
       return Buffer.alloc(0)
     }
 
     try {
       const payload = JSON.stringify({ spans: this._spans })
-      this.#reset()
+      this._reset()
       return Buffer.from(payload, 'utf8')
     } catch (err) {
       log.error(
@@ -120,7 +120,7 @@ class AgentlessJSONEncoder {
         this._spans.length,
         err.message
       )
-      this.#reset()
+      this._reset()
       return Buffer.alloc(0)
     }
   }
@@ -129,10 +129,10 @@ class AgentlessJSONEncoder {
    * Resets the encoder state.
    */
   reset () {
-    this.#reset()
+    this._reset()
   }
 
-  #reset () {
+  _reset () {
     this._spans = []
     this._spanCount = 0
   }

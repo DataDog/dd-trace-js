@@ -79,18 +79,18 @@ class DatadogSpan {
 
     getIntegrationCounter('spans_created', this._integrationName).inc()
 
-    this._spanContext = this.#createContext(parent, fields)
+    this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
     this._spanContext._tags = tags
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
 
-    this._startTime = fields.startTime || this.#getTime()
+    this._startTime = fields.startTime || this._getTime()
 
     this._links = fields.links?.map(link => ({
       context: link.context._ddContext ?? link.context,
-      attributes: this.#sanitizeAttributes(link.attributes),
+      attributes: this._sanitizeAttributes(link.attributes),
     })) ?? []
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
@@ -185,12 +185,12 @@ class DatadogSpan {
   }
 
   setTag (key, value) {
-    this.#addTags({ [key]: value })
+    this._addTags({ [key]: value })
     return this
   }
 
   addTags (keyValueMap) {
-    this.#addTags(keyValueMap)
+    this._addTags(keyValueMap)
     return this
   }
 
@@ -210,7 +210,7 @@ class DatadogSpan {
 
     this._links.push({
       context: context._ddContext ?? context,
-      attributes: this.#sanitizeAttributes(attributes),
+      attributes: this._sanitizeAttributes(attributes),
     })
   }
 
@@ -239,12 +239,12 @@ class DatadogSpan {
     const event = { name }
     if (attributesOrStartTime) {
       if (typeof attributesOrStartTime === 'object') {
-        event.attributes = this.#sanitizeEventAttributes(attributesOrStartTime)
+        event.attributes = this._sanitizeEventAttributes(attributesOrStartTime)
       } else {
         startTime = attributesOrStartTime
       }
     }
-    event.startTime = startTime || this.#getTime()
+    event.startTime = startTime || this._getTime()
     this._events.push(event)
   }
 
@@ -273,7 +273,7 @@ class DatadogSpan {
       finishedRegistry.register(this, this._name)
     }
 
-    finishTime = Number.parseFloat(finishTime) || this.#getTime()
+    finishTime = Number.parseFloat(finishTime) || this._getTime()
 
     this._duration = finishTime - this._startTime
     this._spanContext._trace.finished.push(this)
@@ -282,7 +282,7 @@ class DatadogSpan {
     this._processor.process(this)
   }
 
-  #sanitizeAttributes (attributes = {}) {
+  _sanitizeAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
     const addArrayOrScalarAttributes = (key, maybeArray) => {
@@ -307,7 +307,7 @@ class DatadogSpan {
     return sanitizedAttributes
   }
 
-  #sanitizeEventAttributes (attributes = {}) {
+  _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
     for (const [key, value] of Object.entries(attributes)) {
@@ -330,7 +330,7 @@ class DatadogSpan {
     return sanitizedAttributes
   }
 
-  #createContext (parent, fields) {
+  _createContext (parent, fields) {
     let spanContext
     let startTime
 
@@ -389,13 +389,13 @@ class DatadogSpan {
     return spanContext
   }
 
-  #getTime () {
+  _getTime () {
     const { startTime, ticks } = this._spanContext._trace
 
     return startTime + now() - ticks
   }
 
-  #addTags (keyValuePairs) {
+  _addTags (keyValuePairs) {
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)

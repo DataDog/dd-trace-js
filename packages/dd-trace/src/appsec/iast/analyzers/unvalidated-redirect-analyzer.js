@@ -43,16 +43,16 @@ class UnvalidatedRedirectAnalyzer extends InjectionAnalyzer {
     if (!value) return false
 
     const ranges = getRanges(iastContext, value)
-    return ranges?.length > 0 && this.#hasUnsafeRange(ranges)
+    return ranges?.length > 0 && this._hasUnsafeRange(ranges)
   }
 
-  #hasUnsafeRange (ranges) {
+  _hasUnsafeRange (ranges) {
     return ranges.some(
-      range => this.#isVulnerableRange(range)
+      range => this._isVulnerableRange(range)
     )
   }
 
-  #isVulnerableRange (range) {
+  _isVulnerableRange (range) {
     return VULNERABLE_SOURCE_TYPES.has(range.iinfo.type)
   }
 

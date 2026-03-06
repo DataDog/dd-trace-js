@@ -87,7 +87,7 @@ class PrioritySampler {
    * @returns {boolean} True if the trace should be sampled based on priority.
    */
   isSampled (span) {
-    const priority = this.#getPriorityFromAuto(span)
+    const priority = this._getPriorityFromAuto(span)
     log.trace(span)
     return priority === USER_KEEP || priority === AUTO_KEEP
   }
@@ -102,7 +102,7 @@ class PrioritySampler {
   sample (span, auto = true) {
     if (!span) return
 
-    const context = this.#getContext(span)
+    const context = this._getContext(span)
     const root = context._trace.started[0]
 
     // TODO: remove the decision maker tag when priority is less than AUTO_KEEP
@@ -111,13 +111,13 @@ class PrioritySampler {
 
     log.trace(span, auto)
 
-    const tag = this.#getPriorityFromTags(context._tags, context)
+    const tag = this._getPriorityFromTags(context._tags, context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
       context._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
     } else if (auto) {
-      context._sampling.priority = this.#getPriorityFromAuto(root)
+      context._sampling.priority = this._getPriorityFromAuto(root)
     } else {
       return
     }
@@ -174,7 +174,7 @@ class PrioritySampler {
   setPriority (span, samplingPriority, product) {
     if (!span || !this.validate(samplingPriority)) return
 
-    const context = this.#getContext(span)
+    const context = this._getContext(span)
     const root = context._trace.started[0]
 
     if (!root) {
@@ -198,7 +198,7 @@ class PrioritySampler {
    * @param {DatadogSpan|DatadogSpanContext} span
    * @returns {DatadogSpanContext}
    */
-  #getContext (span) {
+  _getContext (span) {
     return typeof /** @type {DatadogSpan} */ (span).context === 'function'
       ? /** @type {DatadogSpan} */ (span).context()
       : /** @type {DatadogSpanContext} */ (span)
@@ -210,8 +210,8 @@ class PrioritySampler {
    * @param {DatadogSpan} span
    * @returns {SamplingPriority}
    */
-  #getPriorityFromAuto (span) {
-    const context = this.#getContext(span)
+  _getPriorityFromAuto (span) {
+    const context = this._getContext(span)
     const rule = this.#findRule(span)
 
     return rule
@@ -227,7 +227,7 @@ class PrioritySampler {
    * @param {DatadogSpanContext} _context
    * @returns {SamplingPriority|undefined}
    */
-  #getPriorityFromTags (tags, _context) {
+  _getPriorityFromTags (tags, _context) {
     if (Object.hasOwn(tags, MANUAL_KEEP) && tags[MANUAL_KEEP] !== false) {
       return USER_KEEP
     } else if (Object.hasOwn(tags, MANUAL_DROP) && tags[MANUAL_DROP] !== false) {
@@ -258,7 +258,7 @@ class PrioritySampler {
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
     if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
 
-    return rule.sample(context) && this.#isSampledByRateLimit(context)
+    return rule.sample(context) && this._isSampledByRateLimit(context)
       ? USER_KEEP
       : USER_REJECT
   }
@@ -270,7 +270,7 @@ class PrioritySampler {
    * @param {DatadogSpanContext} context
    * @returns {boolean}
    */
-  #isSampledByRateLimit (context) {
+  _isSampledByRateLimit (context) {
     // TODO: Change underscored properties to private ones.
     const allowed = this._limiter.isAllowed()
 

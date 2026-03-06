@@ -25,7 +25,7 @@ class AgentEncoder extends BaseEncoder {
 
     buffer[0] = ARRAY_OF_TWO
 
-    const offset = this.#writeStrings(buffer, 1)
+    const offset = this._writeStrings(buffer, 1)
     this._writeTraces(buffer, offset)
 
     this._reset()
@@ -39,9 +39,9 @@ class AgentEncoder extends BaseEncoder {
     for (let span of trace) {
       span = formatSpan(span)
       this._encodeByte(bytes, ARRAY_OF_TWELVE)
-      this.#encodeString(bytes, span.service)
-      this.#encodeString(bytes, span.name)
-      this.#encodeString(bytes, span.resource)
+      this._encodeString(bytes, span.service)
+      this._encodeString(bytes, span.name)
+      this._encodeString(bytes, span.resource)
       this._encodeId(bytes, span.trace_id)
       this._encodeId(bytes, span.span_id)
       this._encodeId(bytes, span.parent_id)
@@ -50,23 +50,23 @@ class AgentEncoder extends BaseEncoder {
       this._encodeInteger(bytes, span.error)
       this._encodeMap(bytes, span.meta || {})
       this._encodeMap(bytes, span.metrics || {})
-      this.#encodeString(bytes, span.type)
+      this._encodeString(bytes, span.type)
     }
   }
 
-  #encodeString (bytes, value = '') {
-    this.#cacheString(value)
+  _encodeString (bytes, value = '') {
+    this._cacheString(value)
     this._encodeInteger(bytes, this._stringMap[value])
   }
 
-  #cacheString (value) {
+  _cacheString (value) {
     if (!(value in this._stringMap)) {
       this._stringMap[value] = this._stringCount++
       this._stringBytes.write(value)
     }
   }
 
-  #writeStrings (buffer, offset) {
+  _writeStrings (buffer, offset) {
     offset = this._writeArrayPrefix(buffer, offset, this._stringCount)
     offset += this._stringBytes.buffer.copy(buffer, offset, 0, this._stringBytes.length)
 

@@ -30,7 +30,7 @@ class SpanStatsEncoder extends AgentEncoder {
     return buffer
   }
 
-  #encodeStat (bytes, stat) {
+  _encodeStat (bytes, stat) {
     this._encodeMapPrefix(bytes, 14)
 
     this._encodeString(bytes, 'Service')
@@ -78,7 +78,7 @@ class SpanStatsEncoder extends AgentEncoder {
     this._encodeString(bytes, stat.HTTPEndpoint)
   }
 
-  #encodeBucket (bytes, bucket) {
+  _encodeBucket (bytes, bucket) {
     this._encodeMapPrefix(bytes, 3)
 
     this._encodeString(bytes, 'Start')
@@ -90,7 +90,7 @@ class SpanStatsEncoder extends AgentEncoder {
     this._encodeString(bytes, 'Stats')
     this._encodeArrayPrefix(bytes, bucket.Stats)
     for (const stat of bucket.Stats) {
-      this.#encodeStat(bytes, stat)
+      this._encodeStat(bytes, stat)
     }
   }
 
@@ -109,7 +109,7 @@ class SpanStatsEncoder extends AgentEncoder {
     this._encodeString(bytes, 'Stats')
     this._encodeArrayPrefix(bytes, stats.Stats)
     for (const bucket of stats.Stats) {
-      this.#encodeBucket(bytes, bucket)
+      this._encodeBucket(bytes, bucket)
     }
 
     this._encodeString(bytes, 'Lang')
