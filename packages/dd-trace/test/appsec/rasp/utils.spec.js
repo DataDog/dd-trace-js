@@ -5,7 +5,6 @@ const assert = require('node:assert/strict')
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('RASP - utils.js', () => {
   let web, utils, stackTrace, config, telemetry
@@ -211,12 +210,10 @@ describe('RASP - utils.js', () => {
 
       const error = new utils.DatadogRaspAbortError(req, res, blockingAction, raspRule)
 
-      assertObjectContains(error, {
-        name: 'DatadogRaspAbortError',
-        message: 'DatadogRaspAbortError',
-        blockingAction,
-        raspRule,
-      })
+      assert.strictEqual(error.name, 'DatadogRaspAbortError')
+      assert.strictEqual(error.message, 'DatadogRaspAbortError')
+      assert.strictEqual(error.blockingAction, blockingAction)
+      assert.strictEqual(error.raspRule, raspRule)
       assert.strictEqual(Object.getOwnPropertyDescriptor(error, 'req')?.enumerable, false)
       assert.strictEqual(Object.getOwnPropertyDescriptor(error, 'res')?.enumerable, false)
     })

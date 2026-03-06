@@ -6,7 +6,6 @@ const { describe, it, beforeEach } = require('mocha')
 
 require('../../setup/core')
 const PoissonProcessSamplingFilter = require('../../../src/profiling/profilers/poisson')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('PoissonProcessSamplingFilter', () => {
   let nowValue
@@ -117,11 +116,9 @@ describe('PoissonProcessSamplingFilter', () => {
     const prevNextSamplingInstant = filter.nextSamplingInstant
     const event = { startTime: prevSamplingInstant - 10, duration: 1 }
     filter.filter(event)
-    assertObjectContains(filter, {
-      currentSamplingInstant: prevSamplingInstant,
-      nextSamplingInstant: prevNextSamplingInstant,
-      samplingInstantCount: 1,
-    })
+    assert.strictEqual(filter.currentSamplingInstant, prevSamplingInstant)
+    assert.strictEqual(filter.nextSamplingInstant, prevNextSamplingInstant)
+    assert.strictEqual(filter.samplingInstantCount, 1)
   })
 
   it('should cap endTime to now() if event endTime is in the future', () => {

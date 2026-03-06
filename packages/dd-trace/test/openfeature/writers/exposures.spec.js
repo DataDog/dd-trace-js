@@ -74,11 +74,9 @@ describe('OpenFeature Exposures Writer', () => {
 
   describe('constructor', () => {
     it('should initialize with correct defaults', () => {
-      assertObjectContains(writer, {
-        _interval: 1000,
-        _timeout: 5000,
-        _bufferLimit: 1000,
-      })
+      assert.strictEqual(writer._interval, 1000)
+      assert.strictEqual(writer._timeout, 5000)
+      assert.strictEqual(writer._bufferLimit, 1000)
       assert.deepStrictEqual(writer._buffer, [])
     })
 

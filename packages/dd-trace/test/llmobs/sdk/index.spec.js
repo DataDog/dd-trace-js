@@ -14,7 +14,6 @@ const { getConfigFresh } = require('../../helpers/config')
 const tracerVersion = require('../../../../../package.json').version
 const agent = require('../../plugins/agent')
 const { removeDestroyHandler } = require('../util')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 const injectCh = channel('dd-trace:span:inject')
 
@@ -108,14 +107,8 @@ describe('sdk', () => {
         mlApp: 'mlApp',
       })
 
-      assertObjectContains(disabledLLMObs, {
-        enabled: true,
-        _config: {
-          llmobs: {
-            mlApp: 'mlApp',
-          },
-        },
-      })
+      assert.strictEqual(disabledLLMObs.enabled, true)
+      assert.strictEqual(disabledLLMObs._config.llmobs.mlApp, 'mlApp')
       assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
 
       sinon.assert.called(llmobsModule.enable)

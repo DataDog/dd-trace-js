@@ -513,34 +513,18 @@ describe('OpenTelemetry Logs', () => {
     it('configures OTLP endpoint from environment variable', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4321/v1/logs'
       const { loggerProvider } = setupTracer()
-      assertObjectContains(loggerProvider, {
-        processor: {
-          exporter: {
-            options: {
-              path: '/v1/logs',
-              hostname: 'custom',
-              port: '4321',
-            },
-          },
-        },
-      })
+      assert.strictEqual(loggerProvider.processor.exporter.options.path, '/v1/logs')
+      assert.strictEqual(loggerProvider.processor.exporter.options.hostname, 'custom')
+      assert.strictEqual(loggerProvider.processor.exporter.options.port, '4321')
     })
 
     it('prioritizes logs-specific endpoint over generic endpoint', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318/v1/logs'
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://generic:4318/v1/logs'
       const { loggerProvider } = setupTracer()
-      assertObjectContains(loggerProvider, {
-        processor: {
-          exporter: {
-            options: {
-              path: '/v1/logs',
-              hostname: 'custom',
-              port: '4318',
-            },
-          },
-        },
-      })
+      assert.strictEqual(loggerProvider.processor.exporter.options.path, '/v1/logs')
+      assert.strictEqual(loggerProvider.processor.exporter.options.hostname, 'custom')
+      assert.strictEqual(loggerProvider.processor.exporter.options.port, '4318')
     })
 
     it('appends /v1/logs to endpoint if not provided', () => {
@@ -562,14 +546,8 @@ describe('OpenTelemetry Logs', () => {
       process.env.OTEL_EXPORTER_OTLP_LOGS_HEADERS = 'logs-specific=value,shared=logs'
       const { loggerProvider } = setupTracer()
       const exporter = loggerProvider.processor.exporter
-      assertObjectContains(exporter, {
-        options: {
-          headers: {
-            'logs-specific': 'value',
-            shared: 'logs',
-          },
-        },
-      })
+      assert.strictEqual(exporter.options.headers['logs-specific'], 'value')
+      assert.strictEqual(exporter.options.headers.shared, 'logs')
       assert.strictEqual(exporter.options.headers.generic, undefined)
     })
 

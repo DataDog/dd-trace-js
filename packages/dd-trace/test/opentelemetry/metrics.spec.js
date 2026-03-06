@@ -15,7 +15,6 @@ require('../setup/core')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('OpenTelemetry Meter Provider', () => {
   let originalEnv
@@ -721,17 +720,9 @@ describe('OpenTelemetry Meter Provider', () => {
       const { meterProvider } = setupTracer({
         OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4321/v1/metrics',
       })
-      assertObjectContains(meterProvider, {
-        reader: {
-          exporter: {
-            options: {
-              path: '/v1/metrics',
-              hostname: 'custom',
-              port: '4321',
-            },
-          },
-        },
-      })
+      assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
+      assert.strictEqual(meterProvider.reader.exporter.options.hostname, 'custom')
+      assert.strictEqual(meterProvider.reader.exporter.options.port, '4321')
     })
 
     it('prioritizes metrics-specific endpoint over generic endpoint', () => {
@@ -739,17 +730,9 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://custom:4318/v1/metrics',
         OTEL_EXPORTER_OTLP_ENDPOINT: 'http://generic:4318/v1/metrics',
       })
-      assertObjectContains(meterProvider, {
-        reader: {
-          exporter: {
-            options: {
-              path: '/v1/metrics',
-              hostname: 'custom',
-              port: '4318',
-            },
-          },
-        },
-      })
+      assert.strictEqual(meterProvider.reader.exporter.options.path, '/v1/metrics')
+      assert.strictEqual(meterProvider.reader.exporter.options.hostname, 'custom')
+      assert.strictEqual(meterProvider.reader.exporter.options.port, '4318')
     })
 
     it('appends /v1/metrics to endpoint if not provided', () => {
@@ -773,14 +756,8 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'metrics-specific=value,shared=metrics',
       })
       const exporter = meterProvider.reader.exporter
-      assertObjectContains(exporter, {
-        options: {
-          headers: {
-            'metrics-specific': 'value',
-            shared: 'metrics',
-          },
-        },
-      })
+      assert.strictEqual(exporter.options.headers['metrics-specific'], 'value')
+      assert.strictEqual(exporter.options.headers.shared, 'metrics')
       assert.strictEqual(exporter.options.headers.generic, undefined)
     })
   })

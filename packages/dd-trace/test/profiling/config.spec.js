@@ -78,13 +78,9 @@ describe('config', () => {
     assert.ok(config.profilers[0] instanceof SpaceProfiler)
     assert.ok(config.profilers[1] instanceof WallProfiler)
     assert.strictEqual(config.profilers[1].codeHotspotsEnabled(), samplingContextsAvailable)
-    assertObjectContains(config, {
-      v8ProfilerBugWorkaroundEnabled: true,
-      cpuProfilingEnabled: samplingContextsAvailable,
-      uploadCompression: {
-        method: zstdOrGzip,
-      },
-    })
+    assert.strictEqual(config.v8ProfilerBugWorkaroundEnabled, true)
+    assert.strictEqual(config.cpuProfilingEnabled, samplingContextsAvailable)
+    assert.strictEqual(config.uploadCompression.method, zstdOrGzip)
     assert.strictEqual(config.uploadCompression.level, undefined)
   })
 
@@ -107,13 +103,9 @@ describe('config', () => {
     assert.strictEqual(config.version, options.version)
     assert.ok(typeof config.tags === 'object' && config.tags !== null)
     assert.strictEqual(typeof config.tags.host, 'string')
-    assertObjectContains(config, {
-      tags: {
-        service: options.service,
-        version: options.version,
-      },
-      flushInterval: 65 * 1000,
-    })
+    assert.strictEqual(config.tags.service, options.service)
+    assert.strictEqual(config.tags.version, options.version)
+    assert.strictEqual(config.flushInterval, 65 * 1000)
     assert.ok(Array.isArray(config.exporters))
     assert.strictEqual(config.exporters.length, 2)
     assert.ok(config.exporters[0] instanceof AgentExporter)
@@ -280,13 +272,11 @@ describe('config', () => {
     }
 
     const config = new Config(options)
-    assertObjectContains(config, {
-      debugSourceMaps: true,
-      heapSamplingInterval: 1000,
-      pprofPrefix: 'test-prefix',
-      uploadTimeout: 10000,
-      timelineEnabled: false,
-    })
+    assert.strictEqual(config.debugSourceMaps, true)
+    assert.strictEqual(config.heapSamplingInterval, 1000)
+    assert.strictEqual(config.pprofPrefix, 'test-prefix')
+    assert.strictEqual(config.uploadTimeout, 10000)
+    assert.strictEqual(config.timelineEnabled, false)
 
     process.env = oldenv
   })
