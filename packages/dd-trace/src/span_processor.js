@@ -174,6 +174,10 @@ class SpanProcessor {
     trace.started = active
     trace.finished = []
   }
+
+  get _processTags () {
+    return this.#processTags
+  }
 }
 
 module.exports = SpanProcessor

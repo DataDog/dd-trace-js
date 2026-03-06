@@ -60,6 +60,10 @@ class DatadogTracer extends Tracer {
     return this.#dataStreamsProcessor.setOffset(offsetData)
   }
 
+  get _dataStreamsProcessor () {
+    return this.#dataStreamsProcessor
+  }
+
   trace (name, options, fn) {
     options = { childOf: this.scope().active(), ...options }
 
