@@ -219,6 +219,7 @@
 # Language Platform
 /* @DataDog/lang-platform-js
 
+/integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
