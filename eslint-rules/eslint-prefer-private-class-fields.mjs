@@ -15,6 +15,10 @@
  * - Only flags when ALL accesses to that name in the file are within the body of exactly
  *   one class. Any external access, access in a different class, or destructuring use
  *   (incompatible with private fields) suppresses the warning for that property name.
+ * - Never flags fields in exported classes. Exported classes may be subclassed in other
+ *   files, or their fields may be set/read directly by test code (e.g., `instance._field = x`
+ *   or `sinon.stub(instance, '_field')`). Cross-file access is invisible to this single-file
+ *   analysis rule, so exported classes are skipped entirely.
  *
  * Each occurrence (definition + every access) is reported as a separate problem, each with
  * its own single-node fix. This lets ESLint apply all fixes in one pass without range conflicts.
@@ -48,6 +52,23 @@ export default {
 
     /** @type {Set<string>} Property names that cannot be privatized (e.g. destructured) */
     const blocked = new Set()
+
+    /**
+     * Class names exported from this module (CJS module.exports or ESM export).
+     * Exported classes may be subclassed or have their fields accessed externally
+     * (e.g. from test files), so we skip privatization for their fields.
+     *
+     * @type {Set<string>}
+     */
+    const exportedClassNames = new Set()
+
+    /**
+     * Class nodes exported anonymously (e.g. `module.exports = class { ... }`
+     * or `export default class { ... }`).
+     *
+     * @type {Set<import('eslint').Rule.Node>}
+     */
+    const exportedClassNodes = new Set()
 
     /**
      * Walk up the parent chain to find the nearest enclosing ClassDeclaration or ClassExpression.
@@ -135,6 +156,67 @@ export default {
         blocked.add(name)
       },
 
+      /**
+       * Track CJS exports: `module.exports = ClassName` or `module.exports = class { ... }`.
+       * Exported classes may be subclassed or have fields accessed externally (tests, other
+       * modules), so their fields must not be privatized.
+       *
+       * @param {import('eslint').Rule.Node} node
+       */
+      AssignmentExpression (node) {
+        const { left, right } = node
+        if (
+          left.type !== 'MemberExpression' ||
+          left.computed ||
+          left.object.type !== 'Identifier' ||
+          left.object.name !== 'module' ||
+          left.property.type !== 'Identifier' ||
+          left.property.name !== 'exports'
+        ) return
+
+        if (right.type === 'Identifier') {
+          exportedClassNames.add(right.name)
+        } else if (right.type === 'ClassExpression' || right.type === 'ClassDeclaration') {
+          if (right.id) {
+            exportedClassNames.add(right.id.name)
+          } else {
+            exportedClassNodes.add(right)
+          }
+        }
+      },
+
+      /**
+       * Track ESM default exports: `export default ClassName` or `export default class { ... }`.
+       *
+       * @param {import('eslint').Rule.Node} node
+       */
+      ExportDefaultDeclaration (node) {
+        const { declaration } = node
+        if (declaration.type === 'Identifier') {
+          exportedClassNames.add(declaration.name)
+        } else if (declaration.type === 'ClassDeclaration' || declaration.type === 'ClassExpression') {
+          if (declaration.id) {
+            exportedClassNames.add(declaration.id.name)
+          } else {
+            exportedClassNodes.add(declaration)
+          }
+        }
+      },
+
+      /**
+       * Track ESM named exports: `export class ClassName { ... }` or `export { ClassName }`.
+       *
+       * @param {import('eslint').Rule.Node} node
+       */
+      ExportNamedDeclaration (node) {
+        if (node.declaration?.type === 'ClassDeclaration' && node.declaration.id) {
+          exportedClassNames.add(node.declaration.id.name)
+        }
+        for (const specifier of node.specifiers) {
+          exportedClassNames.add(specifier.local.name)
+        }
+      },
+
       'Program:exit' () {
         for (const [propName, sources] of propSources) {
           // Cannot be privatized: appears as a destructuring key
@@ -164,7 +246,14 @@ export default {
           if (!hasAccess) continue
 
           const [classNode] = classes
-          const className = classNode.id?.name ?? '<anonymous>'
+
+          // Skip exported classes: they may be subclassed or have fields accessed externally
+          // (e.g. from test files via `instance._field = x` or `sinon.stub(instance, '_field')`).
+          const classIdentifier = classNode.id?.name
+          if (classIdentifier && exportedClassNames.has(classIdentifier)) continue
+          if (exportedClassNodes.has(classNode)) continue
+
+          const className = classIdentifier ?? '<anonymous>'
           const privateName = propName.slice(1)
 
           // Report one error per occurrence. Each error has a single-node fix so ESLint

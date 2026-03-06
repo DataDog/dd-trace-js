@@ -1,7 +1,7 @@
 'use strict'
 
 class Scheduler {
-  #timer = null
+  _timer = null
 
   constructor (callback, interval) {
     this._callback = callback
@@ -9,21 +9,21 @@ class Scheduler {
   }
 
   start () {
-    if (this.#timer) return
+    if (this._timer) return
 
     this.runAfterDelay(0)
   }
 
   runAfterDelay (interval = this._interval) {
-    this.#timer = setTimeout(this._callback, interval, () => this.runAfterDelay())
+    this._timer = setTimeout(this._callback, interval, () => this.runAfterDelay())
 
-    this.#timer.unref()
+    this._timer.unref()
   }
 
   stop () {
-    clearTimeout(this.#timer)
+    clearTimeout(this._timer)
 
-    this.#timer = null
+    this._timer = null
   }
 }
 

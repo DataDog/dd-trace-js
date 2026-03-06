@@ -84,6 +84,31 @@ ruleTester.run('prefer-private-class-fields', /** @type {import('eslint').Rule.R
         _render() { return super._render() + ' child' }
       }
     `,
+
+    // Exported class (CJS module.exports) — may be subclassed or accessed externally.
+    `
+      class Exporter {
+        _url = 'http://example.com'
+        send() { return this._url }
+      }
+      module.exports = Exporter
+    `,
+
+    // Exported class (ESM export default) — same reason.
+    `
+      export default class Service {
+        _data = null
+        process() { return this._data }
+      }
+    `,
+
+    // Exported class (ESM named export) — same reason.
+    `
+      export class Registry {
+        _instance = null
+        getInstance() { return this._instance }
+      }
+    `,
   ],
 
   invalid: [
