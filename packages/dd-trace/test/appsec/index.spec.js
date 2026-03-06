@@ -284,7 +284,7 @@ describe('AppSec Index', function () {
 
       sinon.stub(RuleManager, 'clearAllRules')
 
-      assert.doesNotThrow(AppSec.disable)
+      AppSec.disable()
 
       sinon.assert.calledOnce(RuleManager.clearAllRules)
     })
