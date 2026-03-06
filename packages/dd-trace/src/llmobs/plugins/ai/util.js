@@ -124,7 +124,8 @@ function getModelMetadata (tags) {
     if (!isModelMetadata && !isTelemetryMetadata) continue
 
     if (isModelMetadata) {
-      const metadataKey = tag.split('.').pop()
+      const lastCommaPosition = tag.lastIndexOf('.')
+      const metadataKey = lastCommaPosition === -1 ? tag :  tag.slice(lastCommaPosition + 1)
       if (metadataKey && MODEL_METADATA_KEYS.has(metadataKey)) {
         modelMetadata[metadataKey] = tags[tag]
       }
