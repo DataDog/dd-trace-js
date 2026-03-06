@@ -359,6 +359,11 @@ class Tracer extends NoopProxy {
   get _pluginManager () {
     return this.#pluginManager
   }
+
+  // Exposed for test access (e.g. to force re-initialization with new env vars)
+  set _initialized (value) {
+    this.#initialized = value
+  }
 }
 
 module.exports = Tracer

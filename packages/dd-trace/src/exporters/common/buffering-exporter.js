@@ -44,6 +44,10 @@ class BufferingExporter {
     }
   }
 
+  get _traceBuffer () {
+    return this.#traceBuffer
+  }
+
   getUncodedTraces () {
     return this.#traceBuffer
   }

@@ -48,6 +48,7 @@ class LLMObs extends NoopLLMObs {
 
   // Exposed for test access
   get _tracer () { return this.#tracer }
+  get _tagger () { return this.#tagger }
   get _config () { return this.#config }
 
   // Exposed for test access
