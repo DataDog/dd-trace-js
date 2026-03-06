@@ -361,6 +361,10 @@ class Tracer extends NoopProxy {
   }
 
   // Exposed for test access (e.g. to force re-initialization with new env vars)
+  get _initialized () {
+    return this.#initialized
+  }
+
   set _initialized (value) {
     this.#initialized = value
   }
