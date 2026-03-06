@@ -3,17 +3,28 @@
 const limiter = require('../../../vendor/dist/limiter')
 
 class RateLimiter {
+  #rateLimit
+  #limiter
+  #tokensRequested = 0
+  #prevIntervalTokens = 0
+  #prevTokensRequested = 0
+
   /**
    * @param {number} rateLimit - Allowed units per interval. Negative means unlimited, 0 disables.
    * @param {'second'|'minute'|'hour'|'day'} [interval='second'] - Time window for the limiter.
    */
   constructor (rateLimit, interval = 'second') {
-    this._rateLimit = Number.parseInt(String(rateLimit))
+    this.#rateLimit = Number.parseInt(String(rateLimit))
     // The limiter constructor accepts a token count number and an interval string
-    this._limiter = new limiter.RateLimiter(this._rateLimit, interval)
-    this._tokensRequested = 0
-    this._prevIntervalTokens = 0
-    this._prevTokensRequested = 0
+    this.#limiter = new limiter.RateLimiter(this.#rateLimit, interval)
+  }
+
+  /**
+   * Maximum allowed units per interval.
+   * @returns {number}
+   */
+  get rateLimit () {
+    return this.#rateLimit
   }
 
   /**
@@ -23,16 +34,16 @@ class RateLimiter {
    * @returns {boolean}
    */
   isAllowed () {
-    const curIntervalStart = this._limiter.curIntervalStart
-    const curIntervalTokens = this._limiter.tokensThisInterval
+    const curIntervalStart = this.#limiter.curIntervalStart
+    const curIntervalTokens = this.#limiter.tokensThisInterval
     const allowed = this._isAllowed()
 
-    if (curIntervalStart === this._limiter.curIntervalStart) {
-      this._tokensRequested++
+    if (curIntervalStart === this.#limiter.curIntervalStart) {
+      this.#tokensRequested++
     } else {
-      this._prevIntervalTokens = curIntervalTokens
-      this._prevTokensRequested = this._tokensRequested
-      this._tokensRequested = 1
+      this.#prevIntervalTokens = curIntervalTokens
+      this.#prevTokensRequested = this.#tokensRequested
+      this.#tokensRequested = 1
     }
 
     return allowed
@@ -45,12 +56,12 @@ class RateLimiter {
    * @returns {number}
    */
   effectiveRate () {
-    if (this._rateLimit < 0) return 1
-    if (this._rateLimit === 0) return 0
-    if (this._tokensRequested === 0) return 1
+    if (this.#rateLimit < 0) return 1
+    if (this.#rateLimit === 0) return 0
+    if (this.#tokensRequested === 0) return 1
 
-    const allowed = this._prevIntervalTokens + this._limiter.tokensThisInterval
-    const requested = this._prevTokensRequested + this._tokensRequested
+    const allowed = this.#prevIntervalTokens + this.#limiter.tokensThisInterval
+    const requested = this.#prevTokensRequested + this.#tokensRequested
 
     return allowed / requested
   }
@@ -60,10 +71,10 @@ class RateLimiter {
    * @returns {boolean}
    */
   _isAllowed () {
-    if (this._rateLimit < 0) return true
-    if (this._rateLimit === 0) return false
+    if (this.#rateLimit < 0) return true
+    if (this.#rateLimit === 0) return false
 
-    return this._limiter.tryRemoveTokens(1)
+    return this.#limiter.tryRemoveTokens(1)
   }
 
   /**
@@ -71,11 +82,11 @@ class RateLimiter {
    * @returns {number}
    */
   _currentWindowRate () {
-    if (this._rateLimit < 0) return 1
-    if (this._rateLimit === 0) return 0
-    if (this._tokensRequested === 0) return 1
+    if (this.#rateLimit < 0) return 1
+    if (this.#rateLimit === 0) return 0
+    if (this.#tokensRequested === 0) return 1
 
-    return this._limiter.tokensThisInterval / this._tokensRequested
+    return this.#limiter.tokensThisInterval / this.#tokensRequested
   }
 }
 
