@@ -16,7 +16,6 @@ import globals from 'globals'
 
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
-import eslintNoDoesNotThrow from './eslint-rules/eslint-no-does-not-throw.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
@@ -376,7 +375,6 @@ export default [
         rules: {
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
-          'eslint-no-does-not-throw': eslintNoDoesNotThrow,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
           'eslint-require-export-exists': eslintRequireExportExists,
@@ -649,7 +647,10 @@ export default [
           'mocha',
         ],
       }],
-      'eslint-rules/eslint-no-does-not-throw': 'error',
+      'no-restricted-syntax': ['error', {
+        selector: "CallExpression:matches([callee.name='doesNotThrow'], [callee.property.name='doesNotThrow'])",
+        message: 'Do not use `assert.doesNotThrow()`. Execute the expression directly instead.',
+      }],
       'n/no-missing-require': 'off',
       'require-await': 'off',
     },
