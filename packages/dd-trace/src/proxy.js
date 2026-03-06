@@ -72,7 +72,6 @@ class Tracer extends NoopProxy {
   #flare
   #modules
   #profilerStarted
-  #tracer
   #testApiManualPlugin
 
   constructor () {
@@ -272,21 +271,21 @@ class Tracer extends NoopProxy {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
-        this.#tracer = new DatadogTracer(config, prioritySampler)
-        this.dataStreamsCheckpointer = this.#tracer.dataStreamsCheckpointer
-        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this.#tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this.#tracer, this.#modules.llmobs, config)
+        this._tracer = new DatadogTracer(config, prioritySampler)
+        this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
+        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this.#modules.llmobs, config)
         if (config.experimental?.aiguard?.enabled) {
-          lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this.#tracer, config)
+          lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this.#tracingInitialized = true
       }
       if (config.experimental.flaggingProvider.enabled) {
         this.#modules.openfeature.enable(config)
-        lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this.#tracer, config)
+        lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
       }
       if (config.iast.enabled) {
-        this.#modules.iast.enable(config, this.#tracer)
+        this.#modules.iast.enable(config, this._tracer)
       }
       // This needs to be after the IAST module is enabled
     } else if (this.#tracingInitialized) {
@@ -297,7 +296,7 @@ class Tracer extends NoopProxy {
     }
 
     if (this.#tracingInitialized) {
-      this.#tracer.configure(config)
+      this._tracer.configure(config)
       this.#pluginManager.configure(config)
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this.#pluginManager)
@@ -354,6 +353,11 @@ class Tracer extends NoopProxy {
    */
   get TracerProvider () {
     return require('./opentelemetry/tracer_provider')
+  }
+
+  // Exposed for external access by test infrastructure and internal modules (startup-log, telemetry, llmobs)
+  get _pluginManager () {
+    return this.#pluginManager
   }
 }
 
