@@ -758,7 +758,7 @@ class Config {
     unprocessedTarget['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL
     setBoolean(target, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     setBoolean(target, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
-    setBoolean(target, 'isKeepingCoverageConfiguration', isTrue(DD_TEST_TIA_KEEP_COV_CONFIG))
+    setBoolean(target, 'isKeepingCoverageConfiguration', DD_TEST_TIA_KEEP_COV_CONFIG)
     setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     warnIfPropagationStyleConflict(
