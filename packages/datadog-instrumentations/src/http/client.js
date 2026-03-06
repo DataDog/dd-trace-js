@@ -101,8 +101,10 @@ function setupResponseInstrumentation (ctx, res) {
             // A 'data' listener was added while we were in a readable+read() loop. In Node.js 24,
             // calling read() while the stream is transitioning to flowing mode crashes inside
             // fromList with "Cannot read properties of undefined (reading 'length')".
-            // Return null to safely exit the read loop; buffered data will drain via 'data' events
-            // now that the stream is in flowing mode.
+            // We return null here to safely exit the caller's read loop, but we also restore the
+            // original read() so that Node.js's internal drain mechanism (which calls read() to
+            // flush buffered data when switching to flowing mode) works correctly afterwards.
+            res.read = originalRead
             return null
           }
           dataReadStarted = true
