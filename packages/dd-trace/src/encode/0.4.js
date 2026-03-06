@@ -345,6 +345,7 @@ class AgentEncoder {
   }
 
   // Exposed for test access
+  get _debugEncoding () { return this.#debugEncoding }
   set _debugEncoding (value) { this.#debugEncoding = value }
 }
 
