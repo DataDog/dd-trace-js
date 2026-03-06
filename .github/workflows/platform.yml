@@ -227,7 +227,7 @@ jobs:
       - uses: ./.github/actions/push_to_test_optim
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ inputs.dd_api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-knex:
     runs-on: ubuntu-latest
