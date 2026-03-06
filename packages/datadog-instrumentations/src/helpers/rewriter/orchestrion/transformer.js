@@ -86,20 +86,22 @@ class Transformer {
   }
 
   #fromFunctionQuery (functionQuery) {
-    const { methodName, functionName, expressionName, className } = functionQuery
+    const { functionName, expressionName, className } = functionQuery
+    const method = functionQuery.methodName || functionQuery.privateMethodName
+    const type = functionQuery.privateMethodName ? 'PrivateIdentifier' : 'Identifier'
     const queries = []
 
     if (className) {
       queries.push(
         `[id.name="${className}"]`,
         `[id.name="${className}"] > ClassExpression`,
-        `[id.name="${className}"] > ClassBody > [key.name="${methodName}"] > [async]`,
-        `[id.name="${className}"] > ClassExpression > ClassBody > [key.name="${methodName}"] > [async]`
+        `[id.name="${className}"] > ClassBody > [key.name="${method}"][key.type=${type}] > [async]`,
+        `[id.name="${className}"] > ClassExpression > ClassBody > [key.name="${method}"][key.type=${type}] > [async]`
       )
-    } else if (methodName) {
+    } else if (method) {
       queries.push(
-        `ClassBody > [key.name="${methodName}"] > [async]`,
-        `Property[key.name="${methodName}"] > [async]`
+        `ClassBody > [key.name="${method}"][key.type=${type}] > [async]`,
+        `Property[key.name="${method}"][key.type=${type}] > [async]`
       )
     }
 

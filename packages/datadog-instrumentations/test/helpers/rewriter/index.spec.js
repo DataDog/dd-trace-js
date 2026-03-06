@@ -248,6 +248,19 @@ describe('check-require-cache', () => {
           },
           channelName: 'trace_function_index',
         },
+        {
+          module: {
+            name: 'test',
+            versionRange: '>=0.1',
+            filePath: 'trace-class-private-method.js',
+          },
+          functionQuery: {
+            className: 'Foo',
+            privateMethodName: 'internal',
+            kind: 'Sync',
+          },
+          channelName: 'trace_class_private_method',
+        },
       ],
     })
   })
@@ -486,5 +499,20 @@ describe('check-require-cache', () => {
     assert.ok(subs.start.called)
     assert.ok(subs.start.calledOnce)
     assert.equal(subs.start.firstCall.args[0].result, 'b')
+  })
+
+  it('should auto instrument using a class private method', () => {
+    const test = compileFile('trace-class-private-method')
+
+    subs = {
+      start: sinon.spy(),
+    }
+
+    ch = tracingChannel('orchestrion:test:trace_class_private_method')
+    ch.subscribe(subs)
+
+    test.test()
+
+    assert.ok(subs.start.called)
   })
 })
