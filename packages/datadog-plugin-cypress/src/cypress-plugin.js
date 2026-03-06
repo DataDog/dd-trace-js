@@ -91,7 +91,11 @@ const {
   RUNTIME_VERSION,
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
-const { resolveOriginalSourcePosition, resolveSourceLineForTest } = require('./source-map-utils')
+const {
+  resolveOriginalSourcePosition,
+  resolveSourceLineForTest,
+  shouldTrustInvocationDetailsLine,
+} = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -952,12 +956,15 @@ class CypressPlugin {
           this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
         }
         if (testSourceLine) {
-          // resolveSourceLineForTest maps the bundler line from invocationDetails back to the
-          // original source line by scanning the spec file for the test call by name and
-          // then applying the adjacent source map (if any). Falls back to testSourceLine as-is.
-          const resolvedLine = testSuiteAbsolutePath && testItTitle
-            ? resolveSourceLineForTest(testSuiteAbsolutePath, testSourceLine, testItTitle) ?? testSourceLine
-            : testSourceLine
+          let resolvedLine = testSourceLine
+          if (testSuiteAbsolutePath && testItTitle) {
+            // Use invocationDetails directly only for plain JS specs without source maps.
+            // Otherwise, resolve from the test declaration in the spec and map via source map.
+            const shouldTrustInvocationDetails = shouldTrustInvocationDetailsLine(testSuiteAbsolutePath, testSourceLine)
+            if (!shouldTrustInvocationDetails) {
+              resolvedLine = resolveSourceLineForTest(testSuiteAbsolutePath, testItTitle) ?? testSourceLine
+            }
+          }
           this.activeTestSpan.setTag(TEST_SOURCE_START, resolvedLine)
         }
         if (isNew) {

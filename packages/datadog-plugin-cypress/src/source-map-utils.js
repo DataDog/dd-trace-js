@@ -9,6 +9,30 @@ const BASE64_DECODE = new Uint8Array(128)
 for (let i = 0; i < BASE64_CHARS.length; i++) {
   BASE64_DECODE[BASE64_CHARS.charCodeAt(i)] = i
 }
+const TEST_DECLARATION_RE = /(?:it|test|specify)\s*\(\s*(?:'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"|`((?:\\.|[\s\S])*?)`)\s*,/g
+const SOURCE_MAP_CACHE = new Map()
+
+/**
+ * Whether a file path references JavaScript.
+ * @param {string} absoluteFilePath
+ * @returns {boolean}
+ */
+function isJavaScriptFile (absoluteFilePath) {
+  return absoluteFilePath.endsWith('.js') || absoluteFilePath.endsWith('.cjs') || absoluteFilePath.endsWith('.mjs')
+}
+
+/**
+ * Decide whether invocationDetails line can be trusted as final source line.
+ * @param {string} absoluteFilePath
+ * @param {number} testSourceLine
+ * @returns {boolean}
+ */
+function shouldTrustInvocationDetailsLine (absoluteFilePath, testSourceLine) {
+  if (!Number.isInteger(testSourceLine) || testSourceLine < 1) return false
+  if (!isJavaScriptFile(absoluteFilePath)) return false
+
+  return getCachedSourceMap(absoluteFilePath) === null
+}
 
 /**
  * Decode one VLQ-encoded integer from `str` at `cursor.pos`, advancing the cursor in place.
@@ -30,25 +54,26 @@ function decodeVLQ (str, cursor) {
 
 /**
  * Resolve a source path from a source map entry to an absolute file path.
- * Handles both regular relative paths and webpack:// virtual module paths.
+ * Handles regular relative paths and virtual URL-like source paths.
  * @param {string} mapDir - Directory of the source map (or the file containing the inline source map)
  * @param {string} sourceRoot - The `sourceRoot` field from the source map
  * @param {string} sourcePath - A single entry from the source map's `sources` array
  * @returns {string | null}
  */
 function resolveSourcePath (mapDir, sourceRoot, sourcePath) {
-  if (sourcePath.startsWith('webpack://')) {
-    // webpack://[namespace]/[path] — strip the "webpack://[namespace]" prefix.
-    // For local files, [path] is absolute (e.g. "/Users/…/spec.ts").
-    const afterProtocol = sourcePath.slice('webpack://'.length)
-    const slashIdx = afterProtocol.indexOf('/')
-    const withoutNamespace = slashIdx === -1 ? '' : afterProtocol.slice(slashIdx)
-    // Strip any query string appended by loaders (e.g. "?babel-loader!")
-    const cleanPath = withoutNamespace.replace(/\?.*$/, '')
-    return cleanPath && path.isAbsolute(cleanPath) ? cleanPath : null
+  const cleanSourcePath = sourcePath.replace(/[?#].*$/, '')
+  if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(cleanSourcePath)) {
+    // Virtual sources may use URL-like schemes (e.g. file://, webpack://, vite://).
+    // If they encode an absolute local path in the URL pathname, use it.
+    try {
+      const pathname = new URL(cleanSourcePath).pathname
+      return pathname && path.isAbsolute(pathname) ? pathname : null
+    } catch {
+      return null
+    }
   }
-  if (sourceRoot && sourceRoot.startsWith('webpack://')) {
-    // sourceRoot is a webpack:// URL — ignore it and resolve relative to mapDir
+  if (sourceRoot && /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(sourceRoot)) {
+    // URL-like sourceRoot values are virtual; resolve relative entries from mapDir.
     return path.resolve(mapDir, sourcePath)
   }
   return path.resolve(mapDir, sourceRoot || '', sourcePath)
@@ -79,6 +104,20 @@ function readSourceMap (absoluteFilePath) {
 }
 
 /**
+ * Read and cache source maps per file path. Cache stores parse result or null.
+ * @param {string} absoluteFilePath
+ * @returns {object | null}
+ */
+function getCachedSourceMap (absoluteFilePath) {
+  if (SOURCE_MAP_CACHE.has(absoluteFilePath)) {
+    return SOURCE_MAP_CACHE.get(absoluteFilePath)
+  }
+  const sourceMap = readSourceMap(absoluteFilePath)
+  SOURCE_MAP_CACHE.set(absoluteFilePath, sourceMap)
+  return sourceMap
+}
+
+/**
  * Given a generated file's absolute path and a generated line number, returns the
  * original source file path and line by reading the adjacent .map file or an inline
  * source map embedded in the file. Returns null when no source map is found or the
@@ -88,7 +127,7 @@ function readSourceMap (absoluteFilePath) {
  * @returns {{ sourceFile: string, line: number } | null}
  */
 function resolveOriginalSourcePosition (absoluteFilePath, generatedLine) {
-  const sourceMap = readSourceMap(absoluteFilePath)
+  const sourceMap = getCachedSourceMap(absoluteFilePath)
   if (!sourceMap) return null
   const { mappings, sources, sourceRoot } = sourceMap
   if (!mappings || !sources?.length) return null
@@ -159,104 +198,70 @@ function templateBodyToRegExp (templateBody) {
 }
 
 /**
- * Find the original source line for a test, resolving through the adjacent source map.
- *
- * Strategy:
- *  1. Try `testSourceLine` (from Cypress's invocationDetails) directly through the source
- *     map. This succeeds when invocationDetails.line happens to be the compiled-JS line
- *     rather than a bundler line.
- *  2. Fall back to scanning the spec file for the it()/test()/specify() call by name:
- *     a. Exact literal match (single/double/backtick quoted, no interpolation).
- *     b. Template-literal fuzzy match: `${…}` placeholders in the source become `.*?`
- *        wildcards that can match whatever the expression evaluated to at runtime.
- *     Then map through the source map (for pre-compiled JS) or return the found line
- *     directly (for .ts specs compiled on-the-fly by Cypress).
- *
+ * Count 1-indexed line number for a character index in `content`.
+ * @param {string} content
+ * @param {number} endIndex
+ * @returns {number}
+ */
+function lineNumberForIndex (content, endIndex) {
+  let line = 1
+  for (let i = 0; i < endIndex; i++) {
+    if (content.charCodeAt(i) === 10) line++
+  }
+  return line
+}
+
+/**
+ * Find the declaration line for a test name by scanning it()/test()/specify() calls.
+ * For template literals, `${...}` placeholders are fuzzy-matched against runtime values.
+ * @param {string} content
+ * @param {string} testName
+ * @returns {number | null}
+ */
+function findTestDeclarationLine (content, testName) {
+  TEST_DECLARATION_RE.lastIndex = 0
+  let match
+  while ((match = TEST_DECLARATION_RE.exec(content)) !== null) {
+    const singleQuoted = match[1]
+    const doubleQuoted = match[2]
+    const templateQuoted = match[3]
+    const isTemplate = templateQuoted !== undefined
+    const candidateName = singleQuoted ?? doubleQuoted ?? templateQuoted
+    if (!candidateName) continue
+
+    const doesMatch = isTemplate
+      ? templateBodyToRegExp(candidateName).test(testName)
+      : candidateName === testName
+    if (doesMatch) {
+      return lineNumberForIndex(content, match.index)
+    }
+  }
+  return null
+}
+
+/**
+ * Find the original source line for a test by scanning declaration name and
+ * mapping the matched generated line through a source map when available.
+ * For `.ts` specs, the matched line is already the source line.
  * @param {string} absoluteFilePath - Absolute path to the spec file (compiled JS or .ts)
- * @param {number} testSourceLine - Line as reported by Cypress's invocationDetails
  * @param {string} testName - The test name passed to `it()`, `test()`, or `specify()`
  * @returns {number | null} The resolved source line (1-indexed), or null
  */
-function resolveSourceLineForTest (absoluteFilePath, testSourceLine, testName) {
-  // Step 1: testSourceLine may already be the compiled JS line — try the source map directly
-  const directResolved = resolveOriginalSourcePosition(absoluteFilePath, testSourceLine)
-  if (directResolved) return directResolved.line
-
-  // Step 2: scan the file for the it() call by name
+function resolveSourceLineForTest (absoluteFilePath, testName) {
   let content
   try {
     content = fs.readFileSync(absoluteFilePath, 'utf8')
   } catch {
     return null
   }
-  const lines = content.split('\n')
 
-  /**
-   * Resolve the source line given the 1-indexed line number found by scanning.
-   * @param {number} foundLine
-   * @returns {number | null}
-   */
-  const resolveFoundLine = (foundLine) => {
-    // Pre-compiled JS: map through the adjacent source map
-    const resolved = resolveOriginalSourcePosition(absoluteFilePath, foundLine)
-    if (resolved) return resolved.line
-    // .ts compiled on-the-fly by Cypress: the found line is already the correct source line
-    if (absoluteFilePath.endsWith('.ts')) return foundLine
-    return null
-  }
+  const foundLine = findTestDeclarationLine(content, testName)
+  if (!foundLine) return null
 
-  // Step 2a: exact literal match (single/double/backtick-quoted with no interpolation)
-  const escapedName = testName.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
-  const literalPattern = new RegExp(`(?:it|test|specify)\\s*\\(\\s*['"\`]${escapedName}['"\`]`)
-  for (let i = 0; i < lines.length; i++) {
-    if (literalPattern.test(lines[i])) {
-      return resolveFoundLine(i + 1)
-    }
-  }
-
-  // Step 2b: template-literal fuzzy match — handles `template ${expr} string test name`
-  // when the test name was already evaluated (e.g. 'template interpolated string test name').
-  // We look for it/test/specify calls that open a backtick string on the same line,
-  // extract the template body, and check if it could produce the runtime test name.
-  const templateStartPattern = /(?:it|test|specify)\s*\(\s*`/
-  for (let i = 0; i < lines.length; i++) {
-    if (!templateStartPattern.test(lines[i])) continue
-
-    // Extract the template body: collect characters from the opening backtick until the
-    // closing backtick (the one immediately followed by a comma or whitespace + comma,
-    // i.e. the end of the test-name argument). We join lines to handle multiline literals.
-    const backtickStart = lines[i].indexOf('`', lines[i].search(/(?:it|test|specify)\s*\(\s*`/))
-    if (backtickStart === -1) continue
-
-    // Build the remaining text starting just after the opening backtick
-    let remaining = lines[i].slice(backtickStart + 1)
-    for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
-      remaining += '\n' + lines[j]
-    }
-
-    // Find the closing backtick (not inside ${ })
-    let depth = 0
-    let bodyEnd = -1
-    for (let k = 0; k < remaining.length; k++) {
-      if (remaining[k] === '$' && remaining[k + 1] === '{') {
-        depth++
-        k++ // skip '{'
-      } else if (depth > 0 && remaining[k] === '}') {
-        depth--
-      } else if (depth === 0 && remaining[k] === '`') {
-        bodyEnd = k
-        break
-      }
-    }
-    if (bodyEnd === -1) continue
-
-    const templateBody = remaining.slice(0, bodyEnd)
-    if (templateBodyToRegExp(templateBody).test(testName)) {
-      return resolveFoundLine(i + 1)
-    }
-  }
-
+  if (absoluteFilePath.endsWith('.ts')) return foundLine
+  const resolved = resolveOriginalSourcePosition(absoluteFilePath, foundLine)
+  if (resolved) return resolved.line
   return null
 }
 
-module.exports = { resolveOriginalSourcePosition, resolveSourceLineForTest }
+module.exports = { resolveOriginalSourcePosition, resolveSourceLineForTest, shouldTrustInvocationDetailsLine }

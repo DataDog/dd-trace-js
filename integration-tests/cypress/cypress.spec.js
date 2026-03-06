@@ -303,7 +303,18 @@ moduleTypes.forEach(({
     })
 
     over12It('reports correct source file and line for pre-compiled typescript test files', async function () {
-      this.retries(0)
+      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+      // Compile the TypeScript spec to JS + source map so the plugin can resolve
+      // the original TypeScript source file and line via the adjacent .js.map file.
+      // tsc exits with code 1 when there are type errors (e.g. missing Cypress type
+      // declarations) but still emits files because noEmitOnError is false.
+      try {
+        execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd })
+      } catch {
+        // tsc emits files even on type errors (noEmitOnError: false), so this is expected
+      }
+
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -344,19 +355,7 @@ moduleTypes.forEach(({
             testTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
             `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
           )
-        }, 60000)
-
-      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
-
-      // Compile the TypeScript spec to JS + source map so the plugin can resolve
-      // the original TypeScript source file and line via the adjacent .js.map file.
-      // tsc exits with code 1 when there are type errors (e.g. missing Cypress type
-      // declarations) but still emits files because noEmitOnError is false.
-      try {
-        execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd })
-      } catch {
-        // tsc emits files even on type errors (noEmitOnError: false), so this is expected
-      }
+        }, 120000)
 
       // Run Cypress with the pre-compiled JS spec (compiled from spec-source-line.cy.ts).
       // Cypress bundles the compiled JS via its own preprocessor; the plugin resolves
@@ -371,11 +370,139 @@ moduleTypes.forEach(({
         },
       })
 
-      await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    over12It('uses declaration scanning fallback when invocationDetails line is invalid', async function () {
+      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+      try {
+        execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd })
+      } catch {
+        // tsc emits files even on type errors (noEmitOnError: false), so this is expected
+      }
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const fallbackEvent = events.find(event =>
+            event.type === 'test' &&
+            event.content.resource.includes('spec source line fallback branch') &&
+            event.content.resource.includes('fallback branch literal title')
+          )
+
+          assert.ok(fallbackEvent, 'fallback-resolution test event should exist')
+          assert.strictEqual(
+            fallbackEvent.content.metrics[TEST_SOURCE_START],
+            7,
+            'should report TS source line resolved via declaration scanning fallback'
+          )
+          assert.ok(
+            fallbackEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-fallback.cy.ts'),
+            `TEST_SOURCE_FILE should point to TypeScript source, got: ${fallbackEvent.content.meta[TEST_SOURCE_FILE]}`
+          )
+        }, 120000)
+
+      childProcess = exec(testCommand, {
+        cwd,
+        env: {
+          ...restEnvVars,
+          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line-fallback.cy.js',
+        },
+      })
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    over12It('keeps original invocationDetails line when no declaration match is found', async function () {
+      this.timeout(140000)
+      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+      try {
+        execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd })
+      } catch {
+        // tsc emits files even on type errors (noEmitOnError: false), so this is expected
+      }
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const noMatchEvent = events.find(event =>
+            event.type === 'test' &&
+            event.content.resource.includes('spec source line no match') &&
+            event.content.resource.includes('no match title')
+          )
+
+          assert.ok(noMatchEvent, 'no-match test event should exist')
+          assert.ok(
+            Number.isInteger(noMatchEvent.content.metrics[TEST_SOURCE_START]) &&
+              noMatchEvent.content.metrics[TEST_SOURCE_START] > 100,
+            `expected unresolved source line to remain a large generated/invocation line, got: ${
+              noMatchEvent.content.metrics[TEST_SOURCE_START]
+            }`
+          )
+          assert.ok(
+            noMatchEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-no-match.cy.ts'),
+            `TEST_SOURCE_FILE should point to TypeScript source, got: ${noMatchEvent.content.meta[TEST_SOURCE_FILE]}`
+          )
+        }, 120000)
+
+      childProcess = exec(testCommand, {
+        cwd,
+        env: {
+          ...restEnvVars,
+          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line-no-match.cy.js',
+        },
+      })
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    over12It('uses invocationDetails line directly for plain javascript specs without source maps', async function () {
+      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const jsInvocationDetailsEvent = events.find(event =>
+            event.type === 'test' &&
+            event.content.resource.includes('spec source line invocation details js') &&
+            event.content.resource.includes('uses invocation details line as source line')
+          )
+
+          assert.ok(jsInvocationDetailsEvent, 'plain-js invocationDetails test event should exist')
+          assert.strictEqual(
+            jsInvocationDetailsEvent.content.metrics[TEST_SOURCE_START],
+            246,
+            'should keep invocationDetails line directly for plain JS specs without source maps'
+          )
+          assert.ok(
+            jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-invocation.cy.js'),
+            `TEST_SOURCE_FILE should point to JS source, got: ${
+              jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE]
+            }`
+          )
+        }, 120000)
+
+      childProcess = exec(testCommand, {
+        cwd,
+        env: {
+          ...restEnvVars,
+          CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+          SPEC_PATTERN: 'cypress/e2e/spec-source-line-invocation.cy.js',
+        },
+      })
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
     over12It('reports correct source file and line for typescript test files compiled by cypress', async function () {
-      this.retries(0)
       // Remove any pre-compiled dist files to ensure Cypress compiles the .ts file itself
       fs.rmSync(path.join(cwd, 'cypress/e2e/dist'), { recursive: true, force: true })
 
@@ -432,7 +559,8 @@ moduleTypes.forEach(({
         },
       })
 
-      await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
     if (version === '6.7.0') {

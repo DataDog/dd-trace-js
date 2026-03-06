@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* global describe, it, specify, cy */
 // This file is used to reproduce the issue where testSourceLine is not correctly
 // detected for test files compiled from TypeScript.
 // The TypeScript-only declarations below are removed during compilation,

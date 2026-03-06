@@ -10,5 +10,9 @@
     "sourceMap": true,
     "noEmitOnError": false
   },
-  "include": ["e2e/spec-source-line.cy.ts"]
+  "include": [
+    "e2e/spec-source-line.cy.ts",
+    "e2e/spec-source-line-fallback.cy.ts",
+    "e2e/spec-source-line-no-match.cy.ts"
+  ]
 }
