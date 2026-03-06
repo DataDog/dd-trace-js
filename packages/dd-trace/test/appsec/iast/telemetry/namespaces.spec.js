@@ -118,17 +118,9 @@ describe('IAST metric namespaces', () => {
 
     finalizeRequestNamespace(context)
 
-    assertObjectContains(namespace, {
-      iastMetrics: {
-        size: 0,
-      },
-      metrics: {
-        size: 0,
-      },
-      distributions: {
-        size: 0,
-      },
-    })
+    assert.strictEqual(namespace.iastMetrics.size, 0)
+    assert.strictEqual(namespace.metrics.size, 0)
+    assert.strictEqual(namespace.distributions.size, 0)
   })
 })
 

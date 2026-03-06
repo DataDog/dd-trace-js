@@ -61,13 +61,9 @@ describe('encode 0.5', () => {
     assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
     assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
     assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
-    assertObjectContains(trace, {
-      0: {
-        6: BigInt(data[0].start),
-        7: BigInt(data[0].duration),
-        8: 0,
-      },
-    })
+    assert.strictEqual(trace[0][6], BigInt(data[0].start))
+    assert.strictEqual(trace[0][7], BigInt(data[0].duration))
+    assert.strictEqual(trace[0][8], 0)
     assert.deepStrictEqual(trace[0][9], { [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset
@@ -130,13 +126,9 @@ describe('encode 0.5', () => {
     assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
     assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
     assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
-    assertObjectContains(trace, {
-      0: {
-        6: BigInt(data[0].start),
-        7: BigInt(data[0].duration),
-        8: 0,
-      },
-    })
+    assert.strictEqual(trace[0][6], BigInt(data[0].start))
+    assert.strictEqual(trace[0][7], BigInt(data[0].duration))
+    assert.strictEqual(trace[0][8], 0)
     assert.deepStrictEqual(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink),
@@ -167,13 +159,9 @@ describe('encode 0.5', () => {
     assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
     assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
     assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
-    assertObjectContains(trace, {
-      0: {
-        6: BigInt(data[0].start),
-        7: BigInt(data[0].duration),
-        8: 0,
-      },
-    })
+    assert.strictEqual(trace[0][6], BigInt(data[0].start))
+    assert.strictEqual(trace[0][7], BigInt(data[0].duration))
+    assert.strictEqual(trace[0][8], 0)
     assert.deepStrictEqual(trace[0][9], {
       [stringMap.indexOf('bar')]: stringMap.indexOf('baz'),
       [stringMap.indexOf('_dd.span_links')]: stringMap.indexOf(encodedLink),
@@ -228,11 +216,9 @@ describe('encode 0.5', () => {
     const payload = encoder.makePayload()
 
     assert.strictEqual(encoder.count(), 0)
-    assertObjectContains(payload, {
-      length: 12,
-      5: 1,
-      11: 0,
-    })
+    assert.strictEqual(payload.length, 12)
+    assert.strictEqual(payload[5], 1)
+    assert.strictEqual(payload[11], 0)
   })
 
   it('should ignore meta_struct property', () => {
@@ -253,13 +239,9 @@ describe('encode 0.5', () => {
     assert.strictEqual(trace[0][3].toString(16), data[0].trace_id.toString())
     assert.strictEqual(trace[0][4].toString(16), data[0].span_id.toString())
     assert.strictEqual(trace[0][5].toString(16), data[0].parent_id.toString())
-    assertObjectContains(trace, {
-      0: {
-        6: BigInt(data[0].start),
-        7: BigInt(data[0].duration),
-        8: 0,
-      },
-    })
+    assert.strictEqual(trace[0][6], BigInt(data[0].start))
+    assert.strictEqual(trace[0][7], BigInt(data[0].duration))
+    assert.strictEqual(trace[0][8], 0)
     assert.deepStrictEqual(trace[0][9], { [stringMap.indexOf('bar')]: stringMap.indexOf('baz') })
     assert.deepStrictEqual(trace[0][10], { [stringMap.indexOf('example')]: 1 })
     assert.strictEqual(stringMap[trace[0][11]], '') // unset

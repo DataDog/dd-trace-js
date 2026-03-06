@@ -8,7 +8,6 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -37,28 +36,18 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', async () => {
           agent.assertSomeTraces(() => {}) // wait for initial info command
           const promise = agent.assertSomeTraces(traces => {
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  name: expectedSchema.outbound.opName,
-                  service: expectedSchema.outbound.serviceName,
-                  resource: 'get',
-                  type: 'valkey',
-                  meta: {
-                    component: 'iovalkey',
-                    '_dd.integration': 'iovalkey',
-                    'db.name': '0',
-                    'db.type': 'valkey',
-                    'span.kind': 'client',
-                    'out.host': 'localhost',
-                    'valkey.raw_command': 'GET foo',
-                  },
-                  metrics: {
-                    'network.destination.port': 6379,
-                  },
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, 'get')
+            assert.strictEqual(traces[0][0].type, 'valkey')
+            assert.strictEqual(traces[0][0].meta.component, 'iovalkey')
+            assert.strictEqual(traces[0][0].meta['_dd.integration'], 'iovalkey')
+            assert.strictEqual(traces[0][0].meta['db.name'], '0')
+            assert.strictEqual(traces[0][0].meta['db.type'], 'valkey')
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+            assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+            assert.strictEqual(traces[0][0].meta['valkey.raw_command'], 'GET foo')
+            assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
           })
 
           await Promise.all([
@@ -100,27 +89,17 @@ describe('Plugin', () => {
         it('should work with userland promises', done => {
           agent.assertSomeTraces(() => {}) // wait for initial info command
           agent.assertSomeTraces(traces => {
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  name: expectedSchema.outbound.opName,
-                  service: expectedSchema.outbound.serviceName,
-                  resource: 'get',
-                  type: 'valkey',
-                  meta: {
-                    'db.name': '0',
-                    'db.type': 'valkey',
-                    'span.kind': 'client',
-                    'out.host': 'localhost',
-                    'valkey.raw_command': 'GET foo',
-                    component: 'iovalkey',
-                  },
-                  metrics: {
-                    'network.destination.port': 6379,
-                  },
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+            assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+            assert.strictEqual(traces[0][0].resource, 'get')
+            assert.strictEqual(traces[0][0].type, 'valkey')
+            assert.strictEqual(traces[0][0].meta['db.name'], '0')
+            assert.strictEqual(traces[0][0].meta['db.type'], 'valkey')
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+            assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+            assert.strictEqual(traces[0][0].meta['valkey.raw_command'], 'GET foo')
+            assert.strictEqual(traces[0][0].meta.component, 'iovalkey')
+            assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
           })
             .then(done)
             .catch(done)

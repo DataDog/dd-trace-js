@@ -120,16 +120,10 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(scopeLogs.length, 1)
 
         const scope = scopeLogs[0]
-        assertObjectContains(scope, {
-          scope: {
-            name: 'test-logger',
-            version: '1.0.0',
-          },
-          schemaUrl: 'https://opentelemetry.io/schemas/1.27.0',
-          logRecords: {
-            length: 2,
-          },
-        })
+        assert.strictEqual(scope.scope.name, 'test-logger')
+        assert.strictEqual(scope.scope.version, '1.0.0')
+        assert.strictEqual(scope.schemaUrl, 'https://opentelemetry.io/schemas/1.27.0')
+        assert.strictEqual(scope.logRecords.length, 2)
 
         const log1 = scope.logRecords[0]
         assert.strictEqual(log1.severityText, 'INFO')
@@ -323,39 +317,19 @@ describe('OpenTelemetry Logs', () => {
 
         // First scope: logger1@1.0.0
         const scope1 = scopeLogs[0]
-        assertObjectContains(scope1, {
-          scope: {
-            name: 'logger1',
-            version: '1.0.0',
-          },
-          logRecords: {
-            length: 1,
-            0: {
-              severityText: 'INFO',
-              body: {
-                stringValue: 'Message from logger1',
-              },
-            },
-          },
-        })
+        assert.strictEqual(scope1.scope.name, 'logger1')
+        assert.strictEqual(scope1.scope.version, '1.0.0')
+        assert.strictEqual(scope1.logRecords.length, 1)
+        assert.strictEqual(scope1.logRecords[0].severityText, 'INFO')
+        assert.strictEqual(scope1.logRecords[0].body.stringValue, 'Message from logger1')
 
         // Second scope: logger2@2.0.0
         const scope2 = scopeLogs[1]
-        assertObjectContains(scope2, {
-          scope: {
-            name: 'logger2',
-            version: '2.0.0',
-          },
-          logRecords: {
-            length: 1,
-            0: {
-              severityText: 'ERROR',
-              body: {
-                stringValue: 'Message from logger2',
-              },
-            },
-          },
-        })
+        assert.strictEqual(scope2.scope.name, 'logger2')
+        assert.strictEqual(scope2.scope.version, '2.0.0')
+        assert.strictEqual(scope2.logRecords.length, 1)
+        assert.strictEqual(scope2.logRecords[0].severityText, 'ERROR')
+        assert.strictEqual(scope2.logRecords[0].body.stringValue, 'Message from logger2')
       })
 
       setupTracer(true, '2')
@@ -422,26 +396,10 @@ describe('OpenTelemetry Logs', () => {
 
         // Object body - tests Object.entries().map() transformation
         assert(logRecords[4].body.kvlistValue)
-        assertObjectContains(logRecords, {
-          4: {
-            body: {
-              kvlistValue: {
-                values: {
-                  length: 2,
-                  0: {
-                    key: 'foo',
-                    value: {
-                      stringValue: 'bar',
-                    },
-                  },
-                  1: {
-                    key: 'baz',
-                  },
-                },
-              },
-            },
-          },
-        })
+        assert.strictEqual(logRecords[4].body.kvlistValue.values.length, 2)
+        assert.strictEqual(logRecords[4].body.kvlistValue.values[0].key, 'foo')
+        assert.strictEqual(logRecords[4].body.kvlistValue.values[0].value.stringValue, 'bar')
+        assert.strictEqual(logRecords[4].body.kvlistValue.values[1].key, 'baz')
         const bazValue = logRecords[4].body.kvlistValue.values[1].value.intValue
         assert.strictEqual(bazValue !== null && typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
 

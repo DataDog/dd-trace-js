@@ -10,7 +10,6 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('dogstatsd', () => {
   let client
@@ -129,18 +128,10 @@ describe('dogstatsd', () => {
 
     sinon.assert.called(udp4.send)
     assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g\n')
-    assertObjectContains(udp4, {
-      send: {
-        firstCall: {
-          args: {
-            1: 0,
-            2: 14,
-            3: '8125',
-            4: '127.0.0.1',
-          },
-        },
-      },
-    })
+    assert.strictEqual(udp4.send.firstCall.args[1], 0)
+    assert.strictEqual(udp4.send.firstCall.args[2], 14)
+    assert.strictEqual(udp4.send.firstCall.args[3], '8125')
+    assert.strictEqual(udp4.send.firstCall.args[4], '127.0.0.1')
   })
 
   it('should send histograms', () => {
@@ -151,18 +142,10 @@ describe('dogstatsd', () => {
 
     sinon.assert.called(udp4.send)
     assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.histogram:10|h\n')
-    assertObjectContains(udp4, {
-      send: {
-        firstCall: {
-          args: {
-            1: 0,
-            2: 20,
-            3: '8125',
-            4: '127.0.0.1',
-          },
-        },
-      },
-    })
+    assert.strictEqual(udp4.send.firstCall.args[1], 0)
+    assert.strictEqual(udp4.send.firstCall.args[2], 20)
+    assert.strictEqual(udp4.send.firstCall.args[3], '8125')
+    assert.strictEqual(udp4.send.firstCall.args[4], '127.0.0.1')
   })
 
   it('should send counters', () => {
@@ -273,18 +256,10 @@ describe('dogstatsd', () => {
 
     sinon.assert.called(udp6.send)
     assert.strictEqual(udp6.send.firstCall.args[0].toString(), 'prefix.test.avg:1|g|#foo:bar,baz:qux\n')
-    assertObjectContains(udp6, {
-      send: {
-        firstCall: {
-          args: {
-            1: 0,
-            2: 37,
-            3: 7777,
-            4: '::1',
-          },
-        },
-      },
-    })
+    assert.strictEqual(udp6.send.firstCall.args[1], 0)
+    assert.strictEqual(udp6.send.firstCall.args[2], 37)
+    assert.strictEqual(udp6.send.firstCall.args[3], 7777)
+    assert.strictEqual(udp6.send.firstCall.args[4], '::1')
   })
 
   const udsIt = os.platform() === 'win32' ? it.skip : it

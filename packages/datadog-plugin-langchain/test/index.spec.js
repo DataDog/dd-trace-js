@@ -626,15 +626,9 @@ describe('Plugin', () => {
             const documents = ['Hello, world!', 'Goodbye, world!']
             const result = await embeddings.embedDocuments(documents)
 
-            assertObjectContains(result, {
-              length: 2,
-              0: {
-                length: 1536,
-              },
-              1: {
-                length: 1536,
-              },
-            })
+            assert.strictEqual(result.length, 2)
+            assert.strictEqual(result[0].length, 1536)
+            assert.strictEqual(result[1].length, 1536)
 
             await checkTraces
           })

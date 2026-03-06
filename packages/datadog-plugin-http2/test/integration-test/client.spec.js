@@ -5,7 +5,6 @@ const assert = require('node:assert/strict')
 const http2 = require('http2')
 const {
   FakeAgent,
-  assertObjectContains,
   spawnPluginIntegrationTestProc,
   sandboxCwd,
   useSandbox,
@@ -42,17 +41,9 @@ describe('esm', () => {
           assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
           assert.ok(Array.isArray(payload[0]))
-          assertObjectContains(payload, {
-            0: {
-              length: 1,
-              0: {
-                name: 'web.request',
-                meta: {
-                  component: 'http2',
-                },
-              },
-            },
-          })
+          assert.strictEqual(payload[0].length, 1)
+          assert.strictEqual(payload[0][0].name, 'web.request')
+          assert.strictEqual(payload[0][0].meta.component, 'http2')
         })
         await curl(proc)
         return resultPromise

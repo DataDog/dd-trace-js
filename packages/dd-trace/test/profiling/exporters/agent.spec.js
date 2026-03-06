@@ -65,21 +65,14 @@ describe('exporters/agent', function () {
   let startSpan
 
   function verifyRequest (req, profiles, start, end) {
-    assertObjectContains(req, {
-      headers: {
-        test: 'injected',
-        'dd-evp-origin': 'dd-trace-js',
-        'dd-evp-origin-version': version,
-      },
-      files: {
-        0: {
-          fieldname: 'event',
-          originalname: 'event.json',
-          mimetype: 'application/json',
-          size: req.files[0].buffer.length,
-        },
-      },
-    })
+    assert.strictEqual(req.headers.test, 'injected')
+    assert.strictEqual(req.headers['dd-evp-origin'], 'dd-trace-js')
+    assert.strictEqual(req.headers['dd-evp-origin-version'], version)
+
+    assert.strictEqual(req.files[0].fieldname, 'event')
+    assert.strictEqual(req.files[0].originalname, 'event.json')
+    assert.strictEqual(req.files[0].mimetype, 'application/json')
+    assert.strictEqual(req.files[0].size, req.files[0].buffer.length)
 
     const event = JSON.parse(req.files[0].buffer.toString())
 

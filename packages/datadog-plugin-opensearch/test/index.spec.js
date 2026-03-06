@@ -8,9 +8,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 describe('Plugin', () => {
   let opensearch
   let tracer
@@ -93,34 +91,20 @@ describe('Plugin', () => {
         it('should set the correct tags on msearch', done => {
           agent
             .assertSomeTraces(traces => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    name: expectedSchema.outbound.opName,
-                    service: expectedSchema.outbound.serviceName,
-                    meta: {
-                      'db.type': 'opensearch',
-                      'span.kind': 'client',
-                      'opensearch.method': 'POST',
-                      'opensearch.url': '/_msearch',
-                    },
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].meta['db.type'], 'opensearch')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['opensearch.method'], 'POST')
+              assert.strictEqual(traces[0][0].meta['opensearch.url'], '/_msearch')
               assert.ok('opensearch.body' in traces[0][0].meta)
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    meta: {
-                      'opensearch.body':
-                        '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]',
-                      'opensearch.params': '{"size":100}',
-                      component: 'opensearch',
-                      '_dd.integration': 'opensearch',
-                    },
-                  },
-                },
-              })
+              assert.strictEqual(
+                traces[0][0].meta['opensearch.body'],
+                '[{"index":"docs"},{"query":{"match_all":{}}},{"index":"docs2"},{"query":{"match_all":{}}}]'
+              )
+              assert.strictEqual(traces[0][0].meta['opensearch.params'], '{"size":100}')
+              assert.strictEqual(traces[0][0].meta.component, 'opensearch')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -158,19 +142,11 @@ describe('Plugin', () => {
         it('should do automatic instrumentation', done => {
           agent
             .assertSomeTraces(traces => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    name: expectedSchema.outbound.opName,
-                    service: expectedSchema.outbound.serviceName,
-                    resource: 'HEAD /',
-                    type: 'elasticsearch',
-                    meta: {
-                      component: 'opensearch',
-                    },
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'HEAD /')
+              assert.strictEqual(traces[0][0].type, 'elasticsearch')
+              assert.strictEqual(traces[0][0].meta.component, 'opensearch')
             })
             .then(done)
             .catch(done)
@@ -224,16 +200,10 @@ describe('Plugin', () => {
         it('should work with userland promises', done => {
           agent
             .assertSomeTraces(traces => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    name: expectedSchema.outbound.opName,
-                    service: expectedSchema.outbound.serviceName,
-                    resource: 'HEAD /',
-                    type: 'elasticsearch',
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'HEAD /')
+              assert.strictEqual(traces[0][0].type, 'elasticsearch')
             })
             .then(done)
             .catch(done)

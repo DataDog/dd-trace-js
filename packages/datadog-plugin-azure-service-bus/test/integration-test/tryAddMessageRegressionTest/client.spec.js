@@ -2,7 +2,6 @@
 
 const assert = require('assert')
 const {
-  assertObjectContains,
   FakeAgent,
   sandboxCwd,
   useSandbox,
@@ -33,24 +32,11 @@ describe('esm', () => {
     it('tryAddMessage returns a boolean, not a Promise', async () => {
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.ok(Array.isArray(payload))
-        assertObjectContains(payload, {
-          length: 3,
-          0: {
-            0: {
-              name: 'azure.servicebus.create',
-            },
-          },
-          1: {
-            0: {
-              name: 'azure.servicebus.create',
-            },
-          },
-          2: {
-            0: {
-              name: 'azure.servicebus.send',
-            },
-          },
-        })
+        assert.strictEqual(payload.length, 3)
+        // Verify we got the expected spans from the test
+        assert.strictEqual(payload[0][0].name, 'azure.servicebus.create')
+        assert.strictEqual(payload[1][0].name, 'azure.servicebus.create')
+        assert.strictEqual(payload[2][0].name, 'azure.servicebus.send')
       })
 
       // This test file will throw an error if tryAddMessage returns a Promise instead of a boolean

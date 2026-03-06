@@ -431,15 +431,9 @@ describe('Plugin', () => {
           messageReceived = false
 
           return agent.assertSomeTraces(traces => {
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  service: 'custom-ws-service',
-                  name: 'web.request',
-                  type: 'websocket',
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'web.request')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -453,16 +447,10 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  resource: `websocket /${route}`,
-                  name: 'websocket.send',
-                  type: 'websocket',
-                  service: 'custom-ws-service',
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].resource, `websocket /${route}`)
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
           })
         })
 
@@ -483,15 +471,9 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  service: 'custom-ws-service',
-                  name: 'websocket.send',
-                  type: 'websocket',
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -507,15 +489,9 @@ describe('Plugin', () => {
           })
 
           return agent.assertSomeTraces(traces => {
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  service: 'custom-ws-service',
-                  name: 'websocket.send',
-                  type: 'websocket',
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
       })
@@ -590,17 +566,9 @@ describe('Plugin', () => {
 
           return agent.assertSomeTraces(traces => {
             assert.ok(!('_dd.dm.inherited' in traces[0][0].meta) || traces[0][0].meta['_dd.dm.inherited'] !== 1)
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  meta: {
-                    'span.kind': 'consumer',
-                  },
-                  name: 'websocket.receive',
-                  type: 'websocket',
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'consumer')
+            assert.strictEqual(traces[0][0].name, 'websocket.receive')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
 
@@ -626,15 +594,9 @@ describe('Plugin', () => {
             const metaData = JSON.parse(traces[0][0].meta['_dd.span_links'])
             const spanId = Number(BigInt('0x' + metaData[0].span_id))
             assert.strictEqual(spanId, firstTraceId)
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  service: 'custom-ws-service',
-                  name: 'websocket.send',
-                  type: 'websocket',
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].service, 'custom-ws-service')
+            assert.strictEqual(traces[0][0].name, 'websocket.send')
+            assert.strictEqual(traces[0][0].type, 'websocket')
           })
         })
       })

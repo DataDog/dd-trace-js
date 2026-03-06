@@ -317,20 +317,10 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueEvents', ({ headers, payload }) => {
-        assertObjectContains(payload, {
-          length: 2,
-          0: {
-            1: {
-              name: 'azure.eventhubs.create',
-            },
-            2: {
-              name: 'azure.eventhubs.create',
-            },
-            3: {
-              name: 'azure.eventhubs.send',
-            },
-          },
-        })
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[0][1].name, 'azure.eventhubs.create')
+        assert.strictEqual(payload[0][2].name, 'azure.eventhubs.create')
+        assert.strictEqual(payload[0][3].name, 'azure.eventhubs.send')
         assert.strictEqual(parseLinks(payload[0][3]).length, 2)
         assertObjectContains(payload[1][0], {
           name: 'azure.functions.invoke',
@@ -353,20 +343,10 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueAmqp', ({ headers, payload }) => {
-        assertObjectContains(payload, {
-          length: 2,
-          0: {
-            1: {
-              name: 'azure.eventhubs.create',
-            },
-            2: {
-              name: 'azure.eventhubs.create',
-            },
-            3: {
-              name: 'azure.eventhubs.send',
-            },
-          },
-        })
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[0][1].name, 'azure.eventhubs.create')
+        assert.strictEqual(payload[0][2].name, 'azure.eventhubs.create')
+        assert.strictEqual(payload[0][3].name, 'azure.eventhubs.send')
         assert.strictEqual(parseLinks(payload[0][3]).length, 2)
         assertObjectContains(payload[1][0], {
           name: 'azure.functions.invoke',

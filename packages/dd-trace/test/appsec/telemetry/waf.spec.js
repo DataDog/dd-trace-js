@@ -221,20 +221,10 @@ describe('Appsec Waf Telemetry metrics', () => {
         appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
         const { metrics } = appsecNamespace.toJSON()
-        assertObjectContains(metrics, {
-          series: {
-            length: 1,
-            0: {
-              metric: 'waf.init',
-              points: {
-                length: 1,
-                0: {
-                  1: 3,
-                },
-              },
-            },
-          },
-        })
+        assert.strictEqual(metrics.series.length, 1)
+        assert.strictEqual(metrics.series[0].metric, 'waf.init')
+        assert.strictEqual(metrics.series[0].points.length, 1)
+        assert.strictEqual(metrics.series[0].points[0][1], 3)
         assertObjectContains(
           metrics.series[0].tags,
           ['waf_version:0.0.1', 'event_rules_version:0.0.2', 'success:true']
@@ -282,20 +272,10 @@ describe('Appsec Waf Telemetry metrics', () => {
         appsecTelemetry.incrementWafUpdatesMetric(wafVersion, rulesVersion, true)
 
         const { metrics } = appsecNamespace.toJSON()
-        assertObjectContains(metrics, {
-          series: {
-            length: 1,
-            0: {
-              metric: 'waf.updates',
-              points: {
-                length: 1,
-                0: {
-                  1: 3,
-                },
-              },
-            },
-          },
-        })
+        assert.strictEqual(metrics.series.length, 1)
+        assert.strictEqual(metrics.series[0].metric, 'waf.updates')
+        assert.strictEqual(metrics.series[0].points.length, 1)
+        assert.strictEqual(metrics.series[0].points[0][1], 3)
         assertObjectContains(
           metrics.series[0].tags,
           ['waf_version:0.0.1', 'event_rules_version:0.0.2', 'success:true']
@@ -323,20 +303,10 @@ describe('Appsec Waf Telemetry metrics', () => {
         appsecTelemetry.incrementWafConfigErrorsMetric(wafVersion, rulesVersion, true)
 
         const { metrics } = appsecNamespace.toJSON()
-        assertObjectContains(metrics, {
-          series: {
-            length: 1,
-            0: {
-              metric: 'waf.config_errors',
-              points: {
-                length: 1,
-                0: {
-                  1: 3,
-                },
-              },
-            },
-          },
-        })
+        assert.strictEqual(metrics.series.length, 1)
+        assert.strictEqual(metrics.series[0].metric, 'waf.config_errors')
+        assert.strictEqual(metrics.series[0].points.length, 1)
+        assert.strictEqual(metrics.series[0].points[0][1], 3)
         assertObjectContains(
           metrics.series[0].tags,
           ['waf_version:0.0.1', 'event_rules_version:0.0.2', 'action:update']

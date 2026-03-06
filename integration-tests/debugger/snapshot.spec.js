@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { assertObjectContains } = require('../helpers')
 const { setup } = require('./utils')
 
 describe('Dynamic Instrumentation', function () {
@@ -272,15 +271,9 @@ describe('Dynamic Instrumentation', function () {
       it('should use default value for maxLength if not provided', function (done) {
         t.agent.on('debugger-input', ({ payload: [{ debugger: { snapshot: { captures } } }] }) => {
           const { locals } = captures.lines[t.breakpoint.line]
-          assertObjectContains(locals, {
-            lstr: {
-              value: {
-                length: 255,
-              },
-              truncated: true,
-              size: 445,
-            },
-          })
+          assert.strictEqual(locals.lstr.value.length, 255)
+          assert.strictEqual(locals.lstr.truncated, true)
+          assert.strictEqual(locals.lstr.size, 445)
           done()
         })
 

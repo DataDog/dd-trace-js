@@ -126,20 +126,10 @@ describe('OpenTelemetry Meter Provider', () => {
     it('exports counter metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const metrics = decoded.resourceMetrics[0].scopeMetrics[0].metrics
-        assertObjectContains(metrics, {
-          length: 1,
-          0: {
-            name: 'requests',
-            sum: {
-              isMonotonic: true,
-              dataPoints: {
-                0: {
-                  asDouble: 10.3,
-                },
-              },
-            },
-          },
-        })
+        assert.strictEqual(metrics.length, 1)
+        assert.strictEqual(metrics[0].name, 'requests')
+        assert.strictEqual(metrics[0].sum.isMonotonic, true)
+        assert.strictEqual(metrics[0].sum.dataPoints[0].asDouble, 10.3)
       })
 
       setupTracer()
@@ -154,17 +144,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('exports histogram metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const histogram = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(histogram, {
-          name: 'duration',
-          histogram: {
-            dataPoints: {
-              0: {
-                count: 1,
-                sum: 100,
-              },
-            },
-          },
-        })
+        assert.strictEqual(histogram.name, 'duration')
+        assert.strictEqual(histogram.histogram.dataPoints[0].count, 1)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 100)
       })
 
       setupTracer()
@@ -236,17 +218,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('exports updowncounter metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(updown, {
-          name: 'queue',
-          sum: {
-            isMonotonic: false,
-            dataPoints: {
-              0: {
-                asInt: 7,
-              },
-            },
-          },
-        })
+        assert.strictEqual(updown.name, 'queue')
+        assert.strictEqual(updown.sum.isMonotonic, false)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 7)
       })
 
       setupTracer()
@@ -279,17 +253,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('exports observable counter metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(counter, {
-          name: 'connections',
-          sum: {
-            isMonotonic: true,
-            dataPoints: {
-              0: {
-                asInt: 42,
-              },
-            },
-          },
-        })
+        assert.strictEqual(counter.name, 'connections')
+        assert.strictEqual(counter.sum.isMonotonic, true)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 42)
       })
 
       setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
@@ -303,17 +269,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('exports observable updowncounter metrics', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(updown, {
-          name: 'tasks',
-          sum: {
-            isMonotonic: false,
-            dataPoints: {
-              0: {
-                asInt: 15,
-              },
-            },
-          },
-        })
+        assert.strictEqual(updown.name, 'tasks')
+        assert.strictEqual(updown.sum.isMonotonic, false)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 15)
       })
 
       setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
@@ -470,17 +428,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('supports CUMULATIVE for counters', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(counter, {
-          name: 'test',
-          sum: {
-            aggregationTemporality: 2,
-            dataPoints: {
-              0: {
-                asInt: 8,
-              },
-            },
-          },
-        })
+        assert.strictEqual(counter.name, 'test')
+        assert.strictEqual(counter.sum.aggregationTemporality, 2)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 8)
       })
 
       setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
@@ -495,17 +445,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('supports DELTA for counters', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const counter = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(counter, {
-          name: 'test',
-          sum: {
-            aggregationTemporality: 1,
-            dataPoints: {
-              0: {
-                asInt: 5,
-              },
-            },
-          },
-        })
+        assert.strictEqual(counter.name, 'test')
+        assert.strictEqual(counter.sum.aggregationTemporality, 1)
+        assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
       })
 
       setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta' })
@@ -561,17 +503,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('observable updowncounter always uses CUMULATIVE', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const updown = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(updown, {
-          name: 'obs.updown',
-          sum: {
-            aggregationTemporality: 2,
-            dataPoints: {
-              0: {
-                asInt: 10,
-              },
-            },
-          },
-        })
+        assert.strictEqual(updown.name, 'obs.updown')
+        assert.strictEqual(updown.sum.aggregationTemporality, 2)
+        assert.strictEqual(updown.sum.dataPoints[0].asInt, 10)
       })
 
       setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
@@ -585,17 +519,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('histograms support DELTA temporality', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const histogram = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(histogram, {
-          histogram: {
-            aggregationTemporality: 1,
-            dataPoints: {
-              0: {
-                count: 2,
-                sum: 30,
-              },
-            },
-          },
-        })
+        assert.strictEqual(histogram.histogram.aggregationTemporality, 1)
+        assert.strictEqual(histogram.histogram.dataPoints[0].count, 2)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 30)
       })
 
       setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
@@ -609,17 +535,9 @@ describe('OpenTelemetry Meter Provider', () => {
     it('histograms support CUMULATIVE temporality', (done) => {
       const validator = mockOtlpExport((decoded) => {
         const histogram = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]
-        assertObjectContains(histogram, {
-          histogram: {
-            aggregationTemporality: 2,
-            dataPoints: {
-              0: {
-                count: 3,
-                sum: 60,
-              },
-            },
-          },
-        })
+        assert.strictEqual(histogram.histogram.aggregationTemporality, 2)
+        assert.strictEqual(histogram.histogram.dataPoints[0].count, 3)
+        assert.strictEqual(histogram.histogram.dataPoints[0].sum, 60)
       })
 
       setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'CUMULATIVE' })
@@ -755,19 +673,9 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.addBatchObservableCallback(() => {}, [])
       meter.removeBatchObservableCallback(() => {}, [])
 
-      assertObjectContains(warnSpy, {
-        callCount: 2,
-        firstCall: {
-          args: {
-            0: 'addBatchObservableCallback is not implemented',
-          },
-        },
-        secondCall: {
-          args: {
-            0: 'removeBatchObservableCallback is not implemented',
-          },
-        },
-      })
+      assert.strictEqual(warnSpy.callCount, 2)
+      assert.strictEqual(warnSpy.firstCall.args[0], 'addBatchObservableCallback is not implemented')
+      assert.strictEqual(warnSpy.secondCall.args[0], 'removeBatchObservableCallback is not implemented')
 
       warnSpy.restore()
     })

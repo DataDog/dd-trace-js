@@ -63,30 +63,21 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const spans = sort(traces[0])
 
-                assertObjectContains(spans, {
-                  0: {
-                    name: 'koa.request',
-                    service: 'test',
-                    type: 'web',
-                    resource: 'GET',
-                    meta: {
-                      'span.kind': 'server',
-                      'http.url': `http://localhost:${port}/user`,
-                      'http.method': 'GET',
-                      'http.status_code': '200',
-                      component: 'koa',
-                      '_dd.integration': 'koa',
-                    },
-                  },
-                  1: {
-                    name: 'koa.middleware',
-                    service: 'test',
-                    resource: 'handle',
-                    meta: {
-                      component: 'koa',
-                    },
-                  },
-                })
+                assert.strictEqual(spans[0].name, 'koa.request')
+                assert.strictEqual(spans[0].service, 'test')
+                assert.strictEqual(spans[0].type, 'web')
+                assert.strictEqual(spans[0].resource, 'GET')
+                assert.strictEqual(spans[0].meta['span.kind'], 'server')
+                assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                assert.strictEqual(spans[0].meta['http.method'], 'GET')
+                assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                assert.strictEqual(spans[0].meta.component, 'koa')
+                assert.strictEqual(spans[0].meta['_dd.integration'], 'koa')
+
+                assert.strictEqual(spans[1].name, 'koa.middleware')
+                assert.strictEqual(spans[1].service, 'test')
+                assert.strictEqual(spans[1].resource, 'handle')
+                assert.strictEqual(spans[1].meta.component, 'koa')
               })
               .then(done)
               .catch(done)
@@ -113,29 +104,20 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  assertObjectContains(spans, {
-                    0: {
-                      name: 'koa.request',
-                      service: 'test',
-                      type: 'web',
-                      resource: 'GET',
-                      meta: {
-                        'span.kind': 'server',
-                        'http.url': `http://localhost:${port}/user`,
-                        'http.method': 'GET',
-                        'http.status_code': '200',
-                        component: 'koa',
-                      },
-                    },
-                    1: {
-                      name: 'koa.middleware',
-                      service: 'test',
-                      resource: 'converted',
-                      meta: {
-                        component: 'koa',
-                      },
-                    },
-                  })
+                  assert.strictEqual(spans[0].name, 'koa.request')
+                  assert.strictEqual(spans[0].service, 'test')
+                  assert.strictEqual(spans[0].type, 'web')
+                  assert.strictEqual(spans[0].resource, 'GET')
+                  assert.strictEqual(spans[0].meta['span.kind'], 'server')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                  assert.strictEqual(spans[0].meta['http.method'], 'GET')
+                  assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                  assert.strictEqual(spans[0].meta.component, 'koa')
+
+                  assert.strictEqual(spans[1].name, 'koa.middleware')
+                  assert.strictEqual(spans[1].service, 'test')
+                  assert.strictEqual(spans[1].resource, 'converted')
+                  assert.strictEqual(spans[1].meta.component, 'koa')
                 })
                 .then(done)
                 .catch(done)
@@ -685,15 +667,9 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  assertObjectContains(spans, {
-                    0: {
-                      resource: 'GET /user/:id',
-                      meta: {
-                        'http.url': `http://localhost:${port}/user/123`,
-                      },
-                      error: 1,
-                    },
-                  })
+                  assert.strictEqual(spans[0].resource, 'GET /user/:id')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
+                  assert.strictEqual(spans[0].error, 1)
 
                   assert.ok(Object.hasOwn(spans[1], 'resource'))
                   assert.match(spans[1].resource, /^(dispatch|bound)/)
@@ -778,22 +754,17 @@ describe('Plugin', () => {
                 .assertSomeTraces(traces => {
                   const spans = sort(traces[0])
 
-                  assertObjectContains(spans, {
-                    0: {
-                      name: 'koa.request',
-                      service: 'test',
-                      type: 'web',
-                      resource: 'GET',
-                      meta: {
-                        'span.kind': 'server',
-                        'http.url': `http://localhost:${port}/user`,
-                        'http.method': 'GET',
-                        'http.status_code': '200',
-                        component: 'koa',
-                      },
-                    },
-                    length: 1,
-                  })
+                  assert.strictEqual(spans[0].name, 'koa.request')
+                  assert.strictEqual(spans[0].service, 'test')
+                  assert.strictEqual(spans[0].type, 'web')
+                  assert.strictEqual(spans[0].resource, 'GET')
+                  assert.strictEqual(spans[0].meta['span.kind'], 'server')
+                  assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                  assert.strictEqual(spans[0].meta['http.method'], 'GET')
+                  assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                  assert.strictEqual(spans[0].meta.component, 'koa')
+
+                  assert.strictEqual(spans.length, 1)
                 })
                 .then(done)
                 .catch(done)
@@ -820,22 +791,17 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
-                    assertObjectContains(spans, {
-                      0: {
-                        name: 'koa.request',
-                        service: 'test',
-                        type: 'web',
-                        resource: 'GET',
-                        meta: {
-                          'span.kind': 'server',
-                          'http.url': `http://localhost:${port}/user`,
-                          'http.method': 'GET',
-                          'http.status_code': '200',
-                          component: 'koa',
-                        },
-                      },
-                      length: 1,
-                    })
+                    assert.strictEqual(spans[0].name, 'koa.request')
+                    assert.strictEqual(spans[0].service, 'test')
+                    assert.strictEqual(spans[0].type, 'web')
+                    assert.strictEqual(spans[0].resource, 'GET')
+                    assert.strictEqual(spans[0].meta['span.kind'], 'server')
+                    assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user`)
+                    assert.strictEqual(spans[0].meta['http.method'], 'GET')
+                    assert.strictEqual(spans[0].meta['http.status_code'], '200')
+                    assert.strictEqual(spans[0].meta.component, 'koa')
+
+                    assert.strictEqual(spans.length, 1)
                   })
                   .then(done)
                   .catch(done)
@@ -965,16 +931,10 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = sort(traces[0])
 
-                    assertObjectContains(spans, {
-                      0: {
-                        resource: 'GET /user/:id',
-                        meta: {
-                          'http.url': `http://localhost:${port}/user/123`,
-                          component: 'koa',
-                        },
-                        error: 1,
-                      },
-                    })
+                    assert.strictEqual(spans[0].resource, 'GET /user/:id')
+                    assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${port}/user/123`)
+                    assert.strictEqual(spans[0].error, 1)
+                    assert.strictEqual(spans[0].meta.component, 'koa')
                   })
                   .then(done)
                   .catch(done)

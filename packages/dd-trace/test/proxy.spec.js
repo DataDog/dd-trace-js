@@ -7,7 +7,6 @@ const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('TracerProxy', () => {
   let Proxy
@@ -499,13 +498,9 @@ describe('TracerProxy', () => {
         const incs = dogStatsD._increments()
 
         assert.strictEqual(dogStatsD._config().dogstatsd.hostname, 'localhost')
-        assertObjectContains(incs, {
-          length: 1,
-          0: {
-            0: 'foo',
-            1: 10,
-          },
-        })
+        assert.strictEqual(incs.length, 1)
+        assert.strictEqual(incs[0][0], 'foo')
+        assert.strictEqual(incs[0][1], 10)
         assert.deepStrictEqual(incs[0][2], { alpha: 'bravo' })
       })
 

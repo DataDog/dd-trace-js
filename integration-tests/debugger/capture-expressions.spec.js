@@ -310,16 +310,10 @@ describe('Dynamic Instrumentation', function () {
         )
 
         const { captureExpressions } = snapshot.captures.lines[t.breakpoint.line]
-        assertObjectContains(captureExpressions, {
-          arr: {
-            type: 'Array',
-            elements: {
-              length: 10,
-            },
-            notCapturedReason: 'collectionSize',
-            size: 200,
-          },
-        })
+        assert.strictEqual(captureExpressions.arr.type, 'Array')
+        assert.strictEqual(captureExpressions.arr.elements.length, 10)
+        assert.strictEqual(captureExpressions.arr.notCapturedReason, 'collectionSize')
+        assert.strictEqual(captureExpressions.arr.size, 200)
       })
 
       it('should use probe maxFieldCount when per-expression limit is not specified', async function () {

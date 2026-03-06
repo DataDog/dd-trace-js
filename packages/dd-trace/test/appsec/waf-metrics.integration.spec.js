@@ -4,14 +4,7 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const Axios = require('axios')
-const {
-  assertObjectContains,
-  sandboxCwd,
-  useSandbox,
-  FakeAgent,
-  spawnProc,
-} = require('../../../../integration-tests/helpers')
-
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
 describe('WAF Metrics', () => {
   let axios, cwd, appFile
 
@@ -169,18 +162,10 @@ describe('WAF Metrics', () => {
       await axios.post('/', { complexPayload })
 
       const checkMessages = agent.assertMessageReceived(({ payload }) => {
-        assertObjectContains(payload, {
-          0: {
-            0: {
-              metrics: {
-                '_dd.appsec.enabled': 1,
-                '_dd.appsec.truncated.container_depth': 20,
-                '_dd.appsec.truncated.container_size': 300,
-                '_dd.appsec.truncated.string_length': 5000,
-              },
-            },
-          },
-        })
+        assert.strictEqual(payload[0][0].metrics['_dd.appsec.enabled'], 1)
+        assert.strictEqual(payload[0][0].metrics['_dd.appsec.truncated.container_depth'], 20)
+        assert.strictEqual(payload[0][0].metrics['_dd.appsec.truncated.container_size'], 300)
+        assert.strictEqual(payload[0][0].metrics['_dd.appsec.truncated.string_length'], 5000)
       })
 
       const checkTelemetryMetrics = agent.assertTelemetryReceived(({ payload }) => {

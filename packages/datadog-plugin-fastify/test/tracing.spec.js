@@ -518,13 +518,9 @@ describe('Plugin', () => {
                   .assertSomeTraces(traces => {
                     const spans = traces[0]
 
-                    assertObjectContains(spans, {
-                      0: {
-                        name: 'fastify.request',
-                        resource: 'GET /user',
-                        error: 0,
-                      },
-                    })
+                    assert.strictEqual(spans[0].name, 'fastify.request')
+                    assert.strictEqual(spans[0].resource, 'GET /user')
+                    assert.strictEqual(spans[0].error, 0)
                     assert.ok(!(ERROR_TYPE in spans[0].meta))
                     assert.ok(!(ERROR_MESSAGE in spans[0].meta))
                     assert.ok(!(ERROR_STACK in spans[0].meta))

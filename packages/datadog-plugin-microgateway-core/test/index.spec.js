@@ -11,7 +11,6 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 const proxy = require('./proxy')
 
 describe('Plugin', () => {
@@ -84,22 +83,16 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const spans = traces[0]
 
-              assertObjectContains(spans, {
-                0: {
-                  name: 'microgateway.request',
-                  service: 'test',
-                  type: 'web',
-                  resource: 'GET /v1',
-                  meta: {
-                    'span.kind': 'server',
-                    'http.url': `http://localhost:${gatewayPort}/v1/foo`,
-                    'http.method': 'GET',
-                    'http.status_code': '200',
-                    component: 'microgateway',
-                    '_dd.integration': 'microgateway',
-                  },
-                },
-              })
+              assert.strictEqual(spans[0].name, 'microgateway.request')
+              assert.strictEqual(spans[0].service, 'test')
+              assert.strictEqual(spans[0].type, 'web')
+              assert.strictEqual(spans[0].resource, 'GET /v1')
+              assert.strictEqual(spans[0].meta['span.kind'], 'server')
+              assert.strictEqual(spans[0].meta['http.url'], `http://localhost:${gatewayPort}/v1/foo`)
+              assert.strictEqual(spans[0].meta['http.method'], 'GET')
+              assert.strictEqual(spans[0].meta['http.status_code'], '200')
+              assert.strictEqual(spans[0].meta.component, 'microgateway')
+              assert.strictEqual(spans[0].meta['_dd.integration'], 'microgateway')
             })
             .then(done)
             .catch(done)

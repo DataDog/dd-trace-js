@@ -9,7 +9,6 @@ const proxyquire = require('proxyquire')
 require('../setup/core')
 const Capabilities = require('../../src/remote_config/capabilities')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('../../src/remote_config/apply_states')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 const noop = () => {}
 
@@ -737,72 +736,40 @@ describe('RemoteConfig', () => {
       assertAsyncHandlerCallArguments(asyncBadAckHandler, 'apply', list[7].file, list[7].id)
       assertAsyncHandlerCallArguments(unackHandler, 'apply', list[8].file, list[8].id)
 
-      assertObjectContains(list, {
-        0: {
-          apply_state: ACKNOWLEDGED,
-          apply_error: '',
-        },
-        1: {
-          apply_state: ERROR,
-          apply_error: 'Error: sync fn',
-        },
-        2: {
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-        },
-        3: {
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-        },
-        4: {
-          apply_state: ACKNOWLEDGED,
-          apply_error: '',
-        },
-        5: {
-          apply_state: ERROR,
-          apply_error: 'Error: sync ack fn',
-        },
-        6: {
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-        },
-        7: {
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-        },
-        8: {
-          apply_state: UNACKNOWLEDGED,
-          apply_error: '',
-        },
-      })
+      assert.strictEqual(list[0].apply_state, ACKNOWLEDGED)
+      assert.strictEqual(list[0].apply_error, '')
+      assert.strictEqual(list[1].apply_state, ERROR)
+      assert.strictEqual(list[1].apply_error, 'Error: sync fn')
+      assert.strictEqual(list[2].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[2].apply_error, '')
+      assert.strictEqual(list[3].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[3].apply_error, '')
+      assert.strictEqual(list[4].apply_state, ACKNOWLEDGED)
+      assert.strictEqual(list[4].apply_error, '')
+      assert.strictEqual(list[5].apply_state, ERROR)
+      assert.strictEqual(list[5].apply_error, 'Error: sync ack fn')
+      assert.strictEqual(list[6].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[6].apply_error, '')
+      assert.strictEqual(list[7].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[7].apply_error, '')
+      assert.strictEqual(list[8].apply_state, UNACKNOWLEDGED)
+      assert.strictEqual(list[8].apply_error, '')
 
       for (let i = 0; i < list.length; i++) {
         assert.strictEqual(rc.appliedConfigs.get(`datadog/42/PRODUCT_${i}/confId/config`), list[i])
       }
 
       setImmediate(() => {
-        assertObjectContains(list, {
-          2: {
-            apply_state: ACKNOWLEDGED,
-            apply_error: '',
-          },
-          3: {
-            apply_state: ERROR,
-            apply_error: 'Error: async fn',
-          },
-          6: {
-            apply_state: ACKNOWLEDGED,
-            apply_error: '',
-          },
-          7: {
-            apply_state: ERROR,
-            apply_error: 'Error: async ack fn',
-          },
-          8: {
-            apply_state: UNACKNOWLEDGED,
-            apply_error: '',
-          },
-        })
+        assert.strictEqual(list[2].apply_state, ACKNOWLEDGED)
+        assert.strictEqual(list[2].apply_error, '')
+        assert.strictEqual(list[3].apply_state, ERROR)
+        assert.strictEqual(list[3].apply_error, 'Error: async fn')
+        assert.strictEqual(list[6].apply_state, ACKNOWLEDGED)
+        assert.strictEqual(list[6].apply_error, '')
+        assert.strictEqual(list[7].apply_state, ERROR)
+        assert.strictEqual(list[7].apply_error, 'Error: async ack fn')
+        assert.strictEqual(list[8].apply_state, UNACKNOWLEDGED)
+        assert.strictEqual(list[8].apply_error, '')
         done()
       })
 

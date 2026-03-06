@@ -92,7 +92,9 @@ function checkBody (
     if (groups.length >= 3) {
       const firstStatement = body[i]
       const rootObject = getRootObjectFromCall(firstStatement)
-      if (rootObject && allPathsResolvable(groups, rootObject, sourceCode)) {
+      if (rootObject &&
+          allPathsResolvable(groups, rootObject, sourceCode) &&
+          allPathsAllowed(groups, rootObject, sourceCode)) {
         context.report({
           node: firstStatement,
           messageId: 'preferObjectContains',
@@ -179,10 +181,34 @@ function getRootObjectFromCall (statement) {
   return null
 }
 
+// Properties that represent collection sizes — assertObjectContains does not
+// work reliably when these are the terminal property being asserted.
+const COLLECTION_SIZE_PROPS = new Set(['length', 'size'])
+
 function allPathsResolvable (groups, rootName, sourceCode) {
   for (const stmt of groups) {
     const firstArg = stmt.expression.arguments[0]
     if (!getPropertyPath(firstArg, rootName, sourceCode)) return false
+  }
+  return true
+}
+
+/**
+ * Returns false if any path in the group:
+ * - Uses a numeric computed index (e.g. arr[0]) — indicates array indexing
+ * - Has a terminal segment that is a collection size property (length, size)
+ *
+ * Called after allPathsResolvable, so getPropertyPath is guaranteed non-null.
+ */
+function allPathsAllowed (groups, rootName, sourceCode) {
+  for (const stmt of groups) {
+    const firstArg = stmt.expression.arguments[0]
+    const segments = getPropertyPath(firstArg, rootName, sourceCode)
+    for (const seg of segments) {
+      if (seg.computed && typeof seg.rawValue === 'number') return false
+    }
+    const last = segments[segments.length - 1]
+    if (last && !last.computed && COLLECTION_SIZE_PROPS.has(last.key)) return false
   }
   return true
 }
@@ -193,7 +219,7 @@ function allPathsResolvable (groups, rootName, sourceCode) {
  * computed property (template strings, variables).
  *
  * Example: `span.meta['key']` with root `span`
- *   → [{ key: 'meta', computed: false }, { key: "'key'", computed: true }]
+ *   → [{ key: 'meta', computed: false }, { key: "'key'", computed: true, rawValue: 'key' }]
  */
 function getPropertyPath (memberExpr, rootName, sourceCode) {
   const segments = []
@@ -206,6 +232,7 @@ function getPropertyPath (memberExpr, rootName, sourceCode) {
       segments.unshift({
         key: sourceCode.getText(current.property),
         computed: true,
+        rawValue: current.property.value,
       })
     } else {
       segments.unshift({

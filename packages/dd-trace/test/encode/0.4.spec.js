@@ -66,13 +66,9 @@ describe('encode', () => {
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assertObjectContains(trace, {
-        0: {
-          start: 123n,
-          duration: 456n,
-          name: data[0].name,
-        },
-      })
+      assert.strictEqual(trace[0].start, 123n)
+      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz' })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
@@ -123,14 +119,12 @@ describe('encode', () => {
       const payload = encoder.makePayload()
 
       assert.strictEqual(encoder.count(), 0)
-      assertObjectContains(payload, {
-        length: 5,
-        0: 0xdd,
-        1: 0,
-        2: 0,
-        3: 0,
-        4: 0,
-      })
+      assert.strictEqual(payload.length, 5)
+      assert.strictEqual(payload[0], 0xdd)
+      assert.strictEqual(payload[1], 0)
+      assert.strictEqual(payload[2], 0)
+      assert.strictEqual(payload[3], 0)
+      assert.strictEqual(payload[4], 0)
     })
 
     it('should log adding an encoded trace to the buffer if enabled', () => {
@@ -242,13 +236,9 @@ describe('encode', () => {
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assertObjectContains(trace, {
-        0: {
-          start: 123n,
-          duration: 456n,
-          name: data[0].name,
-        },
-      })
+      assert.strictEqual(trace[0].start, 123n)
+      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })
@@ -268,13 +258,9 @@ describe('encode', () => {
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assertObjectContains(trace, {
-        0: {
-          start: 123n,
-          duration: 456n,
-          name: data[0].name,
-        },
-      })
+      assert.strictEqual(trace[0].start, 123n)
+      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
     })

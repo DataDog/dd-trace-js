@@ -156,22 +156,11 @@ describe('agentless-ci-visibility-encode', () => {
 
     assert.ok(decodedTrace)
     const spanEvent = decodedTrace.events[0]
-    assertObjectContains(spanEvent, {
-      content: {
-        type: {
-          length: MAX_TYPE_LENGTH,
-        },
-        name: {
-          length: MAX_NAME_LENGTH,
-        },
-        service: {
-          length: MAX_SERVICE_LENGTH,
-        },
-        resource: {
-          length: MAX_RESOURCE_NAME_LENGTH + 3,
-        },
-      },
-    })
+    assert.strictEqual(spanEvent.content.type.length, MAX_TYPE_LENGTH)
+    assert.strictEqual(spanEvent.content.name.length, MAX_NAME_LENGTH)
+    assert.strictEqual(spanEvent.content.service.length, MAX_SERVICE_LENGTH)
+    // ellipsis is added
+    assert.strictEqual(spanEvent.content.resource.length, MAX_RESOURCE_NAME_LENGTH + 3)
   })
 
   it('should fallback to a default name and service if they are not present', () => {

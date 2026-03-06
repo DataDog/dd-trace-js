@@ -38,6 +38,42 @@ ruleTester.run('prefer-assert-object-contains', /** @type {import('eslint').Rule
       assert.deepStrictEqual(obj.b, 2)
       assert.strictEqual(obj.c, 3)
     `,
+    // Numeric computed index (array indexing) — should not transform
+    `
+      assert.strictEqual(arr[0].a, 1)
+      assert.strictEqual(arr[1].b, 2)
+      assert.strictEqual(arr[2].c, 3)
+    `,
+    // Numeric index in the middle of the path — should not transform
+    `
+      assert.strictEqual(obj.items[0], 'a')
+      assert.strictEqual(obj.items[1], 'b')
+      assert.strictEqual(obj.items[2], 'c')
+    `,
+    // Terminal property is 'length' — should not transform
+    `
+      assert.strictEqual(obj.a, 1)
+      assert.strictEqual(obj.b, 2)
+      assert.strictEqual(obj.length, 3)
+    `,
+    // length as the first assertion in the group — should not transform
+    `
+      assert.strictEqual(obj.length, 3)
+      assert.strictEqual(obj.name, 'foo')
+      assert.strictEqual(obj.type, 'bar')
+    `,
+    // Terminal property is 'size' — should not transform
+    `
+      assert.strictEqual(obj.name, 'foo')
+      assert.strictEqual(obj.type, 'bar')
+      assert.strictEqual(obj.size, 100)
+    `,
+    // Nested terminal 'length' on sub-object — should not transform
+    `
+      assert.strictEqual(obj.elements.length, 0)
+      assert.strictEqual(obj.entries.length, 0)
+      assert.strictEqual(obj.values.length, 0)
+    `,
   ],
   invalid: [
     {

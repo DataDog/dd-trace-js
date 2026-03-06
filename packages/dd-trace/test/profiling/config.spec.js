@@ -170,11 +170,9 @@ describe('config', () => {
     assert.ok(Array.isArray(config.profilers))
     assert.strictEqual(config.profilers.length, 0)
 
-    assertObjectContains(errors, {
-      length: 2,
-      0: 'Unknown profiler "nope"',
-      1: 'Unknown profiler "also_nope"',
-    })
+    assert.strictEqual(errors.length, 2)
+    assert.strictEqual(errors[0], 'Unknown profiler "nope"')
+    assert.strictEqual(errors[1], 'Unknown profiler "also_nope"')
   })
 
   it('should support profiler config with empty DD_PROFILING_PROFILERS', () => {

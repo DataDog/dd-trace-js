@@ -468,24 +468,10 @@ function createGarbage (count = 50) {
             call.args[0] === 'runtime.node.event_loop.utilization'
           )
 
-          assertObjectContains(eluCalls, {
-            length: 3,
-            0: {
-              args: {
-                1: 0.2,
-              },
-            },
-            1: {
-              args: {
-                1: 0.75,
-              },
-            },
-            2: {
-              args: {
-                1: 0,
-              },
-            },
-          })
+          assert.strictEqual(eluCalls.length, 3)
+          assert.strictEqual(eluCalls[0].args[1], 0.2)
+          assert.strictEqual(eluCalls[1].args[1], 0.75)
+          assert.strictEqual(eluCalls[2].args[1], 0)
         })
       })
 

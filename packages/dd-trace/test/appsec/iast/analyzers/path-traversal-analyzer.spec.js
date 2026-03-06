@@ -15,7 +15,6 @@ const { newTaintedString } = require('../../../../src/appsec/iast/taint-tracking
 
 const { prepareTestServerForIast } = require('../utils')
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
-const { assertObjectContains } = require('../../../../../../integration-tests/helpers')
 
 const iastContext = {
   rootSpan: {
@@ -77,21 +76,12 @@ describe('path-traversal-analyzer', () => {
   })
 
   it('Analyzer should be subscribed to proper channel', () => {
-    assertObjectContains(pathTraversalAnalyzer, {
-      _subscriptions: {
-        length: 2,
-        0: {
-          _channel: {
-            name: 'apm:fs:operation:start',
-          },
-        },
-        1: {
-          _channel: {
-            name: 'tracing:datadog:express:response:render:start',
-          },
-        },
-      },
-    })
+    assert.strictEqual(pathTraversalAnalyzer._subscriptions.length, 2)
+    assert.strictEqual(pathTraversalAnalyzer._subscriptions[0]._channel.name, 'apm:fs:operation:start')
+    assert.strictEqual(
+      pathTraversalAnalyzer._subscriptions[1]._channel.name,
+      'tracing:datadog:express:response:render:start'
+    )
   })
 
   it('If no context it should not report vulnerability', () => {

@@ -3,7 +3,6 @@
 const assert = require('node:assert/strict')
 const semver = require('semver')
 const { NODE_MAJOR } = require('../../version')
-const { assertObjectContains } = require('../helpers')
 const { setup } = require('./utils')
 
 const NODE_24_11_1_OR_LATER = semver.gte(process.version, '24.11.1')
@@ -204,17 +203,11 @@ describe('Dynamic Instrumentation', function () {
         const { evaluationErrors } = payload.debugger.snapshot
 
         assert.ok(Array.isArray(evaluationErrors))
-        assertObjectContains(evaluationErrors, {
-          length: 2,
-          0: {
-            expr: 'request.invalid.name',
-            message: 'TypeError: Cannot convert undefined or null to object',
-          },
-          1: {
-            expr: 'invalid',
-            message: 'ReferenceError: invalid is not defined',
-          },
-        })
+        assert.strictEqual(evaluationErrors.length, 2)
+        assert.strictEqual(evaluationErrors[0].expr, 'request.invalid.name')
+        assert.strictEqual(evaluationErrors[0].message, 'TypeError: Cannot convert undefined or null to object')
+        assert.strictEqual(evaluationErrors[1].expr, 'invalid')
+        assert.strictEqual(evaluationErrors[1].message, 'ReferenceError: invalid is not defined')
         done()
       })
 

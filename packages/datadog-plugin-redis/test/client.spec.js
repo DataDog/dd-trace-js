@@ -8,7 +8,6 @@ const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -66,28 +65,18 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', async () => {
           const promise = agent
             .assertSomeTraces(traces => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    name: expectedSchema.outbound.opName,
-                    service: expectedSchema.outbound.serviceName,
-                    resource: 'GET',
-                    type: 'redis',
-                    meta: {
-                      'db.name': '0',
-                      'db.type': 'redis',
-                      'span.kind': 'client',
-                      'redis.raw_command': 'GET foo',
-                      component: 'redis',
-                      '_dd.integration': 'redis',
-                      'out.host': '127.0.0.1',
-                    },
-                    metrics: {
-                      'network.destination.port': 6379,
-                    },
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'GET')
+              assert.strictEqual(traces[0][0].type, 'redis')
+              assert.strictEqual(traces[0][0].meta['db.name'], '0')
+              assert.strictEqual(traces[0][0].meta['db.type'], 'redis')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'GET foo')
+              assert.strictEqual(traces[0][0].meta.component, 'redis')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'redis')
+              assert.strictEqual(traces[0][0].meta['out.host'], '127.0.0.1')
+              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
             })
 
           await client.get('foo')
@@ -124,23 +113,15 @@ describe('Plugin', () => {
         it('should work with userland promises', async () => {
           const promise = agent
             .assertSomeTraces(traces => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    name: expectedSchema.outbound.opName,
-                    service: expectedSchema.outbound.serviceName,
-                    resource: 'GET',
-                    type: 'redis',
-                    meta: {
-                      'db.name': '0',
-                      'db.type': 'redis',
-                      'span.kind': 'client',
-                      'redis.raw_command': 'GET foo',
-                      component: 'redis',
-                    },
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'GET')
+              assert.strictEqual(traces[0][0].type, 'redis')
+              assert.strictEqual(traces[0][0].meta['db.name'], '0')
+              assert.strictEqual(traces[0][0].meta['db.type'], 'redis')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'GET foo')
+              assert.strictEqual(traces[0][0].meta.component, 'redis')
             })
 
           breakThen(Promise.prototype)
@@ -189,19 +170,9 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', async () => {
           const promise = agent.assertSomeTraces(traces => {
-            assertObjectContains(traces, {
-              0: {
-                0: {
-                  service: 'custom',
-                  meta: {
-                    'out.host': 'localhost',
-                  },
-                  metrics: {
-                    'network.destination.port': 6379,
-                  },
-                },
-              },
-            })
+            assert.strictEqual(traces[0][0].service, 'custom')
+            assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
+            assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
           })
 
           await client.get('foo')

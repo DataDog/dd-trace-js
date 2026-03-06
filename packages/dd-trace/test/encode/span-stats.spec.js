@@ -18,7 +18,6 @@ const {
   DEFAULT_SERVICE_NAME,
 } = require('../../src/encode/tags-processors')
 const processTags = require('../../src/process-tags')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('span-stats-encode', () => {
   let encoder
@@ -133,20 +132,11 @@ describe('span-stats-encode', () => {
 
     assert.ok(decoded)
     const decodedStat = decoded.Stats[0].Stats[0]
-    assertObjectContains(decodedStat, {
-      Type: {
-        length: MAX_TYPE_LENGTH,
-      },
-      Name: {
-        length: MAX_NAME_LENGTH,
-      },
-      Service: {
-        length: MAX_SERVICE_LENGTH,
-      },
-      Resource: {
-        length: MAX_RESOURCE_NAME_LENGTH + 3,
-      },
-    })
+    assert.strictEqual(decodedStat.Type.length, MAX_TYPE_LENGTH)
+    assert.strictEqual(decodedStat.Name.length, MAX_NAME_LENGTH)
+    assert.strictEqual(decodedStat.Service.length, MAX_SERVICE_LENGTH)
+    // ellipsis is added
+    assert.strictEqual(decodedStat.Resource.length, MAX_RESOURCE_NAME_LENGTH + 3)
   })
 
   it('should fallback to a default name and service if they are not present', () => {

@@ -276,25 +276,15 @@ describe('Plugin', () => {
                     resource: '/test.TestService/getBidi',
                     type: 'http',
                   })
-                  assertObjectContains(traces, {
-                    0: {
-                      0: {
-                        meta: {
-                          'grpc.method.name': 'getBidi',
-                          'grpc.method.service': 'TestService',
-                          'grpc.method.path': '/test.TestService/getBidi',
-                          'grpc.method.kind': 'bidi_streaming',
-                          'rpc.service': 'test.TestService',
-                          'span.kind': 'client',
-                          component: 'grpc',
-                          '_dd.integration': 'grpc',
-                        },
-                        metrics: {
-                          'grpc.status.code': 0,
-                        },
-                      },
-                    },
-                  })
+                  assert.strictEqual(traces[0][0].meta['grpc.method.name'], 'getBidi')
+                  assert.strictEqual(traces[0][0].meta['grpc.method.service'], 'TestService')
+                  assert.strictEqual(traces[0][0].meta['grpc.method.path'], '/test.TestService/getBidi')
+                  assert.strictEqual(traces[0][0].meta['grpc.method.kind'], 'bidi_streaming')
+                  assert.strictEqual(traces[0][0].meta['rpc.service'], 'test.TestService')
+                  assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+                  assert.strictEqual(traces[0][0].metrics['grpc.status.code'], 0)
+                  assert.strictEqual(traces[0][0].meta.component, 'grpc')
+                  assert.strictEqual(traces[0][0].meta['_dd.integration'], 'grpc')
                 })
             })
 

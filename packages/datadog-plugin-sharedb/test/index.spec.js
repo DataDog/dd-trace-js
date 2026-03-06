@@ -8,8 +8,6 @@ const sinon = require('sinon')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-
 describe('Plugin', () => {
   let ShareDB
 
@@ -49,21 +47,13 @@ describe('Plugin', () => {
             if (err) { throw err }
 
             agent.assertSomeTraces(traces => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    service: 'test',
-                    resource: 'fetch some-collection',
-                    meta: {
-                      'span.kind': 'server',
-                      service: 'test',
-                      'sharedb.action': 'fetch',
-                      component: 'sharedb',
-                      '_dd.integration': 'sharedb',
-                    },
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].service, 'test')
+              assert.strictEqual(traces[0][0].resource, 'fetch some-collection')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+              assert.strictEqual(traces[0][0].meta.service, 'test')
+              assert.strictEqual(traces[0][0].meta['sharedb.action'], 'fetch')
+              assert.strictEqual(traces[0][0].meta.component, 'sharedb')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'sharedb')
             })
               .then(done)
               .catch(done)
@@ -106,19 +96,14 @@ describe('Plugin', () => {
             agent.assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].service, 'test')
               assert.ok('resource' in traces[0][0])
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    resource: 'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}',
-                    meta: {
-                      'span.kind': 'server',
-                      service: 'test',
-                      'sharedb.action': 'query-fetch',
-                      component: 'sharedb',
-                    },
-                  },
-                },
-              })
+              assert.strictEqual(
+                traces[0][0].resource,
+                'query-fetch some-collection {"randomValues":{"property":"?","one":"?"}}'
+              )
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+              assert.strictEqual(traces[0][0].meta.service, 'test')
+              assert.strictEqual(traces[0][0].meta['sharedb.action'], 'query-fetch')
+              assert.strictEqual(traces[0][0].meta.component, 'sharedb')
             })
               .then(done)
               .catch(done)

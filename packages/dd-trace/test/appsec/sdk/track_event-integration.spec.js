@@ -8,7 +8,6 @@ const { after, before, describe, it } = require('mocha')
 const { USER_KEEP } = require('../../../../../ext/priority')
 const tracer = require('../../../../../index')
 const agent = require('../../plugins/agent')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('track_event - Integration with the tracer', () => {
   let http
@@ -50,20 +49,10 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assertObjectContains(traces, {
-          0: {
-            0: {
-              meta: {
-                'appsec.events.users.login.success.track': 'true',
-                'usr.id': 'test_user_id',
-                'appsec.events.users.login.success.metakey': 'metaValue',
-              },
-              metrics: {
-                _sampling_priority_v1: USER_KEEP,
-              },
-            },
-          },
-        })
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.success.track'], 'true')
+        assert.strictEqual(traces[0][0].meta['usr.id'], 'test_user_id')
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.success.metakey'], 'metaValue')
+        assert.strictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })
@@ -103,21 +92,11 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assertObjectContains(traces, {
-          0: {
-            0: {
-              meta: {
-                'appsec.events.users.login.failure.track': 'true',
-                'appsec.events.users.login.failure.usr.id': 'test_user_id',
-                'appsec.events.users.login.failure.usr.exists': 'true',
-                'appsec.events.users.login.failure.metakey': 'metaValue',
-              },
-              metrics: {
-                _sampling_priority_v1: USER_KEEP,
-              },
-            },
-          },
-        })
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.track'], 'true')
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.usr.id'], 'test_user_id')
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.usr.exists'], 'true')
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.metakey'], 'metaValue')
+        assert.strictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })
@@ -128,21 +107,11 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assertObjectContains(traces, {
-          0: {
-            0: {
-              meta: {
-                'appsec.events.users.login.failure.track': 'true',
-                'appsec.events.users.login.failure.usr.id': 'test_user_id',
-                'appsec.events.users.login.failure.usr.exists': 'false',
-                'appsec.events.users.login.failure.metakey': 'metaValue',
-              },
-              metrics: {
-                _sampling_priority_v1: USER_KEEP,
-              },
-            },
-          },
-        })
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.track'], 'true')
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.usr.id'], 'test_user_id')
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.usr.exists'], 'false')
+        assert.strictEqual(traces[0][0].meta['appsec.events.users.login.failure.metakey'], 'metaValue')
+        assert.strictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })
@@ -182,19 +151,9 @@ describe('track_event - Integration with the tracer', () => {
         res.end()
       }
       agent.assertSomeTraces(traces => {
-        assertObjectContains(traces, {
-          0: {
-            0: {
-              meta: {
-                'appsec.events.my-custom-event.track': 'true',
-                'appsec.events.my-custom-event.metakey': 'metaValue',
-              },
-              metrics: {
-                _sampling_priority_v1: USER_KEEP,
-              },
-            },
-          },
-        })
+        assert.strictEqual(traces[0][0].meta['appsec.events.my-custom-event.track'], 'true')
+        assert.strictEqual(traces[0][0].meta['appsec.events.my-custom-event.metakey'], 'metaValue')
+        assert.strictEqual(traces[0][0].metrics._sampling_priority_v1, USER_KEEP)
       }).then(done).catch(done)
       axios.get(`http://localhost:${port}/`)
     })

@@ -11,7 +11,6 @@ const sinon = require('sinon')
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   let tracer
@@ -47,24 +46,16 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assertObjectContains(traces, {
-                  0: {
-                    0: {
-                      name: 'restify.request',
-                      service: 'test',
-                      type: 'web',
-                      resource: 'GET',
-                      meta: {
-                        'span.kind': 'server',
-                        'http.url': `http://localhost:${port}/user`,
-                        'http.method': 'GET',
-                        'http.status_code': '404',
-                        component: 'restify',
-                        '_dd.integration': 'restify',
-                      },
-                    },
-                  },
-                })
+                assert.strictEqual(traces[0][0].name, 'restify.request')
+                assert.strictEqual(traces[0][0].service, 'test')
+                assert.strictEqual(traces[0][0].type, 'web')
+                assert.strictEqual(traces[0][0].resource, 'GET')
+                assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user`)
+                assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+                assert.strictEqual(traces[0][0].meta['http.status_code'], '404')
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
+                assert.strictEqual(traces[0][0].meta['_dd.integration'], 'restify')
               })
               .then(done)
               .catch(done)
@@ -88,17 +79,9 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assertObjectContains(traces, {
-                  0: {
-                    0: {
-                      resource: 'GET /user/:id',
-                      meta: {
-                        'http.url': `http://localhost:${port}/user/123`,
-                        component: 'restify',
-                      },
-                    },
-                  },
-                })
+                assert.strictEqual(traces[0][0].resource, 'GET /user/:id')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
               })
               .then(done)
               .catch(done)
@@ -125,17 +108,9 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assertObjectContains(traces, {
-                  0: {
-                    0: {
-                      resource: 'GET /user/:id',
-                      meta: {
-                        'http.url': `http://localhost:${port}/user/123`,
-                        component: 'restify',
-                      },
-                    },
-                  },
-                })
+                assert.strictEqual(traces[0][0].resource, 'GET /user/:id')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
               })
               .then(done)
               .catch(done)
@@ -238,17 +213,9 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assertObjectContains(traces, {
-                  0: {
-                    0: {
-                      resource: 'GET /user/:id',
-                      meta: {
-                        'http.url': `http://localhost:${port}/user/123`,
-                        component: 'restify',
-                      },
-                    },
-                  },
-                })
+                assert.strictEqual(traces[0][0].resource, 'GET /user/:id')
+                assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
+                assert.strictEqual(traces[0][0].meta.component, 'restify')
               })
               .then(done)
               .catch(done)

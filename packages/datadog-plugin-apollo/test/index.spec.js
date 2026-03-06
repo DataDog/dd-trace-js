@@ -121,28 +121,12 @@ describe('Plugin', () => {
             }`
           agent
             .assertSomeTraces((traces) => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    name: expectedSchema.server.opName,
-                  },
-                  1: {
-                    name: 'apollo.gateway.validate',
-                  },
-                  2: {
-                    name: 'apollo.gateway.plan',
-                  },
-                  3: {
-                    name: 'apollo.gateway.execute',
-                  },
-                  4: {
-                    name: 'apollo.gateway.fetch',
-                  },
-                  5: {
-                    name: 'apollo.gateway.postprocessing',
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+              assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
+              assert.strictEqual(traces[0][3].name, 'apollo.gateway.execute')
+              assert.strictEqual(traces[0][4].name, 'apollo.gateway.fetch')
+              assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
             })
             .then(done)
             .catch(done)
@@ -236,17 +220,11 @@ describe('Plugin', () => {
           const source = '{ hello(name: "world") }'
           agent
             .assertSomeTraces((traces) => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    name: expectedSchema.server.opName,
-                    service: expectedSchema.server.serviceName,
-                    resource: '{hello(name:"")}',
-                    type: 'web',
-                    error: 0,
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(traces[0][0].resource, '{hello(name:"")}')
+              assert.strictEqual(traces[0][0].type, 'web')
+              assert.strictEqual(traces[0][0].error, 0)
               assert.ok(!('graphql.source' in traces[0][0].meta))
               assertObjectContains(traces[0][0].meta, {
                 'graphql.operation.type': 'query',
@@ -276,17 +254,11 @@ describe('Plugin', () => {
           `
           agent
             .assertSomeTraces((traces) => {
-              assertObjectContains(traces, {
-                0: {
-                  0: {
-                    name: expectedSchema.server.opName,
-                    service: expectedSchema.server.serviceName,
-                    resource: '{human{address{civicNumber street}name}}',
-                    type: 'web',
-                    error: 0,
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(traces[0][0].resource, '{human{address{civicNumber street}name}}')
+              assert.strictEqual(traces[0][0].type, 'web')
+              assert.strictEqual(traces[0][0].error, 0)
               assert.ok(!('graphql.source' in traces[0][0].meta))
               assertObjectContains(traces[0][0].meta, {
                 'graphql.operation.type': 'query',
@@ -386,20 +358,13 @@ describe('Plugin', () => {
           const variableValues = { who: 'world' }
           agent
             .assertSomeTraces((traces) => {
-              assertObjectContains(traces, {
-                0: {
-                  length: 3,
-                  0: {
-                    name: expectedSchema.server.opName,
-                    service: expectedSchema.server.serviceName,
-                    error: 1,
-                  },
-                  1: {
-                    name: 'apollo.gateway.validate',
-                    error: 0,
-                  },
-                },
-              })
+              assert.strictEqual(traces[0].length, 3)
+              assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(traces[0][0].error, 1)
+
+              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+              assert.strictEqual(traces[0][1].error, 0)
 
               assertObjectContains(traces[0][2], {
                 name: 'apollo.gateway.plan',
@@ -442,22 +407,14 @@ describe('Plugin', () => {
                 },
               })
 
-              assertObjectContains(traces, {
-                0: {
-                  1: {
-                    name: 'apollo.gateway.validate',
-                    error: 0,
-                  },
-                  2: {
-                    name: 'apollo.gateway.plan',
-                    service: expectedSchema.server.serviceName,
-                    error: 0,
-                  },
-                  3: {
-                    name: 'apollo.gateway.execute',
-                  },
-                },
-              })
+              assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+              assert.strictEqual(traces[0][1].error, 0)
+
+              assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
+              assert.strictEqual(traces[0][2].service, expectedSchema.server.serviceName)
+              assert.strictEqual(traces[0][2].error, 0)
+
+              assert.strictEqual(traces[0][3].name, 'apollo.gateway.execute')
               // In order to mimick the ApolloGateway instrumentation we also patch
               // the call to  the recordExceptions() method by ApolloGateway
               // in version 2.3.0, there is no recordExceptions method thus we can't ever attach an error to the
@@ -566,38 +523,25 @@ describe('Plugin', () => {
             const variableValues = { who: 'world' }
             agent
               .assertSomeTraces((traces) => {
-                assertObjectContains(traces, {
-                  0: {
-                    0: {
-                      name: expectedSchema.server.opName,
-                      service: 'custom',
-                      resource: `query ${operationName}`,
-                      meta: {
-                        'graphql.source': source,
-                      },
-                    },
-                    1: {
-                      name: 'apollo.gateway.validate',
-                      service: 'custom',
-                    },
-                    2: {
-                      name: 'apollo.gateway.plan',
-                      service: 'custom',
-                    },
-                    3: {
-                      name: 'apollo.gateway.execute',
-                      service: 'custom',
-                    },
-                    4: {
-                      name: 'apollo.gateway.fetch',
-                      service: 'custom',
-                    },
-                    5: {
-                      name: 'apollo.gateway.postprocessing',
-                      service: 'custom',
-                    },
-                  },
-                })
+                assert.strictEqual(traces[0][0].name, expectedSchema.server.opName)
+                assert.strictEqual(traces[0][0].service, 'custom')
+                assert.strictEqual(traces[0][0].resource, `query ${operationName}`)
+                assert.strictEqual(traces[0][0].meta['graphql.source'], source)
+
+                assert.strictEqual(traces[0][1].name, 'apollo.gateway.validate')
+                assert.strictEqual(traces[0][1].service, 'custom')
+
+                assert.strictEqual(traces[0][2].name, 'apollo.gateway.plan')
+                assert.strictEqual(traces[0][2].service, 'custom')
+
+                assert.strictEqual(traces[0][3].name, 'apollo.gateway.execute')
+                assert.strictEqual(traces[0][3].service, 'custom')
+
+                assert.strictEqual(traces[0][4].name, 'apollo.gateway.fetch')
+                assert.strictEqual(traces[0][4].service, 'custom')
+
+                assert.strictEqual(traces[0][5].name, 'apollo.gateway.postprocessing')
+                assert.strictEqual(traces[0][5].service, 'custom')
               })
               .then(done)
               .catch(done)

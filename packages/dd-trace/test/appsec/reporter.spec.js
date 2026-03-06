@@ -12,8 +12,6 @@ const { USER_KEEP } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
 const { getConfigFresh } = require('../helpers/config')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-
 function getAppSecConfig (options) {
   return getConfigFresh({ appsec: options }).appsec
 }
@@ -604,15 +602,9 @@ describe('reporter', () => {
           assert.strictEqual(truncatedRequestBody.str.length, 4096)
           assert.strictEqual(objectDepth(truncatedRequestBody.nestedObj), 19)
           assert.strictEqual(Object.keys(truncatedRequestBody.objectWithLotsOfNodes).length, 256)
-          assertObjectContains(truncatedRequestBody, {
-            arr: {
-              length: 256,
-            },
-            specialValues: {
-              nullValue: null,
-              undefinedValue: undefined,
-            },
-          })
+          assert.strictEqual(truncatedRequestBody.arr.length, 256)
+          assert.strictEqual(truncatedRequestBody.specialValues.nullValue, null)
+          assert.strictEqual(truncatedRequestBody.specialValues.undefinedValue, undefined)
           assert.deepStrictEqual(truncatedRequestBody.specialValues.emptyObject, {})
           assert.strictEqual(Object.keys(truncatedRequestBody.specialValues.objectWithToJSON).length, 256)
           assert.strictEqual(truncatedRequestBody.specialValues.objectWithToJSON.foo, undefined)

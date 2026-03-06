@@ -13,7 +13,6 @@ const tracer = require('../../../../../index')
 const appsec = require('../../../src/appsec')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
-const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 describe('set_user', () => {
   describe('Internal API', () => {
@@ -150,20 +149,12 @@ describe('set_user', () => {
           res.end()
         }
         agent.assertSomeTraces(traces => {
-          assertObjectContains(traces, {
-            0: {
-              0: {
-                meta: {
-                  'usr.id': 'blockedUser',
-                  'usr.email': 'a@b.c',
-                  'usr.custom': 'hello',
-                  'usr.session_id': '133769',
-                  '_dd.appsec.user.collection_mode': 'sdk',
-                  'appsec.event': 'true',
-                },
-              },
-            },
-          })
+          assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
+          assert.strictEqual(traces[0][0].meta['usr.email'], 'a@b.c')
+          assert.strictEqual(traces[0][0].meta['usr.custom'], 'hello')
+          assert.strictEqual(traces[0][0].meta['usr.session_id'], '133769')
+          assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
+          assert.strictEqual(traces[0][0].meta['appsec.event'], 'true')
           assert.ok(!('appsec.blocked' in traces[0][0].meta))
           assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         }).then(done).catch(done)
@@ -177,17 +168,9 @@ describe('set_user', () => {
           res.end()
         }
         agent.assertSomeTraces(traces => {
-          assertObjectContains(traces, {
-            0: {
-              0: {
-                meta: {
-                  'usr.id': 'blockedUser',
-                  '_dd.appsec.user.collection_mode': 'sdk',
-                  'appsec.event': 'true',
-                },
-              },
-            },
-          })
+          assert.strictEqual(traces[0][0].meta['usr.id'], 'blockedUser')
+          assert.strictEqual(traces[0][0].meta['_dd.appsec.user.collection_mode'], 'sdk')
+          assert.strictEqual(traces[0][0].meta['appsec.event'], 'true')
           assert.ok(!('appsec.blocked' in traces[0][0].meta))
           assert.strictEqual(traces[0][0].meta['http.status_code'], '200')
         }).then(done).catch(done)
