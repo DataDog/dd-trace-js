@@ -253,10 +253,10 @@ describe('OpenFeature Exposures Writer', () => {
         },
         subject: {
           id: 'user_123',
-          type: undefined,
-          attributes: undefined,
         },
       })
+      assert.strictEqual(formattedEvent.subject.type, undefined)
+      assert.strictEqual(formattedEvent.subject.attributes, undefined)
     })
   })
 

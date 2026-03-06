@@ -126,8 +126,8 @@ describe('TextMapPropagator', () => {
         'ot-baggage-bool': 'true',
         'ot-baggage-array': 'foo,bar',
         'ot-baggage-object': '[object Object]',
-        baggage: undefined,
       })
+      assert.strictEqual(carrier.baggage, undefined)
     })
 
     it('should skip legacy baggage items that cannot be encoded as a valid HTTP header name', () => {

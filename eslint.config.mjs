@@ -18,7 +18,6 @@ import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
-import eslintPreferAssertObjectContains from './eslint-rules/eslint-prefer-assert-object-contains.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
@@ -378,7 +377,6 @@ export default [
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
-          'eslint-prefer-assert-object-contains': eslintPreferAssertObjectContains,
           'eslint-require-export-exists': eslintRequireExportExists,
         },
       },
@@ -636,7 +634,6 @@ export default [
       n: eslintPluginN,
     },
     rules: {
-      'eslint-rules/eslint-prefer-assert-object-contains': 'error',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',

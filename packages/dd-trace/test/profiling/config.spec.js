@@ -83,9 +83,9 @@ describe('config', () => {
       cpuProfilingEnabled: samplingContextsAvailable,
       uploadCompression: {
         method: zstdOrGzip,
-        level: undefined,
       },
     })
+    assert.strictEqual(config.uploadCompression.level, undefined)
   })
 
   it('should support configuration options', () => {

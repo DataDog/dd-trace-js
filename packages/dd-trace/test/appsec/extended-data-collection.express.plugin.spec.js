@@ -107,17 +107,13 @@ describe('extended data collection', () => {
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
-        assertObjectContains(span, {
-          type: 'web',
-          meta: {
-            'http.request.headers.custom-request-header-1': undefined,
-            'http.request.headers.custom-request-header-2': undefined,
-            'http.request.headers.custom-request-header-3': undefined,
-            'http.response.headers.custom-response-header-1': undefined,
-            'http.response.headers.custom-response-header-2': undefined,
-            'http.response.headers.custom-response-header-3': undefined,
-          },
-        })
+        assert.strictEqual(span.type, 'web')
+        assert.strictEqual(span.meta['http.request.headers.custom-request-header-1'], undefined)
+        assert.strictEqual(span.meta['http.request.headers.custom-request-header-2'], undefined)
+        assert.strictEqual(span.meta['http.request.headers.custom-request-header-3'], undefined)
+        assert.strictEqual(span.meta['http.response.headers.custom-response-header-1'], undefined)
+        assert.strictEqual(span.meta['http.response.headers.custom-response-header-2'], undefined)
+        assert.strictEqual(span.meta['http.response.headers.custom-response-header-3'], undefined)
 
         const rawMetaStructBody = span.meta_struct?.['http.request.body']
         assert.strictEqual(rawMetaStructBody, undefined)

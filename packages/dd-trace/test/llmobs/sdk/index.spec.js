@@ -113,10 +113,10 @@ describe('sdk', () => {
         _config: {
           llmobs: {
             mlApp: 'mlApp',
-            agentlessEnabled: undefined,
           },
         },
       })
+      assert.strictEqual(disabledLLMObs._config.llmobs.agentlessEnabled, undefined)
 
       sinon.assert.called(llmobsModule.enable)
 

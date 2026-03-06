@@ -567,10 +567,10 @@ describe('OpenTelemetry Logs', () => {
           headers: {
             'logs-specific': 'value',
             shared: 'logs',
-            generic: undefined,
           },
         },
       })
+      assert.strictEqual(exporter.options.headers.generic, undefined)
     })
 
     it('configures OTLP timeout from environment variable', () => {

@@ -778,10 +778,10 @@ describe('OpenTelemetry Meter Provider', () => {
           headers: {
             'metrics-specific': 'value',
             shared: 'metrics',
-            generic: undefined,
           },
         },
       })
+      assert.strictEqual(exporter.options.headers.generic, undefined)
     })
   })
 

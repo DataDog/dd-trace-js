@@ -135,11 +135,9 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
       const span = decoded.spans[0]
 
-      assertObjectContains(span, {
-        type: undefined,
-        meta_struct: undefined,
-        links: undefined,
-      })
+      assert.strictEqual(span.type, undefined)
+      assert.strictEqual(span.meta_struct, undefined)
+      assert.strictEqual(span.links, undefined)
     })
 
     it('should convert span_events to meta.events JSON string', () => {

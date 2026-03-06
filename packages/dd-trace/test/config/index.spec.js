@@ -2459,11 +2459,11 @@ describe('Config', () => {
       appsec: {
         enabled: true,
         rules: 'path/to/rules.json',
-        blockedTemplateHtml: undefined,
-        blockedTemplateJson: undefined,
-        blockedTemplateGraphql: undefined,
       },
     })
+    assert.strictEqual(config.appsec.blockedTemplateHtml, undefined)
+    assert.strictEqual(config.appsec.blockedTemplateJson, undefined)
+    assert.strictEqual(config.appsec.blockedTemplateGraphql, undefined)
   })
 
   it('should enable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
@@ -3823,8 +3823,8 @@ rules:
       assertObjectContains(config, {
         tracing: false,
         logInjection: true,
-        sampleRate: undefined,
       })
+      assert.strictEqual(config.sampleRate, undefined)
     })
   })
 
