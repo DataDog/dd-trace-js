@@ -530,7 +530,7 @@ class LLMObs extends NoopLLMObs {
     if (this.enabled) storage.enterWith({ ...parentStore, span })
 
     if (options) {
-      this._tagger.registerLLMObsSpan(span, {
+      this.#tagger.registerLLMObsSpan(span, {
         ...options,
         parent: parentStore?.span,
       })
