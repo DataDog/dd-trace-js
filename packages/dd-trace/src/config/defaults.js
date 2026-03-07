@@ -107,6 +107,7 @@ const defaultsWithoutSupportedConfigurationEntry = {
   instrumentationSource: 'manual',
   isServiceUserProvided: false,
   lookup: undefined,
+  otelTracesEnabled: false,
   plugins: true,
 }
 

@@ -314,6 +314,13 @@ describe('Config', () => {
     assert.strictEqual(config.otelTracesEnabled, false)
   })
 
+  it('should default sample rate to 1 when OTLP traces export is enabled', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig()
+    assert.strictEqual(process.env.OTEL_TRACES_SAMPLER, 'parentbased_always_on')
+    assert.strictEqual(config.sampleRate, 1)
+  })
+
   it('should initialize with the correct defaults', () => {
     const config = getConfig()
 
