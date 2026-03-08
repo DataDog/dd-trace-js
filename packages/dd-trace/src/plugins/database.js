@@ -1,6 +1,7 @@
 'use strict'
 
 const { PEER_SERVICE_KEY, PEER_SERVICE_SOURCE_KEY } = require('../constants')
+const propagationHash = require('../propagation-hash')
 const StoragePlugin = require('./storage')
 
 class DatabasePlugin extends StoragePlugin {
@@ -59,13 +60,25 @@ class DatabasePlugin extends StoragePlugin {
     const dbmService = this.#getDbmServiceName(serviceName, peerData)
     const servicePropagation = this.#createDBMPropagationCommentService(dbmService, span, peerData)
 
+    let dbmComment = servicePropagation
+
+    // Add propagation hash if both process tags and SQL base hash injection are enabled
+    if (propagationHash.isEnabled() && this.config['dbm.injectSqlBaseHash']) {
+      const hashBase64 = propagationHash.getHashBase64()
+      if (hashBase64) {
+        dbmComment += `,ddsh='${hashBase64}'`
+        // Add hash to span meta as a tag
+        span.setTag('_dd.dbm.propagation_hash', hashBase64)
+      }
+    }
+
     if (disableFullMode || mode === 'service') {
-      return servicePropagation
+      return dbmComment
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')
       span._processor.sample(span)
       const traceparent = span._spanContext.toTraceparent()
-      return `${servicePropagation},traceparent='${traceparent}'`
+      return `${dbmComment},traceparent='${traceparent}'`
     }
   }
 

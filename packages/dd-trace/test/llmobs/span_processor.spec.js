@@ -39,7 +39,7 @@ describe('span processor', () => {
     it('should do nothing if llmobs is not enabled', () => {
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: false } })
 
-      assert.doesNotThrow(() => processor.process(span))
+      processor.process(span)
     })
 
     it('should do nothing if the span is not an llm obs span', () => {

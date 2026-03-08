@@ -3,7 +3,7 @@ name: System Tests
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, mq-working-branch-master-*]
   workflow_dispatch:
   schedule:
     - cron: 0 4 * * *
@@ -26,7 +26,7 @@ jobs:
       - name: Pack dd-trace-js
         run: mkdir -p ./binaries && echo /binaries/$(npm pack --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: system_tests_binaries
           path: ./binaries/**/*
@@ -45,9 +45,9 @@ jobs:
     with:
       library: nodejs
       binaries_artifact: system_tests_binaries
-      desired_execution_time: 300  # 5 minutes
+      desired_execution_time: 300 # 5 minutes
       scenarios_groups: tracer-release
-      excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN  # require AWS and datadog credentials
+      excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN # require AWS and datadog credentials
       parametric_job_count: 8
       skip_empty_scenarios: true
       push_to_test_optimization: ${{ github.actor != 'dependabot[bot]' }}

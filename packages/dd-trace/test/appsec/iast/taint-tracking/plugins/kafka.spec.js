@@ -1,7 +1,5 @@
 'use strict'
 
-const assert = require('node:assert/strict')
-
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
@@ -94,9 +92,7 @@ describe('Kafka consumer plugin', () => {
   it('should not fail with an unknown kafka message', () => {
     const message = {}
 
-    assert.doesNotThrow(() => {
-      handler({ message })
-    })
+    handler({ message })
   })
 
   it('should not fail with an unknown kafka message II', () => {
@@ -104,8 +100,6 @@ describe('Kafka consumer plugin', () => {
       key: 'key',
     }
 
-    assert.doesNotThrow(() => {
-      handler({ message })
-    })
+    handler({ message })
   })
 })

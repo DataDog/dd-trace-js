@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "aerospike",
+    "appsec",
+    "backportability",
+    "ddsource",
+    "kafkajs",
+    "llmobs",
+    "microbenchmarks",
+    "oracledb",
+    "rabbitmq",
+    "rspack",
+    "sirun"
+  ]
+}

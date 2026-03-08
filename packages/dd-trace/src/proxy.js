@@ -6,7 +6,7 @@ const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
-const { setStartupLogPluginManager } = require('./startup-log')
+const { setStartupLogPluginManager, startupLog } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
@@ -101,6 +101,10 @@ class Tracer extends NoopProxy {
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
+
+      // Configure propagation hash manager for process tags + container tags
+      const propagationHash = require('./propagation-hash')
+      propagationHash.configure(config)
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
@@ -288,6 +292,7 @@ class Tracer extends NoopProxy {
       this._pluginManager.configure(config)
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
+      startupLog()
     }
   }
 

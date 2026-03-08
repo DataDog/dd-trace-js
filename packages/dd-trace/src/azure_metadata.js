@@ -58,7 +58,6 @@ function buildMetadata () {
     WEBSITE_SITE_NAME,
   } = getEnvironmentVariables()
 
-  const DD_AAS_DOTNET_EXTENSION_VERSION = getValueFromEnvSources('DD_AAS_DOTNET_EXTENSION_VERSION')
   const DD_AZURE_RESOURCE_GROUP = getValueFromEnvSources('DD_AZURE_RESOURCE_GROUP')
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
@@ -77,7 +76,6 @@ function buildMetadata () {
     : (WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME))
 
   return trimObject({
-    extensionVersion: DD_AAS_DOTNET_EXTENSION_VERSION,
     functionRuntimeVersion: FUNCTIONS_EXTENSION_VERSION,
     instanceID: WEBSITE_INSTANCE_ID,
     instanceName: COMPUTERNAME,
