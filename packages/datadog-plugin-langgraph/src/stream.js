@@ -33,7 +33,6 @@ class NextStreamPlugin extends TracingPlugin {
       span.finish()
     }
   }
-
 }
 
 module.exports = [

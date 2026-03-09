@@ -48,7 +48,7 @@ describe('integrations', () => {
             .addEdge('__start__', 'chat')
             .addEdge('chat', '__end__')
 
-          const app = workflow.compile({name: 'foobarzoo'})
+          const app = workflow.compile({ name: 'foobarzoo' })
 
           // Stream execution
           const chunks = []
@@ -95,7 +95,7 @@ describe('integrations', () => {
             .addEdge('increment2', 'increment3')
             .addEdge('increment3', '__end__')
 
-          const app = workflow.compile({name: 'foobarzoo'})
+          const app = workflow.compile({ name: 'foobarzoo' })
 
           const chunks = []
           for await (const chunk of await app.stream({ count: 0 })) {
@@ -135,7 +135,7 @@ describe('integrations', () => {
             .addEdge('add1', 'add2')
             .addEdge('add2', '__end__')
 
-          const app = workflow.compile({name: 'foobarzoo'})
+          const app = workflow.compile({ name: 'foobarzoo' })
 
           let finalOutput = ''
           for await (const chunk of await app.stream({ text: '' })) {
@@ -177,7 +177,7 @@ describe('integrations', () => {
             .addEdge('normal', 'error')
             .addEdge('error', '__end__')
 
-          const app = workflow.compile({name: 'foobarzoo'})
+          const app = workflow.compile({ name: 'foobarzoo' })
 
           try {
             // eslint-disable-next-line no-unused-vars

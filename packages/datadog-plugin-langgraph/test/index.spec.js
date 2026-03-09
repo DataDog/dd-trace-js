@@ -33,9 +33,7 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
         const allSpans = traces.flat()
         const streamSpan = allSpans.find(span => span.name === 'LangGraph')
 
-        if (!streamSpan) {
-          throw new Error('LangGraph span not found')
-        }
+        assert.ok(streamSpan)
 
         assert.equal(streamSpan.name, 'LangGraph')
         assert.equal(streamSpan.meta['span.kind'], 'internal')
@@ -52,9 +50,7 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
         const allSpans = traces.flat()
         const streamSpan = allSpans.find(span => span.name === 'LangGraph' && span.error === 1)
 
-        if (!streamSpan) {
-          throw new Error('LangGraph error span not found')
-        }
+        assert.ok(streamSpan)
 
         assert.equal(streamSpan.name, 'LangGraph')
         assert.equal(streamSpan.error, 1)
