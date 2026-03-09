@@ -21,6 +21,7 @@ class RateLimiter {
 
   /**
    * Maximum allowed units per interval.
+   * Used by SamplingRule to expose the configured rate via its maxPerSecond getter.
    * @returns {number}
    */
   get rateLimit () {
