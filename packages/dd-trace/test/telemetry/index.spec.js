@@ -102,8 +102,8 @@ describe('telemetry', () => {
     })
 
     pluginsByName = {
-      foo2: { _enabled: true },
-      bar2: { _enabled: false },
+      foo2: { enabled: true },
+      bar2: { enabled: false },
     }
     /**
      * @type {object} CircularObject
@@ -141,7 +141,7 @@ describe('telemetry', () => {
         time: '1703188212',
       },
     }, {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
   })
 
@@ -212,7 +212,7 @@ describe('telemetry', () => {
   })
 
   it('should send app-integrations-change', () => {
-    pluginsByName.baz2 = { _enabled: true }
+    pluginsByName.baz2 = { enabled: true }
     telemetry.updateIntegrations()
 
     return testSeq(3, 'app-integrations-change', payload => {
@@ -225,7 +225,7 @@ describe('telemetry', () => {
   })
 
   it('should send app-integrations-change', () => {
-    pluginsByName.boo2 = { _enabled: true }
+    pluginsByName.boo2 = { enabled: true }
     telemetry.updateIntegrations()
 
     return testSeq(4, 'app-integrations-change', payload => {
@@ -276,7 +276,7 @@ describe('telemetry', () => {
       appsec: { enabled: false },
       profiling: { enabled: false },
     }, {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
     notEnabledTelemetry.appClosing()
     assert.strictEqual(sendDataStub.called, false)
@@ -332,7 +332,7 @@ describe('telemetry app-heartbeat', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
     clock.tick(HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 1)
@@ -399,7 +399,7 @@ describe('Telemetry extended heartbeat', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
     clock.tick(86400000)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
@@ -443,7 +443,7 @@ describe('Telemetry extended heartbeat', () => {
       },
     }
 
-    telemetry.start(config, { _pluginsByName: pluginsByName })
+    telemetry.start(config, { pluginsByName: pluginsByName })
 
     clock.tick(86400000)
     assert.deepStrictEqual(configuration, [])
@@ -538,8 +538,8 @@ describe('Telemetry retry', () => {
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
     pluginsByName = {
-      foo2: { _enabled: true },
-      bar2: { _enabled: false },
+      foo2: { enabled: true },
+      bar2: { enabled: false },
     }
   })
 
@@ -587,10 +587,10 @@ describe('Telemetry retry', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
 
-    pluginsByName.boo3 = { _enabled: true }
+    pluginsByName.boo3 = { enabled: true }
     telemetry.updateIntegrations()
     assert.strictEqual(capturedRequestType, 'app-integrations-change')
     assert.deepStrictEqual(capturedPayload, {
@@ -602,7 +602,7 @@ describe('Telemetry retry', () => {
       }],
     })
 
-    pluginsByName.boo5 = { _enabled: true }
+    pluginsByName.boo5 = { enabled: true }
     telemetry.updateIntegrations()
     assert.strictEqual(capturedRequestType, 'message-batch')
     assert.deepStrictEqual(capturedPayload, [{
@@ -676,7 +676,7 @@ describe('Telemetry retry', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
     // jump to next heartbeat request
     clock.tick(HEARTBEAT_INTERVAL)
@@ -747,12 +747,12 @@ describe('Telemetry retry', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
-    pluginsByName.foo1 = { _enabled: true }
+    pluginsByName.foo1 = { enabled: true }
     telemetry.updateIntegrations() // This sends an batch message and succeeds
 
-    pluginsByName.zoo1 = { _enabled: true }
+    pluginsByName.zoo1 = { enabled: true }
     telemetry.updateIntegrations()
     assert.strictEqual(capturedRequestType, 'app-integrations-change')
 
@@ -809,13 +809,13 @@ describe('Telemetry retry', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
 
-    pluginsByName.foo1 = { _enabled: true }
+    pluginsByName.foo1 = { enabled: true }
     telemetry.updateIntegrations() // This sends an batch message and fails
 
-    pluginsByName.zoo1 = { _enabled: true }
+    pluginsByName.zoo1 = { enabled: true }
     telemetry.updateIntegrations()
 
     assert.strictEqual(capturedRequestType, 'message-batch')
@@ -894,9 +894,9 @@ describe('Telemetry retry', () => {
       },
     },
     {
-      _pluginsByName: pluginsByName,
+      pluginsByName: pluginsByName,
     })
-    pluginsByName.foo1 = { _enabled: true }
+    pluginsByName.foo1 = { enabled: true }
     telemetry.updateIntegrations() // This sends an batch message and fails
     // Skip forward a day
     clock.tick(86400000)
@@ -994,7 +994,7 @@ describe('AVM OSS', () => {
             [{ name: 'appsec.sca.enabled', value: scaValue, origin: scaValueOrigin }],
             telemetryConfig
           )
-          telemetry.start(telemetryConfig, { _pluginsByName: {} })
+          telemetry.start(telemetryConfig, { pluginsByName: {} })
         })
 
         after((done) => {

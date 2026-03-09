@@ -51,7 +51,7 @@ describe('Telemetry logs', () => {
     }
 
     telemetry.start(config, {
-      _pluginsByName: {},
+      pluginsByName: {},
     })
 
     telemetryLog.publish({ message: 'This is an Error', level: 'ERROR' })
