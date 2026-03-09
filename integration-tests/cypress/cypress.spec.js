@@ -1578,6 +1578,7 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
+            SPEC_PATTERN: 'cypress/e2e/{spec,other,hook-describe-error,hook-test-error}.cy.js',
           },
         }
       )
@@ -1615,6 +1616,7 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
+            SPEC_PATTERN: 'cypress/e2e/{spec,other,hook-describe-error,hook-test-error}.cy.js',
           },
         }
       )
