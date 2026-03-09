@@ -951,7 +951,7 @@
   dependencies:
     undici-types "~5.26.4"
 
-"@types/sinon@^21.0.2":
+"@types/sinon@^21.0.0":
   version "21.0.0"
   resolved "https://registry.yarnpkg.com/@types/sinon/-/sinon-21.0.0.tgz#3a598a29b3aec0512a21e57ae0fd4c09aa013ca9"
   integrity sha512-+oHKZ0lTI+WVLxx1IbJDNmReQaIsQJjN2e7UUrJHEeByG7bFeKJYsv1E75JxTQ9QKJDp21bAa/0W2Xo4srsDnw==
