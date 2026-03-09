@@ -11,6 +11,7 @@ const { AgentlessJSONEncoder } = require('../../src/encode/agentless-json')
 describe('AgentlessJSONEncoder', () => {
   let encoder
   let data
+  let childSpan
 
   beforeEach(() => {
     encoder = new AgentlessJSONEncoder()
@@ -33,6 +34,20 @@ describe('AgentlessJSONEncoder', () => {
       duration: 5000000,
       links: [],
     }]
+    childSpan = {
+      trace_id: id('1234abcd1234abcd'),
+      span_id: id('aaaa000000000001'),
+      parent_id: id('5678efab5678efab'),
+      name: 'child',
+      resource: 'child-resource',
+      service: 'test-service',
+      error: 0,
+      meta: {},
+      metrics: {},
+      start: 1234567891000000000,
+      duration: 1000000,
+      links: [],
+    }
   })
 
   describe('encode', () => {
@@ -89,18 +104,20 @@ describe('AgentlessJSONEncoder', () => {
       // Start time is converted from nanoseconds to seconds for intake format
       assert.strictEqual(span.start, 1234567890)
       assert.strictEqual(span.duration, 5000000)
-      assert.deepStrictEqual(span.meta, { foo: 'bar' })
-      assert.deepStrictEqual(span.metrics, { example: 1.5 })
+      assert.deepStrictEqual(span.meta, { foo: 'bar', '_dd.compute_stats': '1' })
+      assert.deepStrictEqual(span.metrics, { example: 1.5, _trace_root: 1 })
     })
 
     it('should handle multiple spans in one trace', () => {
       encoder.encode(data)
-      encoder.encode(data)
+      encoder.encode([childSpan])
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
       assert.strictEqual(decoded.spans.length, 2)
+      assert.strictEqual(decoded.spans[0].meta['_dd.compute_stats'], '1')
+      assert.strictEqual(decoded.spans[1].meta['_dd.compute_stats'], undefined)
     })
 
     it('should handle spans without optional fields', () => {
@@ -153,6 +170,61 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
 
       assert.deepStrictEqual(decoded.spans[0].links, [{ trace_id: 'abc123', span_id: 'def456' }])
+    })
+
+    it('should set _dd.compute_stats on the first span only', () => {
+      encoder.encode([data[0], childSpan])
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+
+      assert.strictEqual(decoded.spans[0].meta['_dd.compute_stats'], '1')
+      assert.strictEqual(decoded.spans[1].meta['_dd.compute_stats'], undefined)
+    })
+
+    it('should set _trace_root on spans with zero parent_id', () => {
+      encoder.encode([data[0], childSpan])
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+
+      assert.strictEqual(decoded.spans[0].metrics._trace_root, 1)
+      assert.strictEqual(decoded.spans[1].metrics._trace_root, undefined)
+    })
+
+    it('should set _top_level on spans marked as top-level', () => {
+      data[0].metrics['_dd.top_level'] = 1
+
+      encoder.encode([data[0], childSpan])
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+
+      assert.strictEqual(decoded.spans[0].metrics._top_level, 1)
+      assert.strictEqual(decoded.spans[1].metrics._top_level, undefined)
+    })
+
+    it('should not set _top_level when _dd.top_level is 0', () => {
+      data[0].metrics['_dd.top_level'] = 0
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+
+      assert.strictEqual(decoded.spans[0].metrics._top_level, undefined)
+    })
+
+    it('should set _dd.compute_stats on next span when first span is malformed', () => {
+      const badSpan = { name: 'bad' }
+
+      encoder.encode([badSpan, childSpan])
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+
+      assert.strictEqual(decoded.spans.length, 1)
+      assert.strictEqual(decoded.spans[0].meta['_dd.compute_stats'], '1')
     })
 
     it('should skip malformed spans and continue encoding', () => {
