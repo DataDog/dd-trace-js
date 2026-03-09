@@ -8,6 +8,7 @@ const {
   useSandbox,
   FakeAgent,
   spawnProc,
+  stopProc,
   curlAndAssertMessage,
   curl,
 } = require('../helpers')
@@ -60,7 +61,7 @@ describe('Standalone ASM', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -184,7 +185,7 @@ describe('Standalone ASM', () => {
       })
 
       afterEach(async () => {
-        proc2.kill()
+        await stopProc(proc2)
       })
 
       // proc/drop-and-call-sdk:
@@ -268,7 +269,7 @@ describe('Standalone ASM', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -316,7 +317,7 @@ describe('Standalone ASM', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
