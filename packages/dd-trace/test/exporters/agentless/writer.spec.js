@@ -26,8 +26,9 @@ describe('AgentlessWriter', () => {
     encoder = {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns(Buffer.from('{"spans":[]}')),
+      makePayload: sinon.stub().returns(Buffer.from('{"traces":[]}')),
       reset: sinon.stub(),
+      isFull: sinon.stub().returns(false),
     }
 
     url = new URL('https://public-trace-http-intake.logs.datadoghq.com')
@@ -108,8 +109,8 @@ describe('AgentlessWriter', () => {
       writer.flush(done)
     })
 
-    it('should flush spans to the intake with correct headers', (done) => {
-      const expectedData = Buffer.from('{"spans":[]}')
+    it('should flush traces to the intake with correct headers', (done) => {
+      const expectedData = Buffer.from('{"traces":[]}')
 
       encoder.count.returns(1)
       encoder.makePayload.returns(expectedData)
@@ -296,6 +297,20 @@ describe('AgentlessWriter', () => {
         sinon.assert.calledOnce(encoder.reset)
         done()
       })
+    })
+  })
+
+  describe('isFull', () => {
+    beforeEach(() => {
+      writer = new Writer({ url })
+    })
+
+    it('should delegate to encoder.isFull', () => {
+      encoder.isFull.returns(false)
+      assert.strictEqual(writer.isFull(), false)
+
+      encoder.isFull.returns(true)
+      assert.strictEqual(writer.isFull(), true)
     })
   })
 

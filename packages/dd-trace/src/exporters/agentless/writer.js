@@ -9,8 +9,8 @@ const BaseWriter = require('../common/writer')
 const { AgentlessJSONEncoder } = require('../../encode/agentless-json')
 
 /**
- * Writer for agentless APM span intake.
- * Sends spans directly to the Datadog intake endpoint without an agent.
+ * Writer for agentless APM trace intake.
+ * Sends batched trace payloads directly to the Datadog intake endpoint without an agent.
  */
 class AgentlessWriter extends BaseWriter {
   #apiKeyMissing = false
@@ -39,13 +39,20 @@ class AgentlessWriter extends BaseWriter {
 
     if (!getValueFromEnvSources('DD_API_KEY')) {
       this.#apiKeyMissing = true
-      log.error('DD_API_KEY is required for agentless span intake. Set DD_API_KEY. Spans will not be sent.')
+      log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
     }
   }
 
   /**
-   * Flushes the current trace. Since we flush after each trace, this sends
-   * a single request.
+   * Returns whether the encoder buffer has exceeded the maximum payload size.
+   * @returns {boolean}
+   */
+  isFull () {
+    return this._encoder.isFull()
+  }
+
+  /**
+   * Flushes all buffered traces as a single request.
    * @param {Function} [done] - Callback when send completes
    */
   flush (done = () => {}) {
@@ -76,7 +83,7 @@ class AgentlessWriter extends BaseWriter {
   /**
    * Sends the encoded payload to the intake endpoint.
    * @param {Buffer} data - The encoded JSON payload
-   * @param {number} count - Number of spans in the payload
+   * @param {number} count - Number of traces in the payload
    * @param {Function} done - Callback when complete
    */
   _sendPayload (data, count, done) {
@@ -96,9 +103,9 @@ class AgentlessWriter extends BaseWriter {
     if (!apiKey) {
       if (!this.#apiKeyMissing) {
         this.#apiKeyMissing = true
-        log.error('DD_API_KEY is required for agentless span intake. Set DD_API_KEY. Spans will not be sent.')
+        log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
       }
-      log.debug('Dropping %d span(s) due to missing DD_API_KEY', count)
+      log.debug('Dropping %d trace(s) due to missing DD_API_KEY', count)
       done()
       return
     }
@@ -137,42 +144,42 @@ class AgentlessWriter extends BaseWriter {
    * Logs request errors with status-specific guidance.
    * @param {Error} err - The error object
    * @param {number} statusCode - HTTP status code (if available)
-   * @param {number} count - Number of spans that were being sent
+   * @param {number} count - Number of traces that were being sent
    */
   _logRequestError (err, statusCode, count) {
     if (statusCode === 401 || statusCode === 403) {
       log.error(
-        'Authentication failed sending %d span(s) (status %s). Verify DD_API_KEY is valid.',
+        'Authentication failed sending %d trace(s) (status %s). Verify DD_API_KEY is valid.',
         count,
         statusCode
       )
     } else if (statusCode === 404) {
       log.error(
-        'Span intake endpoint not found (status %s). Verify DD_SITE is correctly configured. %d span(s) dropped.',
+        'Trace intake endpoint not found (status %s). Verify DD_SITE is correctly configured. %d trace(s) dropped.',
         statusCode,
         count
       )
     } else if (statusCode === 429) {
       log.error(
-        'Rate limited by span intake (status 429). %d span(s) dropped.',
+        'Rate limited by trace intake (status 429). %d trace(s) dropped.',
         count
       )
     } else if (statusCode >= 500) {
       log.error(
-        'Span intake server error (status %s). %d span(s) dropped. This may be transient.',
+        'Trace intake server error (status %s). %d trace(s) dropped. This may be transient.',
         statusCode,
         count
       )
     } else if (statusCode) {
       log.error(
-        'Error sending agentless payload (status %s): %s. %d span(s) dropped.',
+        'Error sending agentless payload (status %s): %s. %d trace(s) dropped.',
         statusCode,
         err.message,
         count
       )
     } else {
       log.error(
-        'Network error sending %d span(s) to %s: %s',
+        'Network error sending %d trace(s) to %s: %s',
         count,
         this._url?.hostname || 'unknown',
         err.message

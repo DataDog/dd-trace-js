@@ -51,15 +51,17 @@ describe('AgentlessJSONEncoder', () => {
   })
 
   describe('encode', () => {
-    it('should encode spans to JSON format', () => {
+    it('should encode a trace in the multi-trace JSON format', () => {
       encoder.encode(data)
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.ok(decoded.spans)
-      assert.ok(Array.isArray(decoded.spans))
-      assert.strictEqual(decoded.spans.length, 1)
+      assert.ok(decoded.traces)
+      assert.ok(Array.isArray(decoded.traces))
+      assert.strictEqual(decoded.traces.length, 1)
+      assert.ok(Array.isArray(decoded.traces[0]))
+      assert.strictEqual(decoded.traces[0].length, 1)
     })
 
     it('should encode IDs as lowercase hex strings', () => {
@@ -67,7 +69,7 @@ describe('AgentlessJSONEncoder', () => {
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
-      const span = decoded.spans[0]
+      const span = decoded.traces[0][0]
 
       assert.strictEqual(span.trace_id, '1234abcd1234abcd')
       assert.strictEqual(span.span_id, '5678efab5678efab')
@@ -82,7 +84,7 @@ describe('AgentlessJSONEncoder', () => {
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
-      const span = decoded.spans[0]
+      const span = decoded.traces[0][0]
 
       // Should be full 32-character hex string
       assert.strictEqual(span.trace_id, '0123456789abcdef0123456789abcdef')
@@ -94,7 +96,7 @@ describe('AgentlessJSONEncoder', () => {
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
-      const span = decoded.spans[0]
+      const span = decoded.traces[0][0]
 
       assert.strictEqual(span.name, 'test')
       assert.strictEqual(span.resource, 'test-resource')
@@ -109,15 +111,43 @@ describe('AgentlessJSONEncoder', () => {
     })
 
     it('should handle multiple spans in one trace', () => {
-      encoder.encode(data)
+      encoder.encode([data[0], childSpan])
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+
+      assert.strictEqual(decoded.traces.length, 1)
+      assert.strictEqual(decoded.traces[0].length, 2)
+      assert.strictEqual(decoded.traces[0][0].meta['_dd.compute_stats'], '1')
+      assert.strictEqual(decoded.traces[0][1].meta['_dd.compute_stats'], undefined)
+    })
+
+    it('should batch multiple traces into a single payload', () => {
+      const trace1 = [data[0]]
+      const trace2 = [childSpan]
+
+      encoder.encode(trace1)
+      encoder.encode(trace2)
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+
+      assert.strictEqual(decoded.traces.length, 2)
+      assert.strictEqual(decoded.traces[0].length, 1)
+      assert.strictEqual(decoded.traces[1].length, 1)
+      assert.strictEqual(decoded.traces[0][0].name, 'test')
+      assert.strictEqual(decoded.traces[1][0].name, 'child')
+    })
+
+    it('should set _dd.compute_stats on the first span of each trace', () => {
+      encoder.encode([data[0]])
       encoder.encode([childSpan])
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.strictEqual(decoded.spans.length, 2)
-      assert.strictEqual(decoded.spans[0].meta['_dd.compute_stats'], '1')
-      assert.strictEqual(decoded.spans[1].meta['_dd.compute_stats'], undefined)
+      assert.strictEqual(decoded.traces[0][0].meta['_dd.compute_stats'], '1')
+      assert.strictEqual(decoded.traces[1][0].meta['_dd.compute_stats'], '1')
     })
 
     it('should handle spans without optional fields', () => {
@@ -129,7 +159,7 @@ describe('AgentlessJSONEncoder', () => {
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
-      const span = decoded.spans[0]
+      const span = decoded.traces[0][0]
 
       assert.strictEqual(span.type, undefined)
       assert.strictEqual(span.meta_struct, undefined)
@@ -143,7 +173,7 @@ describe('AgentlessJSONEncoder', () => {
 
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
-      const span = decoded.spans[0]
+      const span = decoded.traces[0][0]
 
       assert.strictEqual(span.span_events, undefined)
       assert.strictEqual(typeof span.meta.events, 'string')
@@ -158,7 +188,7 @@ describe('AgentlessJSONEncoder', () => {
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.deepStrictEqual(decoded.spans[0].meta_struct, { nested: { key: 'value' } })
+      assert.deepStrictEqual(decoded.traces[0][0].meta_struct, { nested: { key: 'value' } })
     })
 
     it('should include links when non-empty', () => {
@@ -169,17 +199,7 @@ describe('AgentlessJSONEncoder', () => {
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.deepStrictEqual(decoded.spans[0].links, [{ trace_id: 'abc123', span_id: 'def456' }])
-    })
-
-    it('should set _dd.compute_stats on the first span only', () => {
-      encoder.encode([data[0], childSpan])
-
-      const buffer = encoder.makePayload()
-      const decoded = JSON.parse(buffer.toString())
-
-      assert.strictEqual(decoded.spans[0].meta['_dd.compute_stats'], '1')
-      assert.strictEqual(decoded.spans[1].meta['_dd.compute_stats'], undefined)
+      assert.deepStrictEqual(decoded.traces[0][0].links, [{ trace_id: 'abc123', span_id: 'def456' }])
     })
 
     it('should set _trace_root on spans with zero parent_id', () => {
@@ -188,8 +208,8 @@ describe('AgentlessJSONEncoder', () => {
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.strictEqual(decoded.spans[0].metrics._trace_root, 1)
-      assert.strictEqual(decoded.spans[1].metrics._trace_root, undefined)
+      assert.strictEqual(decoded.traces[0][0].metrics._trace_root, 1)
+      assert.strictEqual(decoded.traces[0][1].metrics._trace_root, undefined)
     })
 
     it('should set _top_level on spans marked as top-level', () => {
@@ -200,8 +220,8 @@ describe('AgentlessJSONEncoder', () => {
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.strictEqual(decoded.spans[0].metrics._top_level, 1)
-      assert.strictEqual(decoded.spans[1].metrics._top_level, undefined)
+      assert.strictEqual(decoded.traces[0][0].metrics._top_level, 1)
+      assert.strictEqual(decoded.traces[0][1].metrics._top_level, undefined)
     })
 
     it('should not set _top_level when _dd.top_level is 0', () => {
@@ -212,7 +232,39 @@ describe('AgentlessJSONEncoder', () => {
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.strictEqual(decoded.spans[0].metrics._top_level, undefined)
+      assert.strictEqual(decoded.traces[0][0].metrics._top_level, undefined)
+    })
+
+    it('should not add a trace entry for an empty span array', () => {
+      encoder.encode([])
+
+      assert.strictEqual(encoder.count(), 0)
+      const buffer = encoder.makePayload()
+      assert.strictEqual(buffer.length, 0)
+    })
+
+    it('should skip traces where all spans are malformed', () => {
+      const badSpan = { name: 'bad' }
+
+      encoder.encode([badSpan])
+
+      assert.strictEqual(encoder.count(), 0)
+      const buffer = encoder.makePayload()
+      assert.strictEqual(buffer.length, 0)
+    })
+
+    it('should skip malformed spans within a trace and keep valid ones', () => {
+      const goodSpan = data[0]
+      const badSpan = { name: 'bad' } // Missing required ID fields
+
+      encoder.encode([goodSpan, badSpan])
+
+      assert.strictEqual(encoder.count(), 1)
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+      assert.strictEqual(decoded.traces[0].length, 1)
+      assert.strictEqual(decoded.traces[0][0].name, 'test')
     })
 
     it('should set _dd.compute_stats on next span when first span is malformed', () => {
@@ -223,35 +275,87 @@ describe('AgentlessJSONEncoder', () => {
       const buffer = encoder.makePayload()
       const decoded = JSON.parse(buffer.toString())
 
-      assert.strictEqual(decoded.spans.length, 1)
-      assert.strictEqual(decoded.spans[0].meta['_dd.compute_stats'], '1')
+      assert.strictEqual(decoded.traces[0].length, 1)
+      assert.strictEqual(decoded.traces[0][0].meta['_dd.compute_stats'], '1')
+    })
+  })
+
+  describe('isFull', () => {
+    it('should return false when under the size limit', () => {
+      encoder.encode(data)
+
+      assert.strictEqual(encoder.isFull(), false)
     })
 
-    it('should skip malformed spans and continue encoding', () => {
-      const goodSpan = data[0]
-      const badSpan = { name: 'bad' } // Missing required ID fields
+    it('should return true when over the 15MB size limit', () => {
+      // Meta values are truncated to 25KB, so use many keys per span
+      // and many traces to exceed 15MB
+      const meta = {}
+      for (let k = 0; k < 50; k++) {
+        meta[`key${k}`] = 'x'.repeat(25000)
+      }
+      // Each trace ≈ 50 * 25KB ≈ 1.2MB, so 13 traces should exceed 15MB
+      for (let i = 0; i < 13; i++) {
+        const span = {
+          trace_id: id('1234abcd1234abcd'),
+          span_id: id('5678efab5678efab'),
+          parent_id: id('0000000000000000'),
+          name: 'test',
+          resource: 'test-resource',
+          service: 'test-service',
+          error: 0,
+          meta: { ...meta },
+          metrics: {},
+          start: 1234567890000000000,
+          duration: 5000000,
+          links: [],
+        }
+        encoder.encode([span])
+      }
 
-      encoder.encode([goodSpan, badSpan])
+      assert.strictEqual(encoder.isFull(), true)
+    })
 
-      // Should have encoded only the good span
-      assert.strictEqual(encoder.count(), 1)
+    it('should reset isFull after makePayload', () => {
+      const meta = {}
+      for (let k = 0; k < 50; k++) {
+        meta[`key${k}`] = 'x'.repeat(25000)
+      }
+      for (let i = 0; i < 13; i++) {
+        const span = {
+          trace_id: id('1234abcd1234abcd'),
+          span_id: id('5678efab5678efab'),
+          parent_id: id('0000000000000000'),
+          name: 'test',
+          resource: 'test-resource',
+          service: 'test-service',
+          error: 0,
+          meta: { ...meta },
+          metrics: {},
+          start: 1234567890000000000,
+          duration: 5000000,
+          links: [],
+        }
+        encoder.encode([span])
+      }
 
-      const buffer = encoder.makePayload()
-      const decoded = JSON.parse(buffer.toString())
-      assert.strictEqual(decoded.spans.length, 1)
-      assert.strictEqual(decoded.spans[0].name, 'test')
+      assert.strictEqual(encoder.isFull(), true)
+
+      encoder.makePayload()
+
+      assert.strictEqual(encoder.isFull(), false)
     })
   })
 
   describe('count', () => {
-    it('should report its count', () => {
+    it('should report its trace count', () => {
       assert.strictEqual(encoder.count(), 0)
 
       encoder.encode(data)
 
       assert.strictEqual(encoder.count(), 1)
 
-      encoder.encode(data)
+      encoder.encode([childSpan])
 
       assert.strictEqual(encoder.count(), 2)
     })
@@ -283,7 +387,7 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(encoder.count(), 0)
     })
 
-    it('should return empty buffer when no spans encoded', () => {
+    it('should return empty buffer when no traces encoded', () => {
       const buffer = encoder.makePayload()
 
       assert.ok(Buffer.isBuffer(buffer))
@@ -296,7 +400,7 @@ describe('AgentlessJSONEncoder', () => {
       // Inject a circular reference to cause JSON.stringify to fail
       const circular = {}
       circular.self = circular
-      encoder._spans[0].meta = circular
+      encoder._traces[0][0].meta = circular
 
       const buffer = encoder.makePayload()
 

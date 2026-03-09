@@ -13,13 +13,17 @@ describe('AgentlessExporter', () => {
   let Exporter
   let exporter
   let writer
+  let clock
   let initialHandlersSize
 
   beforeEach(() => {
+    clock = sinon.useFakeTimers()
+
     writer = {
       append: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
       setUrl: sinon.stub(),
+      isFull: sinon.stub().returns(false),
     }
 
     const Writer = function () {
@@ -35,6 +39,7 @@ describe('AgentlessExporter', () => {
   })
 
   afterEach(() => {
+    clock.restore()
     sinon.restore()
     // Clean up any handlers added by tests
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.clear()
@@ -87,32 +92,98 @@ describe('AgentlessExporter', () => {
   })
 
   describe('export', () => {
-    beforeEach(() => {
-      exporter = new Exporter({})
-    })
-
-    it('should append spans to writer and flush immediately', () => {
+    it('should flush immediately when flushInterval is 0', () => {
+      exporter = new Exporter({ flushInterval: 0 })
       const spans = [{ name: 'test' }]
+
       exporter.export(spans)
 
       sinon.assert.calledWith(writer.append, spans)
       sinon.assert.calledOnce(writer.flush)
     })
 
-    it('should flush after each export', () => {
+    it('should schedule a deferred flush when flushInterval is set', () => {
+      exporter = new Exporter({ flushInterval: 2000 })
+      const spans = [{ name: 'test' }]
+
+      exporter.export(spans)
+
+      sinon.assert.calledWith(writer.append, spans)
+      sinon.assert.notCalled(writer.flush)
+
+      clock.tick(2000)
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('should batch multiple traces into one scheduled flush', () => {
+      exporter = new Exporter({ flushInterval: 2000 })
       const spans = [{ name: 'test' }]
 
       exporter.export(spans)
       exporter.export(spans)
       exporter.export(spans)
 
-      sinon.assert.calledThrice(writer.flush)
+      sinon.assert.calledThrice(writer.append)
+      sinon.assert.notCalled(writer.flush)
+
+      clock.tick(2000)
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('should flush immediately when buffer is full regardless of flushInterval', () => {
+      writer.isFull = sinon.stub().returns(false)
+      exporter = new Exporter({ flushInterval: 2000 })
+      const spans = [{ name: 'test' }]
+
+      exporter.export(spans)
+
+      sinon.assert.notCalled(writer.flush)
+
+      // Simulate buffer becoming full on next append
+      writer.isFull.returns(true)
+      exporter.export(spans)
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('should clear pending timer when buffer is full', () => {
+      writer.isFull = sinon.stub().returns(false)
+      exporter = new Exporter({ flushInterval: 2000 })
+      const spans = [{ name: 'test' }]
+
+      // First export schedules timer
+      exporter.export(spans)
+      sinon.assert.notCalled(writer.flush)
+
+      // Buffer becomes full - should flush and clear timer
+      writer.isFull.returns(true)
+      exporter.export(spans)
+      sinon.assert.calledOnce(writer.flush)
+
+      // Timer should have been cleared - no second flush
+      clock.tick(2000)
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('should schedule a new flush after the previous one fires', () => {
+      exporter = new Exporter({ flushInterval: 2000 })
+      const spans = [{ name: 'test' }]
+
+      exporter.export(spans)
+      clock.tick(2000)
+      sinon.assert.calledOnce(writer.flush)
+
+      exporter.export(spans)
+      clock.tick(2000)
+      sinon.assert.calledTwice(writer.flush)
     })
   })
 
   describe('flush', () => {
     beforeEach(() => {
-      exporter = new Exporter({})
+      exporter = new Exporter({ flushInterval: 2000 })
     })
 
     it('should flush writer', () => {
@@ -123,6 +194,19 @@ describe('AgentlessExporter', () => {
 
     it('should call callback when done', (done) => {
       exporter.flush(done)
+    })
+
+    it('should clear pending scheduled flush', () => {
+      const spans = [{ name: 'test' }]
+      exporter.export(spans)
+
+      // Manual flush should clear the pending timer
+      exporter.flush()
+      sinon.assert.calledOnce(writer.flush)
+
+      // Timer fires but should not trigger a second flush
+      clock.tick(2000)
+      sinon.assert.calledOnce(writer.flush)
     })
   })
 
