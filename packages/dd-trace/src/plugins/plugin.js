@@ -39,11 +39,13 @@ class Subscription {
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _channel () {
     return this.#channel
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _handler () {
     return this.#handler
   }
@@ -75,6 +77,7 @@ class StoreBinding {
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _channel () {
     return this.#channel
   }
@@ -182,17 +185,18 @@ module.exports = class Plugin {
     }
   }
 
-  // Exposed for external access by telemetry and llmobs modules
-  get _enabled () {
+  get enabled () {
     return this.#enabled
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _subscriptions () {
     return this.#subscriptions
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _bindings () {
     return this.#bindings
   }

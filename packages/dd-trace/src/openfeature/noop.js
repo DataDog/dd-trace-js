@@ -8,14 +8,13 @@ const { NOOP_REASON } = require('./constants/constants')
  * https://openfeature.dev/docs/reference/concepts/provider/
  */
 class NoopFlaggingProvider {
-  #config
+  #config = {}
 
   /**
    * @param {object} [noopTracer] - Optional noop tracer instance
    */
   constructor (noopTracer) {
     this._tracer = noopTracer
-    this.#config = {}
     this.metadata = { name: 'NoopFlaggingProvider' }
     this.status = 'NOT_READY'
     this.runsOn = 'server'
@@ -78,6 +77,7 @@ class NoopFlaggingProvider {
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _config () { return this.#config }
 
   /**

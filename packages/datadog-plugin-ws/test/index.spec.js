@@ -515,12 +515,12 @@ describe('Plugin', () => {
 
         it('should not initialize sub-plugins when traceWebsocketMessagesEnabled is false', () => {
           const tracer = require('../../dd-trace')
-          const wsPlugin = tracer._pluginManager._pluginsByName.ws
+          const wsPlugin = tracer.pluginManager.pluginsByName.ws
 
-          assert.strictEqual(wsPlugin.server._enabled, false)
-          assert.strictEqual(wsPlugin.producer._enabled, false)
-          assert.strictEqual(wsPlugin.receiver._enabled, false)
-          assert.strictEqual(wsPlugin.close._enabled, false)
+          assert.strictEqual(wsPlugin.server.enabled, false)
+          assert.strictEqual(wsPlugin.producer.enabled, false)
+          assert.strictEqual(wsPlugin.receiver.enabled, false)
+          assert.strictEqual(wsPlugin.close.enabled, false)
         })
       })
       describe('with WebSocket configurations settings', () => {

@@ -230,6 +230,18 @@ class SamplingRule {
   }
 
   /**
+   * Returns a JSON-serializable representation of this rule, including the sample rate.
+   * @returns {{ matchers: RuleMatcher[], sampleRate: number, maxPerSecond?: number }}
+   */
+  toJSON () {
+    return {
+      matchers: this.matchers,
+      sampleRate: this.#sampler.rate(),
+      ...(this.maxPerSecond != null && { maxPerSecond: this.maxPerSecond }),
+    }
+  }
+
+  /**
    * Checks whether the provided span matches all configured criteria.
    *
    * @param {DatadogSpan} span

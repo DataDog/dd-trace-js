@@ -327,7 +327,7 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
-          const plugin = tracer._pluginManager._pluginsByName.mysql
+          const plugin = tracer.pluginManager.pluginsByName.mysql
           computeStub = sinon.stub(plugin._tracerConfig, 'spanComputePeerService')
           remapStub = sinon.stub(plugin._tracerConfig, 'peerServiceMapping')
         })

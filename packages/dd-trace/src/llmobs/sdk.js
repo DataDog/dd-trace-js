@@ -47,11 +47,13 @@ class LLMObs extends NoopLLMObs {
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _tracer () { return this.#tracer }
   get _tagger () { return this.#tagger }
   get _config () { return this.#config }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _llmobsModule () { return this.#llmobsModule }
 
   enable (options = {}) {
