@@ -104,6 +104,8 @@ class AgentExporter extends EventSerializer {
     this.#backoffTries = backoffTries
   }
 
+  // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _url () {
     return this.#url
   }

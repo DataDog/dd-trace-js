@@ -8,21 +8,19 @@ const Writer = require('./writer')
 class AgentExporter {
   #timer
   #config
-  #url
-  #writer
 
   constructor (config, prioritySampler) {
     this.#config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
-    this.#url = getAgentUrl(config)
+    this._url = getAgentUrl(config)
 
     const headers = {}
     if (stats.enabled || apmTracingEnabled === false) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 
-    this.#writer = new Writer({
-      url: this.#url,
+    this._writer = new Writer({
+      url: this._url,
       prioritySampler,
       lookup,
       protocolVersion,
@@ -33,36 +31,26 @@ class AgentExporter {
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
   }
 
-  // Exposed for external access by opentracing/tracer.js and opentelemetry/tracer_provider.js
-  get _url () {
-    return this.#url
-  }
-
-  // Exposed for external access by opentelemetry/tracer_provider.js and cypress plugin
-  get _writer () {
-    return this.#writer
-  }
-
   setUrl (url) {
     try {
       url = new URL(url)
-      this.#url = url
-      this.#writer.setUrl(url)
+      this._url = url
+      this._writer.setUrl(url)
     } catch (e) {
       log.warn(e.stack)
     }
   }
 
   export (spans) {
-    this.#writer.append(spans)
+    this._writer.append(spans)
 
     const { flushInterval } = this.#config
 
     if (flushInterval === 0) {
-      this.#writer.flush()
+      this._writer.flush()
     } else if (this.#timer === undefined) {
       this.#timer = setTimeout(() => {
-        this.#writer.flush()
+        this._writer.flush()
         this.#timer = undefined
       }, flushInterval).unref()
     }
@@ -71,7 +59,7 @@ class AgentExporter {
   flush (done = () => {}) {
     clearTimeout(this.#timer)
     this.#timer = undefined
-    this.#writer.flush(done)
+    this._writer.flush(done)
   }
 }
 

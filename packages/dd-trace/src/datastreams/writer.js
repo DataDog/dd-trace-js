@@ -58,6 +58,7 @@ class DataStreamsWriter {
   }
 
   // Exposed for test access
+  // TODO: Rewrite to not need to expose things for testing. E.g., by using proxyquire
   get _url () { return this.#url }
 
   setUrl (url) {

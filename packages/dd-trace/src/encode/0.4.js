@@ -345,6 +345,7 @@ class AgentEncoder {
   }
 
   // Exposed for test access
+  // TODO: Rewrite to not need to expose things for testing. E.g., by using proxyquire
   get _debugEncoding () { return this.#debugEncoding }
   set _debugEncoding (value) { this.#debugEncoding = value }
 }

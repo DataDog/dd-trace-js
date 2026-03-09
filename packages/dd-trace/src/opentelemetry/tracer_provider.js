@@ -82,6 +82,7 @@ class TracerProvider {
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _processors () { return this.#processors }
 }
 

@@ -421,6 +421,7 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   // Exposed for test access
+  // TODO: Rewrite to not need to expose things for testing
   get _canUseCiVisProtocol () { return this.#canUseCiVisProtocol }
   set _canUseCiVisProtocol (value) { this.#canUseCiVisProtocol = value }
   get _canUseCiVisProtocolPromise () { return this.#canUseCiVisProtocolPromise }
