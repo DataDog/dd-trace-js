@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const semver = require('semver')
 
 const {
   FakeAgent,
@@ -23,7 +24,7 @@ describe('esm', () => {
       './packages/datadog-plugin-elasticsearch/test/integration-test/*'])
 
     before(async function () {
-      const hasDefaultExport = !resolvedVersion.startsWith('9.')
+      const hasDefaultExport = semver.satisfies(resolvedVersion, '<9.3.2')
       if (hasDefaultExport) {
         variants = varySandbox('server.mjs', 'elasticsearch', undefined, '@elastic/elasticsearch')
       } else {
