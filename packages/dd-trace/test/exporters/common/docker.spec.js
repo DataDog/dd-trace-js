@@ -48,6 +48,7 @@ describe('docker', () => {
     assert.strictEqual(carrier['Datadog-Container-Id'], id)
     assert.strictEqual(carrier['Datadog-Entity-ID'], `ci-${id}`)
     assert.strictEqual(docker.entityId, `ci-${id}`)
+    assert.strictEqual(docker.containerId, id)
   })
 
   it('should support IDs with UUID format', () => {
