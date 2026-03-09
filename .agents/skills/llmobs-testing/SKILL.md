@@ -1,6 +1,15 @@
 ---
 name: llmobs-testing
-description: Guide for writing LLM Observability tests in dd-trace-js. Covers VCR cassettes, assertion helpers, and category-specific test strategies for validating LLMObs span events.
+description: |
+  This skill should be used when the user asks to "write LLMObs tests", "add tests for LLM Observability",
+  "test an LLMObs plugin", "llmobs test", "llmobs spec", "test llm observability",
+  "assertLlmObsSpanEvent", "useLlmObs", "getEvents", "MOCK_STRING", "MOCK_NOT_NULLISH",
+  "VCR cassette", "record cassette", "vcr proxy", "llmobs cassette",
+  "test chat completions", "test streaming", "test embeddings", "test agent runs",
+  "test orchestration", "test workflow", "llmobs span event",
+  "category-strategies", "LLM_CLIENT test", "MULTI_PROVIDER test",
+  "ORCHESTRATION test", "INFRASTRUCTURE test",
+  or needs to write, modify, or debug tests for any LLMObs plugin in dd-trace-js.
 ---
 
 # LLM Observability Testing Skill
@@ -17,14 +26,14 @@ description: Guide for writing LLM Observability tests in dd-trace-js. Covers VC
 
 **IF YOU USE THE WRONG CATEGORY STRATEGY, THE TEST WILL FAIL.**
 
-**Categories are defined in:** `anubis_apm/workflows/analyze/models.py:LlmObsCategory`
+**Categories are defined in the `LlmObsCategory` enum.**
 
 **Quick check:**
 - Does package make HTTP calls to LLM APIs? → `LLM_CLIENT` or `MULTI_PROVIDER` (use VCR)
 - Does package orchestrate workflows/graphs? → `ORCHESTRATION` (NO VCR, pure functions)
 - Does package implement protocols/servers? → `INFRASTRUCTURE` (mock servers)
 
-**See `references/category-strategies.md` for FORBIDDEN vs REQUIRED patterns per category.**
+**See [references/category-strategies.md](references/category-strategies.md) for FORBIDDEN vs REQUIRED patterns per category.**
 
 ---
 
@@ -56,7 +65,7 @@ LLMObs tests use special helpers to validate span events.
 3. Get captured span events with `getEvents()`
 4. Validate span structure with `assertLlmObsSpanEvent()`
 
-See `references/test-structure.md` for complete test file templates.
+See [references/test-structure.md](references/test-structure.md) for complete test file templates.
 
 ### 2. VCR Cassettes
 
@@ -81,11 +90,11 @@ VCR records real API calls and replays them in tests for deterministic testing w
 - ❌ `LlmObsCategory.ORCHESTRATION` (Pure functions, no API calls)
 - ❌ `LlmObsCategory.INFRASTRUCTURE` (Mock servers instead)
 
-See `references/vcr-cassettes.md` for recording process and troubleshooting.
+See [references/vcr-cassettes.md](references/vcr-cassettes.md) for recording process and troubleshooting.
 
 ### 3. Category-Specific Test Strategies
 
-Test strategy is determined by the `LlmObsCategory` enum (from `anubis_apm/workflows/analyze/models.py`).
+Test strategy is determined by the `LlmObsCategory` enum.
 
 #### LlmObsCategory.LLM_CLIENT & LlmObsCategory.MULTI_PROVIDER
 
@@ -99,7 +108,7 @@ Test strategy is determined by the `LlmObsCategory` enum (from `anubis_apm/workf
 
 **Span kind:** Usually `'llm'` for chat completions
 
-See `references/category-strategies.md` for detailed patterns.
+See [references/category-strategies.md](references/category-strategies.md) for detailed patterns.
 
 #### LlmObsCategory.ORCHESTRATION
 
@@ -119,7 +128,7 @@ See `references/category-strategies.md` for detailed patterns.
 - LangGraph itself doesn't make HTTP calls
 - Test LangGraph's workflow execution, not the underlying LLM API
 
-See `references/category-strategies.md` for orchestration test patterns.
+See [references/category-strategies.md](references/category-strategies.md) for orchestration test patterns.
 
 #### LlmObsCategory.INFRASTRUCTURE
 
@@ -130,7 +139,7 @@ See `references/category-strategies.md` for orchestration test patterns.
 - Protocol-specific validation
 - NO VCR
 
-See `references/category-strategies.md` for infrastructure test patterns.
+See [references/category-strategies.md](references/category-strategies.md) for infrastructure test patterns.
 
 ### 4. Assertion Patterns
 
@@ -157,7 +166,7 @@ Validates span structure with flexible matchers for non-deterministic values.
 
 **Partial validation:** Only specified fields are checked, others ignored.
 
-See `references/assertion-helpers.md` for complete API and patterns.
+See [references/assertion-helpers.md](references/assertion-helpers.md) for complete API and patterns.
 
 ## Test File Organization
 
@@ -176,7 +185,7 @@ See `references/assertion-helpers.md` for complete API and patterns.
 useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH, MOCK_NUMBER, MOCK_OBJECT
 ```
 
-See `references/test-structure.md` for complete template.
+See [references/test-structure.md](references/test-structure.md) for complete template.
 
 ## Key Testing Points
 
@@ -244,10 +253,10 @@ On errors, validate:
 
 For detailed information, see:
 
-- `references/test-structure.md` - Complete test file templates and organization
-- `references/vcr-cassettes.md` - VCR recording process, cassette management, troubleshooting
-- `references/assertion-helpers.md` - Complete assertLlmObsSpanEvent API, matchers, patterns
-- `references/category-strategies.md` - Detailed test strategies for each LlmObsCategory
+- [references/test-structure.md](references/test-structure.md) - Complete test file templates and organization
+- [references/vcr-cassettes.md](references/vcr-cassettes.md) - VCR recording process, cassette management, troubleshooting
+- [references/assertion-helpers.md](references/assertion-helpers.md) - Complete assertLlmObsSpanEvent API, matchers, patterns
+- [references/category-strategies.md](references/category-strategies.md) - Detailed test strategies for each LlmObsCategory
 
 ## Key Principles
 

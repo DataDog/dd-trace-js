@@ -1,13 +1,31 @@
 ---
 name: llmobs-integration
-description: Guide for creating LLM Observability plugins in dd-trace-js. Provides architecture patterns and implementation strategies for instrumenting LLM libraries with proper span events.
+description: |
+  This skill should be used when the user asks to "add LLMObs support", "create an LLMObs plugin",
+  "instrument an LLM library", "add LLM Observability", "add llmobs", "add llm observability",
+  "instrument chat completions", "instrument streaming", "instrument embeddings",
+  "instrument agent runs", "instrument orchestration", "instrument LLM",
+  "LLMObsPlugin", "LlmObsPlugin", "getLLMObsSpanRegisterOptions", "setLLMObsTags",
+  "span kind llm", "span kind workflow", "span kind agent", "span kind embedding",
+  "span kind tool", "span kind retrieval",
+  "openai llmobs", "anthropic llmobs", "genai llmobs", "google llmobs",
+  "langchain llmobs", "langgraph llmobs", "ai-sdk llmobs",
+  "llm span", "llmobs span event", "model provider", "model name",
+  "tagInputMessages", "tagOutputMessages", "tagMetrics", "tagMetadata",
+  or needs to build, modify, or debug an LLMObs plugin for any LLM library in dd-trace-js.
 ---
 
 # LLM Observability Integration Skill
 
 ## Purpose
 
-This skill helps you create LLMObs plugins that instrument chat completion operations and emit proper span events for LLM observability in dd-trace-js.
+This skill helps you create LLMObs plugins that instrument LLM library operations and emit proper span events for LLM observability in dd-trace-js. Supported operation types include:
+
+- **Chat completions** — standard request/response LLM calls
+- **Streaming chat completions** — streamed token-by-token responses
+- **Embeddings** — vector embedding generation
+- **Agent runs** — autonomous LLM agent execution loops
+- **Orchestration** — multi-step workflow and graph execution (langgraph, crewai, etc.)
 
 ## When to Use
 
@@ -37,15 +55,13 @@ All LLMObs plugins extend the `LLMObsPlugin` base class, which provides the core
 3. `asyncEnd(ctx)` - Calls `setLLMObsTags()` to extract and tag data
 4. `end(ctx)` - Restores parent context
 
-See `references/plugin-architecture.md` for complete implementation details.
+See [references/plugin-architecture.md](references/plugin-architecture.md) for complete implementation details.
 
 ### 2. Package Category System
 
 **CRITICAL:** Every integration must be classified into one category using the `LlmObsCategory` enum. This determines test strategy and implementation approach.
 
 #### LlmObsCategory Enum Values
-
-From `anubis_apm/workflows/analyze/models.py`:
 
 - **`LlmObsCategory.LLM_CLIENT`** - Direct API wrappers (openai, anthropic, genai)
   - Signs: Makes HTTP calls to LLM provider endpoints, requires API keys
@@ -84,11 +100,11 @@ Answer these questions by reading the code:
    - YES → **`LlmObsCategory.ORCHESTRATION`**
    - NO → **`LlmObsCategory.INFRASTRUCTURE`**
 
-See `references/category-detection.md` for detailed heuristics and examples.
+See [references/category-detection.md](references/category-detection.md) for detailed heuristics and examples.
 
 ### 3. LLM Span Kinds
 
-From `anubis_apm/workflows/analyze/models.py`, use the `LlmObsSpanKind` enum:
+Use the `LlmObsSpanKind` enum:
 
 - **`LlmObsSpanKind.LLM`** - Chat completions, text generation
 - **`LlmObsSpanKind.WORKFLOW`** - Graph/chain execution
@@ -113,7 +129,7 @@ All plugins must convert provider-specific message formats to the standard forma
 - Google GenAI: Extract from `parts` arrays, map role names
 - Multi-provider: Detect provider and apply appropriate extraction
 
-See `references/message-extraction.md` for provider-specific patterns.
+See [references/message-extraction.md](references/message-extraction.md) for provider-specific patterns.
 
 ## Implementation Steps
 
@@ -144,7 +160,7 @@ See `references/message-extraction.md` for provider-specific patterns.
    - Non-standard message formats
    - Missing metadata
 
-See `references/plugin-architecture.md` for step-by-step implementation guide.
+See [references/plugin-architecture.md](references/plugin-architecture.md) for step-by-step implementation guide.
 
 ## Common Patterns
 
@@ -168,10 +184,10 @@ All plugins must export an array:
 
 For detailed information, see:
 
-- `references/plugin-architecture.md` - Complete plugin structure, implementation steps, helper methods
-- `references/category-detection.md` - Package classification heuristics and detection process
-- `references/message-extraction.md` - Provider-specific message format patterns
-- `references/reference-implementations.md` - Working plugin examples (OpenAI, Anthropic, Google GenAI)
+- [references/plugin-architecture.md](references/plugin-architecture.md) - Complete plugin structure, implementation steps, helper methods
+- [references/category-detection.md](references/category-detection.md) - Package classification heuristics and detection process
+- [references/message-extraction.md](references/message-extraction.md) - Provider-specific message format patterns
+- [references/reference-implementations.md](references/reference-implementations.md) - Working plugin examples (OpenAI, Anthropic, Google GenAI)
 
 ## Key Principles
 

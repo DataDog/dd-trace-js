@@ -2,8 +2,6 @@
 
 Detailed guide for classifying LLM packages into `LlmObsCategory` enum values.
 
-**Enum location:** `anubis_apm/workflows/analyze/models.py`
-
 ## Categories Explained
 
 ### LlmObsCategory.LLM_CLIENT
@@ -11,11 +9,9 @@ Detailed guide for classifying LLM packages into `LlmObsCategory` enum values.
 **Definition:** Direct wrappers around LLM provider APIs.
 
 **Examples:**
+- `@google/generative-ai` - Google GenAI client (recommended reference implementation)
+- `@anthropic-ai/sdk` - Anthropic Claude client (recommended reference implementation)
 - `openai` - OpenAI API client
-- `@google/generative-ai` - Google GenAI client
-- `@anthropic-ai/sdk` - Anthropic Claude client
-- `@mistralai/mistralai` - Mistral AI client
-- `cohere-ai` - Cohere API client
 
 **Observable signs:**
 - Package name contains provider name (openai, anthropic, genai, etc.)
@@ -111,7 +107,7 @@ Follow this tree to determine category:
 ### Step 1: Read Package Name
 
 Analyze package name for patterns:
-- Contains "openai", "anthropic", "genai", "cohere" → Likely `LlmObsCategory.LLM_CLIENT`
+- Contains "openai", "anthropic", "genai" → Likely `LlmObsCategory.LLM_CLIENT`
 - Contains "langchain", "llamaindex", "ai-sdk" → Likely `LlmObsCategory.MULTI_PROVIDER`
 - Contains "langgraph", "crew", "workflow" → Likely `LlmObsCategory.ORCHESTRATION`
 - Contains "mcp", "protocol", "server" → Likely `LlmObsCategory.INFRASTRUCTURE`
@@ -147,125 +143,37 @@ Check for:
 - State management, graph execution → `LlmObsCategory.ORCHESTRATION`
 - Protocol implementation → `LlmObsCategory.INFRASTRUCTURE`
 
-## Multi-Signal Heuristics
-
-When category is uncertain, use scoring heuristics:
-
-### Signal 1: Package Name Patterns (weight: 3)
-
-```python
-if name contains ['openai', 'anthropic', 'genai', 'mistral']:
-    llm_client += 3
-
-if name contains ['langchain', 'llamaindex', 'ai-sdk']:
-    multi_provider += 3
-
-if name contains ['langgraph', 'crew', 'workflow', 'graph']:
-    orchestration += 3
-
-if name contains ['mcp', 'protocol', 'server']:
-    infrastructure += 3
-```
-
-### Signal 2: Dependencies (weight: 2)
-
-```python
-if depends on ['axios', 'fetch', 'got', 'request']:
-    llm_client += 2
-
-if depends on ['langchain', '@langchain/core']:
-    orchestration += 2
-
-if depends on 2+ provider SDKs:
-    multi_provider += 2
-```
-
-### Signal 3: Method Patterns (weight: 1-2)
-
-```python
-if methods include ['chat', 'completion', 'generate', 'embed']:
-    llm_client += 1
-    multi_provider += 1
-
-if methods include ['graph', 'workflow', 'state', 'invoke']:
-    orchestration += 2
-```
-
-### Signal 4: HTTP Code (weight: 1)
-
-```python
-if plugin includes HTTP requests:
-    llm_client += 1
-```
-
-### Confidence Levels
-
-- **High confidence:** Score >= 5, clear signals
-- **Medium confidence:** Score 3-4, some signals
-- **Low confidence:** Score < 3, weak or no signals
-
 ## Real-World Examples
 
-### Example 1: OpenAI (Category 1)
-
-**Package:** `openai`
-
-**Analysis:**
-- Name contains "openai" → +3 llm_client
-- Has axios dependency → +2 llm_client
-- Methods: `chat.completions.create` → +1 llm_client
-- Plugin includes HTTP requests → +1 llm_client
-- **Total score:** 7 (high confidence)
-
-**Category:** llm_client
-**Confidence:** high
-**Reasoning:** Package name indicates LLM client, has HTTP client dependencies, methods are chat/completion API calls
-
-### Example 2: LangGraph (Category 3)
+### Example 1: LangGraph (ORCHESTRATION)
 
 **Package:** `@langchain/langgraph`
 
-**Analysis:**
-- Name contains "langgraph" → +3 orchestration
-- Depends on @langchain/core → +2 orchestration
-- Methods: `StateGraph.invoke`, `CompiledStateGraph.stream` → +2 orchestration
-- No HTTP client dependencies → 0 llm_client
-- **Total score:** 7 (high confidence)
+- Name contains "langgraph" → orchestration
+- Depends on @langchain/core, no HTTP client dependencies
+- Methods: `StateGraph.invoke`, `CompiledStateGraph.stream` focus on graph execution and state management
 
-**Category:** orchestration
-**Confidence:** high
-**Reasoning:** Package name indicates orchestration, depends on LangChain, methods focus on graph execution and state management
+**Category:** `LlmObsCategory.ORCHESTRATION`
 
-### Example 3: Vercel AI SDK (Category 2)
+### Example 2: Vercel AI SDK (MULTI_PROVIDER)
 
-**Package:** `@ai-sdk/vercel`
+**Package:** `ai` (Vercel AI SDK)
 
-**Analysis:**
-- Name contains "ai-sdk" → +3 multi_provider
-- Depends on openai + anthropic SDKs → +2 multi_provider
-- Methods include provider-agnostic chat → +1 multi_provider
-- **Total score:** 6 (high confidence)
+- Name contains "ai-sdk" → multi_provider
+- Depends on openai + anthropic SDKs (multiple LLM providers)
+- Methods include provider-agnostic chat interface
 
-**Category:** multi_provider
-**Confidence:** high
-**Reasoning:** SDK name suggests abstraction, depends on multiple LLM providers, provides unified interface
+**Category:** `LlmObsCategory.MULTI_PROVIDER`
 
-## Output Format
+### Example 3: Anthropic (LLM_CLIENT)
 
-Always return:
-- `package_category`: One of `llm_client`, `multi_provider`, `orchestration`, `infrastructure`
-- `category_confidence`: One of `high`, `medium`, `low`
-- `category_reasoning`: Detailed explanation with evidence
+**Package:** `@anthropic-ai/sdk`
 
-**Example output:**
+- Name contains "anthropic" → llm_client
+- Makes direct HTTP calls to Anthropic API
+- Methods: `messages.create`, `messages.stream`
 
-```json
-{
-  "package_category": "orchestration",
-  "category_confidence": "high",
-  "category_reasoning": "Package name '@langchain/langgraph' clearly indicates orchestration. Dependencies include @langchain/core (orchestration framework) but no HTTP clients or LLM provider SDKs. Exported classes StateGraph and Pregel with invoke/stream methods manage workflow execution and state transitions rather than making direct LLM API calls. Heuristic score: 7."
-}
-```
+**Category:** `LlmObsCategory.LLM_CLIENT`
 
 ## Edge Cases
 
