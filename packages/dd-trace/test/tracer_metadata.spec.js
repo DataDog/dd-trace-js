@@ -12,7 +12,6 @@ describe('tracer_metadata', () => {
   let TracerMetadata
   let storeMetadata
   let maybeLoad
-  let containerId
 
   function makeStoreConfig (options = {}) {
     TracerMetadata = function (...args) { this.args = args }
@@ -123,7 +122,7 @@ describe('tracer_metadata', () => {
         version: null,
       }
 
-      assert.doesNotThrow(() => storeConfigNoBinding(config))
+      storeConfigNoBinding(config)
     })
   })
 })

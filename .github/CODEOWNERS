@@ -48,6 +48,7 @@
 /packages/dd-trace/test/payload_tagging.spec.js @DataDog/apm-idm-js
 /packages/dd-trace/test/payload-tagging/ @DataDog/apm-idm-js
 /packages/dd-trace/test/propagation-hash.spec.js @DataDog/apm-idm-js
+/packages/dd-trace/test/tracer_metadata.spec.js @DataDog/apm-idm-js
 
 # Test Optimization
 /ci @DataDog/ci-app-libraries
