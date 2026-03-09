@@ -96,6 +96,14 @@ function cleanupPrecompiledSourceLineDist (cwd) {
   fs.rmSync(path.join(cwd, CYPRESS_PRECOMPILED_SPEC_DIST_DIR), { recursive: true, force: true })
 }
 
+function compilePrecompiledTypeScriptSpecs (cwd, env) {
+  try {
+    execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd, env })
+  } catch {
+    // tsc emits files even on type errors (noEmitOnError: false), so this is expected
+  }
+}
+
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
     if (NODE_MAJOR <= 16) {
@@ -317,13 +325,9 @@ moduleTypes.forEach(({
 
         // Compile the TypeScript spec to JS + source map so the plugin can resolve
         // the original TypeScript source file and line via the adjacent .js.map file.
-        // tsc exits with code 1 when there are type errors (e.g. missing Cypress type
-        // declarations) but still emits files because noEmitOnError is false.
-        try {
-          execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd })
-        } catch {
-          // tsc emits files even on type errors (noEmitOnError: false), so this is expected
-        }
+        // We intentionally run with NODE_OPTIONS removed because sandboxed CWDs may not
+        // have local preload paths (e.g. -r ./ci/init) set by outer test environments.
+        compilePrecompiledTypeScriptSpecs(cwd, restEnvVars)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -434,11 +438,7 @@ moduleTypes.forEach(({
       try {
         cleanupPrecompiledSourceLineDist(cwd)
 
-        try {
-          execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd })
-        } catch {
-          // tsc emits files even on type errors (noEmitOnError: false), so this is expected
-        }
+        compilePrecompiledTypeScriptSpecs(cwd, restEnvVars)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -484,11 +484,7 @@ moduleTypes.forEach(({
       try {
         cleanupPrecompiledSourceLineDist(cwd)
 
-        try {
-          execSync('node_modules/.bin/tsc -p cypress/tsconfig.cypress.json', { cwd })
-        } catch {
-          // tsc emits files even on type errors (noEmitOnError: false), so this is expected
-        }
+        compilePrecompiledTypeScriptSpecs(cwd, restEnvVars)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
