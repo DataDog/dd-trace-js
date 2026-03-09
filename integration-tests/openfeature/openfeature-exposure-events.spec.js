@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const ufcPayloads = require('./fixtures/ufc-payloads')
 const RC_PRODUCT = 'FFE_FLAGS'
@@ -64,7 +64,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -160,7 +160,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -240,7 +240,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -301,7 +301,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
