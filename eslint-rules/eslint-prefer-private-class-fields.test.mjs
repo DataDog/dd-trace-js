@@ -2,7 +2,7 @@ import { RuleTester } from 'eslint'
 import rule from './eslint-prefer-private-class-fields.mjs'
 
 const ruleTester = new RuleTester({
-  languageOptions: { ecmaVersion: 2022 },
+  languageOptions: { ecmaVersion: 2022, sourceType: 'module' },
 })
 
 ruleTester.run('prefer-private-class-fields', /** @type {import('eslint').Rule.RuleModule} */ (rule), {
