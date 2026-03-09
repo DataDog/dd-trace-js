@@ -10,8 +10,7 @@ class BaseLangGraphLLMObsPlugin extends LLMObsPlugin {
   static id = 'langgraph'
 
   getLLMObsSpanRegisterOptions (ctx) {
-    const span = ctx.currentStore?.span
-    const name = span?.context()._tags?.['resource.name'] || 'langgraph.workflow'
+    const name = ctx.self.name || 'LangGraph'
 
     return {
       kind: 'workflow',
@@ -36,7 +35,7 @@ class BaseLangGraphLLMObsPlugin extends LLMObsPlugin {
   }
 
   formatIO (data) {
-    if (data === null || data === undefined) return ''
+    if (data == null) return ''
 
     if (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
       return data
@@ -92,24 +91,6 @@ class NextStreamLLMObsPlugin extends BaseLangGraphLLMObsPlugin {
 
   end () {
     // Don't restore context - that will be handled by PregelStreamLLMObsPlugin
-  }
-
-  asyncStart (ctx) {
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    // Accumulate chunks before done
-    if (!ctx.result?.done && ctx.result?.value) {
-      const streamData = streamDataMap.get(span)
-      if (streamData) {
-        streamData.chunks.push(ctx.result.value)
-      }
-    }
-
-    // Tag when done
-    if (ctx.result?.done) {
-      this.#tagOnComplete(ctx)
-    }
   }
 
   asyncEnd (ctx) {

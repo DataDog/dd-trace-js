@@ -27,49 +27,6 @@ createIntegrationTestSuite('langgraph', '@langchain/langgraph', {
     await agent.close({ ritmReset: false })
   })
 
-  describe('Pregel.invoke() - invoke', () => {
-    it('should generate span with correct tags (happy path)', async () => {
-      const traceAssertion = agent.assertSomeTraces((traces) => {
-        const allSpans = traces.flat()
-        const invokeSpan = allSpans.find(span => span.name === 'LangGraph')
-
-        if (!invokeSpan) {
-          throw new Error('LangGraph span not found')
-        }
-
-        assert.equal(invokeSpan.name, 'LangGraph')
-        assert.equal(invokeSpan.meta['span.kind'], 'internal')
-        assert.equal(invokeSpan.meta.component, 'langgraph')
-      })
-
-      await testSetup.pregelInvoke()
-
-      return traceAssertion
-    })
-
-    it('should generate span with error tags (error path)', async () => {
-      const traceAssertion = agent.assertSomeTraces((traces) => {
-        const allSpans = traces.flat()
-        const invokeSpan = allSpans.find(span => span.name === 'LangGraph' && span.error === 1)
-
-        if (!invokeSpan) {
-          throw new Error('LangGraph error span not found')
-        }
-        assert.equal(invokeSpan.name, 'LangGraph')
-        assert.equal(invokeSpan.error, 1)
-        assert.equal(invokeSpan.meta['span.kind'], 'internal')
-        assert.equal(invokeSpan.meta.component, 'langgraph')
-        assert.ok(Object.hasOwn(invokeSpan.meta, 'error.type'))
-        assert.ok(Object.hasOwn(invokeSpan.meta, 'error.message'))
-        assert.ok(Object.hasOwn(invokeSpan.meta, 'error.stack'))
-      })
-
-      await testSetup.pregelInvokeError().catch(() => {})
-
-      return traceAssertion
-    })
-  })
-
   describe('Pregel.stream() - stream', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {

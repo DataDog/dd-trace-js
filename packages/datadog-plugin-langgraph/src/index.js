@@ -2,7 +2,7 @@
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const langgraphLLMObsPlugins = require('../../dd-trace/src/llmobs/plugins/langgraph')
-const internalPlugin = require('./stream')
+const streamPlugin = require('./stream')
 
 const plugins = {}
 
@@ -12,8 +12,8 @@ for (const Plugin of langgraphLLMObsPlugins) {
 }
 
 // Tracing plugins second
-for (const [id, Plugin] of Object.entries(internalPlugin)) {
-  plugins[id] = Plugin
+for (const Plugin of streamPlugin) {
+  plugins[Plugin.id] = Plugin
 }
 
 class LanggraphPlugin extends CompositePlugin {
