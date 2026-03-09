@@ -3,7 +3,7 @@
 const log = require('../../../log')
 const LLMObsPlugin = require('../base')
 
-const pluginManager = require('../../../../../..')._pluginManager
+const pluginManager = require('../../../../../../').pluginManager
 
 const ANTHROPIC_PROVIDER_NAME = 'anthropic'
 const BEDROCK_PROVIDER_NAME = 'amazon_bedrock'
@@ -145,7 +145,7 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
   }
 
   isLLMIntegrationEnabled (integration) {
-    return SUPPORTED_INTEGRATIONS.has(integration) && pluginManager?._pluginsByName[integration]?.llmobs?._enabled
+    return SUPPORTED_INTEGRATIONS.has(integration) && pluginManager?.pluginsByName[integration]?.llmobs?.enabled
   }
 }
 

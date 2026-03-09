@@ -167,6 +167,7 @@ class BaseFFEWriter {
     }
   }
 
+  // TODO: Refactor all of these getters to use proxyquire or sinon
   // Exposed for test access
   get _interval () { return this.#interval }
 

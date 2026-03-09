@@ -384,7 +384,7 @@ describe('Plugin', () => {
         })
 
         it('should be configurable on a per-service basis', () => {
-          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+          const { kinesis, sns, sqs } = tracer.pluginManager.pluginsByName['aws-sdk'].services
 
           assert.strictEqual(kinesis.config.batchPropagationEnabled, false)
           assert.strictEqual(sns.config.batchPropagationEnabled, true)
@@ -411,7 +411,7 @@ describe('Plugin', () => {
         })
 
         it('should be configurable on a per-service basis', () => {
-          const { kinesis, sns, sqs } = tracer._pluginManager._pluginsByName['aws-sdk'].services
+          const { kinesis, sns, sqs } = tracer.pluginManager.pluginsByName['aws-sdk'].services
 
           assert.strictEqual(kinesis.config.batchPropagationEnabled, false)
           assert.strictEqual(sns.config.batchPropagationEnabled, true)

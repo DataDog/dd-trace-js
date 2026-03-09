@@ -28,10 +28,10 @@ const telemetryLogger = require('./logs')
  * }} Integration
  */
 /**
- * @typedef {{ _enabled: boolean }} Plugin
+ * @typedef {{ enabled: boolean }} Plugin
  */
 /**
- * @typedef {{ _pluginsByName: Record<string, Plugin> }} PluginManager
+ * @typedef {{ pluginsByName: Record<string, Plugin> }} PluginManager
  */
 /**
  * @typedef {{
@@ -168,11 +168,11 @@ function updateRetryData (error, retryObj) {
 
 function getIntegrations () {
   const newIntegrations = /** @type {Integration[]} */ ([])
-  for (const pluginName of Object.keys(pluginManager._pluginsByName ?? {})) {
+  for (const pluginName of Object.keys(pluginManager.pluginsByName ?? {})) {
     if (!sentIntegrations.has(pluginName)) {
       newIntegrations.push({
         name: pluginName,
-        enabled: pluginManager._pluginsByName[pluginName]._enabled,
+        enabled: pluginManager.pluginsByName[pluginName].enabled,
         auto_enabled: true,
         [processTags.TELEMETRY_FIELD_NAME]: processTags.tagsObject,
       })

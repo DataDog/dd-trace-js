@@ -54,10 +54,10 @@ describe('startup logging', () => {
     } = require('../src/startup-log')
     tracerInfoMethod = tracerInfo
     setStartupLogPluginManager({
-      _pluginsByName: {
-        http: { _enabled: true },
-        fs: { _enabled: true },
-        semver: { _enabled: true },
+      pluginsByName: {
+        http: { enabled: true },
+        fs: { enabled: true },
+        semver: { enabled: true },
       },
     })
     setStartupLogConfig(configWithStartupLogs)
@@ -109,9 +109,9 @@ describe('startup logging', () => {
       debug: true,
       sample_rate: 1,
       sampling_rules: [
-        { matchers: [{ pattern: 'rule1' }], _sampler: { _rate: 0.4 } },
+        { matchers: [{ pattern: 'rule1' }], sampleRate: 0.4 },
         'rule2',
-        { matchers: [{ pattern: 'rule3' }], _sampler: { _rate: 1 } },
+        { matchers: [{ pattern: 'rule3' }], sampleRate: 1 },
       ],
       tags: { version: '1.2.3', invalid_but_listed_due_to_mocking: '42' },
       dd_version: '1.2.3',
@@ -152,7 +152,7 @@ describe('startupLog should not include integrations_loaded (regression #7470)',
       startupLog,
     } = require('../src/startup-log')
     // Even with pluginManager available, config log should not include integrations
-    setStartupLogPluginManager({ _pluginsByName: { http: {}, fs: {} } })
+    setStartupLogPluginManager({ pluginsByName: { http: {}, fs: {} } })
     setStartupLogConfig(configWithStartupLogs)
     startupLog()
     /* eslint-disable-next-line no-console */
@@ -182,7 +182,7 @@ describe('startup log guards', () => {
     delete require.cache[require.resolve('../src/startup-log')]
     const { setStartupLogConfig, setStartupLogPluginManager, logIntegrations } = require('../src/startup-log')
     setStartupLogConfig(configWithStartupLogs)
-    setStartupLogPluginManager({ _pluginsByName: { http: {} } })
+    setStartupLogPluginManager({ pluginsByName: { http: {} } })
     logIntegrations()
     logIntegrations()
     /* eslint-disable-next-line no-console */
@@ -216,7 +216,7 @@ describe('startup log guards', () => {
       logAgentError,
     } = require('../src/startup-log')
     setStartupLogConfig({ ...configWithStartupLogs, startupLogs: false })
-    setStartupLogPluginManager({ _pluginsByName: { http: {} } })
+    setStartupLogPluginManager({ pluginsByName: { http: {} } })
     startupLog()
     logIntegrations()
     logAgentError({ status: 500, message: 'err' })

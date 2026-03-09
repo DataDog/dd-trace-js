@@ -137,7 +137,7 @@ function withPeerService (tracer, pluginName, spanGenerationFn, service, service
     let computePeerServiceSpy
 
     beforeEach(() => {
-      const plugin = tracer()._pluginManager._pluginsByName[pluginName]
+      const plugin = tracer().pluginManager.pluginsByName[pluginName]
       computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
     })
 

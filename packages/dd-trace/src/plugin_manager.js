@@ -70,9 +70,6 @@ module.exports = class PluginManager {
 
   constructor (tracer) {
     this.#tracer = tracer
-    this.#tracerConfig = null
-    this.#pluginsByName = {}
-    this.#configsByName = {}
 
     this.#loadedSubscriber = ({ name }) => {
       const Plugin = plugins[name]
@@ -134,8 +131,7 @@ module.exports = class PluginManager {
     }
   }
 
-  // Exposed for external access by startup-log, telemetry, llmobs, and test infrastructure
-  get _pluginsByName () {
+  get pluginsByName () {
     return this.#pluginsByName
   }
 

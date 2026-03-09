@@ -70,6 +70,7 @@ class ExposuresWriter extends BaseFFEWriter {
   }
 
   // Exposed for test access
+  // TODO: Refactor to use proxyquire or sinon
   get _pendingEvents () { return this.#pendingEvents }
 
   /**

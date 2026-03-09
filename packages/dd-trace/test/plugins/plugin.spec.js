@@ -56,25 +56,25 @@ describe('Plugin', () => {
     plugin = new BadPlugin()
     plugin.configure({ enabled: true })
 
-    assert.strictEqual(plugin._enabled, true)
+    assert.strictEqual(plugin.enabled, true)
 
     channel('apm:badPlugin:start').publish({ foo: 'bar' })
 
     sinon.assert.calledWith(log.error, 'Error in plugin handler:', sinon.match.instanceOf(Error))
     sinon.assert.calledWith(log.info, 'Disabling plugin: %s', 'BadPlugin')
 
-    assert.strictEqual(plugin._enabled, false)
+    assert.strictEqual(plugin.enabled, false)
   })
 
   it('should not disable with no error', () => {
     plugin = new GoodPlugin()
     plugin.configure({ enabled: true })
 
-    assert.strictEqual(plugin._enabled, true)
+    assert.strictEqual(plugin.enabled, true)
 
     channel('apm:goodPlugin:start').publish({ foo: 'bar' })
 
-    assert.strictEqual(plugin._enabled, true)
+    assert.strictEqual(plugin.enabled, true)
   })
 
   it('should run binding transforms with an undefined current store', () => {

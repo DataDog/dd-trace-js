@@ -29,9 +29,9 @@ class DogStatsDClient {
   #port
   #prefix
   #tags
-  #queue
-  #buffer
-  #offset
+  #queue = []
+  #buffer = ''
+  #offset = 0
   #udp4
   #udp6
 
@@ -48,9 +48,6 @@ class DogStatsDClient {
     this.#port = options.port || defaults['dogstatsd.port']
     this.#prefix = options.prefix || ''
     this.#tags = options.tags || []
-    this.#queue = []
-    this.#buffer = ''
-    this.#offset = 0
     this.#udp4 = this._socket('udp4')
     this.#udp6 = this._socket('udp6')
   }

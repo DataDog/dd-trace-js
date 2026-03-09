@@ -379,7 +379,6 @@ describe('sampling rule', () => {
         sampleRate: 1.0,
       })
 
-      assert.strictEqual(rule._limiter, undefined)
       assert.strictEqual(rule.maxPerSecond, undefined)
     })
 

@@ -355,8 +355,7 @@ class Tracer extends NoopProxy {
     return require('./opentelemetry/tracer_provider')
   }
 
-  // Exposed for external access by test infrastructure and internal modules (startup-log, telemetry, llmobs)
-  get _pluginManager () {
+  get pluginManager () {
     return this.#pluginManager
   }
 }

@@ -412,20 +412,20 @@ describe('IAST Plugin', () => {
 
     it('should disable bad plugin', () => {
       badPlugin.configure({ enabled: true })
-      assert.strictEqual(badPlugin._enabled, true)
+      assert.strictEqual(badPlugin.enabled, true)
 
       channel('appsec:badPlugin:start').publish({ foo: 'bar' })
 
-      assert.strictEqual(badPlugin._enabled, false)
+      assert.strictEqual(badPlugin.enabled, false)
     })
 
     it('should not disable good plugin', () => {
       goodPlugin.configure({ enabled: true })
-      assert.strictEqual(goodPlugin._enabled, true)
+      assert.strictEqual(goodPlugin.enabled, true)
 
       channel('appsec:goodPlugin:start').publish({ foo: 'bar' })
 
-      assert.strictEqual(goodPlugin._enabled, true)
+      assert.strictEqual(goodPlugin.enabled, true)
     })
   })
 })
