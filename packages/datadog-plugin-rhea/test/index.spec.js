@@ -61,7 +61,7 @@ describe('Plugin', () => {
           let expectedProducerHash
           let expectedConsumerHash
 
-          before(() => {
+          beforeEach(() => {
             const phash = propagationHash.getHash()
             const producerHash = computePathwayHash(
               'test', 'tester',
