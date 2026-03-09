@@ -83,33 +83,30 @@ function setupResponseInstrumentation (ctx, res) {
       bodyConsumed = true
 
       // For 'data' events, add our own listener to collect chunks
-      if (eventName === 'data' && !dataListenerAdded) {
+      if (eventName === 'data' && !dataListenerAdded && !dataReadStarted) {
         dataListenerAdded = true
-        // Only add a data listener if we are not already collecting via the read() wrapper.
-        // When both readable and data listeners exist, the stream stays in paused mode and
-        // data events do not fire, so the read wrapper remains the collection path.
-        if (!dataReadStarted) {
-          res.on('data', collectChunk)
-        }
+        res.on('data', collectChunk)
       }
 
       // For 'readable' events, wrap the read() method
       if (eventName === 'readable' && !originalRead && !dataListenerAdded && typeof res.read === 'function') {
         originalRead = res.read
         res.read = function () {
-          if (dataListenerAdded) {
-            // A 'data' listener was added while we were in a readable+read() loop. In Node.js 24,
-            // calling read() while the stream is transitioning to flowing mode crashes inside
-            // fromList with "Cannot read properties of undefined (reading 'length')".
-            // We return null here to safely exit the caller's read loop, but we also restore the
-            // original read() so that Node.js's internal drain mechanism (which calls read() to
-            // flush buffered data when switching to flowing mode) works correctly afterwards.
+          let chunk
+          try {
+            chunk = originalRead.apply(this, arguments)
+          } catch {
+            // Node.js 24+: calling read() while the stream is transitioning from paused to
+            // flowing mode (e.g. a 'data' listener was just added) can crash inside fromList
+            // with "Cannot read properties of undefined (reading 'length')". Restore the
+            // original read() and return null to safely exit the caller's read loop.
             res.read = originalRead
             return null
           }
-          dataReadStarted = true
-          const chunk = originalRead.apply(this, arguments)
-          collectChunk(chunk)
+          if (!dataListenerAdded) {
+            dataReadStarted = true
+            collectChunk(chunk)
+          }
           return chunk
         }
       }
