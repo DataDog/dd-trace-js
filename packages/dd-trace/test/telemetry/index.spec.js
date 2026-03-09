@@ -141,7 +141,7 @@ describe('telemetry', () => {
         time: '1703188212',
       },
     }, {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
   })
 
@@ -276,7 +276,7 @@ describe('telemetry', () => {
       appsec: { enabled: false },
       profiling: { enabled: false },
     }, {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
     notEnabledTelemetry.appClosing()
     assert.strictEqual(sendDataStub.called, false)
@@ -332,7 +332,7 @@ describe('telemetry app-heartbeat', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
     clock.tick(HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 1)
@@ -399,7 +399,7 @@ describe('Telemetry extended heartbeat', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
     clock.tick(86400000)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
@@ -443,7 +443,7 @@ describe('Telemetry extended heartbeat', () => {
       },
     }
 
-    telemetry.start(config, { pluginsByName: pluginsByName })
+    telemetry.start(config, { pluginsByName })
 
     clock.tick(86400000)
     assert.deepStrictEqual(configuration, [])
@@ -587,7 +587,7 @@ describe('Telemetry retry', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
 
     pluginsByName.boo3 = { enabled: true }
@@ -676,7 +676,7 @@ describe('Telemetry retry', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
     // jump to next heartbeat request
     clock.tick(HEARTBEAT_INTERVAL)
@@ -747,7 +747,7 @@ describe('Telemetry retry', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
     pluginsByName.foo1 = { enabled: true }
     telemetry.updateIntegrations() // This sends an batch message and succeeds
@@ -809,7 +809,7 @@ describe('Telemetry retry', () => {
         'runtime-id': '1a2b3c',
       },
     }, {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
 
     pluginsByName.foo1 = { enabled: true }
@@ -894,7 +894,7 @@ describe('Telemetry retry', () => {
       },
     },
     {
-      pluginsByName: pluginsByName,
+      pluginsByName,
     })
     pluginsByName.foo1 = { enabled: true }
     telemetry.updateIntegrations() // This sends an batch message and fails
