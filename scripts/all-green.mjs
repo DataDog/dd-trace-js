@@ -69,12 +69,12 @@ async function checkCompleted () {
 }
 
 async function checkAllGreen () {
-  let latestRuns
+  let checkRuns
 
   try {
     await checkCompleted()
   } finally {
-    const checkRuns = await octokit.paginate(
+    checkRuns = await octokit.paginate(
       'GET /repos/:owner/:repo/commits/:ref/check-runs',
       {
         ...params,
@@ -82,21 +82,10 @@ async function checkAllGreen () {
       }
     )
 
-    // When a check is re-run, older runs remain with their original conclusions.
-    // Deduplicate by name and evaluate only the latest run for each check.
-    const latestByName = new Map()
-    for (const run of checkRuns) {
-      const existing = latestByName.get(run.name)
-      if (!existing || new Date(run.started_at) >= new Date(existing.started_at)) {
-        latestByName.set(run.name, run)
-      }
-    }
-    latestRuns = [...latestByName.values()]
-
-    printSummary(latestRuns)
+    printSummary(checkRuns)
   }
 
-  const allGreen = !latestRuns.some(run => (
+  const allGreen = !checkRuns.some(run => (
     run.conclusion === 'failure' || run.conclusion === 'timed_out'
   ))
 
