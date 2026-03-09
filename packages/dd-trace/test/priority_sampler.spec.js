@@ -370,9 +370,7 @@ describe('PrioritySampler', () => {
     })
 
     it('should ignore empty span', () => {
-      assert.doesNotThrow(() => {
-        prioritySampler.sample()
-      })
+      prioritySampler.sample()
       prioritySampler.sample()
     })
 
@@ -519,9 +517,7 @@ describe('PrioritySampler', () => {
 
   describe('keepTrace', () => {
     it('should not fail if no _prioritySampler', () => {
-      assert.doesNotThrow(() => {
-        PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
-      })
+      PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
     })
 
     it('should call setPriority with span USER_KEEP and mechanism', () => {

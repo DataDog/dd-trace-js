@@ -9,6 +9,7 @@ const {
   sandboxCwd,
   useSandbox,
   spawnProc,
+  stopProc,
 } = require('../helpers')
 
 describe('graphql', () => {
@@ -32,7 +33,7 @@ describe('graphql', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 

@@ -150,9 +150,7 @@ describe('Plugin', () => {
             done()
           })
 
-          assert.doesNotThrow(() => {
-            client.off('message', neverAddedHandler)
-          })
+          client.off('message', neverAddedHandler)
         })
 
         it('should do automatic instrumentation for server connections', done => {

@@ -1,7 +1,6 @@
 /* eslint-disable @stylistic/max-len */
 'use strict'
 
-const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -66,11 +65,11 @@ describe('Hardcoded Password Analyzer', () => {
     })
 
     it('should not fail with a malformed secret', () => {
-      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze(undefined))
-      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file: undefined }))
-      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: undefined }))
-      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: undefined }] }))
-      assert.doesNotThrow(() => hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: 'test' }] }))
+      hardcodedPasswordAnalyzer.analyze(undefined)
+      hardcodedPasswordAnalyzer.analyze({ file: undefined })
+      hardcodedPasswordAnalyzer.analyze({ file, literals: undefined })
+      hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: undefined }] })
+      hardcodedPasswordAnalyzer.analyze({ file, literals: [{ value: 'test' }] })
     })
 
     it('should not report secrets in line 0', () => {

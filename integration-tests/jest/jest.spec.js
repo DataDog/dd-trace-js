@@ -2921,11 +2921,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         known_tests_enabled: true,
       })
 
+      // Request module waits before retrying — need longer gather timeout
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEnd = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+          const testSession = testSessionEnd.content
           assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2935,7 +2938,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test => test.meta[TEST_IS_NEW] === 'true'
           )
           assert.strictEqual(newTests.length, 0)
-        })
+        }, 60000)
 
       childProcess = exec(
         runTestsCommand,
@@ -3772,6 +3775,135 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
       assert.strictEqual(exitCode, 1, 'exit code 1 when suite fails (resolution error, EFD)')
+    })
+
+    it('retries a fast new test using the count from the matching slow_test_retries bucket', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
+            '10s': 1,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testEvents = tests.filter(t => t.resource?.includes('instant-test'))
+          // 1 original + 2 retries from the '5s' bucket (fast test < 5 s)
+          assert.strictEqual(testEvents.length, 3)
+          const efdRetries = testEvents.filter(t =>
+            t.meta[TEST_IS_RETRY] === 'true' && t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd
+          )
+          assert.strictEqual(efdRetries.length, 2)
+          testEvents.forEach(t => assert.strictEqual(t.meta[TEST_IS_NEW], 'true'))
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/instant-test',
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('retries a slightly slow new test using the count from the matching slow_test_retries bucket', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 3,
+            '10s': 1,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        // test runs for ~5100 ms × 2 executions; allow extra time for jest startup + reporting
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testEvents = tests.filter(t => t.resource?.includes('slightly-slow-test'))
+          // 1 original + 1 retry from the '10s' bucket (test takes ~5100 ms, between 5 s and 10 s)
+          assert.strictEqual(testEvents.length, 2)
+          const efdRetries = testEvents.filter(t =>
+            t.meta[TEST_IS_RETRY] === 'true' && t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd
+          )
+          assert.strictEqual(efdRetries.length, 1)
+          testEvents.forEach(t => assert.strictEqual(t.meta[TEST_IS_NEW], 'true'))
+        }, 25_000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/slightly-slow-test',
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('aborts retries and tags the test when the test is too slow for any slow_test_retries bucket', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 3,
+            '10s': 0,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const testEvents = tests.filter(t => t.resource?.includes('slightly-slow-test'))
+          // 0 retries — bucket value is 0
+          assert.strictEqual(testEvents.length, 1)
+          const [testEvent] = testEvents
+          assert.strictEqual(testEvent.meta[TEST_IS_NEW], 'true')
+          assert.strictEqual(testEvent.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+          assert.ok(!(TEST_IS_RETRY in testEvent.meta), 'should not be retried')
+        }, 20_000)
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'test-early-flake-detection/slightly-slow-test',
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
   })
 
@@ -5930,15 +6062,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
       receiver.setTestManagementTestsResponseCode(500)
 
+      // Request module waits before retrying — need longer gather timeout
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEnd = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+          const testSession = testSessionEnd.content
           assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
-        })
+        }, 60000)
 
       childProcess = exec(runTestsCommand, {
         cwd,

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const path = require('path')
 const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 describe('RASP', () => {
   let axios, cwd, appFile, agent, proc, stdioHandler
@@ -43,7 +43,7 @@ describe('RASP', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
   }
