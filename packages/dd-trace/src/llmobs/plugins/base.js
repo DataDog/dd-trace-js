@@ -16,6 +16,7 @@ class LLMObsPlugin extends TracingPlugin {
     this.#tagger = new LLMObsTagger(this._tracerConfig, true)
   }
 
+  // Accessed by subclasses in production code (langchain, openai, anthropic, etc.)
   get _tagger () {
     return this.#tagger
   }
