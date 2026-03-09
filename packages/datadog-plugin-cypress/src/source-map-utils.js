@@ -9,7 +9,7 @@ const BASE64_DECODE = new Uint8Array(128)
 for (let i = 0; i < BASE64_CHARS.length; i++) {
   BASE64_DECODE[BASE64_CHARS.charCodeAt(i)] = i
 }
-const TEST_DECLARATION_RE = /(?:it|test|specify)\s*\(\s*(?:'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"|`((?:\\.|[\s\S])*?)`)\s*,/g
+const TEST_DECLARATION_RE = /(?:it|test|specify)\s*\(\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\[\s\S])*)`)\s*,/g
 const SOURCE_MAP_CACHE = new Map()
 
 /**
