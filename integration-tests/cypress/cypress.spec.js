@@ -5,6 +5,7 @@ const { exec, execSync } = require('node:child_process')
 const { once } = require('node:events')
 const fs = require('node:fs')
 const http = require('node:http')
+const os = require('node:os')
 const path = require('node:path')
 
 const semver = require('semver')
@@ -67,11 +68,55 @@ const {
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
+const { resolveSourceLineForTest } = require('../../packages/datadog-plugin-cypress/src/source-map-utils')
 
 const RECEIVER_STOP_TIMEOUT = 20000
 const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
+
+describe('source-map resolution fallback', () => {
+  // Covers the algorithm branch that resolves source line from invocationDetails.stack.
+  // Current Cypress integration scenarios do not exercise this branch end-to-end,
+  // so we keep this deterministic non-sandbox test for regression coverage.
+  it('resolves source line from invocationDetails stack before declaration scanning', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cypress-source-map-'))
+    const compiledFilePath = path.join(tempDir, 'spec-stack.js')
+    const sourceMapPath = `${compiledFilePath}.map`
+
+    try {
+      fs.writeFileSync(compiledFilePath, [
+        'const title = [\'runtime\', \'title\'].join(\' \')',
+        '',
+        'beforeEach(() => {})',
+        '',
+        'const fn = () => {}',
+        '',
+        'it(title, fn)',
+        '',
+      ].join('\n'))
+
+      fs.writeFileSync(sourceMapPath, JSON.stringify({
+        version: 3,
+        file: 'spec-stack.js',
+        sourceRoot: '',
+        sources: ['spec-stack.ts'],
+        names: [],
+        mappings: ';;;;;;AAQA',
+      }))
+
+      const resolvedLine = resolveSourceLineForTest(
+        compiledFilePath,
+        'this title does not appear in source',
+        'Error\n    at eval (http://localhost:3000/__cypress/tests?p=spec-stack.js:7:1)'
+      )
+
+      assert.strictEqual(resolvedLine, 9)
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+})
 
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 

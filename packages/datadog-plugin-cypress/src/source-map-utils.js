@@ -212,6 +212,27 @@ function lineNumberForIndex (content, endIndex) {
 }
 
 /**
+ * Extract the first stack frame line number from an invocation stack.
+ * Supports Chromium-style ("at fn (file:line:col)") and Firefox-style ("fn@file:line:col").
+ * @param {string} stack
+ * @returns {number | null}
+ */
+function firstGeneratedLineFromStack (stack) {
+  if (typeof stack !== 'string' || stack.length === 0) return null
+  const lines = stack.split('\n')
+  for (const line of lines) {
+    const match = line.match(/:(\d+):\d+\)?\s*$/)
+    if (match) {
+      const parsed = Number(match[1])
+      if (Number.isInteger(parsed) && parsed > 0) {
+        return parsed
+      }
+    }
+  }
+  return null
+}
+
+/**
  * Find the declaration line for a test name by scanning it()/test()/specify() calls.
  * For template literals, `${...}` placeholders are fuzzy-matched against runtime values.
  * @param {string} content
@@ -240,14 +261,23 @@ function findTestDeclarationLine (content, testName) {
 }
 
 /**
- * Find the original source line for a test by scanning declaration name and
- * mapping the matched generated line through a source map when available.
+ * Find the original source line for a test.
+ * It first tries mapping a generated line extracted from invocation stack.
+ * If that fails, it scans declaration name and maps the matched generated line
+ * through a source map when available.
  * For `.ts` specs, the matched line is already the source line.
  * @param {string} absoluteFilePath - Absolute path to the spec file (compiled JS or .ts)
  * @param {string} testName - The test name passed to `it()`, `test()`, or `specify()`
+ * @param {string} invocationStack - Raw invocationDetails stack for the test
  * @returns {number | null} The resolved source line (1-indexed), or null
  */
-function resolveSourceLineForTest (absoluteFilePath, testName) {
+function resolveSourceLineForTest (absoluteFilePath, testName, invocationStack) {
+  const generatedLineFromStack = firstGeneratedLineFromStack(invocationStack)
+  if (generatedLineFromStack && !absoluteFilePath.endsWith('.ts')) {
+    const stackResolved = resolveOriginalSourcePosition(absoluteFilePath, generatedLineFromStack)
+    if (stackResolved) return stackResolved.line
+  }
+
   let content
   try {
     content = fs.readFileSync(absoluteFilePath, 'utf8')

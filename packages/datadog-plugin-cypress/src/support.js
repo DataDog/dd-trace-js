@@ -273,7 +273,9 @@ afterEach(function () {
     isQuarantined: isQuarantinedTestThatFailed,
   }
   try {
-    testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+    const invocationDetails = Cypress.mocha.getRunner().currentRunnable.invocationDetails
+    testInfo.testSourceLine = invocationDetails.line
+    testInfo.testSourceStack = invocationDetails.stack
   } catch {}
 
   const rum = safeGetRum(originalWindow)

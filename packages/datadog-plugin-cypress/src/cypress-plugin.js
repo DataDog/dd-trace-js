@@ -910,6 +910,7 @@ class CypressPlugin {
           error,
           isRUMActive,
           testSourceLine,
+          testSourceStack,
           testSuite,
           testSuiteAbsolutePath,
           testName,
@@ -955,6 +956,14 @@ class CypressPlugin {
         if (isRUMActive) {
           this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
         }
+        // Source-line resolution strategy:
+        // 1. If plain JS and no source map, trust invocationDetails.line directly.
+        // 2. Otherwise, try invocationDetails.stack line mapped through source map.
+        // 3. If that fails, scan generated file for it/test/specify declaration by test name.
+        // 4. If declaration found:
+        //    - .ts file: use declaration line directly.
+        //    - .js file: map declaration line through source map.
+        // 5. If all fail, keep original invocationDetails.line.
         if (testSourceLine) {
           let resolvedLine = testSourceLine
           if (testSuiteAbsolutePath && testItTitle) {
@@ -962,7 +971,11 @@ class CypressPlugin {
             // Otherwise, resolve from the test declaration in the spec and map via source map.
             const shouldTrustInvocationDetails = shouldTrustInvocationDetailsLine(testSuiteAbsolutePath, testSourceLine)
             if (!shouldTrustInvocationDetails) {
-              resolvedLine = resolveSourceLineForTest(testSuiteAbsolutePath, testItTitle) ?? testSourceLine
+              resolvedLine = resolveSourceLineForTest(
+                testSuiteAbsolutePath,
+                testItTitle,
+                testSourceStack
+              ) ?? testSourceLine
             }
           }
           this.activeTestSpan.setTag(TEST_SOURCE_START, resolvedLine)
