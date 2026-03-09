@@ -62,7 +62,7 @@ describe('esm', () => {
 
         assert.strictEqual(maybeHolaActivity.length, 1)
         assertObjectContains(maybeHolaActivity[0], {
-          name: 'azure.durable-functions.invoke',
+          name: 'azure.functions.invoke',
           resource: 'Activity hola',
           meta: {
             'aas.function.trigger': 'Activity',
@@ -72,7 +72,7 @@ describe('esm', () => {
 
         assert.strictEqual(maybeAddNEntity.length, 1)
         assertObjectContains(maybeAddNEntity[0], {
-          name: 'azure.durable-functions.invoke',
+          name: 'azure.functions.invoke',
           resource: 'Entity counter add_n',
           meta: {
             'aas.function.trigger': 'Entity',
@@ -83,7 +83,7 @@ describe('esm', () => {
 
         assert.strictEqual(maybeGetCountEntity.length, 1)
         assertObjectContains(maybeGetCountEntity[0], {
-          name: 'azure.durable-functions.invoke',
+          name: 'azure.functions.invoke',
           resource: 'Entity counter get_count',
           meta: {
             'aas.function.trigger': 'Entity',

@@ -5,7 +5,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 class AzureDurableFunctionsPlugin extends TracingPlugin {
   static get id () { return 'azure-durable-functions' }
   static get operation () { return 'invoke' }
-  static get prefix () { return 'tracing:datadog:azure:durable-functions:invoke' }
+  static get prefix () { return 'tracing:datadog:azure:functions:invoke' }
   static get type () { return 'serverless' }
   static get kind () { return 'server' }
 
