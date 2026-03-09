@@ -6,6 +6,9 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -55,8 +58,25 @@ describe('Plugin', () => {
             connection.open_receiver('amq.topic')
           })
 
-          const expectedProducerHash = '11950901911938809288'
-          const expectedConsumerHash = '13394183765782976023'
+          let expectedProducerHash
+          let expectedConsumerHash
+
+          before(() => {
+            const phash = propagationHash.getHash()
+            const producerHash = computePathwayHash(
+              'test', 'tester',
+              ['direction:out', 'exchange:amq.topic', 'type:rabbitmq'],
+              ENTRY_PARENT_HASH,
+              phash
+            )
+            expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
+            expectedConsumerHash = computePathwayHash(
+              'test', 'tester',
+              ['direction:in', 'topic:amq.topic', 'type:rabbitmq'],
+              producerHash,
+              phash
+            ).readBigUInt64LE(0).toString()
+          })
 
           it('Should set pathway hash tag on a span when producing', (done) => {
             let produceSpanMeta = {}
