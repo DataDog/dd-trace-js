@@ -16,6 +16,7 @@ const {
   sandboxCwd,
   useSandbox,
   assertObjectContains,
+  stopProc,
 } = require('../helpers')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
@@ -565,8 +566,8 @@ describe('profiler', () => {
       }
     })
 
-    afterEach(() => {
-      proc.kill()
+    afterEach(async () => {
+      await stopProc(proc)
     })
 
     it('records profile on process exit', async () => {
@@ -654,8 +655,8 @@ describe('profiler', () => {
   })
 
   context('SSI heuristics', () => {
-    afterEach(() => {
-      proc.kill()
+    afterEach(async () => {
+      await stopProc(proc)
     })
 
     describe('does not trigger for', () => {
@@ -683,7 +684,7 @@ describe('profiler', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

@@ -11,6 +11,7 @@ const {
   useSandbox,
   FakeAgent,
   spawnProc,
+  stopProc,
 } = require('../helpers')
 
 describe('multer', () => {
@@ -39,7 +40,7 @@ describe('multer', () => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
