@@ -9,6 +9,7 @@ const {
   useSandbox,
   FakeAgent,
   spawnProc,
+  stopProc,
 } = require('../helpers')
 
 describe('ASM Data collection', () => {
@@ -42,7 +43,7 @@ describe('ASM Data collection', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
   }
