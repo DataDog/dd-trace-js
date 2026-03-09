@@ -178,13 +178,6 @@ class DogStatsDClient {
       }
     }
 
-    if (config.propagateProcessTags?.enabled) {
-      const processTags = require('./process-tags')
-      for (const tag of processTags.tagsArray) {
-        tags.push(tag)
-      }
-    }
-
     const clientConfig = {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,

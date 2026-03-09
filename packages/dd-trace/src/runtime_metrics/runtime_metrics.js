@@ -38,6 +38,13 @@ module.exports = {
     this.stop()
     const clientConfig = DogStatsDClient.generateClientConfig(config)
 
+    if (config.propagateProcessTags?.enabled) {
+      const processTags = require('../process-tags')
+      for (const tag of processTags.tagsArray) {
+        clientConfig.tags.push(tag)
+      }
+    }
+
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
 
