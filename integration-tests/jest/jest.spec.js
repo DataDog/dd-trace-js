@@ -107,10 +107,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   useSandbox([
     `jest@${JEST_VERSION}`,
     `jest-jasmine2@${JEST_VERSION}`,
+    `babel-jest@${JEST_VERSION}`,
     // jest-environment-jsdom is included in older versions of jest
     JEST_VERSION === 'latest' ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
+    '@babel/core',
+    '@babel/preset-typescript',
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
@@ -1374,6 +1377,45 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       env: getCiVisAgentlessConfig(receiver.port),
       stdio: 'pipe',
     })
+  })
+
+  it('preserves custom testEnvironmentOptions for coverage transforms', async function () {
+    // This repro exists because one of our hooks modified `testEnvironmentOptions`,
+    // which can cause downstream transform errors.
+    this.timeout(60_000)
+
+    let outputWithTracer = ''
+    const command = 'node ./node_modules/jest/bin/jest --config ./jest/dd-trace-transform-repro.config.js --coverage'
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event => event.type === 'test')
+
+        assert.ok(testEvents.length > 0)
+      })
+
+    childProcess = exec(
+      command,
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+
+    childProcess.stdout?.on('data', (chunk) => {
+      outputWithTracer += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      outputWithTracer += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, outputWithTracer)
+    assert.doesNotMatch(outputWithTracer, /testEnvironmentOptions prototype was lost/)
   })
 
   context('intelligent test runner', () => {

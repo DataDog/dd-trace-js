@@ -1552,47 +1552,95 @@ function jestConfigSyncWrapper (jestConfig) {
   })
 }
 
-addHook({
-  name: '@jest/transform',
-  versions: ['>=24.8.0'],
-  file: 'build/ScriptTransformer.js',
-}, transformPackage => {
-  const originalCreateScriptTransformer = transformPackage.createScriptTransformer
+const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
+  '_ddTestModuleId',
+  '_ddTestSessionId',
+  '_ddTestCommand',
+  '_ddTestSessionName',
+  '_ddForcedToRun',
+  '_ddUnskippable',
+  '_ddItrCorrelationId',
+  '_ddKnownTests',
+  '_ddIsEarlyFlakeDetectionEnabled',
+  '_ddEarlyFlakeDetectionSlowTestRetries',
+  '_ddRepositoryRoot',
+  '_ddIsFlakyTestRetriesEnabled',
+  '_ddFlakyTestRetriesCount',
+  '_ddIsDiEnabled',
+  '_ddIsKnownTestsEnabled',
+  '_ddIsTestManagementTestsEnabled',
+  '_ddTestManagementTests',
+  '_ddTestManagementAttemptToFixRetries',
+  '_ddModifiedFiles',
+]
 
-  // `createScriptTransformer` is an async function
-  transformPackage.createScriptTransformer = function (config) {
-    const { testEnvironmentOptions, ...restOfConfig } = config
-    const {
-      _ddTestModuleId,
-      _ddTestSessionId,
-      _ddTestCommand,
-      _ddTestSessionName,
-      _ddForcedToRun,
-      _ddUnskippable,
-      _ddItrCorrelationId,
-      _ddKnownTests,
-      _ddIsEarlyFlakeDetectionEnabled,
-      _ddEarlyFlakeDetectionSlowTestRetries,
-      _ddRepositoryRoot,
-      _ddIsFlakyTestRetriesEnabled,
-      _ddFlakyTestRetriesCount,
-      _ddIsDiEnabled,
-      _ddIsKnownTestsEnabled,
-      _ddIsTestManagementTestsEnabled,
-      _ddTestManagementTests,
-      _ddTestManagementAttemptToFixRetries,
-      _ddModifiedFiles,
-      ...restOfTestEnvironmentOptions
-    } = testEnvironmentOptions
+function removeDatadogTestEnvironmentOptions (testEnvironmentOptions) {
+  const removedEntries = []
 
-    restOfConfig.testEnvironmentOptions = restOfTestEnvironmentOptions
+  for (const key of DD_TEST_ENVIRONMENT_OPTION_KEYS) {
+    if (!Object.hasOwn(testEnvironmentOptions, key)) {
+      continue
+    }
 
-    arguments[0] = restOfConfig
-
-    return originalCreateScriptTransformer.apply(this, arguments)
+    removedEntries.push([key, testEnvironmentOptions[key]])
+    delete testEnvironmentOptions[key]
   }
 
+  return function restoreDatadogTestEnvironmentOptions () {
+    for (const [key, value] of removedEntries) {
+      testEnvironmentOptions[key] = value
+    }
+  }
+}
+
+/**
+ * Wrap `createScriptTransformer` to temporarily hide Datadog-specific
+ * `testEnvironmentOptions` keys while Jest builds its transform config.
+ *
+ * @param {Function} createScriptTransformer
+ * @returns {Function}
+ */
+function wrapCreateScriptTransformer (createScriptTransformer) {
+  return function (config) {
+    const testEnvironmentOptions = config?.testEnvironmentOptions
+
+    if (!testEnvironmentOptions) {
+      return createScriptTransformer.apply(this, arguments)
+    }
+
+    const restoreTestEnvironmentOptions = removeDatadogTestEnvironmentOptions(testEnvironmentOptions)
+
+    try {
+      const result = createScriptTransformer.apply(this, arguments)
+
+      if (result?.then) {
+        return result.finally(restoreTestEnvironmentOptions)
+      }
+
+      restoreTestEnvironmentOptions()
+      return result
+    } catch (e) {
+      restoreTestEnvironmentOptions()
+      throw e
+    }
+  }
+}
+
+addHook({
+  name: '@jest/transform',
+  versions: ['>=24.8.0 <30.0.0'],
+  file: 'build/ScriptTransformer.js',
+}, transformPackage => {
+  transformPackage.createScriptTransformer = wrapCreateScriptTransformer(transformPackage.createScriptTransformer)
+
   return transformPackage
+})
+
+addHook({
+  name: '@jest/transform',
+  versions: ['>=30.0.0'],
+}, transformPackage => {
+  return shimmer.wrap(transformPackage, 'createScriptTransformer', wrapCreateScriptTransformer, { replaceGetter: true })
 })
 
 /**
