@@ -366,6 +366,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 [TEST_SOURCE_FILE]: 'ci-visibility/mocha-plugin-tests/failing.js',
                 [ERROR_TYPE]: 'AssertionError',
                 [ERROR_MESSAGE]: 'Expected values to be strictly equal:\n\ntrue !== false\n',
+                [ORIGIN_KEY]: CI_APP_ORIGIN,
+                [TEST_CODE_OWNERS]: JSON.stringify(['@datadog-dd-trace-js']),
+                [LIBRARY_VERSION]: ddTraceVersion,
               },
             })
           })

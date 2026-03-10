@@ -248,8 +248,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
             )
 
-            assert.ok(test)
-
             assert.match(test.meta[TEST_CODE_OWNERS], /@datadog-dd-trace-js/)
 
             assertObjectContains(test, {

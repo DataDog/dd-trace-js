@@ -47,14 +47,10 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
-        assert.ok(Array.isArray(payload[0]))
         assert.strictEqual(payload[0].length, 1)
 
-        const span = payload[0][0]
-
-        assertObjectContains(span, {
+        assertObjectContains(payload, [[{
           name: 'azure.functions.invoke',
           meta: {
             '_dd.integration': 'azure-functions',
@@ -62,7 +58,7 @@ describe('esm', () => {
             'http.route': '/api/httptest',
           },
           resource: 'GET /api/httptest',
-        })
+        }]])
       })
     }).timeout(60_000)
 

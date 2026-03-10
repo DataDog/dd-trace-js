@@ -363,9 +363,9 @@ describe('spanFormat', () => {
           'foo.bar': 'foobar',
         },
       })
-      assert.strictEqual(trace.meta['service.name'], undefined)
-      assert.strictEqual(trace.meta['span.type'], undefined)
-      assert.strictEqual(trace.meta['resource.name'], undefined)
+      assert.ok(!Object.hasOwn(trace.meta, 'service.name'))
+      assert.ok(!Object.hasOwn(trace.meta, 'span.type'))
+      assert.ok(!Object.hasOwn(trace.meta, 'resource.name'))
     })
 
     it('should extract numeric tags as metrics', () => {
@@ -554,9 +554,9 @@ describe('spanFormat', () => {
           'nested.num': '1',
         },
       })
-      assert.strictEqual(trace.meta['nested.A'], undefined)
-      assert.strictEqual(trace.meta['nested.A.B'], undefined)
-      assert.strictEqual(trace.meta['nested.A.num'], undefined)
+      assert.ok(!Object.hasOwn(trace.meta, 'nested.A'))
+      assert.ok(!Object.hasOwn(trace.meta, 'nested.A.B'))
+      assert.ok(!Object.hasOwn(trace.meta, 'nested.A.num'))
     })
 
     it('should accept a boolean for measured', () => {
