@@ -177,7 +177,7 @@ withVersions('passport-local', 'passport-local', version => {
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController(),
+        abortController: sinon.match(ac => ac instanceof AbortController && ac.signal.aborted === true),
       })
     })
   })
