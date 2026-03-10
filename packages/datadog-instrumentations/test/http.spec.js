@@ -393,8 +393,7 @@ describe('client', () => {
             }
 
             res.on('readable', () => {
-              let chunk
-              while ((chunk = res.read()) !== null) { /* drain */ }
+              while (res.read() !== null) { /* drain */ }
             })
 
             res.on('end', () => {
