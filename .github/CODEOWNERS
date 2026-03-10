@@ -100,7 +100,7 @@
 /integration-tests/cucumber/ @DataDog/ci-app-libraries
 /integration-tests/cypress/ @DataDog/ci-app-libraries
 /integration-tests/playwright/ @DataDog/ci-app-libraries
-/integration-tests/jest/jest.spec.js @DataDog/ci-app-libraries
+/integration-tests/jest/ @DataDog/ci-app-libraries
 /integration-tests/mocha/mocha.spec.js @DataDog/ci-app-libraries
 /integration-tests/playwright/playwright.spec.js @DataDog/ci-app-libraries
 /integration-tests/cucumber/cucumber.spec.js @DataDog/ci-app-libraries
