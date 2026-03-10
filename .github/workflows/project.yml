@@ -52,6 +52,14 @@ jobs:
       - uses: ./.github/actions/install
       - run: npm run verify-exercised-tests
 
+  generated-config-types:
+    runs-on: ubuntu-latest
+    name: Generated config types
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/latest
+      - run: npm run verify:config:types
+
   workflow-job-names:
     runs-on: ubuntu-latest
     name: Workflow job names (unique)

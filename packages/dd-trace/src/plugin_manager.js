@@ -67,7 +67,7 @@ function getEnabled (Plugin) {
 module.exports = class PluginManager {
   constructor (tracer) {
     this._tracer = tracer
-    this._tracerConfig = null
+    this._tracerConfig = /** @type {import('./config/config-base')} */ (null)
     this._pluginsByName = {}
     this._configsByName = {}
 
@@ -121,8 +121,11 @@ module.exports = class PluginManager {
     this.loadPlugin(name)
   }
 
-  // like instrumenter.enable()
-  configure (config = {}) {
+  /**
+   * Like instrumenter.enable()
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  configure (config) {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 

@@ -3,7 +3,7 @@
 
 const log = require('../../../../log')
 const vulnerabilities = require('../../vulnerabilities')
-const defaults = require('../../../../config/defaults')
+const { defaults } = require('../../../../config/defaults')
 
 const { contains, intersects, remove } = require('./range-utils')
 

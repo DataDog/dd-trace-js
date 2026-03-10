@@ -11,7 +11,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const defaults = require('../../dd-trace/src/config/defaults')
+const { defaults } = require('../../dd-trace/src/config/defaults')
 const { NODE_MAJOR } = require('../../../version')
 
 const GRPC_SERVER_ERROR_STATUSES = defaults['grpc.server.error.statuses']

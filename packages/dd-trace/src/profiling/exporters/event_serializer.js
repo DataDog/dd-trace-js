@@ -14,7 +14,7 @@ class EventSerializer {
     this._host = host
     this._service = service
     this._appVersion = version
-    this._libraryInjected = !!libraryInjected
+    this._libraryInjected = libraryInjected
     this._activation = activation || 'unknown'
   }
 

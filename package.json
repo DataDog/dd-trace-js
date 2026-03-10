@@ -11,6 +11,8 @@
     "bench": "node benchmark/index.js",
     "bench:e2e:test-optimization": "node benchmark/e2e-test-optimization/benchmark-run.js",
     "dependencies:dedupe": "yarn-deduplicate yarn.lock",
+    "generate:config:types": "node scripts/generate-config-types.js",
+    "verify:config:types": "node scripts/generate-config-types.js --check",
     "type:check": "tsc --noEmit -p tsconfig.dev.json",
     "type:doc:build": "cd docs && yarn && yarn build",
     "type:doc:test": "cd docs && yarn && yarn test",

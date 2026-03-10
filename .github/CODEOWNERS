@@ -210,6 +210,8 @@
 # Language Platform
 /* @DataDog/lang-platform-js
 
+/eslint-rules/ @DataDog/lang-platform-js
+
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js

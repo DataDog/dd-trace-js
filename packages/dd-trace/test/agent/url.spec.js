@@ -7,7 +7,7 @@ const { describe, it } = require('mocha')
 
 require('../setup/core')
 const { getAgentUrl } = require('../../src/agent/url')
-const defaults = require('../../src/config/defaults')
+const { defaults } = require('../../src/config/defaults')
 
 describe('agent/url', () => {
   describe('getAgentUrl', () => {

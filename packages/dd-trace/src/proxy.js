@@ -27,9 +27,12 @@ class LazyModule {
     this.provider = provider
   }
 
-  enable (...args) {
+  /**
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  enable (config, ...args) {
     this.module = this.provider()
-    this.module.enable(...args)
+    this.module.enable(config, ...args)
   }
 
   disable () {
@@ -237,12 +240,16 @@ class Tracer extends NoopProxy {
         getDynamicInstrumentationClient(config)
       }
     } catch (e) {
-      log.error('Error initialising tracer', e)
+      log.error('Error initializing tracer', e)
+      // TODO: Should we stop everything started so far?
     }
 
     return this
   }
 
+  /**
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
   _startProfiler (config) {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
@@ -256,6 +263,9 @@ class Tracer extends NoopProxy {
     }
   }
 
+  /**
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
   #updateTracing (config) {
     if (config.tracing !== false) {
       if (config.appsec.enabled) {

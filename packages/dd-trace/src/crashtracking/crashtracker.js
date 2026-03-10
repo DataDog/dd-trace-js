@@ -23,6 +23,9 @@ class Crashtracker {
     }
   }
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
     if (this.#started) return this.configure(config)
 
@@ -35,7 +38,7 @@ class Crashtracker {
         this.#getMetadata(config)
       )
     } catch (e) {
-      log.error('Error initialising crashtracker', e)
+      log.error('Error initializing crashtracker', e)
     }
   }
 
@@ -49,6 +52,9 @@ class Crashtracker {
   }
 
   // TODO: Send only configured values when defaults are fixed.
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   #getConfig (config) {
     const url = getAgentUrl(config)
 

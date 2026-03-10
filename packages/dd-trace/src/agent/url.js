@@ -1,7 +1,7 @@
 'use strict'
 
 const { URL, format } = require('url')
-const defaults = require('../config/defaults')
+const { defaults } = require('../config/defaults')
 
 module.exports = { getAgentUrl }
 
@@ -12,7 +12,7 @@ module.exports = { getAgentUrl }
 
 /**
  * Gets the agent URL from config, constructing it from hostname/port if needed
- * @param {ReturnType<import('../config')>} config - Tracer configuration object
+ * @param {import('../config/config-base')} config - Tracer configuration object
  * @returns {URL} The agent URL
  */
 function getAgentUrl (config) {

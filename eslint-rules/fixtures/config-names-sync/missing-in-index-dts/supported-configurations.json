@@ -1,0 +1,18 @@
+{
+  "supportedConfigurations": {
+    "DD_SIMPLE": [
+      {
+        "configurationNames": [
+          "simple"
+        ]
+      }
+    ],
+    "DD_MISSING_FROM_TYPES": [
+      {
+        "configurationNames": [
+          "missingFromTypes"
+        ]
+      }
+    ]
+  }
+}

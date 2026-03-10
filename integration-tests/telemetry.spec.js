@@ -26,7 +26,7 @@ describe('telemetry', () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
         env: {
-          AGENT_PORT: agent.port,
+          AGENT_PORT: String(agent.port),
           DD_LOGS_INJECTION: 'true',
         },
       })
@@ -66,9 +66,9 @@ describe('telemetry', () => {
       await agent.assertTelemetryReceived(msg => {
         const { configuration } = msg.payload.payload
         assertObjectContains(configuration, [
-          { name: 'DD_LOG_INJECTION', value: true, origin: 'default' },
-          { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
-          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' },
+          { name: 'DD_LOGS_INJECTION', value: true, origin: 'default' },
+          { name: 'DD_LOGS_INJECTION', value: true, origin: 'env_var' },
+          { name: 'DD_LOGS_INJECTION', value: false, origin: 'code' },
         ])
       }, 'app-started', 5_000, 1)
     })
