@@ -121,10 +121,12 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.strictEqual(carrier['ot-baggage-number'], '1.23')
-      assert.strictEqual(carrier['ot-baggage-bool'], 'true')
-      assert.strictEqual(carrier['ot-baggage-array'], 'foo,bar')
-      assert.strictEqual(carrier['ot-baggage-object'], '[object Object]')
+      assertObjectContains(carrier, {
+        'ot-baggage-number': '1.23',
+        'ot-baggage-bool': 'true',
+        'ot-baggage-array': 'foo,bar',
+        'ot-baggage-object': '[object Object]',
+      })
       assert.strictEqual(carrier.baggage, undefined)
     })
 
