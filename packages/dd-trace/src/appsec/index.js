@@ -68,7 +68,7 @@ function enable (_config) {
 
     appsecRemoteConfig.enableWafUpdate(_config.appsec)
 
-    Reporter.init(_config.appsec)
+    Reporter.init(_config.appsec, _config.inferredProxyServicesEnabled)
 
     apiSecuritySampler.configure(_config)
 
@@ -173,6 +173,13 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     '_dd.runtime_family': 'nodejs',
     [HTTP_CLIENT_IP]: clientIp,
   })
+
+  if (config.inferredProxyServicesEnabled) {
+    const context = web.getContext(req)
+    if (context?.inferredProxySpan) {
+      context.inferredProxySpan.setTag('_dd.appsec.enabled', 1)
+    }
+  }
 
   const requestHeaders = { ...req.headers }
   delete requestHeaders.cookie
