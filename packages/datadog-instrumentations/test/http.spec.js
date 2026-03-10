@@ -369,9 +369,7 @@ describe('client', () => {
           })
         })
 
-        // The Node.js 24 fromList crash only occurs mid-stream on multi-chunk responses.
-        // Plain HTTP to datadoghq.com returns a tiny 301 redirect (single read), so this
-        // test only runs for HTTPS where the full page response has enough chunks.
+        // Only runs for HTTPS — HTTP returns a tiny 301 redirect with a single read.
         const describeOnlyHttps = httpSchema === 'https' ? it : it.skip
         describeOnlyHttps('should recover when read() throws TypeError during stream mode transition', (done) => {
           startChannelCb.callsFake(setCollectBody)
@@ -379,9 +377,8 @@ describe('client', () => {
           http.get(url, (res) => {
             res.setEncoding('utf8')
 
-            // Replace res.read with a proxy BEFORE adding 'readable', so the instrumentation
-            // captures this proxy as originalRead. The proxy throws TypeError on the second
-            // call to simulate the Node.js 24 fromList crash during stream mode transition.
+            // Mock res.read to throw on the second call, simulating the Node.js 24 fromList crash.
+            // Must be set before 'readable' so the instrumentation captures it as originalRead.
             let readCallCount = 0
             const realRead = res.read.bind(res)
             res.read = function (...args) {
@@ -398,7 +395,6 @@ describe('client', () => {
 
             res.on('end', () => {
               try {
-                // The key assertion: the response completed without crashing
                 assert(responseFinishChannelCb.called)
                 done()
               } catch (e) {

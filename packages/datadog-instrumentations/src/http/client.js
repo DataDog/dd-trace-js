@@ -96,11 +96,7 @@ function setupResponseInstrumentation (ctx, res) {
           try {
             chunk = originalRead.apply(this, arguments)
           } catch (e) {
-            // Node.js 24+: calling read() while the stream is transitioning from paused to
-            // flowing mode (e.g. a 'data' listener was just added) can crash inside fromList
-            // with "Cannot read properties of undefined (reading 'length')". Restore the
-            // original read() and return null to safely exit the caller's read loop.
-            // Re-throw anything that doesn't match the expected fromList crash signature.
+            // Node.js 24+ crashes in fromList when read() is called during a stream mode transition.
             if (!(e instanceof TypeError) || !e.message?.includes('Cannot read prop')) throw e
             log.warn('http.client: read() threw during stream mode transition, restoring original read()')
             res.read = originalRead
