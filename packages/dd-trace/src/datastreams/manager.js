@@ -22,6 +22,15 @@ class DataStreamsManager {
     DataStreamsContext.setDataStreamsContext(ctx)
     return ctx
   }
+
+  /**
+   * @param {string} transactionId
+   * @param {string} checkpointName
+   * @param {object|null} [span=null]
+   */
+  trackTransaction (transactionId, checkpointName, span = null) {
+    this._dataStreamsProcessor.trackTransaction(transactionId, checkpointName, span)
+  }
 }
 
 module.exports = { DataStreamsManager }

@@ -100,7 +100,7 @@ describe('NoopFlaggingProvider', () => {
   describe('configuration methods', () => {
     it('should handle setConfiguration', () => {
       const config = { flags: { 'test-flag': {} } }
-      assert.doesNotThrow(() => noopProvider.setConfiguration(config))
+      noopProvider.setConfiguration(config)
 
       const result = noopProvider.getConfiguration()
       assert.deepStrictEqual(result, config)
@@ -108,17 +108,17 @@ describe('NoopFlaggingProvider', () => {
 
     it('should handle _setConfiguration wrapper', () => {
       const config = { flags: { 'test-flag': {} } }
-      assert.doesNotThrow(() => noopProvider._setConfiguration(config))
+      noopProvider._setConfiguration(config)
 
       const result = noopProvider.getConfiguration()
       assert.deepStrictEqual(result, config)
     })
 
     it('should handle empty or null configuration', () => {
-      assert.doesNotThrow(() => noopProvider.setConfiguration(null))
-      assert.doesNotThrow(() => noopProvider.setConfiguration(undefined))
-      assert.doesNotThrow(() => noopProvider._setConfiguration())
-      assert.doesNotThrow(() => noopProvider._setConfiguration(null))
+      noopProvider.setConfiguration(null)
+      noopProvider.setConfiguration(undefined)
+      noopProvider._setConfiguration()
+      noopProvider._setConfiguration(null)
     })
 
     it('should return stored configuration', () => {

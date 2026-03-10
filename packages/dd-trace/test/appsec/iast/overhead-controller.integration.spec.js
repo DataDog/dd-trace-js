@@ -46,9 +46,7 @@ describe('IAST - overhead-controller - integration', () => {
     })
 
     async function checkVulnerabilitiesInEndpoint (path, vulnerabilitiesAndCount, method = 'GET') {
-      await axios.request(path, { method })
-
-      await agent.assertMessageReceived(({ payload }) => {
+      const assertPromise = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].type, 'web')
         assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
         assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.iast.json'))
@@ -67,16 +65,24 @@ describe('IAST - overhead-controller - integration', () => {
           assert.strictEqual(vulnerabilities[vType], vulnerabilitiesAndCount[vType], `route: ${path} - type: ${vType}`)
         })
       }, 1000, 1, true)
+
+      await Promise.all([
+        axios.request(path, { method }),
+        assertPromise,
+      ])
     }
 
     async function checkNoVulnerabilitiesInEndpoint (path, method = 'GET') {
-      await axios.request(path, { method })
-
-      await agent.assertMessageReceived(({ payload }) => {
+      const assertPromise = agent.assertMessageReceived(({ payload }) => {
         assert.strictEqual(payload[0][0].type, 'web')
         assert.strictEqual(payload[0][0].metrics['_dd.iast.enabled'], 1)
         assert.ok(!('_dd.iast.json' in payload[0][0].meta))
       }, 1000, 1, true)
+
+      await Promise.all([
+        axios.request(path, { method }),
+        assertPromise,
+      ])
     }
 
     it('should report vulnerability only in the first request', async () => {

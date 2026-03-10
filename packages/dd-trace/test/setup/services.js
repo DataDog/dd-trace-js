@@ -16,7 +16,7 @@ function waitForServices () {
 
   if (process.env.SERVICES !== '*') {
     const filter = process.env.SERVICES.split('|')
-    names = names.filter(name => ~filter.indexOf(name))
+    names = names.filter(name => filter.includes(name))
   }
 
   const promises = names

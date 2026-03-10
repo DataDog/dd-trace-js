@@ -4,48 +4,73 @@ const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
 const { getAgentUrl } = require('./agent/url')
-const { info, warn } = require('./log/writer')
+const { warn } = require('./log/writer')
 
 const errors = {}
 let config
 let pluginManager
 /** @type {import('./sampling_rule')[]} */
 let samplingRules = []
-let alreadyRan = false
+let configAlreadyRan = false
+let integrationsAlreadyRan = false
+let agentErrorAlreadyRan = false
 
 /**
- * @param {{ status: number, message: string } } [agentError]
+ * Logs DATADOG TRACER CONFIGURATION immediately at init time.
+ * Excludes integrations_loaded since plugins haven't loaded yet.
  */
-function startupLog (agentError) {
-  if (alreadyRan || !config || !config.startupLogs || !pluginManager) {
+function startupLog () {
+  if (configAlreadyRan || !config || !config.startupLogs) {
     return
   }
 
-  alreadyRan = true
+  configAlreadyRan = true
 
-  const out = tracerInfo()
+  const out = configInfo()
 
-  if (agentError) {
-    out.agent_error = agentError.message
+  warn('DATADOG TRACER CONFIGURATION - ' + out)
+}
+
+/**
+ * Logs loaded integrations. Called from writer.js on first agent payload,
+ * by which time the app has loaded its dependencies.
+ */
+function logIntegrations () {
+  if (integrationsAlreadyRan || !config || !config.startupLogs || !pluginManager) {
+    return
   }
 
-  info('DATADOG TRACER CONFIGURATION - ' + out)
-  if (agentError) {
-    warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
-    errors.agentError = {
-      code: agentError.status,
-      message: `Agent Error: ${agentError.message}`,
-    }
+  integrationsAlreadyRan = true
+
+  warn('DATADOG TRACER INTEGRATIONS LOADED - ' + JSON.stringify(Object.keys(pluginManager._pluginsByName)))
+}
+
+/**
+ * Logs agent error diagnostic.
+ * @param {{ status: number, message: string }} agentError
+ */
+function logAgentError (agentError) {
+  if (agentErrorAlreadyRan || !config || !config.startupLogs) {
+    return
+  }
+
+  agentErrorAlreadyRan = true
+
+  warn('DATADOG TRACER DIAGNOSTIC - Agent Error: ' + agentError.message)
+  errors.agentError = {
+    code: agentError.status,
+    message: `Agent Error: ${agentError.message}`,
   }
 }
 
 /**
+ * Returns config info without integrations (used by startupLog).
  * @returns {Record<string, unknown>}
  */
-function tracerInfo () {
+function configInfo () {
   const url = getAgentUrl(config)
 
-  const out = {
+  return {
     [inspect.custom] () {
       return String(this)
     },
@@ -73,11 +98,18 @@ function tracerInfo () {
     log_injection_enabled: !!config.logInjection,
     runtime_metrics_enabled: !!config.runtimeMetrics,
     profiling_enabled: config.profiling?.enabled === 'true' || config.profiling?.enabled === 'auto',
-    integrations_loaded: Object.keys(pluginManager._pluginsByName),
-    appsec_enabled: !!config.appsec.enabled,
+    appsec_enabled: config.appsec.enabled,
     data_streams_enabled: !!config.dsmEnabled,
   }
+}
 
+/**
+ * Returns full tracer info including integrations (used by flare module).
+ * @returns {Record<string, unknown>}
+ */
+function tracerInfo () {
+  const out = configInfo()
+  out.integrations_loaded = Object.keys(pluginManager._pluginsByName)
   return out
 }
 
@@ -104,6 +136,8 @@ function setSamplingRules (theRules) {
 
 module.exports = {
   startupLog,
+  logIntegrations,
+  logAgentError,
   setStartupLogConfig,
   setStartupLogPluginManager,
   setSamplingRules,

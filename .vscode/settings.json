@@ -1,33 +1,16 @@
 {
-  // Use the workspace version of TypeScript instead of VSCode's bundled version
-  "typescript.tsdk": "node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
-  "cSpell.words": [
-    "aerospike",
-    "appsec",
-    "backportability",
-    "ddsource",
-    "kafkajs",
-    "llmobs",
-    "microbenchmarks",
-    "oracledb",
-    "rabbitmq",
-    "rspack",
-    "sirun"
-  ],
-  "editor.defaultFormatter": "dbaeumer.vscode-eslint",
+  // Core VSCode settings
   "editor.formatOnSave": true,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.tsdk": "node_modules/typescript/lib", // Use the workspace version of TypeScript instead of VSCode's bundled version
+  // Extension settings
   "eslint.format.enable": true,
-  "[javascript]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
-    "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": "explicit"
-    }
-  },
-  "[typescript]": {
-    "editor.defaultFormatter": "dbaeumer.vscode-eslint",
-    "editor.codeActionsOnSave": {
-      "source.fixAll.eslint": "explicit"
-    }
+  "yaml.schemas": {
+    "https://json.schemastore.org/github-workflow.json": ".github/workflows/*.yml"
   }
 }

@@ -10,6 +10,12 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
     ctx.currentStore?.span?.finish()
   }
 
+  start (ctx) {
+    if (!this.config.dsmEnabled) return
+    const { span } = ctx.currentStore
+    this.setProducerCheckpoint(span, ctx)
+  }
+
   bindStart (ctx) {
     const { resource, meta } = this.getSpanData(ctx)
     const span = this.startSpan({
@@ -25,10 +31,6 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
 
     this.injectTraceContext(span, ctx)
 
-    if (this.config.dsmEnabled) {
-      this.setProducerCheckpoint(span, ctx)
-    }
-
     return ctx.currentStore
   }
 
@@ -40,13 +42,24 @@ class BaseBullmqProducerPlugin extends ProducerPlugin {
     throw new Error('injectTraceContext must be implemented by subclass')
   }
 
+  _injectIntoOpts (span, opts) {
+    const carrier = {}
+    this.tracer.inject(span, 'text_map', carrier)
+    const existing = opts.telemetry?.metadata ? JSON.parse(opts.telemetry.metadata) : {}
+    existing._datadog = carrier
+    opts.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
+  }
+
   setProducerCheckpoint (span, ctx) {
-    const { queueName, payloadSize, injectTarget } = this.getDsmData(ctx)
+    const { queueName, payloadSize, optsTarget } = this.getDsmData(ctx)
     const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
     const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-    if (injectTarget && typeof injectTarget === 'object') {
-      injectTarget._datadog = injectTarget._datadog || {}
-      DsmPathwayCodec.encode(dataStreamsContext, injectTarget._datadog)
+
+    if (optsTarget && typeof optsTarget === 'object') {
+      const existing = optsTarget.telemetry?.metadata ? JSON.parse(optsTarget.telemetry.metadata) : {}
+      DsmPathwayCodec.encode(dataStreamsContext, existing._datadog || existing)
+      if (!existing._datadog) existing._datadog = {}
+      optsTarget.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
     }
   }
 
@@ -68,12 +81,22 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
     }
   }
 
-  injectTraceContext (span, ctx) {
-    const data = ctx.arguments?.[1]
-    if (data?.constructor?.name === 'Object') {
-      data._datadog = data._datadog || {}
-      this.tracer.inject(span, 'text_map', data._datadog)
+  #ensureOpts (ctx) {
+    let opts = ctx.arguments?.[2]
+    if (!opts || typeof opts !== 'object') {
+      opts = {}
+      if (ctx.arguments.length <= 2) {
+        Array.prototype.push.call(ctx.arguments, opts)
+      } else {
+        ctx.arguments[2] = opts
+      }
     }
+    return opts
+  }
+
+  injectTraceContext (span, ctx) {
+    const opts = this.#ensureOpts(ctx)
+    this._injectIntoOpts(span, opts)
   }
 
   getDsmData (ctx) {
@@ -81,7 +104,7 @@ class QueueAddPlugin extends BaseBullmqProducerPlugin {
     return {
       queueName: ctx.self?.name || 'bullmq',
       payloadSize: data ? getMessageSize(data) : 0,
-      injectTarget: data,
+      optsTarget: this.#ensureOpts(ctx),
     }
   }
 }
@@ -108,10 +131,11 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
   injectTraceContext (span, ctx) {
     const jobs = ctx.arguments?.[0]
     if (!Array.isArray(jobs)) return
+
     for (const job of jobs) {
-      if (job?.data?.constructor?.name !== 'Object') continue
-      job.data._datadog = job.data._datadog || {}
-      this.tracer.inject(span, 'text_map', job.data._datadog)
+      if (!job) continue
+      job.opts = job.opts || {}
+      this._injectIntoOpts(span, job.opts)
     }
   }
 
@@ -123,7 +147,7 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     return {
       queueName: ctx.self?.name || 'bullmq',
       payloadSize,
-      injectTarget: jobs[0]?.data,
+      optsTarget: jobs[0]?.opts,
     }
   }
 
@@ -133,12 +157,14 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
     const edgeTags = ['direction:out', `topic:${queueName}`, 'type:bullmq']
 
     for (const job of jobs) {
-      if (job?.data && job.data !== null && job.data.constructor.name === 'Object') {
-        const payloadSize = getMessageSize(job.data)
-        const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
-        job.data._datadog = job.data._datadog || {}
-        DsmPathwayCodec.encode(dataStreamsContext, job.data._datadog)
-      }
+      if (!job?.data) continue
+      const payloadSize = getMessageSize(job.data)
+      const dataStreamsContext = this.tracer.setCheckpoint(edgeTags, span, payloadSize)
+      job.opts = job.opts || {}
+      const existing = job.opts.telemetry?.metadata ? JSON.parse(job.opts.telemetry.metadata) : {}
+      DsmPathwayCodec.encode(dataStreamsContext, existing._datadog || existing)
+      if (!existing._datadog) existing._datadog = {}
+      job.opts.telemetry = { metadata: JSON.stringify(existing), omitContext: true }
     }
   }
 }
@@ -159,18 +185,21 @@ class FlowProducerAddPlugin extends BaseBullmqProducerPlugin {
 
   injectTraceContext (span, ctx) {
     const flow = ctx.arguments?.[0]
-    if (flow?.data?.constructor?.name === 'Object') {
-      flow.data._datadog = flow.data._datadog || {}
-      this.tracer.inject(span, 'text_map', flow.data._datadog)
-    }
+    if (!flow) return
+    flow.opts = flow.opts || {}
+    this._injectIntoOpts(span, flow.opts)
   }
 
   getDsmData (ctx) {
     const flow = ctx.arguments?.[0]
+    if (!flow) {
+      return { queueName: 'bullmq', payloadSize: 0, optsTarget: undefined }
+    }
+    flow.opts = flow.opts || {}
     return {
-      queueName: flow?.queueName || 'bullmq',
-      payloadSize: flow?.data ? getMessageSize(flow.data) : 0,
-      injectTarget: flow?.data,
+      queueName: flow.queueName || 'bullmq',
+      payloadSize: flow.data ? getMessageSize(flow.data) : 0,
+      optsTarget: flow.opts,
     }
   }
 }

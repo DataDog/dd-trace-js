@@ -11,7 +11,7 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { channel } = require('../src/helpers/instrument')
 describe('mysql2 instrumentation', () => {
-  withVersions('mysql2', 'mysql2', version => {
+  withVersions('mysql2', 'mysql2', (version) => {
     function abort ({ sql, abortController }) {
       assert.strictEqual(typeof sql, 'string')
       const error = new Error('Test')
@@ -27,7 +27,7 @@ describe('mysql2 instrumentation', () => {
     }
 
     const sql = 'SELECT 1'
-    let startCh, mysql2, shouldEmitEndAfterQueryAbort
+    let startCh, mysql2, shouldEmitEndAfterQueryAbort, poolAddsErrorListenerOnQuery
     let apmQueryStartChannel, apmQueryStart, mysql2Version
 
     before(() => {
@@ -40,6 +40,8 @@ describe('mysql2 instrumentation', () => {
       mysql2Version = mysql2Require.version()
       // in v1.3.3 CommandQuery started to emit 'end' after 'error' event
       shouldEmitEndAfterQueryAbort = semver.intersects(mysql2Version, '>=1.3.3')
+      // in v3.17.2 Pool.query adds a once('error') listener for isReadOnlyError handling
+      poolAddsErrorListenerOnQuery = semver.intersects(mysql2Version, '>=3.17.2')
       mysql2 = mysql2Require.get()
       apmQueryStartChannel = channel('apm:mysql2:query:start')
     })
@@ -274,6 +276,52 @@ describe('mysql2 instrumentation', () => {
         })
 
         describe('with sql as string', () => {
+          it('should wrap onResult once for Prepare commands', (done) => {
+            const paramCount = 50
+            const placeholders = Array.from({ length: paramCount }, () => '?').join(', ')
+            const values = Array.from({ length: paramCount }, (_, index) => index)
+            const addCommand = connection.addCommand
+            let prepareCommand
+            let onResultSetCount = 0
+            let wrappedAtAddCommand = false
+
+            connection.addCommand = function (cmd) {
+              if (cmd?.constructor?.name === 'Prepare') {
+                prepareCommand = cmd
+
+                let currentOnResult = cmd.onResult
+                const originalOnResult = currentOnResult
+                Object.defineProperty(cmd, 'onResult', {
+                  configurable: true,
+                  enumerable: true,
+                  get () { return currentOnResult },
+                  set (value) {
+                    if (value !== currentOnResult) {
+                      onResultSetCount++
+                    }
+                    currentOnResult = value
+                  },
+                })
+
+                const result = addCommand.apply(this, arguments)
+                wrappedAtAddCommand = onResultSetCount === 1 && prepareCommand.onResult !== originalOnResult
+                return result
+              }
+
+              return addCommand.apply(this, arguments)
+            }
+
+            connection.execute(`SELECT ${placeholders}`, values, (err) => {
+              assert.strictEqual(err, null)
+              assert.ok(prepareCommand)
+              assert.strictEqual(prepareCommand.parameterCount, paramCount)
+              assert.strictEqual(prepareCommand.parameterDefinitions.length, paramCount)
+              assert.strictEqual(wrappedAtAddCommand, true)
+              assert.strictEqual(onResultSetCount, 1)
+              done()
+            })
+          })
+
           it('should abort the query on abortController.abort()', (done) => {
             startCh.subscribe(abort)
 
@@ -444,7 +492,7 @@ describe('mysql2 instrumentation', () => {
 
               await once(query, 'end')
 
-              assert.strictEqual(query.listenerCount('error'), 0)
+              assert.strictEqual(query.listenerCount('error'), poolAddsErrorListenerOnQuery ? 1 : 0)
 
               sinon.assert.called(apmQueryStart)
             })

@@ -96,7 +96,7 @@ describe('Plugin Manager', () => {
 
   describe('configurePlugin', () => {
     it('does not throw for old-style plugins', () => {
-      assert.doesNotThrow(() => pm.configurePlugin('one', false))
+      pm.configurePlugin('one', false)
     })
 
     describe('without configure', () => {

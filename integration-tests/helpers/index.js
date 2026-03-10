@@ -28,6 +28,7 @@ let shouldKill
 const ANY_STRING = Symbol('test.ANY_STRING')
 const ANY_NUMBER = Symbol('test.ANY_NUMBER')
 const ANY_VALUE = Symbol('test.ANY_VALUE')
+const defaultStopProcTimeoutMs = 2_000
 
 /**
  * @param {string} filename
@@ -65,7 +66,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
 
   if (expectedSource) {
     assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
-    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
+      `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid
 }
@@ -258,6 +259,60 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
         }
         resolve()
       })
+  })
+}
+
+/**
+ * Stop a process and wait for it to fully exit.
+ *
+ * Sends `SIGTERM` first, waits up to `timeoutMs`, and escalates to `SIGKILL` if needed.
+ *
+ * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
+ * @param {object} [options] - Stop options.
+ * @param {number} [options.timeoutMs=defaultStopProcTimeoutMs] - Max wait per signal in milliseconds.
+ * @returns {Promise<void>}
+ */
+async function stopProc (proc, { timeoutMs = defaultStopProcTimeoutMs } = {}) {
+  if (!proc) return
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+
+  proc.kill()
+
+  const exitedAfterSigterm = await waitForProcExit(proc, timeoutMs)
+  if (exitedAfterSigterm) return
+
+  proc.kill('SIGKILL')
+  const exitedAfterSigkill = await waitForProcExit(proc, timeoutMs)
+
+  if (!exitedAfterSigkill) {
+    throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
+  }
+}
+
+/**
+ * Wait for a process to exit for up to `timeoutMs`.
+ *
+ * @param {childProcess.ChildProcess} proc - Process to wait for.
+ * @param {number} timeoutMs - Max time to wait in milliseconds.
+ * @returns {Promise<boolean>} `true` if the process exited before timeout.
+ */
+function waitForProcExit (proc, timeoutMs) {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return Promise.resolve(true)
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      proc.removeListener('exit', onExit)
+      resolve(false)
+    }, timeoutMs)
+
+    proc.once('exit', onExit)
+
+    function onExit () {
+      clearTimeout(timeout)
+      resolve(true)
+    }
   })
 }
 
@@ -516,6 +571,7 @@ async function createSandbox (
  * @param {string} bindingName - The binding name that will be use to bind to the packageName.
  * @param {string} [namedExport] - The name of the named variant to use.
  * @param {string} [packageName] - The name of the package. If not provided, the binding name will be used.
+ * @param {boolean} [byPassDefault] - Skip default export variant generation.
  * @returns {Variants} A map from variant names to resulting filenames
  */
 /**
@@ -527,28 +583,32 @@ async function createSandbox (
  * whose value is the original text within the file that will be replaced.
  *
  * @param {string} filename - The file that will be copied and modified for each variant.
- * @param {Variants} variants - The variants.
+ * @param {Variants|string} variants - The variants or binding name.
+ * @param {string} [namedExport] - Named export to use for star/destructure variants.
+ * @param {string} [packageName] - Module specifier for the import.
+ * @param {boolean} [byPassDefault] - Skip default export variant generation.
  * @returns {Variants} A map from variant names to resulting filenames
  */
-function varySandbox (filename, variants, namedExport, packageName = variants, byPassDefault) {
+function varySandbox (filename, variants, namedExport, packageName, byPassDefault) {
   if (typeof variants === 'string') {
     const bindingName = variants
+    const resolvedName = packageName || bindingName
     // Default namedVariant to bindingName when bypassing default export
     if (byPassDefault && !namedExport) namedExport = bindingName
     variants = byPassDefault
       ? {
           // eslint-disable-next-line @stylistic/max-len
-          star: `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
-          destructure: `import { ${namedExport} } from '${packageName}'`,
+          star: `import * as mod${bindingName} from '${resolvedName}'; const ${bindingName} = mod${bindingName}.${namedExport}`,
+          destructure: `import { ${namedExport} } from '${resolvedName}'`,
         }
       : {
-          default: `import ${bindingName} from '${packageName}'`,
+          default: `import ${bindingName} from '${resolvedName}'`,
           star: namedExport
-            ? `import * as ${bindingName} from '${packageName}'`
-            : `import * as mod${bindingName} from '${packageName}'; const ${bindingName} = mod${bindingName}.default`,
+            ? `import * as ${bindingName} from '${resolvedName}'`
+            : `import * as mod${bindingName} from '${resolvedName}'; const ${bindingName} = mod${bindingName}.default`,
           destructure: namedExport
-            ? `import { ${namedExport} } from '${packageName}'; const ${bindingName} = { ${namedExport} }`
-            : `import { default as ${bindingName}} from '${packageName}'`,
+            ? `import { ${namedExport} } from '${resolvedName}'; const ${bindingName} = { ${namedExport} }`
+            : `import { default as ${bindingName}} from '${resolvedName}'`,
         }
   }
 
@@ -949,6 +1009,7 @@ module.exports = {
   hookFile,
   assertObjectContains,
   assertUUID,
+  stopProc,
   spawnProc,
   spawnProcAndExpectExit,
   telemetryForwarder,

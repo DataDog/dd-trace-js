@@ -6,7 +6,7 @@ const { NODE_MAJOR } = require('../../../../../version')
 const processTags = require('../../process-tags')
 const { breakpointToProbes } = require('./state')
 const session = require('./session')
-const { getLocalStateForCallFrame } = require('./snapshot')
+const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
@@ -67,9 +67,13 @@ session.on('Debugger.paused', async ({ params }) => {
     throw new Error(`Unexpected Debugger.paused reason: ${params.reason}`)
   }
 
-  let maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength
+  let maxReferenceDepth = 0
+  let maxCollectionSize = 0
+  let maxFieldCount = 0
+  let maxLength = 0
   let sampled = false
   let numberOfProbesWithSnapshots = 0
+  let probesWithCaptureExpressions = false
   const probes = []
   let templateExpressions = ''
 
@@ -104,7 +108,7 @@ session.on('Debugger.paused', async ({ params }) => {
         continue
       }
 
-      if (probe.captureSnapshot === true) {
+      if (probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined) {
         // This algorithm to calculate number of sampled snapshots within the last second is not perfect, as it's not a
         // sliding window. But it's quick and easy :)
         if (i === 0 && start - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
@@ -116,11 +120,15 @@ session.on('Debugger.paused', async ({ params }) => {
           snapshotsSampledWithinTheLastSecond++
         }
 
-        snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
-        maxReferenceDepth = highestOrUndefined(probe.capture?.maxReferenceDepth, maxReferenceDepth)
-        maxCollectionSize = highestOrUndefined(probe.capture?.maxCollectionSize, maxCollectionSize)
-        maxFieldCount = highestOrUndefined(probe.capture?.maxFieldCount, maxFieldCount)
-        maxLength = highestOrUndefined(probe.capture?.maxLength, maxLength)
+        if (probe.captureSnapshot === true) {
+          snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
+          maxReferenceDepth = Math.max(probe.capture.maxReferenceDepth, maxReferenceDepth)
+          maxCollectionSize = Math.max(probe.capture.maxCollectionSize, maxCollectionSize)
+          maxFieldCount = Math.max(probe.capture.maxFieldCount, maxFieldCount)
+          maxLength = Math.max(probe.capture.maxLength, maxLength)
+        } else {
+          probesWithCaptureExpressions = true
+        }
       }
 
       if (probe.condition !== undefined) {
@@ -173,16 +181,32 @@ session.on('Debugger.paused', async ({ params }) => {
   }
 
   // TODO: Create unique states for each affected probe based on that probes unique `capture` settings (DEBUG-2863)
-  let processLocalState, captureErrors
+  let processLocalState
+  /** @type {Error[] | undefined} */
+  let fatalSnapshotErrors
   if (numberOfProbesWithSnapshots !== 0) {
-    const opts = {
-      maxReferenceDepth,
-      maxCollectionSize,
-      maxFieldCount,
-      maxLength,
-      deadlineNs: start + config.dynamicInstrumentation.captureTimeoutNs,
+    const result = await getLocalStateForCallFrame(
+      params.callFrames[0],
+      { maxReferenceDepth, maxCollectionSize, maxFieldCount, maxLength },
+      start + config.dynamicInstrumentation.captureTimeoutNs
+    )
+    processLocalState = result.processLocalState
+    fatalSnapshotErrors = result.fatalErrors
+  }
+
+  // Evaluate capture expressions for probes that have them
+  let captureExpressionResults = null
+  if (probesWithCaptureExpressions === true) {
+    captureExpressionResults = new Map()
+    for (const probe of probes) {
+      if (probe.compiledCaptureExpressions === undefined) continue
+      // eslint-disable-next-line no-await-in-loop
+      captureExpressionResults.set(probe.id, await evaluateCaptureExpressions(
+        params.callFrames[0],
+        probe.compiledCaptureExpressions,
+        start + config.dynamicInstrumentation.captureTimeoutNs
+      ))
     }
-    ;({ processLocalState, captureErrors } = await getLocalStateForCallFrame(params.callFrames[0], opts))
   }
 
   await session.post('Debugger.resume')
@@ -228,16 +252,48 @@ session.on('Debugger.paused', async ({ params }) => {
     }
 
     if (probe.captureSnapshot) {
-      if (captureErrors?.length > 0) {
+      if (fatalSnapshotErrors && fatalSnapshotErrors.length > 0) {
         // There was an error collecting the snapshot for this probe, let's not try again
         probe.captureSnapshot = false
-        probe.permanentEvaluationErrors = captureErrors.map(error => ({
+        probe.permanentEvaluationErrors = fatalSnapshotErrors.map(error => ({
           expr: '',
           message: error.message,
         }))
       }
       snapshot.captures = {
-        lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
+        lines: { [probe.location.lines[0]]: { locals: /** @type {Function} */ (processLocalState)() } },
+      }
+    } else if (probe.compiledCaptureExpressions !== undefined) {
+      const expressionResult = /** @type {Map} */ (captureExpressionResults).get(probe.id)
+      if (expressionResult) {
+        // Handle fatal capture errors - disable capture expressions for this probe permanently
+        if (expressionResult.fatalErrors?.length > 0) {
+          probe.compiledCaptureExpressions = undefined
+          probe.permanentEvaluationErrors = expressionResult.fatalErrors.map(error => ({
+            expr: '',
+            message: error.message,
+          }))
+        }
+
+        snapshot.captures = {
+          lines: { [probe.location.lines[0]]: { captureExpressions: expressionResult.processCaptureExpressions() } },
+        }
+
+        // Handle transient evaluation errors - include in snapshot for this capture
+        if (expressionResult.evaluationErrors?.length > 0) {
+          if (snapshot.evaluationErrors === undefined) {
+            snapshot.evaluationErrors = expressionResult.evaluationErrors
+          } else {
+            snapshot.evaluationErrors.push(...expressionResult.evaluationErrors)
+          }
+        }
+      } else {
+        log.error('[debugger:devtools_client] Missing capture expression results for probe %s (version: %s)',
+          probe.id, probe.version)
+        snapshot.evaluationErrors = [{
+          expr: '',
+          message: 'Internal error: capture expression results not found',
+        }]
       }
     }
 
@@ -274,10 +330,6 @@ session.on('Debugger.paused', async ({ params }) => {
     send(message, logger, dd, snapshot)
   }
 })
-
-function highestOrUndefined (num, max) {
-  return num === undefined ? max : Math.max(num, max ?? 0)
-}
 
 function processDD (result) {
   return result?.trace_id === undefined ? undefined : result

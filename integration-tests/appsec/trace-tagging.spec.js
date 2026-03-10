@@ -9,6 +9,7 @@ const {
   useSandbox,
   FakeAgent,
   spawnProc,
+  stopProc,
 } = require('../helpers')
 
 describe('ASM Trace Tagging rules', () => {
@@ -29,7 +30,7 @@ describe('ASM Trace Tagging rules', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
   }
