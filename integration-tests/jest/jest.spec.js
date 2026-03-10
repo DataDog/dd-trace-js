@@ -248,26 +248,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
             )
 
-            assert.ok(test)
-
-            assert.strictEqual(test.meta.language, 'javascript')
-            assert.strictEqual(test.meta.service, 'plugin-tests')
-            assert.strictEqual(test.meta[ORIGIN_KEY], CI_APP_ORIGIN)
-            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'jest')
-            assert.strictEqual(test.meta[TEST_NAME], name)
-            assert.strictEqual(test.meta[TEST_STATUS], status)
-            assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test.js')
-            assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/jest-plugin-tests/jest-test.js')
-            assert.strictEqual(test.meta[TEST_TYPE], 'test')
-            assert.strictEqual(test.meta[JEST_TEST_RUNNER], 'jest-circus')
-            assert.strictEqual(test.meta[LIBRARY_VERSION], ddTraceVersion)
-            assert.strictEqual(test.meta[COMPONENT], 'jest')
             assert.match(test.meta[TEST_CODE_OWNERS], /@datadog-dd-trace-js/)
 
-            assert.strictEqual(test.type, 'test')
-            assert.strictEqual(test.name, 'jest.test')
-            assert.strictEqual(test.service, 'plugin-tests')
-            assert.strictEqual(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
+            assertObjectContains(test, {
+              type: 'test',
+              name: 'jest.test',
+              service: 'plugin-tests',
+              resource: `ci-visibility/jest-plugin-tests/jest-test.js.${name}`,
+              meta: {
+                language: 'javascript',
+                [ORIGIN_KEY]: CI_APP_ORIGIN,
+                [TEST_FRAMEWORK]: 'jest',
+                [TEST_NAME]: name,
+                [TEST_STATUS]: status,
+                [TEST_SUITE]: 'ci-visibility/jest-plugin-tests/jest-test.js',
+                [TEST_SOURCE_FILE]: 'ci-visibility/jest-plugin-tests/jest-test.js',
+                [TEST_TYPE]: 'test',
+                [JEST_TEST_RUNNER]: 'jest-circus',
+                [LIBRARY_VERSION]: ddTraceVersion,
+                [COMPONENT]: 'jest',
+              },
+            })
 
             assert.ok(test.metrics[TEST_SOURCE_START])
             assert.ok(test.meta[TEST_FRAMEWORK_VERSION])
@@ -1584,9 +1585,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
+        assertObjectContains(coveragePayload, {
+          name: 'coverage1',
+          filename: 'coverage1.msgpack',
+          type: 'application/msgpack',
+        })
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)

@@ -12,6 +12,7 @@ const {
 } = require('../src/constants')
 const { tagsFromObject } = require('../src/payload-tagging/tagging')
 const { computeTags } = require('../src/payload-tagging')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const defaultOpts = { maxDepth: 10, prefix: 'http.payload' }
 
@@ -218,9 +219,11 @@ describe('Tagging orchestration', () => {
       untargeted: '{ "foo": "bar" }',
     }
     const tags = computeTags(config, input, { maxDepth: 10, prefix: 'foo' })
-    assert.strictEqual(tags['foo.request.foo'], 'bar')
-    assert.strictEqual(tags['foo.response.baz'], 'quux')
-    assert.strictEqual(tags['foo.invalid'], '{ invalid JSON }')
-    assert.strictEqual(tags['foo.untargeted'], '{ "foo": "bar" }')
+    assertObjectContains(tags, {
+      'foo.request.foo': 'bar',
+      'foo.response.baz': 'quux',
+      'foo.invalid': '{ invalid JSON }',
+      'foo.untargeted': '{ "foo": "bar" }',
+    })
   })
 })

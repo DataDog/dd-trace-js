@@ -685,9 +685,11 @@ describe(`cucumber@${version} commonJS`, () => {
                 assert.ok(!('dd-api-key' in coverageRequest.headers))
                 assert.ok(!('dd-api-key' in eventsRequest.headers))
               }
-              assert.strictEqual(coveragePayload.name, 'coverage1')
-              assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-              assert.strictEqual(coveragePayload.type, 'application/msgpack')
+              assertObjectContains(coveragePayload, {
+                name: 'coverage1',
+                filename: 'coverage1.msgpack',
+                type: 'application/msgpack',
+              })
 
               const eventTypes = eventsRequest.payload.events.map(event => event.type)
 
