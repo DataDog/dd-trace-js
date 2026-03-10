@@ -348,22 +348,29 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 1)
             const [test] = tests
-            assert.strictEqual(test.meta[COMPONENT], 'mocha')
-            assert.strictEqual(test.meta.language, 'javascript')
-            assert.strictEqual(test.meta[TEST_NAME], 'mocha-test-fail can fail')
-            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(test.meta[TEST_TYPE], 'test')
-            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'mocha')
-            assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/failing.js')
-            assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/failing.js')
-            assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
-            assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
             assert.ok(test.metrics[TEST_SOURCE_START])
             assert.ok(test.meta[ERROR_STACK])
             assert.strictEqual(test.parent_id.toString(), '0')
-            assert.strictEqual(test.type, 'test')
-            assert.strictEqual(test.name, 'mocha.test')
-            assert.strictEqual(test.resource, 'ci-visibility/mocha-plugin-tests/failing.js.mocha-test-fail can fail')
+            assertObjectContains(test, {
+              type: 'test',
+              name: 'mocha.test',
+              resource: 'ci-visibility/mocha-plugin-tests/failing.js.mocha-test-fail can fail',
+              meta: {
+                [COMPONENT]: 'mocha',
+                language: 'javascript',
+                [TEST_NAME]: 'mocha-test-fail can fail',
+                [TEST_STATUS]: 'fail',
+                [TEST_TYPE]: 'test',
+                [TEST_FRAMEWORK]: 'mocha',
+                [TEST_SUITE]: 'ci-visibility/mocha-plugin-tests/failing.js',
+                [TEST_SOURCE_FILE]: 'ci-visibility/mocha-plugin-tests/failing.js',
+                [ERROR_TYPE]: 'AssertionError',
+                [ERROR_MESSAGE]: 'Expected values to be strictly equal:\n\ntrue !== false\n',
+                [ORIGIN_KEY]: CI_APP_ORIGIN,
+                [TEST_CODE_OWNERS]: JSON.stringify(['@datadog-dd-trace-js']),
+                [LIBRARY_VERSION]: ddTraceVersion,
+              },
+            })
           })
 
         childProcess = exec(
@@ -1626,9 +1633,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
+        assertObjectContains(coveragePayload, {
+          name: 'coverage1',
+          filename: 'coverage1.msgpack',
+          type: 'application/msgpack',
+        })
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
