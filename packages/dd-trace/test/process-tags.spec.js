@@ -9,7 +9,7 @@ const { getConfigFresh } = require('./helpers/config')
 require('./setup/core')
 
 describe('process-tags', () => {
-  const processTags = require('../src/process-tags')
+  let processTags = require('../src/process-tags')
   const { sanitize } = require('../src/process-tags')
 
   before(() => {
@@ -127,6 +127,27 @@ describe('process-tags', () => {
           assert.doesNotMatch(part, /undefined/)
         })
       }
+    })
+
+    describe('config processTags', () => {
+      beforeEach(() => {
+        delete require.cache[require.resolve('../src/process-tags')]
+        processTags = require('../src/process-tags')
+      })
+
+      it('should set svc.user tag to true based on config', () => {
+        processTags.initialize({ isServiceNameInferred: false, service: 'test' })
+        const [serviceNameTag, value] = processTags.tags[5]
+        assert.strictEqual(serviceNameTag, 'svc.user')
+        assert.strictEqual(value, true)
+      })
+
+      it('should set svc.auto based on config', () => {
+        processTags.initialize({ isServiceNameInferred: true, service: 'test' })
+        const [serviceNameTag, value] = processTags.tags[5]
+        assert.strictEqual(serviceNameTag, 'svc.auto')
+        assert.strictEqual(value, 'test')
+      })
     })
   })
 

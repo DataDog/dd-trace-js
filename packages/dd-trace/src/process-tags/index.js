@@ -12,8 +12,19 @@ const ENTRYPOINT_PATH = require.main?.filename || ''
 // entrypoint.basedir = baz
 // package.json.name = <from package.json>
 
-// process tags are constant throughout the lifetime of a process
-function getProcessTags (config) {
+/**
+ * Sanitize a process tag value
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function sanitize (value) {
+  return String(value)
+    .toLowerCase()
+    .replaceAll(/[^a-zA-Z0-9/_.-]+/g, '_')
+}
+
+function buildProcessTags (config) {
   // Lazy load pkg to avoid issues with require.main during test initialization
   const pkg = require('../pkg')
 
@@ -35,7 +46,8 @@ function getProcessTags (config) {
     ['package.json.name', pkg.name || undefined],
   ]
 
-  if (config && config.isServiceNameInferred) {
+  // If config dependant tags keep growing, we should consider moving this into a function
+  if (config?.isServiceNameInferred) {
     tags.push(['svc.auto', config.service])
   } else if (config) {
     tags.push(['svc.user', true])
@@ -52,53 +64,27 @@ function getProcessTags (config) {
     }
   }
 
-  const serialized = tagsArray.join(',')
-
-  return {
-    tags,
-    serialized,
-    tagsObject,
-    tagsArray,
-  }
+  processTags.tags = tags
+  processTags.serialized = tagsArray.join(',')
+  processTags.tagsObject = tagsObject
+  processTags.tagsArray = tagsArray
 }
 
-// This lets the singletong be initialiazed with config values,
-// we should only allow one initialization to take place
-// module.exports = processTags
-const processTags = {}
-module.exports = processTags
-let initialized = false
+// Singleton with constant defaults so pre-init reads don't blow up
+const processTags = module.exports = {
+  initialize (config) {
+    // check if one of the properties added during build exist and if so return
+    if (processTags.tags) return
+    buildProcessTags(config)
+  },
 
-module.exports.initialize = (config) => {
-  // ensure initialize only happens once
-  if (initialized) return
-  initialized = true
-
-  Object.assign(processTags, getProcessTags(config))
+  TRACING_FIELD_NAME: '_dd.tags.process',
+  DSM_FIELD_NAME: 'ProcessTags',
+  PROFILING_FIELD_NAME: 'process_tags',
+  DYNAMIC_INSTRUMENTATION_FIELD_NAME: 'process_tags',
+  TELEMETRY_FIELD_NAME: 'process_tags',
+  REMOTE_CONFIG_FIELD_NAME: 'process_tags',
+  CRASH_TRACKING_FIELD_NAME: 'process_tags',
+  CLIENT_TRACE_STATISTICS_FIELD_NAME: 'ProcessTags',
+  sanitize,
 }
-
-// Export the singleton
-// module.exports = getProcessTags()
-
-module.exports.TRACING_FIELD_NAME = '_dd.tags.process'
-module.exports.DSM_FIELD_NAME = 'ProcessTags'
-module.exports.PROFILING_FIELD_NAME = 'process_tags'
-module.exports.DYNAMIC_INSTRUMENTATION_FIELD_NAME = 'process_tags'
-module.exports.TELEMETRY_FIELD_NAME = 'process_tags'
-module.exports.REMOTE_CONFIG_FIELD_NAME = 'process_tags'
-module.exports.CRASH_TRACKING_FIELD_NAME = 'process_tags'
-module.exports.CLIENT_TRACE_STATISTICS_FIELD_NAME = 'ProcessTags'
-
-/**
- * Sanitize a process tag value
- *
- * @param {string} value
- * @returns {string}
- */
-function sanitize (value) {
-  return String(value)
-    .toLowerCase()
-    .replaceAll(/[^a-zA-Z0-9/_.-]+/g, '_')
-}
-
-module.exports.sanitize = sanitize

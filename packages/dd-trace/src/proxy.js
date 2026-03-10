@@ -103,6 +103,7 @@ class Tracer extends NoopProxy {
     try {
       const config = getConfig(options) // TODO: support dynamic code config
 
+      // Add config dependant process tags
       processTags.initialize(config)
 
       // Configure propagation hash manager for process tags + container tags

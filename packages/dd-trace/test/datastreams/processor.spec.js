@@ -319,6 +319,7 @@ describe('DataStreamsProcessor', () => {
   it('should include ProcessTags when propagation is enabled', () => {
     const propagationHash = require('../../src/propagation-hash')
     const processTags = require('../../src/process-tags')
+    processTags.initialize()
 
     // Configure and enable the feature
     propagationHash.configure({ propagateProcessTags: { enabled: true } })
