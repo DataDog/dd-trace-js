@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('./helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('./helpers')
 describe('Remote config client id', () => {
   let axios, cwd, appFile
 
@@ -34,7 +34,7 @@ describe('Remote config client id', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -98,7 +98,7 @@ describe('Remote config client id', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

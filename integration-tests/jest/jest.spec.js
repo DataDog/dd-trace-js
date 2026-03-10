@@ -107,10 +107,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   useSandbox([
     `jest@${JEST_VERSION}`,
     `jest-jasmine2@${JEST_VERSION}`,
+    `babel-jest@${JEST_VERSION}`,
     // jest-environment-jsdom is included in older versions of jest
     JEST_VERSION === 'latest' ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
+    '@babel/core',
+    '@babel/preset-typescript',
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
@@ -1376,6 +1379,45 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  it('preserves custom testEnvironmentOptions for coverage transforms', async function () {
+    // This repro exists because one of our hooks modified `testEnvironmentOptions`,
+    // which can cause downstream transform errors.
+    this.timeout(60_000)
+
+    let outputWithTracer = ''
+    const command = 'node ./node_modules/jest/bin/jest --config ./jest/dd-trace-transform-repro.config.js --coverage'
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event => event.type === 'test')
+
+        assert.ok(testEvents.length > 0)
+      })
+
+    childProcess = exec(
+      command,
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+
+    childProcess.stdout?.on('data', (chunk) => {
+      outputWithTracer += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      outputWithTracer += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, outputWithTracer)
+    assert.doesNotMatch(outputWithTracer, /testEnvironmentOptions prototype was lost/)
+  })
+
   context('intelligent test runner', () => {
     context('if the agent is not event platform proxy compatible', () => {
       it('does not do any intelligent test runner request', (done) => {
@@ -1943,6 +1985,113 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    it('keeps user coverage reporters when DD_TEST_TIA_KEEP_COV_CONFIG is true', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            COVERAGE_REPORTERS: 'lcov',
+            DD_TEST_TIA_KEEP_COV_CONFIG: 'true',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), true)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
+    })
+
+    it('overrides user coverage reporters when code coverage is enabled because of us', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            COVERAGE_REPORTERS: 'lcov',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), false)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
+    })
+
+    it('keeps user coverage reporters when code coverage is enabled by the user', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
+            COVERAGE_REPORTERS: 'lcov',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), true)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
     })
 
     it('calculates executable lines even if there have been skipped suites', (done) => {

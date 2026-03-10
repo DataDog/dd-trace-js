@@ -258,6 +258,7 @@ afterEach(function () {
 
   const testInfo = {
     testName,
+    testItTitle: currentTest.title,
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
     // For quarantined tests, report the actual state (failed) to Datadog, not what Cypress thinks (passed)
@@ -272,7 +273,9 @@ afterEach(function () {
     isQuarantined: isQuarantinedTestThatFailed,
   }
   try {
-    testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+    const invocationDetails = Cypress.mocha.getRunner().currentRunnable.invocationDetails
+    testInfo.testSourceLine = invocationDetails.line
+    testInfo.testSourceStack = invocationDetails.stack
   } catch {}
 
   const rum = safeGetRum(originalWindow)
