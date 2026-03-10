@@ -69,7 +69,9 @@ const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 let skippableSuites = []
 let knownTests = {}
 let isCodeCoverageEnabled = false
+let isCodeCoverageEnabledBecauseOfUs = false
 let isSuitesSkippingEnabled = false
+let isKeepingCoverageConfiguration = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -994,6 +996,8 @@ function getCliWrapper (isNewJestVersion) {
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+          isKeepingCoverageConfiguration =
+            libraryConfig.isKeepingCoverageConfiguration ?? isKeepingCoverageConfiguration
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
           earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
@@ -1327,9 +1331,10 @@ function coverageReporterWrapper (coverageReporter) {
    */
   // `_addUntestedFiles` is an async function
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
-    // If the user has added coverage manually, they're willing to pay the price of this execution, so
-    // we will not skip it.
-    if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
+    if (isKeepingCoverageConfiguration) {
+      return addUntestedFiles.apply(this, arguments)
+    }
+    if (isCodeCoverageEnabledBecauseOfUs) {
       return Promise.resolve()
     }
     return addUntestedFiles.apply(this, arguments)
@@ -1509,12 +1514,13 @@ function configureTestEnvironment (readConfigsResult) {
   }
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
+  isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
 
   if (readConfigsResult.globalConfig.forceExit) {
     log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
 
-  if (isCodeCoverageEnabled) {
+  if (isCodeCoverageEnabledBecauseOfUs) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
       collectCoverage: true,
@@ -1522,13 +1528,17 @@ function configureTestEnvironment (readConfigsResult) {
     readConfigsResult.globalConfig = globalConfig
   }
   if (isSuitesSkippingEnabled) {
-    // If suite skipping is enabled, the code coverage results are not going to be relevant,
-    // so we do not show them.
-    // Also, we might skip every test, so we need to pass `passWithNoTests`
+    // If suite skipping is enabled, we pass `passWithNoTests` in case every test gets skipped.
     const globalConfig = {
       ...readConfigsResult.globalConfig,
-      coverageReporters: ['none'],
       passWithNoTests: true,
+    }
+    if (isCodeCoverageEnabledBecauseOfUs && !isKeepingCoverageConfiguration) {
+      globalConfig.coverageReporters = ['none']
+      readConfigsResult.configs = configs.map(config => ({
+        ...config,
+        coverageReporters: ['none'],
+      }))
     }
     readConfigsResult.globalConfig = globalConfig
   }
