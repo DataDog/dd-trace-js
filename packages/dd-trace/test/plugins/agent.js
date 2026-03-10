@@ -200,11 +200,6 @@ function handleTraceRequest (req, res, sendToTestAgent) {
       })
 
     testAgentReq.on('response', testAgentRes => {
-      if (res._closed) {
-        // Skip handling for already closed agents
-        return
-      }
-
       if (testAgentRes.statusCode !== 200) {
         // handle request failures from the Test Agent here
         let body = ''
@@ -212,7 +207,8 @@ function handleTraceRequest (req, res, sendToTestAgent) {
           body += chunk
         })
         testAgentRes.on('end', () => {
-          res.status(400).send(body)
+          // eslint-disable-next-line no-console
+          console.warn(`handleTraceRequest: Test agent returned ${testAgentRes.statusCode}: ${body}`)
         })
       }
     })
