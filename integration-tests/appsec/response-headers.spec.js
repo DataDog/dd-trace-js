@@ -9,6 +9,7 @@ const {
   useSandbox,
   FakeAgent,
   spawnProc,
+  stopProc,
 } = require('../helpers')
 
 describe('Headers collection - Fastify', () => {
@@ -34,7 +35,7 @@ describe('Headers collection - Fastify', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 

@@ -1,19 +1,33 @@
 'use strict'
 
 const log = require('../log')
+const { TOP_LEVEL_KEY } = require('../constants')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
 /**
  * Formats a span for JSON encoding.
  * @param {object} span - The span to format
+ * @param {boolean} isFirstSpan - Whether this is the first span in the trace
  * @returns {object} The formatted span
  */
-function formatSpan (span) {
+function formatSpan (span, isFirstSpan) {
   span = normalizeSpan(truncateSpan(span, false))
 
   if (span.span_events) {
     span.meta.events = JSON.stringify(span.span_events)
     delete span.span_events
+  }
+
+  if (isFirstSpan) {
+    span.meta['_dd.compute_stats'] = '1'
+  }
+
+  if (span.parent_id?.toString(10) === '0') {
+    span.metrics._trace_root = 1
+  }
+
+  if (span.metrics[TOP_LEVEL_KEY]) {
+    span.metrics._top_level = 1
   }
 
   return span
@@ -83,7 +97,7 @@ class AgentlessJSONEncoder {
   encode (trace) {
     for (const span of trace) {
       try {
-        const formattedSpan = formatSpan(span)
+        const formattedSpan = formatSpan(span, this._spanCount === 0)
         const jsonSpan = spanToJSON(formattedSpan)
 
         this._spans.push(jsonSpan)
