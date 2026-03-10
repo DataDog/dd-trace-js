@@ -52,6 +52,10 @@ const messaging = {
       opName: () => 'bullmq.add',
       serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
     },
+    mqtt: {
+      opName: () => 'mqtt.send',
+      serviceName: identityService,
+    },
   },
   consumer: {
     amqplib: {
@@ -85,6 +89,10 @@ const messaging = {
     bullmq: {
       opName: () => 'bullmq.processJob',
       serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
+    },
+    mqtt: {
+      opName: () => 'mqtt.process',
+      serviceName: identityService,
     },
   },
   client: {

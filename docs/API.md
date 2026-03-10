@@ -74,6 +74,7 @@ tracer.use('pg', {
 <h5 id="moleculer"></h5>
 <h5 id="mongodb-core"></h5>
 <h5 id="mongoose"></h5>
+<h5 id="mqtt"></h5>
 <h5 id="mysql"></h5>
 <h5 id="mysql2"></h5>
 <h5 id="net"></h5>
@@ -152,6 +153,7 @@ tracer.use('pg', {
 * [moleculer](./interfaces/export_.plugins.moleculer.html)
 * [mongodb-core](./interfaces/export_.plugins.mongodb_core.html)
 * [mongoose](./interfaces/export_.plugins.mongoose.html)
+* [mqtt](./interfaces/export_.plugins.mqtt.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
 * [net](./interfaces/export_.plugins.net.html)

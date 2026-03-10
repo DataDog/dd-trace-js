@@ -385,6 +385,7 @@ tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
 tracer.use('mongodb-core');
 tracer.use('mongoose');
+tracer.use('mqtt');
 tracer.use('mysql');
 tracer.use('mysql', { service: () => `my-custom-mysql` });
 tracer.use('mysql2');

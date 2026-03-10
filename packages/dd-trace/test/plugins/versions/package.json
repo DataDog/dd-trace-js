@@ -148,6 +148,7 @@
     "mongodb": "7.0.0",
     "mongodb-core": "3.2.7",
     "mongoose": "9.1.4",
+    "mqtt": "5.15.0",
     "mquery": "6.0.0",
     "multer": "2.0.2",
     "mysql": "2.18.1",

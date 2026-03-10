@@ -267,6 +267,7 @@ interface Plugins {
   "moleculer": tracer.plugins.moleculer;
   "mongodb-core": tracer.plugins.mongodb_core;
   "mongoose": tracer.plugins.mongoose;
+  "mqtt": tracer.plugins.mqtt;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
   "net": tracer.plugins.net;
@@ -2423,6 +2424,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [mysql](https://github.com/mysqljs/mysql) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [mqtt](https://github.com/npmjs/package/mqtt) message queue library.
+     */
+    interface mqtt extends Instrumentation {}
+
     interface mysql extends Instrumentation {
       service?: string | ((params: any) => string);
     }

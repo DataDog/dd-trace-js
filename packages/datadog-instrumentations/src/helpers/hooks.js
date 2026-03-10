@@ -97,6 +97,7 @@ module.exports = {
   mongodb: () => require('../mongodb'),
   'mongodb-core': () => require('../mongodb-core'),
   mongoose: () => require('../mongoose'),
+  mqtt: () => require('../mqtt'),
   mquery: () => require('../mquery'),
   multer: () => require('../multer'),
   mysql: () => require('../mysql'),
