@@ -151,78 +151,11 @@ assertLlmObsSpanEvent(events[0], {
    - Tool calls → `spanKind: 'tool'`
    - Embeddings → `spanKind: 'embedding'`
 
-## Complete Test Example
+## Reference Test Implementation
 
-```javascript
-const { useLlmObs, assertLlmObsSpanEvent, MOCK_STRING, MOCK_NOT_NULLISH } = require('../../util')
-
-describe('openai plugin', () => {
-  const { getEvents } = useLlmObs({ plugin: 'openai' })
-
-  it('instruments chat completions', async () => {
-    const client = new OpenAI({
-      apiKey: 'test-key',
-      baseURL: 'http://127.0.0.1:9126/vcr/openai'  // VCR proxy
-    })
-
-    const response = await client.chat.completions.create({
-      messages: [
-        { role: 'user', content: 'Hello' },
-        { role: 'assistant', content: 'Hi!' },
-        { role: 'user', content: 'How are you?' }
-      ],
-      model: 'gpt-4',
-      temperature: 0.7,
-      max_tokens: 100
-    })
-
-    const events = getEvents()
-
-    // Validate span structure
-    assertLlmObsSpanEvent(events[0], {
-      spanKind: 'llm',
-      name: 'openai.chat.completions',
-      modelName: 'gpt-4',
-      modelProvider: 'openai',
-      inputMessages: [
-        { content: 'Hello', role: 'user' },
-        { content: 'Hi!', role: 'assistant' },
-        { content: 'How are you?', role: 'user' }
-      ],
-      outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
-      metrics: {
-        input_tokens: MOCK_NOT_NULLISH,
-        output_tokens: MOCK_NOT_NULLISH,
-        total_tokens: MOCK_NOT_NULLISH
-      },
-      metadata: {
-        temperature: 0.7,
-        max_tokens: 100
-      }
-    })
-  })
-
-  it('handles errors', async () => {
-    // Test error case
-    try {
-      await client.chat.completions.create({
-        messages: [],  // Invalid: empty messages
-        model: 'gpt-4'
-      })
-    } catch (err) {
-      // Expected to fail
-    }
-
-    const events = getEvents()
-
-    assertLlmObsSpanEvent(events[0], {
-      spanKind: 'llm',
-      outputMessages: [{ content: '', role: '' }],
-      error: MOCK_OBJECT
-    })
-  })
-})
-```
+For a complete, real-world example of how tests using these helpers are structured, see:
+- [`packages/datadog-plugin-anthropic/test/llmobs.spec.js`](../../../../../packages/datadog-plugin-anthropic/test/llmobs.spec.js)
+- [`packages/datadog-plugin-google-genai/test/llmobs.spec.js`](../../../../../packages/datadog-plugin-google-genai/test/llmobs.spec.js)
 
 ## Field Reference Quick Lookup
 

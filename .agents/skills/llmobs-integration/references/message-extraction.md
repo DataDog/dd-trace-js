@@ -1,253 +1,40 @@
 # Message Extraction Patterns
 
-Provider-specific patterns for converting messages to standard LLMObs format.
+## Overview
 
-## Standard Format
+Every LLM provider uses a different message format. Before implementing `extractInputMessages` and `extractOutputMessages`, you **must** read the provider's actual source code and existing plugin implementation to understand its specific format.
 
-All plugins must convert messages to:
+All plugins must normalize messages to the standard LLMObs format: `[{ content: string, role: string }]`
 
-```javascript
-[{
-  content: string,  // Message text
-  role: string      // 'user', 'assistant', 'system', 'tool', etc.
-}]
-```
+Common roles: `'user'`, `'assistant'`, `'system'`, `'tool'`
 
-## Input Message Patterns
+## What Varies Per Provider
 
-### OpenAI Format
+**Input formats differ in:**
+- Field name for the messages array (`messages`, `contents`, `prompt`, etc.)
+- Whether content is a plain string or an array of typed parts
+- Role naming conventions (e.g., `'model'` vs `'assistant'`)
 
-```javascript
-// Input
-{
-  messages: [
-    { role: 'system', content: 'You are helpful' },
-    { role: 'user', content: 'Hello' }
-  ]
-}
+**Output formats differ in:**
+- Response structure (`choices[0].message`, `content[0].text`, `candidates[0].content.parts`, etc.)
+- Token usage field names (`prompt_tokens`/`completion_tokens` vs `input_tokens`/`output_tokens`)
 
-// Extraction
-extractInputMessages(inputs) {
-  if (Array.isArray(inputs.messages)) {
-    return inputs.messages.map(msg => ({
-      content: msg.content || '',
-      role: msg.role || 'user'
-    }))
-  }
-  return []
-}
-```
+## How to Research a New Provider
 
-### Anthropic Format
+1. Read the existing tracing plugin for the package (`packages/datadog-plugin-<name>/src/index.js`) to understand what arguments and results look like
+2. Look at the provider's SDK source or API docs to understand response shapes
+3. Check an existing LLMObs plugin for a similar provider as a reference
 
-```javascript
-// Input
-{
-  messages: [
-    { role: 'user', content: [{ type: 'text', text: 'Hello' }] }
-  ]
-}
+## Reference Implementations
 
-// Extraction
-extractInputMessages(inputs) {
-  if (Array.isArray(inputs.messages)) {
-    return inputs.messages.map(msg => ({
-      content: Array.isArray(msg.content)
-        ? msg.content.map(c => c.text || c.type).join('')
-        : msg.content || '',
-      role: msg.role
-    }))
-  }
-  return []
-}
-```
+The best examples of message extraction for the providers we support:
+- Anthropic: [`packages/datadog-plugin-anthropic/src/llmobs.js`](../../../../../packages/datadog-plugin-anthropic/src/llmobs.js)
+- Google GenAI: [`packages/datadog-plugin-google-genai/src/llmobs.js`](../../../../../packages/datadog-plugin-google-genai/src/llmobs.js)
 
-### Google GenAI Format
+## Key Implementation Notes
 
-```javascript
-// Input
-{
-  contents: [
-    { role: 'user', parts: [{ text: 'Hello' }] }
-  ]
-}
-
-// Extraction
-extractInputMessages(inputs) {
-  if (Array.isArray(inputs.contents)) {
-    return inputs.contents.map(item => ({
-      content: item.parts?.map(p => p.text).join('') || '',
-      role: item.role || 'user'
-    }))
-  }
-  return []
-}
-```
-
-### Prompt String Format
-
-```javascript
-// Input
-{ prompt: 'Hello, AI!' }
-
-// Extraction
-extractInputMessages(inputs) {
-  if (inputs.prompt) {
-    return [{ content: inputs.prompt, role: 'user' }]
-  }
-  return []
-}
-```
-
-### Direct String Format
-
-```javascript
-// Input
-'Hello, AI!'
-
-// Extraction
-extractInputMessages(inputs) {
-  if (typeof inputs === 'string') {
-    return [{ content: inputs, role: 'user' }]
-  }
-  return []
-}
-```
-
-## Output Message Patterns
-
-### OpenAI Format
-
-```javascript
-// Output
-{
-  choices: [
-    { message: { role: 'assistant', content: 'Hi there!' } }
-  ]
-}
-
-// Extraction
-extractOutputMessages(results) {
-  if (results.choices && results.choices[0]) {
-    const message = results.choices[0].message || {}
-    return [{
-      content: message.content || '',
-      role: message.role || 'assistant'
-    }]
-  }
-  return [{ content: '', role: '' }]
-}
-```
-
-### Anthropic Format
-
-```javascript
-// Output
-{
-  role: 'assistant',
-  content: [{ type: 'text', text: 'Hi there!' }]
-}
-
-// Extraction
-extractOutputMessages(results) {
-  if (results.content && Array.isArray(results.content)) {
-    const text = results.content
-      .filter(c => c.type === 'text')
-      .map(c => c.text)
-      .join('')
-    return [{
-      content: text,
-      role: results.role || 'assistant'
-    }]
-  }
-  return [{ content: '', role: '' }]
-}
-```
-
-### Google GenAI Format
-
-```javascript
-// Output
-{
-  candidates: [
-    { content: { role: 'model', parts: [{ text: 'Hi there!' }] } }
-  ]
-}
-
-// Extraction
-extractOutputMessages(results) {
-  if (results.candidates && results.candidates[0]) {
-    const content = results.candidates[0].content
-    const text = content?.parts?.map(p => p.text).join('') || ''
-    return [{
-      content: text,
-      role: 'assistant'  // Normalize 'model' to 'assistant'
-    }]
-  }
-  return [{ content: '', role: '' }]
-}
-```
-
-### Direct Text Format
-
-```javascript
-// Output
-{ text: 'Hi there!' }
-
-// Extraction
-extractOutputMessages(results) {
-  if (results.text) {
-    return [{
-      content: results.text,
-      role: 'assistant'
-    }]
-  }
-  return [{ content: '', role: '' }]
-}
-```
-
-## Advanced Patterns
-
-### Streaming
-Accumulate content across chunks using a buffer, extract delta from each chunk (`chunk.choices?.[0]?.delta?.content`), tag final accumulated content.
-
-### Function Calling
-For function calls, stringify the function_call object as content. Preserve 'tool' role for tool responses.
-
-### Multi-Turn Conversations
-Extract all messages in order, preserving roles and sequence.
-
-## Error Handling
-
-Always return empty messages on error:
-
-```javascript
-setLLMObsTags(ctx) {
-  const span = ctx.currentStore?.span
-  if (!span) return
-
-  this.tagInputMessages(span, this.extractInputMessages(ctx.arguments?.[0]))
-
-  if (ctx.error) {
-    // Tag empty output on error
-    this.tagOutputMessages(span, [{ content: '', role: '' }])
-    return
-  }
-
-  // Normal extraction
-  this.tagOutputMessages(span, this.extractOutputMessages(ctx.result))
-}
-```
-
-### Multimodal Content
-For images/multimodal, map array content and join: `msg.content.map(c => c.text || c.type || '[image]').join(' ')`.
-
-## Best Practices
-
-1. Always handle null/undefined with `|| ''` and `|| []` defaults
-2. Preserve role types (except normalize 'model' → 'assistant')
-3. Handle arrays - many formats use arrays for content parts
-4. Return `[{content: '', role: ''}]` on error
-5. Join multi-part content with `.join('')`
-6. Maintain message ordering in conversations
-7. Keep 'system', 'tool', 'function' roles intact
+- Always handle null/undefined with fallback defaults
+- Normalize `'model'` role to `'assistant'` for consistency
+- For array content parts (Anthropic, Google), join text parts with `''`
+- For streaming, accumulate delta content across chunks before tagging
+- Always return `[{ content: '', role: '' }]` on error (never omit output messages)
