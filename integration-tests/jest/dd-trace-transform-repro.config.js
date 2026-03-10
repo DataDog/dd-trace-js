@@ -8,8 +8,8 @@ module.exports = {
   rootDir: path.join(__dirname, '..'),
   cache: false,
   collectCoverage: true,
-  coverageProvider: 'babel',
   testEnvironment: 'node',
+  testRunner: 'jest-circus/runner',
   testEnvironmentOptions: sharedOptions,
   testMatch: ['**/jest/transform-config-identity/**/*.test.ts'],
   transform: {
