@@ -98,8 +98,7 @@ function setupResponseInstrumentation (ctx, res) {
           } catch (e) {
             // Node.js 24+ crashes in fromList when read() is called during a stream mode transition.
             if (!(e instanceof TypeError) || !e.message?.includes('Cannot read prop')) throw e
-            log.debug('http.client: read() threw during stream mode transition, restoring original read()')
-            res.read = originalRead
+            log.debug('http.client: read() threw during stream mode transition')
             return null
           }
           if (!dataListenerAdded) {
