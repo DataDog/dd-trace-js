@@ -93,7 +93,7 @@ async function checkAllGreen () {
     }
     latestRuns = [...latestByName.values()]
 
-    printSummary(latestRuns)
+    await printSummary(latestRuns)
   }
 
   const allGreen = !latestRuns.some(run => (
