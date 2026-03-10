@@ -95,11 +95,12 @@ function setupResponseInstrumentation (ctx, res) {
           let chunk
           try {
             chunk = originalRead.apply(this, arguments)
-          } catch {
+          } catch (e) {
             // Node.js 24+: calling read() while the stream is transitioning from paused to
             // flowing mode (e.g. a 'data' listener was just added) can crash inside fromList
-            // with "Cannot read properties of undefined (reading 'length')". Restore the
-            // original read() and return null to safely exit the caller's read loop.
+            // with a TypeError. Restore the original read() and return null to safely exit
+            // the caller's read loop. Re-throw anything that isn't the expected fromList crash.
+            if (!(e instanceof TypeError)) throw e
             res.read = originalRead
             return null
           }
