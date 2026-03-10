@@ -234,6 +234,7 @@ class CiVisibilityExporter extends BufferingExporter {
         testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
       isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled,
       isCoverageReportUploadEnabled,
+      isKeepingCoverageConfiguration: this._config.isKeepingCoverageConfiguration,
     }
   }
 

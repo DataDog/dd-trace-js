@@ -1945,6 +1945,113 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    it('keeps user coverage reporters when DD_TEST_TIA_KEEP_COV_CONFIG is true', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            COVERAGE_REPORTERS: 'lcov',
+            DD_TEST_TIA_KEEP_COV_CONFIG: 'true',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), true)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
+    })
+
+    it('overrides user coverage reporters when code coverage is enabled because of us', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            COVERAGE_REPORTERS: 'lcov',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), false)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
+    })
+
+    it('keeps user coverage reporters when code coverage is enabled by the user', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
+            COVERAGE_REPORTERS: 'lcov',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), true)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
+    })
+
     it('calculates executable lines even if there have been skipped suites', (done) => {
       receiver.setSettings({
         itr_enabled: true,
