@@ -25,54 +25,6 @@ module.exports = [
   },
   {
     "module": {
-      "name": "graphql",
-      "versionRange": ">=0.10",
-      "filePath": "language/parser.js"
-    },
-    "functionQuery": {
-      "functionName": "parse",
-      "kind": "Sync"
-    },
-    "channelName": "apm:graphql:parser:start"
-  },
-  {
-    "module": {
-      "name": "graphql",
-      "versionRange": ">=0.10",
-      "filePath": "language/parser.mjs"
-    },
-    "functionQuery": {
-      "functionName": "parse",
-      "kind": "Sync"
-    },
-    "channelName": "apm:graphql:parser:start"
-  },
-  {
-    "module": {
-      "name": "graphql",
-      "versionRange": ">=0.10",
-      "filePath": "validation/validate.js"
-    },
-    "functionQuery": {
-      "functionName": "validate",
-      "kind": "Sync"
-    },
-    "channelName": "apm:graphql:validate:start"
-  },
-  {
-    "module": {
-      "name": "graphql",
-      "versionRange": ">=0.10",
-      "filePath": "validation/validate.mjs"
-    },
-    "functionQuery": {
-      "functionName": "validate",
-      "kind": "Sync"
-    },
-    "channelName": "apm:graphql:validate:start"
-  },
-  {
-    "module": {
       "name": "@graphql-tools/executor",
       "versionRange": ">=0.0.14",
       "filePath": "cjs/index.js"
@@ -130,5 +82,125 @@ module.exports = [
       "kind": "Async"
     },
     "channelName": "apm:graphql:execute:start"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "language/parser.js"
+    },
+    "functionQuery": {
+      "functionName": "parse",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:parser:start"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "language/parser.mjs"
+    },
+    "functionQuery": {
+      "functionName": "parse",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:parser:start"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "validation/validate.js"
+    },
+    "functionQuery": {
+      "functionName": "validate",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:validate:start"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "validation/validate.mjs"
+    },
+    "functionQuery": {
+      "functionName": "validate",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:validate:start"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "language/printer.js"
+    },
+    "functionQuery": {
+      "functionName": "print",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:printer:export"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "language/printer.mjs"
+    },
+    "functionQuery": {
+      "functionName": "print",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:printer:export"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "language/visitor.js"
+    },
+    "functionQuery": {
+      "functionName": "visit",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:visitor:export"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "language/visitor.mjs"
+    },
+    "functionQuery": {
+      "functionName": "visit",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:visitor:export"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "utilities/index.js"
+    },
+    "functionQuery": {
+      "functionName": "getOperationAST",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:utilities:export"
+  },
+  {
+    "module": {
+      "name": "graphql",
+      "versionRange": ">=0.10",
+      "filePath": "utilities/index.mjs"
+    },
+    "functionQuery": {
+      "functionName": "getOperationAST",
+      "kind": "Sync"
+    },
+    "channelName": "apm:graphql:utilities:export"
   }
 ]
