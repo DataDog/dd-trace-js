@@ -23,7 +23,7 @@ addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (
 
 function entityWrapper (method) {
   return function (entityName, arg) {
-    if (azureDurableFunctionsChannel.hasSubscribers) return method.apply(this, arguments)
+    if (!azureDurableFunctionsChannel.hasSubscribers) return method.apply(this, arguments)
 
     // because this method is overloaded, the second argument can either be an object
     // with the handler or the handler itself, so first we figure which type it is
@@ -51,7 +51,7 @@ function entityHandler (handler, entityName) {
 
 function activityHandler (method) {
   return function (activityName, activityOptions) {
-    if (azureDurableFunctionsChannel.hasSubscribers) return method.apply(this, arguments)
+    if (!azureDurableFunctionsChannel.hasSubscribers) return method.apply(this, arguments)
 
     shimmer.wrap(activityOptions, 'handler', handler => {
       const isAsync =
