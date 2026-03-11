@@ -302,6 +302,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   const {
     _requireFile: testSuiteAbsolutePath,
     location: {
+      file: testSourceFileAbsolutePath,
       line: testSourceLine,
     },
     _type,
@@ -319,7 +320,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
 
   if (isNewTestSuite) {
     startedSuites.push(testSuiteAbsolutePath)
-    const testSuiteCtx = { testSuiteAbsolutePath }
+    const testSuiteCtx = { testSuiteAbsolutePath, testSourceFileAbsolutePath }
     testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
@@ -335,6 +336,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
     const testCtx = {
       testName,
       testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
       testSourceLine,
       browserName,
       isDisabled: test._ddIsDisabled,
@@ -468,6 +470,7 @@ function testEndHandler ({
       testSkipCh.publish({
         testName: getTestFullname(test),
         testSuiteAbsolutePath,
+        testSourceFileAbsolutePath: test.location.file,
         testSourceLine: test.location.line,
         browserName,
         isNew: test._ddIsNew,
@@ -1153,6 +1156,7 @@ addHook({
     const {
       _requireFile: testSuiteAbsolutePath,
       location: {
+        file: testSourceFileAbsolutePath,
         line: testSourceLine,
       },
     } = test
@@ -1168,6 +1172,7 @@ addHook({
     const testCtx = {
       testName,
       testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
       testSourceLine,
       browserName,
     }
@@ -1331,7 +1336,10 @@ function generateSummaryWrapper (generateSummary) {
       if (didNotRun) {
         const {
           _requireFile: testSuiteAbsolutePath,
-          location: { line: testSourceLine },
+          location: {
+            file: testSourceFileAbsolutePath,
+            line: testSourceLine,
+          },
           _ddIsNew: isNew,
           _ddIsDisabled: isDisabled,
           _ddIsModified: isModified,
@@ -1342,6 +1350,7 @@ function generateSummaryWrapper (generateSummary) {
         testSkipCh.publish({
           testName: getTestFullname(test),
           testSuiteAbsolutePath,
+          testSourceFileAbsolutePath,
           testSourceLine,
           browserName,
           isNew,
