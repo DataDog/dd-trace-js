@@ -297,12 +297,12 @@ describe('SpanStatsProcessor', () => {
     processor = new SpanStatsProcessor(config)
     clearTimeout(processor.timer)
 
-    assert.ok(SpanStatsExporter.calledWith({
+    assert.deepStrictEqual(SpanStatsExporter.lastCall.args[0], {
       hostname: config.hostname,
       port: config.port,
       url: config.url,
       tags: config.tags,
-    }))
+    })
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, hostname())
@@ -362,7 +362,7 @@ describe('SpanStatsProcessor', () => {
   it('should export on interval', () => {
     processor.onInterval()
 
-    assert.ok(exporter.export.calledWith({
+    assert.deepStrictEqual(exporter.export.lastCall.args[0], {
       Hostname: hostname(),
       Env: config.env,
       Version: config.version,
@@ -391,7 +391,7 @@ describe('SpanStatsProcessor', () => {
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
-    }))
+    })
   })
 
   it('should export on interval with default version', () => {
@@ -400,7 +400,7 @@ describe('SpanStatsProcessor', () => {
     const processor = new SpanStatsProcessor(versionlessConfig)
     processor.onInterval()
 
-    assert.ok(exporter.export.calledWith({
+    assert.deepStrictEqual(exporter.export.lastCall.args[0], {
       Hostname: hostname(),
       Env: config.env,
       Version: version,
@@ -410,6 +410,6 @@ describe('SpanStatsProcessor', () => {
       RuntimeID: processor.tags['runtime-id'],
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
-    }))
+    })
   })
 })
