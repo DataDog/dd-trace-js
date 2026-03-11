@@ -18,6 +18,7 @@ const {
   SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   DECISION_MAKER_KEY,
   SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_KNUTH_RATE,
 } = require('../src/constants')
 const { ASM } = require('../src/standalone/product')
 
@@ -367,6 +368,62 @@ describe('PrioritySampler', () => {
 
       assert.strictEqual(context._trace['_dd.rule_psr'], 0.5)
       assert.strictEqual(context._trace['_dd.limit_psr'], 1)
+    })
+
+    it('should set _dd.p.ksr tag for agent sampling', () => {
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '1')
+    })
+
+    it('should set _dd.p.ksr tag for agent sampling with custom rate', () => {
+      prioritySampler.update({
+        'service:test,env:test': 0.5,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.5')
+    })
+
+    it('should set _dd.p.ksr tag for rule-based sampling', () => {
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.5,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.5')
+    })
+
+    it('should set _dd.p.ksr tag for rule-based sampling with rate 0', () => {
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0')
+    })
+
+    it('should set _dd.p.ksr tag for rate 1.0 as "1"', () => {
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 1.0,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '1')
+    })
+
+    it('should set _dd.p.ksr tag as a string type', () => {
+      prioritySampler.sample(span)
+
+      assert.strictEqual(typeof context._trace.tags[SAMPLING_KNUTH_RATE], 'string')
+    })
+
+    it('should not set _dd.p.ksr tag for manual sampling', () => {
+      context._tags[MANUAL_KEEP] = undefined
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], undefined)
     })
 
     it('should ignore empty span', () => {

@@ -31,9 +31,20 @@ const {
   SAMPLING_LIMIT_DECISION,
   SAMPLING_AGENT_DECISION,
   DECISION_MAKER_KEY,
+  SAMPLING_KNUTH_RATE,
 } = require('./constants')
 
 const DEFAULT_KEY = 'service:,env:'
+
+/**
+ * Formats a sampling rate as a string with up to 6 significant digits and no trailing zeros.
+ *
+ * @param {number} rate
+ * @returns {string}
+ */
+function formatKnuthRate (rate) {
+  return Number(rate.toPrecision(6)).toString()
+}
 
 const defaultSampler = new Sampler(AUTO_KEEP)
 
@@ -254,6 +265,7 @@ class PrioritySampler {
    */
   #getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
+    context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
     if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
@@ -290,7 +302,9 @@ class PrioritySampler {
     // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
-    context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
+    const rate = sampler.rate()
+    context._trace[SAMPLING_AGENT_DECISION] = rate
+    context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rate)
 
     context._sampling.mechanism = sampler === defaultSampler ? SAMPLING_MECHANISM_DEFAULT : SAMPLING_MECHANISM_AGENT
 

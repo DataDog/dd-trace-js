@@ -22,6 +22,7 @@ module.exports = {
   SPAN_SAMPLING_MAX_PER_SECOND: '_dd.span_sampling.max_per_second',
   DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
   DECISION_MAKER_KEY: '_dd.p.dm',
+  SAMPLING_KNUTH_RATE: '_dd.p.ksr',
   PROCESS_ID: 'process_id',
   ERROR_TYPE: 'error.type',
   ERROR_MESSAGE: 'error.message',
