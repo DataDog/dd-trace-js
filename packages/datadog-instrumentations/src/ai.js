@@ -2,6 +2,7 @@
 
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
+const { createWrapWithAIGuard } = require('./ai/aiguard')
 const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
@@ -117,3 +118,45 @@ for (const hook of getHooks('ai')) {
     return exports
   })
 }
+
+function getAIGuardWrappedFunctions (aiExports) {
+  const wrapWithAIGuard = createWrapWithAIGuard(aiExports)
+
+  return {
+    generateText: fn => wrapWithAIGuard('generateText', fn, true),
+    streamText: fn => wrapWithAIGuard('streamText', fn, true),
+    generateObject: fn => wrapWithAIGuard('generateObject', fn, false),
+    streamObject: fn => wrapWithAIGuard('streamObject', fn, false),
+  }
+}
+
+// CJS exports
+addHook({
+  name: 'ai',
+  versions: ['>=4.0.0'],
+}, exports => {
+  const tracedFunctions = getAIGuardWrappedFunctions(exports)
+  let moduleExports = exports
+
+  for (const [fnName, tracedFn] of Object.entries(tracedFunctions)) {
+    moduleExports = shimmer.wrap(moduleExports, fnName, tracedFn, { replaceGetter: true })
+  }
+
+  return moduleExports
+})
+
+// ESM exports
+addHook({
+  name: 'ai',
+  versions: ['>=4.0.0'],
+  file: 'dist/index.mjs',
+}, exports => {
+  const tracedFunctions = getAIGuardWrappedFunctions(exports)
+  let moduleExports = exports
+
+  for (const [fnName, tracedFn] of Object.entries(tracedFunctions)) {
+    moduleExports = shimmer.wrap(moduleExports, fnName, tracedFn, { replaceGetter: true })
+  }
+
+  return moduleExports
+})

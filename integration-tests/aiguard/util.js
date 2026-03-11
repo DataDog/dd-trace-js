@@ -2,10 +2,10 @@
 
 const http = require('http')
 
-const executeRequest = (url, method = 'GET', headers = {}, body = null) => {
+const executeRequest = (url, headers = {}) => {
   return new Promise((resolve, reject) => {
     const req = http.request(url, {
-      method,
+      method: 'GET',
       headers,
     }, res => {
       const chunks = []
@@ -13,9 +13,16 @@ const executeRequest = (url, method = 'GET', headers = {}, body = null) => {
       res.on('end', () => {
         try {
           const response = Buffer.concat(chunks).toString()
+          // Always try to parse JSON response, regardless of status code
+          let parsedBody
+          try {
+            parsedBody = JSON.parse(response)
+          } catch {
+            parsedBody = response
+          }
           resolve({
             status: res.statusCode,
-            body: res.statusCode === 200 ? JSON.parse(response) : response,
+            body: parsedBody,
           })
         } catch (err) {
           reject(err)
@@ -24,9 +31,6 @@ const executeRequest = (url, method = 'GET', headers = {}, body = null) => {
       res.on('error', reject)
     })
     req.on('error', reject)
-    if (body) {
-      req.write(JSON.stringify(body))
-    }
     req.end()
   })
 }

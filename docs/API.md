@@ -573,3 +573,53 @@ function handle () {
   })
 }
 ```
+
+<h2 id="aiguard-vercel-ai">AI Guard With Vercel AI SDK</h2>
+
+When AI Guard is enabled, the `ai` integration evaluates prompts and tool calls automatically for Vercel AI SDK model
+executions. No middleware instance or `wrapLanguageModel()` call is required.
+
+<h3 id="aiguard-vercel-ai-setup">Setup</h3>
+
+```javascript
+const tracer = require('dd-trace').init({
+  experimental: {
+    aiguard: {
+      enabled: true
+    }
+  }
+})
+
+const { generateText } = require('ai')
+const { openai } = require('@ai-sdk/openai')
+```
+
+<h3 id="aiguard-vercel-ai-behavior">Behavior</h3>
+
+- `generateText()`, `streamText()`, `generateObject()`, and `streamObject()` are evaluated automatically.
+- Object-valued models are wrapped directly at the model execution boundary.
+- String-valued models are resolved through the AI SDK public provider contract (`AI_SDK_DEFAULT_PROVIDER` or `ai.gateway`).
+- Prompt evaluation happens before `doGenerate()` / `doStream()`.
+- Tool-call evaluation happens before user-defined tool execution.
+- `generateObject()` and `streamObject()` only perform prompt evaluation; structured output path data is not treated as a user-defined tool call.
+
+<h3 id="aiguard-vercel-ai-usage">Usage</h3>
+
+```javascript
+const result = await generateText({
+  model: openai('gpt-4o'),
+  prompt: 'Hello, how are you?'
+})
+```
+
+If AI Guard blocks a prompt, the call fails with a plain `Error` whose message is
+`Prompt blocked by AI Guard security policy`.
+
+If AI Guard blocks a tool call in a non-streaming path, the call rejects with a plain `Error` whose message is
+`Tool call blocked by AI Guard security policy`.
+
+If AI Guard blocks a tool call during `streamText()`, the returned stream emits an `error` chunk whose `error`
+is a plain `Error` with message `Tool call blocked by AI Guard security policy`, and the stream then terminates.
+
+The low-level `tracer.aiguard.evaluate()` API remains available when you want to evaluate a prompt or tool call
+explicitly outside of the Vercel AI SDK integration.
