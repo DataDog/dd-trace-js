@@ -27,15 +27,20 @@ class ApolloBasePlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    // Only synchronous operations would have `result` or `error` on `end`.
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
+    this.onEnd(ctx)
     ctx?.currentStore?.span?.finish()
   }
 
   asyncStart (ctx) {
-    ctx?.currentStore?.span.finish()
+    this.onAsyncStart(ctx)
+    ctx?.currentStore?.span?.finish()
     return ctx.parentStore
   }
+
+  onEnd (ctx) {}
+
+  onAsyncStart (ctx) {}
 
   getServiceName () {
     return this.serviceName({

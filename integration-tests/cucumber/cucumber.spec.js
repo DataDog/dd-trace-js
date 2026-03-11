@@ -685,9 +685,11 @@ describe(`cucumber@${version} commonJS`, () => {
                 assert.ok(!('dd-api-key' in coverageRequest.headers))
                 assert.ok(!('dd-api-key' in eventsRequest.headers))
               }
-              assert.strictEqual(coveragePayload.name, 'coverage1')
-              assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-              assert.strictEqual(coveragePayload.type, 'application/msgpack')
+              assertObjectContains(coveragePayload, {
+                name: 'coverage1',
+                filename: 'coverage1.msgpack',
+                type: 'application/msgpack',
+              })
 
               const eventTypes = eventsRequest.payload.events.map(event => event.type)
 
@@ -1875,6 +1877,45 @@ describe(`cucumber@${version} commonJS`, () => {
               done()
             }).catch(done)
           })
+        })
+
+        onlyLatestIt('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            flaky_test_retries_count: 1,
+            early_flake_detection: {
+              enabled: false,
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.strictEqual(tests.length, 2, 'initial + 1 ATR retry')
+              const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.strictEqual(failedTests.length, 2)
+              const lastFailed = failedTests[failedTests.length - 1]
+              assert.strictEqual(lastFailed.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+            {
+              cwd,
+              env: {
+                ...envVars,
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
       })
       // Dynamic instrumentation only supported from >=8.0.0

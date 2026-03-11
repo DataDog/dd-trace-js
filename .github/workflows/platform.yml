@@ -69,7 +69,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:bun
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
+      - uses: DataDog/junit-upload-github-action@293a1d0af2a269c6300930eb13d3bf0ddec21863  # v2.2.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ secrets.DD_API_KEY }}
@@ -224,15 +224,17 @@ jobs:
       - name: Run instrumentation tests (oldest-maintenance, with retries)
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
         with:
-          max_attempts: 3
+          max_attempts: 5
           timeout_minutes: 15
+          retry_wait_seconds: 20
           command: yarn test:instrumentations:ci
       - uses: ./.github/actions/node/latest
       - name: Run instrumentation tests (latest, with retries)
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
         with:
-          max_attempts: 3
+          max_attempts: 5
           timeout_minutes: 15
+          retry_wait_seconds: 20
           command: yarn test:instrumentations:ci
       - uses: ./.github/actions/coverage
         with:
