@@ -981,6 +981,7 @@ versions.forEach((version) => {
                 test => test.meta[TEST_NAME] === 'playwright should not retry new tests'
               )
               assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
+              newTests.sort((a, b) => (a.meta.start ?? 0) - (b.meta.start ?? 0))
               newTests.forEach(test => {
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
                 assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
