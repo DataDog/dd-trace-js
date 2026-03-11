@@ -515,4 +515,29 @@ describe('check-require-cache', () => {
 
     assert.ok(subs.start.called)
   })
+
+  it('should inject dc-polyfill using a resolvable path (auto-injection compatible)', () => {
+    const { test } = compile('test-trace-sync')
+
+    subs = {
+      start: sinon.spy(),
+    }
+
+    ch = tracingChannel('orchestrion:test-trace-sync:test_invoke')
+    ch.subscribe(subs)
+
+    test()
+
+    assert.ok(subs.start.called)
+
+    assert.ok(
+      !content.includes('require("dc-polyfill")') && !content.includes("require('dc-polyfill')"),
+      'expected injected require to not use bare module specifier'
+    )
+
+    assert.ok(
+      content.includes('dc-polyfill'),
+      'expected rewritten content to reference dc-polyfill'
+    )
+  })
 })

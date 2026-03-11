@@ -9,7 +9,8 @@ const { create } = require('./orchestrion')
 /** @type {Record<string, string>} map of module base name to version */
 const moduleVersions = {}
 const disabled = new Set()
-const matcher = create(instrumentations, 'dc-polyfill')
+const dcPolyfillPath = require.resolve('dc-polyfill').replaceAll('\\', '/')
+const matcher = create(instrumentations, dcPolyfillPath)
 
 function rewrite (content, filename, format) {
   if (!content) return content
