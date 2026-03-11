@@ -12,7 +12,7 @@ class SSRFAnalyzer extends InjectionAnalyzer {
     this.addSub('apm:http:client:request:start', ({ args }) => {
       if (typeof args.originalUrl === 'string') {
         this.analyze(args.originalUrl)
-      } else if (args.options && args.options.host) {
+      } else if (args.options?.host) {
         this.analyze(args.options.host)
       }
     })

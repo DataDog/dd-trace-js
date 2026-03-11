@@ -91,8 +91,8 @@ describe('FlaggingProvider', () => {
     it('should handle null/undefined configuration gracefully', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
-      assert.doesNotThrow(() => provider._setConfiguration(null))
-      assert.doesNotThrow(() => provider._setConfiguration(undefined))
+      provider._setConfiguration(null)
+      provider._setConfiguration(undefined)
     })
   })
 

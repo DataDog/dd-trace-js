@@ -5,7 +5,7 @@ on:
     paths:
       - "eslint-rules/**"
   push:
-    branches: [master]
+    branches: [master, mq-working-branch-master-*]
     paths:
       - "eslint-rules/**"
 

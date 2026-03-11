@@ -8,7 +8,7 @@ module.exports = {
     },
     {
       name: '@ai-sdk/openai',
-      versions: ['>=1.3.23'],
+      versions: ['>=1.3.23', '>=2.0.0'],
     },
     {
       name: 'zod',

@@ -289,6 +289,12 @@ function getOnTestEndHandler (config) {
       hasFailedAllRetries = true
     }
 
+    // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+    if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
+      getIsLastRetry(test) && testStatuses.every(status => status === 'fail')) {
+      hasFailedAllRetries = true
+    }
+
     const isAttemptToFixRetry = test._ddIsAttemptToFix && testStatuses.length > 1
     const isAtrRetry = config.isFlakyTestRetriesEnabled &&
       !test._ddIsAttemptToFix &&

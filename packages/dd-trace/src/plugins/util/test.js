@@ -145,6 +145,10 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.tes
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
+
+// Library configuration request error tag
+const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
+
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
 const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
@@ -201,6 +205,22 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
+
+/**
+ * Returns request error tags from a test session span for propagation to child events.
+ * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @returns {Record<string, string>}
+ */
+function getSessionRequestErrorTags (sessionSpan) {
+  const tags = sessionSpan?.context()._tags
+  if (!tags || typeof tags !== 'object') return {}
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR] === 'true') {
+    return {
+      [DD_CI_LIBRARY_CONFIGURATION_ERROR]: 'true',
+    }
+  }
+  return {}
+}
 
 module.exports = {
   TEST_CODE_OWNERS,
@@ -278,6 +298,7 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getEfdRetryCount,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -308,6 +329,8 @@ module.exports = {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
+  getSessionRequestErrorTags,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,
@@ -844,6 +867,31 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
+}
+
+/**
+ * Given a test's first-execution duration (ms) and the slow_test_retries map
+ * from the backend, return how many EFD retries to run.
+ *
+ * Returns 0 when the test is too slow to retry (≥ 5 min).
+ *
+ * @param {number} durationMs
+ * @param {Record<string, number>} slowTestRetries  e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @returns {number}
+ */
+function getEfdRetryCount (durationMs, slowTestRetries) {
+  const thresholds = [
+    { limitMs: 5 * 1000, key: '5s' },
+    { limitMs: 10 * 1000, key: '10s' },
+    { limitMs: 30 * 1000, key: '30s' },
+    { limitMs: 5 * 60 * 1000, key: '5m' },
+  ]
+  for (const { limitMs, key } of thresholds) {
+    if (durationMs < limitMs) {
+      return slowTestRetries[key] ?? 0
+    }
+  }
+  return 0 // ≥ 5 min — abort
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {

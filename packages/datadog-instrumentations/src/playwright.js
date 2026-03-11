@@ -41,7 +41,7 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
-const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 1000
+const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
 
 let applyRepeatEachIndex = null
 
@@ -400,6 +400,15 @@ function testEndHandler ({
   if (testStatuses.length === earlyFlakeDetectionNumRetries + 1 &&
     (test._ddIsNew || test._ddIsModified) &&
     test._ddIsEfdRetry &&
+    testStatuses.every(status => status === 'fail')) {
+    test._ddHasFailedAllRetries = true
+  }
+
+  // ATR: set _ddHasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
+    !(test._ddIsNew || test._ddIsModified) &&
+    flakyTestRetriesCount != null && flakyTestRetriesCount > 0 &&
+    testStatuses.length === flakyTestRetriesCount + 1 &&
     testStatuses.every(status => status === 'fail')) {
     test._ddHasFailedAllRetries = true
   }

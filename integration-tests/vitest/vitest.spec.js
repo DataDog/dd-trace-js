@@ -58,6 +58,7 @@ const {
   TEST_IS_TEST_FRAMEWORK_WORKER,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
@@ -239,6 +240,29 @@ versions.forEach((version) => {
             })
           }),
         ])
+      })
+    })
+
+    context('error tags', () => {
+      it('tags session and children with _dd.ci.library_configuration_error when settings fails', async () => {
+        receiver.setSettingsResponseCode(404)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+          })
+        childProcess = exec('./node_modules/.bin/vitest run', {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          },
+        })
+        await Promise.all([eventsPromise, once(childProcess, 'exit')])
       })
     })
 
@@ -428,6 +452,56 @@ versions.forEach((version) => {
             },
           }
         )
+      })
+
+      it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 2,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const neverPassingTest = tests.filter(
+              test => test.resource ===
+                'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass'
+            )
+            assert.strictEqual(neverPassingTest.length, 3, '1 initial + 2 ATR retries')
+            neverPassingTest.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'fail'))
+
+            const lastAttempt = neverPassingTest[neverPassingTest.length - 1]
+            assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+            for (let i = 0; i < neverPassingTest.length - 1; i++) {
+              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in neverPassingTest[i].meta))
+            }
+          }
+        )
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
       })
     })
 
@@ -896,6 +970,7 @@ versions.forEach((version) => {
         receiver.setKnownTestsResponseCode(500)
         receiver.setKnownTests({})
 
+        // Request module waits before retrying — need longer gather timeout
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -918,9 +993,11 @@ versions.forEach((version) => {
 
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
             assert.strictEqual(failedTests.length, 1)
-            const testSessionEvent = events.find(event => event.type === 'test_session_end').content
+            const testSessionEnd = events.find(event => event.type === 'test_session_end')
+            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+            const testSessionEvent = testSessionEnd.content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
-          })
+          }, 60000)
 
         childProcess = exec(
           './node_modules/.bin/vitest run',
@@ -1986,15 +2063,18 @@ versions.forEach((version) => {
           })
           receiver.setTestManagementTestsResponseCode(500)
 
+          // Request module waits before retrying — need longer gather timeout
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const testSession = events.find(event => event.type === 'test_session_end').content
+              const testSessionEnd = events.find(event => event.type === 'test_session_end')
+              assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+              const testSession = testSessionEnd.content
               assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
               // it is not retried
               assert.strictEqual(tests.length, 1)
-            })
+            }, 60000)
 
           childProcess = exec(
             './node_modules/.bin/vitest run',

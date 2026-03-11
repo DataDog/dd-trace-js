@@ -206,6 +206,7 @@ class CiVisibilityExporter extends BufferingExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled,
       isDiEnabled,
@@ -222,6 +223,7 @@ class CiVisibilityExporter extends BufferingExporter {
       requireGit,
       isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled,
       earlyFlakeDetectionNumRetries,
+      earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
       isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: this._config.flakyTestRetriesCount,
@@ -232,6 +234,7 @@ class CiVisibilityExporter extends BufferingExporter {
         testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
       isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled,
       isCoverageReportUploadEnabled,
+      isKeepingCoverageConfiguration: this._config.isKeepingCoverageConfiguration,
     }
   }
 

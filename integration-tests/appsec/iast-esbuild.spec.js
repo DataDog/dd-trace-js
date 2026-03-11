@@ -10,7 +10,7 @@ const { promisify } = require('util')
 const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 const exec = promisify(childProcess.exec)
 const retry = async fn => {
@@ -109,7 +109,7 @@ describe('esbuild support for IAST', () => {
       })
 
       afterEach(async () => {
-        contextVars.proc.kill()
+        await stopProc(contextVars.proc)
         await contextVars.agent.stop()
       })
     }
@@ -118,7 +118,9 @@ describe('esbuild support for IAST', () => {
   describe('cjs', () => {
     const context = { proc: null, agent: null, axios: null, applicationDir: null, bundledApplicationDir: null }
 
-    before(async () => {
+    before(async function () {
+      this.timeout(120_000)
+
       const setup = await setupApplication('iast-esbuild-cjs')
       context.applicationDir = setup.applicationDir
       context.bundledApplicationDir = setup.bundledApplicationDir

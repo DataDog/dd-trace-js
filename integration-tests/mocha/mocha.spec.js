@@ -69,6 +69,7 @@ const {
   TEST_FRAMEWORK_VERSION,
   LIBRARY_VERSION,
   TEST_PARAMETERS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const {
@@ -347,22 +348,29 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             assert.strictEqual(tests.length, 1)
             const [test] = tests
-            assert.strictEqual(test.meta[COMPONENT], 'mocha')
-            assert.strictEqual(test.meta.language, 'javascript')
-            assert.strictEqual(test.meta[TEST_NAME], 'mocha-test-fail can fail')
-            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(test.meta[TEST_TYPE], 'test')
-            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'mocha')
-            assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/mocha-plugin-tests/failing.js')
-            assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/mocha-plugin-tests/failing.js')
-            assert.strictEqual(test.meta[ERROR_TYPE], 'AssertionError')
-            assert.strictEqual(test.meta[ERROR_MESSAGE], 'Expected values to be strictly equal:\n\ntrue !== false\n')
             assert.ok(test.metrics[TEST_SOURCE_START])
             assert.ok(test.meta[ERROR_STACK])
             assert.strictEqual(test.parent_id.toString(), '0')
-            assert.strictEqual(test.type, 'test')
-            assert.strictEqual(test.name, 'mocha.test')
-            assert.strictEqual(test.resource, 'ci-visibility/mocha-plugin-tests/failing.js.mocha-test-fail can fail')
+            assertObjectContains(test, {
+              type: 'test',
+              name: 'mocha.test',
+              resource: 'ci-visibility/mocha-plugin-tests/failing.js.mocha-test-fail can fail',
+              meta: {
+                [COMPONENT]: 'mocha',
+                language: 'javascript',
+                [TEST_NAME]: 'mocha-test-fail can fail',
+                [TEST_STATUS]: 'fail',
+                [TEST_TYPE]: 'test',
+                [TEST_FRAMEWORK]: 'mocha',
+                [TEST_SUITE]: 'ci-visibility/mocha-plugin-tests/failing.js',
+                [TEST_SOURCE_FILE]: 'ci-visibility/mocha-plugin-tests/failing.js',
+                [ERROR_TYPE]: 'AssertionError',
+                [ERROR_MESSAGE]: 'Expected values to be strictly equal:\n\ntrue !== false\n',
+                [ORIGIN_KEY]: CI_APP_ORIGIN,
+                [TEST_CODE_OWNERS]: JSON.stringify(['@datadog-dd-trace-js']),
+                [LIBRARY_VERSION]: ddTraceVersion,
+              },
+            })
           })
 
         childProcess = exec(
@@ -1625,9 +1633,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
+        assertObjectContains(coveragePayload, {
+          name: 'coverage1',
+          filename: 'coverage1.msgpack',
+          type: 'application/msgpack',
+        })
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
@@ -2025,6 +2035,26 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           done()
         }).catch(done)
       })
+    })
+  })
+
+  context('error tags', () => {
+    it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
+      receiver.setSettingsResponseCode(404)
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+          const testEvent = events.find(event => event.type === 'test')
+          assert.ok(testEvent, 'should have test event')
+          assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+        })
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      await Promise.all([eventsPromise, once(childProcess, 'exit')])
     })
   })
 
@@ -2506,11 +2536,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         known_tests_enabled: true,
       })
 
+      // Request module waits before retrying — need longer gather timeout
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEnd = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+          const testSession = testSessionEnd.content
           assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
 
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
@@ -2520,7 +2553,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test => test.meta[TEST_IS_NEW] === 'true'
           )
           assert.strictEqual(newTests.length, 0)
-        })
+        }, 60000)
 
       childProcess = exec(
         runTestsCommand,
@@ -3129,6 +3162,61 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       childProcess.on('exit', () => {
         eventsPromise.then(() => done()).catch(done)
       })
+    })
+
+    onlyLatestIt('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Mark fail-test as known so EFD does not run; only ATR will retry
+      receiver.setKnownTests({
+        mocha: {
+          'ci-visibility/test/fail-test.js': ['can report failed tests'],
+        },
+      })
+      const NUM_RETRIES_ATR = 2
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        flaky_test_retries_count: NUM_RETRIES_ATR,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const failTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/fail-test.js'
+          )
+
+          assert.strictEqual(failTests.length, NUM_RETRIES_ATR + 1)
+          failTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          })
+
+          const retriedTests = failTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_ATR)
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          })
+
+          const lastRetry = failTests[failTests.length - 1]
+          assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+          for (let i = 0; i < failTests.length - 1; i++) {
+            assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in failTests[i].meta))
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify(['./test/fail-test.js']),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: String(NUM_RETRIES_ATR),
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
   })
 
@@ -4052,15 +4140,18 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
       receiver.setTestManagementTestsResponseCode(500)
 
+      // Request module waits before retrying — need longer gather timeout
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEnd = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+          const testSession = testSessionEnd.content
           assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
-        })
+        }, 60000)
 
       childProcess = exec(
         runTestsCommand,

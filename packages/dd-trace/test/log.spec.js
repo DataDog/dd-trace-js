@@ -153,14 +153,12 @@ describe('log', () => {
     })
 
     it('should support chaining', () => {
-      assert.doesNotThrow(() => {
-        log
-          .use(logger)
-          .toggle(true)
-          .error('error')
-          .debug('debug')
-          .reset()
-      })
+      log
+        .use(logger)
+        .toggle(true)
+        .error('error')
+        .debug('debug')
+        .reset()
     })
 
     it('should call the logger in a noop context', () => {

@@ -275,9 +275,11 @@ class VitestPlugin extends CiPlugin {
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
       const { testSuiteAbsolutePath, frameworkVersion } = ctx
 
+      // TODO: Handle case where the command is not set
       this.command = getValueFromEnvSources('DD_CIVISIBILITY_TEST_COMMAND')
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
+        // TODO: Handle case where the session ID or module ID is not set
         'x-datadog-trace-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_SESSION_ID'),
         'x-datadog-parent-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_MODULE_ID'),
       })
@@ -301,14 +303,17 @@ class VitestPlugin extends CiPlugin {
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'vitest'
-      )
-      testSuiteMetadata[TEST_SOURCE_FILE] = testSuite
-      testSuiteMetadata[TEST_SOURCE_START] = 1
+      // Request error tags are applied to test spans in the main process (worker-report:trace handler)
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'vitest'
+        ),
+        [TEST_SOURCE_FILE]: testSuite,
+        [TEST_SOURCE_START]: 1,
+      }
 
       const codeOwners = this.getCodeOwners(testSuiteMetadata)
       if (codeOwners) {

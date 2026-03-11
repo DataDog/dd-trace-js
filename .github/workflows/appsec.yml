@@ -3,7 +3,7 @@ name: AppSec
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, mq-working-branch-master-*]
   schedule:
     - cron: 0 4 * * *
   workflow_dispatch:
@@ -33,11 +33,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-macos
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
@@ -56,11 +55,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ubuntu
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   windows:
     name: ${{ github.workflow }} / windows
@@ -75,11 +73,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ldapjs:
     name: ${{ github.workflow }} / ldapjs
@@ -107,11 +104,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ldapjs
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   postgres:
     name: ${{ github.workflow }} / postgres
@@ -137,11 +133,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-postgres
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mysql:
     name: ${{ github.workflow }} / mysql
@@ -167,11 +162,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mysql
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   express:
     name: ${{ github.workflow }} / express
@@ -188,11 +182,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-express
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   fastify:
     name: ${{ github.workflow }} / fastify
@@ -209,11 +202,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-fastify
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   graphql:
     name: ${{ github.workflow }} / graphql
@@ -230,11 +222,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-graphql
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongodb-core:
     name: ${{ github.workflow }} / mongodb-core
@@ -257,11 +248,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongoose:
     name: ${{ github.workflow }} / mongoose
@@ -284,11 +274,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongoose
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   sourcing:
     runs-on: ubuntu-latest
@@ -308,11 +297,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-sourcing
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   next:
     strategy:
@@ -369,11 +357,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   lodash:
     name: ${{ github.workflow }} / lodash
@@ -390,11 +377,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-lodash
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   integration:
     strategy:
@@ -409,11 +395,10 @@ jobs:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:appsec
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   passport:
     runs-on: ubuntu-latest
@@ -429,11 +414,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-passport
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   template:
     runs-on: ubuntu-latest
@@ -449,11 +433,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-template
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   node-serialize:
     name: ${{ github.workflow }} / node-serialize
@@ -470,11 +453,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-node-serialize
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   kafka:
     runs-on: ubuntu-latest
@@ -509,26 +491,24 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-kafka
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   stripe:
     runs-on: ubuntu-latest
     env:
       PLUGINS: stripe
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}

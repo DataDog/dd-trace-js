@@ -1,3 +1,7 @@
+// TODO: once we've well iterated on this file (6 months+),
+// we can plan to move it to its own package to reuse elsewhere.
+// written on 2026-02-12
+
 import { readFileSync } from 'fs'
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
@@ -642,6 +646,10 @@ export default [
           ...Object.keys(dependencies),
           'mocha',
         ],
+      }],
+      'no-restricted-syntax': ['error', {
+        selector: "CallExpression:matches([callee.name='doesNotThrow'], [callee.property.name='doesNotThrow'])",
+        message: 'Do not use `assert.doesNotThrow()`. Execute the expression directly instead.',
       }],
       'n/no-missing-require': 'off',
       'require-await': 'off',
