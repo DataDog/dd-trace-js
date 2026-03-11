@@ -304,9 +304,13 @@ class PrioritySampler {
 
     const rate = sampler.rate()
     context._trace[SAMPLING_AGENT_DECISION] = rate
-    context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rate)
 
-    context._sampling.mechanism = sampler === defaultSampler ? SAMPLING_MECHANISM_DEFAULT : SAMPLING_MECHANISM_AGENT
+    if (sampler === defaultSampler) {
+      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+    } else {
+      context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rate)
+      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
+    }
 
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }

@@ -370,13 +370,13 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._trace['_dd.limit_psr'], 1)
     })
 
-    it('should set _dd.p.ksr tag for agent sampling', () => {
+    it('should not set _dd.p.ksr tag for default sampling mechanism', () => {
       prioritySampler.sample(span)
 
-      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '1')
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], undefined)
     })
 
-    it('should set _dd.p.ksr tag for agent sampling with custom rate', () => {
+    it('should set _dd.p.ksr tag for agent sampling with explicit rates', () => {
       prioritySampler.update({
         'service:test,env:test': 0.5,
       })
@@ -413,6 +413,9 @@ describe('PrioritySampler', () => {
     })
 
     it('should set _dd.p.ksr tag as a string type', () => {
+      prioritySampler.update({
+        'service:test,env:test': 0.5,
+      })
       prioritySampler.sample(span)
 
       assert.strictEqual(typeof context._trace.tags[SAMPLING_KNUTH_RATE], 'string')
