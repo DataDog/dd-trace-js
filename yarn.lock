@@ -231,14 +231,12 @@
   dependencies:
     "@datadog/flagging-core" "1.1.0"
 
-"@datadog/pprof@5.13.4":
-  version "5.13.4"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.13.4.tgz#3555252e177a1311826a9db4e4fb5bedc5561284"
-  integrity sha512-tX9ntTBh/pGFzZJ/dOkiZrtQ1pLMyX6liGyB5E7MpSQAXcCPj4Fh9yvZtqkKepwQn/0RWayCtZbwM3ikbh+c4w==
+"@datadog/pprof@5.13.5":
+  version "5.13.5"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.13.5.tgz#36eea628f321ed512fe4ce440de4cffa2e056569"
+  integrity sha512-W0dvo91ff2EMQI9Vhv8PNM+w1ZWuClm1pBVdLB6y0bMB3+E+wEGg0VD1iNJxsuPbwDt5+yV0u3e4WkqK12Lzlg==
   dependencies:
-    delay "^5.0.0"
     node-gyp-build "<4.0"
-    p-limit "^3.1.0"
     pprof-format "^2.2.1"
     source-map "^0.7.4"
 
@@ -1594,11 +1592,6 @@ define-properties@^1.2.1:
     define-data-property "^1.0.1"
     has-property-descriptors "^1.0.0"
     object-keys "^1.1.1"
-
-delay@^5.0.0:
-  version "5.0.0"
-  resolved "https://registry.yarnpkg.com/delay/-/delay-5.0.0.tgz#137045ef1b96e5071060dd5be60bf9334436bd1d"
-  integrity sha512-ReEBKkIfe4ya47wlPYf/gu5ib6yUG0/Aez0JQZQz94kiWtRQvZIQbTiehsnwHvLSWJnQdhVeqYue7Id1dKr0qw==
 
 delayed-stream@~1.0.0:
   version "1.0.0"
@@ -3433,7 +3426,7 @@ p-limit@^2.2.0:
   dependencies:
     p-try "^2.0.0"
 
-p-limit@^3.0.2, p-limit@^3.1.0:
+p-limit@^3.0.2:
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/p-limit/-/p-limit-3.1.0.tgz#e1daccbe78d0d1388ca18c64fea38e3e57e3706b"
   integrity sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==

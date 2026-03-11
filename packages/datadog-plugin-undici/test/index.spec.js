@@ -709,11 +709,10 @@ describe('Plugin', () => {
             })
 
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assert.strictEqual(span.service, 'test')
-                assert.strictEqual(span.type, 'http')
-                assert.strictEqual(span.resource, 'GET')
+              .assertFirstTraceSpan({
+                service: 'test',
+                type: 'http',
+                resource: 'GET',
               })
               .then(done)
               .catch(done)
