@@ -1340,6 +1340,15 @@ declare namespace tracer {
      * @returns The DSM context associated with the current pathway.
      */
     setConsumeCheckpoint (type: string, source: string, carrier: any, manualCheckpoint?: boolean): any;
+
+    /**
+     * Records a transaction ID at a named checkpoint without pathway propagation.
+     * Tags the active span (or the provided span) with dsm.transaction.id and dsm.transaction.checkpoint.
+     * @param transactionId The unique transaction identifier (truncated to 255 UTF-8 bytes).
+     * @param checkpointName The logical checkpoint name (stable 1-byte ID per process lifetime).
+     * @param span The span to tag. Defaults to the currently active span.
+     */
+    trackTransaction(transactionId: string, checkpointName: string, span?: Span | null): void;
   }
 
   export interface EventTrackingV2 {

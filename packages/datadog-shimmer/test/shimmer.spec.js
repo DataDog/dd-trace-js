@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const shimmer = require('../src/shimmer')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('shimmer', () => {
   describe('with a method', () => {
@@ -283,9 +284,11 @@ describe('shimmer', () => {
 
       const count = Object.getOwnPropertyDescriptor(obj, 'count')
 
-      assert.strictEqual(count.enumerable, false)
-      assert.strictEqual(count.writable, true)
-      assert.strictEqual(count.configurable, false)
+      assertObjectContains(count, {
+        enumerable: false,
+        writable: true,
+        configurable: false,
+      })
     })
 
     it('should skip non-configurable/writable string keyed methods', () => {

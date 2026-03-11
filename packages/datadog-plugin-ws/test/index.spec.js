@@ -517,10 +517,20 @@ describe('Plugin', () => {
           const tracer = require('../../dd-trace')
           const wsPlugin = tracer._pluginManager._pluginsByName.ws
 
-          assert.strictEqual(wsPlugin.server._enabled, false)
-          assert.strictEqual(wsPlugin.producer._enabled, false)
-          assert.strictEqual(wsPlugin.receiver._enabled, false)
-          assert.strictEqual(wsPlugin.close._enabled, false)
+          assertObjectContains(wsPlugin, {
+            server: {
+              _enabled: false,
+            },
+            producer: {
+              _enabled: false,
+            },
+            receiver: {
+              _enabled: false,
+            },
+            close: {
+              _enabled: false,
+            },
+          })
         })
       })
       describe('with WebSocket configurations settings', () => {

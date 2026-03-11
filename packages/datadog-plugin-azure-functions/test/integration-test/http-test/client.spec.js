@@ -5,6 +5,7 @@ const assert = require('node:assert/strict')
 const { spawn } = require('child_process')
 const {
   FakeAgent,
+  assertObjectContains,
   hookFile,
   sandboxCwd,
   useSandbox,
@@ -46,18 +47,18 @@ describe('esm', () => {
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/httptest', ({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
-        assert.ok(Array.isArray(payload[0]))
         assert.strictEqual(payload[0].length, 1)
 
-        const span = payload[0][0]
-
-        assert.strictEqual(span.name, 'azure.functions.invoke')
-        assert.strictEqual(span.meta['_dd.integration'], 'azure-functions')
-        assert.strictEqual(span.meta.component, 'azure-functions')
-        assert.strictEqual(span.meta['http.route'], '/api/httptest')
-        assert.strictEqual(span.resource, 'GET /api/httptest')
+        assertObjectContains(payload, [[{
+          name: 'azure.functions.invoke',
+          meta: {
+            '_dd.integration': 'azure-functions',
+            component: 'azure-functions',
+            'http.route': '/api/httptest',
+          },
+          resource: 'GET /api/httptest',
+        }]])
       })
     }).timeout(60_000)
 

@@ -2443,6 +2443,60 @@ moduleTypes.forEach(({
         ])
       })
 
+      it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 1,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const neverPassingTests = tests.filter(
+              test => test.resource === 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes'
+            )
+            assert.strictEqual(neverPassingTests.length, 2, 'initial + 1 ATR retry')
+            const failedNeverPassing = neverPassingTests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failedNeverPassing.length, 2)
+            const lastFailed = failedNeverPassing[failedNeverPassing.length - 1]
+            assert.strictEqual(lastFailed.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+            assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          }, 25000)
+
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        const specToRun = 'cypress/e2e/flaky-test-retries.js'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+      })
+
       over12It('does not retry flaky tests when testIsolation is false', async () => {
         receiver.setSettings({
           itr_enabled: false,

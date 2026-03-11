@@ -4,6 +4,8 @@
   "license": "BSD-3-Clause",
   "private": true,
   "dependencies": {
+    "@babel/core": "7.29.0",
+    "@babel/preset-typescript": "7.28.5",
     "@ai-sdk/openai": "3.0.12",
     "@anthropic-ai/sdk": "0.73.0",
     "@apollo/gateway": "2.12.2",
@@ -85,6 +87,7 @@
     "avsc": "5.7.9",
     "aws-sdk": "2.1693.0",
     "axios": "1.13.2",
+    "babel-jest": "30.2.0",
     "azure-functions-core-tools": "4.6.0",
     "bluebird": "3.7.2",
     "body-parser": "2.2.2",
