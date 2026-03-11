@@ -72,26 +72,32 @@ describe('agentless-ci-visibility-encode', () => {
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    assert.strictEqual(decodedTrace.version, 1)
-    assertObjectContains(decodedTrace.metadata['*'], {
-      language: 'javascript',
-      library_version: ddTraceVersion,
-    })
     const spanEvent = decodedTrace.events[0]
-    assert.strictEqual(spanEvent.type, 'span')
-    assert.strictEqual(spanEvent.version, 1)
     assert.strictEqual(spanEvent.content.trace_id.toString(10), trace[0].trace_id.toString(10))
     assert.strictEqual(spanEvent.content.span_id.toString(10), trace[0].span_id.toString(10))
     assert.strictEqual(spanEvent.content.parent_id.toString(10), trace[0].parent_id.toString(10))
-    assertObjectContains(spanEvent.content, {
-      name: 'test',
-      resource: 'test-r',
-      service: 'test-s',
-      type: 'foo',
+    assertObjectContains(decodedTrace, {
+      version: 1,
+      metadata: {
+        '*': {
+          language: 'javascript',
+          library_version: ddTraceVersion,
+        },
+      },
+      events: [{
+        type: 'span',
+        version: 1,
+        content: {
+          name: 'test',
+          resource: 'test-r',
+          service: 'test-s',
+          type: 'foo',
+          error: 0,
+          start: 123,
+          duration: 456,
+        },
+      }],
     })
-    assert.strictEqual(spanEvent.content.error, 0)
-    assert.strictEqual(spanEvent.content.start, 123)
-    assert.strictEqual(spanEvent.content.duration, 456)
 
     assert.deepStrictEqual(spanEvent.content.meta, {
       bar: 'baz',

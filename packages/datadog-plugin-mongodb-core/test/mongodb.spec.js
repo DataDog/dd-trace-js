@@ -113,18 +113,17 @@ describe('Plugin', () => {
 
           it('should do automatic instrumentation', done => {
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `insert test.${collectionName}`
-
-                assert.strictEqual(span.name, expectedSchema.outbound.opName)
-                assert.strictEqual(span.service, expectedSchema.outbound.serviceName)
-                assert.strictEqual(span.resource, resource)
-                assert.strictEqual(span.type, 'mongodb')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['db.name'], `test.${collectionName}`)
-                assert.strictEqual(span.meta['out.host'], '127.0.0.1')
-                assert.strictEqual(span.meta.component, 'mongodb')
+              .assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: `insert test.${collectionName}`,
+                type: 'mongodb',
+                meta: {
+                  'span.kind': 'client',
+                  'db.name': `test.${collectionName}`,
+                  'out.host': '127.0.0.1',
+                  component: 'mongodb',
+                },
               })
               .then(done)
               .catch(done)

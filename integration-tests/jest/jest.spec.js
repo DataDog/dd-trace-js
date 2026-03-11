@@ -248,26 +248,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
             )
 
-            assert.ok(test)
-
-            assert.strictEqual(test.meta.language, 'javascript')
-            assert.strictEqual(test.meta.service, 'plugin-tests')
-            assert.strictEqual(test.meta[ORIGIN_KEY], CI_APP_ORIGIN)
-            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'jest')
-            assert.strictEqual(test.meta[TEST_NAME], name)
-            assert.strictEqual(test.meta[TEST_STATUS], status)
-            assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test.js')
-            assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/jest-plugin-tests/jest-test.js')
-            assert.strictEqual(test.meta[TEST_TYPE], 'test')
-            assert.strictEqual(test.meta[JEST_TEST_RUNNER], 'jest-circus')
-            assert.strictEqual(test.meta[LIBRARY_VERSION], ddTraceVersion)
-            assert.strictEqual(test.meta[COMPONENT], 'jest')
             assert.match(test.meta[TEST_CODE_OWNERS], /@datadog-dd-trace-js/)
 
-            assert.strictEqual(test.type, 'test')
-            assert.strictEqual(test.name, 'jest.test')
-            assert.strictEqual(test.service, 'plugin-tests')
-            assert.strictEqual(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
+            assertObjectContains(test, {
+              type: 'test',
+              name: 'jest.test',
+              service: 'plugin-tests',
+              resource: `ci-visibility/jest-plugin-tests/jest-test.js.${name}`,
+              meta: {
+                language: 'javascript',
+                [ORIGIN_KEY]: CI_APP_ORIGIN,
+                [TEST_FRAMEWORK]: 'jest',
+                [TEST_NAME]: name,
+                [TEST_STATUS]: status,
+                [TEST_SUITE]: 'ci-visibility/jest-plugin-tests/jest-test.js',
+                [TEST_SOURCE_FILE]: 'ci-visibility/jest-plugin-tests/jest-test.js',
+                [TEST_TYPE]: 'test',
+                [JEST_TEST_RUNNER]: 'jest-circus',
+                [LIBRARY_VERSION]: ddTraceVersion,
+                [COMPONENT]: 'jest',
+              },
+            })
 
             assert.ok(test.metrics[TEST_SOURCE_START])
             assert.ok(test.meta[TEST_FRAMEWORK_VERSION])
@@ -1584,9 +1585,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
+        assertObjectContains(coveragePayload, {
+          name: 'coverage1',
+          filename: 'coverage1.msgpack',
+          type: 'application/msgpack',
+        })
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
@@ -4312,6 +4315,64 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       childProcess.on('exit', () => {
         eventsPromise.then(() => done()).catch(done)
       })
+    })
+
+    it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Mark fail-test as known so EFD does not run; only ATR will retry
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/fail-test.js': ['can report failed tests'],
+        },
+      })
+      const NUM_RETRIES_ATR = 2
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        flaky_test_retries_count: NUM_RETRIES_ATR,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const failTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/fail-test.js'
+          )
+
+          // Should have 1 initial attempt + NUM_RETRIES_ATR retries
+          assert.strictEqual(failTests.length, NUM_RETRIES_ATR + 1)
+
+          failTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          })
+
+          const retriedTests = failTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_ATR)
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          })
+
+          // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
+          const lastRetry = failTests[failTests.length - 1]
+          assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+          for (let i = 0; i < failTests.length - 1; i++) {
+            assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in failTests[i].meta))
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test/fail-test',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: String(NUM_RETRIES_ATR),
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
   })
 

@@ -1373,11 +1373,11 @@ describe('Config', () => {
         mlApp: 'myMlApp',
       },
     })
-    assert.strictEqual(config.logLevel, logLevel)
-    assert.strictEqual(config.logger, logger)
-    assert.strictEqual(config.middlewareTracingEnabled, false)
-    assert.deepStrictEqual(config.peerServiceMapping, { d: 'dd' })
     assertObjectContains(config, {
+      logLevel,
+      logger,
+      middlewareTracingEnabled: false,
+      peerServiceMapping: { d: 'dd' },
       plugins: false,
       port: '6218',
       protocolVersion: '0.5',
@@ -2245,12 +2245,15 @@ describe('Config', () => {
   it('should set telemetry default values', () => {
     const config = getConfig()
 
-    assert.notStrictEqual(config.telemetry, undefined)
-    assert.strictEqual(config.telemetry.enabled, true)
-    assert.strictEqual(config.telemetry.heartbeatInterval, 60000)
-    assert.strictEqual(config.telemetry.logCollection, true)
-    assert.strictEqual(config.telemetry.debug, false)
-    assert.strictEqual(config.telemetry.metrics, true)
+    assertObjectContains(config, {
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: 60000,
+        logCollection: true,
+        debug: false,
+        metrics: true,
+      },
+    })
   })
 
   it('should set DD_TELEMETRY_HEARTBEAT_INTERVAL', () => {
@@ -2449,8 +2452,12 @@ describe('Config', () => {
     sinon.assert.calledWithExactly(log.error.secondCall, 'Error reading file %s', 'DOES_NOT_EXIST.html', error)
     sinon.assert.calledWithExactly(log.error.thirdCall, 'Error reading file %s', 'DOES_NOT_EXIST.json', error)
 
-    assert.strictEqual(config.appsec.enabled, true)
-    assert.strictEqual(config.appsec.rules, 'path/to/rules.json')
+    assertObjectContains(config, {
+      appsec: {
+        enabled: true,
+        rules: 'path/to/rules.json',
+      },
+    })
     assert.strictEqual(config.appsec.blockedTemplateHtml, undefined)
     assert.strictEqual(config.appsec.blockedTemplateJson, undefined)
     assert.strictEqual(config.appsec.blockedTemplateGraphql, undefined)
@@ -3762,15 +3769,19 @@ rules:
 
       config.setRemoteConfig({ tracing_enabled: false })
 
-      assert.strictEqual(config.tracing, false)
-      assert.strictEqual(config.logInjection, true)
-      assert.strictEqual(config.sampleRate, 0.5)
+      assertObjectContains(config, {
+        tracing: false,
+        logInjection: true,
+        sampleRate: 0.5,
+      })
 
       config.setRemoteConfig(null)
 
-      assert.strictEqual(config.tracing, true)
-      assert.strictEqual(config.logInjection, true)
-      assert.strictEqual(config.sampleRate, 0.5)
+      assertObjectContains(config, {
+        tracing: true,
+        logInjection: true,
+        sampleRate: 0.5,
+      })
     })
 
     it('should ignore null values', () => {
@@ -3796,16 +3807,20 @@ rules:
         tracing_sampling_rate: 0.8,
       })
 
-      assert.strictEqual(config.tracing, true)
-      assert.strictEqual(config.logInjection, false)
-      assert.strictEqual(config.sampleRate, 0.8)
+      assertObjectContains(config, {
+        tracing: true,
+        logInjection: false,
+        sampleRate: 0.8,
+      })
 
       config.setRemoteConfig({
         tracing_enabled: false,
       })
 
-      assert.strictEqual(config.tracing, false)
-      assert.strictEqual(config.logInjection, true)
+      assertObjectContains(config, {
+        tracing: false,
+        logInjection: true,
+      })
       assert.strictEqual(config.sampleRate, undefined)
     })
   })
