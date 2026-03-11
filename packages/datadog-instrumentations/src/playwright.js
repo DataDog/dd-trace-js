@@ -406,6 +406,7 @@ function testEndHandler ({
 
   // ATR: set _ddHasFailedAllRetries when all auto test retries were exhausted and every attempt failed
   if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
+    !(test._ddIsNew || test._ddIsModified) &&
     flakyTestRetriesCount != null && flakyTestRetriesCount > 0 &&
     testStatuses.length === flakyTestRetriesCount + 1 &&
     testStatuses.every(status => status === 'fail')) {
