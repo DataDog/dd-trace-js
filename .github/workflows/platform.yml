@@ -224,15 +224,17 @@ jobs:
       - name: Run instrumentation tests (oldest-maintenance, with retries)
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
         with:
-          max_attempts: 3
+          max_attempts: 5
           timeout_minutes: 15
+          retry_wait_seconds: 20
           command: yarn test:instrumentations:ci
       - uses: ./.github/actions/node/latest
       - name: Run instrumentation tests (latest, with retries)
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
         with:
-          max_attempts: 3
+          max_attempts: 5
           timeout_minutes: 15
+          retry_wait_seconds: 20
           command: yarn test:instrumentations:ci
       - uses: ./.github/actions/coverage
         with:
