@@ -69,7 +69,9 @@ const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 let skippableSuites = []
 let knownTests = {}
 let isCodeCoverageEnabled = false
+let isCodeCoverageEnabledBecauseOfUs = false
 let isSuitesSkippingEnabled = false
+let isKeepingCoverageConfiguration = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -671,6 +673,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        // ATR: set failedAllTests when all auto test retries were exhausted and every attempt failed
+        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry) {
+          const maxRetries = Number(this.global[RETRY_TIMES]) || 0
+          if (event.test?.invocations === maxRetries + 1 && status === 'fail') {
+            failedAllTests = true
+          }
+        }
+
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
@@ -994,6 +1004,8 @@ function getCliWrapper (isNewJestVersion) {
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+          isKeepingCoverageConfiguration =
+            libraryConfig.isKeepingCoverageConfiguration ?? isKeepingCoverageConfiguration
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
           earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
@@ -1327,9 +1339,10 @@ function coverageReporterWrapper (coverageReporter) {
    */
   // `_addUntestedFiles` is an async function
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
-    // If the user has added coverage manually, they're willing to pay the price of this execution, so
-    // we will not skip it.
-    if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
+    if (isKeepingCoverageConfiguration) {
+      return addUntestedFiles.apply(this, arguments)
+    }
+    if (isCodeCoverageEnabledBecauseOfUs) {
       return Promise.resolve()
     }
     return addUntestedFiles.apply(this, arguments)
@@ -1509,12 +1522,13 @@ function configureTestEnvironment (readConfigsResult) {
   }
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
+  isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
 
   if (readConfigsResult.globalConfig.forceExit) {
     log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
 
-  if (isCodeCoverageEnabled) {
+  if (isCodeCoverageEnabledBecauseOfUs) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
       collectCoverage: true,
@@ -1522,13 +1536,17 @@ function configureTestEnvironment (readConfigsResult) {
     readConfigsResult.globalConfig = globalConfig
   }
   if (isSuitesSkippingEnabled) {
-    // If suite skipping is enabled, the code coverage results are not going to be relevant,
-    // so we do not show them.
-    // Also, we might skip every test, so we need to pass `passWithNoTests`
+    // If suite skipping is enabled, we pass `passWithNoTests` in case every test gets skipped.
     const globalConfig = {
       ...readConfigsResult.globalConfig,
-      coverageReporters: ['none'],
       passWithNoTests: true,
+    }
+    if (isCodeCoverageEnabledBecauseOfUs && !isKeepingCoverageConfiguration) {
+      globalConfig.coverageReporters = ['none']
+      readConfigsResult.configs = configs.map(config => ({
+        ...config,
+        coverageReporters: ['none'],
+      }))
     }
     readConfigsResult.globalConfig = globalConfig
   }
@@ -1552,47 +1570,95 @@ function jestConfigSyncWrapper (jestConfig) {
   })
 }
 
-addHook({
-  name: '@jest/transform',
-  versions: ['>=24.8.0'],
-  file: 'build/ScriptTransformer.js',
-}, transformPackage => {
-  const originalCreateScriptTransformer = transformPackage.createScriptTransformer
+const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
+  '_ddTestModuleId',
+  '_ddTestSessionId',
+  '_ddTestCommand',
+  '_ddTestSessionName',
+  '_ddForcedToRun',
+  '_ddUnskippable',
+  '_ddItrCorrelationId',
+  '_ddKnownTests',
+  '_ddIsEarlyFlakeDetectionEnabled',
+  '_ddEarlyFlakeDetectionSlowTestRetries',
+  '_ddRepositoryRoot',
+  '_ddIsFlakyTestRetriesEnabled',
+  '_ddFlakyTestRetriesCount',
+  '_ddIsDiEnabled',
+  '_ddIsKnownTestsEnabled',
+  '_ddIsTestManagementTestsEnabled',
+  '_ddTestManagementTests',
+  '_ddTestManagementAttemptToFixRetries',
+  '_ddModifiedFiles',
+]
 
-  // `createScriptTransformer` is an async function
-  transformPackage.createScriptTransformer = function (config) {
-    const { testEnvironmentOptions, ...restOfConfig } = config
-    const {
-      _ddTestModuleId,
-      _ddTestSessionId,
-      _ddTestCommand,
-      _ddTestSessionName,
-      _ddForcedToRun,
-      _ddUnskippable,
-      _ddItrCorrelationId,
-      _ddKnownTests,
-      _ddIsEarlyFlakeDetectionEnabled,
-      _ddEarlyFlakeDetectionSlowTestRetries,
-      _ddRepositoryRoot,
-      _ddIsFlakyTestRetriesEnabled,
-      _ddFlakyTestRetriesCount,
-      _ddIsDiEnabled,
-      _ddIsKnownTestsEnabled,
-      _ddIsTestManagementTestsEnabled,
-      _ddTestManagementTests,
-      _ddTestManagementAttemptToFixRetries,
-      _ddModifiedFiles,
-      ...restOfTestEnvironmentOptions
-    } = testEnvironmentOptions
+function removeDatadogTestEnvironmentOptions (testEnvironmentOptions) {
+  const removedEntries = []
 
-    restOfConfig.testEnvironmentOptions = restOfTestEnvironmentOptions
+  for (const key of DD_TEST_ENVIRONMENT_OPTION_KEYS) {
+    if (!Object.hasOwn(testEnvironmentOptions, key)) {
+      continue
+    }
 
-    arguments[0] = restOfConfig
-
-    return originalCreateScriptTransformer.apply(this, arguments)
+    removedEntries.push([key, testEnvironmentOptions[key]])
+    delete testEnvironmentOptions[key]
   }
 
+  return function restoreDatadogTestEnvironmentOptions () {
+    for (const [key, value] of removedEntries) {
+      testEnvironmentOptions[key] = value
+    }
+  }
+}
+
+/**
+ * Wrap `createScriptTransformer` to temporarily hide Datadog-specific
+ * `testEnvironmentOptions` keys while Jest builds its transform config.
+ *
+ * @param {Function} createScriptTransformer
+ * @returns {Function}
+ */
+function wrapCreateScriptTransformer (createScriptTransformer) {
+  return function (config) {
+    const testEnvironmentOptions = config?.testEnvironmentOptions
+
+    if (!testEnvironmentOptions) {
+      return createScriptTransformer.apply(this, arguments)
+    }
+
+    const restoreTestEnvironmentOptions = removeDatadogTestEnvironmentOptions(testEnvironmentOptions)
+
+    try {
+      const result = createScriptTransformer.apply(this, arguments)
+
+      if (result?.then) {
+        return result.finally(restoreTestEnvironmentOptions)
+      }
+
+      restoreTestEnvironmentOptions()
+      return result
+    } catch (e) {
+      restoreTestEnvironmentOptions()
+      throw e
+    }
+  }
+}
+
+addHook({
+  name: '@jest/transform',
+  versions: ['>=24.8.0 <30.0.0'],
+  file: 'build/ScriptTransformer.js',
+}, transformPackage => {
+  transformPackage.createScriptTransformer = wrapCreateScriptTransformer(transformPackage.createScriptTransformer)
+
   return transformPackage
+})
+
+addHook({
+  name: '@jest/transform',
+  versions: ['>=30.0.0'],
+}, transformPackage => {
+  return shimmer.wrap(transformPackage, 'createScriptTransformer', wrapCreateScriptTransformer, { replaceGetter: true })
 })
 
 /**

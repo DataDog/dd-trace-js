@@ -39,7 +39,7 @@ describe('span processor', () => {
     it('should do nothing if llmobs is not enabled', () => {
       processor = new LLMObsSpanProcessor({ llmobs: { enabled: false } })
 
-      assert.doesNotThrow(() => processor.process(span))
+      processor.process(span)
     })
 
     it('should do nothing if the span is not an llm obs span', () => {
@@ -250,12 +250,15 @@ describe('span processor', () => {
       processor.process(span)
       const payload = writer.append.getCall(0).firstArg
 
-      assert.strictEqual(payload.meta['error.message'], 'error message')
-      assert.strictEqual(payload.meta['error.type'], 'error type')
-      assert.strictEqual(payload.meta['error.stack'], 'error stack')
-      assert.strictEqual(payload.status, 'error')
-
-      assertObjectContains(payload.tags, ['error_type:error type'])
+      assertObjectContains(payload, {
+        meta: {
+          'error.message': 'error message',
+          'error.type': 'error type',
+          'error.stack': 'error stack',
+        },
+        status: 'error',
+        tags: ['error_type:error type'],
+      })
     })
 
     it('uses the error itself if the span does not have specific error fields', () => {

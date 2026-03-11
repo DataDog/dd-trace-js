@@ -7,6 +7,7 @@ const {
   sandboxCwd,
   useSandbox,
   spawnProc,
+  stopProc,
   curlAndAssertMessage,
   assertObjectContains,
 } = require('./helpers')
@@ -35,7 +36,7 @@ describe('Log Injection', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

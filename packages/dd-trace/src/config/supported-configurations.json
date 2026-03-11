@@ -1770,6 +1770,16 @@
         ]
       }
     ],
+    "DD_TEST_TIA_KEEP_COV_CONFIG": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "configurationNames": [
+          "isKeepingCoverageConfiguration"
+        ]
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",

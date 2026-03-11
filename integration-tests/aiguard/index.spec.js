@@ -5,7 +5,7 @@ const path = require('path')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { assertObjectContains } = require('../helpers')
 const startApiMock = require('./api-mock')
 const { executeRequest } = require('./util')
@@ -44,7 +44,7 @@ describe('AIGuard SDK integration tests', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
