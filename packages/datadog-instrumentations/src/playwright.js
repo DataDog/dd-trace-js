@@ -404,6 +404,14 @@ function testEndHandler ({
     test._ddHasFailedAllRetries = true
   }
 
+  // ATR: set _ddHasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
+    flakyTestRetriesCount != null && flakyTestRetriesCount > 0 &&
+    testStatuses.length === flakyTestRetriesCount + 1 &&
+    testStatuses.every(status => status === 'fail')) {
+    test._ddHasFailedAllRetries = true
+  }
+
   // this handles tests that do not go through the worker process (because they're skipped)
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)

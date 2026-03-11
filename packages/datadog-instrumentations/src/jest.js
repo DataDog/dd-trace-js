@@ -673,6 +673,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        // ATR: set failedAllTests when all auto test retries were exhausted and every attempt failed
+        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry) {
+          const maxRetries = Number(this.global[RETRY_TIMES]) || 0
+          if (event.test?.invocations === maxRetries + 1 && status === 'fail') {
+            failedAllTests = true
+          }
+        }
+
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations

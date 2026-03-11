@@ -247,6 +247,7 @@ class CypressPlugin {
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
   isFlakyTestRetriesEnabled = false
+  flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
   isKnownTestsEnabled = false
   earlyFlakeDetectionNumRetries = 0
@@ -354,7 +355,10 @@ class CypressPlugin {
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
-            this.cypressConfig.retries.runMode = flakyTestRetriesCount
+            this.flakyTestRetriesCount = flakyTestRetriesCount ?? 0
+            this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
+          } else {
+            this.flakyTestRetriesCount = 0
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
@@ -1018,6 +1022,12 @@ class CypressPlugin {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
             }
           }
+        }
+        // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
+        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
+          this.flakyTestRetriesCount > 0 && testStatuses.length === this.flakyTestRetriesCount + 1 &&
+          testStatuses.every(status => status === 'fail')) {
+          this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
         }
 
         // Ensure quarantined tests reported from support.js are tagged
