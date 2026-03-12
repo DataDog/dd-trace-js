@@ -525,7 +525,6 @@ describe('Plugin', () => {
           })
 
           it('should not break prisma load when dd-trace is loaded but not initialized', async function () {
-            this.timeout(10000)
             const result = await prismaClient.$queryRaw`SELECT 1`
             assert.ok(result)
           })
