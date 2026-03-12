@@ -13,7 +13,7 @@ require('../../setup/core')
 
 const cachedExecStub = sinon.stub().returns('')
 
-const { getCIMetadata } = require('../../../src/plugins/util/ci')
+const { getCIMetadata, getJobIDFromDiagFile } = require('../../../src/plugins/util/ci')
 const {
   CI_ENV_VARS,
   CI_NODE_LABELS,
@@ -111,4 +111,22 @@ describe('test environment data', () => {
       })
     })
   })
+})
+
+describe('test getJobIDFromDiagFile function', () => {
+  const TEST_HOME = path.join(__dirname, 'fixtures')
+
+  const runnerTempPaths = [
+    { runnerTemp: path.join(TEST_HOME, '/runner/work/_temp'), expected: '9876543210' },
+    { runnerTemp: null, expected: null },
+    { runnerTemp: undefined, expected: null },
+    { runnerTemp: path.join(TEST_HOME, Math.random().toString(36).slice(2, 10)), expected: null },
+    { runnerTemp: path.join(TEST_HOME, '/runner_empty/work/_temp'), expected: null },
+  ]
+
+  for (const { runnerTemp, expected } of runnerTempPaths) {
+    it(`returns ${expected} for runnerTemp: ${runnerTemp}`, () => {
+      assert.strictEqual(getJobIDFromDiagFile(runnerTemp), expected)
+    })
+  }
 })

@@ -1661,6 +1661,7 @@ function getAgentUrl (url, options) {
     !options.port &&
     !getEnv('DD_AGENT_HOST') &&
     !getEnv('DD_TRACE_AGENT_PORT') &&
+    !isTrue(getEnv('DD_CIVISIBILITY_AGENTLESS_ENABLED')) &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
