@@ -16,7 +16,7 @@ app.post('/api_security_sampling/:i', (req, res) => {
   res.send('OK')
 })
 
-function collectRawBody (req, done) {
+function collectRawBody(req, done) {
   let body = ''
 
   req.on('data', chunk => {
@@ -35,12 +35,6 @@ function collectRawBody (req, done) {
 }
 
 const server = http.createServer((req, res) => {
-  if (req.url.startsWith('/resource_renaming')) {
-    res.writeHead(200)
-    res.end('OK')
-    return
-  }
-
   if (req.url.startsWith('/api_security_sampling_resource_renaming')) {
     collectRawBody(req, () => {
       res.writeHead(200)
