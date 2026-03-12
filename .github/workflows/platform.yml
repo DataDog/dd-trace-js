@@ -62,6 +62,19 @@ jobs:
       - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
 
+  bun-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:bun
+      - uses: DataDog/junit-upload-github-action@293a1d0af2a269c6300930eb13d3bf0ddec21863  # v2.2.0
+        if: always() && github.actor != 'dependabot[bot]'
+        with:
+          api_key: ${{ secrets.DD_API_KEY }}
+          service: dd-trace-js-tests
+
   core:
     runs-on: ubuntu-latest
     steps:
@@ -74,11 +87,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-core
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   dd-trace-api:
     runs-on: ubuntu-latest
@@ -199,13 +211,36 @@ jobs:
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
+  # TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
+  # ./.github/actions/instrumentations/test once fixed upstream.
   instrumentation-http:
     runs-on: ubuntu-latest
     env:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - name: Run instrumentation tests (oldest-maintenance, with retries)
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 5
+          timeout_minutes: 15
+          retry_wait_seconds: 20
+          command: yarn test:instrumentations:ci
+      - uses: ./.github/actions/node/latest
+      - name: Run instrumentation tests (latest, with retries)
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        with:
+          max_attempts: 5
+          timeout_minutes: 15
+          retry_wait_seconds: 20
+          command: yarn test:instrumentations:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: instrumentations-${{ github.job }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
 
@@ -388,11 +423,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: test-${{ github.job }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # TODO: Split this up as it runs tests for multiple different teams.
   integration:
@@ -415,11 +449,10 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
       - run: yarn test:integration:esbuild
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   unit-guardrails:
     runs-on: ubuntu-latest
@@ -431,11 +464,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
@@ -453,11 +485,10 @@ jobs:
       - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
       - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   integration-guardrails-unsupported:
     strategy:
@@ -490,8 +521,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}

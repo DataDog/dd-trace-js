@@ -8,15 +8,15 @@ const tracingChannelPredicate = (node) => (
 )
 
 const transforms = module.exports = {
-  tracingChannelImport ({ format }, node) {
+  tracingChannelImport ({ dcModule, sourceType }, node) {
     if (node.body.some(tracingChannelPredicate)) return
 
     const index = node.body.findIndex(child => child.directive === 'use strict')
-    const code = format === 'module'
-      ? 'import { tracingChannel as tr_ch_apm_tracingChannel } from "diagnostics_channel"'
-      : 'const {tracingChannel: tr_ch_apm_tracingChannel} = require("diagnostics_channel")'
+    const code = sourceType === 'module'
+      ? `import { tracingChannel as tr_ch_apm_tracingChannel } from "${dcModule}"`
+      : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
 
-    node.body.splice(index + 1, 0, parse(code, { module: format === 'module' }).body[0])
+    node.body.splice(index + 1, 0, parse(code, { sourceType }).body[0])
   },
 
   tracingChannelDeclaration (state, node) {
@@ -196,11 +196,11 @@ function wrapSuper (_state, node) {
 }
 
 function wrapCallback (state, node) {
-  const { channelName, functionQuery: { index = -1 } } = state
+  const { channelName, functionQuery: { callbackIndex = -1 } } = state
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
   const wrapper = parse(`
     function wrapper () {
-      const __apm$cb = Array.prototype.at.call(arguments, ${index});
+      const __apm$cb = Array.prototype.at.call(arguments, ${callbackIndex});
       const __apm$ctx = {
         arguments,
         self: this,
@@ -235,7 +235,7 @@ function wrapCallback (state, node) {
       if (typeof __apm$cb !== 'function') {
         return __apm$traced();
       }
-      Array.prototype.splice.call(arguments, ${index}, 1, __apm$wrappedCb);
+      Array.prototype.splice.call(arguments, ${callbackIndex}, 1, __apm$wrappedCb);
 
       return ${channelVariable}.start.runStores(__apm$ctx, () => {
         try {

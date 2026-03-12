@@ -8,12 +8,17 @@ const supportedConfigsPath = path.resolve(
   path.dirname(__filename),
   '../packages/dd-trace/src/config/supported-configurations.json'
 )
-const { aliases } = JSON.parse(fs.readFileSync(supportedConfigsPath, 'utf8'))
+const { supportedConfigurations } = JSON.parse(fs.readFileSync(supportedConfigsPath, 'utf8'))
 
 const aliasToCanonical = {}
-for (const canonical of Object.keys(aliases)) {
-  for (const alias of aliases[canonical]) {
-    aliasToCanonical[alias] = canonical
+for (const [canonical, entries] of Object.entries(supportedConfigurations)) {
+  for (const entry of entries) {
+    if (entry.aliases && !entry.deprecated) {
+      for (const alias of entry.aliases) {
+        aliasToCanonical[alias] ??= []
+        aliasToCanonical[alias].push(canonical)
+      }
+    }
   }
 }
 

@@ -97,4 +97,53 @@ describe('data streams checkpointer manual api', () => {
     const calledTags = mockSetCheckpoint.getCall(0).args[0]
     assert.ok(!calledTags.includes('manual_checkpoint:true'))
   })
+
+  it('should call trackTransaction on the processor with correct args', function () {
+    const mockTrackTransaction = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
+
+    tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
+
+    sinon.assert.calledOnce(mockTrackTransaction)
+    // Third arg is the active span (null when no span is active in this test context)
+    sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested', null)
+  })
+
+  it('should pass an explicit span to the processor', function () {
+    const mockTrackTransaction = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
+    const span = { setTag: sinon.stub() }
+
+    tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested', span)
+
+    sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested', span)
+  })
+
+  it('should use the active span when no span is provided', function () {
+    const mockTrackTransaction = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
+    const activeSpan = { setTag: sinon.stub() }
+    const scopeStub = sinon.stub(tracer._tracer, 'scope').returns({ active: () => activeSpan })
+
+    try {
+      tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
+      sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested', activeSpan)
+    } finally {
+      scopeStub.restore()
+    }
+  })
+
+  it('trackTransaction is a no-op when dsmEnabled is false', function () {
+    const mockTrackTransaction = sinon.stub()
+    tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
+
+    const originalDsmEnabled = tracer._tracer._config.dsmEnabled
+    tracer._tracer._config.dsmEnabled = false
+
+    tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
+
+    sinon.assert.notCalled(mockTrackTransaction)
+
+    tracer._tracer._config.dsmEnabled = originalDsmEnabled
+  })
 })

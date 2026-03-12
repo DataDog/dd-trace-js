@@ -68,7 +68,7 @@ function enable (_config) {
 
     appsecRemoteConfig.enableWafUpdate(_config.appsec)
 
-    Reporter.init(_config.appsec)
+    Reporter.init(_config.appsec, _config.inferredProxyServicesEnabled)
 
     apiSecuritySampler.configure(_config)
 
@@ -174,6 +174,13 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
     [HTTP_CLIENT_IP]: clientIp,
   })
 
+  if (config.inferredProxyServicesEnabled) {
+    const context = web.getContext(req)
+    if (context?.inferredProxySpan) {
+      context.inferredProxySpan.setTag('_dd.appsec.enabled', 1)
+    }
+  }
+
   const requestHeaders = { ...req.headers }
   delete requestHeaders.cookie
 
@@ -225,6 +232,9 @@ function incomingHttpEndTranslator ({ req, res }) {
   ) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
+
+  // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
+  web.setRouteOrEndpointTag(req)
 
   if (apiSecuritySampler.sampleRequest(req, res, true)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }

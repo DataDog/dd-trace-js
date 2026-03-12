@@ -62,7 +62,7 @@ module.exports = getConfig
 class Config {
   /**
    * parsed DD_TAGS, usable as a standalone tag set across products
-   * @type {Record<string, string> | undefined}
+   * @type {Record<string, string>}
    */
   #parsedDdTags = {}
   #envUnprocessed = {}
@@ -89,6 +89,8 @@ class Config {
 
     options = {
       ...options,
+      // TODO(BridgeAR): Remove the experimental prefix once we have a major version.
+      // That also applies to index.d.ts
       appsec: options.appsec == null ? options.experimental?.appsec : options.appsec,
       iast: options.iast == null ? options.experimental?.iast : options.iast,
     }
@@ -162,7 +164,7 @@ class Config {
    * Set the configuration with remote config settings.
    * Applies remote configuration, recalculates derived values, and merges all configuration sources.
    *
-   * @param {import('./config/remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
+   * @param {import('./remote_config').RemoteConfigOptions|null} options - Configurations received via Remote
    *   Config or null to reset all remote configuration
    */
   setRemoteConfig (options) {
@@ -350,6 +352,7 @@ class Config {
       DD_TELEMETRY_HEARTBEAT_INTERVAL,
       DD_TELEMETRY_LOG_COLLECTION_ENABLED,
       DD_TELEMETRY_METRICS_ENABLED,
+      DD_TEST_TIA_KEEP_COV_CONFIG,
       DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
       DD_TRACE_AGENT_PORT,
@@ -369,7 +372,6 @@ class Config {
       DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED,
       DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED,
       DD_TRACE_GIT_METADATA_ENABLED,
-      DD_TRACE_GLOBAL_TAGS,
       DD_TRACE_GRAPHQL_ERROR_EXTENSIONS,
       DD_TRACE_HEADER_TAGS,
       DD_TRACE_LEGACY_BAGGAGE_ENABLED,
@@ -436,13 +438,11 @@ class Config {
 
     const tags = {}
 
-    const parsedDdTags = parseSpaceSeparatedTags(DD_TAGS)
-    tagger.add(this.#parsedDdTags, parsedDdTags)
-
     tagger.add(tags, parseSpaceSeparatedTags(handleOtel(OTEL_RESOURCE_ATTRIBUTES)))
-    tagger.add(tags, parsedDdTags)
+    tagger.add(tags, parseSpaceSeparatedTags(DD_TAGS))
     tagger.add(tags, DD_TRACE_TAGS)
-    tagger.add(tags, DD_TRACE_GLOBAL_TAGS)
+
+    Object.assign(this.#parsedDdTags, tags)
 
     setString(target, 'apiKey', DD_API_KEY)
     setBoolean(target, 'otelLogsEnabled', DD_LOGS_OTEL_ENABLED)
@@ -549,7 +549,7 @@ class Config {
       maybeInt(DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS)
     target.baggageMaxBytes = DD_TRACE_BAGGAGE_MAX_BYTES
     target.baggageMaxItems = DD_TRACE_BAGGAGE_MAX_ITEMS
-    target.baggageTagKeys = DD_TRACE_BAGGAGE_TAG_KEYS
+    setArray(target, 'baggageTagKeys', DD_TRACE_BAGGAGE_TAG_KEYS)
     setBoolean(target, 'clientIpEnabled', DD_TRACE_CLIENT_IP_ENABLED)
     setString(target, 'clientIpHeader', DD_TRACE_CLIENT_IP_HEADER?.toLowerCase())
     if (DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING || DD_TRACE_CLOUD_RESPONSE_PAYLOAD_TAGGING) {
@@ -650,6 +650,7 @@ class Config {
     setString(target, 'installSignature.id', DD_INSTRUMENTATION_INSTALL_ID)
     setString(target, 'installSignature.time', DD_INSTRUMENTATION_INSTALL_TIME)
     setString(target, 'installSignature.type', DD_INSTRUMENTATION_INSTALL_TYPE)
+    // TODO: Why is DD_INJECTION_ENABLED a comma separated list?
     setArray(target, 'injectionEnabled', DD_INJECTION_ENABLED)
     if (DD_INJECTION_ENABLED !== undefined) {
       setString(target, 'instrumentationSource', DD_INJECTION_ENABLED ? 'ssi' : 'manual')
@@ -709,8 +710,11 @@ class Config {
       maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE) ??
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     ))
-    setUnit(target, 'sampleRate', DD_TRACE_SAMPLE_RATE ||
-    getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG))
+    setUnit(
+      target,
+      'sampleRate',
+      DD_TRACE_SAMPLE_RATE || getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG)
+    )
     target['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
     setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
     unprocessedTarget['sampler.rules'] = DD_TRACE_SAMPLING_RULES
@@ -751,9 +755,10 @@ class Config {
     setBoolean(target, 'telemetry.debug', DD_TELEMETRY_DEBUG)
     setBoolean(target, 'telemetry.dependencyCollection', DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED)
     target['telemetry.heartbeatInterval'] = maybeInt(Math.floor(DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
-    unprocessedTarget['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000
+    unprocessedTarget['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL
     setBoolean(target, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     setBoolean(target, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
+    setBoolean(target, 'isKeepingCoverageConfiguration', DD_TEST_TIA_KEEP_COV_CONFIG)
     setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     warnIfPropagationStyleConflict(
@@ -894,7 +899,7 @@ class Config {
     opts['cloudPayloadTagging.maxDepth'] = maybeInt(options.cloudPayloadTagging?.maxDepth)
     opts.baggageMaxBytes = options.baggageMaxBytes
     opts.baggageMaxItems = options.baggageMaxItems
-    opts.baggageTagKeys = options.baggageTagKeys
+    setArray(opts, 'baggageTagKeys', options.baggageTagKeys)
     setBoolean(opts, 'codeOriginForSpans.enabled', options.codeOriginForSpans?.enabled)
     setBoolean(
       opts,
@@ -1100,6 +1105,21 @@ class Config {
       ? new URL(DD_CIVISIBILITY_AGENTLESS_URL)
       : getAgentUrl(this.#getTraceAgentUrl(), this.#optionsArg)
 
+    // Experimental agentless APM span intake
+    // When enabled, sends spans directly to Datadog intake without an agent
+    const agentlessEnabled = isTrue(getEnv('_DD_APM_TRACING_AGENTLESS_ENABLED'))
+    if (agentlessEnabled) {
+      setString(calc, 'experimental.exporter', 'agentless')
+      // Disable rate limiting - server-side sampling will be used
+      calc['sampler.rateLimit'] = -1
+      // Disable client-side stats computation
+      setBoolean(calc, 'stats.enabled', false)
+      // Enable hostname reporting
+      setBoolean(calc, 'reportHostname', true)
+      // Clear sampling rules - server-side sampling handles this
+      calc['sampler.rules'] = []
+    }
+
     if (this.#isCiVisibility()) {
       setBoolean(calc, 'isEarlyFlakeDetectionEnabled',
         getEnv('DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED') ?? true)
@@ -1132,6 +1152,7 @@ class Config {
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc['telemetry.heartbeatInterval'] = maybeInt(Math.floor(this.#defaults['telemetry.heartbeatInterval'] * 1000))
 
     setBoolean(calc, 'isGitUploadEnabled',
       calc.isIntelligentTestRunnerEnabled && !isFalse(getEnv('DD_CIVISIBILITY_GIT_UPLOAD_ENABLED')))
@@ -1159,7 +1180,7 @@ class Config {
   /**
    * Applies remote configuration options from APM_TRACING configs.
    *
-   * @param {import('./config/remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
+   * @param {import('./remote_config').RemoteConfigOptions} options - Configurations received via Remote Config
    */
   #applyRemoteConfig (options) {
     const opts = this.#remote
@@ -1640,6 +1661,7 @@ function getAgentUrl (url, options) {
     !options.port &&
     !getEnv('DD_AGENT_HOST') &&
     !getEnv('DD_TRACE_AGENT_PORT') &&
+    !isTrue(getEnv('DD_CIVISIBILITY_AGENTLESS_ENABLED')) &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')
