@@ -317,6 +317,27 @@ versions.forEach((version) => {
           'playwright-tests-ts/one-test.js.playwright should work with passing tests',
           'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
         ])
+        assert.deepStrictEqual(
+          testEvents
+            .map(test => ({
+              resource: test.content.resource,
+              sourceFile: test.content.meta[TEST_SOURCE_FILE],
+              sourceStart: test.content.metrics[TEST_SOURCE_START],
+            }))
+            .sort((left, right) => left.resource.localeCompare(right.resource)),
+          [
+            {
+              resource: 'playwright-tests-ts/one-test.js.playwright should work with passing tests',
+              sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
+              sourceStart: 9,
+            },
+            {
+              resource: 'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
+              sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
+              sourceStart: 14,
+            },
+          ]
+        )
         assert.match(testOutput, /1 passed/)
         assert.match(testOutput, /1 skipped/)
         assert.doesNotMatch(testOutput, /TypeError/)
