@@ -300,9 +300,11 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
   }
 }
 
-function reportMetrics (metrics, raspRule) {
-  const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+function reportMetrics (metrics, raspRule, req) {
+  if (!req) {
+    req = storage('legacy').getStore()?.req
+  }
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) return
 
@@ -311,9 +313,9 @@ function reportMetrics (metrics, raspRule) {
   }
 
   if (raspRule) {
-    updateRaspRequestsMetricTags(metrics, store.req, raspRule)
+    updateRaspRequestsMetricTags(metrics, req, raspRule)
   } else {
-    updateWafRequestsMetricTags(metrics, store.req)
+    updateWafRequestsMetricTags(metrics, req)
   }
 
   reportTruncationMetrics(rootSpan, metrics)
@@ -333,9 +335,11 @@ function reportTruncationMetrics (rootSpan, metrics) {
   }
 }
 
-function reportAttack ({ events: attackData, actions }) {
-  const store = storage('legacy').getStore()
-  const req = store?.req
+function reportAttack ({ events: attackData, actions }, req) {
+  if (!req) {
+    req = storage('legacy').getStore()?.req
+  }
+
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -473,10 +477,13 @@ function isSchemaAttribute (attribute) {
   return attribute.startsWith('_dd.appsec.s.')
 }
 
-function reportAttributes (attributes) {
+function reportAttributes (attributes, req) {
   if (!attributes) return
 
-  const req = storage('legacy').getStore()?.req
+  if (!req) {
+    req = storage('legacy').getStore()?.req
+  }
+
   const rootSpan = web.root(req)
 
   if (!rootSpan) return

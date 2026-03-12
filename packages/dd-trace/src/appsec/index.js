@@ -233,6 +233,9 @@ function incomingHttpEndTranslator ({ req, res }) {
     persistent[addresses.HTTP_INCOMING_QUERY] = query
   }
 
+  // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
+  web.setRouteOrEndpointTag(req)
+
   if (apiSecuritySampler.sampleRequest(req, res, true)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
