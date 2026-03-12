@@ -6,6 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 
 const constants = require('../src/constants')
 require('./setup/core')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 const ERROR_MESSAGE = constants.ERROR_MESSAGE
 const ERROR_STACK = constants.ERROR_STACK
@@ -29,12 +30,14 @@ describe('tagger', () => {
   it('should add tags as a string', () => {
     tagger.add(carrier, 'foo: bar,def,abc:,,baz:qux:quxx,  valid')
 
-    assert.strictEqual(carrier.foo, 'bar')
-    assert.strictEqual(carrier.baz, 'qux:quxx')
-    assert.strictEqual(carrier.def, '')
-    assert.strictEqual(carrier.abc, '')
+    assertObjectContains(carrier, {
+      foo: 'bar',
+      baz: 'qux:quxx',
+      def: '',
+      abc: '',
+      valid: '',
+    })
     assert.ok(!('' in carrier))
-    assert.strictEqual(carrier.valid, '')
 
     tagger.add(carrier, ':')
 

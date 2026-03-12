@@ -293,7 +293,7 @@ describe('DataStreamsProcessor', () => {
   it('should export on interval', () => {
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
-    sinon.assert.calledWith(writer.flush, {
+    assert.deepStrictEqual(writer.flush.lastCall.args[0], {
       Env: 'test',
       Service: 'service1',
       Version: 'v1',

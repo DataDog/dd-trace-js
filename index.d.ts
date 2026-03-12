@@ -2034,6 +2034,22 @@ declare namespace tracer {
        * @default true
        */
       signature?: boolean;
+
+      /**
+       * An object of optional callbacks to be executed during the respective
+       * phase of an Apollo Gateway operation. Undefined callbacks default to a
+       * noop function.
+       *
+       * @default {}
+       */
+      hooks?: {
+        request?: (span?: Span, ctx?: any) => void;
+        validate?: (span?: Span, ctx?: any) => void;
+        plan?: (span?: Span, ctx?: any) => void;
+        execute?: (span?: Span, ctx?: any) => void;
+        fetch?: (span?: Span, ctx?: any) => void;
+        postprocessing?: (span?: Span, ctx?: any) => void;
+      };
     }
 
     /**
