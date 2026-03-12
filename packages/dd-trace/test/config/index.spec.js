@@ -42,7 +42,7 @@ describe('Config', () => {
 
   const comparator = (a, b) => a.name.localeCompare(b.name) || a.origin.localeCompare(b.origin)
 
-  function reloadLoggerAndConfig() {
+  function reloadLoggerAndConfig () {
     log = proxyquire('../../src/log', {})
     log.use = sinon.spy()
     log.toggle = sinon.spy()
@@ -2985,7 +2985,7 @@ describe('Config', () => {
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
 
-        ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: 7 } }))
+      ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: 7 } }))
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 7,
         requestsEnabled: true,
@@ -3003,7 +3003,7 @@ describe('Config', () => {
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
 
-        ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: NaN } }))
+      ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: NaN } }))
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 10,
       })
