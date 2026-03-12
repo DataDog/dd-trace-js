@@ -253,6 +253,28 @@ function createGarbage (count = 50) {
           })
         })
 
+        it('should include process tags when propagateProcessTags is enabled', function () {
+          config.propagateProcessTags = { enabled: true }
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(tags.some(tag => tag.startsWith('entrypoint.type:')), 'expected entrypoint.type tag')
+        })
+
+        it('should not include process tags when propagateProcessTags is disabled', function () {
+          config.propagateProcessTags = { enabled: false }
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
+        })
+
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
