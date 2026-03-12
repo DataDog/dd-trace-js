@@ -1,8 +1,6 @@
 'use strict'
 
 const tracerVersion = require('../../../version').VERSION
-const { containerId } = require('./exporters/common/docker')
-const processTags = require('./process-tags')
 
 function storeConfig (config) {
   try {
@@ -13,17 +11,13 @@ function storeConfig (config) {
       return
     }
 
-    const serializedProcessTags = config.propagateProcessTags?.enabled ? processTags.serialized : ''
-
     const metadata = new processDiscovery.TracerMetadata(
       config.tags['runtime-id'],
       tracerVersion,
       config.hostname,
       config.service || null,
       config.env || null,
-      config.version || null,
-      serializedProcessTags,
-      containerId || ''
+      config.version || null
     )
 
     return processDiscovery.storeMetadata(metadata)

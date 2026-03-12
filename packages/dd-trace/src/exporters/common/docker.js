@@ -35,7 +35,6 @@ if (inodePath) {
 const entityId = containerId ? `ci-${containerId}` : inode && `in-${inode}`
 
 module.exports = {
-  containerId,
   entityId,
 
   inject (carrier) {
