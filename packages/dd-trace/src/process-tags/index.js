@@ -46,7 +46,7 @@ function buildProcessTags (config) {
     ['package.json.name', pkg.name || undefined],
   ]
 
-  // If config dependant tags keep growing, we should consider moving this into a function
+  // If config dependent tags keep growing, we should consider moving this into a function
   if (config?.isServiceNameInferred) {
     tags.push(['svc.auto', config.service])
   } else if (config) {
