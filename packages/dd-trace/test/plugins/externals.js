@@ -428,6 +428,16 @@ module.exports = {
       versions: ['^4'],
     },
   ],
+  'openai-agents': [
+    {
+      name: '@openai/agents-core',
+      versions: ['0.4.5'],
+    },
+    {
+      name: '@openai/agents',
+      versions: ['0.3.9'],
+    },
+  ],
   next: [
     {
       name: 'react',

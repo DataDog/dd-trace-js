@@ -26,6 +26,7 @@ module.exports = {
   '@jest/transform': () => require('../jest'),
   '@koa/router': () => require('../koa'),
   '@langchain/core': { esmFirst: true, fn: () => require('../langchain') },
+  '@openai/agents-core': { esmFirst: true, fn: () => require('../openai-agents') },
   '@node-redis/client': () => require('../redis'),
   '@opensearch-project/opensearch': () => require('../opensearch'),
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),

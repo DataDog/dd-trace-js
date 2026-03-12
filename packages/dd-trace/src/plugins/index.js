@@ -23,6 +23,7 @@ const plugins = {
   get '@koa/router' () { return require('../../../datadog-plugin-koa/src') },
   get '@langchain/core' () { return require('../../../datadog-plugin-langchain/src') },
   get '@langchain/openai' () { return require('../../../datadog-plugin-langchain/src') },
+  get '@openai/agents-core' () { return require('../../../datadog-plugin-openai-agents/src') },
   get '@node-redis/client' () { return require('../../../datadog-plugin-redis/src') },
   get '@opensearch-project/opensearch' () { return require('../../../datadog-plugin-opensearch/src') },
   get '@prisma/client' () { return require('../../../datadog-plugin-prisma/src') },
