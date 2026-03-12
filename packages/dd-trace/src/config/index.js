@@ -1387,6 +1387,8 @@ function isInvalidOtelEnvironmentVariable (envVar, value) {
       return Number.isNaN(Number.parseFloat(value))
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false'
+    case 'OTEL_TRACES_EXPORTER':
+      return value.toLowerCase() !== 'otlp' && value.toLowerCase() !== 'none'
     case 'OTEL_METRICS_EXPORTER':
     case 'OTEL_LOGS_EXPORTER':
       return value.toLowerCase() !== 'none'
