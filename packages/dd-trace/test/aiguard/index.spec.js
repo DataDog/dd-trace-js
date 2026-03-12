@@ -189,6 +189,35 @@ describe('AIGuard SDK', () => {
     })
   }
 
+  const blockDefaultsSuite = [
+    { description: 'no options', opts: undefined, shouldBlock: true },
+    { description: 'empty options', opts: {}, shouldBlock: true },
+    { description: 'explicit block: false', opts: { block: false }, shouldBlock: false },
+  ]
+  for (const { description, opts, shouldBlock } of blockDefaultsSuite) {
+    it(`test evaluate block defaults to remote is_blocking_enabled (${description})`, async () => {
+      mockFetch({
+        body: {
+          data: {
+            attributes: { action: 'DENY', reason: 'Nope', tags: ['deny'], is_blocking_enabled: true },
+          },
+        },
+      })
+
+      if (shouldBlock) {
+        await rejects(
+          () => aiguard.evaluate(prompt, opts),
+          err => err.name === 'AIGuardAbortError' && err.reason === 'Nope'
+        )
+      } else {
+        const evaluation = await aiguard.evaluate(prompt, opts)
+        assert.strictEqual(evaluation.action, 'DENY')
+      }
+
+      assertTelemetry('ai_guard.requests', { error: false, action: 'DENY', block: shouldBlock })
+    })
+  }
+
   it('test evaluate with sds_findings', async () => {
     const sdsFindings = [
       {
