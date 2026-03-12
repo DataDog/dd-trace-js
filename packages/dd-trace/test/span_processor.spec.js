@@ -205,7 +205,7 @@ describe('SpanProcessor', () => {
       tags.split(',').forEach(tag => {
         const [key, value] = tag.split(':')
         if (key !== 'entrypoint.basedir') return
-        assert.strictEqual(value, test)
+        assert.strictEqual(value, 'test')
         foundATag = true
       })
       assert.ok(foundATag)
