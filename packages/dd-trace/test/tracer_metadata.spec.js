@@ -20,7 +20,7 @@ describe('tracer_metadata', () => {
 
     return proxyquire('../src/tracer_metadata', {
       '@datadog/libdatadog': { maybeLoad },
-      './exporters/common/docker': { containerId: options.containerId ?? undefined },
+      './exporters/common/docker': { containerId: options.containerId },
     })
   }
 

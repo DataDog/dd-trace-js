@@ -2,6 +2,7 @@
 
 const tracerVersion = require('../../../version').VERSION
 const { containerId } = require('./exporters/common/docker')
+const processTags = require('./process-tags')
 
 function storeConfig (config) {
   try {
@@ -12,7 +13,6 @@ function storeConfig (config) {
       return
     }
 
-    const processTags = require('./process-tags')
     const serializedProcessTags = config.propagateProcessTags?.enabled ? processTags.serialized : ''
 
     const metadata = new processDiscovery.TracerMetadata(
