@@ -25,6 +25,18 @@ runs:
       with:
         flags: ${{ inputs.flags }}
 
+    - name: Strip branch coverage from LCOV for Datadog
+      if: always()
+      continue-on-error: true
+      shell: bash
+      run: |
+        # Datadog includes BRDA/BRF/BRH (branch coverage) in its total calculation,
+        # while Codecov only counts line coverage (DA/LF/LH). Stripping branch data
+        # ensures parity between the two systems.
+        for f in $(find . -path '*/coverage-node-*/lcov.info' 2>/dev/null); do
+          grep -v '^BR[A-Z]' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+        done
+
     - name: Upload coverage to Datadog
       if: always()
       continue-on-error: true
