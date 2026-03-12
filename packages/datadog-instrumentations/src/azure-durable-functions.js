@@ -23,8 +23,6 @@ addHook({ name: 'durable-functions', versions: ['>=3'], patchDefault: false }, (
 
 function entityWrapper (method) {
   return function (entityName, arg) {
-    if (!azureDurableFunctionsChannel.hasSubscribers) return method.apply(this, arguments)
-
     // because this method is overloaded, the second argument can either be an object
     // with the handler or the handler itself, so first we figure which type it is
     if (typeof arg === 'function') {
@@ -41,6 +39,8 @@ function entityWrapper (method) {
 
 function entityHandler (handler, entityName) {
   return function () {
+    if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, arguments)
+
     const entityContext = arguments[0]
     return azureDurableFunctionsChannel.traceSync(
       handler,
@@ -51,13 +51,13 @@ function entityHandler (handler, entityName) {
 
 function activityHandler (method) {
   return function (activityName, activityOptions) {
-    if (!azureDurableFunctionsChannel.hasSubscribers) return method.apply(this, arguments)
-
     shimmer.wrap(activityOptions, 'handler', handler => {
       const isAsync =
         handler && handler.constructor && handler.constructor.name === 'AsyncFunction'
 
       return function () {
+        if (!azureDurableFunctionsChannel.hasSubscribers) return handler.apply(this, arguments)
+
         // use tracePromise if this is an async handler. otherwise, use traceSync
         return isAsync
           ? azureDurableFunctionsChannel.tracePromise(
