@@ -17,6 +17,7 @@ module.exports = {
   SAMPLING_MECHANISM_SPAN: 8,
   SAMPLING_MECHANISM_REMOTE_USER: 11,
   SAMPLING_MECHANISM_REMOTE_DYNAMIC: 12,
+  SAMPLING_MECHANISM_AI_GUARD: 13,
   SPAN_SAMPLING_MECHANISM: '_dd.span_sampling.mechanism',
   SPAN_SAMPLING_RULE_RATE: '_dd.span_sampling.rule_rate',
   SPAN_SAMPLING_MAX_PER_SECOND: '_dd.span_sampling.max_per_second',
