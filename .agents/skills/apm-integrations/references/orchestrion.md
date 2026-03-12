@@ -210,6 +210,22 @@ For integrations wrapping multiple methods, create a separate plugin class per m
 
 ## Common Issues
 
+### Channel Name Mismatch (Migration Pitfall)
+**Symptom**: Tests hang or exit 137 (OOM); spans never finish; plugin receives no events
+**Cause**: Using full `apm:` channel names in the orchestrion config's `channelName` field. Orchestrion **prepends** `tracing:orchestrion:{module}:` automatically — if `channelName` already contains a prefix, it becomes double-prefixed and no plugin subscribes to it.
+
+```javascript
+// ❌ WRONG — channelName already has the apm: prefix
+{ channelName: 'apm:mariadb:query:start' }
+// creates: tracing:orchestrion:mariadb:apm:mariadb:query:start  ← nobody subscribes
+
+// ✅ CORRECT — short name only
+{ channelName: 'query:start' }
+// creates: tracing:orchestrion:mariadb:query:start  ← plugin subscribes via static prefix
+```
+
+**Fix**: Use short names in `channelName` (e.g. `query:start`, `Client_query`). The full channel name is formed at runtime.
+
 ### Wrong filePath
 **Symptom**: No channel events published
 **Fix**: Verify the method is actually defined in that file (not re-exported from elsewhere)
