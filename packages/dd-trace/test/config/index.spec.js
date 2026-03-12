@@ -2580,6 +2580,14 @@ describe('Config', () => {
 
         assert.strictEqual(config.url, '')
       })
+
+      it('should not be used when DD_CIVISIBILITY_AGENTLESS_ENABLED provided', () => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.url, '')
+      })
     })
   })
 
