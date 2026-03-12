@@ -8,6 +8,10 @@ const { pollInterval, setup } = require('./utils')
 describe('Dynamic Instrumentation', function () {
   const t = setup({ testApp: 'target-app/basic.js', dependencies: ['fastify'] })
 
+  before(function () {
+    require('../../packages/dd-trace/src/process-tags').initialize()
+  })
+
   describe('diagnostics messages', function () {
     it('should send expected diagnostics messages if probe is received and triggered', function (done) {
       let receivedAckUpdate = false
