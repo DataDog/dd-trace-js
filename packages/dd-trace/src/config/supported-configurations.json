@@ -746,7 +746,7 @@
       {
         "implementation": "B",
         "type": "boolean",
-        "default": "true",
+        "default": "false",
         "configurationNames": [
           "propagateProcessTags.enabled"
         ]

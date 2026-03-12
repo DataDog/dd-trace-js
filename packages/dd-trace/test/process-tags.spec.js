@@ -276,19 +276,17 @@ describe('process-tags', () => {
       assert.strictEqual(processor._processTags, false)
     })
 
-    it('should enable process tags propagation when not set', () => {
-      // Don't set the environment variable - enabled by default
+    it('should disable process tags propagation when not set', () => {
+      // Don't set the environment variable
 
       const config = getConfigFresh()
 
-      assert.ok(config.propagateProcessTags)
-      assert.strictEqual(config.propagateProcessTags.enabled, true)
+      assert.notStrictEqual(config.propagateProcessTags?.enabled, true)
 
       SpanProcessor = require('../src/span_processor')
       const processor = new SpanProcessor(undefined, undefined, config)
 
-      assert.ok(typeof processor._processTags === 'string')
-      assert.match(processor._processTags, /entrypoint/)
+      assert.strictEqual(processor._processTags, false)
     })
   })
 })
