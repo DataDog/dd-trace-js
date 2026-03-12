@@ -508,6 +508,29 @@ describe('Plugin', () => {
           })
         })
 
+        describe('without tracer initialization', () => {
+          before(async function () {
+            this.timeout(10000)
+            clearPrismaEnv()
+            setPrismaEnv(config)
+
+            const cwd = await copySchemaToVersionDir(config.schema, range)
+
+            execPrismaGenerate(config, cwd)
+
+            require('../../dd-trace')
+
+            prisma = loadPrismaModule(config, range)
+            prismaClient = createPrismaClient(prisma, config)
+          })
+
+          it('should not break prisma load when dd-trace is loaded but not initialized', async function () {
+            this.timeout(10000)
+            const result = await prismaClient.$queryRaw`SELECT 1`
+            assert.ok(result)
+          })
+        })
+
         describe('with configuration', () => {
           describe('with custom service name', () => {
             before(async function () {
