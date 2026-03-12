@@ -503,11 +503,6 @@ class Config {
     if (OTEL_TRACES_EXPORTER) {
       setBoolean(target, 'otelTracesEnabled', OTEL_TRACES_EXPORTER.toLowerCase() === 'otlp')
     }
-    const effectiveOtelTracesSampler = OTEL_TRACES_SAMPLER ??
-      (OTEL_TRACES_EXPORTER?.toLowerCase() === 'otlp' ? 'parentbased_always_on' : undefined)
-    if (effectiveOtelTracesSampler && !OTEL_TRACES_SAMPLER) {
-      process.env.OTEL_TRACES_SAMPLER = effectiveOtelTracesSampler
-    }
     // Set OpenTelemetry traces configuration with specific _TRACES_ vars
     // taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
@@ -731,10 +726,15 @@ class Config {
       maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE) ??
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     ))
+    let otelTracesSampleRate = getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG)
+    if (OTEL_TRACES_EXPORTER === 'otlp') {
+      otelTracesSampleRate = getFromOtelSamplerMap(OTEL_TRACES_SAMPLER || 'parentbased_always_on'
+        , OTEL_TRACES_SAMPLER_ARG)
+    }
     setUnit(
       target,
       'sampleRate',
-      DD_TRACE_SAMPLE_RATE || getFromOtelSamplerMap(effectiveOtelTracesSampler, OTEL_TRACES_SAMPLER_ARG)
+      DD_TRACE_SAMPLE_RATE || otelTracesSampleRate
     )
     target['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
     setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))

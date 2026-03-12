@@ -4,7 +4,6 @@
 process.setMaxListeners(50)
 
 const assert = require('assert')
-const os = require('os')
 const http = require('http')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
