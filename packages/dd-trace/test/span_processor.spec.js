@@ -205,8 +205,7 @@ describe('SpanProcessor', () => {
       tags.split(',').forEach(tag => {
         const [key, value] = tag.split(':')
         if (key !== 'entrypoint.basedir') return
-        // The value will be 'bin' when running via mocha CLI, 'test' when running the test file directly
-        assert.ok(value === 'test' || value === 'bin')
+        assert.strictEqual(value, test)
         foundATag = true
       })
       assert.ok(foundATag)
