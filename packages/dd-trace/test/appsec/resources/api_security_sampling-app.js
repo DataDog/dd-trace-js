@@ -16,7 +16,7 @@ app.post('/api_security_sampling/:i', (req, res) => {
   res.send('OK')
 })
 
-function collectRawBody(req, done) {
+function collectRawBody (req, done) {
   let body = ''
 
   req.on('data', chunk => {
