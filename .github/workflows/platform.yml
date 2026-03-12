@@ -87,6 +87,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-core
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -114,6 +115,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-bluebird:
     runs-on: ubuntu-latest
@@ -239,6 +241,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -419,6 +422,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-instrumentations-misc
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -464,6 +468,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -521,6 +526,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

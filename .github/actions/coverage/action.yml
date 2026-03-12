@@ -1,5 +1,5 @@
 name: coverage
-description: Verify coverage output and upload it to Codecov.
+description: Verify coverage output and upload it to Codecov and Datadog.
 
 inputs:
   flags:
@@ -9,6 +9,9 @@ inputs:
     description: "Coverage report directory (defaults to 'coverage')"
     required: false
     default: coverage
+  dd_api_key:
+    description: "Datadog API key for coverage upload"
+    required: false
 
 runs:
   using: composite
@@ -20,4 +23,13 @@ runs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
       with:
+        flags: ${{ inputs.flags }}
+
+    - name: Upload coverage to Datadog
+      if: always()
+      continue-on-error: true
+      uses: DataDog/coverage-upload-github-action@v1
+      with:
+        api_key: ${{ inputs.dd_api_key }}
+        files: .
         flags: ${{ inputs.flags }}
