@@ -6,3 +6,6 @@ runs:
     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
     - run: docker compose up -d testagent || docker compose up -d testagent
       shell: bash
+    - name: Wait for test agent to be ready
+      run: timeout 30 bash -c 'until curl -sf http://127.0.0.1:9126/info >/dev/null; do sleep 1; done'
+      shell: bash

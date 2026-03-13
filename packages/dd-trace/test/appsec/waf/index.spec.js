@@ -130,7 +130,7 @@ describe('WAF Manager', () => {
       const req = {}
       waf.run(payload, req, 'ssrf')
 
-      sinon.assert.calledOnceWithExactly(run, payload, 'ssrf')
+      sinon.assert.calledOnceWithExactly(run, payload, 'ssrf', req)
     })
 
     it('should call wafManager.run without raspRuleType', () => {
@@ -142,7 +142,7 @@ describe('WAF Manager', () => {
       const req = {}
       waf.run(payload, req)
 
-      sinon.assert.calledOnceWithExactly(run, payload, undefined)
+      sinon.assert.calledOnceWithExactly(run, payload, undefined, req)
     })
 
     describe('sampling priority', () => {
@@ -458,9 +458,9 @@ describe('WAF Manager', () => {
           },
         }
 
-        wafContextWrapper.run(params)
+        wafContextWrapper.run(params, undefined, req)
 
-        sinon.assert.calledOnceWithExactly(Reporter.reportAttack, match({ events: ['ATTACK DATA'] }))
+        sinon.assert.calledOnceWithExactly(Reporter.reportAttack, match({ events: ['ATTACK DATA'] }), req)
       })
 
       it('should report if rule is triggered', () => {
@@ -583,8 +583,8 @@ describe('WAF Manager', () => {
 
         ddwafContext.run.returns(result)
 
-        wafContextWrapper.run(params)
-        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes)
+        wafContextWrapper.run(params, undefined, req)
+        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req)
       })
 
       it('should report fingerprints when ddwafContext returns fingerprints in results attributes', () => {
@@ -605,8 +605,8 @@ describe('WAF Manager', () => {
           persistent: {
             'server.request.body': 'foo',
           },
-        })
-        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes)
+        }, undefined, req)
+        sinon.assert.calledOnceWithExactly(Reporter.reportAttributes, result.attributes, req)
       })
     })
   })

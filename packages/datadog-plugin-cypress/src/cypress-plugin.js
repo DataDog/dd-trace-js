@@ -91,6 +91,11 @@ const {
   RUNTIME_VERSION,
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
+const {
+  resolveOriginalSourcePosition,
+  resolveSourceLineForTest,
+  shouldTrustInvocationDetailsLine,
+} = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -238,11 +243,11 @@ class CypressPlugin {
 
   finishedTestsByFile = {}
   testStatuses = {}
-
   isTestsSkipped = false
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
   isFlakyTestRetriesEnabled = false
+  flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
   isKnownTestsEnabled = false
   earlyFlakeDetectionNumRetries = 0
@@ -350,7 +355,10 @@ class CypressPlugin {
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
-            this.cypressConfig.retries.runMode = flakyTestRetriesCount
+            this.flakyTestRetriesCount = flakyTestRetriesCount ?? 0
+            this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
+          } else {
+            this.flakyTestRetriesCount = 0
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
@@ -391,7 +399,9 @@ class CypressPlugin {
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
 
     if (testSuiteAbsolutePath) {
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const resolvedSuitePosition = resolveOriginalSourcePosition(testSuiteAbsolutePath, 1)
+      const resolvedSuiteAbsolutePath = resolvedSuitePosition ? resolvedSuitePosition.sourceFile : testSuiteAbsolutePath
+      const testSourceFile = getTestSuitePath(resolvedSuiteAbsolutePath, this.repositoryRoot)
       testSuiteSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
       testSuiteSpanMetadata[TEST_SOURCE_START] = 1
       const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
@@ -804,8 +814,10 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        const testSourceFile = spec.absolute && this.repositoryRoot
-          ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+        const resolvedSpecPosition = spec.absolute ? resolveOriginalSourcePosition(spec.absolute, 1) : null
+        const resolvedSpecAbsolutePath = resolvedSpecPosition ? resolvedSpecPosition.sourceFile : spec.absolute
+        const testSourceFile = resolvedSpecAbsolutePath && this.repositoryRoot
+          ? getTestSuitePath(resolvedSpecAbsolutePath, this.repositoryRoot)
           : spec.relative
         if (testSourceFile) {
           finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
@@ -902,9 +914,11 @@ class CypressPlugin {
           error,
           isRUMActive,
           testSourceLine,
+          testSourceStack,
           testSuite,
           testSuiteAbsolutePath,
           testName,
+          testItTitle,
           isNew,
           isEfdRetry,
           isAttemptToFix,
@@ -946,8 +960,29 @@ class CypressPlugin {
         if (isRUMActive) {
           this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
         }
+        // Source-line resolution strategy:
+        // 1. If plain JS and no source map, trust invocationDetails.line directly.
+        // 2. Otherwise, try invocationDetails.stack line mapped through source map.
+        // 3. If that fails, scan generated file for it/test/specify declaration by test name.
+        // 4. If declaration found:
+        //    - .ts file: use declaration line directly.
+        //    - .js file: map declaration line through source map.
+        // 5. If all fail, keep original invocationDetails.line.
         if (testSourceLine) {
-          this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
+          let resolvedLine = testSourceLine
+          if (testSuiteAbsolutePath && testItTitle) {
+            // Use invocationDetails directly only for plain JS specs without source maps.
+            // Otherwise, resolve from the test declaration in the spec and map via source map.
+            const shouldTrustInvocationDetails = shouldTrustInvocationDetailsLine(testSuiteAbsolutePath, testSourceLine)
+            if (!shouldTrustInvocationDetails) {
+              resolvedLine = resolveSourceLineForTest(
+                testSuiteAbsolutePath,
+                testItTitle,
+                testSourceStack
+              ) ?? testSourceLine
+            }
+          }
+          this.activeTestSpan.setTag(TEST_SOURCE_START, resolvedLine)
         }
         if (isNew) {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
@@ -987,6 +1022,12 @@ class CypressPlugin {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
             }
           }
+        }
+        // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
+        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
+          this.flakyTestRetriesCount > 0 && testStatuses.length === this.flakyTestRetriesCount + 1 &&
+          testStatuses.every(status => status === 'fail')) {
+          this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
         }
 
         // Ensure quarantined tests reported from support.js are tagged

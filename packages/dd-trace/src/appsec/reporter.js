@@ -34,6 +34,7 @@ const config = {
   maxHeadersCollected: 0,
   headersRedaction: false,
   raspBodyCollection: false,
+  inferredProxyServicesEnabled: false,
 }
 
 const metricsQueue = new Map()
@@ -103,11 +104,12 @@ const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHea
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
 const REDACTED_HEADERS = new Set(redactedHeadersList)
 
-function init (_config) {
+function init (_config, inferredProxyServicesEnabled) {
   config.headersExtendedCollectionEnabled = _config.extendedHeadersCollection.enabled
   config.maxHeadersCollected = _config.extendedHeadersCollection.maxHeaders
   config.headersRedaction = _config.extendedHeadersCollection.redaction
   config.raspBodyCollection = _config.rasp.bodyCollection
+  config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
 }
 
 function formatHeaderName (name) {
@@ -298,9 +300,11 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
   }
 }
 
-function reportMetrics (metrics, raspRule) {
-  const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+function reportMetrics (metrics, raspRule, req) {
+  if (!req) {
+    req = storage('legacy').getStore()?.req
+  }
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) return
 
@@ -309,9 +313,9 @@ function reportMetrics (metrics, raspRule) {
   }
 
   if (raspRule) {
-    updateRaspRequestsMetricTags(metrics, store.req, raspRule)
+    updateRaspRequestsMetricTags(metrics, req, raspRule)
   } else {
-    updateWafRequestsMetricTags(metrics, store.req)
+    updateWafRequestsMetricTags(metrics, req)
   }
 
   reportTruncationMetrics(rootSpan, metrics)
@@ -331,9 +335,11 @@ function reportTruncationMetrics (rootSpan, metrics) {
   }
 }
 
-function reportAttack ({ events: attackData, actions }) {
-  const store = storage('legacy').getStore()
-  const req = store?.req
+function reportAttack ({ events: attackData, actions }, req) {
+  if (!req) {
+    req = storage('legacy').getStore()?.req
+  }
+
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
@@ -361,6 +367,14 @@ function reportAttack ({ events: attackData, actions }) {
   }
 
   rootSpan.addTags(newTags)
+
+  // Add _dd.appsec.json tag to inferred proxy span
+  if (config.inferredProxyServicesEnabled) {
+    const context = web.getContext(req)
+    if (context?.inferredProxySpan) {
+      context.inferredProxySpan.setTag('_dd.appsec.json', newTags['_dd.appsec.json'])
+    }
+  }
 
   // TODO this should be deleted in a major
   if (config.raspBodyCollection && isRaspAttack(attackData)) {
@@ -463,10 +477,13 @@ function isSchemaAttribute (attribute) {
   return attribute.startsWith('_dd.appsec.s.')
 }
 
-function reportAttributes (attributes) {
+function reportAttributes (attributes, req) {
   if (!attributes) return
 
-  const req = storage('legacy').getStore()?.req
+  if (!req) {
+    req = storage('legacy').getStore()?.req
+  }
+
   const rootSpan = web.root(req)
 
   if (!rootSpan) return
