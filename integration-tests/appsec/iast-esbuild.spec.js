@@ -17,7 +17,7 @@ const retry = async fn => {
   try {
     await fn()
   } catch {
-    await setTimeout(60_000)
+    await setTimeout(5_000)
     await fn()
   }
 }
@@ -38,7 +38,7 @@ describe('esbuild support for IAST', () => {
     await exec('npm init -y', { cwd: craftedNodeModulesDir })
     await retry(() => exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
       cwd: craftedNodeModulesDir,
-      timeout: 3e3,
+      timeout: 60_000,
     }))
   })
 
