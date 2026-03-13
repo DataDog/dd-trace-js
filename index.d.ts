@@ -1626,6 +1626,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Sensitive Data Scanner findings from the evaluation.
+       */
+      sds: Object[];
     }
 
     /**
@@ -1641,6 +1645,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Sensitive Data Scanner findings from the evaluation.
+       */
+      sds: Object[];
     }
 
     /**

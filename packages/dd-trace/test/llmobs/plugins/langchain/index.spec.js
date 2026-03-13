@@ -31,6 +31,8 @@ describe('integrations', () => {
 
   let llmobs
 
+  let langchainAnthropicVersion
+
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     ANTHROPIC_API_KEY: '<not-a-real-key>',
@@ -98,6 +100,8 @@ describe('integrations', () => {
             .get('@langchain/openai')
           langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
           langchainCohere = require(`../../../../../../versions/@langchain/cohere@${version}`).get()
+
+          langchainAnthropicVersion = require(`../../../../../../versions/@langchain/anthropic@${version}`).version()
 
           // need to specify specific import in `get(...)`
           langchainMessages = require(`../../../../../../versions/@langchain/core@${version}`)
@@ -263,7 +267,10 @@ describe('integrations', () => {
           })
 
           it('submits an llm span for an anthropic chat model call', async () => {
-            const chatModel = getLangChainAnthropicClient('chat', { modelName: 'claude-3-5-sonnet-20241022' })
+            const usingNewerAnthropic = semifies(langchainAnthropicVersion, '>=1.3.22')
+            const modelName = usingNewerAnthropic ? 'claude-haiku-4-5-20251001' : 'claude-3-5-sonnet-20241022'
+
+            const chatModel = getLangChainAnthropicClient('chat', { modelName })
 
             await chatModel.invoke('Hello!')
 
@@ -271,7 +278,7 @@ describe('integrations', () => {
             assertLlmObsSpanEvent(llmobsSpans[0], {
               span: apmSpans[0],
               spanKind: 'llm',
-              modelName: 'claude-3-5-sonnet-20241022',
+              modelName,
               modelProvider: 'anthropic',
               name: 'langchain.chat_models.anthropic.ChatAnthropic',
               inputMessages: [{ content: 'Hello!', role: 'user' }],
