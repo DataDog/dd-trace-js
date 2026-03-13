@@ -15,6 +15,8 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const tracerVersion = require('../../../../package.json').version
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
+const { USER_KEEP } = require('../../../../ext/priority')
+const { SAMPLING_MECHANISM_AI_GUARD, DECISION_MAKER_KEY } = require('../../src/constants')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -477,4 +479,77 @@ describe('AIGuard SDK', () => {
       assertFetch(toolCall, `${endpoint}/evaluate`)
     })
   }
+
+  describe('manual keep on root span', () => {
+    const assertRootSpanKept = async () => {
+      await agent.assertSomeTraces(traces => {
+        const rootSpan = traces[0][0]
+        assert.strictEqual(rootSpan.metrics._sampling_priority_v1, USER_KEEP)
+        assert.strictEqual(rootSpan.meta[DECISION_MAKER_KEY], `-${SAMPLING_MECHANISM_AI_GUARD}`)
+      })
+    }
+
+    it('sets USER_KEEP on root span after ALLOW evaluation', async () => {
+      mockFetch({
+        body: { data: { attributes: { action: 'ALLOW', reason: 'OK', tags: [], is_blocking_enabled: false } } },
+      })
+
+      await tracer.trace('root', async () => {
+        await aiguard.evaluate(prompt)
+      })
+
+      await assertRootSpanKept()
+    })
+
+    it('sets USER_KEEP on root span after DENY evaluation (non-blocking)', async () => {
+      mockFetch({
+        body: {
+          data: { attributes: { action: 'DENY', reason: 'denied', tags: ['deny_tag'], is_blocking_enabled: false } },
+        },
+      })
+
+      await tracer.trace('root', async () => {
+        await aiguard.evaluate(prompt, { block: false })
+      })
+
+      await assertRootSpanKept()
+    })
+
+    it('keeps trace even when auto-sampling would drop it', async () => {
+      // Configure sampler to drop all traces (0% sample rate)
+      tracer._tracer._prioritySampler.configure('test', { sampleRate: 0 })
+
+      try {
+        mockFetch({
+          body: { data: { attributes: { action: 'ALLOW', reason: 'OK', tags: [], is_blocking_enabled: false } } },
+        })
+
+        await tracer.trace('root', async () => {
+          await aiguard.evaluate(prompt)
+        })
+
+        await assertRootSpanKept()
+      } finally {
+        tracer._tracer._prioritySampler.configure('test', {})
+      }
+    })
+
+    it('sets USER_KEEP on root span after ABORT evaluation (blocking)', async () => {
+      mockFetch({
+        body: {
+          data: { attributes: { action: 'ABORT', reason: 'blocked', tags: ['tag'], is_blocking_enabled: true } },
+        },
+      })
+
+      await tracer.trace('root', async () => {
+        try {
+          await aiguard.evaluate(prompt, { block: true })
+        } catch {
+          // expected AIGuardAbortError
+        }
+      })
+
+      await assertRootSpanKept()
+    })
+  })
 })
