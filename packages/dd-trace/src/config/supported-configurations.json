@@ -715,6 +715,76 @@
         "default": null
       }
     ],
+    "DD_ENHANCED_METRICS": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.enhancedMetrics"
+        ],
+        "default": "true"
+      }
+    ],
+    "DD_CAPTURE_LAMBDA_PAYLOAD": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.captureLambdaPayload"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_CAPTURE_LAMBDA_PAYLOAD_MAX_DEPTH": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "lambda.captureLambdaPayloadMaxDepth"
+        ],
+        "default": "10"
+      }
+    ],
+    "DD_COLD_START_TRACING": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.coldStartTracing"
+        ],
+        "default": "true"
+      }
+    ],
+    "DD_COLD_START_TRACE_SKIP_LIB": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "lambda.coldStartTraceSkipLib"
+        ],
+        "default": ""
+      }
+    ],
+    "DD_DECODE_AUTHORIZER_CONTEXT": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.decodeAuthorizerContext"
+        ],
+        "default": "true"
+      }
+    ],
+    "DD_ENCODE_AUTHORIZER_CONTEXT": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.encodeAuthorizerContext"
+        ],
+        "default": "true"
+      }
+    ],
     "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": [
       {
         "implementation": "A",
@@ -1245,6 +1315,26 @@
         "configurationNames": [
           "otelMetricsEnabled"
         ]
+      }
+    ],
+    "DD_MERGE_XRAY_TRACES": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.mergeXrayTraces"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_MIN_COLD_START_DURATION": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "lambda.minColdStartTraceDurationMs"
+        ],
+        "default": "3"
       }
     ],
     "DD_MINI_AGENT_PATH": [
@@ -3037,6 +3127,16 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_MANAGED_SERVICES": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "lambda.createInferredSpan"
+        ],
         "default": "true"
       }
     ],

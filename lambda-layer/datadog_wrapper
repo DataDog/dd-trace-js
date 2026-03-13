@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Datadog Lambda Wrapper for Node.js
+# This script is invoked via AWS_LAMBDA_EXEC_WRAPPER=/opt/datadog_wrapper
+# It initializes dd-trace before the Lambda runtime loads the customer's handler.
+
+# Save the original handler so dd-trace's instrumentation can find and wrap it
+export DD_LAMBDA_HANDLER="${_HANDLER}"
+
+# Inject dd-trace initialization before any user code via --require
+# This ensures the tracer is initialized and instrumentation hooks are registered
+# before the Lambda runtime loads the customer's handler module.
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require /opt/nodejs/node_modules/dd-trace/init"
+
+# Execute the Lambda runtime (or whatever command was passed)
+exec "$@"
