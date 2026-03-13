@@ -1378,6 +1378,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
         assert.strictEqual(retries.length, 4)
 
+        // Native --retries (not ATR), so retry reason should be 'external'
+        retries.forEach(test => {
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+        })
+
         // Verify the two files ran in separate worker processes
         const testsBySuite = {}
         for (const test of tests) {
