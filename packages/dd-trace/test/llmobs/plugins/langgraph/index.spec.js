@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
-const { describe, it, beforeEach, before } = require('mocha')
+const { describe, it, beforeEach } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 
 const {
@@ -15,11 +15,7 @@ describe('integrations', () => {
   let Annotation
 
   describe('langgraph', () => {
-    const { getEvents } = useLlmObs({ plugin: 'langgraph' })
-
-    before(async () => {
-      // Load langgraph modules
-    })
+    const { getEvents } = useLlmObs({ plugin: ['langgraph', 'langchain'] })
 
     withVersions('langgraph', '@langchain/langgraph', (version) => {
       beforeEach(() => {
@@ -50,7 +46,6 @@ describe('integrations', () => {
 
           const app = workflow.compile({ name: 'foobarzoo' })
 
-          // Stream execution
           const chunks = []
           for await (const chunk of await app.stream({
             messages: [{ role: 'user', content: 'Stream test' }],
@@ -69,7 +64,7 @@ describe('integrations', () => {
             inputValue: JSON.stringify({
               messages: [{ role: 'user', content: 'Stream test' }],
             }),
-            outputValue: MOCK_STRING, // Final streamed output
+            outputValue: MOCK_STRING,
             tags: { ml_app: 'test', integration: 'langgraph' },
           })
         })
@@ -197,7 +192,7 @@ describe('integrations', () => {
             spanKind: 'workflow',
             name: 'foobarzoo',
             inputValue: JSON.stringify({ value: 0 }),
-            outputValue: undefined, // No output on error
+            outputValue: undefined,
             error: {
               type: 'Error',
               message: 'Streaming error',
@@ -205,6 +200,82 @@ describe('integrations', () => {
             },
             tags: { ml_app: 'test', integration: 'langgraph' },
           })
+        })
+      })
+
+      describe('node naming', () => {
+        it('creates child workflow spans named after each graph node', async () => {
+          const StateAnnotation = Annotation.Root({
+            count: Annotation({
+              reducer: (x, y) => x + y,
+              default: () => 0,
+            }),
+          })
+
+          function increment (state) {
+            return { count: 1 }
+          }
+
+          const workflow = new StateGraph(StateAnnotation)
+            .addNode('node1', increment)
+            .addNode('node2', increment)
+            .addEdge('__start__', 'node1')
+            .addEdge('node1', 'node2')
+            .addEdge('node2', '__end__')
+
+          const app = workflow.compile({ name: 'myGraph' })
+
+          // eslint-disable-next-line no-unused-vars
+          for await (const chunk of await app.stream({ count: 0 })) {
+            // consume stream
+          }
+
+          // 1 outer graph span + 2 node spans
+          const { llmobsSpans } = await getEvents(3)
+
+          const graphSpan = llmobsSpans.find(s => s.name === 'myGraph')
+          const node1Span = llmobsSpans.find(s => s.name === 'node1')
+          const node2Span = llmobsSpans.find(s => s.name === 'node2')
+
+          assert.ok(graphSpan, 'should have an outer workflow span for the graph')
+          assert.ok(node1Span, 'should have a child span named after node1')
+          assert.ok(node2Span, 'should have a child span named after node2')
+
+          assert.strictEqual(node1Span.meta['span.kind'], 'workflow')
+          assert.strictEqual(node2Span.meta['span.kind'], 'workflow')
+
+          // node spans are children of the outer graph span
+          assert.strictEqual(node1Span.parent_id, graphSpan.span_id)
+          assert.strictEqual(node2Span.parent_id, graphSpan.span_id)
+        })
+
+        it('does not create spans for ChannelWrite internal nodes', async () => {
+          const StateAnnotation = Annotation.Root({
+            value: Annotation({ default: () => 0 }),
+          })
+
+          function setVal () {
+            return { value: 42 }
+          }
+
+          const workflow = new StateGraph(StateAnnotation)
+            .addNode('myNode', setVal)
+            .addEdge('__start__', 'myNode')
+            .addEdge('myNode', '__end__')
+
+          const app = workflow.compile({ name: 'simpleGraph' })
+
+          // eslint-disable-next-line no-unused-vars
+          for await (const chunk of await app.stream({ value: 0 })) {
+            // consume
+          }
+
+          // 1 outer span + 1 node span — no ChannelWrite spans
+          const { llmobsSpans } = await getEvents(2)
+
+          assert.ok(llmobsSpans.some(s => s.name === 'simpleGraph'), 'should have outer graph span')
+          assert.ok(llmobsSpans.some(s => s.name === 'myNode'), 'should have node span')
+          assert.ok(!llmobsSpans.some(s => s.name === 'ChannelWrite'), 'should not have ChannelWrite spans')
         })
       })
     })
