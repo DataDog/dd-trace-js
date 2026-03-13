@@ -1267,6 +1267,13 @@ function getCliWrapper (isNewJestVersion) {
         error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
       }
 
+      // The test suite finish handler uses process.nextTick to defer span.finish() (to allow
+      // ci:jest:test-suite:error time to publish). In runInBand mode, if the last suite finishes
+      // right before session finish, the nextTick callback hasn't run yet and the suite span
+      // won't be included in the session flush. Draining the nextTick queue ensures all pending
+      // suite spans are finished before we publish session finish and flush.
+      await new Promise(resolve => process.nextTick(resolve))
+
       let timeoutId
 
       // Pass the resolve callback to defer it to DC listener

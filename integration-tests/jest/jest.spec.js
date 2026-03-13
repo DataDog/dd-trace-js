@@ -3849,7 +3849,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
           assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true', 'EFD should be running')
 
-          // TODO: parsing errors do not report test suite
+          const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          const failedSuite = suites.find(s => s.meta?.[TEST_SUITE]?.includes('test-suite-failed-to-run-parse'))
+          assert.ok(failedSuite, 'failing test suite should be reported')
+          assert.strictEqual(failedSuite.meta[TEST_STATUS], 'fail')
+
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           const occasionallyFailingTests = tests.filter(t => t.resource?.includes('occasionally-failing-test'))
           const numRetries = 3 // slow_test_retries: { '5s': 3 }
@@ -4057,6 +4061,71 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
+  })
+
+  it('reports test_suite_end for test files that fail to parse (runInBand)', async () => {
+    const testAssertionsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+        const failedSuite = suites.find(s => s.meta?.[TEST_SUITE]?.includes('test-suite-failed-to-run-parse'))
+        assert.ok(failedSuite, 'test suite with parse error should emit test_suite_end')
+        assert.strictEqual(failedSuite.meta[TEST_STATUS], 'fail')
+
+        const testSession = events.find(event => event.type === 'test_session_end')?.content
+        assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'test-management/test-suite-failed-to-run-parse',
+          SHOULD_CHECK_RESULTS: '1',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+    assert.strictEqual(exitCode, 1)
+  })
+
+  it('reports test_suite_end for test files that fail to parse (parallel)', async () => {
+    const testAssertionsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+
+        const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+        const failedSuite = suites.find(s => s.meta?.[TEST_SUITE]?.includes('test-suite-failed-to-run-parse'))
+        assert.ok(failedSuite, 'test suite with parse error should emit test_suite_end in parallel mode')
+        assert.strictEqual(failedSuite.meta[TEST_STATUS], 'fail')
+
+        const passingSuite = suites.find(s => s.meta?.[TEST_SUITE]?.includes('test-quarantine-2'))
+        assert.ok(passingSuite, 'passing test suite should also be reported')
+        assert.strictEqual(passingSuite.meta[TEST_STATUS], 'pass')
+
+        const testSession = events.find(event => event.type === 'test_session_end')?.content
+        assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'test-management/(test-suite-failed-to-run-parse|test-quarantine-2)',
+          SHOULD_CHECK_RESULTS: '1',
+          RUN_IN_PARALLEL: '1',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), testAssertionsPromise])
+    assert.strictEqual(exitCode, 1)
   })
 
   context('flaky test retries', () => {
@@ -6183,7 +6252,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true', 'test management should be running')
 
-            // TODO: parsing errors do not report test suite
+            const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            const failedSuite = suites.find(s => s.meta?.[TEST_SUITE]?.includes('test-suite-failed-to-run-parse'))
+            assert.ok(failedSuite, 'failing test suite should be reported')
+            assert.strictEqual(failedSuite.meta[TEST_STATUS], 'fail')
+
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             const quarantine1Tests = tests.filter(t => t.resource?.includes('test-quarantine-1'))
             const withQuarantineTag = quarantine1Tests.filter(t => t.meta?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true')
