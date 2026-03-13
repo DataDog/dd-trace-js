@@ -1629,7 +1629,7 @@ declare namespace tracer {
       /**
        * Sensitive Data Scanner findings from the evaluation.
        */
-      sds: unknown[];
+      sds: Object[];
     }
 
     /**
@@ -1648,7 +1648,7 @@ declare namespace tracer {
       /**
        * Sensitive Data Scanner findings from the evaluation.
        */
-      sds: unknown[];
+      sds: Object[];
     }
 
     /**
