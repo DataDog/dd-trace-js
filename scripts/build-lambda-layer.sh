@@ -1,18 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
-# Build a Lambda Layer zip containing dd-trace-js and the datadog_wrapper script.
+# Build a Lambda Layer zip containing dd-trace-js and the dd_trace_wrapper script.
 #
 # Usage:
 #   ./scripts/build-lambda-layer.sh [output_path]
 #
 # The resulting zip can be published as an AWS Lambda Layer.
-# Users set AWS_LAMBDA_EXEC_WRAPPER=/opt/datadog_wrapper to enable auto-instrumentation.
+# Users set AWS_LAMBDA_EXEC_WRAPPER=/opt/dd_trace_wrapper to enable auto-instrumentation.
 #
 # Layer structure on disk at /opt/:
 #   /opt/
-#     datadog_wrapper              # Shell script entry point
 #     nodejs/
+#       dd_trace_wrapper           # Shell script entry point
 #       node_modules/
 #         dd-trace/                # Full dd-trace package
 #           init.js
@@ -52,9 +52,9 @@ cd "$LAYER_DIR/nodejs/node_modules/dd-trace"
 npm install --omit=dev --ignore-scripts 2>/dev/null
 
 # 5. Copy the wrapper script
-echo "==> Adding datadog_wrapper script..."
-cp "$REPO_ROOT/lambda-layer/datadog_wrapper" "$LAYER_DIR/datadog_wrapper"
-chmod +x "$LAYER_DIR/datadog_wrapper"
+echo "==> Adding dd_trace_wrapper script..."
+cp "$REPO_ROOT/lambda-layer/dd_trace_wrapper" "$LAYER_DIR/nodejs/dd_trace_wrapper"
+chmod +x "$LAYER_DIR/nodejs/dd_trace_wrapper"
 
 # 6. Create the zip
 echo "==> Creating zip..."
@@ -71,4 +71,4 @@ echo "    --zip-file fileb://$OUTPUT_PATH \\"
 echo "    --compatible-runtimes nodejs18.x nodejs20.x nodejs22.x"
 echo ""
 echo "To use:"
-echo "  Set AWS_LAMBDA_EXEC_WRAPPER=/opt/datadog_wrapper on your Lambda function"
+echo "  Set AWS_LAMBDA_EXEC_WRAPPER=/opt/nodejs/dd_trace_wrapper on your Lambda function"

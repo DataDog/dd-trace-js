@@ -1,6 +1,7 @@
 'use strict'
 
 const path = require('path')
+const Module = require('module')
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -50,21 +51,6 @@ function _extractModuleNameAndHandlerPath (handler) {
     throw new Error('Malformed handler name: ' + handler)
   }
   return [match[1], match[2]] // [module, handler-path]
-}
-
-/**
- * Returns all possible paths of the files to be patched when required.
- *
- * @param {string} lambdaStylePath the path comprised of the `LAMBDA_TASK_ROOT`,
- * the root of the module of the Lambda handler, and the module name.
- * @returns {string[]} the lambdaStylePath with appropriate extensions for the hook.
- */
-function _getLambdaFilePaths (lambdaStylePath) {
-  return [
-    lambdaStylePath + '.js',
-    lambdaStylePath + '.mjs',
-    lambdaStylePath + '.cjs',
-  ]
 }
 
 /**
@@ -134,12 +120,29 @@ function wrapLambdaHandler (originalHandler, handlerPath) {
   return wrappedHandler
 }
 
+/**
+ * Patches the handler exports after a module is loaded by file path.
+ *
+ * @param {object} moduleExports the loaded module's exports.
+ * @param {string} handlerPath dot-delimited path to the handler within exports.
+ */
+function _patchHandlerExports (moduleExports, handlerPath) {
+  var resolved = _resolveHandlerParent(moduleExports, handlerPath)
+  if (resolved && typeof resolved.parent[resolved.key] === 'function') {
+    shimmer.wrap(resolved.parent, resolved.key, function (original) {
+      return wrapLambdaHandler(original, handlerPath)
+    })
+  }
+}
+
 // Determine which mode to use based on environment
 var lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
 var originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
 
 if (originalLambdaHandler) {
-  // Auto mode: DD_LAMBDA_HANDLER is set, intercept the user's handler module directly
+  // Auto mode: DD_LAMBDA_HANDLER is set, intercept the user's handler module directly.
+  // We monkey-patch Module._load because the Lambda runtime loads the handler by
+  // absolute file path — addHook/RITM only intercepts npm package names, not file paths.
   var moduleRootAndHandler = _extractModuleRootAndHandler(originalLambdaHandler)
   var moduleRoot = moduleRootAndHandler[0]
   var moduleAndHandler = moduleRootAndHandler[1]
@@ -149,21 +152,44 @@ if (originalLambdaHandler) {
 
   var taskRoot = lambdaTaskRoot || process.cwd()
   var lambdaStylePath = path.resolve(taskRoot, moduleRoot, moduleName)
-  var lambdaFilePaths = _getLambdaFilePaths(lambdaStylePath)
 
-  for (var i = 0; i < lambdaFilePaths.length; i++) {
-    ;(function (capturedHandlerPath) {
-      addHook({ name: lambdaFilePaths[i] }, function (moduleExports) {
-        var resolved = _resolveHandlerParent(moduleExports, capturedHandlerPath)
-        if (resolved && typeof resolved.parent[resolved.key] === 'function') {
-          shimmer.wrap(resolved.parent, resolved.key, function (original) {
-            return wrapLambdaHandler(original, capturedHandlerPath)
-          })
-        }
+  // Build a set of resolved paths the handler module could have (with extensions)
+  var targetPaths = new Set()
+  var extensions = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts', '']
+  for (var i = 0; i < extensions.length; i++) {
+    targetPaths.add(lambdaStylePath + extensions[i])
+  }
 
-        return moduleExports
-      })
-    })(handlerPath)
+  // Also try to resolve the path as Node would, to handle cases where the
+  // extension or index.js resolution differs from our guesses
+  try {
+    targetPaths.add(require.resolve(lambdaStylePath))
+  } catch (e) {
+    // Module may not exist yet at instrumentation registration time
+  }
+
+  var originalLoad = Module._load
+  var patched = false
+
+  Module._load = function (request, parent, isMain) {
+    var result = originalLoad.apply(this, arguments)
+
+    if (!patched) {
+      // Resolve the requested module to an absolute path to compare against targets
+      var resolvedPath
+      try {
+        resolvedPath = Module._resolveFilename(request, parent, isMain)
+      } catch (e) {
+        return result
+      }
+
+      if (targetPaths.has(resolvedPath)) {
+        patched = true
+        _patchHandlerExports(result, handlerPath)
+      }
+    }
+
+    return result
   }
 } else {
   // Manual mode: wrap the `datadog` export from datadog-lambda-js
@@ -182,5 +208,4 @@ if (originalLambdaHandler) {
 module.exports = {
   _extractModuleRootAndHandler,
   _extractModuleNameAndHandlerPath,
-  _getLambdaFilePaths,
 }

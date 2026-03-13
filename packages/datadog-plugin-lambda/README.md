@@ -14,7 +14,7 @@ Key motivations:
 ## Architecture
 
 ```
-AWS_LAMBDA_EXEC_WRAPPER=/opt/datadog_wrapper
+AWS_LAMBDA_EXEC_WRAPPER=/opt/nodejs/dd_trace_wrapper
   -> Sets DD_LAMBDA_HANDLER="$_HANDLER"
   -> Sets NODE_OPTIONS="--require /opt/nodejs/node_modules/dd-trace/init"
   -> exec "$@" (starts the Lambda runtime)
@@ -29,7 +29,7 @@ AWS_LAMBDA_EXEC_WRAPPER=/opt/datadog_wrapper
 |-----------|------|------|
 | **Instrumentation** | `packages/datadog-instrumentations/src/lambda.js` | Hooks into handler module loading via `addHook`, wraps the handler, emits `dc.tracingChannel('datadog:lambda:invoke')` events |
 | **Plugin** | `packages/datadog-plugin-lambda/src/index.js` | `TracingPlugin` subclass that subscribes to channel events and creates spans, extracts context, emits metrics |
-| **Layer wrapper** | `lambda-layer/datadog_wrapper` | Shell script for `AWS_LAMBDA_EXEC_WRAPPER` — sets env vars and execs the runtime |
+| **Layer wrapper** | `lambda-layer/dd_trace_wrapper` | Shell script for `AWS_LAMBDA_EXEC_WRAPPER` — sets env vars and execs the runtime |
 | **Layer build** | `scripts/build-lambda-layer.sh` | Packages dd-trace + wrapper into a Lambda Layer zip |
 
 ### Plugin Lifecycle
@@ -97,7 +97,7 @@ All configuration is via environment variables:
 
 3. Configure your Lambda function:
    - Add the layer
-   - Set `AWS_LAMBDA_EXEC_WRAPPER=/opt/datadog_wrapper`
+   - Set `AWS_LAMBDA_EXEC_WRAPPER=/opt/nodejs/dd_trace_wrapper`
    - Set `DD_SITE`, `DD_API_KEY` (or use the Datadog Agent Extension)
 
 ### Manual instrumentation
