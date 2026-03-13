@@ -802,6 +802,16 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
+        /**
+         * Maximum number of feature flag tags to attach to a single trace.
+         * Limits bandwidth when many flags are evaluated in one trace. Capped at 1000.
+         * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_MAX_FLAG_TAGS environment variable.
+         *
+         * @default 300
+         * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_MAX_FLAG_TAGS
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        maxFlagTags?: number
       }
     };
 

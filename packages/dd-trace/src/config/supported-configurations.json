@@ -742,6 +742,16 @@
         "default": "false"
       }
     ],
+    "DD_EXPERIMENTAL_FLAGGING_PROVIDER_MAX_FLAG_TAGS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "experimental.flaggingProvider.maxFlagTags"
+        ],
+        "default": "300"
+      }
+    ],
     "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [
       {
         "implementation": "A",

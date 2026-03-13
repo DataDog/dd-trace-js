@@ -326,4 +326,69 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       })
     })
   })
+
+  describe('Feature flag span tagging', () => {
+    let agent, proc
+
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+      proc = await spawnProc(appFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
+          DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED: 'true',
+        },
+      })
+    })
+
+    afterEach(async () => {
+      await stopProc(proc)
+      await agent.stop()
+    })
+
+    it('should tag root span with feature flag metadata', (done) => {
+      const configId = 'org-42-env-test'
+
+      agent.on('remote-config-ack-update', async (id, _version, state) => {
+        if (state === UNACKNOWLEDGED) return
+        if (id !== configId) return
+
+        try {
+          assert.strictEqual(state, ACKNOWLEDGED)
+
+          const response = await fetch(`${proc.url}/evaluate-flags`)
+          assert.strictEqual(response.status, 200)
+        } catch (error) {
+          done(error)
+        }
+      })
+
+      agent.assertMessageReceived(({ payload }) => {
+        const trace = payload.flat()
+        const webSpan = trace.find(s => s.resource === 'GET /evaluate-flags')
+        if (!webSpan) throw new Error('Web span not found in this payload')
+
+        // Verify no child spans are created for feature flag evaluations
+        const ffSpans = trace.filter(s => s.name === 'dd-trace.feature_flag.evaluate')
+        assert.strictEqual(ffSpans.length, 0, 'Should not create child spans for flag evaluations')
+
+        // Verify root span has feature flag tags (flat format: flag key → variant)
+        assert.ok(
+          webSpan.meta['feature_flags.test-boolean-flag'],
+          'Root span should have boolean flag tag'
+        )
+        assert.ok(
+          webSpan.meta['feature_flags.test-string-flag'],
+          'Root span should have string flag tag'
+        )
+      }, 30000, 10, true).then(done, done)
+
+      agent.addRemoteConfig({
+        product: RC_PRODUCT,
+        id: configId,
+        config: ufcPayloads.testBooleanAndStringFlags,
+      })
+    })
+  })
 })

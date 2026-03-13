@@ -48,4 +48,10 @@ module.exports = {
    * @type {string} Reason code for noop provider evaluations
    */
   NOOP_REASON: 'STATIC',
+
+  /**
+   * @constant
+   * @type {string} Tag prefix for feature flag metadata on spans
+   */
+  FF_TAG_PREFIX: 'feature_flags',
 }
