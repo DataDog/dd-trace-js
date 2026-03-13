@@ -1117,13 +1117,11 @@ versions.forEach((version) => {
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 4) // 2 repetitions on 2 tests
 
-            // vitest reports the test as failed if any of the repetitions fail, so we'll follow that
-            // TODO: we might want to improve this
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 3)
+            assert.strictEqual(failedTests.length, 2)
 
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
             assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSessionEvent.meta))
           })
 
@@ -1142,7 +1140,7 @@ versions.forEach((version) => {
 
         childProcess.on('exit', (exitCode) => {
           eventsPromise.then(() => {
-            assert.strictEqual(exitCode, 1)
+            assert.strictEqual(exitCode, 0)
             done()
           }).catch(done)
         })

@@ -665,7 +665,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       }
     }
 
-    if (isEarlyFlakeDetectionEnabled && taskToStatuses.has(task) && !attemptToFixTasks.has(task)) {
+    if (taskToStatuses.has(task) && !attemptToFixTasks.has(task)) {
       const statuses = taskToStatuses.get(task)
       // If the test has passed at least once, we consider it passed
       if (statuses.includes('pass')) {
@@ -744,7 +744,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const lastExecutionStatus = task.result.state
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task)
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task) || newTasks.has(task)
     const statuses = taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
