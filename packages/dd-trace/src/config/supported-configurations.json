@@ -23,6 +23,7 @@
         "default": null
       }
     ],
+    "DD_TRACE_OPENAI_AGENTS_ENABLED": ["A"],
     "_DD_APM_TRACING_AGENTLESS_ENABLED": [
       {
         "implementation": "A",

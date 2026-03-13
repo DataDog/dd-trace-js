@@ -1,0 +1,333 @@
+'use strict'
+
+const path = require('path')
+
+class OpenaiAgentsTestSetup {
+  async setup (module) {
+    this.module = module
+
+    module.setDefaultModelProvider({
+      createModel (modelName) {
+        return {
+          async getResponse (request) {
+            return {
+              output: [
+                { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'test response' }] },
+              ],
+              usage: { requests: 1, inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              responseId: 'fake-response-id',
+              referencedTools: [],
+            }
+          },
+          async * getStreamedResponse (request) {
+            yield {
+              type: 'response.completed',
+              response: {
+                output: [
+                  { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'streamed' }] },
+                ],
+              },
+            }
+          },
+        }
+      },
+    })
+
+    // Load @openai/agents-openai from its own version directory to get the actual
+    // OpenAIResponsesModel class (instrumented by orchestrion on the prototype)
+    const agentsOpenaiVersionDir = path.join(
+      __dirname, '..', '..', '..', 'versions', '@openai', 'agents-openai@>=0.7.0'
+    )
+    const agentsOpenaiWrapper = require(agentsOpenaiVersionDir)
+    const agentsOpenai = agentsOpenaiWrapper.get()
+    const { OpenAIResponsesModel } = agentsOpenai
+
+    const mockClient = {
+      baseURL: 'https://api.openai.com/v1',
+      responses: {
+        create: async (requestData, options) => {
+          return {
+            id: 'resp-001',
+            output: [
+              { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'test response' }] },
+            ],
+            usage: {
+              input_tokens: 10,
+              output_tokens: 5,
+              total_tokens: 15,
+            },
+          }
+        },
+      },
+    }
+
+    const mockStreamClient = {
+      baseURL: 'https://api.openai.com/v1',
+      responses: {
+        create: async (requestData, options) => {
+          return (async function * () {
+            yield {
+              type: 'response.completed',
+              response: {
+                id: 'resp-002',
+                output: [
+                  { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'streamed' }] },
+                ],
+                usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+              },
+            }
+          })()
+        },
+      },
+    }
+
+    const mockErrorClient = {
+      baseURL: 'https://api.openai.com/v1',
+      responses: {
+        create: async () => {
+          throw new Error('Intentional error for testing')
+        },
+      },
+    }
+
+    this.fakeModel = new OpenAIResponsesModel(mockClient, 'gpt-4')
+    this.streamModel = new OpenAIResponsesModel(mockStreamClient, 'gpt-4')
+    this.errorModel = new OpenAIResponsesModel(mockErrorClient, 'gpt-4')
+
+    this.agent = new module.Agent({
+      name: 'test_agent',
+      instructions: 'You are a test agent',
+      model: this.fakeModel,
+    })
+
+    this.errorAgent = new module.Agent({
+      name: 'error_agent',
+      instructions: 'You are an error test agent',
+      model: this.errorModel,
+    })
+
+    this.targetAgent = new module.Agent({
+      name: 'target_agent',
+      instructions: 'You are a target agent',
+      model: this.fakeModel,
+    })
+
+    this.testTool = module.tool({
+      name: 'test_tool',
+      description: 'A test tool',
+      parameters: {},
+      execute: async (ctx, args) => {
+        return 'tool result'
+      },
+    })
+
+    this.errorTool = module.tool({
+      name: 'error_tool',
+      description: 'A tool that errors',
+      parameters: {},
+      execute: async (ctx, args) => {
+        throw new Error('Intentional error for testing')
+      },
+    })
+  }
+
+  async teardown () {
+    this.module = undefined
+    this.agent = undefined
+    this.errorAgent = undefined
+    this.fakeModel = undefined
+    this.streamModel = undefined
+    this.errorModel = undefined
+  }
+
+  async run () {
+    return this.module.run(this.agent, 'hello', { maxTurns: 2 })
+  }
+
+  async runError () {
+    return this.module.run(this.errorAgent, 'hello', { maxTurns: 1 })
+  }
+
+  async getResponse () {
+    // Must wrap in withTrace() because OpenAIResponsesModel.getResponse uses the
+    // library's internal tracing (withResponseSpan) which requires an active trace context
+    return this.module.withTrace('test-getResponse', async () => {
+      return this.fakeModel.getResponse({
+        systemInstructions: 'test',
+        input: 'hello',
+        modelSettings: {},
+        tools: [],
+        outputSchema: undefined,
+        handoffs: [],
+        previousResponseId: undefined,
+      })
+    })
+  }
+
+  async getResponseError () {
+    return this.module.withTrace('test-getResponseError', async () => {
+      return this.errorModel.getResponse({
+        systemInstructions: 'test',
+        input: 'hello',
+        modelSettings: {},
+        tools: [],
+        outputSchema: undefined,
+        handoffs: [],
+        previousResponseId: undefined,
+      })
+    })
+  }
+
+  async getStreamedResponse () {
+    return this.module.withTrace('test-getStreamedResponse', async () => {
+      // After orchestrion wrapping, async *getStreamedResponse returns a Promise<AsyncIterator>
+      // instead of an AsyncIterator directly, so we must await it first
+      const iter = await this.streamModel.getStreamedResponse({
+        systemInstructions: 'test',
+        input: 'hello',
+        modelSettings: {},
+        tools: [],
+        outputSchema: undefined,
+        handoffs: [],
+        previousResponseId: undefined,
+      })
+      // eslint-disable-next-line no-unused-vars
+      for await (const _item of iter) {
+      }
+    })
+  }
+
+  async getStreamedResponseError () {
+    return this.module.withTrace('test-getStreamedResponseError', async () => {
+      // After orchestrion wrapping, async *getStreamedResponse returns a Promise<AsyncIterator>
+      const iter = await this.errorModel.getStreamedResponse({
+        systemInstructions: 'test',
+        input: 'hello',
+        modelSettings: {},
+        tools: [],
+        outputSchema: undefined,
+        handoffs: [],
+        previousResponseId: undefined,
+      })
+      // eslint-disable-next-line no-unused-vars
+      for await (const _item of iter) {
+      }
+    })
+  }
+
+  async invokeFunctionTool () {
+    return this.module.invokeFunctionTool({
+      tool: this.testTool,
+      runContext: new this.module.RunContext({ context: {} }),
+      input: '{}',
+      details: { toolCallId: 'test-call-id' },
+    })
+  }
+
+  async invokeFunctionToolError () {
+    return this.module.invokeFunctionTool({
+      tool: this.errorTool,
+      runContext: new this.module.RunContext({ context: {} }),
+      input: '{}',
+      details: { toolCallId: 'error-call-id' },
+    })
+  }
+
+  async onInvokeHandoff () {
+    // Use the handoff() factory function (not new Handoff() directly) because
+    // the orchestrion instruments the onInvokeHandoff function INSIDE the factory
+    const h = this.module.handoff(this.targetAgent)
+    return h.onInvokeHandoff(
+      new this.module.RunContext({ context: {} }),
+      '{}'
+    )
+  }
+
+  async onInvokeHandoffError () {
+    // Create a handoff with inputType so parser is set, then pass empty input
+    // to trigger ModelBehaviorError('Handoff function expected non empty input')
+    const h = this.module.handoff(this.targetAgent, {
+      inputType: {
+        type: 'object',
+        properties: { reason: { type: 'string' } },
+        required: ['reason'],
+        additionalProperties: false,
+      },
+      onHandoff: async (ctx, parsed) => {
+        // This won't be reached since empty input triggers error first
+      },
+    })
+    return h.onInvokeHandoff(
+      new this.module.RunContext({ context: {} }),
+      '' // Empty input triggers ModelBehaviorError
+    )
+  }
+
+  async runInputGuardrails () {
+    const guardrail = {
+      type: 'tool_input',
+      name: 'test_input_guardrail',
+      run: async ({ context, agent, toolCall }) => {
+        return { allow: true }
+      },
+    }
+    return this.module.runToolInputGuardrails({
+      guardrails: [guardrail],
+      context: new this.module.RunContext({ context: {} }),
+      agent: this.agent,
+      toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
+    })
+  }
+
+  async runInputGuardrailsError () {
+    const guardrail = {
+      type: 'tool_input',
+      name: 'error_input_guardrail',
+      run: async ({ context, agent, toolCall }) => {
+        throw new Error('Intentional error for testing')
+      },
+    }
+    return this.module.runToolInputGuardrails({
+      guardrails: [guardrail],
+      context: new this.module.RunContext({ context: {} }),
+      agent: this.agent,
+      toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
+    })
+  }
+
+  async runOutputGuardrails () {
+    const guardrail = {
+      type: 'tool_output',
+      name: 'test_output_guardrail',
+      run: async ({ context, agent, toolCall, toolOutput }) => {
+        return { allow: true }
+      },
+    }
+    return this.module.runToolOutputGuardrails({
+      guardrails: [guardrail],
+      context: new this.module.RunContext({ context: {} }),
+      agent: this.agent,
+      toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
+      toolOutput: 'test output',
+    })
+  }
+
+  async runOutputGuardrailsError () {
+    const guardrail = {
+      type: 'tool_output',
+      name: 'error_output_guardrail',
+      run: async ({ context, agent, toolCall, toolOutput }) => {
+        throw new Error('Intentional error for testing')
+      },
+    }
+    return this.module.runToolOutputGuardrails({
+      guardrails: [guardrail],
+      context: new this.module.RunContext({ context: {} }),
+      agent: this.agent,
+      toolCall: { id: 'test-call', name: 'test_tool', arguments: '{}' },
+      toolOutput: 'test output',
+    })
+  }
+}
+
+module.exports = OpenaiAgentsTestSetup
