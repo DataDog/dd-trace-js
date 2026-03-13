@@ -1353,6 +1353,65 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
+  onlyLatestIt('correctly reports retries in parallel mode', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        // Verify we are actually in parallel mode
+        const sessionEvent = events.find(event => event.type === 'test_session_end').content
+        assert.strictEqual(sessionEvent.meta[MOCHA_IS_PARALLEL], 'true')
+
+        // Each file has 1 test that fails twice then passes on the 3rd attempt (3 events per file)
+        assert.strictEqual(tests.length, 6)
+
+        // 2 failed attempts per file = 4 total
+        const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+        assert.strictEqual(failedTests.length, 4)
+
+        // The 3rd attempt passes in each file = 2 total
+        const passingTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+        assert.strictEqual(passingTests.length, 2)
+
+        // First attempt of each test is not a retry, subsequent ones are (2 retries * 2 files = 4)
+        const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+        assert.strictEqual(retries.length, 4)
+
+        // Verify the two files ran in separate worker processes
+        const testsBySuite = {}
+        for (const test of tests) {
+          const suiteName = test.meta[TEST_SUITE]
+          if (!testsBySuite[suiteName]) {
+            testsBySuite[suiteName] = test
+          }
+        }
+        const testFromEachWorker = Object.values(testsBySuite)
+        assert.strictEqual(testFromEachWorker.length, 2)
+        const runtimeIds = testFromEachWorker.map(test => test.meta['runtime-id'])
+        assert.ok(runtimeIds[0])
+        assert.ok(runtimeIds[1])
+        assert.notStrictEqual(runtimeIds[0], runtimeIds[1],
+          'Tests from different files should have different runtime-ids (separate worker processes)'
+        )
+      })
+
+    childProcess = exec(
+      'node node_modules/mocha/bin/mocha' +
+      ' --parallel --jobs 2 --retries 2' +
+      ' ./ci-visibility/mocha-plugin-tests/retries-parallel.js' +
+      ' ./ci-visibility/mocha-plugin-tests/retries-parallel-2.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+    await Promise.all([
+      eventsPromise,
+      once(childProcess, 'exit'),
+    ])
+  })
+
   it('does not blow up when workerpool is used outside of a test', (done) => {
     childProcess = exec('node ./ci-visibility/run-workerpool.js', {
       cwd,

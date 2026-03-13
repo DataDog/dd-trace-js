@@ -10,6 +10,7 @@ const {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
+  getOnTestRetryHandler,
   getRunTestsWrapper,
 } = require('./utils')
 require('./common')
@@ -73,6 +74,8 @@ addHook({
     this.on('test', getOnTestHandler(false))
 
     this.on('test end', getOnTestEndHandler(config))
+
+    this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())
