@@ -162,7 +162,8 @@ describe('AIGuard SDK', () => {
       if (shouldBlock) {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
-          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === tags
+          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === tags &&
+            JSON.stringify(err.sds) === '[]'
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })
@@ -171,6 +172,7 @@ describe('AIGuard SDK', () => {
         if (tags) {
           assert.strictEqual(evaluation.tags, tags)
         }
+        assert.deepStrictEqual(evaluation.sds, [])
       }
 
       assertTelemetry('ai_guard.requests', { error: false, action, block: shouldBlock })
@@ -221,8 +223,9 @@ describe('AIGuard SDK', () => {
       },
     })
 
-    await aiguard.evaluate(messages)
+    const result = await aiguard.evaluate(messages)
 
+    assert.deepStrictEqual(result.sds, sdsFindings)
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages, sds: sdsFindings }
@@ -239,11 +242,43 @@ describe('AIGuard SDK', () => {
       },
     })
 
-    await aiguard.evaluate(messages)
+    const result = await aiguard.evaluate(messages)
 
+    assert.deepStrictEqual(result.sds, [])
     await assertAIGuardSpan(
       { 'ai_guard.target': 'prompt', 'ai_guard.action': 'ALLOW' },
       { messages }
+    )
+  })
+
+  it('test evaluate with sds_findings in abort error', async () => {
+    const sdsFindings = [
+      {
+        rule_display_name: 'Credit Card Number',
+        rule_tag: 'credit_card',
+        category: 'pii',
+        matched_text: '4111111111111111',
+        location: { start_index: 10, end_index_exclusive: 26, path: 'messages[0].content[0].text' },
+      },
+    ]
+    const messages = [{ role: 'user', content: 'My card is 4111111111111111' }]
+    mockFetch({
+      body: {
+        data: {
+          attributes: {
+            action: 'ABORT',
+            reason: 'PII detected',
+            tags: ['pii'],
+            sds_findings: sdsFindings,
+            is_blocking_enabled: true,
+          },
+        },
+      },
+    })
+
+    await rejects(
+      () => aiguard.evaluate(messages, { block: true }),
+      err => err.name === 'AIGuardAbortError' && JSON.stringify(err.sds) === JSON.stringify(sdsFindings)
     )
   })
 
