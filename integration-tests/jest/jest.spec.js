@@ -2877,7 +2877,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('retries flaky tests', (done) => {
+    it('retries flaky tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({ jest: {} })
@@ -2929,12 +2929,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         }
       )
-      childProcess.on('exit', () => {
-        // TODO: check exit code: if a new, retried test fails, the exit code should remain 0
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     it('does not retry new tests that are skipped', (done) => {
