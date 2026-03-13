@@ -6386,6 +6386,54 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }).catch(done)
       })
     })
+
+    it('does detect custom tags on test suites from beforeAll and afterAll hooks', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
+
+          assertObjectContains(testSuite, {
+            meta: {
+              'suite.beforeAll': 'true',
+              'suite.afterAll': 'true',
+            },
+          })
+
+          const suiteSpanId = testSuite.test_suite_id.toString()
+          const sessionTraceId = testSuite.test_session_id.toString()
+
+          // Spans created in beforeAll/afterAll appear as 'span' events and are children of the test suite span
+          const spans = events.filter(event => event.type === 'span').map(event => event.content)
+          const beforeAllSpan = spans.find(span => span.resource === 'beforeAll.setup')
+          const afterAllSpan = spans.find(span => span.resource === 'afterAll.teardown')
+
+          assert.ok(beforeAllSpan)
+          assert.strictEqual(beforeAllSpan.parent_id.toString(), suiteSpanId)
+          assert.strictEqual(beforeAllSpan.trace_id.toString(), sessionTraceId)
+
+          assert.ok(afterAllSpan)
+          assert.strictEqual(afterAllSpan.parent_id.toString(), suiteSpanId)
+          assert.strictEqual(afterAllSpan.trace_id.toString(), sessionTraceId)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'ci-visibility/test-suite-custom-tags',
+          },
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
   })
 
   context('impacted tests', () => {
