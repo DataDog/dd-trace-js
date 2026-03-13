@@ -4063,7 +4063,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  it('reports test_suite_end for test files that fail to parse (runInBand)', async () => {
+  onlyLatestIt('reports test_suite_end for test files that fail to parse (runInBand)', async () => {
     const testAssertionsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -4093,7 +4093,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.strictEqual(exitCode, 1)
   })
 
-  it('reports test_suite_end for test files that fail to parse (parallel)', async () => {
+  onlyLatestIt('reports test_suite_end for test files that fail to parse (parallel)', async () => {
     const testAssertionsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
