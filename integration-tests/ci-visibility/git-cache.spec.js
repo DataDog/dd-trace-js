@@ -6,7 +6,7 @@ const assert = require('assert')
 const os = require('os')
 const path = require('path')
 
-const { sandboxCwd, useSandbox } = require('../helpers')
+const { assertObjectContains, sandboxCwd, useSandbox } = require('../helpers')
 
 const FIXED_COMMIT_MESSAGE = 'Test commit message for caching'
 const GET_COMMIT_MESSAGE_COMMAND_ARGS = ['log', '-1', '--pretty=format:%s']
@@ -136,10 +136,12 @@ describe('git-cache integration tests', () => {
     }
 
     assert.ok(secondError instanceof Error)
-    assert.strictEqual(secondError.message, firstError.message)
-    assert.strictEqual(secondError.code, firstError.code)
-    assert.strictEqual(secondError.status, firstError.status)
-    assert.strictEqual(secondError.errno, firstError.errno)
+    assertObjectContains(secondError, {
+      message: firstError.message,
+      code: firstError.code,
+      status: firstError.status,
+      errno: firstError.errno,
+    })
   })
 
   it('should not cache when DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED is not set to true', function () {

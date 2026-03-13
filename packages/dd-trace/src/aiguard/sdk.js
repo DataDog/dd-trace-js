@@ -23,11 +23,12 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 const ALLOW = 'ALLOW'
 
 class AIGuardAbortError extends Error {
-  constructor (reason, tags) {
+  constructor (reason, tags, sds) {
     super(reason)
     this.name = 'AIGuardAbortError'
     this.reason = reason
     this.tags = tags
+    this.sds = sds || []
   }
 }
 
@@ -135,7 +136,7 @@ class AIGuard extends NoopAIGuard {
     if (!this.#initialized) {
       return super.evaluate(messages, opts)
     }
-    const { block = false } = opts ?? {}
+    const { block = true } = opts ?? {}
     return this.#tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
       const last = messages[messages.length - 1]
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
@@ -184,7 +185,7 @@ class AIGuard extends NoopAIGuard {
         action = attr.action
         reason = attr.reason
         tags = attr.tags
-        sdsFindings = attr.sds_findings
+        sdsFindings = attr.sds_findings || []
         blockingEnabled = attr.is_blocking_enabled ?? false
       } catch (e) {
         appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
@@ -204,9 +205,9 @@ class AIGuard extends NoopAIGuard {
       }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
-        throw new AIGuardAbortError(reason, tags)
+        throw new AIGuardAbortError(reason, tags, sdsFindings)
       }
-      return { action, reason, tags }
+      return { action, reason, tags, sds: sdsFindings }
     })
   }
 }
