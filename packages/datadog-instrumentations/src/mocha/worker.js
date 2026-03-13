@@ -49,6 +49,12 @@ addHook({
       delete this.options._ddIsTestManagementTestsEnabled
       delete this.options._ddTestManagementTests
     }
+    if (this.options._ddIsFlakyTestRetriesEnabled) {
+      config.isFlakyTestRetriesEnabled = true
+      config.flakyTestRetriesCount = this.options._ddFlakyTestRetriesCount
+      delete this.options._ddIsFlakyTestRetriesEnabled
+      delete this.options._ddFlakyTestRetriesCount
+    }
     return run.apply(this, arguments)
   })
 
@@ -95,5 +101,4 @@ addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
   file: 'lib/runnable.js',
-}, runnableWrapper)
-// TODO: parallel mode does not support flaky test retries, so no library config is passed.
+}, (runnablePackage) => runnableWrapper(runnablePackage, config))

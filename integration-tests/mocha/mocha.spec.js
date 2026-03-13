@@ -3277,6 +3277,74 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
+
+    onlyLatestIt('retries failed tests automatically in parallel mode', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Verify we are in parallel mode
+          const sessionEvent = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(sessionEvent.meta[MOCHA_IS_PARALLEL], 'true')
+
+          // Each file has 1 test that fails twice then passes (3 events per file, 6 total)
+          assert.strictEqual(tests.length, 6)
+
+          const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.strictEqual(failedAttempts.length, 4)
+
+          const passedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.strictEqual(passedAttempts.length, 2)
+
+          // Retries should be tagged with ATR reason
+          const atrRetries = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+          assert.strictEqual(atrRetries.length, 4)
+
+          passedAttempts.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          })
+
+          // Verify tests ran in separate worker processes
+          const testsBySuite = {}
+          for (const test of tests) {
+            const suiteName = test.meta[TEST_SUITE]
+            if (!testsBySuite[suiteName]) {
+              testsBySuite[suiteName] = test
+            }
+          }
+          const testFromEachWorker = Object.values(testsBySuite)
+          assert.strictEqual(testFromEachWorker.length, 2)
+          const runtimeIds = testFromEachWorker.map(test => test.meta['runtime-id'])
+          assert.ok(runtimeIds[0])
+          assert.ok(runtimeIds[1])
+          assert.notStrictEqual(runtimeIds[0], runtimeIds[1])
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test-flaky-test-retries/eventually-passing-test-parallel.js' +
+        ' ./ci-visibility/test-flaky-test-retries/eventually-passing-test-parallel-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
   })
 
   it('takes into account untested files if "all" is passed to nyc', (done) => {
