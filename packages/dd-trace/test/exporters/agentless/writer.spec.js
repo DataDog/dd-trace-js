@@ -15,6 +15,7 @@ describe('AgentlessWriter', () => {
   let writer
   let request
   let encoder
+  let encoderArgs
   let url
   let log
   let getValueFromEnvSources
@@ -26,7 +27,7 @@ describe('AgentlessWriter', () => {
     encoder = {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
-      makePayload: sinon.stub().returns(Buffer.from('{"spans":[]}')),
+      makePayload: sinon.stub().returns(Buffer.from('{"traces":[]}')),
       reset: sinon.stub(),
     }
 
@@ -39,7 +40,8 @@ describe('AgentlessWriter', () => {
 
     getValueFromEnvSources = sinon.stub().returns('test-api-key')
 
-    const AgentlessJSONEncoder = function () {
+    const AgentlessJSONEncoder = function (...args) {
+      encoderArgs = args
       return encoder
     }
 
@@ -78,6 +80,17 @@ describe('AgentlessWriter', () => {
 
       assert.strictEqual(writer._url.hostname, 'public-trace-http-intake.logs.datadoghq.com')
     })
+
+    it('should pass writer reference and metadata to encoder', () => {
+      const metadata = {
+        hostname: 'test-host',
+        env: 'test-env',
+      }
+      writer = new Writer({ url, metadata })
+
+      assert.strictEqual(encoderArgs[0], writer)
+      assertObjectContains(encoderArgs[1], metadata)
+    })
   })
 
   describe('append', () => {
@@ -108,8 +121,8 @@ describe('AgentlessWriter', () => {
       writer.flush(done)
     })
 
-    it('should flush spans to the intake with correct headers', (done) => {
-      const expectedData = Buffer.from('{"spans":[]}')
+    it('should flush traces to the intake with correct headers', (done) => {
+      const expectedData = Buffer.from('{"traces":[]}')
 
       encoder.count.returns(1)
       encoder.makePayload.returns(expectedData)
@@ -124,6 +137,7 @@ describe('AgentlessWriter', () => {
           headers: {
             'Content-Type': 'application/json',
             'dd-api-key': 'test-api-key',
+            'X-Datadog-Trace-Count': '1',
             'Datadog-Meta-Lang': 'nodejs',
             'Datadog-Meta-Lang-Version': process.version,
             'Datadog-Meta-Lang-Interpreter': 'v8',
@@ -160,6 +174,23 @@ describe('AgentlessWriter', () => {
         sinon.assert.notCalled(request)
         // Should only log debug, not error (error was at startup)
         sinon.assert.notCalled(log.error)
+        done()
+      })
+    })
+
+    it('should log error and drop traces when URL is null', (done) => {
+      writer = new Writer({ url: null, site: '|||invalid|||' })
+
+      // Clear constructor logs
+      log.error.resetHistory()
+
+      encoder.count.returns(2)
+
+      writer.flush(() => {
+        sinon.assert.notCalled(request)
+        sinon.assert.calledOnce(log.error)
+        const call = log.error.getCall(0)
+        assert.ok(call.args[0].includes('No valid URL configured'))
         done()
       })
     })
@@ -286,14 +317,31 @@ describe('AgentlessWriter', () => {
       })
     })
 
-    it('should reset encoder and skip request when not writable', (done) => {
+    it('should reset encoder and log error when not writable with pending traces', (done) => {
       request.writable = false
 
-      encoder.count.returns(1)
+      encoder.count.returns(3)
 
       writer.flush(() => {
         sinon.assert.notCalled(request)
         sinon.assert.calledOnce(encoder.reset)
+        sinon.assert.calledOnce(log.error)
+        const call = log.error.getCall(0)
+        assert.ok(call.args[0].includes('Maximum number of active requests'))
+        assert.strictEqual(call.args[1], 3)
+        done()
+      })
+    })
+
+    it('should reset encoder without logging when not writable and empty', (done) => {
+      request.writable = false
+
+      encoder.count.returns(0)
+
+      writer.flush(() => {
+        sinon.assert.notCalled(request)
+        sinon.assert.calledOnce(encoder.reset)
+        sinon.assert.notCalled(log.error)
         done()
       })
     })
