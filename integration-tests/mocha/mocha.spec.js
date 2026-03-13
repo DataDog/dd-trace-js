@@ -2100,6 +2100,60 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }).catch(done)
       })
     })
+
+    onlyLatestIt('can skip suites in parallel mode', async () => {
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+          const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          assert.strictEqual(suites.length, 2)
+
+          const skippedSuite = suites.find(s =>
+            s.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          )
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          const runningSuite = suites.find(s =>
+            s.resource === 'test_suite.ci-visibility/test/ci-visibility-test-2.js'
+          )
+          assert.strictEqual(runningSuite.meta[TEST_STATUS], 'pass')
+
+          // Only 1 test ran (from the non-skipped suite)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 1)
+          assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test/ci-visibility-test.js' +
+        ' ./ci-visibility/test/ci-visibility-test-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
   })
 
   context('error tags', () => {

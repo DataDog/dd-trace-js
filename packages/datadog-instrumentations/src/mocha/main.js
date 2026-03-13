@@ -106,7 +106,7 @@ function getOnStartHandler (isParallel, frameworkVersion) {
     const processArgv = process.argv.slice(2).join(' ')
     const command = `mocha ${processArgv}`
     testSessionStartCh.publish({ command, frameworkVersion })
-    if (!isParallel && skippedSuites.length) {
+    if (skippedSuites.length) {
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
   }
@@ -315,8 +315,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
     config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
     config.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
-    // ITR is not supported in parallel mode yet
-    config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
+    config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
 
@@ -626,6 +625,13 @@ addHook({
     this.once('start', getOnStartHandler(true, frameworkVersion))
     this.once('end', getOnEndHandler(true))
 
+    // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
+    for (const filePath of files) {
+      if (isMarkedAsUnskippable({ path: filePath })) {
+        unskippableSuites.push(filePath)
+      }
+    }
+
     getExecutionConfiguration(this, true, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
         const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
@@ -640,7 +646,25 @@ addHook({
           config.isEarlyFlakeDetectionFaulty = true
         }
       }
-      run.apply(this, arguments)
+      if (config.isSuitesSkippingEnabled && suitesToSkip.length) {
+        const filteredFiles = []
+        const skippedFiles = []
+        for (const file of files) {
+          const testPath = getTestSuitePath(file, process.cwd())
+          const shouldSkip = suitesToSkip.includes(testPath)
+          const isUnskippable = unskippableSuites.includes(file)
+          if (shouldSkip && !isUnskippable) {
+            skippedFiles.push(testPath)
+          } else {
+            filteredFiles.push(file)
+          }
+        }
+        isSuitesSkipped = skippedFiles.length > 0
+        skippedSuites = skippedFiles
+        run.apply(this, [cb, { files: filteredFiles }])
+      } else {
+        run.apply(this, arguments)
+      }
     })
 
     return this
