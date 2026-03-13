@@ -1991,8 +1991,7 @@ versions.forEach((version) => {
                 )
 
                 if (isQuarantining) {
-                  // TODO: do not flip the status of the test but still ignore failures
-                  assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'pass')
+                  assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
                   assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 } else {
                   assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
