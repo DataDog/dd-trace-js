@@ -506,7 +506,12 @@ class Config {
     // Set OpenTelemetry traces configuration with specific _TRACES_ vars
     // taking precedence over generic _EXPORTERS_ vars
     if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
-      setString(target, 'otelTracesUrl', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT || target.otelUrl)
+      if (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+        setString(target, 'otelTracesUrl', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
+      } else {
+        // Signal-agnostic endpoint: always append /v1/traces subpath per OTLP spec
+        setString(target, 'otelTracesUrl', OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/traces')
+      }
     }
     setString(target, 'otelTracesHeaders', OTEL_EXPORTER_OTLP_TRACES_HEADERS || target.otelHeaders)
     setString(target, 'otelTracesProtocol', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || target.otelProtocol)

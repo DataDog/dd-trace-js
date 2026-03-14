@@ -461,16 +461,41 @@ describe('OpenTelemetry Traces', () => {
 
     it('uses port 4318 for default OTLP HTTP endpoint', () => {
       delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+      delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
 
       const config = getConfigFresh()
       assert(config.otelTracesUrl.includes(':4318'), `expected port 4318 in URL, got: ${config.otelTracesUrl}`)
     })
 
-    it('respects explicit endpoint', () => {
+    it('respects explicit traces-specific endpoint as-is', () => {
       process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://custom-collector:9999'
 
       const config = getConfigFresh()
       assert.strictEqual(config.otelTracesUrl, 'http://custom-collector:9999')
+    })
+
+    it('appends /v1/traces to generic OTEL_EXPORTER_OTLP_ENDPOINT with no path', () => {
+      delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
+
+      const config = getConfigFresh()
+      assert.strictEqual(config.otelTracesUrl, 'http://collector:4318/v1/traces')
+    })
+
+    it('appends /v1/traces to generic OTEL_EXPORTER_OTLP_ENDPOINT with a custom path', () => {
+      delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318/custom'
+
+      const config = getConfigFresh()
+      assert.strictEqual(config.otelTracesUrl, 'http://collector:4318/custom/v1/traces')
+    })
+
+    it('traces-specific endpoint takes precedence over generic endpoint', () => {
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://generic:4318'
+      process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://traces-specific:9999'
+
+      const config = getConfigFresh()
+      assert.strictEqual(config.otelTracesUrl, 'http://traces-specific:9999')
     })
 
     // Note: Configuration env var tests are skipped due to test setup complexity.
