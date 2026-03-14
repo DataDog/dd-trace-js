@@ -280,20 +280,21 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Converts a DD Identifier object to a Buffer of the specified byte length.
+   * Converts a DD Identifier object to a hex-encoded string of the specified byte length.
    * Pads with leading zeros if the identifier buffer is shorter than the target.
+   * Per the OTLP http/json spec, trace-ids and span-ids must be hex-encoded strings.
    *
    * @param {object} identifier - DD Identifier object with toBuffer() method
    * @param {number} targetLength - Target byte length (16 for trace ID, 8 for span ID)
-   * @returns {Buffer} Buffer of the specified length
+   * @returns {string} Hex-encoded string of the specified length
    */
   #idToBytes (identifier, targetLength) {
     const buffer = identifier.toBuffer()
     if (buffer.length === targetLength) {
-      return Buffer.from(buffer)
+      return Buffer.from(buffer).toString('hex')
     }
     if (buffer.length > targetLength) {
-      return Buffer.from(buffer.slice(buffer.length - targetLength))
+      return Buffer.from(buffer.slice(buffer.length - targetLength)).toString('hex')
     }
     // Pad with leading zeros to reach target length
     const result = Buffer.alloc(targetLength)
@@ -301,7 +302,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     for (let i = 0; i < buffer.length; i++) {
       result[offset + i] = buffer[i]
     }
-    return result
+    return result.toString('hex')
   }
 
   /**
@@ -319,18 +320,18 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Converts a hex string to a Buffer of the specified byte length.
+   * Normalizes a hex string to the specified byte length.
    * Pads with leading zeros if the hex string is shorter than expected.
+   * Per the OTLP http/json spec, trace-ids and span-ids must be hex-encoded strings.
    *
-   * @param {string | undefined} hexString - Hex string to convert
+   * @param {string | undefined} hexString - Hex string to normalize
    * @param {number} targetLength - Target byte length
-   * @returns {Buffer} Buffer of the specified length
+   * @returns {string} Hex-encoded string of the specified length
    */
   #hexToBytes (hexString, targetLength) {
-    if (!hexString) return Buffer.alloc(targetLength)
+    if (!hexString) return '0'.repeat(targetLength * 2)
     const cleanHex = hexString.startsWith('0x') ? hexString.slice(2) : hexString
-    const paddedHex = cleanHex.padStart(targetLength * 2, '0')
-    return Buffer.from(paddedHex, 'hex')
+    return cleanHex.padStart(targetLength * 2, '0')
   }
 }
 

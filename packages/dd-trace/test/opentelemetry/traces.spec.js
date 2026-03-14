@@ -173,6 +173,16 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(otlpSpan.kind, 2) // server
       assert.strictEqual(otlpSpan.startTimeUnixNano, 1700000000000000000)
       assert.strictEqual(otlpSpan.endTimeUnixNano, 1700000000050000000)
+
+      // trace-id and span-id must be hex-encoded strings per the OTLP http/json spec
+      assert.strictEqual(typeof otlpSpan.traceId, 'string', 'traceId must be a string')
+      assert.strictEqual(otlpSpan.traceId.length, 32, 'traceId must be 32 hex chars (16 bytes)')
+      assert.match(otlpSpan.traceId, /^[0-9a-f]+$/, 'traceId must be lowercase hex')
+      assert.strictEqual(typeof otlpSpan.spanId, 'string', 'spanId must be a string')
+      assert.strictEqual(otlpSpan.spanId.length, 16, 'spanId must be 16 hex chars (8 bytes)')
+      assert.match(otlpSpan.spanId, /^[0-9a-f]+$/, 'spanId must be lowercase hex')
+      assert.strictEqual(typeof otlpSpan.parentSpanId, 'string', 'parentSpanId must be a string')
+      assert.strictEqual(otlpSpan.parentSpanId.length, 16, 'parentSpanId must be 16 hex chars (8 bytes)')
     })
 
     it('maps span kind correctly', () => {
@@ -315,6 +325,8 @@ describe('OpenTelemetry Traces', () => {
 
       assert.strictEqual(otlpSpan.links.length, 1)
       assert.strictEqual(otlpSpan.links[0].traceState, 'dd=s:1')
+      assert.strictEqual(otlpSpan.links[0].traceId, 'aabbccddaabbccddaabbccddaabbccdd')
+      assert.strictEqual(otlpSpan.links[0].spanId, '1122334455667788')
 
       const linkAttrs = extractAttrs(otlpSpan.links[0].attributes)
       assert.strictEqual(linkAttrs['link.reason'], 'follows-from')
@@ -331,16 +343,16 @@ describe('OpenTelemetry Traces', () => {
     it('handles multiple spans', () => {
       const transformer = new OtlpTraceTransformer({})
       const spans = [
-        createMockSpan({ name: 'span1' }),
-        createMockSpan({ name: 'span2', span_id: id('bbbbbbbbbbbbbbbb') }),
+        createMockSpan({ resource: '/api/first' }),
+        createMockSpan({ resource: '/api/second', span_id: id('bbbbbbbbbbbbbbbb') }),
       ]
 
       const decoded = decodePayload(transformer.transformSpans(spans))
       const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
 
       assert.strictEqual(otlpSpans.length, 2)
-      assert.strictEqual(otlpSpans[0].name, '/api/test')
-      assert.strictEqual(otlpSpans[1].name, 'span2')
+      assert.strictEqual(otlpSpans[0].name, '/api/first')
+      assert.strictEqual(otlpSpans[1].name, '/api/second')
     })
   })
 
