@@ -116,7 +116,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     const result = {
       traceId: this.#idToBytes(span.trace_id, 16),
       spanId: this.#idToBytes(span.span_id, 8),
-      name: span.name,
+      name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
       startTimeUnixNano: span.start,
       endTimeUnixNano: span.start + span.duration,

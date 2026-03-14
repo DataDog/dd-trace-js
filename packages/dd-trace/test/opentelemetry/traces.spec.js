@@ -169,7 +169,7 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(scopeSpans[0].scope.name, 'dd-trace-js')
 
       const otlpSpan = scopeSpans[0].spans[0]
-      assert.strictEqual(otlpSpan.name, 'test.operation')
+      assert.strictEqual(otlpSpan.name, '/api/test')
       assert.strictEqual(otlpSpan.kind, 2) // server
       assert.strictEqual(otlpSpan.startTimeUnixNano, 1700000000000000000)
       assert.strictEqual(otlpSpan.endTimeUnixNano, 1700000000050000000)
@@ -339,7 +339,7 @@ describe('OpenTelemetry Traces', () => {
       const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
 
       assert.strictEqual(otlpSpans.length, 2)
-      assert.strictEqual(otlpSpans[0].name, 'span1')
+      assert.strictEqual(otlpSpans[0].name, '/api/test')
       assert.strictEqual(otlpSpans[1].name, 'span2')
     })
   })
@@ -348,7 +348,7 @@ describe('OpenTelemetry Traces', () => {
     it('exports spans via OTLP HTTP with JSON encoding', () => {
       mockOtlpExport((decoded) => {
         const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
-        assert.strictEqual(otlpSpan.name, 'http.request')
+        assert.strictEqual(otlpSpan.name, '/api/test')
       })
 
       const tracer = setupTracer()
