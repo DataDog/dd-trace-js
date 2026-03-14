@@ -705,6 +705,10 @@ class Config {
     }
 
     setString(target, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
+    if (DD_TRACE_AGENT_PROTOCOL_VERSION && target.otelTracesEnabled) {
+      target.otelTracesEnabled = false
+      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
+    }
     setString(target, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     setBoolean(target, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED)
     target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)

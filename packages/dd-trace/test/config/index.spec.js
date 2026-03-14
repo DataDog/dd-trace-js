@@ -325,6 +325,13 @@ describe('Config', () => {
     assert.strictEqual(config.otelTracesEnabled, false)
   })
 
+  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesEnabled, false)
+  })
+
   it('should default sample rate to 1 when OTLP traces export is enabled', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
