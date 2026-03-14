@@ -136,13 +136,16 @@ function _patchHandlerExports (moduleExports, handlerPath) {
 }
 
 // Determine which mode to use based on environment
-var lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
 var originalLambdaHandler = process.env.DD_LAMBDA_HANDLER
+var currentHandler = process.env._HANDLER || ''
+var usingHandlerWrapper = currentHandler.indexOf('handler-wrapper') !== -1
 
-if (originalLambdaHandler) {
-  // Auto mode: DD_LAMBDA_HANDLER is set, intercept the user's handler module directly.
-  // We monkey-patch Module._load because the Lambda runtime loads the handler by
-  // absolute file path — addHook/RITM only intercepts npm package names, not file paths.
+if (originalLambdaHandler && !usingHandlerWrapper) {
+  // Legacy auto mode: DD_LAMBDA_HANDLER is set but _HANDLER was NOT overridden
+  // to point to our handler-wrapper module (e.g., older layer setup without
+  // dd_trace_wrapper, or custom integration). Fall back to Module._load patching.
+  // Note: this does NOT work on nodejs22.x which uses ESM import() for handlers.
+  var lambdaTaskRoot = process.env.LAMBDA_TASK_ROOT
   var moduleRootAndHandler = _extractModuleRootAndHandler(originalLambdaHandler)
   var moduleRoot = moduleRootAndHandler[0]
   var moduleAndHandler = moduleRootAndHandler[1]
@@ -191,7 +194,7 @@ if (originalLambdaHandler) {
 
     return result
   }
-} else {
+} else if (!originalLambdaHandler) {
   // Manual mode: wrap the `datadog` export from datadog-lambda-js
   addHook({ name: 'datadog-lambda-js', versions: ['>=4'] }, function (datadogLambdaModule) {
     shimmer.wrap(datadogLambdaModule, 'datadog', function (originalDatadog) {
@@ -208,4 +211,5 @@ if (originalLambdaHandler) {
 module.exports = {
   _extractModuleRootAndHandler,
   _extractModuleNameAndHandlerPath,
+  wrapLambdaHandler,
 }

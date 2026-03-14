@@ -3036,6 +3036,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_LAMBDA_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_LANGCHAIN_ANTHROPIC_ENABLED": [
       {
         "implementation": "A",

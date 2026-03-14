@@ -170,63 +170,65 @@ class LambdaPlugin extends TracingPlugin {
 
     if (!span) return
 
-    // Extract HTTP status code
-    const statusCode = extractHTTPStatusCodeTag(ctx._triggerTags, result, ctx._isResponseStream)
-    if (statusCode) {
-      span.setTag('http.status_code', statusCode)
+    try {
+      // Extract HTTP status code
+      const statusCode = extractHTTPStatusCodeTag(ctx._triggerTags, result, ctx._isResponseStream)
+      if (statusCode) {
+        span.setTag('http.status_code', statusCode)
+        if (ctx._inferredSpan) {
+          ctx._inferredSpan.setTag('http.status_code', statusCode)
+        }
+      }
+
+      // Capture response payload
+      if (config.captureLambdaPayload && result !== undefined) {
+        try {
+          tagObject(span, 'function.response', result, 0, config.captureLambdaPayloadMaxDepth)
+        } catch (e) {
+          log.debug('Failed to tag response payload')
+        }
+      }
+
+      // Enhanced metrics for errors
+      if (config.enhancedMetrics && this._dogstatsd) {
+        if (ctx.error) {
+          incrementErrors(this._dogstatsd, context)
+        }
+        if (isBatchItemFailure(result)) {
+          const count = batchItemFailureCount(result)
+          incrementBatchItemFailures(this._dogstatsd, count, context)
+        }
+      }
+
+      // Add span pointers
+      if (config.addSpanPointers) {
+        try {
+          const pointers = getSpanPointerAttributes(ctx.event)
+          for (const p of pointers) {
+            span.addLink(p.pointer)
+          }
+        } catch (e) {
+          log.debug('Failed to add span pointers')
+        }
+      }
+
+      // Finish inferred span
       if (ctx._inferredSpan) {
-        ctx._inferredSpan.setTag('http.status_code', statusCode)
-      }
-    }
-
-    // Capture response payload
-    if (config.captureLambdaPayload && result !== undefined) {
-      try {
-        tagObject(span, 'function.response', result, 0, config.captureLambdaPayloadMaxDepth)
-      } catch (e) {
-        log.debug('Failed to tag response payload')
-      }
-    }
-
-    // Enhanced metrics for errors
-    if (config.enhancedMetrics && this._dogstatsd) {
-      if (ctx.error) {
-        incrementErrors(this._dogstatsd, context)
-      }
-      if (isBatchItemFailure(result)) {
-        const count = batchItemFailureCount(result)
-        incrementBatchItemFailures(this._dogstatsd, count, context)
-      }
-    }
-
-    // Add span pointers
-    if (config.addSpanPointers) {
-      try {
-        const pointers = getSpanPointerAttributes(ctx.event)
-        for (const p of pointers) {
-          span.addLink(p.pointer)
+        try {
+          if (ctx._inferredSpanIsAsync) {
+            // For async spans, finish at the same time as the lambda span
+            // (will be finished when lambda span finishes)
+          } else {
+            ctx._inferredSpan.finish()
+          }
+        } catch (e) {
+          log.debug('Failed to finish inferred span')
         }
-      } catch (e) {
-        log.debug('Failed to add span pointers')
       }
+    } finally {
+      // Always finish the lambda span, even if tagging/metrics threw
+      span.finish()
     }
-
-    // Finish inferred span
-    if (ctx._inferredSpan) {
-      try {
-        if (ctx._inferredSpanIsAsync) {
-          // For async spans, finish at the same time as the lambda span
-          // (will be finished when lambda span finishes)
-        } else {
-          ctx._inferredSpan.finish()
-        }
-      } catch (e) {
-        log.debug('Failed to finish inferred span')
-      }
-    }
-
-    // Finish the lambda span
-    span.finish()
   }
 
   error (ctx) {

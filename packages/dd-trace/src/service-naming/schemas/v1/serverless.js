@@ -8,6 +8,10 @@ const serverless = {
       opName: () => 'azure.functions.invoke',
       serviceName: identityService,
     },
+    lambda: {
+      opName: () => 'aws.lambda',
+      serviceName: identityService,
+    },
   },
 }
 

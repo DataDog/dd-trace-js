@@ -66,11 +66,17 @@ function extractTraceContext (event, context, tracer, config) {
   const xrayContext = xrayService.extractXrayContext()
   if (xrayContext !== null) {
     log.debug('Extracted trace context from X-Ray')
-    const xraySpanContext = tracer.extract('text_map', {
+    const carrier = {
       'x-datadog-trace-id': xrayContext.traceId,
       'x-datadog-parent-id': xrayContext.parentId,
-      'x-datadog-sampling-priority': String(xrayContext.sampleMode)
-    })
+    }
+    // Only propagate X-Ray sampling when mergeXrayTraces is enabled.
+    // Otherwise, X-Ray's Sampled=0 would cause dd-trace to drop the trace.
+    // Let dd-trace's own sampler decide when not merging.
+    if (config?.mergeXrayTraces) {
+      carrier['x-datadog-sampling-priority'] = String(xrayContext.sampleMode)
+    }
+    const xraySpanContext = tracer.extract('text_map', carrier)
     return xraySpanContext
   }
 

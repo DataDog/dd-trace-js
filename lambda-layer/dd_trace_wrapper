@@ -7,9 +7,17 @@
 # Save the original handler so dd-trace's instrumentation can find and wrap it
 export DD_LAMBDA_HANDLER="${_HANDLER}"
 
+# Override _HANDLER to point to our handler wrapper module.
+# The Lambda runtime will load this module instead of the user's handler.
+# The wrapper module resolves the original handler from DD_LAMBDA_HANDLER,
+# wraps it with tracing channel events, and re-exports it.
+# This is more reliable than Module._load patching because the nodejs22.x
+# runtime may use ESM import() which bypasses Module._load entirely.
+export _HANDLER="/opt/nodejs/node_modules/dd-trace/packages/dd-trace/src/lambda/handler-wrapper.handler"
+
 # Inject dd-trace initialization before any user code via --require
 # This ensures the tracer is initialized and instrumentation hooks are registered
-# before the Lambda runtime loads the customer's handler module.
+# before the Lambda runtime loads the handler wrapper module.
 export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--require /opt/nodejs/node_modules/dd-trace/init"
 
 # Execute the Lambda runtime (or whatever command was passed)

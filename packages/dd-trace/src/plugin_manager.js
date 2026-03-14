@@ -39,6 +39,12 @@ loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
+// Lambda plugin doesn't use addHook (it wraps via handler-wrapper or Module._load),
+// so it won't publish to the load channel. Register it explicitly.
+if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
+  maybeEnable(plugins.lambda)
+}
+
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
