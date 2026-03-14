@@ -1,6 +1,7 @@
 'use strict'
 
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
+const { VERSION } = require('../../../../../version')
 
 /**
  * @typedef {import('../../config')} Config
@@ -34,6 +35,9 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 function buildResourceAttributes (config) {
   const resourceAttributes = {
     'service.name': config.service || config.tags.service,
+    'telemetry.sdk.name': 'dd-trace',
+    'telemetry.sdk.version': VERSION,
+    'telemetry.sdk.language': 'javascript',
   }
 
   const env = config.env || config.tags.env

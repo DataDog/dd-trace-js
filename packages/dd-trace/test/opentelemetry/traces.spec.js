@@ -479,6 +479,9 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(resourceAttrs['service.name'], 'my-trace-service')
         assert.strictEqual(resourceAttrs['service.version'], 'v2.0.0')
         assert.strictEqual(resourceAttrs['deployment.environment'], 'staging')
+        assert.strictEqual(resourceAttrs['telemetry.sdk.name'], 'dd-trace')
+        assert.ok(resourceAttrs['telemetry.sdk.version'], 'telemetry.sdk.version should be set')
+        assert.strictEqual(resourceAttrs['telemetry.sdk.language'], 'javascript')
       })
 
       const tracer = setupTracer()
