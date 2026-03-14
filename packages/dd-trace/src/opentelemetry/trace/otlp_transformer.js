@@ -187,6 +187,14 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
       }
     }
 
+    // Add meta_struct as bytesValue attributes (JSON-serialized, base64-encoded per proto JSON mapping)
+    if (span.meta_struct) {
+      for (const [key, value] of Object.entries(span.meta_struct)) {
+        const bytes = Buffer.from(JSON.stringify(value))
+        attributes.push({ key, value: { bytesValue: bytes.toString('base64') } })
+      }
+    }
+
     return attributes
   }
 

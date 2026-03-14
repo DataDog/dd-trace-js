@@ -251,6 +251,31 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(attrs['http.status_code'], 404)
     })
 
+    it('encodes meta_struct values as base64 bytesValue attributes', () => {
+      const transformer = new OtlpTraceTransformer({})
+      const span = createMockSpan({
+        meta_struct: {
+          '_dd.stack': { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] },
+          'http.request.body': { key: 'value' },
+        },
+      })
+
+      const decoded = decodePayload(transformer.transformSpans([span]))
+      const attrs = decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes
+
+      const stackAttr = attrs.find(a => a.key === '_dd.stack')
+      assert.ok(stackAttr, '_dd.stack attribute should be present')
+      assert.ok(stackAttr.value.bytesValue !== undefined, '_dd.stack should have bytesValue')
+      const stackDecoded = JSON.parse(Buffer.from(stackAttr.value.bytesValue, 'base64').toString())
+      assert.deepStrictEqual(stackDecoded, { nodejs: [{ id: 1, text: 'fn', file: 'a.js', line: 10 }] })
+
+      const bodyAttr = attrs.find(a => a.key === 'http.request.body')
+      assert.ok(bodyAttr, 'http.request.body attribute should be present')
+      assert.ok(bodyAttr.value.bytesValue !== undefined, 'http.request.body should have bytesValue')
+      const bodyDecoded = JSON.parse(Buffer.from(bodyAttr.value.bytesValue, 'base64').toString())
+      assert.deepStrictEqual(bodyDecoded, { key: 'value' })
+    })
+
     it('excludes _dd.span_links and span.kind from attributes', () => {
       const transformer = new OtlpTraceTransformer({})
       const span = createMockSpan({
