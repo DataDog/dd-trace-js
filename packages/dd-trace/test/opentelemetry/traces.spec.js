@@ -440,6 +440,21 @@ describe('OpenTelemetry Traces', () => {
       exporter.export([createMockSpan()])
     })
 
+    it('includes multiple comma-separated custom headers from OTEL_EXPORTER_OTLP_TRACES_HEADERS', () => {
+      process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS = 'x-api-key=secret123,other-config-value=value'
+
+      mockOtlpExport((decoded, headers) => {
+        assert.strictEqual(headers['x-api-key'], 'secret123')
+        assert.strictEqual(headers['other-config-value'], 'value')
+      })
+
+      const tracer = setupTracer()
+      const processor = tracer._tracer._processor
+      const exporter = processor._exporter
+
+      exporter.export([createMockSpan()])
+    })
+
     it('does not export empty span arrays', () => {
       let exportCalled = false
       sinon.stub(http, 'request').callsFake(() => {
