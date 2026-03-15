@@ -357,6 +357,24 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(linkAttrs['link.reason'], 'follows-from')
     })
 
+    it('maps timestamps correctly', () => {
+      const transformer = new OtlpTraceTransformer({})
+      const beforeNs = Date.now() * 1e6
+      const durationNs = 50000000 // 50ms
+      const span = createMockSpan({
+        start: beforeNs,
+        duration: durationNs,
+      })
+
+      const decoded = decodePayload(transformer.transformSpans([span]))
+      const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+      assert.ok(otlpSpan.startTimeUnixNano >= beforeNs,
+        `startTimeUnixNano (${otlpSpan.startTimeUnixNano}) should be >= recorded time (${beforeNs})`)
+      assert.ok(otlpSpan.endTimeUnixNano >= otlpSpan.startTimeUnixNano,
+        `endTimeUnixNano (${otlpSpan.endTimeUnixNano}) should be >= startTimeUnixNano (${otlpSpan.startTimeUnixNano})`)
+    })
+
     it('handles empty span array', () => {
       const transformer = new OtlpTraceTransformer({})
       const decoded = decodePayload(transformer.transformSpans([]))
