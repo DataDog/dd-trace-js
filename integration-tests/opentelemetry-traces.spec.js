@@ -34,6 +34,7 @@ describe('OTLP Trace Export', () => {
 
   it('should export traces in OTLP JSON format', async () => {
     const tracesPromise = waitForOtlpTraces(agent, timeout)
+    const beforeNs = Date.now() * 1e6
 
     const proc = fork(join(cwd, 'opentelemetry/otlp-traces.js'), {
       cwd,
@@ -122,7 +123,7 @@ describe('OTLP Trace Export', () => {
 
     // Validate timing fields
     for (const span of spans) {
-      assert.ok(span.startTimeUnixNano > 0, 'span should have a positive startTimeUnixNano')
+      assert.ok(span.startTimeUnixNano >= beforeNs, 'span startTimeUnixNano should be >= test start time')
       assert.ok(span.endTimeUnixNano > 0, 'span should have a positive endTimeUnixNano')
       assert.ok(span.endTimeUnixNano >= span.startTimeUnixNano, 'endTime should be >= startTime')
     }
