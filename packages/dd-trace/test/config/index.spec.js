@@ -46,6 +46,7 @@ describe('Config', () => {
     log = proxyquire('../../src/log', {})
     log.use = sinon.spy()
     log.toggle = sinon.spy()
+    log.info = sinon.spy()
     log.warn = sinon.spy()
     log.error = sinon.spy()
 
@@ -301,6 +302,38 @@ describe('Config', () => {
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_traceidratio'
     config = getConfig()
     assert.strictEqual(config.sampleRate, 0.1)
+  })
+
+  it('should log when a non-parentbased sampler is upgraded to its parentbased equivalent', () => {
+    for (const [sampler, parentBased] of [
+      ['always_on', 'parentbased_always_on'],
+      ['always_off', 'parentbased_always_off'],
+      ['traceidratio', 'parentbased_traceidratio'],
+    ]) {
+      log.info.resetHistory()
+      process.env.OTEL_TRACES_SAMPLER = sampler
+      process.env.OTEL_TRACES_SAMPLER_ARG = '0.5'
+      getConfig()
+      sinon.assert.calledWith(
+        log.info,
+        'OTEL_TRACES_SAMPLER=%s is not supported; using %s instead',
+        sampler,
+        parentBased
+      )
+    }
+  })
+
+  it('should not log a sampler upgrade for parentbased samplers', () => {
+    for (const sampler of ['parentbased_always_on', 'parentbased_always_off', 'parentbased_traceidratio']) {
+      log.info.resetHistory()
+      process.env.OTEL_TRACES_SAMPLER = sampler
+      process.env.OTEL_TRACES_SAMPLER_ARG = '0.5'
+      getConfig()
+      const upgradeCall = log.info.getCalls().find(
+        (call) => call.args[0]?.includes?.('is not supported')
+      )
+      assert.strictEqual(upgradeCall, undefined)
+    }
   })
 
   it('should default OTEL_TRACES_SAMPLER to parentbased_always_on when OTEL_TRACES_EXPORTER is otlp', () => {
