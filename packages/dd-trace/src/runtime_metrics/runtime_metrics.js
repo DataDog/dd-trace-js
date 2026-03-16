@@ -27,7 +27,6 @@ let lastTime = 0
 let lastCpuUsage = null
 let eventLoopDelayObserver = null
 
-processTags.initialize()
 // !!!!!!!!!!!
 //  IMPORTANT
 // !!!!!!!!!!!
