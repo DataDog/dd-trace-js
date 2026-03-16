@@ -1088,6 +1088,61 @@ describe(`cucumber@${version} commonJS`, () => {
             }).catch(done)
           })
         })
+
+        onlyLatestIt('can skip suites in parallel mode', async () => {
+          receiver.setSuitesToSkip([{
+            type: 'suite',
+            attributes: {
+              suite: `${featuresPath}farewell.feature`,
+            },
+          }])
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+              assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+              const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(suites.length, 2)
+
+              const skippedSuite = suites.find(s =>
+                s.resource === `test_suite.${featuresPath}farewell.feature`
+              )
+              assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+              // greetings.feature ran (not skipped)
+              const runningSuite = suites.find(s =>
+                s.resource === `test_suite.${featuresPath}greetings.feature`
+              )
+              assert.ok(runningSuite)
+              assert.ok(!(TEST_SKIPPED_BY_ITR in runningSuite.meta))
+
+              // Only tests from the non-skipped suite ran
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.ok(tests.length > 0)
+              tests.forEach(test => {
+                assert.ok(!test.meta[TEST_SUITE].includes('farewell'))
+              })
+            })
+
+          childProcess = exec(
+            parallelModeCommand,
+            {
+              cwd,
+              env: getCiVisAgentlessConfig(receiver.port),
+            }
+          )
+          await Promise.all([
+            eventsPromise,
+            once(childProcess, 'exit'),
+          ])
+        })
       })
 
       context('early flake detection', () => {
