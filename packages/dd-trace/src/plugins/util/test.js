@@ -170,7 +170,6 @@ const MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY = {
   playwright: '>=1.38.0',
 }
 
-const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set([])
 const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'playwright', 'vitest'])
 
 const TEST_LEVEL_EVENT_TYPES = [
@@ -1021,7 +1020,7 @@ function isAttemptToFixSupported (testFramework, isParallel, frameworkVersion) {
     return satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX[testFramework])
   }
 
-  return !(isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework))
+  return true
 }
 
 function isFailedTestReplaySupported (testFramework, frameworkVersion) {
