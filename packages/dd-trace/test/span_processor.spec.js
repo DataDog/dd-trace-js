@@ -93,12 +93,14 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(finishedSpan.context()._tags, {})
   })
 
-  it('should skip traces with unfinished spans', () => {
+  it('should not flush a partial trace below the flushMinSpans threshold', () => {
     trace.started = [activeSpan, finishedSpan]
     trace.finished = [finishedSpan]
     processor.process(finishedSpan)
 
     sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [activeSpan, finishedSpan])
+    assert.deepStrictEqual(trace.finished, [finishedSpan])
   })
 
   it('should skip unrecorded traces', () => {
