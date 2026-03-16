@@ -108,9 +108,9 @@ function enable (_config) {
     config = _config
   } catch (err) {
     if (!IS_SERVERLESS) {
-      log.error('[ASM] Unable to start AppSec', err)
-    } else {
       log.debug('[ASM] Serverless mode: suppressing error log, calling disable()')
+    } else {
+      log.error('[ASM] Unable to start AppSec', err)
     }
 
     disable()
