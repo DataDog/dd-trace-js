@@ -19,5 +19,4 @@ module.exports = {
   ConsoleLogger,
 }
 
-
 // REMOVE ME THIS IS A CODEOWNERS TEST
