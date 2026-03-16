@@ -50,7 +50,7 @@ class BaseOpenaiAgentsLLMObsPlugin extends LLMObsPlugin {
     const inputMessages = extractInputMessages(request)
 
     if (error) {
-      this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '', role: '' }])
       return
     }
 
@@ -246,11 +246,11 @@ function extractMetrics (result) {
   const usage = result?.usage
   if (!usage) return metrics
 
-  if (usage.inputTokens !== undefined) metrics.inputTokens = usage.inputTokens
-  if (usage.outputTokens !== undefined) metrics.outputTokens = usage.outputTokens
+  if (usage.input_tokens !== undefined) metrics.inputTokens = usage.input_tokens
+  if (usage.output_tokens !== undefined) metrics.outputTokens = usage.output_tokens
 
-  if (usage.totalTokens !== undefined) {
-    metrics.totalTokens = usage.totalTokens
+  if (usage.total_tokens !== undefined) {
+    metrics.totalTokens = usage.total_tokens
   } else if (metrics.inputTokens !== undefined && metrics.outputTokens !== undefined) {
     metrics.totalTokens = metrics.inputTokens + metrics.outputTokens
   }
