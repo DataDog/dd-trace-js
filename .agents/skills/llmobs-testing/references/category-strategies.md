@@ -109,6 +109,26 @@ it('instruments chat completion', async () => {
 - ✅ Test provider-specific features
 - ✅ Commit cassettes to repo
 
+### ⚠️ Transitive Dependency Require Order
+
+If the instrumented methods live in a **sub-package** that is a dependency of the package you load (e.g. `@openai/agents-openai` is a dep of `@openai/agents-core`), you must **require the sub-package first**.
+
+RITM patches modules on their first `require()`. If the parent package loads the sub-package transitively before your `before()` hook requires it, the module is already cached and RITM never fires — instrumentation silently does nothing.
+
+```javascript
+before(() => {
+  // ✅ CORRECT: require the instrumented sub-package first
+  const { OpenAIResponsesModel } = require('@openai/agents-openai')
+  const agentsCore = require('@openai/agents-core')
+
+  // ❌ WRONG: parent loads sub-package transitively, caching it before RITM patches it
+  // const agentsCore = require('@openai/agents-core')        // caches @openai/agents-openai
+  // const { OpenAIResponsesModel } = require('@openai/agents-openai')  // already cached, not patched
+})
+```
+
+**Symptom when wrong:** tests time out — `getEvents()` never resolves, no APM traces arrive, only the SDK's own internal tracing output appears.
+
 ## LlmObsCategory.ORCHESTRATION
 
 **Strategy:** Pure function tests, NO VCR, NO real API calls
