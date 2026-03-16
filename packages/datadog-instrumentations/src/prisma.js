@@ -172,8 +172,10 @@ const prismaHook = (runtime, versions, name, isIitm) => {
         prismaHelperInit.publish(prismaHelperCtx)
 
         const helper = prismaHelperCtx.helper
-        this._tracingHelper = helper
-        this._engine.tracingHelper = helper
+        if (helper) {
+          this._tracingHelper = helper
+          this._engine.tracingHelper = helper
+        }
       }
     }
   }

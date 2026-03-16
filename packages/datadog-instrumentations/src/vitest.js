@@ -661,6 +661,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
         task.result.state = 'pass'
       } else if (isQuarantined) {
+        if (task.result.state === 'fail') {
+          switchedStatuses.add(task)
+        }
         task.result.state = 'pass'
       }
     }

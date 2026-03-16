@@ -228,6 +228,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "azure-durable-functions": tracer.plugins.azure_durable_functions
   "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -1626,6 +1627,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Sensitive Data Scanner findings from the evaluation.
+       */
+      sds: Object[];
     }
 
     /**
@@ -1641,6 +1646,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Sensitive Data Scanner findings from the evaluation.
+       */
+      sds: Object[];
     }
 
     /**
@@ -2112,6 +2121,12 @@ declare namespace tracer {
      * @azure/service-bus module
      */
     interface azure_service_bus extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * durable-functions module
+     */
+      interface azure_durable_functions extends Integration {}
 
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
