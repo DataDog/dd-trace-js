@@ -369,7 +369,7 @@ moduleTypes.forEach(({
               testTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         // Run Cypress with the pre-compiled JS spec (compiled from spec-source-line.cy.ts).
         // Cypress bundles the compiled JS via its own preprocessor; the plugin resolves
@@ -459,7 +459,7 @@ moduleTypes.forEach(({
               fallbackEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-fallback.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${fallbackEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(testCommand, {
           cwd,
@@ -507,7 +507,7 @@ moduleTypes.forEach(({
               noMatchEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-no-match.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${noMatchEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(testCommand, {
           cwd,
@@ -549,7 +549,7 @@ moduleTypes.forEach(({
               jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE]
             }`
           )
-        }, 120000)
+        }, 60000)
 
       childProcess = exec(testCommand, {
         cwd,
@@ -1850,7 +1850,7 @@ moduleTypes.forEach(({
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.strictEqual(newTests.length, 0)
-          }, 120000)
+          }, 60000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -3285,7 +3285,7 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             // it is not retried
             assert.strictEqual(tests.length, 1)
-          }, 120000)
+          }, 60000)
 
         const {
           NODE_OPTIONS,
