@@ -150,7 +150,7 @@ const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test
 const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
 
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
-const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
+const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
   playwright: '>=1.38.0',
 }
