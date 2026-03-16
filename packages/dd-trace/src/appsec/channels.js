@@ -26,6 +26,8 @@ module.exports = {
   httpClientResponseFinish: dc.channel('apm:http:client:response:finish'),
   incomingHttpRequestEnd: dc.channel('dd-trace:incomingHttpRequestEnd'),
   incomingHttpRequestStart: dc.channel('dd-trace:incomingHttpRequestStart'),
+  lambdaStartInvocation: dc.channel('datadog:lambda:start-invocation'),
+  lambdaEndInvocation: dc.channel('datadog:lambda:end-invocation'),
   multerParser: dc.channel('datadog:multer:read:finish'),
   mysql2OuterQueryStart: dc.channel('datadog:mysql2:outerquery:start'),
   nextBodyParsed: dc.channel('apm:next:body-parsed'),
