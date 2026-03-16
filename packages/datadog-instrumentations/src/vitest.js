@@ -747,7 +747,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const lastExecutionStatus = task.result.state
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task)
+    const isAtf = attemptToFixTasks.has(task)
+    const isQuarantinedOrDisabledAtf = isAtf && (quarantinedTasks.has(task) || disabledTasks.has(task))
+    const shouldTrackStatuses = isEarlyFlakeDetectionEnabled || isAtf
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isQuarantinedOrDisabledAtf
     const statuses = taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -765,8 +768,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
         }
-        if (shouldFlipStatus) {
+        if (shouldTrackStatuses) {
           statuses.push(lastExecutionStatus)
+        }
+        if (shouldFlipStatus) {
           // If we don't "reset" the result.state to "pass", once a repetition fails,
           // vitest will always consider the test as failed, so we can't read the actual status
           // This means that we change vitest's behavior:
@@ -776,7 +781,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
       }
     } else if (numRepetition === task.repeats) {
-      if (shouldFlipStatus) {
+      if (shouldTrackStatuses) {
         statuses.push(lastExecutionStatus)
       }
 
