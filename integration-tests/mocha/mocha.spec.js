@@ -4531,17 +4531,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('libraries capabilities', () => {
-    const getTestAssertions = (isParallel) =>
+    const getTestAssertions = () =>
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
         assert.ok(metadataDicts.length > 0)
         metadataDicts.forEach(metadata => {
-          if (isParallel) {
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-          } else {
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-          }
+          assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
@@ -4553,8 +4549,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         })
       })
 
-    const runTest = (done, isParallel, extraEnvVars = {}) => {
-      const testAssertionsPromise = getTestAssertions(isParallel)
+    const runTest = (done, extraEnvVars = {}) => {
+      const testAssertionsPromise = getTestAssertions()
 
       childProcess = exec(
         runTestsCommand,
@@ -4573,13 +4569,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     }
 
     it('adds capabilities to tests', (done) => {
-      runTest(done, false)
+      runTest(done)
     })
 
     onlyLatestIt('adds capabilities to tests (parallel)', (done) => {
-      runTest(done, true, {
-        RUN_IN_PARALLEL: '1',
-      })
+      runTest(done, { RUN_IN_PARALLEL: '1' })
     })
   })
 
