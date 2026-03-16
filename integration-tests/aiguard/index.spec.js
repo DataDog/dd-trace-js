@@ -57,6 +57,18 @@ describe('AIGuard SDK integration tests', () => {
     { ...r, blocking: false },
   ])
 
+  it('test default options honors remote blocking', async () => {
+    const response = await executeRequest(`${url}/deny-default-options`, 'GET')
+    assert.strictEqual(response.status, 403)
+    assertObjectContains(response.body, 'I am feeling suspicious today')
+    await agent.assertMessageReceived(({ headers, payload }) => {
+      const span = payload[0].find(span => span.name === 'ai_guard')
+      assert.notStrictEqual(span, null)
+      assert.strictEqual(span.meta['ai_guard.action'], 'DENY')
+      assert.strictEqual(span.meta['ai_guard.blocked'], 'true')
+    })
+  })
+
   for (const { endpoint, action, reason, blocking } of testSuite) {
     it(`test evaluate with ${action} response (blocking ${blocking})`, async () => {
       const headers = blocking ? { 'x-blocking-enabled': true } : null

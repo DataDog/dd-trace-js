@@ -673,6 +673,7 @@ export default [
     languageOptions: {
       globals: {
         afterAll: 'readonly',
+        beforeAll: 'readonly',
         expect: 'readonly',
         jest: 'readonly',
       },
