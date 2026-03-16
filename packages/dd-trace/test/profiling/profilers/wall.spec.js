@@ -297,18 +297,20 @@ describe('profilers/native/wall', () => {
   })
 
   describe('webTags caching in getProfilingContext', () => {
-    // TracingPlugin.startSpan() calls storage.enterWith({span}) immediately on span
-    // creation, before the plugin calls addRequestTags() to set span.type='web'.
-    // This means the first enterCh event fires with span.type unset. The profiler
-    // must not cache webTags=undefined from that first event, or the subsequent
+    // TracingPlugin.startSpan() calls activateSpan() immediately on span creation,
+    // before addRequestTags() sets span.type='web'. This fires spanActivatedChannel
+    // (ACF path) or enterCh (non-ACF path) with span.type unset. The profiler must
+    // not cache webTags=undefined from that first event, or the subsequent
     // activation (with span.type='web' already set) would incorrectly use the
     // stale cache and never produce trace endpoint labels.
+    let spanActivatedCh
     let enterCh
     let currentStore
     let localPprof
     let WallProfiler
 
     beforeEach(() => {
+      spanActivatedCh = dc.channel('dd-trace:span:activate')
       enterCh = dc.channel('dd-trace:storage:enter')
       currentStore = null
 
@@ -323,7 +325,10 @@ describe('profilers/native/wall', () => {
 
       WallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
         '@datadog/pprof': localPprof,
-        '../../../../datadog-core': { storage: () => ({ getStore: () => currentStore }) },
+        '../../span_activation': {
+          activeSpan: () => currentStore?.span,
+          spanActivatedChannel: spanActivatedCh,
+        },
       })
     })
 
@@ -356,14 +361,14 @@ describe('profilers/native/wall', () => {
 
       // First activation: span.type not yet set → webTags cannot be determined
       currentStore = { span: webSpan }
-      enterCh.publish()
+      spanActivatedCh.publish()
       assert.strictEqual(localPprof.time.setContext.getCall(0).args[0].webTags, undefined)
 
       // Plugin sets span.type='web' (simulating addRequestTags)
       webSpanTags['span.type'] = 'web'
 
       // Second activation: span.type='web' → webTags must now be the tags object
-      enterCh.publish()
+      spanActivatedCh.publish()
       assert.strictEqual(localPprof.time.setContext.getCall(1).args[0].webTags, webSpanTags)
 
       profiler.stop()
@@ -410,13 +415,13 @@ describe('profilers/native/wall', () => {
 
       // Activate web span twice (first without type, then with type)
       currentStore = { span: webSpan }
-      enterCh.publish()
+      spanActivatedCh.publish()
       webSpanTags['span.type'] = 'web'
-      enterCh.publish()
+      spanActivatedCh.publish()
 
       // Now activate the child span — it must inherit webTags via parent walk
       currentStore = { span: childSpan }
-      enterCh.publish()
+      spanActivatedCh.publish()
       const childCtx = localPprof.time.setContext.lastCall.args[0]
       assert.strictEqual(childCtx.webTags, webSpanTags)
 
