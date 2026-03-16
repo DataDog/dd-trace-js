@@ -247,6 +247,7 @@ class Config {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
+      DD_AI_GUARD_BLOCK,
       DD_AI_GUARD_ENABLED,
       DD_AI_GUARD_ENDPOINT,
       DD_AI_GUARD_MAX_CONTENT_SIZE,
@@ -604,6 +605,7 @@ class Config {
         maybeInt(DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
     }
     setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
+    setBoolean(target, 'experimental.aiguard.block', DD_AI_GUARD_BLOCK)
     setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     setString(target, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
     target['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
@@ -935,6 +937,7 @@ class Config {
     this.#optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
       options.dynamicInstrumentation?.uploadIntervalSeconds
     setString(opts, 'env', options.env || tags.env)
+    setBoolean(opts, 'experimental.aiguard.block', options.experimental?.aiguard?.block)
     setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
     setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
     opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)

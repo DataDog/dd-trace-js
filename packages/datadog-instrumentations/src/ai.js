@@ -6,8 +6,104 @@ const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
+const aiguardChannel = channel('dd-trace:ai:aiguard')
 
 const tracers = new WeakSet()
+const wrappedModels = new WeakSet()
+
+/**
+ * Publishes a payload to the AIGuard channel and returns a Promise that resolves
+ * when evaluation is complete, or rejects with AIGuardAbortError if blocked.
+ *
+ * @param {{phase: 'input'|'output', prompt: Array, content?: Array}} payload
+ * @returns {Promise<void>}
+ */
+function publishToAIGuard (payload) {
+  return new Promise((resolve, reject) => {
+    aiguardChannel.publish({ ...payload, resolve, reject })
+  })
+}
+
+/**
+ * Wraps a Vercel AI language model's doGenerate and doStream methods to evaluate
+ * messages with AIGuard.
+ *
+ * @param {object} model - A Vercel AI language model instance
+ */
+function wrapModelWithAIGuard (model) {
+  if (!model || wrappedModels.has(model)) return
+  wrappedModels.add(model)
+
+  if (typeof model.doGenerate === 'function') {
+    shimmer.wrap(model, 'doGenerate', function (original) {
+      return function (options) {
+        if (!aiguardChannel.hasSubscribers) return original.call(this, options)
+        if (!options.prompt?.length) return original.call(this, options)
+
+        // Evaluate input
+        return publishToAIGuard({ phase: 'input', prompt: options.prompt })
+          .then(() => original.call(this, options))
+          .then(result => {
+            const content = result.content ?? []
+            if (!content.length) return result
+            // Evaluate output text or tool calls
+            return publishToAIGuard({ phase: 'output', prompt: options.prompt, content })
+              .then(() => result)
+          })
+      }
+    })
+  }
+
+  if (typeof model.doStream === 'function') {
+    shimmer.wrap(model, 'doStream', function (original) {
+      return function (options) {
+        if (!aiguardChannel.hasSubscribers) return original.call(this, options)
+        if (!options.prompt?.length) return original.call(this, options)
+
+        // Evaluate input
+        return publishToAIGuard({ phase: 'input', prompt: options.prompt })
+          .then(() => original.call(this, options))
+          .then(result => {
+            const chunks = []
+            const reader = result.stream.getReader()
+
+            // Read all chunks before evaluating output
+            function readAll () {
+              return reader.read().then(({ done, value }) => {
+                if (done) return
+                chunks.push(value)
+                return readAll()
+              })
+            }
+
+            return readAll().then(() => {
+              const toolCalls = chunks.filter(c => c?.type === 'tool-call')
+              const text = chunks.filter(c => c?.type === 'text-delta').map(c => c.textDelta).join('')
+              const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
+
+              // Evaluate output text or tool calls
+              const evaluate = content.length
+                ? publishToAIGuard({ phase: 'output', prompt: options.prompt, content })
+                : Promise.resolve()
+
+              return evaluate.then(() => {
+                // eslint-disable-next-line n/no-unsupported-features/node-builtins
+                const stream = new ReadableStream({
+                  start (controller) {
+                    for (const chunk of chunks) {
+                      controller.enqueue(chunk)
+                    }
+                    controller.close()
+                  },
+                })
+                return { ...result, stream }
+              })
+            })
+          })
+      }
+    })
+  }
+}
 
 function wrapTracer (tracer) {
   if (tracers.has(tracer)) {
@@ -114,6 +210,16 @@ for (const hook of getHooks('ai')) {
       },
     })
 
+    // resolveLanguageModel is called by all LLM entry points (generateText, streamText,
+    // generateObject, streamObject)
+    tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
+      end (ctx) {
+        wrapModelWithAIGuard(ctx.result)
+      },
+    })
+
     return exports
   })
 }
+
+module.exports = { wrapModelWithAIGuard }
