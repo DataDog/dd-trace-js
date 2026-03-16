@@ -694,8 +694,7 @@ addHook({
     if (config.isTestManagementTestsEnabled) {
       const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
       newWorkerArgs._ddIsTestManagementTestsEnabled = true
-      // TODO: attempt to fix does not work in parallel mode yet
-      // newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
+      newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
       newWorkerArgs._ddTestManagementTests = {
         mocha: {
           suites: {
