@@ -2100,6 +2100,60 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }).catch(done)
       })
     })
+
+    onlyLatestIt('can skip suites in parallel mode', async () => {
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+          const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          assert.strictEqual(suites.length, 2)
+
+          const skippedSuite = suites.find(s =>
+            s.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          )
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          const runningSuite = suites.find(s =>
+            s.resource === 'test_suite.ci-visibility/test/ci-visibility-test-2.js'
+          )
+          assert.strictEqual(runningSuite.meta[TEST_STATUS], 'pass')
+
+          // Only 1 test ran (from the non-skipped suite)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 1)
+          assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test/ci-visibility-test.js' +
+        ' ./ci-visibility/test/ci-visibility-test-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
   })
 
   context('error tags', () => {
@@ -4477,17 +4531,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('libraries capabilities', () => {
-    const getTestAssertions = (isParallel) =>
+    const getTestAssertions = () =>
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
         assert.ok(metadataDicts.length > 0)
         metadataDicts.forEach(metadata => {
-          if (isParallel) {
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-          } else {
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-          }
+          assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
@@ -4499,8 +4549,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         })
       })
 
-    const runTest = (done, isParallel, extraEnvVars = {}) => {
-      const testAssertionsPromise = getTestAssertions(isParallel)
+    const runTest = (done, extraEnvVars = {}) => {
+      const testAssertionsPromise = getTestAssertions()
 
       childProcess = exec(
         runTestsCommand,
@@ -4519,13 +4569,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     }
 
     it('adds capabilities to tests', (done) => {
-      runTest(done, false)
+      runTest(done)
     })
 
     onlyLatestIt('adds capabilities to tests (parallel)', (done) => {
-      runTest(done, true, {
-        RUN_IN_PARALLEL: '1',
-      })
+      runTest(done, { RUN_IN_PARALLEL: '1' })
     })
   })
 
