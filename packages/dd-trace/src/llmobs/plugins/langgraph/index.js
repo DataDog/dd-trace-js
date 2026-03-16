@@ -39,25 +39,23 @@ class PregelStreamLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions (ctx) {
     const name = ctx.self.name || 'LangGraph'
 
+    const enabled = this._tracerConfig.llmobs.enabled
+    if (!enabled) return
+
+    const span = ctx.currentStore?.span
+    if (!span) return
+    streamDataMap.set(span, {
+      streamInputs: ctx.arguments?.[0],
+      chunks: [],
+    })
+
     return {
       kind: 'workflow',
       name,
     }
   }
 
-  asyncEnd (ctx) {
-    const enabled = this._tracerConfig.llmobs.enabled
-    if (!enabled) return
-
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    // Store inputs and initialize chunk accumulator
-    streamDataMap.set(span, {
-      streamInputs: ctx.arguments?.[0],
-      chunks: [],
-    })
-  }
+  asyncEnd () {}
 }
 
 class NextStreamLLMObsPlugin extends LLMObsPlugin {
@@ -100,7 +98,7 @@ class NextStreamLLMObsPlugin extends LLMObsPlugin {
     if (!streamData) return
 
     const { streamInputs: inputs, chunks } = streamData
-    const input = inputs != null ? formatIO(inputs) : undefined
+    const input = inputs == null ? undefined : formatIO(inputs)
     const lastChunk = chunks.length > 0 ? chunks[chunks.length - 1] : undefined
     const output = !hasError && lastChunk != null ? formatIO(lastChunk) : undefined
 
