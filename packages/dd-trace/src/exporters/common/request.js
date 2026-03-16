@@ -14,7 +14,7 @@ const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 
-const maxActiveRequests = 8
+const maxActiveRequests = 64e6
 
 let activeRequests = 0
 
@@ -126,14 +126,14 @@ function request (data, options, callback) {
       return callback(null)
     }
 
-    activeRequests++
+    activeRequests += options.headers['Content-Length']
 
     storage('legacy').run({ noop: true }, () => {
       let finished = false
       const finalize = () => {
         if (finished) return
         finished = true
-        activeRequests--
+        activeRequests -= options.headers['Content-Length']
       }
 
       const req = client.request(options, (res) => onResponse(res, finalize))
