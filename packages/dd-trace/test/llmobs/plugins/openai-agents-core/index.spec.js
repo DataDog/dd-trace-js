@@ -1,5 +1,7 @@
 'use strict'
 
+const path = require('node:path')
+
 const {
   assertLlmObsSpanEvent,
   MOCK_NOT_NULLISH,
@@ -17,12 +19,24 @@ describe('integrations', () => {
     let errorModel
 
     before(() => {
-      // Require @openai/agents-openai FIRST so RITM patches it before @openai/agents-core
-      // loads it transitively. See transitive dependency require order note in skill docs.
-      const agentsOpenai = require('@openai/agents-openai')
+      // Clear require cache so modules load fresh through orchestrion rewriter
+      for (const key of Object.keys(require.cache)) {
+        if (key.includes('@openai/agents')) {
+          delete require.cache[key]
+        }
+      }
+
+      // Load from version wrappers so RITM + orchestrion instrumentation intercepts
+      const agentsOpenaiVersionDir = path.join(
+        __dirname, '..', '..', '..', '..', '..', '..', 'versions', '@openai', 'agents-openai@>=0.7.0'
+      )
+      const agentsOpenai = require(agentsOpenaiVersionDir).get()
       OpenAIResponsesModel = agentsOpenai.OpenAIResponsesModel
 
-      agentsCore = require('@openai/agents-core')
+      const agentsCoreVersionDir = path.join(
+        __dirname, '..', '..', '..', '..', '..', '..', 'versions', '@openai', 'agents-core@>=0.7.0'
+      )
+      agentsCore = require(agentsCoreVersionDir).get()
 
       // Mock client returning a successful response
       const mockClient = {
