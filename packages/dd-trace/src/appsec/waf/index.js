@@ -110,7 +110,7 @@ function removeConfig (configPath) {
   }
 }
 
-function run (data, req, raspRule) {
+function run (data, req, raspRule, rootSpan) {
   if (!req) {
     const store = storage('legacy').getStore()
     if (!store || !store.req) {
@@ -122,12 +122,12 @@ function run (data, req, raspRule) {
   }
 
   const wafContext = waf.wafManager.getWAFContext(req)
-  const result = wafContext.run(data, raspRule, req)
+  const result = wafContext.run(data, raspRule, req, rootSpan)
 
   if (result?.keep) {
     if (limiter.isAllowed()) {
-      const rootSpan = web.root(req)
-      keepTrace(rootSpan, ASM)
+      const span = rootSpan || web.root(req)
+      keepTrace(span, ASM)
     } else {
       updateRateLimitedMetric(req)
     }
