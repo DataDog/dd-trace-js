@@ -16,6 +16,8 @@ const {
   fastifyCookieParser,
   incomingHttpRequestStart,
   incomingHttpRequestEnd,
+  lambdaStartInvocation,
+  lambdaEndInvocation,
   passportVerify,
   passportUser,
   expressSession,
@@ -42,6 +44,7 @@ const apiSecuritySampler = require('./api_security_sampler')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
+const lambda = require('./lambda')
 const rasp = require('./rasp')
 
 const responseAnalyzedSet = new WeakSet()
@@ -98,12 +101,16 @@ function enable (_config) {
     stripeCheckoutSessionCreate.subscribe(onStripeCheckoutSessionCreate)
     stripePaymentIntentCreate.subscribe(onStripePaymentIntentCreate)
     stripeConstructEvent.subscribe(onStripeConstructEvent)
+    lambdaStartInvocation.subscribe(lambda.onLambdaStartInvocation)
+    lambdaEndInvocation.subscribe(lambda.onLambdaEndInvocation)
 
     isEnabled = true
     config = _config
   } catch (err) {
     if (!IS_SERVERLESS) {
       log.error('[ASM] Unable to start AppSec', err)
+    } else {
+      log.debug('[ASM] Serverless mode: suppressing error log, calling disable()')
     }
 
     disable()
@@ -540,6 +547,8 @@ function disable () {
   if (stripeCheckoutSessionCreate.hasSubscribers) stripeCheckoutSessionCreate.unsubscribe(onStripeCheckoutSessionCreate)
   if (stripePaymentIntentCreate.hasSubscribers) stripePaymentIntentCreate.unsubscribe(onStripePaymentIntentCreate)
   if (stripeConstructEvent.hasSubscribers) stripeConstructEvent.unsubscribe(onStripeConstructEvent)
+  if (lambdaStartInvocation.hasSubscribers) lambdaStartInvocation.unsubscribe(lambda.onLambdaStartInvocation)
+  if (lambdaEndInvocation.hasSubscribers) lambdaEndInvocation.unsubscribe(lambda.onLambdaEndInvocation)
 }
 
 // this is faster than Object.keys().length === 0
