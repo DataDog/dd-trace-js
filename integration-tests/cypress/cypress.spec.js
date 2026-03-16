@@ -2975,11 +2975,9 @@ moduleTypes.forEach(({
             testAssertionsPromise,
           ])
 
-          if (shouldAlwaysPass) {
+          if (shouldAlwaysPass || isQuarantined || isDisabled) {
             assert.strictEqual(exitCode, 0)
           } else {
-            // TODO: we need to figure out how to trick cypress into returning exit code 0
-            // even if there are failed tests
             assert.strictEqual(exitCode, 1)
           }
         }
@@ -3018,9 +3016,6 @@ moduleTypes.forEach(({
          * TODO:
          * The spec says that quarantined tests that are not attempted to fix should be run and their result ignored.
          * Cypress will skip the test instead.
-         *
-         * When a test is quarantined and attempted to fix, the spec is to run the test and ignore its result.
-         * Cypress will run the test, but it won't ignore its result.
          */
         it('can mark tests as quarantined and tests are not skipped', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
