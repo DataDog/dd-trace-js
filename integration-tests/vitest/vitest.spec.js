@@ -1716,6 +1716,7 @@ versions.forEach((version) => {
             shouldAlwaysPass,
             isQuarantining,
             shouldFailSometimes,
+            shouldFailFirstOnly,
             isDisabling,
             extraEnvVars = {},
           } = {}) => {
@@ -1738,6 +1739,7 @@ versions.forEach((version) => {
                   ...extraEnvVars,
                   ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
                   ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
+                  ...(shouldFailFirstOnly ? { SHOULD_FAIL_FIRST_ONLY: '1' } : {}),
                 },
               }
             )
@@ -1775,6 +1777,12 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
+          })
+
+          it('does not suppress exit code for plain ATF tests even when last retry passes', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+            runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailFirstOnly: true })
           })
 
           it('does not attempt to fix tests if test management is not enabled', (done) => {
@@ -1991,8 +1999,7 @@ versions.forEach((version) => {
                 )
 
                 if (isQuarantining) {
-                  // TODO: do not flip the status of the test but still ignore failures
-                  assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'pass')
+                  assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
                   assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 } else {
                   assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')

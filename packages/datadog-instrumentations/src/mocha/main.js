@@ -315,10 +315,10 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
     config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
     config.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
-    // ITR and auto test retries are not supported in parallel mode yet
+    // ITR is not supported in parallel mode yet
     config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
-    config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
-    config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
+    config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+    config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
 
     if (config.isKnownTestsEnabled) {
       ctx.onDone = onReceivedKnownTests
@@ -663,7 +663,8 @@ addHook({
     if (!testFinishCh.hasSubscribers ||
         (!config.isKnownTestsEnabled &&
          !config.isTestManagementTestsEnabled &&
-         !config.isImpactedTestsEnabled)) {
+         !config.isImpactedTestsEnabled &&
+         !config.isFlakyTestRetriesEnabled)) {
       return run.apply(this, arguments)
     }
 
@@ -693,8 +694,7 @@ addHook({
     if (config.isTestManagementTestsEnabled) {
       const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
       newWorkerArgs._ddIsTestManagementTestsEnabled = true
-      // TODO: attempt to fix does not work in parallel mode yet
-      // newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
+      newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
       newWorkerArgs._ddTestManagementTests = {
         mocha: {
           suites: {
@@ -707,6 +707,11 @@ addHook({
     if (config.isImpactedTestsEnabled) {
       newWorkerArgs._ddIsImpactedTestsEnabled = true
       newWorkerArgs._ddModifiedFiles = config.modifiedFiles || {}
+    }
+
+    if (config.isFlakyTestRetriesEnabled) {
+      newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
+      newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
     }
 
     // We pass the known tests for the test file to the worker

@@ -1353,6 +1353,70 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
 
+  onlyLatestIt('correctly reports retries in parallel mode', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        // Verify we are actually in parallel mode
+        const sessionEvent = events.find(event => event.type === 'test_session_end').content
+        assert.strictEqual(sessionEvent.meta[MOCHA_IS_PARALLEL], 'true')
+
+        // Each file has 1 test that fails twice then passes on the 3rd attempt (3 events per file)
+        assert.strictEqual(tests.length, 6)
+
+        // 2 failed attempts per file = 4 total
+        const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+        assert.strictEqual(failedTests.length, 4)
+
+        // The 3rd attempt passes in each file = 2 total
+        const passingTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+        assert.strictEqual(passingTests.length, 2)
+
+        // First attempt of each test is not a retry, subsequent ones are (2 retries * 2 files = 4)
+        const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+        assert.strictEqual(retries.length, 4)
+
+        // Native --retries (not ATR), so retry reason should be 'external'
+        retries.forEach(test => {
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+        })
+
+        // Verify the two files ran in separate worker processes
+        const testsBySuite = {}
+        for (const test of tests) {
+          const suiteName = test.meta[TEST_SUITE]
+          if (!testsBySuite[suiteName]) {
+            testsBySuite[suiteName] = test
+          }
+        }
+        const testFromEachWorker = Object.values(testsBySuite)
+        assert.strictEqual(testFromEachWorker.length, 2)
+        const runtimeIds = testFromEachWorker.map(test => test.meta['runtime-id'])
+        assert.ok(runtimeIds[0])
+        assert.ok(runtimeIds[1])
+        assert.notStrictEqual(runtimeIds[0], runtimeIds[1],
+          'Tests from different files should have different runtime-ids (separate worker processes)'
+        )
+      })
+
+    childProcess = exec(
+      'node node_modules/mocha/bin/mocha' +
+      ' --parallel --jobs 2 --retries 2' +
+      ' ./ci-visibility/mocha-plugin-tests/retries-parallel.js' +
+      ' ./ci-visibility/mocha-plugin-tests/retries-parallel-2.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+    await Promise.all([
+      eventsPromise,
+      once(childProcess, 'exit'),
+    ])
+  })
+
   it('does not blow up when workerpool is used outside of a test', (done) => {
     childProcess = exec('node ./ci-visibility/run-workerpool.js', {
       cwd,
@@ -3218,6 +3282,74 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
+
+    onlyLatestIt('retries failed tests automatically in parallel mode', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Verify we are in parallel mode
+          const sessionEvent = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(sessionEvent.meta[MOCHA_IS_PARALLEL], 'true')
+
+          // Each file has 1 test that fails twice then passes (3 events per file, 6 total)
+          assert.strictEqual(tests.length, 6)
+
+          const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.strictEqual(failedAttempts.length, 4)
+
+          const passedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.strictEqual(passedAttempts.length, 2)
+
+          // Retries should be tagged with ATR reason
+          const atrRetries = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+          assert.strictEqual(atrRetries.length, 4)
+
+          passedAttempts.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          })
+
+          // Verify tests ran in separate worker processes
+          const testsBySuite = {}
+          for (const test of tests) {
+            const suiteName = test.meta[TEST_SUITE]
+            if (!testsBySuite[suiteName]) {
+              testsBySuite[suiteName] = test
+            }
+          }
+          const testFromEachWorker = Object.values(testsBySuite)
+          assert.strictEqual(testFromEachWorker.length, 2)
+          const runtimeIds = testFromEachWorker.map(test => test.meta['runtime-id'])
+          assert.ok(runtimeIds[0])
+          assert.ok(runtimeIds[1])
+          assert.notStrictEqual(runtimeIds[0], runtimeIds[1])
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test-flaky-test-retries/eventually-passing-test-parallel.js' +
+        ' ./ci-visibility/test-flaky-test-retries/eventually-passing-test-parallel-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
   })
 
   it('takes into account untested files if "all" is passed to nyc', (done) => {
@@ -3880,6 +4012,86 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
         runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
       })
+
+      onlyLatestIt('can attempt to fix in parallel mode', async () => {
+        const NUM_RETRIES = 3
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-parallel-1.js': {
+                tests: {
+                  'attempt to fix parallel tests 1 can attempt to fix a test': {
+                    properties: { attempt_to_fix: true },
+                  },
+                },
+              },
+              'ci-visibility/test-management/test-attempt-to-fix-parallel-2.js': {
+                tests: {
+                  'attempt to fix parallel tests 2 can attempt to fix a test': {
+                    properties: { attempt_to_fix: true },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const sessionEvent = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(sessionEvent.meta[MOCHA_IS_PARALLEL], 'true')
+            assert.strictEqual(sessionEvent.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            // Each file: 1 initial attempt + NUM_RETRIES retries = (NUM_RETRIES + 1) per file, 2 files
+            assert.strictEqual(tests.length, (NUM_RETRIES + 1) * 2)
+
+            // All attempts fail (tests always throw)
+            tests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+            })
+
+            // Last attempt of each test should have failed-all-retries
+            const testsBySuite = {}
+            for (const test of tests) {
+              const suite = test.meta[TEST_SUITE]
+              if (!testsBySuite[suite]) testsBySuite[suite] = []
+              testsBySuite[suite].push(test)
+            }
+            for (const suiteTests of Object.values(testsBySuite)) {
+              const lastAttempt = suiteTests[suiteTests.length - 1]
+              assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+            }
+
+            // Verify separate worker processes
+            const firstTestPerSuite = Object.values(testsBySuite).map(t => t[0])
+            assert.strictEqual(firstTestPerSuite.length, 2)
+            const runtimeIds = firstTestPerSuite.map(t => t.meta['runtime-id'])
+            assert.ok(runtimeIds[0])
+            assert.ok(runtimeIds[1])
+            assert.notStrictEqual(runtimeIds[0], runtimeIds[1])
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+          ' ./ci-visibility/test-management/test-attempt-to-fix-parallel-1.js' +
+          ' ./ci-visibility/test-management/test-attempt-to-fix-parallel-2.js',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit'),
+        ])
+      })
     })
 
     context('disabled', () => {
@@ -4273,11 +4485,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         metadataDicts.forEach(metadata => {
           if (isParallel) {
             assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
           } else {
             assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
           }
+          assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')

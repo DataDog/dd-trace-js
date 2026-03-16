@@ -24,6 +24,8 @@ describe('Plugin', () => {
   let langchainTools
   let MemoryVectorStore
 
+  let langchainAnthropicVersion
+
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
     ANTHROPIC_API_KEY: '<not-a-real-key>',
@@ -105,6 +107,8 @@ describe('Plugin', () => {
           // can probably scaffold `withVersions` better to make this a bit cleaner
           langchainGoogleGenAI = require(`../../../versions/@langchain/google-genai@${version}`).get()
         }
+
+        langchainAnthropicVersion = require(`../../../versions/@langchain/anthropic@${version}`).version()
 
         // need to specify specific import in `get(...)`
         langchainMessages = require(`../../../versions/@langchain/core@${version}`).get('@langchain/core/messages')
@@ -378,7 +382,10 @@ describe('Plugin', () => {
               assert.ok(Object.hasOwn(span.meta, 'langchain.request.model'))
             })
 
-          const chatModel = getLangChainAnthropicClient('chat', { modelName: 'claude-3-5-sonnet-20241022' })
+          const modelName =
+            semifies(langchainAnthropicVersion, '>=1.3.22') ? 'claude-haiku-4-5-20251001' : 'claude-3-5-sonnet-20241022'
+
+          const chatModel = getLangChainAnthropicClient('chat', { modelName })
 
           const result = await chatModel.invoke('Hello!')
           assert.ok(result.content)

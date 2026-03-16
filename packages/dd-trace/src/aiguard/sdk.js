@@ -4,6 +4,8 @@ const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: fa
 const log = require('../log')
 const telemetryMetrics = require('../telemetry/metrics')
 const tracerVersion = require('../../../../package.json').version
+const { keepTrace } = require('../priority_sampler')
+const { AI_GUARD } = require('../standalone/product')
 const NoopAIGuard = require('./noop')
 const executeRequest = require('./client')
 const {
@@ -152,6 +154,12 @@ class AIGuard extends NoopAIGuard {
       }
       span.meta_struct = {
         [AI_GUARD_META_STRUCT_KEY]: metaStruct,
+      }
+      const rootSpan = span.context()?._trace?.started?.[0]
+      if (rootSpan) {
+        // keepTrace must be called before executeRequest so the sampling decision
+        // is propagated correctly to outgoing HTTP client calls.
+        keepTrace(rootSpan, AI_GUARD)
       }
       let response
       try {
