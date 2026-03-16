@@ -681,6 +681,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let isQuarantined = false
     let isModified = false
 
+    const originalDryRun = this.options.dryRun
     if (isTestManagementTestsEnabled) {
       const testProperties = getTestProperties(testSuitePath, pickle.name)
       isAttemptToFix = testProperties.attemptToFix
@@ -718,6 +719,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
+
+    // Restore dryRun so it doesn't affect subsequent tests in the same worker
+    this.options.dryRun = originalDryRun
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
     const lastTestStatus = testStatuses.at(-1)
@@ -1053,6 +1057,12 @@ addHook({
     this.options.worldParameters._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
     this.options.worldParameters._ddNumTestRetries = numTestRetries
 
+    if (isTestManagementTestsEnabled) {
+      this.options.worldParameters._ddIsTestManagementTestsEnabled = true
+      this.options.worldParameters._ddTestManagementTests = testManagementTests
+      this.options.worldParameters._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
+    }
+
     return startWorker.apply(this, arguments)
   })
   return adapterPackage
@@ -1090,6 +1100,11 @@ addHook({
       }
       isFlakyTestRetriesEnabled = !!this.options.worldParameters._ddIsFlakyTestRetriesEnabled
       numTestRetries = this.options.worldParameters._ddNumTestRetries ?? 0
+      isTestManagementTestsEnabled = !!this.options.worldParameters._ddIsTestManagementTestsEnabled
+      if (isTestManagementTestsEnabled) {
+        testManagementTests = this.options.worldParameters._ddTestManagementTests
+        testManagementAttemptToFixRetries = this.options.worldParameters._ddTestManagementAttemptToFixRetries
+      }
     }
   )
   return workerPackage

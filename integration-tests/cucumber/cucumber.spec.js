@@ -2888,6 +2888,119 @@ describe(`cucumber@${version} commonJS`, () => {
       ])
       assert.match(testOutput, /Test management tests could not be fetched/)
     })
+
+    onlyLatestIt('can disable tests in parallel mode', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        cucumber: {
+          suites: {
+            'ci-visibility/features-test-management-parallel/disabled.feature': {
+              tests: {
+                'Say disabled parallel': {
+                  properties: { disabled: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 2)
+
+          const disabledTest = tests.find(t => t.meta[TEST_NAME] === 'Say disabled parallel')
+          assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+
+          const passingTest = tests.find(t => t.meta[TEST_NAME] === 'Say passing parallel')
+          assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+        })
+
+      let exitCode
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js' +
+        ' ci-visibility/features-test-management-parallel/disabled.feature' +
+        ' ci-visibility/features-test-management-parallel/passing.feature' +
+        ' --parallel 2',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      childProcess.on('exit', (code) => { exitCode = code })
+
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    onlyLatestIt('can quarantine tests in parallel mode', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        cucumber: {
+          suites: {
+            'ci-visibility/features-test-management-parallel/quarantine.feature': {
+              tests: {
+                'Say quarantine parallel': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      let exitCode
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 2)
+
+          const quarantinedTest = tests.find(t => t.meta[TEST_NAME] === 'Say quarantine parallel')
+          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+          const passingTest = tests.find(t => t.meta[TEST_NAME] === 'Say passing parallel')
+          assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js ci-visibility/features-test-management-parallel/quarantine.feature' +
+        ' ci-visibility/features-test-management-parallel/passing.feature --parallel 2',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      childProcess.on('exit', (code) => { exitCode = code })
+
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+
+      // Quarantined test fails but exit code should be 0
+      assert.strictEqual(exitCode, 0)
+    })
   })
 
   context('libraries capabilities', () => {
@@ -2907,11 +3020,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
             assert.ok(metadataDicts.length > 0)
             metadataDicts.forEach(metadata => {
-              if (runMode === 'parallel') {
-                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-              } else {
-                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-              }
+              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
