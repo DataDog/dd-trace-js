@@ -43,10 +43,10 @@ addHook({
     }
     if (this.options._ddIsTestManagementTestsEnabled) {
       config.isTestManagementTestsEnabled = true
-      // TODO: attempt to fix does not work in parallel mode yet
-      // config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
+      config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
       config.testManagementTests = this.options._ddTestManagementTests
       delete this.options._ddIsTestManagementTestsEnabled
+      delete this.options._ddTestManagementAttemptToFixRetries
       delete this.options._ddTestManagementTests
     }
     if (this.options._ddIsFlakyTestRetriesEnabled) {
