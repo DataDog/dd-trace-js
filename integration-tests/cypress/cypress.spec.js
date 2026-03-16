@@ -540,7 +540,7 @@ moduleTypes.forEach(({
           assert.ok(jsInvocationDetailsEvent, 'plain-js invocationDetails test event should exist')
           assert.strictEqual(
             jsInvocationDetailsEvent.content.metrics[TEST_SOURCE_START],
-            246,
+            244,
             'should keep invocationDetails line directly for plain JS specs without source maps'
           )
           assert.ok(
