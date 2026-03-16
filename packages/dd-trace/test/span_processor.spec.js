@@ -22,6 +22,10 @@ describe('SpanProcessor', () => {
   let SpanSampler
   let sample
 
+  before(() => {
+    require('../src/process-tags').initialize()
+  })
+
   beforeEach(() => {
     tracer = {}
     trace = {

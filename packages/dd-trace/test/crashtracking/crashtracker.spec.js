@@ -16,6 +16,10 @@ describeNotWindows('crashtracker', () => {
   let libdatadog
   let log
 
+  before(() => {
+    require('../../src/process-tags').initialize()
+  })
+
   beforeEach(() => {
     libdatadog = require('@datadog/libdatadog')
 
