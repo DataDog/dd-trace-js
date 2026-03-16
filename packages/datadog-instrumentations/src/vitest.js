@@ -161,7 +161,8 @@ function isCliApiPackage (vitestPackage) {
 }
 
 function isTestPackage (testPackage) {
-  return testPackage.V?.name === 'VitestTestRunner'
+  // vitest@4.0.x exports VitestTestRunner as V; vitest@4.1.0+ renamed it to TestRunner exported as T
+  return testPackage.V?.name === 'VitestTestRunner' || testPackage.T?.name === 'TestRunner'
 }
 
 function hasForksPoolWorker (vitestPackage) {
@@ -873,7 +874,7 @@ addHook({
     return testPackage
   }
 
-  wrapVitestTestRunner(testPackage.V)
+  wrapVitestTestRunner(testPackage.V ?? testPackage.T)
 
   return testPackage
 })
