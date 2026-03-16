@@ -47,6 +47,7 @@ const testSkippedCh = channel('ci:jest:test:skip')
 const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
+const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -502,6 +503,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           })
 
           event.test.fn = newFn
+        })
+      }
+
+      if (event.name === 'hook_start' && (event.hook.type === 'beforeAll' || event.hook.type === 'afterAll')) {
+        const ctx = { testSuiteAbsolutePath: this.testSuiteAbsolutePath }
+        let hookFn = event.hook.fn
+        if (originalHookFns.has(event.hook)) {
+          hookFn = originalHookFns.get(event.hook)
+        } else {
+          originalHookFns.set(event.hook, hookFn)
+        }
+        event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function () {
+          return testSuiteHookFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
         })
       }
 

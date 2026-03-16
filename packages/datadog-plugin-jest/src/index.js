@@ -386,6 +386,12 @@ class JestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
+    this.addBind('ci:jest:test-suite:hook:fn', (ctx) => {
+      const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(ctx.testSuiteAbsolutePath)
+      const store = storage('legacy').getStore()
+      return { ...store, span: testSuiteSpan }
+    })
+
     this.addSub('ci:jest:test:finish', ({
       span,
       status,
