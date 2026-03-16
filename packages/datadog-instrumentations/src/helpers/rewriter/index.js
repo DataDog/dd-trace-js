@@ -3,13 +3,13 @@
 const { readFileSync } = require('fs')
 const { join } = require('path')
 const log = require('../../../../dd-trace/src/log')
+const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
 const instrumentations = require('./instrumentations')
-const { create } = require('./orchestrion')
 
 /** @type {Record<string, string>} map of module base name to version */
 const moduleVersions = {}
 const disabled = new Set()
-const matcher = create(instrumentations, 'dc-polyfill')
+const matcher = create(instrumentations)
 
 function rewrite (content, filename, format) {
   if (!content) return content
