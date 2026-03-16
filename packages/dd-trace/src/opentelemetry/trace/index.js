@@ -35,7 +35,7 @@ const { VERSION } = require('../../../../../version')
 function buildResourceAttributes (config) {
   const resourceAttributes = {
     'service.name': config.service || config.tags.service,
-    'telemetry.sdk.name': 'dd-trace',
+    'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.version': VERSION,
     'telemetry.sdk.language': 'javascript',
   }
