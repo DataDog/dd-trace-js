@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const { describe, it, beforeEach } = require('mocha')
+const dc = require('dc-polyfill')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
@@ -27,6 +28,7 @@ describe('profilers/native/wall', () => {
           kSampleCount: 0,
           NON_JS_THREADS_FUNCTION_NAME: 'Non JS threads activity',
         },
+        getState: sinon.stub().returns({ 0: 0 }),
         getMetrics: sinon.stub().returns({
           totalAsyncContextCount: 0,
           usedAsyncContextCount: 0,
@@ -291,6 +293,134 @@ describe('profilers/native/wall', () => {
       'span id': '1234567890',
       'local root span id': '0987654321',
       'trace endpoint': 'GET /foo/bar',
+    })
+  })
+
+  describe('webTags caching in getProfilingContext', () => {
+    // TracingPlugin.startSpan() calls storage.enterWith({span}) immediately on span
+    // creation, before the plugin calls addRequestTags() to set span.type='web'.
+    // This means the first enterCh event fires with span.type unset. The profiler
+    // must not cache webTags=undefined from that first event, or the subsequent
+    // activation (with span.type='web' already set) would incorrectly use the
+    // stale cache and never produce trace endpoint labels.
+    let enterCh
+    let currentStore
+    let localPprof
+    let WallProfiler
+
+    beforeEach(() => {
+      enterCh = dc.channel('dd-trace:storage:enter')
+      currentStore = null
+
+      // Fresh setContext stub so we can track calls independently per test.
+      localPprof = {
+        ...pprof,
+        time: {
+          ...pprof.time,
+          setContext: sinon.stub(),
+        },
+      }
+
+      WallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
+        '@datadog/pprof': localPprof,
+        '../../../../datadog-core': { storage: () => ({ getStore: () => currentStore }) },
+      })
+    })
+
+    function makeWebSpan () {
+      const tags = {}
+      const spanId = {}
+      const ctx = { _tags: tags, _spanId: spanId, _parentId: null, _trace: { started: [] } }
+      const span = { context: () => ctx }
+      ctx._trace.started.push(span)
+      return { span, tags, spanId }
+    }
+
+    function makeChildSpan (webSpanId, webSpan) {
+      const tags = { 'span.type': 'router' }
+      const spanId = {}
+      const ctx = { _tags: tags, _spanId: spanId, _parentId: webSpanId, _trace: { started: [webSpan] } }
+      const span = { context: () => ctx }
+      ctx._trace.started.push(span)
+      return { span, tags }
+    }
+
+    it('should recompute webTags on re-activation after span.type is set (ACF path)', () => {
+      const { span: webSpan, tags: webSpanTags } = makeWebSpan()
+      const profiler = new WallProfiler({
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      // First activation: span.type not yet set → webTags cannot be determined
+      currentStore = { span: webSpan }
+      enterCh.publish()
+      assert.strictEqual(localPprof.time.setContext.getCall(0).args[0].webTags, undefined)
+
+      // Plugin sets span.type='web' (simulating addRequestTags)
+      webSpanTags['span.type'] = 'web'
+
+      // Second activation: span.type='web' → webTags must now be the tags object
+      enterCh.publish()
+      assert.strictEqual(localPprof.time.setContext.getCall(1).args[0].webTags, webSpanTags)
+
+      profiler.stop()
+    })
+
+    it('should recompute webTags on re-activation after span.type is set (non-ACF path)', () => {
+      const { span: webSpan, tags: webSpanTags } = makeWebSpan()
+      const profiler = new WallProfiler({
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: false,
+      })
+      profiler.start()
+
+      // In non-ACF mode, start() calls #setNewContext() which calls setContext({ref:{}}).
+      // Subsequent #enter() calls mutate the .ref property of that holder in place.
+      const contextHolder = localPprof.time.setContext.getCall(0).args[0]
+
+      // First activation: span.type not yet set → webTags=undefined
+      currentStore = { span: webSpan }
+      enterCh.publish()
+      assert.strictEqual(contextHolder.ref.webTags, undefined)
+
+      // Plugin sets span.type='web'
+      webSpanTags['span.type'] = 'web'
+
+      // Second activation: must recompute and find webTags
+      enterCh.publish()
+      assert.strictEqual(contextHolder.ref.webTags, webSpanTags)
+
+      profiler.stop()
+    })
+
+    it('should propagate webTags to child spans after web span type is set (ACF path)', () => {
+      const { span: webSpan, tags: webSpanTags, spanId: webSpanId } = makeWebSpan()
+      const { span: childSpan } = makeChildSpan(webSpanId, webSpan)
+
+      const profiler = new WallProfiler({
+        endpointCollectionEnabled: true,
+        codeHotspotsEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      // Activate web span twice (first without type, then with type)
+      currentStore = { span: webSpan }
+      enterCh.publish()
+      webSpanTags['span.type'] = 'web'
+      enterCh.publish()
+
+      // Now activate the child span — it must inherit webTags via parent walk
+      currentStore = { span: childSpan }
+      enterCh.publish()
+      const childCtx = localPprof.time.setContext.lastCall.args[0]
+      assert.strictEqual(childCtx.webTags, webSpanTags)
+
+      profiler.stop()
     })
   })
 })
