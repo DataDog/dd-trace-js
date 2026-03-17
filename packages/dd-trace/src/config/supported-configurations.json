@@ -3688,7 +3688,7 @@
     ],
     "DD_TRACE_STARTUP_LOGS": [
       {
-        "implementation": "D",
+        "implementation": "C",
         "type": "boolean",
         "configurationNames": [
           "startupLogs"
