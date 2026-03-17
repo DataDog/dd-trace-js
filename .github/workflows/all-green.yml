@@ -33,7 +33,7 @@ jobs:
           DELAY: ${{ github.run_attempt == 1 && '7' || '0' }} # 7 minutes on first attempt, no delay on reruns
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ github.token }}
-          POLLING_INTERVAL: 1
+          POLLING_INTERVAL: 2
           RETRIES: 15
       - name: Require vendor validation when vendor/ changes
         if: github.event_name == 'pull_request'
