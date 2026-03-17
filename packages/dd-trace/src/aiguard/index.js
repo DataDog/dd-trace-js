@@ -3,7 +3,6 @@
 const { channel } = require('dc-polyfill')
 const log = require('../log')
 const AIGuard = require('./sdk')
-const { convertVercelPromptToMessages, buildOutputMessages } = require('./messages')
 
 const aiguardChannel = channel('dd-trace:ai:aiguard')
 
@@ -38,23 +37,17 @@ function disable () {
 }
 
 /**
- * Handles channel messages with the contract: { phase, prompt, content?, resolve, reject }
+ * Handles channel messages with pre-converted messages.
  *
- * @param {{phase: 'input'|'output', prompt: Array, content?: Array, resolve: Function, reject: Function}} ctx
+ * @param {{messages: Array<object>, resolve: Function, reject: Function}} ctx
  */
 function onEvaluate (ctx) {
-  const inputMessages = convertVercelPromptToMessages(ctx.prompt)
-  if (inputMessages.length === 0) {
+  if (!ctx.messages?.length) {
     ctx.resolve()
     return
   }
 
-  let messagesToEvaluate = inputMessages
-  if (ctx.phase === 'output' && ctx.content) {
-    messagesToEvaluate = buildOutputMessages(inputMessages, ctx.content)
-  }
-
-  aiguard.evaluate(messagesToEvaluate, { block })
+  aiguard.evaluate(ctx.messages, { block })
     .then(() => {
       ctx.resolve()
     })

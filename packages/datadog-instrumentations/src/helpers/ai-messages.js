@@ -1,7 +1,7 @@
 'use strict'
 
 /**
- * Converts a LanguageModelV2FilePart with an image mediaType to an OpenAI image_url content part.
+ * Converts a LanguageModelV2FilePart with an image mediaType to an AI guard style image_url content part.
  *
  * @param {{type: 'file', data: URL|string|Uint8Array, mediaType: string}} part
  * @returns {{type: 'image_url', image_url: {url: string}}|undefined}
@@ -26,10 +26,10 @@ function convertFilePartToImageUrl (part) {
 }
 
 /**
- * Converts a LanguageModelV2Prompt to the OpenAI-style message format expected by AIGuard's evaluate API.
+ * Converts a LanguageModelV2Prompt to the AI guard style message format.
  *
  * Vercel AI v2 prompt entries use content arrays with typed parts (e.g. { type: 'text', text },
- * { type: 'file', data, mediaType }), while AIGuard expects OpenAI-style messages.
+ * { type: 'file', data, mediaType }). This function converts them to AI guard style messages.
  * When file parts with image media types are present, the content is an array of text and
  * image_url parts; otherwise it is a plain string.
  *
@@ -115,9 +115,9 @@ function convertVercelPromptToMessages (prompt) {
 }
 
 /**
- * Converts LLM output tool calls to AIGuard message format for output evaluation.
+ * Converts LLM output tool calls to AI guard style message format.
  *
- * @param {Array<object>} inputMessages - The input messages already in AIGuard format
+ * @param {Array<object>} inputMessages - The input messages already in AI guard style format
  * @param {Array<{toolCallId: string, toolName: string, args?: unknown, input?: unknown}>} toolCalls
  * @returns {Array<object>}
  */
@@ -141,9 +141,9 @@ function buildToolCallOutputMessages (inputMessages, toolCalls) {
 }
 
 /**
- * Builds AIGuard output messages for evaluating the assistant's text response.
+ * Builds OpenAI-style output messages for the assistant's text response.
  *
- * @param {Array<object>} inputMessages - The input messages already in AIGuard format
+ * @param {Array<object>} inputMessages - The input messages already in AI guard style format
  * @param {string} text - The assistant's text response
  * @returns {Array<object>}
  */
@@ -155,10 +155,10 @@ function buildTextOutputMessages (inputMessages, text) {
 }
 
 /**
- * Parses content array and dispatches to the appropriate output message builder.
+ * Parses a Vercel AI content array and dispatches to the appropriate output message builder.
  *
- * @param {Array<object>} inputMessages - The input messages already in AIGuard format
- * @param {Array<{type: string}>} content - content array
+ * @param {Array<object>} inputMessages - The input messages already in AI guard style format
+ * @param {Array<{type: string}>} content - Vercel AI content array from doGenerate/doStream result
  * @returns {Array<object>}
  */
 function buildOutputMessages (inputMessages, content) {
@@ -171,8 +171,8 @@ function buildOutputMessages (inputMessages, content) {
 
 module.exports = {
   convertVercelPromptToMessages,
-  convertFilePartToImageUrl, // test only
-  buildToolCallOutputMessages, // test only
-  buildTextOutputMessages, // test only
+  convertFilePartToImageUrl,
+  buildToolCallOutputMessages,
+  buildTextOutputMessages,
   buildOutputMessages,
 }

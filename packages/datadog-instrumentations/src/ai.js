@@ -3,6 +3,7 @@
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
+const { convertVercelPromptToMessages, buildOutputMessages } = require('./helpers/ai-messages')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
@@ -12,15 +13,14 @@ const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
 
 /**
- * Publishes a payload to the AIGuard channel and returns a Promise that resolves
- * when evaluation is complete, or rejects with AIGuardAbortError if blocked.
+ * Publishes already-converted AI guard style messages to the AIGuard channel.
  *
- * @param {{phase: 'input'|'output', prompt: Array, content?: Array}} payload
+ * @param {Array<object>} messages - AI guard style messages to evaluate
  * @returns {Promise<void>}
  */
-function publishToAIGuard (payload) {
+function publishToAIGuard (messages) {
   return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ ...payload, resolve, reject })
+    aiguardChannel.publish({ messages, resolve, reject })
   })
 }
 
@@ -40,14 +40,15 @@ function wrapModelWithAIGuard (model) {
         if (!aiguardChannel.hasSubscribers) return original.call(this, options)
         if (!options.prompt?.length) return original.call(this, options)
 
-        // Evaluate input
-        return publishToAIGuard({ phase: 'input', prompt: options.prompt })
+        const inputMessages = convertVercelPromptToMessages(options.prompt)
+        if (!inputMessages.length) return original.call(this, options)
+
+        return publishToAIGuard(inputMessages)
           .then(() => original.call(this, options))
           .then(result => {
             const content = result.content ?? []
             if (!content.length) return result
-            // Evaluate output text or tool calls
-            return publishToAIGuard({ phase: 'output', prompt: options.prompt, content })
+            return publishToAIGuard(buildOutputMessages(inputMessages, content))
               .then(() => result)
           })
       }
@@ -60,14 +61,15 @@ function wrapModelWithAIGuard (model) {
         if (!aiguardChannel.hasSubscribers) return original.call(this, options)
         if (!options.prompt?.length) return original.call(this, options)
 
-        // Evaluate input
-        return publishToAIGuard({ phase: 'input', prompt: options.prompt })
+        const inputMessages = convertVercelPromptToMessages(options.prompt)
+        if (!inputMessages.length) return original.call(this, options)
+
+        return publishToAIGuard(inputMessages)
           .then(() => original.call(this, options))
           .then(result => {
             const chunks = []
             const reader = result.stream.getReader()
 
-            // Read all chunks before evaluating output
             function readAll () {
               return reader.read().then(({ done, value }) => {
                 if (done) return
@@ -81,9 +83,8 @@ function wrapModelWithAIGuard (model) {
               const text = chunks.filter(c => c?.type === 'text-delta').map(c => c.textDelta).join('')
               const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
 
-              // Evaluate output text or tool calls
               const evaluate = content.length
-                ? publishToAIGuard({ phase: 'output', prompt: options.prompt, content })
+                ? publishToAIGuard(buildOutputMessages(inputMessages, content))
                 : Promise.resolve()
 
               return evaluate.then(() => {

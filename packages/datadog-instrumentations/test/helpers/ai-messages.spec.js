@@ -9,9 +9,9 @@ const {
   buildOutputMessages,
   buildTextOutputMessages,
   buildToolCallOutputMessages,
-} = require('../../src/aiguard/messages')
+} = require('../../src/helpers/ai-messages')
 
-describe('aiguard/messages', () => {
+describe('ai-messages', () => {
   describe('convertVercelPromptToMessages', () => {
     it('should return empty array for non-array input', () => {
       assert.deepStrictEqual(convertVercelPromptToMessages(null), [])

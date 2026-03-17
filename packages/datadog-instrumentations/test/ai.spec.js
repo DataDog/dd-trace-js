@@ -36,7 +36,7 @@ function readStream (stream) {
 function subscribeAutoResolve () {
   const calls = []
   const handler = ctx => {
-    calls.push({ phase: ctx.phase, prompt: ctx.prompt, content: ctx.content })
+    calls.push({ messages: ctx.messages })
     ctx.resolve()
   }
   aiguardChannel.subscribe(handler)
@@ -109,8 +109,7 @@ describe('wrapModelWithAIGuard', () => {
       return model.doGenerate({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 1)
-          assert.strictEqual(calls[0].phase, 'input')
-          assert.deepStrictEqual(calls[0].prompt, prompt)
+          assert.deepStrictEqual(calls[0].messages, [{ role: 'user', content: 'Hello' }])
           assert.strictEqual(evaluatedBeforeOriginal, true)
         })
         .finally(unsubscribe)
@@ -136,9 +135,10 @@ describe('wrapModelWithAIGuard', () => {
       return model.doGenerate({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.strictEqual(calls[1].phase, 'output')
-          assert.deepStrictEqual(calls[1].prompt, prompt)
-          assert.deepStrictEqual(calls[1].content, content)
+          assert.deepStrictEqual(calls[1].messages, [
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hello!' },
+          ])
         })
         .finally(unsubscribe)
     })
@@ -152,8 +152,16 @@ describe('wrapModelWithAIGuard', () => {
       return model.doGenerate({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.strictEqual(calls[1].phase, 'output')
-          assert.deepStrictEqual(calls[1].content, content)
+          assert.deepStrictEqual(calls[1].messages, [
+            { role: 'user', content: 'Hello' },
+            {
+              role: 'assistant',
+              tool_calls: [{
+                id: 'c1',
+                function: { name: 'search', arguments: '{"q":"test"}' },
+              }],
+            },
+          ])
         })
         .finally(unsubscribe)
     })
@@ -248,8 +256,7 @@ describe('wrapModelWithAIGuard', () => {
 
       return model.doStream({ prompt })
         .then(() => {
-          assert.strictEqual(calls[0].phase, 'input')
-          assert.deepStrictEqual(calls[0].prompt, prompt)
+          assert.deepStrictEqual(calls[0].messages, [{ role: 'user', content: 'Hello' }])
         })
         .finally(unsubscribe)
     })
@@ -294,8 +301,10 @@ describe('wrapModelWithAIGuard', () => {
       return model.doStream({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.strictEqual(calls[1].phase, 'output')
-          assert.deepStrictEqual(calls[1].content, [{ type: 'text', text: 'Hello World' }])
+          assert.deepStrictEqual(calls[1].messages, [
+            { role: 'user', content: 'Hello' },
+            { role: 'assistant', content: 'Hello World' },
+          ])
         })
         .finally(unsubscribe)
     })
@@ -311,8 +320,16 @@ describe('wrapModelWithAIGuard', () => {
       return model.doStream({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.strictEqual(calls[1].phase, 'output')
-          assert.deepStrictEqual(calls[1].content, [tc1, tc2])
+          assert.deepStrictEqual(calls[1].messages, [
+            { role: 'user', content: 'Hello' },
+            {
+              role: 'assistant',
+              tool_calls: [
+                { id: 'c1', function: { name: 'search', arguments: '{"q":"a"}' } },
+                { id: 'c2', function: { name: 'fetch', arguments: '{"url":"x"}' } },
+              ],
+            },
+          ])
         })
         .finally(unsubscribe)
     })
@@ -326,7 +343,7 @@ describe('wrapModelWithAIGuard', () => {
 
       return model.doStream({ prompt })
         .then(() => {
-          assert.deepStrictEqual(calls[1].content, [tc])
+          assert.ok(calls[1].messages[1].tool_calls)
         })
         .finally(unsubscribe)
     })
