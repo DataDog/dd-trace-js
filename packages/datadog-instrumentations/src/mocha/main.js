@@ -101,7 +101,7 @@ function getFilteredSuites (originalSuites) {
   }, { suitesToRun: [], skippedSuites: new Set() })
 }
 
-function getOnStartHandler (isParallel, frameworkVersion) {
+function getOnStartHandler (frameworkVersion) {
   return function () {
     const processArgv = process.argv.slice(2).join(' ')
     const command = `mocha ${processArgv}`
@@ -451,7 +451,7 @@ addHook({
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
 
-    this.once('start', getOnStartHandler(false, frameworkVersion))
+    this.once('start', getOnStartHandler(frameworkVersion))
 
     this.once('end', getOnEndHandler(false))
 
@@ -622,7 +622,7 @@ addHook({
       return run.apply(this, arguments)
     }
 
-    this.once('start', getOnStartHandler(true, frameworkVersion))
+    this.once('start', getOnStartHandler(frameworkVersion))
     this.once('end', getOnEndHandler(true))
 
     // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
