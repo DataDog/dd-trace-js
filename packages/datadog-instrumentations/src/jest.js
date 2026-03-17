@@ -702,11 +702,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
         const ctx = testContexts.get(event.test)
+        if (!ctx) {
+          log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
+          return
+        }
 
         const finalStatus = this.getFinalStatus(testName,
           status,
-          !!ctx?.isNew,
-          !!ctx?.isModified,
+          !!ctx.isNew,
+          !!ctx.isModified,
           isEfdRetry,
           isAttemptToFix,
           numTestExecutions)
@@ -761,6 +765,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         efdDeterminedRetries.clear()
         efdSlowAbortedTests.clear()
         efdNewTestCandidates.clear()
+        retriedTestsToNumAttempts.clear()
+        attemptToFixRetriedTestsStatuses.clear()
+        testsToBeRetried.clear()
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
