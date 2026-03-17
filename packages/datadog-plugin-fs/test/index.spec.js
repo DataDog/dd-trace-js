@@ -22,7 +22,7 @@ describe('Plugin', () => {
 
     afterEach(() => agent.close({ ritmReset: false }))
 
-    beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
+    beforeEach(() => agent.load([], undefined, { flushInterval: 1 }).then(() => {
       tracer = require('../../dd-trace')
       fs = require('node:fs')
     }))
