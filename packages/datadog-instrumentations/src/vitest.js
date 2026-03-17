@@ -154,9 +154,9 @@ function isReporterPackageNewest (vitestPackage) {
  * @returns {{ key: string, value: Function } | undefined}
  */
 function findExportByName (pkg, name) {
-  for (const key of Object.keys(pkg)) {
-    if (pkg[key]?.name === name) {
-      return { key, value: pkg[key] }
+  for (const [key, value] of Object.entries(pkg)) {
+    if (value?.name === name) {
+      return { key, value }
     }
   }
 }
