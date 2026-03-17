@@ -1,7 +1,5 @@
 'use strict'
 
-const path = require('node:path')
-
 const {
   assertLlmObsSpanEvent,
   MOCK_NOT_NULLISH,
@@ -10,6 +8,19 @@ const {
 
 describe('integrations', () => {
   describe('openai-agents LLMObs', () => {
+    // Save and clear agent URL env vars so the LLMObs writer sends to the
+    // test agent's dynamic port instead of a pre-configured agent URL.
+    const savedAgentUrl = process.env.DD_TRACE_AGENT_URL
+    const savedAgentPort = process.env.DD_TRACE_AGENT_PORT
+    before(() => {
+      delete process.env.DD_TRACE_AGENT_URL
+      delete process.env.DD_TRACE_AGENT_PORT
+    })
+    after(() => {
+      if (savedAgentUrl !== undefined) process.env.DD_TRACE_AGENT_URL = savedAgentUrl
+      if (savedAgentPort !== undefined) process.env.DD_TRACE_AGENT_PORT = savedAgentPort
+    })
+
     const { getEvents } = useLlmObs({ plugin: 'openai-agents' })
 
     let agentsCore
@@ -26,17 +37,11 @@ describe('integrations', () => {
         }
       }
 
-      // Load from version wrappers so RITM + orchestrion instrumentation intercepts
-      const agentsOpenaiVersionDir = path.join(
-        __dirname, '..', '..', '..', '..', '..', '..', 'versions', '@openai', 'agents-openai@>=0.7.0'
-      )
-      const agentsOpenai = require(agentsOpenaiVersionDir).get()
+      // Load packages directly - instrumentation is set up by useLlmObs
+      const agentsOpenai = require('@openai/agents-openai')
       OpenAIResponsesModel = agentsOpenai.OpenAIResponsesModel
 
-      const agentsCoreVersionDir = path.join(
-        __dirname, '..', '..', '..', '..', '..', '..', 'versions', '@openai', 'agents-core@>=0.7.0'
-      )
-      agentsCore = require(agentsCoreVersionDir).get()
+      agentsCore = require('@openai/agents-core')
 
       // Mock client returning a successful response
       const mockClient = {

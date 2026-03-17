@@ -38,13 +38,13 @@ class BaseOpenaiAgentsLLMObsPlugin extends LLMObsPlugin {
   /**
    * Extracts and tags LLM-specific data on the span after the operation completes.
    *
-   * @param {{ currentStore?: { span: object }, args?: Array<*>, result?: object }} ctx
+   * @param {{ currentStore?: { span: object }, arguments?: Array<*>, result?: object }} ctx
    */
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const request = ctx.args?.[0]
+    const request = ctx.arguments?.[0]
     const error = !!span.context()._tags.error
 
     const inputMessages = extractInputMessages(request)
@@ -82,13 +82,13 @@ class GetStreamedResponseLLMObsPlugin extends BaseOpenaiAgentsLLMObsPlugin {
    * For streaming, the span finishes before stream iteration begins.
    * Output data is not available, so we only tag inputs and metadata.
    *
-   * @param {{ currentStore?: { span: object }, args?: Array<*> }} ctx
+   * @param {{ currentStore?: { span: object }, arguments?: Array<*> }} ctx
    */
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const request = ctx.args?.[0]
+    const request = ctx.arguments?.[0]
     const inputMessages = extractInputMessages(request)
 
     // Streaming spans finish before iteration; output is not available
@@ -246,11 +246,15 @@ function extractMetrics (result) {
   const usage = result?.usage
   if (!usage) return metrics
 
-  if (usage.input_tokens !== undefined) metrics.inputTokens = usage.input_tokens
-  if (usage.output_tokens !== undefined) metrics.outputTokens = usage.output_tokens
+  const inputTokens = usage.inputTokens ?? usage.input_tokens
+  const outputTokens = usage.outputTokens ?? usage.output_tokens
+  const totalTokens = usage.totalTokens ?? usage.total_tokens
 
-  if (usage.total_tokens !== undefined) {
-    metrics.totalTokens = usage.total_tokens
+  if (inputTokens !== undefined) metrics.inputTokens = inputTokens
+  if (outputTokens !== undefined) metrics.outputTokens = outputTokens
+
+  if (totalTokens !== undefined) {
+    metrics.totalTokens = totalTokens
   } else if (metrics.inputTokens !== undefined && metrics.outputTokens !== undefined) {
     metrics.totalTokens = metrics.inputTokens + metrics.outputTokens
   }
