@@ -3688,12 +3688,12 @@
     ],
     "DD_TRACE_STARTUP_LOGS": [
       {
-        "implementation": "C",
+        "implementation": "D",
         "type": "boolean",
         "configurationNames": [
           "startupLogs"
         ],
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_STATS_COMPUTATION_ENABLED": [
