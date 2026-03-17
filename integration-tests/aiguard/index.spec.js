@@ -35,6 +35,7 @@ describe('AIGuard SDK integration tests', () => {
         DD_TRACING_ENABLED: 'true',
         DD_TRACE_AGENT_PORT: agent.port,
         DD_AI_GUARD_ENABLED: 'true',
+        DD_AI_GUARD_BLOCK: 'true',
         DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
         DD_API_KEY: 'DD_API_KEY',
         DD_APP_KEY: 'DD_APP_KEY',
@@ -94,33 +95,29 @@ describe('AIGuard SDK integration tests', () => {
 
   const autoSuite = [
     {
-      point: 'Point 1: input evaluation',
       endpoint: '/auto/point1',
       target: 'prompt',
       description: 'blocks malicious user input before LLM call',
     },
     {
-      point: 'Point 2: text output evaluation',
       endpoint: '/auto/point2',
       target: 'prompt',
       description: 'blocks assistant text response with sensitive data',
     },
     {
-      point: 'Point 3: tool call evaluation',
       endpoint: '/auto/point3',
       target: 'tool',
       description: 'blocks dangerous tool calls before execution',
     },
     {
-      point: 'Point 4: tool output evaluation',
       endpoint: '/auto/point4',
       target: 'tool',
       description: 'blocks malicious tool output before LLM sees it',
     },
   ]
 
-  for (const { point, endpoint, target, description } of autoSuite) {
-    it(`${point} — allows safe messages (${description})`, async () => {
+  for (const { endpoint, target, description } of autoSuite) {
+    it(`allows safe messages (${description})`, async () => {
       const response = await executeRequest(`${url}${endpoint}?deny=false`)
       assert.strictEqual(response.status, 200)
       assert.deepStrictEqual(response.body, { blocked: false })
@@ -133,10 +130,10 @@ describe('AIGuard SDK integration tests', () => {
       })
     })
 
-    it(`${point} — blocks dangerous messages (${description})`, async () => {
+    it(`blocks dangerous messages (${description})`, async () => {
       const response = await executeRequest(`${url}${endpoint}?deny=true`)
       assert.strictEqual(response.status, 403)
-      assert.deepStrictEqual(response.body, { blocked: true, reason: 'Blocked by policy' })
+      assert.deepStrictEqual(JSON.parse(response.body), { blocked: true, reason: 'Blocked by policy' })
 
       await agent.assertMessageReceived(({ payload }) => {
         const span = payload[0].find(span => span.name === 'ai_guard')
