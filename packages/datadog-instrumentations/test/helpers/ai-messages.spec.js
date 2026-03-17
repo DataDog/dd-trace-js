@@ -309,7 +309,9 @@ describe('ai-messages', () => {
   describe('convertFilePartToImageUrl', () => {
     it('should return undefined for unsupported data types', () => {
       assert.strictEqual(convertFilePartToImageUrl({ type: 'file', data: 42, mediaType: 'image/png' }), undefined)
-      assert.strictEqual(convertFilePartToImageUrl({ type: 'file', data: undefined, mediaType: 'image/png' }), undefined)
+      assert.strictEqual(convertFilePartToImageUrl(
+        { type: 'file', data: undefined, mediaType: 'image/png' }), undefined
+      )
     })
   })
 
