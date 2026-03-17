@@ -250,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       kafka:
-        image: apache/kafka-native:3.9.1
+        image: apache/kafka:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
@@ -607,7 +607,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       kafka:
-        image: apache/kafka-native:3.9.1
+        image: apache/kafka:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
