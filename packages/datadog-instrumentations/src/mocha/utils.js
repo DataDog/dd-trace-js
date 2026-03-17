@@ -140,7 +140,6 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
-    // Flaky test retries does not work in parallel mode
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
       this.retries(libraryConfig?.flakyTestRetriesCount)
     }
@@ -286,6 +285,12 @@ function getOnTestEndHandler (config) {
 
     if (test._ddIsEfdRetry && isLastEfdRetry &&
       testStatuses.every(status => status === 'fail')) {
+      hasFailedAllRetries = true
+    }
+
+    // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+    if (config.isFlakyTestRetriesEnabled && !test._ddIsAttemptToFix && !test._ddIsEfdRetry &&
+      getIsLastRetry(test) && testStatuses.every(status => status === 'fail')) {
       hasFailedAllRetries = true
     }
 

@@ -295,7 +295,7 @@ describe('Plugin', () => {
           }
 
           it('should skip injection without a store', async () => {
-            assert.doesNotThrow(() => winston.info('message'))
+            winston.info('message')
           })
         })
 

@@ -317,6 +317,27 @@ versions.forEach((version) => {
           'playwright-tests-ts/one-test.js.playwright should work with passing tests',
           'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
         ])
+        assert.deepStrictEqual(
+          testEvents
+            .map(test => ({
+              resource: test.content.resource,
+              sourceFile: test.content.meta[TEST_SOURCE_FILE],
+              sourceStart: test.content.metrics[TEST_SOURCE_START],
+            }))
+            .sort((left, right) => left.resource.localeCompare(right.resource)),
+          [
+            {
+              resource: 'playwright-tests-ts/one-test.js.playwright should work with passing tests',
+              sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
+              sourceStart: 9,
+            },
+            {
+              resource: 'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
+              sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
+              sourceStart: 14,
+            },
+          ]
+        )
         assert.match(testOutput, /1 passed/)
         assert.match(testOutput, /1 skipped/)
         assert.doesNotMatch(testOutput, /TypeError/)
@@ -664,7 +685,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -981,6 +1002,7 @@ versions.forEach((version) => {
                 test => test.meta[TEST_NAME] === 'playwright should not retry new tests'
               )
               assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
+              newTests.sort((a, b) => (a.meta.start ?? 0) - (b.meta.start ?? 0))
               newTests.forEach(test => {
                 assert.strictEqual(test.meta[TEST_STATUS], 'fail')
                 assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
@@ -1184,6 +1206,46 @@ versions.forEach((version) => {
             .then(() => done())
             .catch(done)
         })
+      })
+
+      it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 1,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.strictEqual(failedTests.length, 2, 'initial + 1 ATR retry, both fail')
+            const lastFailed = failedTests[failedTests.length - 1]
+            assert.strictEqual(lastFailed.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+            assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          }, 30000)
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-automatic-retry',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            },
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), receiverPromise])
       })
     })
 

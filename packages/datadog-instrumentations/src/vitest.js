@@ -95,6 +95,7 @@ function getProvidedContext () {
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
+      _ddFlakyTestRetriesCount: flakyTestRetriesCount,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddModifiedFiles: modifiedFiles,
     } = globalThis.__vitest_worker__.providedContext
@@ -109,6 +110,7 @@ function getProvidedContext () {
       testManagementAttemptToFixRetries,
       testManagementTests,
       isFlakyTestRetriesEnabled,
+      flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
       isImpactedTestsEnabled,
       modifiedFiles,
     }
@@ -124,6 +126,7 @@ function getProvidedContext () {
       testManagementAttemptToFixRetries: 0,
       testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
+      flakyTestRetriesCount: 0,
       isImpactedTestsEnabled: false,
       modifiedFiles: {},
     }
@@ -260,6 +263,7 @@ function getSortWrapper (sort, frameworkVersion) {
           ? this.ctx.getCoreWorkspaceProject()
           : this.ctx.getRootProject()
         workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+        workspaceProject._provided._ddFlakyTestRetriesCount = flakyTestRetriesCount
       } catch {
         log.warn('Could not send library configuration to workers.')
       }
@@ -657,6 +661,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
         task.result.state = 'pass'
       } else if (isQuarantined) {
+        if (task.result.state === 'fail') {
+          switchedStatuses.add(task)
+        }
         task.result.state = 'pass'
       }
     }
@@ -740,7 +747,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const lastExecutionStatus = task.result.state
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task)
+    const isAtf = attemptToFixTasks.has(task)
+    const isQuarantinedOrDisabledAtf = isAtf && (quarantinedTasks.has(task) || disabledTasks.has(task))
+    const shouldTrackStatuses = isEarlyFlakeDetectionEnabled || isAtf
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isQuarantinedOrDisabledAtf
     const statuses = taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -758,8 +768,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
         }
-        if (shouldFlipStatus) {
+        if (shouldTrackStatuses) {
           statuses.push(lastExecutionStatus)
+        }
+        if (shouldFlipStatus) {
           // If we don't "reset" the result.state to "pass", once a repetition fails,
           // vitest will always consider the test as failed, so we can't read the actual status
           // This means that we change vitest's behavior:
@@ -769,7 +781,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
       }
     } else if (numRepetition === task.repeats) {
-      if (shouldFlipStatus) {
+      if (shouldTrackStatuses) {
         statuses.push(lastExecutionStatus)
       }
 
@@ -1043,6 +1055,15 @@ addHook({
             // statuses only includes repetitions (not the initial run), so we check against numRepeats (not +1)
             if (statuses && statuses.length === providedContext.numRepeats &&
               statuses.every(status => status === 'fail')) {
+              hasFailedAllRetries = true
+            }
+          }
+
+          // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+          if (providedContext.isFlakyTestRetriesEnabled && !attemptToFixTasks.has(task) &&
+            !newTasks.has(task) && !modifiedTasks.has(task)) {
+            const maxRetries = providedContext.flakyTestRetriesCount ?? 0
+            if (maxRetries > 0 && task.result?.retryCount === maxRetries) {
               hasFailedAllRetries = true
             }
           }

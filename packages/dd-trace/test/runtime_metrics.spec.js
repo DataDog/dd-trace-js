@@ -12,6 +12,7 @@ const sinon = require('sinon')
 
 require('./setup/core')
 const { DogStatsDClient } = require('../src/dogstatsd')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -35,6 +36,10 @@ function createGarbage (count = 50) {
       let runtimeMetrics
       let proxy
       let config
+
+      before(() => {
+        require('../src/process-tags').initialize()
+      })
 
       beforeEach(() => {
         config = {
@@ -250,6 +255,28 @@ function createGarbage (count = 50) {
               'invalid:t_e_s_t5-:./',
             ],
           })
+        })
+
+        it('should include process tags when propagateProcessTags is enabled', function () {
+          config.propagateProcessTags = { enabled: true }
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(tags.some(tag => tag.startsWith('entrypoint.type:')), 'expected entrypoint.type tag')
+        })
+
+        it('should not include process tags when propagateProcessTags is disabled', function () {
+          config.propagateProcessTags = { enabled: false }
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
         })
 
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
@@ -659,12 +686,14 @@ function createGarbage (count = 50) {
             return acc
           }, {})
 
-          assert.strictEqual(metrics['runtime.node.mem.heap_total'], stats.heapTotal)
-          assert.strictEqual(metrics['runtime.node.mem.heap_used'], stats.heapUsed)
-          assert.strictEqual(metrics['runtime.node.mem.rss'], stats.rss)
-          assert.strictEqual(metrics['runtime.node.mem.total'], totalmem)
-          assert.strictEqual(metrics['runtime.node.mem.free'], freemem)
-          assert.strictEqual(metrics['runtime.node.mem.external'], stats.external)
+          assertObjectContains(metrics, {
+            'runtime.node.mem.heap_total': stats.heapTotal,
+            'runtime.node.mem.heap_used': stats.heapUsed,
+            'runtime.node.mem.rss': stats.rss,
+            'runtime.node.mem.total': totalmem,
+            'runtime.node.mem.free': freemem,
+            'runtime.node.mem.external': stats.external,
+          })
         })
       })
 

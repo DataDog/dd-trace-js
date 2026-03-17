@@ -82,16 +82,17 @@ describe('Plugin', () => {
             const query = 'SELECT 1+1'
 
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.query.opName)
-                assert.strictEqual(span.service, expectedSchema.query.serviceName)
-                assert.strictEqual(span.resource, query)
-                assert.strictEqual(span.type, 'sql')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
-                assert.strictEqual(span.meta.component, 'couchbase')
-                assert.strictEqual(span.meta['_dd.integration'], 'couchbase')
+              .assertFirstTraceSpan({
+                name: expectedSchema.query.opName,
+                service: expectedSchema.query.serviceName,
+                resource: query,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  'couchbase.bucket.name': 'datadog-test',
+                  component: 'couchbase',
+                  '_dd.integration': 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -112,14 +113,15 @@ describe('Plugin', () => {
 
           it('should handle storage queries', done => {
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.upsert.opName)
-                assert.strictEqual(span.service, expectedSchema.upsert.serviceName)
-                assert.strictEqual(span.resource, 'couchbase.upsert')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
-                assert.strictEqual(span.meta.component, 'couchbase')
+              .assertFirstTraceSpan({
+                name: expectedSchema.upsert.opName,
+                service: expectedSchema.upsert.serviceName,
+                resource: 'couchbase.upsert',
+                meta: {
+                  'span.kind': 'client',
+                  'couchbase.bucket.name': 'datadog-test',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -144,15 +146,16 @@ describe('Plugin', () => {
             const query = 'SELECT 1+2'
 
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.query.opName)
-                assert.strictEqual(span.service, expectedSchema.query.serviceName)
-                assert.strictEqual(span.resource, query)
-                assert.strictEqual(span.type, 'sql')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
-                assert.strictEqual(span.meta.component, 'couchbase')
+              .assertFirstTraceSpan({
+                name: expectedSchema.query.opName,
+                service: expectedSchema.query.serviceName,
+                resource: query,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  'couchbase.bucket.name': 'datadog-test',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -225,14 +228,15 @@ describe('Plugin', () => {
             const query = 'SELECT 1+1'
 
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.query.opName)
-                assert.strictEqual(span.service, expectedSchema.query.serviceName)
-                assert.strictEqual(span.resource, query)
-                assert.strictEqual(span.type, 'sql')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta.component, 'couchbase')
+              .assertFirstTraceSpan({
+                name: expectedSchema.query.opName,
+                service: expectedSchema.query.serviceName,
+                resource: query,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -242,15 +246,16 @@ describe('Plugin', () => {
 
           it('should handle storage queries', done => {
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.upsert.opName)
-                assert.strictEqual(span.service, expectedSchema.upsert.serviceName)
-                assert.strictEqual(span.resource, 'couchbase.upsert')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta['couchbase.bucket.name'], 'datadog-test')
-                assert.strictEqual(span.meta['couchbase.collection.name'], '_default')
-                assert.strictEqual(span.meta.component, 'couchbase')
+              .assertFirstTraceSpan({
+                name: expectedSchema.upsert.opName,
+                service: expectedSchema.upsert.serviceName,
+                resource: 'couchbase.upsert',
+                meta: {
+                  'span.kind': 'client',
+                  'couchbase.bucket.name': 'datadog-test',
+                  'couchbase.collection.name': '_default',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
@@ -279,20 +284,21 @@ describe('Plugin', () => {
 
         describe('operations still work with callbacks', () => {
           it('should perform normal cluster query operation with callback', done => {
+            const query = 'SELECT 1+1'
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                assert.strictEqual(span.name, expectedSchema.query.opName)
-                assert.strictEqual(span.service, expectedSchema.query.serviceName)
-                assert.strictEqual(span.resource, query)
-                assert.strictEqual(span.type, 'sql')
-                assert.strictEqual(span.meta['span.kind'], 'client')
-                assert.strictEqual(span.meta.component, 'couchbase')
+              .assertFirstTraceSpan({
+                name: expectedSchema.query.opName,
+                service: expectedSchema.query.serviceName,
+                resource: query,
+                type: 'sql',
+                meta: {
+                  'span.kind': 'client',
+                  component: 'couchbase',
+                },
               })
               .then(done)
               .catch(done)
 
-            const query = 'SELECT 1+1'
             cluster.query(query, (err, rows) => {
               if (err) done(err)
             })

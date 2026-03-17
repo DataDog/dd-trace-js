@@ -453,6 +453,56 @@ versions.forEach((version) => {
           }
         )
       })
+
+      it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 2,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const neverPassingTest = tests.filter(
+              test => test.resource ===
+                'ci-visibility/vitest-tests/flaky-test-retries.mjs.flaky test retries can retry tests that never pass'
+            )
+            assert.strictEqual(neverPassingTest.length, 3, '1 initial + 2 ATR retries')
+            neverPassingTest.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'fail'))
+
+            const lastAttempt = neverPassingTest[neverPassingTest.length - 1]
+            assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+            for (let i = 0; i < neverPassingTest.length - 1; i++) {
+              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in neverPassingTest[i].meta))
+            }
+          }
+        )
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      })
     })
 
     it('correctly calculates test code owners when working directory is not repository root', (done) => {
@@ -1666,6 +1716,7 @@ versions.forEach((version) => {
             shouldAlwaysPass,
             isQuarantining,
             shouldFailSometimes,
+            shouldFailFirstOnly,
             isDisabling,
             extraEnvVars = {},
           } = {}) => {
@@ -1688,6 +1739,7 @@ versions.forEach((version) => {
                   ...extraEnvVars,
                   ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
                   ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
+                  ...(shouldFailFirstOnly ? { SHOULD_FAIL_FIRST_ONLY: '1' } : {}),
                 },
               }
             )
@@ -1725,6 +1777,12 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailSometimes: true })
+          })
+
+          it('does not suppress exit code for plain ATF tests even when last retry passes', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+            runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailFirstOnly: true })
           })
 
           it('does not attempt to fix tests if test management is not enabled', (done) => {
@@ -1941,8 +1999,7 @@ versions.forEach((version) => {
                 )
 
                 if (isQuarantining) {
-                  // TODO: do not flip the status of the test but still ignore failures
-                  assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'pass')
+                  assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
                   assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
                 } else {
                   assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
