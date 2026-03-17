@@ -15,6 +15,17 @@ class LangChainLLMObsChainHandler extends LangChainLLMObsHandler {
     // chain spans will always be workflows
     this._tagger.tagTextIO(span, input, output)
   }
+
+  getName ({ span, instance }) {
+    const firstCallable = instance?.first
+
+    if (firstCallable?.constructor?.name === 'ChannelWrite') return
+
+    const firstCallableIsLangGraph = firstCallable?.lc_namespace?.includes('langgraph')
+    const firstCallableName = firstCallable?.name
+
+    return firstCallableIsLangGraph ? firstCallableName : super.getName({ span })
+  }
 }
 
 module.exports = LangChainLLMObsChainHandler
