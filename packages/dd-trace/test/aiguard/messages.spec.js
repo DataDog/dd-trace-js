@@ -5,6 +5,7 @@ const { describe, it } = require('mocha')
 
 const {
   convertVercelPromptToMessages,
+  convertFilePartToImageUrl,
   buildOutputMessages,
   buildTextOutputMessages,
   buildToolCallOutputMessages,
@@ -43,17 +44,115 @@ describe('aiguard/messages', () => {
       ])
     })
 
-    it('should convert user messages with content array', () => {
+    it('should convert user messages with text-only content array', () => {
       const prompt = [{
         role: 'user',
         content: [
           { type: 'text', text: 'Hello' },
-          { type: 'image', image: 'data:...' },
           { type: 'text', text: 'World' },
         ],
       }]
       assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [
         { role: 'user', content: 'Hello\nWorld' },
+      ])
+    })
+
+    it('should convert user messages with file part containing image URL string', () => {
+      const prompt = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is in this image?' },
+          { type: 'file', data: 'https://example.com/photo.png', mediaType: 'image/png' },
+        ],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is in this image?' },
+          { type: 'image_url', image_url: { url: 'https://example.com/photo.png' } },
+        ],
+      }])
+    })
+
+    it('should convert user messages with file part containing image data URL', () => {
+      const prompt = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe this' },
+          { type: 'file', data: 'data:image/jpeg;base64,abc123', mediaType: 'image/jpeg' },
+        ],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe this' },
+          { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,abc123' } },
+        ],
+      }])
+    })
+
+    it('should convert user messages with file part containing URL object', () => {
+      const prompt = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Analyze' },
+          { type: 'file', data: new URL('https://example.com/img.jpg'), mediaType: 'image/jpeg' },
+        ],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Analyze' },
+          { type: 'image_url', image_url: { url: 'https://example.com/img.jpg' } },
+        ],
+      }])
+    })
+
+    it('should convert user messages with file part containing base64 string', () => {
+      const prompt = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is this?' },
+          { type: 'file', data: 'iVBORw0KGgo=', mediaType: 'image/webp' },
+        ],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'What is this?' },
+          { type: 'image_url', image_url: { url: 'data:image/webp;base64,iVBORw0KGgo=' } },
+        ],
+      }])
+    })
+
+    it('should convert user messages with file part containing Uint8Array', () => {
+      const bytes = new Uint8Array([0x89, 0x50, 0x4E, 0x47])
+      const prompt = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe' },
+          { type: 'file', data: bytes, mediaType: 'image/png' },
+        ],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe' },
+          { type: 'image_url', image_url: { url: `data:image/png;base64,${Buffer.from(bytes).toString('base64')}` } },
+        ],
+      }])
+    })
+
+    it('should ignore file parts with non-image media types', () => {
+      const prompt = [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Read this PDF' },
+          { type: 'file', data: 'base64data', mediaType: 'application/pdf' },
+        ],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [
+        { role: 'user', content: 'Read this PDF' },
       ])
     })
 
@@ -146,11 +245,17 @@ describe('aiguard/messages', () => {
       }])
     })
 
-    it('should convert a full multi-turn conversation', () => {
+    it('should convert a full multi-turn conversation with images', () => {
       const prompt = [
         { role: 'system', content: 'Be helpful' },
-        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
-        { role: 'assistant', content: [{ type: 'text', text: 'Hi there' }] },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'file', data: 'https://example.com/photo.png', mediaType: 'image/png' },
+          ],
+        },
+        { role: 'assistant', content: [{ type: 'text', text: 'It shows a cat' }] },
         {
           role: 'assistant',
           content: [{
@@ -171,8 +276,14 @@ describe('aiguard/messages', () => {
       ]
       assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [
         { role: 'system', content: 'Be helpful' },
-        { role: 'user', content: 'Hello' },
-        { role: 'assistant', content: 'Hi there' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is in this image?' },
+            { type: 'image_url', image_url: { url: 'https://example.com/photo.png' } },
+          ],
+        },
+        { role: 'assistant', content: 'It shows a cat' },
         {
           role: 'assistant',
           tool_calls: [{
@@ -192,6 +303,13 @@ describe('aiguard/messages', () => {
       assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [
         { role: 'user', content: 'Hello' },
       ])
+    })
+  })
+
+  describe('convertFilePartToImageUrl', () => {
+    it('should return undefined for unsupported data types', () => {
+      assert.strictEqual(convertFilePartToImageUrl({ type: 'file', data: 42, mediaType: 'image/png' }), undefined)
+      assert.strictEqual(convertFilePartToImageUrl({ type: 'file', data: undefined, mediaType: 'image/png' }), undefined)
     })
   })
 

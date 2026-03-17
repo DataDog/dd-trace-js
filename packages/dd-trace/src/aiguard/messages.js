@@ -1,14 +1,40 @@
 'use strict'
 
 /**
- * Converts Vercel AI SDK internal prompt format to the OpenAI-style message format
- * expected by AIGuard's evaluate API.
+ * Converts a LanguageModelV2FilePart with an image mediaType to an OpenAI image_url content part.
  *
- * Vercel AI prompt entries use content arrays with typed parts (e.g. { type: 'text', text }),
- * while AIGuard expects flat { role, content } messages.
+ * @param {{type: 'file', data: URL|string|Uint8Array, mediaType: string}} part
+ * @returns {{type: 'image_url', image_url: {url: string}}|undefined}
+ */
+function convertFilePartToImageUrl (part) {
+  const { data, mediaType } = part
+
+  if (data instanceof URL) {
+    return { type: 'image_url', image_url: { url: data.toString() } }
+  }
+
+  if (typeof data === 'string') {
+    if (data.startsWith('http') || data.startsWith('data:')) {
+      return { type: 'image_url', image_url: { url: data } }
+    }
+    return { type: 'image_url', image_url: { url: `data:${mediaType};base64,${data}` } }
+  }
+
+  if (data instanceof Uint8Array) {
+    return { type: 'image_url', image_url: { url: `data:${mediaType};base64,${Buffer.from(data).toString('base64')}` } }
+  }
+}
+
+/**
+ * Converts a LanguageModelV2Prompt to the OpenAI-style message format expected by AIGuard's evaluate API.
+ *
+ * Vercel AI v2 prompt entries use content arrays with typed parts (e.g. { type: 'text', text },
+ * { type: 'file', data, mediaType }), while AIGuard expects OpenAI-style messages.
+ * When file parts with image media types are present, the content is an array of text and
+ * image_url parts; otherwise it is a plain string.
  *
  * @param {Array<{role: string, content: string|Array<{type: string}>}>} prompt
- * @returns {Array<{role: string, content?: string, tool_calls?: Array, tool_call_id?: string}>}
+ * @returns {Array<{role: string, content?: string|Array<{type: string}>, tool_calls?: Array, tool_call_id?: string}>}
  */
 function convertVercelPromptToMessages (prompt) {
   if (!Array.isArray(prompt)) return []
@@ -24,11 +50,21 @@ function convertVercelPromptToMessages (prompt) {
         if (typeof msg.content === 'string') {
           messages.push({ role: 'user', content: msg.content })
         } else if (Array.isArray(msg.content)) {
-          const textParts = []
+          const contentParts = []
           for (const part of msg.content) {
-            if (part.type === 'text') textParts.push(part.text)
+            if (part.type === 'text') {
+              contentParts.push({ type: 'text', text: part.text })
+            } else if (part.type === 'file' && part.mediaType?.startsWith('image/')) {
+              const converted = convertFilePartToImageUrl(part)
+              if (converted) contentParts.push(converted)
+            }
           }
-          messages.push({ role: 'user', content: textParts.join('\n') })
+          const hasImages = contentParts.some(p => p.type === 'image_url')
+          if (hasImages) {
+            messages.push({ role: 'user', content: contentParts })
+          } else {
+            messages.push({ role: 'user', content: contentParts.map(p => p.text).join('\n') })
+          }
         }
         break
       }
@@ -135,6 +171,7 @@ function buildOutputMessages (inputMessages, content) {
 
 module.exports = {
   convertVercelPromptToMessages,
+  convertFilePartToImageUrl, // test only
   buildToolCallOutputMessages, // test only
   buildTextOutputMessages, // test only
   buildOutputMessages,
