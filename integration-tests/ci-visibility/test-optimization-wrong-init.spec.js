@@ -44,8 +44,8 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
   describe(`test optimization wrong init for ${testFramework}`, () => {
     let cwd, receiver, childProcess, processOutput
 
-    // cucumber does not support Node.js@18 anymore
-    if (NODE_MAJOR <= 18 && testFramework === 'cucumber') return
+    // cucumber and vitest@4.x do not support Node.js@18
+    if (NODE_MAJOR <= 18 && (testFramework === 'cucumber' || testFramework === 'vitest')) return
 
     const testFrameworks = ['jest', 'mocha', 'vitest']
 
