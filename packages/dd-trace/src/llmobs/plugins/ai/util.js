@@ -120,19 +120,19 @@ function getModelMetadata (tags) {
   const modelMetadata = {}
   for (const tag of Object.keys(tags)) {
     const isModelMetadata = tag.startsWith(VERCEL_AI_MODEL_METADATA_PREFIX)
-    const isTelemetryMetadata = tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)
-    if (!isModelMetadata && !isTelemetryMetadata) continue
-
     if (isModelMetadata) {
       const lastCommaPosition = tag.lastIndexOf('.')
       const metadataKey = lastCommaPosition === -1 ? tag : tag.slice(lastCommaPosition + 1)
       if (metadataKey && MODEL_METADATA_KEYS.has(metadataKey)) {
         modelMetadata[metadataKey] = tags[tag]
       }
-    } else if (isTelemetryMetadata) {
-      const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
-      if (metadataKey) {
-        modelMetadata[metadataKey] = tags[tag]
+    } else {
+      const isTelemetryMetadata = tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)
+      if (isTelemetryMetadata) {
+        const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
+        if (metadataKey) {
+          modelMetadata[metadataKey] = tags[tag]
+        }
       }
     }
   }
@@ -152,9 +152,6 @@ function getGenerationMetadata (tags) {
 
   for (const tag of Object.keys(tags)) {
     const isGenerationMetadata = tag.startsWith(VERCEL_AI_GENERATION_METADATA_PREFIX)
-    const isTelemetryMetadata = tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)
-    if (!isGenerationMetadata && !isTelemetryMetadata) continue
-
     if (isGenerationMetadata) {
       const lastCommaPosition = tag.lastIndexOf('.')
       const settingKey = lastCommaPosition === -1 ? tag : tag.slice(lastCommaPosition + 1)
@@ -163,10 +160,13 @@ function getGenerationMetadata (tags) {
 
       const settingValue = tags[tag]
       metadata[settingKey] = settingValue
-    } else if (isTelemetryMetadata) {
-      const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
-      if (metadataKey) {
-        metadata[metadataKey] = tags[tag]
+    } else {
+      const isTelemetryMetadata = tag.startsWith(VERCEL_AI_TELEMETRY_METADATA_PREFIX)
+      if (isTelemetryMetadata) {
+        const metadataKey = tag.slice(VERCEL_AI_TELEMETRY_METADATA_PREFIX.length)
+        if (metadataKey) {
+          metadata[metadataKey] = tags[tag]
+        }
       }
     }
   }
