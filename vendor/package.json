@@ -4,7 +4,7 @@
     "postinstall": "node rspack"
   },
   "dependencies": {
-    "@apm-js-collab/code-transformer": "rochdev/orchestrion-js#js-rewrite",
+    "@apm-js-collab/code-transformer": "github:rochdev/orchestrion-js#js-rewrite",
     "@datadog/sketches-js": "2.1.1",
     "@datadog/source-map": "npm:source-map@^0.6.0",
     "@isaacs/ttlcache": "^2.1.4",
