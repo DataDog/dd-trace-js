@@ -685,7 +685,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',

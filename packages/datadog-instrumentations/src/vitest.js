@@ -146,8 +146,23 @@ function isReporterPackageNewest (vitestPackage) {
   return vitestPackage.h?.name === 'BaseSequencer'
 }
 
-function isBaseSequencer (vitestPackage) {
-  return vitestPackage.b?.name === 'BaseSequencer'
+/**
+ * Finds an export by its `.name` property in a minified vitest chunk.
+ * Minified export keys change across versions, so we search by function/class name.
+ * @param {object} pkg - The module exports object
+ * @param {string} name - The `.name` value to look for
+ * @returns {{ key: string, value: Function } | undefined}
+ */
+function findExportByName (pkg, name) {
+  for (const [key, value] of Object.entries(pkg)) {
+    if (value?.name === name) {
+      return { key, value }
+    }
+  }
+}
+
+function getBaseSequencerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'BaseSequencer')
 }
 
 function getChannelPromise (channelToPublishTo, frameworkVersion) {
@@ -157,19 +172,19 @@ function getChannelPromise (channelToPublishTo, frameworkVersion) {
 }
 
 function isCliApiPackage (vitestPackage) {
-  return vitestPackage.s?.name === 'startVitest'
+  return !!findExportByName(vitestPackage, 'startVitest')
 }
 
-function isTestPackage (testPackage) {
-  return testPackage.V?.name === 'VitestTestRunner'
+function getTestRunnerExport (testPackage) {
+  return findExportByName(testPackage, 'VitestTestRunner') || findExportByName(testPackage, 'TestRunner')
 }
 
-function hasForksPoolWorker (vitestPackage) {
-  return vitestPackage.f?.name === 'ForksPoolWorker'
+function getForksPoolWorkerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'ForksPoolWorker')
 }
 
-function hasThreadsPoolWorker (vitestPackage) {
-  return vitestPackage.T?.name === 'ThreadsPoolWorker'
+function getThreadsPoolWorkerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'ThreadsPoolWorker')
 }
 
 function getSessionStatus (state) {
@@ -447,7 +462,11 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
-  shimmer.wrap(vitestPackage, 'c', getCliOrStartVitestWrapper(frameworkVersion))
+  const createCliExport = findExportByName(vitestPackage, 'createCLI')
+  if (!createCliExport) {
+    return vitestPackage
+  }
+  shimmer.wrap(vitestPackage, createCliExport.key, getCliOrStartVitestWrapper(frameworkVersion))
 
   return vitestPackage
 }
@@ -534,27 +553,30 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   if (!isCliApiPackage(cliApiPackage)) {
     return cliApiPackage
   }
-  shimmer.wrap(cliApiPackage, 's', getCliOrStartVitestWrapper(frameworkVersion))
+  const startVitestExport = findExportByName(cliApiPackage, 'startVitest')
+  shimmer.wrap(cliApiPackage, startVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
 
-  if (hasForksPoolWorker(cliApiPackage)) {
+  const forksPoolWorker = getForksPoolWorkerExport(cliApiPackage)
+  if (forksPoolWorker) {
     // function is async
-    shimmer.wrap(cliApiPackage.f.prototype, 'start', start => function () {
+    shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function () {
       vitestPool = 'child_process'
       this.env.DD_VITEST_WORKER = '1'
 
       return start.apply(this, arguments)
     })
-    shimmer.wrap(cliApiPackage.f.prototype, 'on', getWrappedOn)
+    shimmer.wrap(forksPoolWorker.value.prototype, 'on', getWrappedOn)
   }
 
-  if (hasThreadsPoolWorker(cliApiPackage)) {
+  const threadsPoolWorker = getThreadsPoolWorkerExport(cliApiPackage)
+  if (threadsPoolWorker) {
     // function is async
-    shimmer.wrap(cliApiPackage.T.prototype, 'start', start => function () {
+    shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function () {
       vitestPool = 'worker_threads'
       this.env.DD_VITEST_WORKER = '1'
       return start.apply(this, arguments)
     })
-    shimmer.wrap(cliApiPackage.T.prototype, 'on', getWrappedOn)
+    shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
   }
   return cliApiPackage
 }
@@ -661,6 +683,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
         task.result.state = 'pass'
       } else if (isQuarantined) {
+        if (task.result.state === 'fail') {
+          switchedStatuses.add(task)
+        }
         task.result.state = 'pass'
       }
     }
@@ -744,7 +769,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const lastExecutionStatus = task.result.state
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task)
+    const isAtf = attemptToFixTasks.has(task)
+    const isQuarantinedOrDisabledAtf = isAtf && (quarantinedTasks.has(task) || disabledTasks.has(task))
+    const shouldTrackStatuses = isEarlyFlakeDetectionEnabled || isAtf
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isQuarantinedOrDisabledAtf
     const statuses = taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -762,8 +790,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
         }
-        if (shouldFlipStatus) {
+        if (shouldTrackStatuses) {
           statuses.push(lastExecutionStatus)
+        }
+        if (shouldFlipStatus) {
           // If we don't "reset" the result.state to "pass", once a repetition fails,
           // vitest will always consider the test as failed, so we can't read the actual status
           // This means that we change vitest's behavior:
@@ -773,7 +803,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
       }
     } else if (numRepetition === task.repeats) {
-      if (shouldFlipStatus) {
+      if (shouldTrackStatuses) {
         statuses.push(lastExecutionStatus)
       }
 
@@ -861,11 +891,12 @@ addHook({
   versions: ['>=4.0.0'],
   filePattern: 'dist/chunks/test.*',
 }, (testPackage) => {
-  if (!isTestPackage(testPackage)) {
+  const testRunner = getTestRunnerExport(testPackage)
+  if (!testRunner) {
     return testPackage
   }
 
-  wrapVitestTestRunner(testPackage.V)
+  wrapVitestTestRunner(testRunner.value)
 
   return testPackage
 })
@@ -934,8 +965,9 @@ addHook({
   versions: ['>=3.0.9'],
   filePattern: 'dist/chunks/coverage.*',
 }, (coveragePackage) => {
-  if (isBaseSequencer(coveragePackage)) {
-    shimmer.wrap(coveragePackage.b.prototype, 'sort', getSortWrapper)
+  const baseSequencer = getBaseSequencerExport(coveragePackage)
+  if (baseSequencer) {
+    shimmer.wrap(baseSequencer.value.prototype, 'sort', getSortWrapper)
   }
   return coveragePackage
 })

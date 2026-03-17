@@ -37,6 +37,10 @@ function createGarbage (count = 50) {
       let proxy
       let config
 
+      before(() => {
+        require('../src/process-tags').initialize()
+      })
+
       beforeEach(() => {
         config = {
           runtimeMetrics: {

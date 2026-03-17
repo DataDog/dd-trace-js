@@ -369,7 +369,7 @@ moduleTypes.forEach(({
               testTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         // Run Cypress with the pre-compiled JS spec (compiled from spec-source-line.cy.ts).
         // Cypress bundles the compiled JS via its own preprocessor; the plugin resolves
@@ -459,7 +459,7 @@ moduleTypes.forEach(({
               fallbackEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-fallback.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${fallbackEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(testCommand, {
           cwd,
@@ -507,7 +507,7 @@ moduleTypes.forEach(({
               noMatchEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-no-match.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${noMatchEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(testCommand, {
           cwd,
@@ -540,7 +540,7 @@ moduleTypes.forEach(({
           assert.ok(jsInvocationDetailsEvent, 'plain-js invocationDetails test event should exist')
           assert.strictEqual(
             jsInvocationDetailsEvent.content.metrics[TEST_SOURCE_START],
-            246,
+            244,
             'should keep invocationDetails line directly for plain JS specs without source maps'
           )
           assert.ok(
@@ -549,7 +549,7 @@ moduleTypes.forEach(({
               jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE]
             }`
           )
-        }, 120000)
+        }, 60000)
 
       childProcess = exec(testCommand, {
         cwd,
@@ -1850,7 +1850,7 @@ moduleTypes.forEach(({
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.strictEqual(newTests.length, 0)
-          }, 120000)
+          }, 60000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -2975,11 +2975,9 @@ moduleTypes.forEach(({
             testAssertionsPromise,
           ])
 
-          if (shouldAlwaysPass) {
+          if (shouldAlwaysPass || isQuarantined || isDisabled) {
             assert.strictEqual(exitCode, 0)
           } else {
-            // TODO: we need to figure out how to trick cypress into returning exit code 0
-            // even if there are failed tests
             assert.strictEqual(exitCode, 1)
           }
         }
@@ -3018,9 +3016,6 @@ moduleTypes.forEach(({
          * TODO:
          * The spec says that quarantined tests that are not attempted to fix should be run and their result ignored.
          * Cypress will skip the test instead.
-         *
-         * When a test is quarantined and attempted to fix, the spec is to run the test and ignore its result.
-         * Cypress will run the test, but it won't ignore its result.
          */
         it('can mark tests as quarantined and tests are not skipped', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
@@ -3290,7 +3285,7 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             // it is not retried
             assert.strictEqual(tests.length, 1)
-          }, 120000)
+          }, 60000)
 
         const {
           NODE_OPTIONS,

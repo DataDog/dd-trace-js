@@ -12,6 +12,10 @@ const serverless = {
       opName: () => 'aws.lambda',
       serviceName: identityService,
     },
+    'azure-durable-functions': {
+      opName: () => 'azure.functions.invoke',
+      serviceName: identityService,
+    },
   },
 }
 

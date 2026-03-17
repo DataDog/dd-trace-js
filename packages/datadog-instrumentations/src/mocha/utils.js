@@ -140,7 +140,6 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
-    // Flaky test retries does not work in parallel mode
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
       this.retries(libraryConfig?.flakyTestRetriesCount)
     }

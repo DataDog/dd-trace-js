@@ -362,7 +362,8 @@ class FakeCiVisIntake extends FakeAgent {
             this.off('message', messageHandler)
             resolve()
           } catch (e) {
-            // we'll try again when a new payload arrives
+            // Assertion not yet satisfied — we'll try again when a new payload arrives.
+            // The timeout handler will re-run onPayload and reject with the actual error.
           }
         }
       }

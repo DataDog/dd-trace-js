@@ -228,6 +228,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "azure-durable-functions": tracer.plugins.azure_durable_functions
   "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -261,6 +262,7 @@ interface Plugins {
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
+  "langgraph": tracer.plugins.langgraph;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -2122,6 +2124,12 @@ declare namespace tracer {
     interface azure_service_bus extends Integration {}
 
     /**
+     * This plugin automatically instruments the
+     * durable-functions module
+     */
+      interface azure_durable_functions extends Integration {}
+
+    /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
      * to automatically inject trace identifiers in log records when the
      * [logInjection](interfaces/traceroptions.html#logInjection) option is enabled
@@ -2571,6 +2579,12 @@ declare namespace tracer {
     interface langchain extends Instrumentation {}
 
     /**
+     * This plugin automatically instruments the
+     * [langgraph](https://github.com/npmjs/package/langgraph) library.
+     */
+    interface langgraph extends Instrumentation {}
+
+      /**
      * This plugin automatically instruments the
      * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
      */
