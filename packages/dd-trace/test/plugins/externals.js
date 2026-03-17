@@ -459,6 +459,16 @@ module.exports = {
       dep: true,
     },
   ],
+  'openai-agents': [
+    {
+      name: '@openai/agents-core',
+      versions: ['>=0.7.0'],
+    },
+    {
+      name: '@openai/agents-openai',
+      versions: ['>=0.7.0'],
+    },
+  ],
   passport: [
     {
       name: 'express',
