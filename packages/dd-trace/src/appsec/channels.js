@@ -42,7 +42,7 @@ module.exports = {
   routerParam: dc.channel('datadog:router:param:start'),
   setCookieChannel: dc.channel('datadog:iast:set-cookie'),
   setUncaughtExceptionCaptureCallbackStart: dc.channel('datadog:process:setUncaughtExceptionCaptureCallback:start'),
-  startGraphqlResolve: dc.channel('datadog:graphql:resolver:start'),
+  startGraphqlResolver: dc.channel('datadog:graphql:resolver:start'),
   stripeCheckoutSessionCreate: dc.channel('datadog:stripe:checkoutSession:create:finish'),
   stripeConstructEvent: dc.channel('datadog:stripe:constructEvent:finish'),
   stripePaymentIntentCreate: dc.channel('datadog:stripe:paymentIntent:create:finish'),
