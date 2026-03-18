@@ -6,10 +6,20 @@ const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
 const instrumentations = require('./instrumentations')
 
+let dcPolyfill
+
+try {
+  dcPolyfill = require.resolve('dc-polyfill')
+} catch {
+  // The `dc-polyfill` module is unavailable for some reason (like bundling).
+  // Let's just keep the default of using `diagnostics-channel` as a fallback
+  // which works for most Node versions.
+}
+
 /** @type {Record<string, string>} map of module base name to version */
 const moduleVersions = {}
 const disabled = new Set()
-const matcher = create(instrumentations)
+const matcher = create(instrumentations, dcPolyfill)
 
 function rewrite (content, filename, format) {
   if (!content) return content
