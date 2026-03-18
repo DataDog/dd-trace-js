@@ -116,11 +116,13 @@ class Profiler extends EventEmitter {
       reportHostname,
     }
 
-    return this._start(options).catch((err) => {
+    try {
+      return this._start(options)
+    } catch (err) {
       logError(logger, 'Error starting profiler. For troubleshooting tips, see ' +
         '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
       return false
-    })
+    }
   }
 
   get enabled () {
@@ -131,7 +133,7 @@ class Profiler extends EventEmitter {
     logError(this.#logger, err)
   }
 
-  async _start (options) {
+  _start (options) {
     if (this.enabled) return true
 
     const config = this.#config = new Config(options)
@@ -148,15 +150,21 @@ class Profiler extends EventEmitter {
       setLogger(config.logger)
 
       if (config.sourceMap) {
-        mapper = await SourceMapper.create([process.cwd()], config.debugSourceMaps)
-        this.#sourceMapCount = mapper.infoMap.size
-        if (config.debugSourceMaps) {
-          this.#logger.debug(() => {
-            return this.#sourceMapCount === 0
-              ? 'Found no source maps'
-              : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+        mapper = new SourceMapper(config.debugSourceMaps)
+        mapper.loadDirectory(process.cwd())
+          .then(() => {
+            this.#sourceMapCount = mapper.infoMap.size
+            if (config.debugSourceMaps) {
+              this.#logger.debug(() => {
+                return this.#sourceMapCount === 0
+                  ? 'Found no source maps'
+                  : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+              })
+            }
           })
-        }
+          .catch((err) => {
+            this.#logError(err)
+          })
       }
 
       const clevel = config.uploadCompression.level
