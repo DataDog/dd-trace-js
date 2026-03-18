@@ -1,7 +1,7 @@
 'use strict'
 
-const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 const { VERSION } = require('../../../../../version')
+const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 
 /**
  * @typedef {import('../../config')} Config
