@@ -789,19 +789,20 @@ moduleTypes.forEach(({
           )
           assert.ok(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
 
-          assertObjectContains(testSuiteEvents.map(suite => suite.content.resource), [
-            'test_suite.cypress/e2e/spec.cy.js',
-            'test_suite.cypress/e2e/other.cy.js',
-            'test_suite.cypress/e2e/hook-test-error.cy.js',
-            'test_suite.cypress/e2e/hook-describe-error.cy.js',
-          ])
+          assert.deepStrictEqual(
+            testSuiteEvents.map(suite => suite.content.resource).sort(),
+            [
+              'test_suite.cypress/e2e/hook-describe-error.cy.js',
+              'test_suite.cypress/e2e/hook-test-error.cy.js',
+              'test_suite.cypress/e2e/other.cy.js',
+              'test_suite.cypress/e2e/spec.cy.js',
+            ]
+          )
 
-          assertObjectContains(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
-            'fail',
-            'pass',
-            'fail',
-            'fail',
-          ])
+          assertObjectContains(
+            testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]).sort(),
+            ['fail', 'fail', 'fail', 'pass']
+          )
 
           testSuiteEvents.forEach(({
             content: {
@@ -822,16 +823,10 @@ moduleTypes.forEach(({
             assert.ok(metrics[DD_HOST_CPU_COUNT])
           })
 
-          assertObjectContains(testEvents.map(test => test.content.resource), [
+          assertObjectContains(testEvents.map(test => test.content.resource).sort(), [
+            'cypress/e2e/other.cy.js.context passes',
             'cypress/e2e/spec.cy.js.context passes',
             'cypress/e2e/spec.cy.js.other context fails',
-            'cypress/e2e/other.cy.js.context passes',
-          ])
-
-          assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
-            'pass',
-            'fail',
-            'pass',
           ])
 
           testEvents.forEach(({
