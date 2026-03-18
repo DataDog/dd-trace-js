@@ -6,12 +6,14 @@ description: |
   "instrument chat completions", "instrument streaming", "instrument embeddings",
   "instrument agent runs", "instrument orchestration", "instrument LLM",
   "LLMObsPlugin", "LlmObsPlugin", "getLLMObsSpanRegisterOptions", "setLLMObsTags",
+  "tagLLMIO", "tagEmbeddingIO", "tagRetrievalIO", "tagTextIO", "tagMetrics", "tagMetadata",
+  "tagSpanTags", "tagPrompt", "LlmObsCategory", "LlmObsSpanKind",
   "span kind llm", "span kind workflow", "span kind agent", "span kind embedding",
   "span kind tool", "span kind retrieval",
   "openai llmobs", "anthropic llmobs", "genai llmobs", "google llmobs",
   "langchain llmobs", "langgraph llmobs", "ai-sdk llmobs",
   "llm span", "llmobs span event", "model provider", "model name",
-  "tagInputMessages", "tagOutputMessages", "tagMetrics", "tagMetadata",
+  "CompositePlugin llmobs", "llmobs tracing", "VCR cassettes",
   or needs to build, modify, or debug an LLMObs plugin for any LLM library in dd-trace-js.
 ---
 
@@ -25,7 +27,9 @@ This skill helps you create LLMObs plugins that instrument LLM library operation
 - **Streaming chat completions** — streamed token-by-token responses
 - **Embeddings** — vector embedding generation
 - **Agent runs** — autonomous LLM agent execution loops
-- **Orchestration** — multi-step workflow and graph execution (langgraph, crewai, etc.)
+- **Orchestration** — multi-step workflow and graph execution (langgraph, etc.)
+- **Tool calls** — tool/function invocations
+- **Retrieval** — vector DB / RAG operations
 
 ## When to Use
 
@@ -73,7 +77,7 @@ See [references/plugin-architecture.md](references/plugin-architecture.md) for c
   - Test strategy: VCR with real API calls via proxy
   - Instrumentation: Hook provider abstraction layer
 
-- **`LlmObsCategory.ORCHESTRATION`** - Workflow managers (langgraph, crewai)
+- **`LlmObsCategory.ORCHESTRATION`** - Workflow managers (langgraph)
   - Signs: Graph/workflow execution, state management, NO direct HTTP to LLM providers
   - Test strategy: Pure function tests, NO VCR, NO real API calls
   - Instrumentation: Hook workflow lifecycle (invoke, stream, run)
@@ -148,11 +152,11 @@ See [references/message-extraction.md](references/message-extraction.md) for pro
    - Return registration options object
 
 4. **Implement `setLLMObsTags(ctx)`**
-   - Extract input messages from `ctx.inputs`
-   - Extract output messages from `ctx.outputs`
+   - Extract input messages from `ctx.arguments`
+   - Extract output messages from `ctx.result`
    - Extract token metrics (input_tokens, output_tokens, total_tokens)
    - Extract metadata (temperature, max_tokens, etc.)
-   - Tag span using helper methods
+   - Tag span using `this._tagger` methods
 
 5. **Handle edge cases**
    - Streaming responses (if applicable)
@@ -187,7 +191,7 @@ For detailed information, see:
 - [references/plugin-architecture.md](references/plugin-architecture.md) - Complete plugin structure, implementation steps, helper methods
 - [references/category-detection.md](references/category-detection.md) - Package classification heuristics and detection process
 - [references/message-extraction.md](references/message-extraction.md) - Provider-specific message format patterns
-- [references/reference-implementations.md](references/reference-implementations.md) - Working plugin examples (OpenAI, Anthropic, Google GenAI)
+- [references/reference-implementations.md](references/reference-implementations.md) - Working plugin examples (Anthropic, Google GenAI)
 
 ## Key Principles
 

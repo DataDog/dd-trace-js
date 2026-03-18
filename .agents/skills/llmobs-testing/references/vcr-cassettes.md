@@ -24,7 +24,7 @@ Configure client to use VCR proxy:
 
 ```javascript
 const client = new MyLLMClient({
-  apiKey: 'test-api-key',  // Any value works for recording
+  apiKey: process.env.PROVIDER_API_KEY ?? 'test-api-key',  // Real key needed for first recording; replays work without one
   baseURL: 'http://127.0.0.1:9126/vcr/{provider-name}'  // VCR proxy URL
 })
 ```
@@ -113,10 +113,10 @@ When to re-record:
 - Cassettes are outdated
 
 **Process:**
-1. Delete old cassettes: `rm -rf test/llmobs/plugins/{provider}/cassettes/`
+1. Delete the specific cassette file that needs re-recording (visible in the git diff of the PR being worked on — don't delete the whole folder)
 2. Set API key: `export PROVIDER_API_KEY="..."`
 3. Run tests: `npm test ...`
-4. Commit new cassettes
+4. Commit the updated cassette
 
 ## Playback Mode
 
@@ -186,7 +186,7 @@ describe('openai LLMObs', () => {
   beforeEach(() => {
     const OpenAI = require('openai')
     openai = new OpenAI({
-      apiKey: 'test-key',
+      apiKey: process.env.OPENAI_API_KEY ?? 'test-api-key',
       baseURL: 'http://127.0.0.1:9126/vcr/openai'  // VCR proxy
     })
   })

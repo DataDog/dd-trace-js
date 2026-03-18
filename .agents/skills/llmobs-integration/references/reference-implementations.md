@@ -15,11 +15,9 @@ The abstract base class all plugins extend.
 - `asyncEnd(ctx)` - Calls setLLMObsTags
 - `end(ctx)` - Restores context
 
-**Inherited helpers:**
-- `tagInputMessages(span, messages)`
-- `tagOutputMessages(span, messages)`
-- `tagMetrics(span, metrics)`
-- `tagMetadata(span, metadata)`
+**Tagger methods** (accessed via `this._tagger`):
+- `tagLLMIO`, `tagEmbeddingIO`, `tagRetrievalIO`, `tagTextIO`
+- `tagMetadata`, `tagMetrics`, `tagSpanTags`, `tagPrompt`
 
 ## Simple LLM Client Examples
 
@@ -172,23 +170,9 @@ kind: 'workflow' for graph execution
 
 ## CompositePlugin Integration
 
-Some plugins integrate LLMObs with tracing plugins using CompositePlugin:
+Some plugins integrate LLMObs with tracing plugins using `CompositePlugin`. The plugin class declares a `static plugins` field mapping keys to plugin classes.
 
-**Pattern:**
-```javascript
-// In integration plugin index.js
-const TracingPlugin = require('./tracing')
-const LLMObsPlugin = require('./llmobs')
-const CompositePlugin = require('../../plugins/composite')
-
-module.exports = [
-  CompositePlugin.createPlugin([TracingPlugin, LLMObsPlugin])
-]
-```
-
-**Examples:**
-- `packages/datadog-plugin-anthropic/src/index.js`
-- `packages/datadog-plugin-google-genai/src/index.js`
+See `packages/datadog-plugin-google-genai/src/index.js` for a reference implementation.
 
 ## Testing Examples
 

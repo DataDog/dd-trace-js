@@ -4,32 +4,9 @@ Complete guide to `assertLlmObsSpanEvent()` and mock matchers for validating LLM
 
 ## assertLlmObsSpanEvent
 
-Main assertion function for validating LLMObs span structure.
+Main assertion function for validating LLMObs span structure. Only the fields you specify are checked — unspecified fields are ignored.
 
-**Signature:**
-```javascript
-assertLlmObsSpanEvent(actual, expected)
-```
-
-**Parameters:**
-- `actual` - Span event object from `getEvents()`
-- `expected` - Expected span structure with flexible matchers (only validates specified fields)
-
-## Assertable Fields
-
-| Field | Type | Description | Example |
-|-------|------|-------------|---------|
-| `spanKind` | string (required) | Span type | `'llm'`, `'workflow'`, `'agent'`, `'tool'`, `'embedding'`, `'retrieval'` |
-| `name` | string | Operation name | `'openai.chat.completions'`, `'langgraph.graph.invoke'` |
-| `modelName` | string | Model identifier | `'gpt-4'`, `'claude-3-sonnet'` |
-| `modelProvider` | string | Provider name | `'openai'`, `'anthropic'`, `'google'` |
-| `inputMessages` | array | Input messages | `[{content: 'Hello', role: 'user'}]` |
-| `outputMessages` | array | Output messages | `[{content: MOCK_STRING, role: 'assistant'}]` |
-| `metrics` | object | Token usage | `{input_tokens: 10, output_tokens: 20, total_tokens: 30}` |
-| `metadata` | object | Model parameters | `{temperature: 0.7, max_tokens: 1024}` |
-| `error` | object | Error info (if failed) | `MOCK_OBJECT` or specific error shape |
-
-**Message format:** `{content: string, role: string}`
+See the docstring in `packages/dd-trace/test/llmobs/util.js` for the full type signature and parameter details.
 
 ## Mock Matchers
 
@@ -154,8 +131,9 @@ assertLlmObsSpanEvent(events[0], {
 ## Reference Test Implementation
 
 For a complete, real-world example of how tests using these helpers are structured, see:
-- [`packages/datadog-plugin-anthropic/test/llmobs.spec.js`](../../../../../packages/datadog-plugin-anthropic/test/llmobs.spec.js)
-- [`packages/datadog-plugin-google-genai/test/llmobs.spec.js`](../../../../../packages/datadog-plugin-google-genai/test/llmobs.spec.js)
+- [`packages/datadog-plugin-anthropic/test/llmobs.spec.js`](../../../../../packages/datadog-plugin-anthropic/test/llmobs.spec.js) (LLM_CLIENT / MULTI_PROVIDER pattern)
+- [`packages/datadog-plugin-google-genai/test/llmobs.spec.js`](../../../../../packages/datadog-plugin-google-genai/test/llmobs.spec.js) (LLM_CLIENT pattern)
+- `packages/dd-trace/test/llmobs/plugins/langgraph/index.spec.js` (ORCHESTRATION pattern)
 
 ## Field Reference Quick Lookup
 

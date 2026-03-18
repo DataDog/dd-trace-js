@@ -32,7 +32,6 @@ Detailed guide for classifying LLM packages into `LlmObsCategory` enum values.
 **Examples:**
 - `@ai-sdk/vercel` - Vercel AI SDK
 - `langchain` - LangChain framework
-- `llamaindex` - LlamaIndex framework
 
 **Observable signs:**
 - Package name suggests multi-provider (ai-sdk, langchain)
@@ -51,14 +50,12 @@ Detailed guide for classifying LLM packages into `LlmObsCategory` enum values.
 
 **Examples:**
 - `@langchain/langgraph` - LangGraph workflow engine
-- `crewai` - CrewAI multi-agent framework
 - Workflow engines, agent coordinators
 
 **Observable signs:**
 - Package name suggests orchestration (langgraph, crew, workflow, graph)
 - Has graph/workflow/chain execution methods (`invoke`, `stream`, `run`)
 - Manages state and control flow between nodes/agents
-- Does NOT make HTTP calls to LLM providers
 - Dependencies include orchestration libraries (e.g., @langchain/core)
 - Methods focus on state management, not API calls
 
@@ -145,17 +142,19 @@ Check for:
 
 ## Real-World Examples
 
-### Example 1: LangGraph (ORCHESTRATION)
+### Example 1: Anthropic (LLM_CLIENT)
 
-**Package:** `@langchain/langgraph`
+**Package:** `@anthropic-ai/sdk` — see `packages/datadog-plugin-anthropic/`
 
-- Name contains "langgraph" → orchestration
-- Depends on @langchain/core, no HTTP client dependencies
-- Methods: `StateGraph.invoke`, `CompiledStateGraph.stream` focus on graph execution and state management
+**Category:** `LlmObsCategory.LLM_CLIENT` — name contains "anthropic", direct HTTP calls to Claude API, requires API key, methods are `messages.create`
 
-**Category:** `LlmObsCategory.ORCHESTRATION`
+### Example 2: Google GenAI (LLM_CLIENT)
 
-### Example 2: Vercel AI SDK (MULTI_PROVIDER)
+**Package:** `@google/generative-ai` — see `packages/datadog-plugin-google-genai/`
+
+**Category:** `LlmObsCategory.LLM_CLIENT` — name contains "genai", direct HTTP calls to Gemini API, complex nested message format (contents/parts)
+
+### Example 3: Vercel AI SDK (MULTI_PROVIDER)
 
 **Package:** `ai` (Vercel AI SDK)
 
@@ -165,31 +164,17 @@ Check for:
 
 **Category:** `LlmObsCategory.MULTI_PROVIDER`
 
-### Example 3: Anthropic (LLM_CLIENT)
+### Example 4: LangGraph (ORCHESTRATION)
 
-**Package:** `@anthropic-ai/sdk`
+**Package:** `@langchain/langgraph` — see `packages/dd-trace/src/llmobs/plugins/langgraph/`
 
-- Name contains "anthropic" → llm_client
-- Makes direct HTTP calls to Anthropic API
-- Methods: `messages.create`, `messages.stream`
-
-**Category:** `LlmObsCategory.LLM_CLIENT`
+**Category:** `LlmObsCategory.ORCHESTRATION` — name indicates graph orchestration, depends on `@langchain/core`, methods manage workflow state (`StateGraph.invoke`, `Pregel.stream`), no direct LLM HTTP calls
 
 ## Edge Cases
 
-### Uncertain Cases
-
-When signals conflict or are weak:
-- Document all signals found
-- Choose category with highest score
-- Set confidence to "low"
-- Explain uncertainty in reasoning
-
-### Non-Standard Packages
+When signals conflict or are weak, choose the category with the most evidence and prefer the category that matches test strategy needs: if the package makes HTTP calls it needs VCR (LLM_CLIENT/MULTI_PROVIDER); if it doesn't, use pure functions (ORCHESTRATION) or mock servers (INFRASTRUCTURE).
 
 Some packages don't fit cleanly:
 - Utilities/helpers → Check what they instrument
 - Plugins/extensions → Follow parent library category
 - Hybrid packages → Categorize by primary function
-
-**Guideline:** When in doubt, prefer category that matches test strategy needs. If package makes HTTP calls, it needs VCR (Category 1/2). If it doesn't, use pure functions (Category 3).

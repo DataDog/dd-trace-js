@@ -3,12 +3,16 @@ name: llmobs-testing
 description: |
   This skill should be used when the user asks to "write LLMObs tests", "add tests for LLM Observability",
   "test an LLMObs plugin", "llmobs test", "llmobs spec", "test llm observability",
-  "assertLlmObsSpanEvent", "useLlmObs", "getEvents", "MOCK_STRING", "MOCK_NOT_NULLISH",
-  "VCR cassette", "record cassette", "vcr proxy", "llmobs cassette",
+  "assertLlmObsSpanEvent", "useLlmObs", "getEvents",
+  "MOCK_STRING", "MOCK_NOT_NULLISH", "MOCK_NUMBER", "MOCK_OBJECT",
+  "VCR cassette", "record cassette", "replay cassette", "vcr proxy", "llmobs cassette",
   "test chat completions", "test streaming", "test embeddings", "test agent runs",
   "test orchestration", "test workflow", "llmobs span event",
-  "category-strategies", "LLM_CLIENT test", "MULTI_PROVIDER test",
-  "ORCHESTRATION test", "INFRASTRUCTURE test",
+  "LLMObs test strategy", "LlmObsCategory test",
+  "LLM_CLIENT test", "MULTI_PROVIDER test", "ORCHESTRATION test", "INFRASTRUCTURE test",
+  "span kind llm test", "span kind workflow test",
+  "inputMessages", "outputMessages", "token metrics", "llmobs span validation",
+  "cassette not generated", "re-record cassette", "127.0.0.1:9126",
   or needs to write, modify, or debug tests for any LLMObs plugin in dd-trace-js.
 ---
 
