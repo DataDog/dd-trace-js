@@ -16,7 +16,7 @@ const { httpAgent, httpsAgent } = require('./agents')
 
 const maxActiveRequests = 64e6
 
-let activeRequests = 0
+let activeBufferSize = 0
 
 function parseUrl (urlObjOrString) {
   if (urlObjOrString !== null && typeof urlObjOrString === 'object') return urlToHttpOptions(urlObjOrString)
@@ -126,14 +126,14 @@ function request (data, options, callback) {
       return callback(null)
     }
 
-    activeRequests += options.headers['Content-Length'] ?? 0
+    activeBufferSize += options.headers['Content-Length'] ?? 0
 
     storage('legacy').run({ noop: true }, () => {
       let finished = false
       const finalize = () => {
         if (finished) return
         finished = true
-        activeRequests -= options.headers['Content-Length'] ?? 0
+        activeBufferSize -= options.headers['Content-Length'] ?? 0
       }
 
       const req = client.request(options, (res) => onResponse(res, finalize))
@@ -183,7 +183,7 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    return activeRequests < maxActiveRequests
+    return activeBufferSize < maxActiveRequests
   },
 })
 
