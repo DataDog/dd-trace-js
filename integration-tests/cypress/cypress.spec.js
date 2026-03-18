@@ -790,12 +790,16 @@ moduleTypes.forEach(({
           assert.ok(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
 
           assertObjectContains(testSuiteEvents.map(suite => suite.content.resource), [
-            'test_suite.cypress/e2e/other.cy.js',
             'test_suite.cypress/e2e/spec.cy.js',
+            'test_suite.cypress/e2e/other.cy.js',
+            'test_suite.cypress/e2e/hook-test-error.cy.js',
+            'test_suite.cypress/e2e/hook-describe-error.cy.js',
           ])
 
           assertObjectContains(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
+            'fail',
             'pass',
+            'fail',
             'fail',
           ])
 
@@ -819,15 +823,15 @@ moduleTypes.forEach(({
           })
 
           assertObjectContains(testEvents.map(test => test.content.resource), [
-            'cypress/e2e/other.cy.js.context passes',
             'cypress/e2e/spec.cy.js.context passes',
             'cypress/e2e/spec.cy.js.other context fails',
+            'cypress/e2e/other.cy.js.context passes',
           ])
 
           assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
             'pass',
-            'pass',
             'fail',
+            'pass',
           ])
 
           testEvents.forEach(({
