@@ -3918,7 +3918,7 @@
     ],
     "OTEL_EXPORTER_OTLP_TRACES_HEADERS": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "map",
         "default": null,
         "configurationNames": [
@@ -3928,9 +3928,9 @@
     ],
     "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
       {
-        "implementation": "D",
+        "implementation": "A",
         "type": "string",
-        "default": "http/json",
+        "default": "",
         "configurationNames": [
           "otelTracesProtocol"
         ]

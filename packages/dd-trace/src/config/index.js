@@ -514,7 +514,9 @@ class Config {
       }
     }
     setString(target, 'otelTracesHeaders', OTEL_EXPORTER_OTLP_TRACES_HEADERS || target.otelHeaders)
-    setString(target, 'otelTracesProtocol', OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || target.otelProtocol)
+    // otelTracesProtocol is hard-coded because other protocols are not implemented
+    // will be set to OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || target.otelProtocol after full implementation
+    setString(target, 'otelTracesProtocol', 'http/json')
     const otelTracesTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TRACES_TIMEOUT, 'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT')
     target.otelTracesTimeout = otelTracesTimeout === undefined ? target.otelTimeout : otelTracesTimeout
     setBoolean(
