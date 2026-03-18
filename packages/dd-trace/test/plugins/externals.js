@@ -360,6 +360,27 @@ module.exports = {
       dep: true,
     },
   ],
+  langgraph: [
+    {
+      name: '@langchain/langgraph',
+      versions: ['>=1.1.2'],
+    },
+    {
+      name: '@langchain/core',
+      versions: ['>=1.1.16'],
+      dep: true,
+    },
+    {
+      name: 'zod',
+      versions: ['>=3.25.32'],
+      dep: true,
+    },
+    {
+      name: 'zod-to-json-schema',
+      versions: ['>=3.0.0'],
+      dep: true,
+    },
+  ],
   ldapjs: [
     {
       name: 'ldapjs',
