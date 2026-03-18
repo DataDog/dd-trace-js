@@ -231,10 +231,10 @@
   dependencies:
     "@datadog/flagging-core" "1.1.0"
 
-"@datadog/pprof@5.13.5":
-  version "5.13.5"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.13.5.tgz#36eea628f321ed512fe4ce440de4cffa2e056569"
-  integrity sha512-W0dvo91ff2EMQI9Vhv8PNM+w1ZWuClm1pBVdLB6y0bMB3+E+wEGg0VD1iNJxsuPbwDt5+yV0u3e4WkqK12Lzlg==
+"@datadog/pprof@5.14.0":
+  version "5.14.0"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.14.0.tgz#a5a43fde3ca9369345994cc5cf82d5dcf743fb1c"
+  integrity sha512-bXYptMf0BY3NdKcAmX5aAOnozj7GFdNYE4SIdPF0/Q/Yfb2fYBIYZaN/Le6BhiDIepBvvH/H75d3EIFhB64kOw==
   dependencies:
     node-gyp-build "<4.0"
     pprof-format "^2.2.1"
