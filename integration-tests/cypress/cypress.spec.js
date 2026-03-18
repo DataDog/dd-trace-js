@@ -2443,7 +2443,6 @@ moduleTypes.forEach(({
           receiverPromise,
         ])
       })
-
     })
 
     it('correctly calculates test code owners when working directory is not repository root', async () => {
