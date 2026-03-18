@@ -58,8 +58,8 @@ function addVariableTags (config, span, variableValues) {
 
   if (variableValues && config.variables) {
     const variables = config.variables(variableValues)
-    for (const param in variables) {
-      tags[`graphql.variables.${param}`] = variables[param]
+    for (const [param, value] of Object.entries(variables)) {
+      tags[`graphql.variables.${param}`] = value
     }
   }
 
