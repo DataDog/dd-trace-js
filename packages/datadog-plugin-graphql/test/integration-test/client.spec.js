@@ -42,7 +42,10 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.parse'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+          sandboxCwd(), variants[variant], agent.port,
+          { DD_TRACE_AGENT_URL: `http://127.0.0.1:${agent.port}` }
+        )
 
         await res
       }).timeout(50000)

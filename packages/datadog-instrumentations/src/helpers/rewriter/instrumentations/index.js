@@ -5,4 +5,5 @@ module.exports = [
   ...require('./bullmq'),
   ...require('./langchain'),
   ...require('./langgraph'),
+  ...require('./graphql'),
 ]

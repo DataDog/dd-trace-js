@@ -5,7 +5,7 @@ const { identityService } = require('../util')
 const graphql = {
   server: {
     graphql: {
-      opName: () => 'graphql.execute',
+      opName: () => 'graphql.server.request',
       serviceName: identityService,
     },
   },
