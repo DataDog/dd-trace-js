@@ -74,7 +74,7 @@ class Crashtracker {
         timeout_ms: 3000,
       },
       timeout: { secs: 5, nanos: 0 },
-      demangle_names: false,
+      demangle_names: true,
       signals: [],
       resolve_frames: resolveMode,
     }
