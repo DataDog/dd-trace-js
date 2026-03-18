@@ -14,7 +14,7 @@ const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 
-const maxActiveRequests = 64e6
+const maxActiveBufferSize = 64e6
 
 let activeBufferSize = 0
 
@@ -183,7 +183,7 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    return activeBufferSize < maxActiveRequests
+    return activeBufferSize < maxActiveBufferSize
   },
 })
 
