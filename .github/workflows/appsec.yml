@@ -526,13 +526,6 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-      - name: Strip branch coverage from LCOV for Datadog
-        if: always()
-        continue-on-error: true
-        run: |
-          for f in $(find . -path '*/coverage-node-*/lcov.info' 2>/dev/null); do
-            grep -v '^BR[A-Z]' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-          done
       - name: Upload coverage to Datadog
         if: always()
         continue-on-error: true
