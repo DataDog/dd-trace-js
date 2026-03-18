@@ -1,8 +1,6 @@
 'use strict'
 
 const { EventEmitter } = require('events')
-const { promisify } = require('util')
-const zlib = require('zlib')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
@@ -42,6 +40,7 @@ function processInfo (infos, info, type) {
 
 class Profiler extends EventEmitter {
   #compressionFn
+  #compressionFnInitialized = false
   #compressionOptions
   #config
   #enabled = false
@@ -133,6 +132,48 @@ class Profiler extends EventEmitter {
     logError(this.#logger, err)
   }
 
+  #getCompressionFn () {
+    if (!this.#compressionFnInitialized) {
+      this.#compressionFnInitialized = true
+      try {
+        const { promisify } = require('util')
+        const zlib = require('zlib')
+        const { method, level: clevel } = this.#config.uploadCompression
+        switch (method) {
+          case 'gzip':
+            this.#compressionFn = promisify(zlib.gzip)
+            if (clevel !== undefined) {
+              this.#compressionOptions = {
+                level: clevel,
+              }
+            }
+            break
+          case 'zstd':
+            if (typeof zlib.zstdCompress === 'function') { // eslint-disable-line n/no-unsupported-features/node-builtins
+              // eslint-disable-next-line n/no-unsupported-features/node-builtins
+              this.#compressionFn = promisify(zlib.zstdCompress)
+              if (clevel !== undefined) {
+                this.#compressionOptions = {
+                  params: {
+                    // eslint-disable-next-line n/no-unsupported-features/node-builtins
+                    [zlib.constants.ZSTD_c_compressionLevel]: clevel,
+                  },
+                }
+              }
+            } else {
+              const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+              const level = clevel ?? 0 // 0 is zstd default compression level
+              this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
+            }
+            break
+        }
+      } catch (err) {
+        this.#logError(err)
+      }
+    }
+    return this.#compressionFn
+  }
+
   _start (options) {
     if (this.enabled) return true
 
@@ -165,36 +206,6 @@ class Profiler extends EventEmitter {
           .catch((err) => {
             this.#logError(err)
           })
-      }
-
-      const clevel = config.uploadCompression.level
-      switch (config.uploadCompression.method) {
-        case 'gzip':
-          this.#compressionFn = promisify(zlib.gzip)
-          if (clevel !== undefined) {
-            this.#compressionOptions = {
-              level: clevel,
-            }
-          }
-          break
-        case 'zstd':
-          if (typeof zlib.zstdCompress === 'function') { // eslint-disable-line n/no-unsupported-features/node-builtins
-            // eslint-disable-next-line n/no-unsupported-features/node-builtins
-            this.#compressionFn = promisify(zlib.zstdCompress)
-            if (clevel !== undefined) {
-              this.#compressionOptions = {
-                params: {
-                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                  [zlib.constants.ZSTD_c_compressionLevel]: clevel,
-                },
-              }
-            }
-          } else {
-            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
-            const level = clevel ?? 0 // 0 is zstd default compression level
-            this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
-          }
-          break
       }
     } catch (err) {
       this.#logError(err)
@@ -345,8 +356,9 @@ class Profiler extends EventEmitter {
       await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
         try {
           const encoded = await profiler.encode(profile)
-          const compressed = encoded instanceof Buffer && this.#compressionFn !== undefined
-            ? await this.#compressionFn(encoded, this.#compressionOptions)
+          const compressionFn = this.#getCompressionFn()
+          const compressed = encoded instanceof Buffer && compressionFn !== undefined
+            ? await compressionFn(encoded, this.#compressionOptions)
             : encoded
           encodedProfiles[profiler.type] = compressed
           processInfo(infos, info, profiler.type)
