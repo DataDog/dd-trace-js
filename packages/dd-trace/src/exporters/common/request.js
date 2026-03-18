@@ -126,14 +126,14 @@ function request (data, options, callback) {
       return callback(null)
     }
 
-    activeRequests += options.headers['Content-Length']
+    activeRequests += options.headers['Content-Length'] ?? 0
 
     storage('legacy').run({ noop: true }, () => {
       let finished = false
       const finalize = () => {
         if (finished) return
         finished = true
-        activeRequests -= options.headers['Content-Length']
+        activeRequests -= options.headers['Content-Length'] ?? 0
       }
 
       const req = client.request(options, (res) => onResponse(res, finalize))
