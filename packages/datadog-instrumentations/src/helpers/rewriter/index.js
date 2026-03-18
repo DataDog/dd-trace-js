@@ -9,7 +9,7 @@ const instrumentations = require('./instrumentations')
 let dcPolyfill
 
 try {
-  dcPolyfill = require.resolve('dc-polyfill')
+  dcPolyfill = require.resolve('dc-polyfill').replaceAll('\\', '/')
 } catch {
   // The `dc-polyfill` module is unavailable for some reason (like bundling).
   // Let's just keep the default of using `diagnostics-channel` as a fallback
