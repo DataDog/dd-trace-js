@@ -6,13 +6,14 @@ const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
-const { setStartupLogPluginManager } = require('./startup-log')
+const { setStartupLogPluginManager, startupLog } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
 const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS } = require('./serverless')
+const processTags = require('./process-tags')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -101,6 +102,9 @@ class Tracer extends NoopProxy {
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
+
+      // Add config dependent process tags
+      processTags.initialize(config)
 
       // Configure propagation hash manager for process tags + container tags
       const propagationHash = require('./propagation-hash')
@@ -297,6 +301,7 @@ class Tracer extends NoopProxy {
       this._pluginManager.configure(config)
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
+      startupLog()
     }
   }
 

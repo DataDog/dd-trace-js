@@ -43,11 +43,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   aws-sdk:
     strategy:
@@ -120,11 +119,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-event-hubs:
     runs-on: ubuntu-latest
@@ -222,11 +220,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-service-bus:
     runs-on: ubuntu-latest
@@ -247,14 +244,41 @@ jobs:
         env:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: "Localtestpass1!"
+        options: >-
+          --health-cmd "bash -c 'exec 3<>/dev/tcp/localhost/1433'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 60s
     env:
       PLUGINS: azure-service-bus
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Wait for Service Bus emulator to be ready
+        run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
       - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  azure-durable-functions:
+    runs-on: ubuntu-latest
+    services:
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+        ports:
+          - "127.0.0.1:10000:10000"
+          - "127.0.0.1:10001:10001"
+          - "127.0.0.1:10002:10002"
+    env:
+      PLUGINS: azure-durable-functions
+      SERVICES: azurite
+
+    steps:
+     - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+     - uses: ./.github/actions/plugins/test
+       with:
+        dd_api_key: ${{ secrets.DD_API_KEY }}
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest

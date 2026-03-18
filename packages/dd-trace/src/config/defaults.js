@@ -106,6 +106,7 @@ const defaultsWithoutSupportedConfigurationEntry = {
   isGCPFunction: false,
   instrumentationSource: 'manual',
   isServiceUserProvided: false,
+  isServiceNameInferred: true,
   lookup: undefined,
   otelTracesEnabled: false,
   plugins: true,

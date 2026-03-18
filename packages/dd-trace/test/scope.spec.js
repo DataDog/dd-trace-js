@@ -38,7 +38,7 @@ describe('Scope', () => {
     })
 
     it('should support an invalid callback', () => {
-      assert.doesNotThrow(() => { scope.activate(span, 'invalid') }, Error)
+      scope.activate(span, 'invalid')
     })
 
     it('should activate the span on the current scope', () => {

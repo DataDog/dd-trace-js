@@ -54,6 +54,8 @@ class BaseLangChainLLMObsPlugin extends LLMObsPlugin {
     const handler = this._handlers[ctx.type]
     const name = handler?.getName({ span, instance })
 
+    if (name == null) return
+
     return {
       modelProvider,
       modelName,

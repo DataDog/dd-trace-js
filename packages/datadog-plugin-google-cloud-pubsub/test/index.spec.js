@@ -13,6 +13,7 @@ const { expectSomeSpan, withDefaults } = require('../../dd-trace/test/plugins/he
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const gc = global.gc ?? (() => {})
 
@@ -395,17 +396,20 @@ describe('Plugin', () => {
 
           const dsmFullTopic = `projects/${project}/topics/${dsmTopicName}`
 
+          const phash = propagationHash.getHash()
           expectedProducerHash = computePathwayHash(
             'test',
             'tester',
             ['direction:out', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-            ENTRY_PARENT_HASH
+            ENTRY_PARENT_HASH,
+            phash
           )
           expectedConsumerHash = computePathwayHash(
             'test',
             'tester',
             ['direction:in', 'topic:' + dsmFullTopic, 'type:google-pubsub'],
-            expectedProducerHash
+            expectedProducerHash,
+            phash
           )
         })
 

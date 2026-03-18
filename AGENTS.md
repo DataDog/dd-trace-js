@@ -115,8 +115,6 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 
 Favor fewer `assert.deepStrictEqual`/`assertObjectContains` calls over many `assert.strictEqual` calls. Combine existing calls, when touching test files.
 
-Never use the `doesNotThrow()` assertion. Instead, execute the method directly.
-
 ### Time-Based Testing
 
 **Never rely on actual time passing in unit tests.** Use sinon's fake timers to mock time and make tests deterministic and fast.

@@ -3,25 +3,22 @@ name: Update 3rd-party licenses
 on:
   pull_request:
     paths:
+      - ".github/vendored-dependencies.csv"
+      - "vendor/package-lock.json"
       - "yarn.lock"
 
 jobs:
-  update-3rdparty-licenses:
+  check-licenses:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
+    outputs:
+      needs_update: ${{ steps.check.outputs.needs_update }}
+      is_bot_same_repo: ${{ steps.check.outputs.is_bot_same_repo }}
+      head_oid: ${{ steps.check.outputs.head_oid }}
     env:
       REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
     steps:
-      - name: Mint GitHub App token (octo-sts) for bot PR updates
-        if: github.event.pull_request.user.type == 'Bot' && github.event_name == 'pull_request'
-        uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
-        id: octo-sts
-        with:
-          scope: DataDog/dd-trace-js
-          policy: update-3rdparty-licenses
-
       - name: Check out PR branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -33,8 +30,8 @@ jobs:
       - name: Check out dd-license-attribution
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: DataDog/dd-license-attribution
-          ref: 224a89cb69d3143e8aa4640405037cf9c233ddf5
+          repository: watson/dd-license-attribution
+          ref: 8ea483b9f735bf8da632c89796789cc2a050a9a6
           path: dd-license-attribution
 
       - name: Install dd-license-attribution
@@ -67,75 +64,119 @@ jobs:
             --use-mirrors=mirrors.json \
             --no-scancode-strategy \
             --no-github-sbom-strategy \
-            --yarn-subdir vendor \
+            --lockfile-subdir vendor \
             "${REPOSITORY_URL}" > LICENSE-3rdparty.csv
 
       - name: Append vendored dependencies from PR
         run: |
           cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv
 
-      - name: Run LICENSE-3rdparty.csv update check
+      - name: Check for LICENSE-3rdparty.csv changes
+        id: check
         env:
           PR_USER_TYPE: ${{ github.event.pull_request.user.type }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          GITHUB_HEAD_REF: ${{ github.head_ref }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           BASE_REPO: ${{ github.repository }}
+        run: |
+          set -e
+
+          echo "head_oid=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+
+          if git diff --ignore-space-at-eol --exit-code LICENSE-3rdparty.csv; then
+            echo "✅ LICENSE-3rdparty.csv is already up to date"
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+          else
+            echo "📝 LICENSE-3rdparty.csv was modified by license attribution command"
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "$PR_HEAD_REPO" == "$BASE_REPO" ]]; then
+            echo "is_bot_same_repo=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_bot_same_repo=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload updated LICENSE-3rdparty.csv
+        if: steps.check.outputs.needs_update == 'true' && steps.check.outputs.is_bot_same_repo == 'true'
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: license-csv
+          path: LICENSE-3rdparty.csv
+          if-no-files-found: error
+
+      - name: Fail for PRs with outdated licenses
+        if: steps.check.outputs.needs_update == 'true' && steps.check.outputs.is_bot_same_repo != 'true'
+        run: |
+          echo "❌ The LICENSE-3rdparty.csv file needs to be updated!"
+          echo ""
+          echo "The license attribution command has modified LICENSE-3rdparty.csv."
+          echo ""
+          echo "To fix this issue:"
+          echo "1. Set up dd-license-attribution locally by following the installation instructions in:"
+          echo "   https://github.com/DataDog/dd-license-attribution"
+          echo "2. Run the license CSV generation command locally:"
+          echo "   dd-license-attribution generate-sbom-csv \\"
+          echo "     --no-scancode-strategy \\"
+          echo "     --no-github-sbom-strategy \\"
+          echo "     https://github.com/datadog/dd-trace-js > LICENSE-3rdparty.csv"
+          echo "3. Append vendored dependencies:"
+          echo "   cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv"
+          echo "4. Commit the updated LICENSE-3rdparty.csv file"
+          echo "5. Push your changes"
+          echo ""
+          echo "This helps keep the 3rd-party license information accurate."
+          exit 1
+
+  auto-commit-licenses:
+    needs: check-licenses
+    if: needs.check-licenses.outputs.needs_update == 'true' && needs.check-licenses.outputs.is_bot_same_repo == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Mint GitHub App token (octo-sts)
+        uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: update-3rdparty-licenses
+
+      - name: Download updated LICENSE-3rdparty.csv
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: license-csv
+
+      - name: Commit LICENSE-3rdparty.csv via GitHub API
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          EXPECTED_HEAD_OID: ${{ needs.check-licenses.outputs.head_oid }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
         run: |
           set -e
 
-          if git diff --ignore-space-at-eol --exit-code LICENSE-3rdparty.csv; then
-            echo "✅ LICENSE-3rdparty.csv is already up to date"
-          else
-            echo "📝 LICENSE-3rdparty.csv was modified by license attribution command"
+          echo "🤖 Bot-created PR detected. Auto-committing LICENSE-3rdparty.csv changes..."
 
-            if [[ "$PR_USER_TYPE" == "Bot" ]] && [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]] && [[ "$PR_HEAD_REPO" == "$BASE_REPO" ]]; then
-              echo "🤖 Bot-created PR detected. Auto-committing LICENSE-3rdparty.csv changes..."
+          contents="$(base64 -w 0 LICENSE-3rdparty.csv)"
 
-              expected_head_oid="$(git rev-parse HEAD)"
-              contents="$(base64 -w 0 LICENSE-3rdparty.csv)"
+          variables="$(jq -c \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg branch "$GITHUB_HEAD_REF" \
+            --arg msg "Update LICENSE-3rdparty.csv" \
+            --arg expected "$EXPECTED_HEAD_OID" \
+            --arg path "LICENSE-3rdparty.csv" \
+            --arg contents "$contents" \
+            '{
+              input: {
+                branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                message: { headline: $msg },
+                expectedHeadOid: $expected,
+                fileChanges: { additions: [{ path: $path, contents: $contents }] }
+              }
+            }'
+          )"
 
-              variables="$(jq -c \
-                --arg repo "$GITHUB_REPOSITORY" \
-                --arg branch "$GITHUB_HEAD_REF" \
-                --arg msg "Update LICENSE-3rdparty.csv" \
-                --arg expected "$expected_head_oid" \
-                --arg path "LICENSE-3rdparty.csv" \
-                --arg contents "$contents" \
-                '{
-                  input: {
-                    branch: { repositoryNameWithOwner: $repo, branchName: $branch },
-                    message: { headline: $msg },
-                    expectedHeadOid: $expected,
-                    fileChanges: { additions: [{ path: $path, contents: $contents }] }
-                  }
-                }'
-              )"
+          query='mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }'
+          gh api graphql -f query="$query" -f variables="$variables" -q '.data.createCommitOnBranch.commit.url' >/dev/null
 
-              query='mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }'
-              gh api graphql -f query="$query" -f variables="$variables" -q '.data.createCommitOnBranch.commit.url' >/dev/null
-
-              echo "✅ Successfully committed and pushed LICENSE-3rdparty.csv updates"
-            else
-              echo "❌ The LICENSE-3rdparty.csv file needs to be updated!"
-              echo ""
-              echo "The license attribution command has modified LICENSE-3rdparty.csv."
-              echo ""
-              echo "To fix this issue:"
-              echo "1. Set up dd-license-attribution locally by following the installation instructions in:"
-              echo "   https://github.com/DataDog/dd-license-attribution"
-              echo "2. Run the license CSV generation command locally:"
-              echo "   dd-license-attribution generate-sbom-csv \\"
-              echo "     --no-scancode-strategy \\"
-              echo "     --no-github-sbom-strategy \\"
-              echo "     https://github.com/datadog/dd-trace-js > LICENSE-3rdparty.csv"
-              echo "3. Append vendored dependencies:"
-              echo "   cat .github/vendored-dependencies.csv >> LICENSE-3rdparty.csv"
-              echo "4. Commit the updated LICENSE-3rdparty.csv file"
-              echo "5. Push your changes"
-              echo ""
-              echo "This helps keep the 3rd-party license information accurate."
-              exit 1
-            fi
-          fi
+          echo "✅ Successfully committed and pushed LICENSE-3rdparty.csv updates"

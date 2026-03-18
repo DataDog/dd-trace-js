@@ -80,11 +80,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   amqp10:
     runs-on: ubuntu-latest
@@ -223,11 +222,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-child-process
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   crypto:
     runs-on: ubuntu-latest
@@ -252,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       kafka:
-        image: apache/kafka-native:3.9.1
+        image: apache/kafka:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
@@ -292,11 +290,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   cookie-parser:
     runs-on: ubuntu-latest
@@ -354,11 +351,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-couchbase-${{ matrix.node-version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   connect:
     runs-on: ubuntu-latest
@@ -393,11 +389,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-dns
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   elasticsearch:
     runs-on: ubuntu-latest
@@ -424,11 +419,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-elasticsearch
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   express:
     runs-on: ubuntu-latest
@@ -573,11 +567,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http-${{ matrix.node-version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   http2:
     runs-on: ubuntu-latest
@@ -602,11 +595,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http2
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   kafkajs:
     strategy:
@@ -615,7 +607,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       kafka:
-        image: apache/kafka-native:3.9.1
+        image: apache/kafka:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
@@ -654,11 +646,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-kafkajs-${{ matrix.node-version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   knex:
     runs-on: ubuntu-latest
@@ -906,11 +897,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-net
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # TODO: fix performance issues and test more Node versions
 
@@ -964,11 +954,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-next-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   node-serialize:
     runs-on: ubuntu-latest
@@ -1043,11 +1032,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-oracledb
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
@@ -1070,11 +1058,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-pino
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   passport-http:
     runs-on: ubuntu-latest
@@ -1163,11 +1150,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   process:
     runs-on: ubuntu-latest
@@ -1320,11 +1306,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-sharedb
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   tedious:
     runs-on: ubuntu-latest
@@ -1354,11 +1339,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-tedious
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   undici:
     runs-on: ubuntu-latest
