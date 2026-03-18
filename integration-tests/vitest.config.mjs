@@ -6,6 +6,7 @@ const config = {
       process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
     ],
     pool: process.env.POOL_CONFIG || 'forks',
+    reporters: ['default'],
   },
 }
 
