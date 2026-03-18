@@ -455,6 +455,37 @@ describe('OpenTelemetry Traces', () => {
       exporter.export([createMockSpan()])
     })
 
+    it('includes custom headers from OTEL_EXPORTER_OTLP_HEADERS when traces-specific header is not set', () => {
+      delete process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'x-generic-key=generic-value'
+
+      mockOtlpExport((decoded, headers) => {
+        assert.strictEqual(headers['x-generic-key'], 'generic-value')
+      })
+
+      const tracer = setupTracer()
+      const processor = tracer._tracer._processor
+      const exporter = processor._exporter
+
+      exporter.export([createMockSpan()])
+    })
+
+    it('uses OTEL_EXPORTER_OTLP_TRACES_HEADERS over OTEL_EXPORTER_OTLP_HEADERS when both are set', () => {
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'x-generic-key=generic-value'
+      process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS = 'x-traces-key=traces-value'
+
+      mockOtlpExport((decoded, headers) => {
+        assert.strictEqual(headers['x-traces-key'], 'traces-value')
+        assert.strictEqual(headers['x-generic-key'], undefined)
+      })
+
+      const tracer = setupTracer()
+      const processor = tracer._tracer._processor
+      const exporter = processor._exporter
+
+      exporter.export([createMockSpan()])
+    })
+
     it('does not export empty span arrays', () => {
       let exportCalled = false
       sinon.stub(http, 'request').callsFake(() => {
