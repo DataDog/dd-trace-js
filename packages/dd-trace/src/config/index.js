@@ -49,6 +49,7 @@ const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'igno
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 const DEFAULT_OTLP_PORT = 4318
 const RUNTIME_ID = uuid()
+// eslint-disable-next-line eslint-rules/eslint-process-env -- internal propagation, not user config
 const ROOT_SESSION_ID = process.env.DD_ROOT_JS_SESSION_ID || RUNTIME_ID
 const NAMING_VERSIONS = new Set(['v0', 'v1'])
 const DEFAULT_NAMING_VERSION = 'v0'

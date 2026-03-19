@@ -5,7 +5,8 @@ const shimmer = require('../../../datadog-shimmer')
 let patched = false
 
 function injectSessionEnv (existingEnv, rootSessionId, runtimeId) {
-  const base = existingEnv != null ? existingEnv : process.env
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  const base = existingEnv == null ? process.env : existingEnv
   return {
     ...base,
     DD_ROOT_JS_SESSION_ID: rootSessionId,
@@ -15,7 +16,7 @@ function injectSessionEnv (existingEnv, rootSessionId, runtimeId) {
 
 function wrapSpawnLike (original, rootSessionId, runtimeId) {
   return function () {
-    const args = Array.from(arguments)
+    const args = [...arguments]
     if (Array.isArray(args[1])) {
       // method(file, argsArray, [options])
       const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
