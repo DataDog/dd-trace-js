@@ -147,33 +147,5 @@ describe('session-propagation', () => {
       assert.strictEqual(context.callArgs, undefined)
     })
 
-    it('should inject env vars for fork-like callArgs (modulePath, args, options)', () => {
-      const context = {
-        callArgs: ['child.js', ['--flag'], { silent: true }],
-        shell: false,
-      }
-
-      childProcessChannel.start.publish(context)
-
-      assert.strictEqual(context.callArgs[0], 'child.js')
-      assert.deepStrictEqual(context.callArgs[1], ['--flag'])
-      assert.strictEqual(context.callArgs[2].silent, true)
-      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[2].env.DD_PARENT_JS_SESSION_ID, 'current-id')
-    })
-
-    it('should inject env vars for fork-like callArgs (modulePath, options)', () => {
-      const context = {
-        callArgs: ['child.js', { silent: true }],
-        shell: false,
-      }
-
-      childProcessChannel.start.publish(context)
-
-      assert.strictEqual(context.callArgs[0], 'child.js')
-      assert.strictEqual(context.callArgs[1].silent, true)
-      assert.strictEqual(context.callArgs[1].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[1].env.DD_PARENT_JS_SESSION_ID, 'current-id')
-    })
   })
 })

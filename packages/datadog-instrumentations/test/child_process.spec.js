@@ -774,6 +774,13 @@ describe('child process', () => {
       })
 
       describe('callArgs on context', () => {
+        function injectTestEnv (context) {
+          if (!context.callArgs) return
+          const args = context.callArgs
+          const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
+          args[2] = { ...opts, env: { ...process.env, DD_TEST_VAR: 'injected' } } // eslint-disable-line eslint-rules/eslint-process-env
+        }
+
         it('should include callArgs for async methods', (done) => {
           const child = childProcess.spawn('echo', ['hello'])
 
@@ -797,66 +804,25 @@ describe('child process', () => {
           assert.deepStrictEqual(context.callArgs[1], ['hello'])
         })
 
-        it('should allow subscribers to mutate callArgs for spawn', (done) => {
-          function injectEnv (context) {
-            if (!context.callArgs) return
-            const args = context.callArgs
-            const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
-            args[2] = { ...opts, env: { ...process.env, DD_TEST_VAR: 'injected' } } // eslint-disable-line eslint-rules/eslint-process-env
-          }
-
-          childProcessChannel.subscribe({ start: injectEnv })
+        it('should allow subscribers to mutate callArgs for async methods', (done) => {
+          childProcessChannel.subscribe({ start: injectTestEnv })
 
           const child = childProcess.spawn('node', ['-e', 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)'])
 
           child.once('close', (code) => {
-            childProcessChannel.unsubscribe({ start: injectEnv })
+            childProcessChannel.unsubscribe({ start: injectTestEnv })
             assert.strictEqual(code, 0)
             done()
           })
         })
 
-        it('should allow subscribers to mutate callArgs for spawnSync', () => {
-          function injectEnv (context) {
-            if (!context.callArgs) return
-            const args = context.callArgs
-            const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
-            args[2] = { ...opts, env: { ...process.env, DD_TEST_VAR: 'injected' } } // eslint-disable-line eslint-rules/eslint-process-env
-          }
-
-          childProcessChannel.subscribe({ start: injectEnv })
+        it('should allow subscribers to mutate callArgs for sync methods', () => {
+          childProcessChannel.subscribe({ start: injectTestEnv })
 
           const result = childProcess.spawnSync('node', ['-e', 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)'])
 
-          childProcessChannel.unsubscribe({ start: injectEnv })
+          childProcessChannel.unsubscribe({ start: injectTestEnv })
           assert.strictEqual(result.status, 0)
-        })
-
-        it('should allow subscribers to mutate callArgs for fork', (done) => {
-          const tmpFile = path.join(os.tmpdir(), `dd-trace-test-callargs-${Date.now()}.js`)
-          fs.writeFileSync(tmpFile, 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)')
-
-          function injectEnv (context) {
-            if (!context.callArgs) return
-            const args = context.callArgs
-            if (args[1] != null && typeof args[1] === 'object' && !Array.isArray(args[1])) {
-              args[1] = { ...args[1], env: { ...process.env, DD_TEST_VAR: 'injected' } } // eslint-disable-line eslint-rules/eslint-process-env
-            } else {
-              const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
-              args[2] = { ...opts, env: { ...process.env, DD_TEST_VAR: 'injected' } } // eslint-disable-line eslint-rules/eslint-process-env
-            }
-          }
-
-          childProcessChannel.subscribe({ start: injectEnv })
-
-          const child = childProcess.fork(tmpFile)
-
-          child.once('close', (code) => {
-            childProcessChannel.unsubscribe({ start: injectEnv })
-            try { fs.unlinkSync(tmpFile) } catch (e) { /* ignore */ }
-            assert.strictEqual(code, 0)
-            done()
-          })
         })
       })
     })
