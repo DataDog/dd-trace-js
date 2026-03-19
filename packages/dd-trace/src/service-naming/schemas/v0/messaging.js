@@ -105,7 +105,7 @@ const messaging = {
     bullmq: {
       opName: () => 'bullmq.processJob',
       serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
-      serviceSource: awsServiceSource,
+      serviceSource: integrationSource('bullmq'),
     },
   },
   client: {

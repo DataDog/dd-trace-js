@@ -150,7 +150,7 @@ describe('Plugin', () => {
         it('should contain service name source tag', done => {
           agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].meta['_dd.svc.src'], 'opt.split_by_domain')
+              assert.strictEqual(traces[0][0].meta['_dd.svc.src'], 'opt.split_by_instance')
             })
             .then(done)
             .catch(done)

@@ -1,5 +1,5 @@
 'use strict'
-const { optionServiceSource} = require('../util')
+const { optionServiceSource } = require('../util')
 
 const websocket = {
   request: {
