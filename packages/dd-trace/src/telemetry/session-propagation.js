@@ -18,52 +18,52 @@ function injectSessionEnv (existingEnv) {
   }
 }
 
-function getArgShape (args, shell) {
-  if (Array.isArray(args[1])) return 'argsArray'
-  if (args[1] != null && typeof args[1] === 'object') return 'options'
-  if (shell) return 'shell'
-  if (typeof args[1] === 'function') return 'callback'
-  return 'fileOnly'
+/**
+ * Finds the index of the options object in callArgs, or determines
+ * where one should be inserted. Returns { index, exists }.
+ *
+ * child_process methods have these signatures:
+ *   spawn(file, [args], [options])
+ *   execFile(file, [args], [options], [cb])
+ *   fork(file, [args], [options])
+ *   execSync(command, [options])
+ */
+function findOptionsIndex (args, shell) {
+  if (Array.isArray(args[1])) {
+    // (file, argsArray, ...) — options slot is index 2
+    return { index: 2, exists: args[2] != null && typeof args[2] === 'object' }
+  }
+  if (args[1] != null && typeof args[1] === 'object') {
+    // (file, options, ...) — options already at index 1
+    return { index: 1, exists: true }
+  }
+  // No args array and no options object — options should go at index 1 for shell
+  // commands, or index 2 for non-shell (after an empty args array we'll insert)
+  return { index: shell ? 1 : 2, exists: false }
 }
 
 function onChildProcessStart (context) {
   if (!context.callArgs) return
 
   const args = context.callArgs
-  switch (getArgShape(args, context.shell)) {
-    case 'argsArray': {
-      // method(file, argsArray, [options], [cb])
-      const optsIdx = 2
-      if (args[optsIdx] != null && typeof args[optsIdx] === 'object') {
-        args[optsIdx] = { ...args[optsIdx], env: injectSessionEnv(args[optsIdx].env) }
-      } else {
-        // No options object — insert one before any trailing callback
-        const env = { env: injectSessionEnv(null) }
-        if (typeof args[optsIdx] === 'function') {
-          args.splice(optsIdx, 0, env)
-        } else {
-          args[optsIdx] = env
-        }
-      }
-      break
+  const { index, exists } = findOptionsIndex(args, context.shell)
+
+  if (exists) {
+    args[index] = { ...args[index], env: injectSessionEnv(args[index].env) }
+  } else {
+    const opts = { env: injectSessionEnv(null) }
+
+    // For non-shell commands without an args array, insert an empty one first
+    if (!context.shell && !Array.isArray(args[1])) {
+      args.splice(1, 0, [])
     }
-    case 'options':
-      // method(file, options, [cb])
-      args[1] = { ...args[1], env: injectSessionEnv(args[1].env) }
-      break
-    case 'shell':
-      // execSync(command) — shell command with no options
-      args[1] = { env: injectSessionEnv(null) }
-      break
-    case 'callback':
-      // execFile(file, cb) — insert options before the callback
-      args.splice(1, 0, { env: injectSessionEnv(null) })
-      break
-    case 'fileOnly':
-      // spawn(file) / fork(file) — no args array, no options, no callback
-      args[1] = []
-      args[2] = { env: injectSessionEnv(null) }
-      break
+
+    // Insert options before any trailing callback to preserve call semantics
+    if (typeof args[index] === 'function') {
+      args.splice(index, 0, opts)
+    } else {
+      args[index] = opts
+    }
   }
 }
 
@@ -79,4 +79,4 @@ function start (config) {
   })
 }
 
-module.exports = { start, _onChildProcessStart: onChildProcessStart, _getArgShape: getArgShape }
+module.exports = { start, _onChildProcessStart: onChildProcessStart }

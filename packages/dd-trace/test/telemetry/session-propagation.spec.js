@@ -161,8 +161,9 @@ describe('session-propagation', () => {
       onChildProcessStart(context)
 
       assert.strictEqual(context.callArgs[0], 'cmd')
-      assert.strictEqual(context.callArgs[1].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[2], cb)
+      assert.deepStrictEqual(context.callArgs[1], [])
+      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
+      assert.strictEqual(context.callArgs[3], cb)
     })
 
     it('should not modify context without callArgs', () => {
