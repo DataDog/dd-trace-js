@@ -7,7 +7,7 @@ function amqpServiceName ({ tracerService }) {
 }
 
 function integrationSource (source) {
-  return source
+  return () => source
 }
 
 const messaging = {

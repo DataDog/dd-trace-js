@@ -13,7 +13,7 @@ class MoleculerServerPlugin extends ServerPlugin {
     const followsFrom = this.tracer.extract('text_map', middlewareCtx.meta)
     const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
     const service = this.config.service || schemaServiceName
-    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
+    const serviceSource = this.config.service ? () => 'opt.plugin' : schemaServiceSource
     this.startSpan(this.operationName(), {
       childOf: followsFrom || ctx?.currentStore?.span || this.activeSpan,
       service,

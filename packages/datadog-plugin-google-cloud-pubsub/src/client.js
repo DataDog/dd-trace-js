@@ -15,11 +15,11 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
     let service, serviceSource
     if (this.config.service) {
       service = this.config.service
-      serviceSource = 'opt.plugin'
+      serviceSource = () => 'opt.plugin'
     } else {
       const result = this.serviceName()
       service = result.name
-      serviceSource = result.source
+      serviceSource = () => result.source
     }
 
     const spanOptions = {

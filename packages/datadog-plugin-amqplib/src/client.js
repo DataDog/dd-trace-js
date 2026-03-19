@@ -19,7 +19,7 @@ class AmqplibClientPlugin extends ClientPlugin {
     const stream = (channel.connection && channel.connection.stream) || {}
     const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
     const service = this.config.service || schemaServiceName
-    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
+    const serviceSource = this.config.service ? () => 'opt.plugin' : schemaServiceSource
     const span = this.startSpan(this.operationName(), {
       service,
       serviceSource,
