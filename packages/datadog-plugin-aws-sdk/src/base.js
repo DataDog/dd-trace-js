@@ -182,13 +182,15 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   }
 
   serviceName () {
-    return this.config.service ||
-      super.serviceName({
-        id: 'aws',
-        type: 'web',
-        kind: 'client',
-        awsService: this.serviceIdentifier,
-      })
+    if (this.config.service) {
+      return { name: this.config.service, source: 'opt.plugin' }
+    }
+    return super.serviceName({
+      id: 'aws',
+      type: 'web',
+      kind: 'client',
+      awsService: this.serviceIdentifier,
+    })
   }
 
   isEnabled (request) {
