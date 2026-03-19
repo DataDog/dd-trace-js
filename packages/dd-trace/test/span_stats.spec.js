@@ -323,11 +323,38 @@ describe('SpanAggKey', () => {
         [SPAN_KIND]: 'client',
         'peer.service': 'my-db',
         'db.system': 'postgresql',
-        'db.name': 'users',
+        'out.host': 'db.example.com',
       },
     }
     const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
-    assert.deepStrictEqual(key.peerTags, ['db.name:users', 'db.system:postgresql', 'peer.service:my-db'])
+    assert.deepStrictEqual(key.peerTags, ['db.system:postgresql', 'out.host:db.example.com', 'peer.service:my-db'])
+  })
+
+  it('should extract peer tags for internal span kind with _dd.base_service', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'internal',
+        '_dd.base_service': 'other-service',
+        'peer.service': 'my-db',
+      },
+    }
+    const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
+    assert.deepStrictEqual(key.peerTags, ['_dd.base_service:other-service', 'peer.service:my-db'])
+  })
+
+  it('should not extract peer tags for internal span kind without _dd.base_service', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'internal',
+        'peer.service': 'my-db',
+      },
+    }
+    const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
+    assert.deepStrictEqual(key.peerTags, [])
   })
 
   it('should use custom peer tag keys when provided', () => {

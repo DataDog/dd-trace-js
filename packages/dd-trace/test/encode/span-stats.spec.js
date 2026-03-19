@@ -89,7 +89,15 @@ describe('span-stats-encode', () => {
     const buffer = encoder.makePayload()
     const decoded = msgpack.decode(buffer)
 
-    assert.deepStrictEqual(decoded, stats)
+    // GRPCStatusCode is serialized as a string per protobuf spec
+    const expected = {
+      ...stats,
+      Stats: stats.Stats.map(b => ({
+        ...b,
+        Stats: b.Stats.map(s => ({ ...s, GRPCStatusCode: String(s.GRPCStatusCode || 0) })),
+      })),
+    }
+    assert.deepStrictEqual(decoded, expected)
   })
 
   it('should report its count', () => {
@@ -194,7 +202,7 @@ describe('span-stats-encode', () => {
     assert.strictEqual(decodedStat.SpanKind, 'server')
     assert.strictEqual(decodedStat.IsTraceRoot, 1)
     assert.deepStrictEqual(decodedStat.PeerTags, [])
-    assert.strictEqual(decodedStat.GRPCStatusCode, 0)
+    assert.strictEqual(decodedStat.GRPCStatusCode, '0')
   })
 
   it('should encode peer tags as string array', () => {
@@ -219,7 +227,7 @@ describe('span-stats-encode', () => {
     const decodedStat = decoded.Stats[0].Stats[0]
     assert.strictEqual(decodedStat.SpanKind, 'client')
     assert.deepStrictEqual(decodedStat.PeerTags, ['db.system:postgresql', 'peer.service:my-db'])
-    assert.strictEqual(decodedStat.GRPCStatusCode, 2)
+    assert.strictEqual(decodedStat.GRPCStatusCode, '2')
   })
 
   it('should handle missing SpanKind and PeerTags gracefully', () => {
@@ -246,6 +254,6 @@ describe('span-stats-encode', () => {
     assert.strictEqual(decodedStat.SpanKind, '')
     assert.strictEqual(decodedStat.IsTraceRoot, 0)
     assert.deepStrictEqual(decodedStat.PeerTags, [])
-    assert.strictEqual(decodedStat.GRPCStatusCode, 0)
+    assert.strictEqual(decodedStat.GRPCStatusCode, '0')
   })
 })

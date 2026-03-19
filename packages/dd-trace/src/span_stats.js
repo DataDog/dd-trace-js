@@ -36,6 +36,7 @@ const SPAN_KIND_CONSUMER = 'consumer'
 const ELIGIBLE_SPAN_KINDS = new Set([SPAN_KIND_SERVER, SPAN_KIND_CLIENT, SPAN_KIND_PRODUCER, SPAN_KIND_CONSUMER])
 
 // span.kind values that support peer tags (client-side or message producers/consumers)
+const SPAN_KIND_INTERNAL = 'internal'
 const PEER_TAG_SPAN_KINDS = new Set([SPAN_KIND_CLIENT, SPAN_KIND_PRODUCER, SPAN_KIND_CONSUMER])
 
 // gRPC status code extraction keys, checked in order
@@ -49,11 +50,12 @@ const GRPC_STATUS_KEYS = [
 // Default peer tags to extract per Go reference implementation
 const DEFAULT_PEER_TAGS = [
   '_dd.base_service',
-  'peer.hostname',
   'peer.service',
-  'db.name',
+  'peer.hostname',
+  'out.host',
   'db.instance',
   'db.system',
+  'messaging.destination',
   'network.destination.name',
 ]
 
@@ -205,14 +207,22 @@ function extractGrpcStatusCode (span) {
 }
 
 /**
- * Extracts peer tags from the span for client/producer/consumer span kinds.
+ * Extracts peer tags from the span for client/producer/consumer span kinds,
+ * or for internal spans that have a _dd.base_service tag (service override).
  * @param {object} span - Formatted span object
  * @param {string} spanKind - The span kind value
  * @param {string[]} peerTagKeys - List of peer tag keys to extract
  * @returns {string[]} Sorted array of "key:value" peer tag strings
  */
 function extractPeerTags (span, spanKind, peerTagKeys) {
-  if (!PEER_TAG_SPAN_KINDS.has(spanKind) || !peerTagKeys?.length) {
+  if (!peerTagKeys?.length) {
+    return []
+  }
+
+  const isInternalWithBaseService = spanKind === SPAN_KIND_INTERNAL &&
+    (span.meta['_dd.base_service'] !== undefined || span.metrics?.['_dd.base_service'] !== undefined)
+
+  if (!PEER_TAG_SPAN_KINDS.has(spanKind) && !isInternalWithBaseService) {
     return []
   }
 

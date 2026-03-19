@@ -91,7 +91,7 @@ class SpanStatsEncoder extends AgentEncoder {
     }
 
     this._encodeString(bytes, 'GRPCStatusCode')
-    this._encodeInteger(bytes, stat.GRPCStatusCode || 0)
+    this._encodeString(bytes, String(stat.GRPCStatusCode || 0))
   }
 
   _encodeBucket (bytes, bucket) {
