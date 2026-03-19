@@ -25,6 +25,9 @@ function findOptionsIndex (args, shell) {
   if (args[1] != null && typeof args[1] === 'object') {
     return { index: 1, exists: true }
   }
+  if (!shell && args[2] != null && typeof args[2] === 'object') {
+    return { index: 2, exists: true }
+  }
   return { index: shell ? 1 : 2, exists: false }
 }
 

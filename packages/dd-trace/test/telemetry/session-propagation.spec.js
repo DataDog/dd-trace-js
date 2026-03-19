@@ -188,6 +188,20 @@ describe('session-propagation', () => {
       assert.strictEqual(context.callArgs[3], cb)
     })
 
+    it('should merge into existing options when args is skipped with undefined', () => {
+      const context = {
+        callArgs: ['node', undefined, { cwd: '/tmp', env: { FOO: 'bar' } }],
+        shell: false,
+      }
+
+      onChildProcessStart(context)
+
+      assert.strictEqual(context.callArgs[2].cwd, '/tmp')
+      assert.strictEqual(context.callArgs[2].env.FOO, 'bar')
+      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
+      assert.strictEqual(context.callArgs[2].env.DD_PARENT_JS_SESSION_ID, 'current-id')
+    })
+
     it('should not modify context without callArgs', () => {
       const context = {
         command: 'node test.js',
