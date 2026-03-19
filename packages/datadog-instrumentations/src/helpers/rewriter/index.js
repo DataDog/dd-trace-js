@@ -4,6 +4,7 @@ const { readFileSync } = require('fs')
 const { join } = require('path')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+const { traceAsyncIterator, traceIterator } = require('./orchestrion/transforms')
 const instrumentations = require('./instrumentations')
 
 let dcPolyfill
@@ -20,6 +21,9 @@ try {
 const moduleVersions = {}
 const disabled = new Set()
 const matcher = create(instrumentations, dcPolyfill)
+
+matcher.addTransform('traceIterator', traceIterator)
+matcher.addTransform('traceAsyncIterator', traceAsyncIterator)
 
 function rewrite (content, filename, format) {
   if (!content) return content

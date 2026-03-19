@@ -48,7 +48,7 @@ const compiler = {
   },
 
   traverse: (ast, query, visitor) => {
-    const esquery = require('../../../../../../vendor/dist/esquery').default
+    const esquery = require('../../../../../../vendor/dist/esquery')
 
     compiler.traverse = (ast, query, visitor) => {
       return esquery.traverse(ast, esquery.parse(query), visitor)
@@ -58,7 +58,7 @@ const compiler = {
   },
 
   query: (ast, query) => {
-    const esquery = require('../../../../../../vendor/dist/esquery').default
+    const esquery = require('../../../../../../vendor/dist/esquery')
 
     compiler.query = esquery.query
 
