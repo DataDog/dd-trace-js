@@ -12,6 +12,7 @@ const endpoints = require('./endpoints')
 const { sendData } = require('./send-data')
 const { manager: metricsManager } = require('./metrics')
 const telemetryLogger = require('./logs')
+const sessionPropagation = require('./session-propagation')
 
 /**
  * @typedef {Record<string, unknown>} TelemetryPayloadObject
@@ -370,7 +371,7 @@ function start (aConfig, thePluginManager) {
   dependencies.start(config, application, host, getRetryData, updateRetryData)
   telemetryLogger.start(config)
   endpoints.start(config, application, host, getRetryData, updateRetryData)
-  require('./session-propagation').start(config)
+  sessionPropagation.start(config)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
