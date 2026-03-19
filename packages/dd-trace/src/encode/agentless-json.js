@@ -16,6 +16,9 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
 function formatSpan (span, isFirstSpan) {
   span = normalizeSpan(truncateSpan(span, false))
 
+  // Remove _dd.p.tid (the upper 64 bits of a 128-bit trace ID) since trace_id is truncated to lower 64 bits
+  delete span.meta['_dd.p.tid']
+
   if (span.span_events) {
     span.meta.events = JSON.stringify(span.span_events)
     delete span.span_events
@@ -45,7 +48,7 @@ function formatSpan (span, isFirstSpan) {
  */
 function spanToJSON (span) {
   const result = {
-    trace_id: span.trace_id.toString(16).toLowerCase(),
+    trace_id: span.trace_id.toString(16).toLowerCase().slice(-16),
     span_id: span.span_id.toString(16).toLowerCase(),
     parent_id: span.parent_id.toString(16).toLowerCase(),
     name: span.name,
