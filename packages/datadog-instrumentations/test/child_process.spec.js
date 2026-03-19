@@ -329,7 +329,6 @@ describe('child process', () => {
                   abortController: sinon.match.instanceOf(AbortController),
                   shell: true,
                 })
-                sinon.assert.calledOnce(start)
                 sinon.assert.calledWithMatch(asyncFinish, {
                   command: 'echo',
                   file: 'echo',

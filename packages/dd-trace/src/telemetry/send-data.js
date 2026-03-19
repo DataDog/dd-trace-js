@@ -103,7 +103,7 @@ function getHeaders (config, application, reqType) {
   if (config.rootSessionId && config.rootSessionId !== sessionId) {
     headers['dd-root-session-id'] = config.rootSessionId
   }
-  const debug = config.telemetry && config.telemetry.debug
+  const debug = config.telemetry?.debug
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }
@@ -130,8 +130,6 @@ let seqId = 0
  * @returns {TelemetryPayload}
  */
 function getPayload (payload) {
-  // Some telemetry endpoints payloads accept collections of elements such as the 'logs' endpoint.
-  // 'logs' request type payload is meant to send library logs to Datadog’s backend.
   if (Array.isArray(payload)) {
     return payload
   }
@@ -165,7 +163,6 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
       url = url || new URL(getAgentlessTelemetryEndpoint(config.site))
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
-      // No point to do the request if the URL is invalid
       return cb(err, { payload, reqType })
     }
   }
@@ -197,7 +194,6 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
       }
-      // figure out which data center to send to
       const backendUrl = getAgentlessTelemetryEndpoint(config.site)
       const backendHeader = { ...options.headers, 'DD-API-KEY': getValueFromEnvSources('DD_API_KEY') }
       const backendOptions = {
@@ -222,7 +218,6 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
       log.info('Started agent telemetry')
     }
 
-    // call the callback function so that we can track the error and payload
     cb(error, { payload, reqType })
   })
 }
