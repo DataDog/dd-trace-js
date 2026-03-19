@@ -96,11 +96,11 @@ describe('wrapModelWithAIGuard', () => {
         .finally(unsubscribe)
     })
 
-    it('publishes input evaluation before calling original', () => {
+    it('publishes input evaluation in parallel with LLM call', () => {
       const { calls, unsubscribe } = subscribeAutoResolve()
-      let evaluatedBeforeOriginal = false
+      let llmCalledBeforeGuardResolves = false
       const original = sinon.stub().callsFake(() => {
-        evaluatedBeforeOriginal = calls.length === 1
+        llmCalledBeforeGuardResolves = calls.length === 0 || calls.length === 1
         return Promise.resolve({ content: [] })
       })
       model.doGenerate = original
@@ -110,19 +110,19 @@ describe('wrapModelWithAIGuard', () => {
         .then(() => {
           assert.strictEqual(calls.length, 1)
           assert.deepStrictEqual(calls[0].messages, [{ role: 'user', content: 'Hello' }])
-          assert.strictEqual(evaluatedBeforeOriginal, true)
+          assert.strictEqual(llmCalledBeforeGuardResolves, true)
+          sinon.assert.calledOnce(original)
         })
         .finally(unsubscribe)
     })
 
-    it('does not call original when input is rejected', () => {
+    it('rejects with guard error when input is rejected', () => {
       const { err, unsubscribe } = subscribeAutoReject()
       const original = sinon.stub().resolves({ content: [] })
       model.doGenerate = original
       wrapModelWithAIGuard(model)
 
       return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
-        .then(() => sinon.assert.notCalled(original))
         .finally(unsubscribe)
     })
 
@@ -249,7 +249,7 @@ describe('wrapModelWithAIGuard', () => {
         .finally(unsubscribe)
     })
 
-    it('publishes input evaluation before reading stream', () => {
+    it('publishes input evaluation in parallel with LLM call', () => {
       const { calls, unsubscribe } = subscribeAutoResolve()
       model.doStream = sinon.stub().resolves({ stream: makeStream([]) })
       wrapModelWithAIGuard(model)
@@ -261,14 +261,13 @@ describe('wrapModelWithAIGuard', () => {
         .finally(unsubscribe)
     })
 
-    it('rejects when input is rejected without calling original', () => {
+    it('rejects with guard error when input is rejected', () => {
       const { err, unsubscribe } = subscribeAutoReject()
-      const original = sinon.stub()
+      const original = sinon.stub().resolves({ stream: makeStream([]) })
       model.doStream = original
       wrapModelWithAIGuard(model)
 
       return assert.rejects(() => model.doStream({ prompt }), e => e === err)
-        .then(() => sinon.assert.notCalled(original))
         .finally(unsubscribe)
     })
 

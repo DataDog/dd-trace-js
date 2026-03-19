@@ -43,9 +43,10 @@ function wrapModelWithAIGuard (model) {
         const inputMessages = convertVercelPromptToMessages(options.prompt)
         if (!inputMessages.length) return original.call(this, options)
 
-        return publishToAIGuard(inputMessages)
-          .then(() => original.call(this, options))
-          .then(result => {
+        // Run AI Guard input evaluation and LLM call in parallel.
+        // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
+        return Promise.all([publishToAIGuard(inputMessages), original.call(this, options)])
+          .then(([, result]) => {
             const content = result.content ?? []
             if (!content.length) return result
             return publishToAIGuard(buildOutputMessages(inputMessages, content))
@@ -64,9 +65,10 @@ function wrapModelWithAIGuard (model) {
         const inputMessages = convertVercelPromptToMessages(options.prompt)
         if (!inputMessages.length) return original.call(this, options)
 
-        return publishToAIGuard(inputMessages)
-          .then(() => original.call(this, options))
-          .then(result => {
+        // Run AI Guard input evaluation and LLM call in parallel.
+        // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
+        return Promise.all([publishToAIGuard(inputMessages), original.call(this, options)])
+          .then(([, result]) => {
             const chunks = []
             const reader = result.stream.getReader()
 
