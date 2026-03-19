@@ -1125,6 +1125,8 @@ class Config {
       setBoolean(calc, 'reportHostname', true)
       // Clear sampling rules - server-side sampling handles this
       calc['sampler.rules'] = []
+      // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
+      setBoolean(calc, 'traceId128BitGenerationEnabled', false)
     }
 
     if (this.#isCiVisibility()) {
