@@ -18,24 +18,37 @@ function injectSessionEnv (existingEnv) {
   }
 }
 
+function getArgShape (args, shell) {
+  if (Array.isArray(args[1])) return 'argsArray'
+  if (args[1] != null && typeof args[1] === 'object') return 'options'
+  if (shell) return 'shell'
+  return 'fileOnly'
+}
+
 function onChildProcessStart (context) {
   if (!context.callArgs) return
 
   const args = context.callArgs
-  if (Array.isArray(args[1])) {
-    // method(file, argsArray, [options])
-    const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
-    args[2] = { ...opts, env: injectSessionEnv(opts.env) }
-  } else if (args[1] != null && typeof args[1] === 'object') {
-    // method(file, options)
-    args[1] = { ...args[1], env: injectSessionEnv(args[1].env) }
-  } else if (context.shell) {
-    // execSync(command) — shell command with no options
-    args[1] = { env: injectSessionEnv(null) }
-  } else {
-    // spawn(file) / fork(file) — no args array, no options
-    args[1] = []
-    args[2] = { env: injectSessionEnv(null) }
+  switch (getArgShape(args, context.shell)) {
+    case 'argsArray': {
+      // method(file, argsArray, [options])
+      const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
+      args[2] = { ...opts, env: injectSessionEnv(opts.env) }
+      break
+    }
+    case 'options':
+      // method(file, options)
+      args[1] = { ...args[1], env: injectSessionEnv(args[1].env) }
+      break
+    case 'shell':
+      // execSync(command) — shell command with no options
+      args[1] = { env: injectSessionEnv(null) }
+      break
+    case 'fileOnly':
+      // spawn(file) / fork(file) — no args array, no options
+      args[1] = []
+      args[2] = { env: injectSessionEnv(null) }
+      break
   }
 }
 
