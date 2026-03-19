@@ -1,10 +1,14 @@
 'use strict'
 
-const shimmer = require('../../../datadog-shimmer')
+const dc = require('dc-polyfill')
 
-let patched = false
+const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
-function injectSessionEnv (existingEnv, rootSessionId, runtimeId) {
+let subscribed = false
+let rootSessionId
+let runtimeId
+
+function injectSessionEnv (existingEnv) {
   // eslint-disable-next-line eslint-rules/eslint-process-env
   const base = existingEnv == null ? process.env : existingEnv
   return {
@@ -14,36 +18,37 @@ function injectSessionEnv (existingEnv, rootSessionId, runtimeId) {
   }
 }
 
-function wrapSpawnLike (original, rootSessionId, runtimeId) {
-  return function () {
-    const args = [...arguments]
-    if (Array.isArray(args[1])) {
-      // method(file, argsArray, [options])
-      const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
-      args[2] = { ...opts, env: injectSessionEnv(opts.env, rootSessionId, runtimeId) }
-    } else if (args[1] != null && typeof args[1] === 'object') {
-      // method(file, options)
-      args[1] = { ...args[1], env: injectSessionEnv(args[1].env, rootSessionId, runtimeId) }
-    } else {
-      // method(file) — no args array, no options
-      args[1] = []
-      args[2] = { env: injectSessionEnv(null, rootSessionId, runtimeId) }
-    }
-    return original.apply(this, args)
+function onChildProcessStart (context) {
+  if (!context.callArgs) return
+
+  const args = context.callArgs
+  if (Array.isArray(args[1])) {
+    // method(file, argsArray, [options])
+    const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
+    args[2] = { ...opts, env: injectSessionEnv(opts.env) }
+  } else if (args[1] != null && typeof args[1] === 'object') {
+    // method(file, options)
+    args[1] = { ...args[1], env: injectSessionEnv(args[1].env) }
+  } else if (context.shell) {
+    // execSync(command) — shell command with no options
+    args[1] = { env: injectSessionEnv(null) }
+  } else {
+    // spawn(file) / fork(file) — no args array, no options
+    args[1] = []
+    args[2] = { env: injectSessionEnv(null) }
   }
 }
 
 function start (config) {
-  if (patched) return
-  patched = true
+  if (subscribed) return
+  subscribed = true
 
-  const rootSessionId = config.rootSessionId
-  const runtimeId = config.tags['runtime-id']
+  rootSessionId = config.rootSessionId
+  runtimeId = config.tags['runtime-id']
 
-  const childProcess = require('child_process')
-  for (const method of ['spawn', 'spawnSync', 'fork']) {
-    shimmer.wrap(childProcess, method, original => wrapSpawnLike(original, rootSessionId, runtimeId))
-  }
+  childProcessChannel.subscribe({
+    start: onChildProcessStart,
+  })
 }
 
 module.exports = { start }
