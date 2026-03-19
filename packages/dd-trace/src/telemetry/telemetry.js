@@ -399,6 +399,7 @@ function stop () {
   telemetryStopChannel.publish(getTelemetryData())
 
   endpoints.stop()
+  sessionPropagation.stop()
   config = undefined
 }
 

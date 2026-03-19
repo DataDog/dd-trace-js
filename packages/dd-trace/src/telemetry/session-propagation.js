@@ -52,6 +52,8 @@ function onChildProcessStart (context) {
   }
 }
 
+const handler = { start: onChildProcessStart }
+
 function start (config) {
   if (!config.telemetry?.enabled || subscribed) return
   subscribed = true
@@ -59,9 +61,15 @@ function start (config) {
   rootSessionId = config.rootSessionId
   runtimeId = config.tags['runtime-id']
 
-  childProcessChannel.subscribe({
-    start: onChildProcessStart,
-  })
+  childProcessChannel.subscribe(handler)
 }
 
-module.exports = { start, _onChildProcessStart: onChildProcessStart }
+function stop () {
+  if (!subscribed) return
+  childProcessChannel.unsubscribe(handler)
+  subscribed = false
+  rootSessionId = undefined
+  runtimeId = undefined
+}
+
+module.exports = { start, stop, _onChildProcessStart: onChildProcessStart }

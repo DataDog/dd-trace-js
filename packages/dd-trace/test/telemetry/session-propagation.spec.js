@@ -54,6 +54,28 @@ describe('session-propagation', () => {
     assert.strictEqual(subscribeSpy.callCount, 0)
   })
 
+  it('should unsubscribe and allow re-subscribe after stop()', () => {
+    sessionPropagation.start({
+      telemetry: { enabled: true },
+      rootSessionId: 'root-id',
+      tags: { 'runtime-id': 'current-id' },
+    })
+
+    sessionPropagation.stop()
+
+    // After stop(), start() should accept new config
+    sessionPropagation.start({
+      telemetry: { enabled: true },
+      rootSessionId: 'new-root',
+      tags: { 'runtime-id': 'new-id' },
+    })
+
+    const context = { callArgs: ['node', ['test.js'], {}], shell: false }
+    sessionPropagation._onChildProcessStart(context)
+    assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'new-root')
+    assert.strictEqual(context.callArgs[2].env.DD_PARENT_JS_SESSION_ID, 'new-id')
+  })
+
   describe('env injection via callArgs', () => {
     let onChildProcessStart
 
