@@ -11,10 +11,12 @@ const {
 
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
+// ignored exec method because it calls to execFile directly
 const execAsyncMethods = ['execFile', 'spawn', 'fork']
 
 const names = ['child_process', 'node:child_process']
 
+// child_process and node:child_process returns the same object instance, we only want to add hooks once
 let patched = false
 
 function throwSyncError (error) {
@@ -104,6 +106,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
         try {
           if (context.abortController.signal.aborted) {
             const error = context.abortController.signal.reason || new Error('Aborted')
+            // expected behaviors on error are different
             return returnError(error, context)
           }
 
@@ -191,7 +194,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
         let childProcess
         if (context.abortController.signal.aborted) {
           childProcess = new ChildProcess()
-          childProcess.on('error', () => {})
+          childProcess.on('error', () => {}) // Original method does not crash when non subscribers
 
           process.nextTick(() => {
             const error = context.abortController.signal.reason || new Error('Aborted')
@@ -235,6 +238,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
         shimmer.wrapFunction(childProcessMethod[util.promisify.custom],
           promisify => wrapChildProcessCustomPromisifyMethod(promisify, shell))
 
+      // should do it in this way because the original property is readonly
       const descriptor = Object.getOwnPropertyDescriptor(childProcessMethod, util.promisify.custom)
       Object.defineProperty(wrappedChildProcessMethod,
         util.promisify.custom,

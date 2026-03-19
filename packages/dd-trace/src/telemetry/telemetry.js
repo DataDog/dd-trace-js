@@ -114,6 +114,11 @@ let integrations
 /** @type {Map<string, { name: string, value: ConfigValue, origin: string, seq_id: number }>} */
 const configWithOrigin = new Map()
 
+/**
+ * Retry information that `telemetry.js` keeps in-memory to be merged into the next payload.
+ *
+ * @typedef {{ payload: TelemetryPayloadObject, reqType: string }} RetryData
+ */
 /** @type {{ payload: TelemetryPayloadObject, reqType: string } | null} */
 let retryData = null
 
@@ -150,9 +155,11 @@ function updateRetryData (error, retryObj) {
     reqType: retryObj.payload[0].request_type,
   }
 
+  // Since this payload failed twice it now gets save in to the extended heartbeat
   const failedPayload = retryObj.payload[1].payload
   const failedReqType = retryObj.payload[1].request_type
 
+  // save away the dependencies and integration request for extended heartbeat.
   if (failedReqType === 'app-integrations-change') {
     heartbeatFailedIntegrations.push(failedPayload)
   } else if (failedReqType === 'app-dependencies-loaded') {
@@ -228,9 +235,11 @@ function appClosing () {
   if (!config?.telemetry?.enabled) {
     return
   }
+  // Give chance to listeners to update metrics before shutting down.
   telemetryAppClosingChannel.publish()
   const { reqType, payload } = createPayload('app-closing')
   sendData(config, application, host, reqType, payload)
+  // We flush before shutting down.
   metricsManager.send(config, application, host)
   telemetryLogger.send(config, application, host)
 }
@@ -281,10 +290,12 @@ function getTelemetryData () {
  * @param {{ reqType: string, payload: TelemetryPayloadObject }[]} payload
  */
 function createBatchPayload (payload) {
-  return payload.map(item => ({
-    request_type: item.reqType,
-    payload: item.payload,
-  }))
+  return payload.map(item => {
+    return {
+      request_type: item.reqType,
+      payload: item.payload,
+    }
+  })
 }
 
 /**
@@ -494,10 +505,12 @@ function updateConfig (changes, config) {
       entry.value = value.join(',')
     }
 
+    // Use composite key to support multiple origins for same config name
     configWithOrigin.set(`${name}|${origin}`, entry)
   }
 
   if (changed) {
+    // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     const { reqType, payload } = createPayload('app-client-configuration-change', {
       configuration: [...configWithOrigin.values()],
     })
