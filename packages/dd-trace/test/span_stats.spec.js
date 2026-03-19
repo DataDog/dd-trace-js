@@ -15,6 +15,7 @@ const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../src/constants')
 
 const {
   MEASURED,
+  SPAN_KIND,
   HTTP_STATUS_CODE,
   HTTP_ENDPOINT,
   HTTP_ROUTE,
@@ -44,6 +45,7 @@ const basicSpan = {
 const topLevelSpan = {
   ...basicSpan,
   name: 'top-level-span',
+  parent_id: '0',
   metrics: {
     ...basicSpan.metrics,
     [TOP_LEVEL_KEY]: 1,
@@ -85,6 +87,9 @@ const {
   SpanBuckets,
   TimeBuckets,
   SpanStatsProcessor,
+  DEFAULT_PEER_TAGS,
+  TRILEAN_TRUE,
+  TRILEAN_FALSE,
 } = proxyquire('../src/span_stats', {
   './exporters/span-stats': {
     SpanStatsExporter,
@@ -94,22 +99,22 @@ const {
 describe('SpanAggKey', () => {
   it('should make aggregation key for a basic span', () => {
     const key = new SpanAggKey(basicSpan)
-    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,')
+    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,,1,,0')
   })
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
-    assert.strictEqual(key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,')
+    assert.strictEqual(key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,,1,,0')
   })
 
   it('should make aggregation key for an error span', () => {
     const key = new SpanAggKey(errorSpan)
-    assert.strictEqual(key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,')
+    assert.strictEqual(key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,,,1,,0')
   })
 
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
-    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,`)
+    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,1,,0`)
   })
 
   it('should include HTTP method and route in aggregation key', () => {
@@ -122,7 +127,8 @@ describe('SpanAggKey', () => {
       },
     }
     const key = new SpanAggKey(span)
-    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,,1,,0')
   })
 
   it('should include HTTP method and endpoint in aggregation key', () => {
@@ -136,7 +142,7 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int}')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int},,1,,0')
   })
 
   it('should prioritize http.route over http.endpoint', () => {
@@ -150,7 +156,192 @@ describe('SpanAggKey', () => {
       },
     }
     const key = new SpanAggKey(span)
-    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id')
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,,1,,0')
+  })
+
+  it('should include span.kind in aggregation key', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'server',
+      },
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.spanKind, 'server')
+    assert.ok(key.toString().includes(',server,'))
+  })
+
+  it('should set isTraceRoot to TRUE when parent_id is 0', () => {
+    const span = {
+      ...basicSpan,
+      parent_id: '0',
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.isTraceRoot, TRILEAN_TRUE)
+  })
+
+  it('should set isTraceRoot to FALSE when parent_id is non-zero', () => {
+    const span = {
+      ...basicSpan,
+      parent_id: '12345',
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.isTraceRoot, TRILEAN_FALSE)
+  })
+
+  it('should set isTraceRoot to TRUE when parent_id is undefined', () => {
+    const key = new SpanAggKey(basicSpan)
+    assert.strictEqual(key.isTraceRoot, TRILEAN_TRUE)
+  })
+
+  it('should extract gRPC status code from rpc.grpc.status_code', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        'rpc.grpc.status_code': '2',
+      },
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.grpcStatusCode, 2)
+  })
+
+  it('should extract gRPC status code from grpc.code as fallback', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        'grpc.code': '13',
+      },
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.grpcStatusCode, 13)
+  })
+
+  it('should prioritize rpc.grpc.status_code over grpc.code', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        'rpc.grpc.status_code': '5',
+        'grpc.code': '13',
+      },
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.grpcStatusCode, 5)
+  })
+
+  it('should extract gRPC status code from metrics', () => {
+    const span = {
+      ...basicSpan,
+      metrics: {
+        ...basicSpan.metrics,
+        'rpc.grpc.status_code': 7,
+      },
+    }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.grpcStatusCode, 7)
+  })
+
+  it('should return 0 for gRPC status code when none found', () => {
+    const key = new SpanAggKey(basicSpan)
+    assert.strictEqual(key.grpcStatusCode, 0)
+  })
+
+  it('should extract peer tags for client span kind', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'client',
+        'peer.service': 'my-db',
+        'db.system': 'postgresql',
+      },
+    }
+    const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
+    assert.deepStrictEqual(key.peerTags, ['db.system:postgresql', 'peer.service:my-db'])
+  })
+
+  it('should extract peer tags for producer span kind', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'producer',
+        'peer.service': 'kafka-broker',
+      },
+    }
+    const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
+    assert.deepStrictEqual(key.peerTags, ['peer.service:kafka-broker'])
+  })
+
+  it('should extract peer tags for consumer span kind', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'consumer',
+        'network.destination.name': 'broker.local',
+      },
+    }
+    const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
+    assert.deepStrictEqual(key.peerTags, ['network.destination.name:broker.local'])
+  })
+
+  it('should not extract peer tags for server span kind', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'server',
+        'peer.service': 'my-db',
+      },
+    }
+    const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
+    assert.deepStrictEqual(key.peerTags, [])
+  })
+
+  it('should not extract peer tags when no span kind', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        'peer.service': 'my-db',
+      },
+    }
+    const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
+    assert.deepStrictEqual(key.peerTags, [])
+  })
+
+  it('should sort peer tags alphabetically', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'client',
+        'peer.service': 'my-db',
+        'db.system': 'postgresql',
+        'db.name': 'users',
+      },
+    }
+    const key = new SpanAggKey(span, DEFAULT_PEER_TAGS)
+    assert.deepStrictEqual(key.peerTags, ['db.name:users', 'db.system:postgresql', 'peer.service:my-db'])
+  })
+
+  it('should use custom peer tag keys when provided', () => {
+    const span = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'client',
+        'custom.tag': 'value',
+        'peer.service': 'my-db',
+      },
+    }
+    const key = new SpanAggKey(span, ['custom.tag'])
+    assert.deepStrictEqual(key.peerTags, ['custom.tag:value'])
   })
 })
 
@@ -173,6 +364,10 @@ describe('SpanAggStats', () => {
       Synthetics: aggKey.synthetics,
       HTTPMethod: aggKey.method,
       HTTPEndpoint: aggKey.endpoint,
+      SpanKind: aggKey.spanKind,
+      IsTraceRoot: aggKey.isTraceRoot,
+      PeerTags: aggKey.peerTags,
+      GRPCStatusCode: aggKey.grpcStatusCode,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 0,
@@ -200,6 +395,10 @@ describe('SpanAggStats', () => {
       Synthetics: aggKey.synthetics,
       HTTPMethod: aggKey.method,
       HTTPEndpoint: aggKey.endpoint,
+      SpanKind: aggKey.spanKind,
+      IsTraceRoot: aggKey.isTraceRoot,
+      PeerTags: aggKey.peerTags,
+      GRPCStatusCode: aggKey.grpcStatusCode,
       Hits: 1,
       TopLevelHits: 1,
       Errors: 0,
@@ -227,6 +426,10 @@ describe('SpanAggStats', () => {
       Synthetics: aggKey.synthetics,
       HTTPMethod: aggKey.method,
       HTTPEndpoint: aggKey.endpoint,
+      SpanKind: aggKey.spanKind,
+      IsTraceRoot: aggKey.isTraceRoot,
+      PeerTags: aggKey.peerTags,
+      GRPCStatusCode: aggKey.grpcStatusCode,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 1,
@@ -310,6 +513,7 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(processor.env, config.env)
     assert.deepStrictEqual(processor.tags, config.tags)
     assert.strictEqual(processor.version, config.version)
+    assert.deepStrictEqual(processor.peerTagKeys, DEFAULT_PEER_TAGS)
   })
 
   it('should construct a disabled instance', () => {
@@ -350,6 +554,10 @@ describe('SpanStatsProcessor', () => {
       Synthetics: false,
       HTTPMethod: '',
       HTTPEndpoint: '',
+      SpanKind: '',
+      IsTraceRoot: TRILEAN_TRUE,
+      PeerTags: [],
+      GRPCStatusCode: 0,
       Hits: n,
       TopLevelHits: n,
       Errors: 0,
@@ -378,6 +586,10 @@ describe('SpanStatsProcessor', () => {
           Synthetics: false,
           HTTPMethod: '',
           HTTPEndpoint: '',
+          SpanKind: '',
+          IsTraceRoot: TRILEAN_TRUE,
+          PeerTags: [],
+          GRPCStatusCode: 0,
           Hits: n,
           TopLevelHits: n,
           Errors: 0,
@@ -411,5 +623,118 @@ describe('SpanStatsProcessor', () => {
       Sequence: processor.sequence,
       ProcessTags: processTags.serialized,
     })
+  })
+
+  it('should accept spans eligible by span.kind (server)', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    const serverSpan = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'server',
+      },
+      metrics: {},
+    }
+    proc.onSpanFinished(serverSpan)
+    assert.strictEqual(proc.buckets.size, 1)
+  })
+
+  it('should accept spans eligible by span.kind (client)', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    const clientSpan = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'client',
+      },
+      metrics: {},
+    }
+    proc.onSpanFinished(clientSpan)
+    assert.strictEqual(proc.buckets.size, 1)
+  })
+
+  it('should accept spans eligible by span.kind (producer)', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    const producerSpan = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'producer',
+      },
+      metrics: {},
+    }
+    proc.onSpanFinished(producerSpan)
+    assert.strictEqual(proc.buckets.size, 1)
+  })
+
+  it('should accept spans eligible by span.kind (consumer)', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    const consumerSpan = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'consumer',
+      },
+      metrics: {},
+    }
+    proc.onSpanFinished(consumerSpan)
+    assert.strictEqual(proc.buckets.size, 1)
+  })
+
+  it('should reject spans with internal span.kind and no top-level/measured', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    const internalSpan = {
+      ...basicSpan,
+      meta: {
+        ...basicSpan.meta,
+        [SPAN_KIND]: 'internal',
+      },
+      metrics: {},
+    }
+    proc.onSpanFinished(internalSpan)
+    assert.strictEqual(proc.buckets.size, 0)
+  })
+
+  it('should reject spans with no span.kind and no top-level/measured', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    proc.onSpanFinished(basicSpan)
+    assert.strictEqual(proc.buckets.size, 0)
+  })
+
+  it('should allow setting custom peer tag keys', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    const customKeys = ['custom.tag1', 'custom.tag2']
+    proc.setPeerTagKeys(customKeys)
+    assert.deepStrictEqual(proc.peerTagKeys, customKeys)
+  })
+
+  it('should not override peer tag keys with empty array', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    proc.setPeerTagKeys([])
+    assert.deepStrictEqual(proc.peerTagKeys, DEFAULT_PEER_TAGS)
+  })
+
+  it('should not override peer tag keys with non-array', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    proc.setPeerTagKeys('not-an-array')
+    assert.deepStrictEqual(proc.peerTagKeys, DEFAULT_PEER_TAGS)
   })
 })

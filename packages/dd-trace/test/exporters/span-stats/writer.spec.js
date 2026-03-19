@@ -91,6 +91,7 @@ describe('span-stats writer', () => {
             'Datadog-Meta-Lang': 'javascript',
             'Datadog-Meta-Tracer-Version': pkg.version,
             'Content-Type': 'application/msgpack',
+            'Datadog-Client-Computed-Top-Level': 'yes',
           },
         })
         done()

@@ -48,6 +48,10 @@ describe('span-stats-encode', () => {
       HTTPStatusCode: 200,
       HTTPMethod: 'GET',
       HTTPEndpoint: '/users/:id',
+      SpanKind: 'server',
+      IsTraceRoot: 1,
+      PeerTags: [],
+      GRPCStatusCode: 0,
       Hits: 30799,
       TopLevelHits: 30799,
       Duration: 1230,
@@ -178,5 +182,70 @@ describe('span-stats-encode', () => {
     const decodedStat = decoded.Stats[0].Stats[0]
     assert.strictEqual(decodedStat.HTTPMethod, 'GET')
     assert.strictEqual(decodedStat.HTTPEndpoint, '/users/:id')
+  })
+
+  it('should encode SpanKind, IsTraceRoot, PeerTags, and GRPCStatusCode', () => {
+    encoder.encode(stats)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.SpanKind, 'server')
+    assert.strictEqual(decodedStat.IsTraceRoot, 1)
+    assert.deepStrictEqual(decodedStat.PeerTags, [])
+    assert.strictEqual(decodedStat.GRPCStatusCode, 0)
+  })
+
+  it('should encode peer tags as string array', () => {
+    const statWithPeerTags = {
+      ...stat,
+      SpanKind: 'client',
+      PeerTags: ['db.system:postgresql', 'peer.service:my-db'],
+      GRPCStatusCode: 2,
+    }
+    const statsWithPeerTags = {
+      ...stats,
+      Stats: [{
+        ...bucket,
+        Stats: [statWithPeerTags],
+      }],
+    }
+    encoder.encode(statsWithPeerTags)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.SpanKind, 'client')
+    assert.deepStrictEqual(decodedStat.PeerTags, ['db.system:postgresql', 'peer.service:my-db'])
+    assert.strictEqual(decodedStat.GRPCStatusCode, 2)
+  })
+
+  it('should handle missing SpanKind and PeerTags gracefully', () => {
+    const statWithoutNew = {
+      ...stat,
+      SpanKind: undefined,
+      IsTraceRoot: undefined,
+      PeerTags: undefined,
+      GRPCStatusCode: undefined,
+    }
+    const statsWithoutNew = {
+      ...stats,
+      Stats: [{
+        ...bucket,
+        Stats: [statWithoutNew],
+      }],
+    }
+    encoder.encode(statsWithoutNew)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.SpanKind, '')
+    assert.strictEqual(decodedStat.IsTraceRoot, 0)
+    assert.deepStrictEqual(decodedStat.PeerTags, [])
+    assert.strictEqual(decodedStat.GRPCStatusCode, 0)
   })
 })
