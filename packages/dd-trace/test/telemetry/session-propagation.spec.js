@@ -146,6 +146,5 @@ describe('session-propagation', () => {
 
       assert.strictEqual(context.callArgs, undefined)
     })
-
   })
 })

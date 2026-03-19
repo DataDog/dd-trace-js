@@ -778,7 +778,7 @@ describe('child process', () => {
           if (!context.callArgs) return
           const args = context.callArgs
           const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
-          args[2] = { ...opts, env: { ...process.env, DD_TEST_VAR: 'injected' } } // eslint-disable-line eslint-rules/eslint-process-env
+          args[2] = { ...opts, env: { ...process.env, DD_TEST_VAR: 'injected' } }
         }
 
         it('should include callArgs for async methods', (done) => {
@@ -807,7 +807,8 @@ describe('child process', () => {
         it('should allow subscribers to mutate callArgs for async methods', (done) => {
           childProcessChannel.subscribe({ start: injectTestEnv })
 
-          const child = childProcess.spawn('node', ['-e', 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)'])
+          const script = 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)'
+          const child = childProcess.spawn('node', ['-e', script])
 
           child.once('close', (code) => {
             childProcessChannel.unsubscribe({ start: injectTestEnv })
@@ -819,7 +820,8 @@ describe('child process', () => {
         it('should allow subscribers to mutate callArgs for sync methods', () => {
           childProcessChannel.subscribe({ start: injectTestEnv })
 
-          const result = childProcess.spawnSync('node', ['-e', 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)'])
+          const script = 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)'
+          const result = childProcess.spawnSync('node', ['-e', script])
 
           childProcessChannel.unsubscribe({ start: injectTestEnv })
           assert.strictEqual(result.status, 0)
