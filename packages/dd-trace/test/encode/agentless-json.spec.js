@@ -91,9 +91,9 @@ describe('AgentlessJSONEncoder', () => {
       })
     })
 
-    it('should encode 128-bit trace IDs correctly', () => {
-      // 128-bit trace IDs are used in W3C Trace Context
-      data[0].trace_id = id('0123456789abcdef0123456789abcdef')
+    it('should truncate 128-bit trace IDs to 64-bit', () => {
+      // 128-bit trace IDs (e.g. from W3C Trace Context or 128-bit generation) should be truncated
+      data[0].trace_id = id('aaaaaaaaaaaaaaaa0123456789abcdef')
 
       encoder.encode(data)
 
@@ -101,9 +101,21 @@ describe('AgentlessJSONEncoder', () => {
       const decoded = JSON.parse(buffer.toString())
       const span = decoded.traces[0].spans[0]
 
-      // Should be full 32-character hex string
-      assert.strictEqual(span.trace_id, '0123456789abcdef0123456789abcdef')
-      assert.strictEqual(span.trace_id.length, 32)
+      // Should be lower 64 bits only (16-character hex string)
+      assert.strictEqual(span.trace_id, '0123456789abcdef')
+      assert.strictEqual(span.trace_id.length, 16)
+    })
+
+    it('should strip _dd.p.tid from meta', () => {
+      data[0].meta['_dd.p.tid'] = '0123456700000000'
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = JSON.parse(buffer.toString())
+      const span = decoded.traces[0].spans[0]
+
+      assert.strictEqual(span.meta['_dd.p.tid'], undefined)
     })
 
     it('should include span fields with start time converted to seconds', () => {
