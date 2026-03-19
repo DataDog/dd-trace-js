@@ -370,6 +370,7 @@ function start (aConfig, thePluginManager) {
   dependencies.start(config, application, host, getRetryData, updateRetryData)
   telemetryLogger.start(config)
   endpoints.start(config, application, host, getRetryData, updateRetryData)
+  require('./child_session').start(config)
 
   sendData(config, application, host, 'app-started', appStarted(config))
 
