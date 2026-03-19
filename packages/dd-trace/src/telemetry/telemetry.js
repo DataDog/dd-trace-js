@@ -281,12 +281,10 @@ function getTelemetryData () {
  * @param {{ reqType: string, payload: TelemetryPayloadObject }[]} payload
  */
 function createBatchPayload (payload) {
-  return payload.map(item => {
-    return {
-      request_type: item.reqType,
-      payload: item.payload,
-    }
-  })
+  return payload.map(item => ({
+    request_type: item.reqType,
+    payload: item.payload,
+  }))
 }
 
 /**
@@ -496,12 +494,10 @@ function updateConfig (changes, config) {
       entry.value = value.join(',')
     }
 
-    // Use composite key to support multiple origins for same config name
     configWithOrigin.set(`${name}|${origin}`, entry)
   }
 
   if (changed) {
-    // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
     const { reqType, payload } = createPayload('app-client-configuration-change', {
       configuration: [...configWithOrigin.values()],
     })

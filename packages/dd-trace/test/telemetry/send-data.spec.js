@@ -164,7 +164,7 @@ describe('sendData', () => {
     }, retryObjData]
 
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
-      { language: 'js' }, 'test', 'message-batch', payload) /
+      { language: 'js' }, 'test', 'message-batch', payload)
 
     sinon.assert.calledOnce(request)
 
