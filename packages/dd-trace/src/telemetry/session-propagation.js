@@ -9,7 +9,7 @@ let rootSessionId
 let runtimeId
 
 function injectSessionEnv (existingEnv) {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
+  // eslint-disable-next-line eslint-rules/eslint-process-env -- internal env propagation, not a user-facing config
   const base = existingEnv == null ? process.env : existingEnv
   return {
     ...base,
@@ -64,4 +64,4 @@ function start (config) {
   })
 }
 
-module.exports = { start }
+module.exports = { start, _onChildProcessStart: onChildProcessStart, _getArgShape: getArgShape }

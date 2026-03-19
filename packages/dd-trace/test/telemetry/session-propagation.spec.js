@@ -55,12 +55,15 @@ describe('session-propagation', () => {
   })
 
   describe('env injection via callArgs', () => {
+    let onChildProcessStart
+
     beforeEach(() => {
       sessionPropagation.start({
         telemetry: { enabled: true },
         rootSessionId: 'root-id',
         tags: { 'runtime-id': 'current-id' },
       })
+      onChildProcessStart = sessionPropagation._onChildProcessStart
     })
 
     it('should inject env vars when callArgs has (file, args, options)', () => {
@@ -69,7 +72,7 @@ describe('session-propagation', () => {
         shell: false,
       }
 
-      childProcessChannel.start.publish(context)
+      onChildProcessStart(context)
 
       assert.strictEqual(context.callArgs[0], 'node')
       assert.deepStrictEqual(context.callArgs[1], ['test.js'])
@@ -85,7 +88,7 @@ describe('session-propagation', () => {
         shell: false,
       }
 
-      childProcessChannel.start.publish(context)
+      onChildProcessStart(context)
 
       assert.strictEqual(context.callArgs[0], 'node')
       assert.strictEqual(context.callArgs[1].cwd, '/tmp')
@@ -99,7 +102,7 @@ describe('session-propagation', () => {
         shell: false,
       }
 
-      childProcessChannel.start.publish(context)
+      onChildProcessStart(context)
 
       assert.strictEqual(context.callArgs[0], 'node')
       assert.deepStrictEqual(context.callArgs[1], [])
@@ -113,7 +116,7 @@ describe('session-propagation', () => {
         shell: true,
       }
 
-      childProcessChannel.start.publish(context)
+      onChildProcessStart(context)
 
       assert.strictEqual(context.callArgs[0], 'ls -la')
       assert.strictEqual(context.callArgs[1].env.DD_ROOT_JS_SESSION_ID, 'root-id')
@@ -126,11 +129,10 @@ describe('session-propagation', () => {
         shell: false,
       }
 
-      childProcessChannel.start.publish(context)
+      onChildProcessStart(context)
 
       const env = context.callArgs[2].env
       assert.strictEqual(env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      // Should contain existing process.env keys (check a key we know exists on all platforms)
       assert.ok(Object.keys(env).length > 2, 'env should contain process.env keys')
     })
 
@@ -141,8 +143,7 @@ describe('session-propagation', () => {
         shell: false,
       }
 
-      // Should not throw
-      childProcessChannel.start.publish(context)
+      onChildProcessStart(context)
 
       assert.strictEqual(context.callArgs, undefined)
     })
