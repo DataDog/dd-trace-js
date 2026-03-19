@@ -14,7 +14,7 @@ class SchemaDefinition {
     const item = this.schema[type][kind][plugin]
     return {
       name: item.serviceName(opts),
-      source: item?.serviceSource(opts),
+      source: item.serviceSource?.(opts),
     }
   }
 }
