@@ -21,7 +21,7 @@
   "license": "ISC",
   "dependencies": {
     "@apollo/server": "5.4.0",
-    "@koa/router": "15.3.1",
+    "@koa/router": "15.3.2",
     "aws-sdk": "2.1693.0",
     "axios": "1.13.6",
     "express": "4.22.1",
