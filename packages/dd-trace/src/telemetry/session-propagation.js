@@ -22,6 +22,7 @@ function getArgShape (args, shell) {
   if (Array.isArray(args[1])) return 'argsArray'
   if (args[1] != null && typeof args[1] === 'object') return 'options'
   if (shell) return 'shell'
+  if (typeof args[1] === 'function') return 'callback'
   return 'fileOnly'
 }
 
@@ -31,21 +32,35 @@ function onChildProcessStart (context) {
   const args = context.callArgs
   switch (getArgShape(args, context.shell)) {
     case 'argsArray': {
-      // method(file, argsArray, [options])
-      const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
-      args[2] = { ...opts, env: injectSessionEnv(opts.env) }
+      // method(file, argsArray, [options], [cb])
+      const optsIdx = 2
+      if (args[optsIdx] != null && typeof args[optsIdx] === 'object') {
+        args[optsIdx] = { ...args[optsIdx], env: injectSessionEnv(args[optsIdx].env) }
+      } else {
+        // No options object — insert one before any trailing callback
+        const env = { env: injectSessionEnv(null) }
+        if (typeof args[optsIdx] === 'function') {
+          args.splice(optsIdx, 0, env)
+        } else {
+          args[optsIdx] = env
+        }
+      }
       break
     }
     case 'options':
-      // method(file, options)
+      // method(file, options, [cb])
       args[1] = { ...args[1], env: injectSessionEnv(args[1].env) }
       break
     case 'shell':
       // execSync(command) — shell command with no options
       args[1] = { env: injectSessionEnv(null) }
       break
+    case 'callback':
+      // execFile(file, cb) — insert options before the callback
+      args.splice(1, 0, { env: injectSessionEnv(null) })
+      break
     case 'fileOnly':
-      // spawn(file) / fork(file) — no args array, no options
+      // spawn(file) / fork(file) — no args array, no options, no callback
       args[1] = []
       args[2] = { env: injectSessionEnv(null) }
       break

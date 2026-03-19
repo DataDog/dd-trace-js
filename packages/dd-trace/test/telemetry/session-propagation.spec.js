@@ -136,6 +136,35 @@ describe('session-propagation', () => {
       assert.ok(Object.keys(env).length > 2, 'env should contain process.env keys')
     })
 
+    it('should preserve callback when callArgs has (file, args, cb)', () => {
+      const cb = () => {}
+      const context = {
+        callArgs: ['node', ['-v'], cb],
+        shell: false,
+      }
+
+      onChildProcessStart(context)
+
+      assert.strictEqual(context.callArgs[0], 'node')
+      assert.deepStrictEqual(context.callArgs[1], ['-v'])
+      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
+      assert.strictEqual(context.callArgs[3], cb)
+    })
+
+    it('should preserve callback when callArgs has (file, cb)', () => {
+      const cb = () => {}
+      const context = {
+        callArgs: ['cmd', cb],
+        shell: false,
+      }
+
+      onChildProcessStart(context)
+
+      assert.strictEqual(context.callArgs[0], 'cmd')
+      assert.strictEqual(context.callArgs[1].env.DD_ROOT_JS_SESSION_ID, 'root-id')
+      assert.strictEqual(context.callArgs[2], cb)
+    })
+
     it('should not modify context without callArgs', () => {
       const context = {
         command: 'node test.js',
