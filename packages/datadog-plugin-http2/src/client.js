@@ -38,13 +38,15 @@ class Http2ClientPlugin extends ClientPlugin {
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
+    const { name: serviceName, source: serviceSource } = this.serviceName({ pluginConfig: this.config, sessionDetails })
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
+      serviceSource,
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,
-        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails }),
+        'service.name': serviceName,
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,

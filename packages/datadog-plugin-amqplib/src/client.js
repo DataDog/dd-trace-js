@@ -17,8 +17,12 @@ class AmqplibClientPlugin extends ClientPlugin {
     if (method === 'basic.publish') return
 
     const stream = (channel.connection && channel.connection.stream) || {}
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const service = this.config.service || schemaServiceName
+    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
     const span = this.startSpan(this.operationName(), {
-      service: this.config.service || this.serviceName(),
+      service,
+      serviceSource,
       resource: getResourceName(method, fields),
       kind: this.constructor.kind,
       meta: {

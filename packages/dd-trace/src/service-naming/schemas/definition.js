@@ -12,7 +12,10 @@ class SchemaDefinition {
 
   getServiceName (type, kind, plugin, opts) {
     const item = this.schema[type][kind][plugin]
-    return item.serviceName(opts)
+    return {
+      name: item.serviceName(opts),
+      source: item?.serviceSource(opts),
+    }
   }
 }
 

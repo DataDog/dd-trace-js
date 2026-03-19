@@ -60,8 +60,10 @@ class AzureFunctionsPlugin extends TracingPlugin {
       ctx.webContext = webContext
     } else {
       // For non-HTTP triggers, use standard flow
+      const { name: service, source: serviceSource } = this.serviceName()
       span = this.startSpan(this.operationName(), {
-        service: this.serviceName(),
+        service,
+        serviceSource,
         type: 'serverless',
         meta,
       }, ctx)

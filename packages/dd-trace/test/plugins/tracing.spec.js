@@ -8,20 +8,26 @@ const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const TracingPlugin = require('../../src/plugins/tracing')
+const { SVC_SRC_KEY } = require('../../src/constants')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
 describe('TracingPlugin', () => {
   describe('startSpan method', () => {
-    it('passes given childOf relationship to the tracer', () => {
-      const startSpanSpy = sinon.spy()
-      const plugin = new TracingPlugin({
+    let startSpanSpy
+    let plugin
+
+    beforeEach(() => {
+      startSpanSpy = sinon.spy()
+      plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy,
         },
       })
       plugin.configure({})
+    })
 
+    it('passes given childOf relationship to the tracer', () => {
       plugin.startSpan('Test span', { childOf: 'some parent span' })
 
       sinon.assert.calledWith(startSpanSpy,
@@ -30,6 +36,26 @@ describe('TracingPlugin', () => {
           childOf: 'some parent span',
         })
       )
+    })
+
+    it('sets SVC_SRC_KEY tag when serviceSource is provided', () => {
+      plugin.startSpan('Test span', { service: 'my-service', serviceSource: 'kafka' })
+
+      sinon.assert.calledWith(startSpanSpy,
+        'Test span',
+        sinon.match({
+          tags: sinon.match({
+            [SVC_SRC_KEY]: 'kafka',
+          }),
+        })
+      )
+    })
+
+    it('does not set SVC_SRC_KEY tag when serviceSource is undefined', () => {
+      plugin.startSpan('Test span', { service: 'my-service' })
+
+      const callArgs = startSpanSpy.firstCall.args[1]
+      assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when serviceSource is undefined')
     })
   })
 })

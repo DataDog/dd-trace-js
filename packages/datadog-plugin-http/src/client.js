@@ -37,13 +37,16 @@ class HttpClientPlugin extends ClientPlugin {
     const method = (options.method || 'GET').toUpperCase()
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
+    const { name: serviceName, source: serviceSource } =
+      this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) })
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
+      serviceSource,
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',
-        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
+        'service.name': serviceName,
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,

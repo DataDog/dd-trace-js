@@ -30,9 +30,10 @@ class WSClosePlugin extends TracingPlugin {
     const spanKind = isPeerClose ? 'consumer' : 'producer'
     const spanTags = socket.spanTags
     const path = spanTags['resource.name'].split(' ')[1]
-    const service = this.serviceName({ pluginConfig: this.config })
+    const { name: service, source: serviceSource } = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
       service,
+      serviceSource,
       meta: {
         'resource.name': `websocket ${path}`,
         'span.type': 'websocket',

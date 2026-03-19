@@ -19,8 +19,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const document = args.document
     const source = this.config.source && document && docSource
 
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const service = this.config.service || schemaServiceName
+    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
     const span = this.startSpan(this.operationName(), {
-      service: this.config.service || this.serviceName(),
+      service,
+      serviceSource,
       resource: getSignature(document, name, type, this.config.signature),
       kind: this.constructor.kind,
       type: this.constructor.type,

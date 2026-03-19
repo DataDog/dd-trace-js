@@ -48,6 +48,7 @@ describe('span-stats-encode', () => {
       HTTPStatusCode: 200,
       HTTPMethod: 'GET',
       HTTPEndpoint: '/users/:id',
+      SrvSrc: 'kafka',
       Hits: 30799,
       TopLevelHits: 30799,
       Duration: 1230,
@@ -178,5 +179,29 @@ describe('span-stats-encode', () => {
     const decodedStat = decoded.Stats[0].Stats[0]
     assert.strictEqual(decodedStat.HTTPMethod, 'GET')
     assert.strictEqual(decodedStat.HTTPEndpoint, '/users/:id')
+  })
+
+  it('should encode SrvSrc', () => {
+    encoder.encode(stats)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.SrvSrc, 'kafka')
+  })
+
+  it('should encode SrvSrc as empty string when not present', () => {
+    const statsWithoutSrvSrc = {
+      ...stats,
+      Stats: [{ ...bucket, Stats: [{ ...stat, SrvSrc: undefined }] }],
+    }
+    encoder.encode(statsWithoutSrvSrc)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.SrvSrc, '')
   })
 })

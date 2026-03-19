@@ -65,6 +65,8 @@ class UndiciPlugin extends HttpClientPlugin {
     const allowed = this.config.filter(uri)
     const childOf = store && allowed ? store.span : null
 
+    const { name: service, source: serviceSource } =
+      this.serviceName({ pluginConfig: this.config, sessionDetails: { host: hostname, port } })
     const span = this.startSpan(this.operationName(), {
       childOf,
       meta: {
@@ -76,7 +78,8 @@ class UndiciPlugin extends HttpClientPlugin {
       metrics: {
         [CLIENT_PORT_KEY]: port ? Number.parseInt(port, 10) : undefined,
       },
-      service: this.serviceName({ pluginConfig: this.config, sessionDetails: { host: hostname, port } }),
+      service,
+      serviceSource,
       resource: method,
       type: 'http',
     }, false)

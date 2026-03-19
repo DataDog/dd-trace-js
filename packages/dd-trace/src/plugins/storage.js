@@ -14,6 +14,7 @@ class StoragePlugin extends ClientPlugin {
   startSpan (name, options, ctx) {
     if (!options.service && this.system) {
       options.service = `${this.tracer._service}-${this.system}`
+      options.serviceSource = this.system
     }
 
     return super.startSpan(name, options, ctx)

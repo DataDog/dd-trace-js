@@ -9,7 +9,14 @@ class ConsumerPlugin extends InboundPlugin {
 
   startSpan (options, enterOrCtx) {
     if (!options.service) {
-      options.service = this.config.service || this.serviceName()
+      if (this.config.service) {
+        options.service = this.config.service
+        options.serviceSource = 'opt.plugin'
+      } else {
+        const { name, source } = this.serviceName()
+        options.service = name
+        options.serviceSource = source
+      }
     }
     if (!options.kind) {
       options.kind = this.constructor.kind

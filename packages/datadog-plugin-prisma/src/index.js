@@ -41,12 +41,14 @@ class PrismaPlugin extends DatabasePlugin {
 
   startEngineSpan (ctx) {
     const { engineSpan, childrenByParent, childOf, dbConfig } = ctx
-    const service = this.serviceName({ pluginConfig: this.config, system: this.system })
+    const { name: service, source: serviceSource } = this.serviceName(
+      { pluginConfig: this.config, system: this.system })
     const spanName = engineSpan.name.slice(14) // remove 'prisma:engine:' prefix
     const options = {
       childOf,
       resource: spanName,
       service,
+      serviceSource,
       kind: engineSpan.kind,
       meta: {
         prisma: {
@@ -85,10 +87,11 @@ class PrismaPlugin extends DatabasePlugin {
   }
 
   bindStart (ctx) {
-    const service = this.serviceName({ pluginConfig: this.config })
+    const { name: service, source: serviceSource } = this.serviceName(
+      { pluginConfig: this.config })
     const resource = formatResourceName(ctx.resourceName, ctx.attributes)
 
-    const options = { service, resource }
+    const options = { service, serviceSource, resource }
 
     if (ctx.resourceName === 'operation') {
       options.meta = {

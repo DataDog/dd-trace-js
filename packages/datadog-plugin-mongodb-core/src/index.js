@@ -35,9 +35,10 @@ class MongodbCorePlugin extends DatabasePlugin {
     }
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-    const service = this.serviceName({ pluginConfig: this.config })
+    const { name: service, source: serviceSource } = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
       service,
+      serviceSource,
       resource,
       type: 'mongodb',
       kind: 'client',

@@ -31,9 +31,10 @@ class WSReceiverPlugin extends TracingPlugin {
     const path = spanTags['resource.name'].split(' ')[1]
     const opCode = binary ? 'binary' : 'text'
 
-    const service = this.serviceName({ pluginConfig: this.config })
+    const { name: service, source: serviceSource } = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
       service,
+      serviceSource,
       meta: {
         'span.type': 'websocket',
         'span.kind': 'consumer',

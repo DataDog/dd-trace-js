@@ -11,9 +11,13 @@ class MoleculerServerPlugin extends ServerPlugin {
     const { action, middlewareCtx, broker } = ctx
 
     const followsFrom = this.tracer.extract('text_map', middlewareCtx.meta)
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const service = this.config.service || schemaServiceName
+    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
     this.startSpan(this.operationName(), {
       childOf: followsFrom || ctx?.currentStore?.span || this.activeSpan,
-      service: this.config.service || this.serviceName(),
+      service,
+      serviceSource,
       resource: action.name,
       kind: 'server',
       type: 'web',

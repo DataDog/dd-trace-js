@@ -21,6 +21,7 @@ module.exports = {
   SPAN_SAMPLING_MECHANISM: '_dd.span_sampling.mechanism',
   SPAN_SAMPLING_RULE_RATE: '_dd.span_sampling.rule_rate',
   SPAN_SAMPLING_MAX_PER_SECOND: '_dd.span_sampling.max_per_second',
+  SVC_SRC_KEY: '_dd.svc.src',
   DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
   DECISION_MAKER_KEY: '_dd.p.dm',
   PROCESS_ID: 'process_id',

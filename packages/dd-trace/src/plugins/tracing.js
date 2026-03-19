@@ -2,7 +2,7 @@
 
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
-const { COMPONENT } = require('../constants')
+const { COMPONENT, SVC_SRC_KEY } = require('../constants')
 const Plugin = require('./plugin')
 
 class TracingPlugin extends Plugin {
@@ -26,7 +26,7 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
-   * @returns {string}
+   * @returns {{ name: string, source: string | undefined }}
    */
   serviceName (opts = {}) {
     const {
@@ -158,6 +158,7 @@ class TracingPlugin extends Plugin {
    * @param {object} [options.meta] - The meta data for the span.
    * @param {object} [options.metrics] - The metrics for the span.
    * @param {string} [options.service] - The service name.
+   * @param {string} [options.serviceSource] - The source that determined the service name (sets _dd.svc.src tag).
    * @param {number} [options.startTime] - The start time of the span.
    * @param {string} [options.resource] - The resource name.
    * @param {string} [options.type] - The type of the span.
@@ -176,6 +177,7 @@ class TracingPlugin extends Plugin {
       meta,
       metrics,
       service,
+      serviceSource,
       startTime,
       resource,
       type,
@@ -198,6 +200,7 @@ class TracingPlugin extends Plugin {
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
+        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
         ...meta,
         ...metrics,
       },

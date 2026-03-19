@@ -20,8 +20,11 @@ class MemcachedPlugin extends CachePlugin {
       meta['memcached.command'] = query.command
     }
 
+    const { name: service, source: serviceSource } =
+      this.serviceName({ pluginConfig: this.config, system: this.system })
     this.startSpan({
-      service: this.serviceName({ pluginConfig: this.config, system: this.system }),
+      service,
+      serviceSource,
       resource: query.type,
       type: 'memcached',
       meta,

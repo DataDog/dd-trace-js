@@ -4,7 +4,7 @@
 
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const web = require('../../dd-trace/src/plugins/util/web')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 
 class Http2ServerPlugin extends ServerPlugin {
   constructor (tracer, config) {
@@ -19,17 +19,23 @@ class Http2ServerPlugin extends ServerPlugin {
   bindStart (ctx) {
     const { req, res } = ctx
 
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const service = this.config.service || schemaServiceName
+    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
     const span = web.startSpan(
       this.tracer,
       {
         ...this.config,
-        service: this.config.service || this.serviceName(),
+        service,
       },
       req,
       res,
       this.operationName(),
       ctx
     )
+    if (serviceSource !== undefined) {
+      span.setTag(SVC_SRC_KEY, serviceSource)
+    }
 
     span.setTag(COMPONENT, this.constructor.id)
     span._integrationName = this.constructor.id

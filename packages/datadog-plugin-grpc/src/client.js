@@ -24,8 +24,12 @@ class GrpcClientPlugin extends ClientPlugin {
     const { metadata, path, type } = message
     const metadataFilter = this.config.metadataFilter
     const method = getMethodMetadata(path, type)
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const service = this.config.service || schemaServiceName
+    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
     const span = this.startSpan(this.operationName(), {
-      service: this.config.service || this.serviceName(),
+      service,
+      serviceSource,
       resource: path,
       kind: 'client',
       type: 'http',

@@ -10,7 +10,7 @@ class PGPlugin extends DatabasePlugin {
 
   bindStart (ctx) {
     const { params = {}, query, processId, stream } = ctx
-    const service = this.serviceName({ pluginConfig: this.config, params })
+    const { name: service, source: serviceSource } = this.serviceName({ pluginConfig: this.config, params })
     const originalStatement = this.maybeTruncate(query.text)
 
     const span = this.startSpan(this.operationName(), {
@@ -26,6 +26,7 @@ class PGPlugin extends DatabasePlugin {
         'out.host': params.host,
         [CLIENT_PORT_KEY]: params.port,
       },
+      serviceSource,
     }, ctx)
 
     if (stream) {

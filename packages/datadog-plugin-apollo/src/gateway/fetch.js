@@ -11,9 +11,11 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
     const store = storage('legacy').getStore()
     const childOf = store ? store.span : null
 
+    const { name: service, source: serviceSource } = this.getServiceName()
     const spanData = {
       childOf,
-      service: this.getServiceName(),
+      service,
+      serviceSource,
       type: this.constructor.type,
       meta: {},
     }
