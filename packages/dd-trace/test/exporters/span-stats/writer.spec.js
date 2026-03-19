@@ -86,7 +86,7 @@ describe('span-stats writer', () => {
           protocol: url.protocol,
           hostname: url.hostname,
           path: '/v0.6/stats',
-          method: 'PUT',
+          method: 'POST',
           headers: {
             'Datadog-Meta-Lang': 'javascript',
             'Datadog-Meta-Tracer-Version': pkg.version,
