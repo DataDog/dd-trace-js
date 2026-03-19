@@ -40,7 +40,7 @@ function onChildProcessStart (context) {
 }
 
 function start (config) {
-  if (subscribed) return
+  if (!config.telemetry?.enabled || subscribed) return
   subscribed = true
 
   rootSessionId = config.rootSessionId

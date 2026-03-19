@@ -8,14 +8,14 @@ const dc = require('dc-polyfill')
 
 require('../setup/core')
 
-describe('child_session', () => {
+describe('session-propagation', () => {
   const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
-  let childSession
+  let sessionPropagation
 
   beforeEach(() => {
     // Fresh require to reset the subscribed flag
-    delete require.cache[require.resolve('../../src/telemetry/child_session')]
-    childSession = require('../../src/telemetry/child_session')
+    delete require.cache[require.resolve('../../src/telemetry/session-propagation')]
+    sessionPropagation = require('../../src/telemetry/session-propagation')
   })
 
   afterEach(() => {
@@ -27,7 +27,8 @@ describe('child_session', () => {
   it('should subscribe to child_process channel', () => {
     const hadSubscribers = childProcessChannel.start.hasSubscribers
 
-    childSession.start({
+    sessionPropagation.start({
+      telemetry: { enabled: true },
       rootSessionId: 'root-id',
       tags: { 'runtime-id': 'current-id' },
     })
@@ -36,20 +37,33 @@ describe('child_session', () => {
     assert.ok(childProcessChannel.start.hasSubscribers)
   })
 
+  it('should not subscribe when telemetry is disabled', () => {
+    const subscribeSpy = sinon.spy(childProcessChannel, 'subscribe')
+
+    sessionPropagation.start({
+      telemetry: { enabled: false },
+      rootSessionId: 'root-id',
+      tags: { 'runtime-id': 'current-id' },
+    })
+
+    assert.strictEqual(subscribeSpy.callCount, 0)
+  })
+
   it('should only subscribe once', () => {
-    const config = { rootSessionId: 'root-id', tags: { 'runtime-id': 'current-id' } }
-    childSession.start(config)
+    const config = { telemetry: { enabled: true }, rootSessionId: 'root-id', tags: { 'runtime-id': 'current-id' } }
+    sessionPropagation.start(config)
 
     // Spy on subscribe to verify second call doesn't subscribe again
     const subscribeSpy = sinon.spy(childProcessChannel, 'subscribe')
-    childSession.start(config)
+    sessionPropagation.start(config)
 
     assert.strictEqual(subscribeSpy.callCount, 0)
   })
 
   describe('env injection via callArgs', () => {
     beforeEach(() => {
-      childSession.start({
+      sessionPropagation.start({
+        telemetry: { enabled: true },
         rootSessionId: 'root-id',
         tags: { 'runtime-id': 'current-id' },
       })
