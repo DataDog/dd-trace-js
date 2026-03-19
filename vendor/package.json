@@ -10,7 +10,6 @@
     "@isaacs/ttlcache": "^2.1.4",
     "@opentelemetry/core": ">=1.14.0 <1.31.0",
     "@opentelemetry/resources": ">=1.0.0 <1.31.0",
-    "astring": "^1.9.0",
     "crypto-randomuuid": "^1.0.0",
     "escape-string-regexp": "^5.0.0",
     "esquery": "^1.7.0",

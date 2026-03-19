@@ -4,7 +4,7 @@ const { readFileSync } = require('fs')
 const { join } = require('path')
 const log = require('../../../../dd-trace/src/log')
 const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
-const { traceAsyncIterator, traceIterator } = require('./orchestrion/transforms')
+const { traceAsyncIterator, traceIterator } = require('./transforms')
 const instrumentations = require('./instrumentations')
 
 let dcPolyfill
