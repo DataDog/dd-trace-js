@@ -188,7 +188,7 @@ describe('span-stats-encode', () => {
     const decoded = msgpack.decode(buffer)
 
     const decodedStat = decoded.Stats[0].Stats[0]
-    assert.strictEqual(decodedStat.SrvSrc, 'kafka')
+    assert.strictEqual(decodedStat.srv_src, 'kafka')
   })
 
   it('should encode SrvSrc as empty string when not present', () => {
@@ -202,6 +202,6 @@ describe('span-stats-encode', () => {
     const decoded = msgpack.decode(buffer)
 
     const decodedStat = decoded.Stats[0].Stats[0]
-    assert.strictEqual(decodedStat.SrvSrc, '')
+    assert.strictEqual(decodedStat.srv_src, '')
   })
 })

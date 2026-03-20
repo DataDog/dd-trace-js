@@ -77,7 +77,7 @@ class SpanStatsEncoder extends AgentEncoder {
     this._encodeString(bytes, 'HTTPEndpoint')
     this._encodeString(bytes, stat.HTTPEndpoint)
 
-    this._encodeString(bytes, 'SrvSrc')
+    this._encodeString(bytes, 'srv_src')
     this._encodeString(bytes, stat.SrvSrc || '')
   }
 
