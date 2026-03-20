@@ -25,8 +25,12 @@ try {
   const libdatadog = require('@datadog/libdatadog')
   // Use maybeLoad to avoid throwing if the pipeline crate is not available
   pipeline = libdatadog.maybeLoad('pipeline')
-  // Only mark as available if NativeSpanState is actually present
-  available = pipeline?.NativeSpanState != null
+  if (pipeline) {
+    // Initialize the WASM module before use
+    pipeline.init()
+  }
+  // Only mark as available if WasmSpanState is actually present
+  available = pipeline?.WasmSpanState != null
 } catch (e) {
   // Native module not available - this is expected on some platforms
   available = false
@@ -64,19 +68,27 @@ module.exports = {
   },
 
   /**
-   * The NativeSpanState class from the pipeline crate.
-   * @type {typeof import('@datadog/libdatadog').NativeSpanState | null}
+   * The WasmSpanState class from the pipeline crate.
+   * @type {typeof import('@datadog/libdatadog').WasmSpanState | null}
    */
-  get NativeSpanState () {
-    return pipeline?.NativeSpanState ?? null
+  get WasmSpanState () {
+    return pipeline?.WasmSpanState ?? null
   },
 
   /**
    * The OpCode enum from the pipeline crate for change buffer operations.
-   * @type {typeof import('@datadog/libdatadog').OpCode | null}
+   * @type {Object | null}
    */
   get OpCode () {
-    return pipeline?.OpCode ?? null
+    return pipeline ? pipeline.getOpCodes() : null
+  },
+
+  /**
+   * Get the WASM memory for direct buffer access.
+   * @type {WebAssembly.Memory | null}
+   */
+  get wasmMemory () {
+    return pipeline ? pipeline.getWasmMemory() : null
   },
 
   /**
