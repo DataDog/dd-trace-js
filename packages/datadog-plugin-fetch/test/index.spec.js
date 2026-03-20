@@ -456,7 +456,7 @@ describe('Plugin', function () {
           agent
             .assertSomeTraces(traces => {
               assert.strictEqual(traces[0][0].service, `localhost:${port}`)
-              assert.strictEqual(traces[0][0].meta['_dd.svc.src'], 'opt.split_by_domain')
+              assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.split_by_domain')
             })
             .then(done)
             .catch(done)

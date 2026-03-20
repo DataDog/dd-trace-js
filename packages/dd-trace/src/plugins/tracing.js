@@ -158,7 +158,7 @@ class TracingPlugin extends Plugin {
    * @param {object} [options.meta] - The meta data for the span.
    * @param {object} [options.metrics] - The metrics for the span.
    * @param {string} [options.service] - The service name.
-   * @param {string} [options.serviceSource] - The source that determined the service name (sets _dd.svc.src tag).
+   * @param {string} [options.serviceSource] - The source that determined the service name (sets _dd.svc_src tag).
    * @param {number} [options.startTime] - The start time of the span.
    * @param {string} [options.resource] - The resource name.
    * @param {string} [options.type] - The type of the span.
