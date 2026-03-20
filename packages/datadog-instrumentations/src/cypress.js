@@ -72,9 +72,11 @@ function wrapConfig (config) {
   }
 }
 
+// Cypress >=10 introduced defineConfig and setupNodeEvents.
+// Auto-instrumentation wraps these to inject the plugin automatically.
 addHook({
   name: 'cypress',
-  versions: DD_MAJOR >= 6 ? ['>=10.2.0'] : ['>=6.7.0'],
+  versions: ['>=10.2.0'],
 }, (cypress) => {
   const originalDefineConfig = cypress.defineConfig
   cypress.defineConfig = function (config) {
@@ -92,3 +94,13 @@ addHook({
 
   return cypress
 })
+
+// Cypress <10 uses the old pluginsFile approach. No auto-instrumentation;
+// users must use the manual dd-trace/ci/cypress/plugin setup.
+// This hook is kept so the plugin system registers Cypress for version tracking.
+if (DD_MAJOR < 6) {
+  addHook({
+    name: 'cypress',
+    versions: ['>=6.7.0 <10.2.0'],
+  }, lib => lib)
+}

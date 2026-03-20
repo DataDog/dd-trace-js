@@ -314,6 +314,49 @@ moduleTypes.forEach(({
       ])
     })
 
+    // cypress-legacy-plugin.config.js uses defineConfig which only exists in Cypress >=10
+    const legacyPluginIt = (version !== '6.7.0') ? it : it.skip
+    legacyPluginIt('is backwards compatible with the old manual plugin approach', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          const passedTestSpan = testSpans.find(span =>
+            span.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+
+          assertObjectContains(passedTestSpan, {
+            name: 'cypress.test',
+            type: 'test',
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
+
+      childProcess = exec(
+        './node_modules/.bin/cypress run --config-file cypress-legacy-plugin.config.js',
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
     over12It('reports correct source file and line for pre-compiled typescript test files', async function () {
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
