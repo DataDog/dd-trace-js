@@ -88,19 +88,12 @@ class SpanProcessor {
         this._syncSamplingToNative(spanContext, nativeSpanId)
       }
     } else {
-      // No manual override - use native sampling if span is in native storage
-      if (spanContext._nativeSpanId !== undefined) {
-        const priority = this._nativeSpans.sample(spanContext._nativeSpanId)
-        // Set result in JS context for propagation
-        spanContext._sampling.priority = priority
-        // Set default mechanism for native sampling
-        spanContext._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+      // Use JS-side sampling
+      this._prioritySampler.sample(spanContext)
 
-        // Sync native sampling decision to native storage as trace metric
+      // Sync sampling decision to native storage if span is in native storage
+      if (spanContext._nativeSpanId !== undefined) {
         this._syncSamplingToNative(spanContext, spanContext._nativeSpanId)
-      } else {
-        // Span not in native storage (e.g., OTel spans) - fall back to JS sampling
-        this._prioritySampler.sample(spanContext)
       }
     }
 
