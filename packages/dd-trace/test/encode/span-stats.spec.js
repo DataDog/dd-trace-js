@@ -48,7 +48,7 @@ describe('span-stats-encode', () => {
       HTTPStatusCode: 200,
       HTTPMethod: 'GET',
       HTTPEndpoint: '/users/:id',
-      SrvSrc: 'kafka',
+      srv_src: 'kafka',
       Hits: 30799,
       TopLevelHits: 30799,
       Duration: 1230,
@@ -194,7 +194,7 @@ describe('span-stats-encode', () => {
   it('should encode SrvSrc as empty string when not present', () => {
     const statsWithoutSrvSrc = {
       ...stats,
-      Stats: [{ ...bucket, Stats: [{ ...stat, SrvSrc: undefined }] }],
+      Stats: [{ ...bucket, Stats: [{ ...stat, srv_src: undefined }] }],
     }
     encoder.encode(statsWithoutSrvSrc)
 

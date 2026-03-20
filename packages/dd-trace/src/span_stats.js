@@ -72,7 +72,7 @@ class SpanAggStats {
       Synthetics: synthetics,
       HTTPMethod: method,
       HTTPEndpoint: endpoint,
-      SrvSrc: srvSrc,
+      srv_src: srvSrc,
       Hits: this.hits,
       TopLevelHits: this.topLevelHits,
       Errors: this.errors,
