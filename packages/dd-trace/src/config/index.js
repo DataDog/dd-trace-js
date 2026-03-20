@@ -424,6 +424,10 @@ class Config {
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS,
+      OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
+      OTEL_TRACES_EXPORTER,
       OTEL_METRIC_EXPORT_TIMEOUT,
       OTEL_EXPORTER_OTLP_PROTOCOL,
       OTEL_EXPORTER_OTLP_ENDPOINT,
@@ -496,6 +500,25 @@ class Config {
         setString(target, 'otelMetricsTemporalityPreference', temporalityPref)
       }
     }
+    if (OTEL_TRACES_EXPORTER) {
+      setBoolean(target, 'otelTracesEnabled', OTEL_TRACES_EXPORTER.toLowerCase() === 'otlp')
+    }
+    // Set OpenTelemetry traces configuration with specific _TRACES_ vars
+    // taking precedence over generic _EXPORTERS_ vars
+    if (OTEL_EXPORTER_OTLP_ENDPOINT || OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+      if (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+        setString(target, 'otelTracesUrl', OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
+      } else {
+        // Signal-agnostic endpoint: always append /v1/traces subpath per OTLP spec
+        setString(target, 'otelTracesUrl', OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/traces')
+      }
+    }
+    setString(target, 'otelTracesHeaders', OTEL_EXPORTER_OTLP_TRACES_HEADERS || target.otelHeaders)
+    // otelTracesProtocol is hard-coded because other protocols are not implemented
+    // will be set to OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || target.otelProtocol after full implementation
+    setString(target, 'otelTracesProtocol', 'http/json')
+    const otelTracesTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TRACES_TIMEOUT, 'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT')
+    target.otelTracesTimeout = otelTracesTimeout === undefined ? target.otelTimeout : otelTracesTimeout
     setBoolean(
       target,
       'apmTracingEnabled',
@@ -689,6 +712,10 @@ class Config {
     }
 
     setString(target, 'protocolVersion', DD_TRACE_AGENT_PROTOCOL_VERSION)
+    if (DD_TRACE_AGENT_PROTOCOL_VERSION && target.otelTracesEnabled) {
+      target.otelTracesEnabled = false
+      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
+    }
     setString(target, 'queryStringObfuscation', DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP)
     setBoolean(target, 'remoteConfig.enabled', DD_REMOTE_CONFIGURATION_ENABLED)
     target['remoteConfig.pollInterval'] = maybeFloat(DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS)
@@ -710,10 +737,15 @@ class Config {
       maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE) ??
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     ))
+    let otelTracesSampleRate = getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG)
+    if (OTEL_TRACES_EXPORTER === 'otlp') {
+      otelTracesSampleRate = getFromOtelSamplerMap(OTEL_TRACES_SAMPLER || 'parentbased_always_on'
+        , OTEL_TRACES_SAMPLER_ARG)
+    }
     setUnit(
       target,
       'sampleRate',
-      DD_TRACE_SAMPLE_RATE || getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG)
+      DD_TRACE_SAMPLE_RATE || otelTracesSampleRate
     )
     target['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
     setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
@@ -1159,6 +1191,7 @@ class Config {
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    calc.otelTracesUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/traces`
     calc['telemetry.heartbeatInterval'] = maybeInt(Math.floor(this.#defaults['telemetry.heartbeatInterval'] * 1000))
 
     setBoolean(calc, 'isGitUploadEnabled',
@@ -1338,11 +1371,23 @@ function getCounter (event, ddVar, otelVar) {
   return counter
 }
 
+const NON_PARENTBASED_TO_PARENTBASED = {
+  always_on: 'parentbased_always_on',
+  always_off: 'parentbased_always_off',
+  traceidratio: 'parentbased_traceidratio',
+}
+
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
+  const parentBasedEquivalent = NON_PARENTBASED_TO_PARENTBASED[otelTracesSampler]
+  if (parentBasedEquivalent) {
+    log.info(
+      'OTEL_TRACES_SAMPLER=%s is not supported; using %s instead',
+      otelTracesSampler, parentBasedEquivalent
+    )
+    otelTracesSampler = parentBasedEquivalent
+  }
+
   const OTEL_TRACES_SAMPLER_MAPPING = {
-    always_on: '1.0',
-    always_off: '0.0',
-    traceidratio: otelTracesSamplerArg,
     parentbased_always_on: '1.0',
     parentbased_always_off: '0.0',
     parentbased_traceidratio: otelTracesSamplerArg,
@@ -1374,6 +1419,7 @@ function isInvalidOtelEnvironmentVariable (envVar, value) {
     case 'OTEL_SDK_DISABLED':
       return value.toLowerCase() !== 'true' && value.toLowerCase() !== 'false'
     case 'OTEL_TRACES_EXPORTER':
+      return value.toLowerCase() !== 'otlp' && value.toLowerCase() !== 'none'
     case 'OTEL_METRICS_EXPORTER':
     case 'OTEL_LOGS_EXPORTER':
       return value.toLowerCase() !== 'none'

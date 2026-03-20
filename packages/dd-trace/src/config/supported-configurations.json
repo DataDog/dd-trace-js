@@ -3930,6 +3930,46 @@
         ]
       }
     ],
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "configurationNames": [
+          "otelTracesUrl"
+        ]
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_TRACES_HEADERS": [
+      {
+        "implementation": "A",
+        "type": "map",
+        "default": null,
+        "configurationNames": [
+          "otelTracesHeaders"
+        ]
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "",
+        "configurationNames": [
+          "otelTracesProtocol"
+        ]
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_TRACES_TIMEOUT": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "otelTracesTimeout"
+        ],
+        "default": "10000"
+      }
+    ],
     "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": [
       {
         "implementation": "A",

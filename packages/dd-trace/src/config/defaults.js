@@ -108,6 +108,7 @@ const defaultsWithoutSupportedConfigurationEntry = {
   isServiceUserProvided: false,
   isServiceNameInferred: true,
   lookup: undefined,
+  otelTracesEnabled: false,
   plugins: true,
 }
 
