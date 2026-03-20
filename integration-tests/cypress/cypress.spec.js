@@ -3571,6 +3571,5 @@ moduleTypes.forEach(({
         assert.match(testOutput, /Retrying "impacted test order second test" to detect flakes because it is modified/)
       })
     })
-
   })
 })

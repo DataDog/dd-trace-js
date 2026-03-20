@@ -58,7 +58,7 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       on('task', cypressPlugin.getTasks())
 
       return cypressPlugin.init(tracer, config)
-    } catch (e) {
+    } catch {
       // If anything goes wrong, register noop tasks so Cypress can still run
       on('task', noopTask)
       return config
