@@ -1,12 +1,11 @@
 'use strict'
 
-const { NativeSpanState, OpCode } = require('./index')
+const { WasmSpanState, OpCode, wasmMemory } = require('./index')
 const log = require('../log')
 
 // Default buffer sizes
-const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 64KB
+const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
-const SAMPLING_BUFFER_SIZE = 1024 // 1KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
 
 // Pre-compute BigInt versions of opcodes to avoid allocation in hot path
@@ -39,7 +38,7 @@ class NativeSpansInterface {
    * @param {string} options.tracerService Default service name
    */
   constructor (options) {
-    if (!NativeSpanState) {
+    if (!WasmSpanState) {
       throw new Error('Native spans module is not available')
     }
 
@@ -53,10 +52,7 @@ class NativeSpansInterface {
       tracerService: options.tracerService
     }
 
-    // Allocate shared buffers
-    this._changeQueueBuffer = Buffer.alloc(CHANGE_QUEUE_BUFFER_SIZE)
-    this._stringTableInputBuffer = Buffer.alloc(STRING_TABLE_INPUT_BUFFER_SIZE)
-    this._samplingBuffer = Buffer.alloc(SAMPLING_BUFFER_SIZE)
+    // Flush buffer for span export
     this._flushBuffer = Buffer.alloc(FLUSH_BUFFER_SIZE)
 
     // Change queue buffer state
@@ -64,26 +60,27 @@ class NativeSpansInterface {
     this._cqbIndex = 8
     this._cqbCount = 0
 
-    // Create DataView for efficient typed writes
-    this._cqbView = new DataView(this._changeQueueBuffer.buffer, this._changeQueueBuffer.byteOffset)
-
     // String table state
     this._stringMap = new Map()
     this._stringIdCounter = 0
 
-    // Initialize the native state
-    this._state = new NativeSpanState(
+    // Initialize the WASM state (buffers are allocated in WASM memory)
+    this._state = new WasmSpanState(
       options.agentUrl,
       this._options.tracerVersion,
       this._options.lang,
       this._options.langVersion,
       this._options.langInterpreter,
-      this._changeQueueBuffer,
-      this._stringTableInputBuffer,
+      CHANGE_QUEUE_BUFFER_SIZE,
+      STRING_TABLE_INPUT_BUFFER_SIZE,
       this._options.pid,
-      this._options.tracerService,
-      this._samplingBuffer
+      this._options.tracerService
     )
+
+    // Get the WASM memory view for writing to the change queue buffer
+    this._wasmMemory = wasmMemory
+    this._cqbPtr = this._state.change_queue_ptr()
+    this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
 
     log.debug('Native spans interface initialized')
   }
@@ -105,19 +102,23 @@ class NativeSpansInterface {
     this._stringMap.clear()
     this._stringIdCounter = 0
 
-    // Reinitialize native state with new URL
-    this._state = new NativeSpanState(
+    // Reinitialize WASM state with new URL
+    this._state = new WasmSpanState(
       url,
       this._options.tracerVersion,
       this._options.lang,
       this._options.langVersion,
       this._options.langInterpreter,
-      this._changeQueueBuffer,
-      this._stringTableInputBuffer,
+      CHANGE_QUEUE_BUFFER_SIZE,
+      STRING_TABLE_INPUT_BUFFER_SIZE,
       this._options.pid,
-      this._options.tracerService,
-      this._samplingBuffer
+      this._options.tracerService
     )
+
+    // Update WASM memory pointers (may have changed after reallocation)
+    this._wasmMemory = wasmMemory
+    this._cqbPtr = this._state.change_queue_ptr()
+    this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
 
     log.debug('Native spans interface reinitialized with new URL:', url)
   }
@@ -145,7 +146,13 @@ class NativeSpansInterface {
   resetChangeQueue () {
     this._cqbIndex = 8
     this._cqbCount = 0
-    this._changeQueueBuffer.fill(0)
+    // Zero out the count header in WASM memory
+    if (this._wasmMemory.buffer !== this._cqbView.buffer) {
+      this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
+      this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+    }
+    this._cqbView.setUint32(0, 0, true)
+    this._cqbView.setUint32(4, 0, true)
   }
 
   /**
@@ -205,6 +212,12 @@ class NativeSpansInterface {
    * @param {...(string|Array)} args Operation arguments
    */
   queueOp (op, spanId, ...args) {
+    // WASM memory may grow/be detached, so refresh the view if needed
+    if (this._wasmMemory.buffer !== this._cqbView.buffer) {
+      this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
+      this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+    }
+
     // Check if Rust flushed the queue (wrote 0 to count position)
     if (this._cqbView.getUint32(0, true) === 0 && this._cqbCount > 0) {
       this._cqbIndex = 8
@@ -213,12 +226,12 @@ class NativeSpansInterface {
 
     // Check if we have enough space (rough estimate)
     const estimatedSize = 16 + args.length * 16 // op + spanId + args
-    if (this._cqbIndex + estimatedSize > this._changeQueueBuffer.length) {
+    if (this._cqbIndex + estimatedSize > CHANGE_QUEUE_BUFFER_SIZE) {
       // Buffer full, flush first
       this.flushChangeQueue()
     }
 
-    const buf = this._changeQueueBuffer
+    const buf = this._cqbBytes || (this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr))
     const view = this._cqbView
     let idx = this._cqbIndex
 
@@ -389,19 +402,23 @@ class NativeSpansInterface {
   }
 
   /**
-   * Convert a big-endian span ID buffer to BigInt for native calls.
+   * Convert a big-endian span ID buffer to a number for WASM calls.
+   * WASM functions take f64 (JS number), not BigInt.
    * @param {Uint8Array|number[]} buf The span ID buffer
-   * @returns {bigint}
+   * @returns {number}
    */
-  #bufferToBigInt (buf) {
-    return (BigInt(buf[0]) << 56n) |
-           (BigInt(buf[1]) << 48n) |
-           (BigInt(buf[2]) << 40n) |
-           (BigInt(buf[3]) << 32n) |
-           (BigInt(buf[4]) << 24n) |
-           (BigInt(buf[5]) << 16n) |
-           (BigInt(buf[6]) << 8n) |
-           BigInt(buf[7])
+  #bufferToNumber (buf) {
+    // Read as little-endian u64 matching the change queue byte order
+    return Number(
+      (BigInt(buf[0]) << 56n) |
+      (BigInt(buf[1]) << 48n) |
+      (BigInt(buf[2]) << 40n) |
+      (BigInt(buf[3]) << 32n) |
+      (BigInt(buf[4]) << 24n) |
+      (BigInt(buf[5]) << 16n) |
+      (BigInt(buf[6]) << 8n) |
+      BigInt(buf[7])
+    )
   }
 
   /**
@@ -413,7 +430,7 @@ class NativeSpansInterface {
    */
   getMetaAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getMetaAttr(this.#bufferToBigInt(spanId), key)
+    return this._state.getMetaAttr(this.#bufferToNumber(spanId), key)
   }
 
   /**
@@ -425,7 +442,7 @@ class NativeSpansInterface {
    */
   getMetricAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getMetricAttr(this.#bufferToBigInt(spanId), key)
+    return this._state.getMetricAttr(this.#bufferToNumber(spanId), key)
   }
 
   /**
@@ -436,7 +453,7 @@ class NativeSpansInterface {
    */
   getName (spanId) {
     this.flushChangeQueue()
-    return this._state.getName(this.#bufferToBigInt(spanId))
+    return this._state.getName(this.#bufferToNumber(spanId))
   }
 
   /**
@@ -447,7 +464,7 @@ class NativeSpansInterface {
    */
   getServiceName (spanId) {
     this.flushChangeQueue()
-    return this._state.getServiceName(this.#bufferToBigInt(spanId))
+    return this._state.getServiceName(this.#bufferToNumber(spanId))
   }
 
   /**
@@ -458,7 +475,7 @@ class NativeSpansInterface {
    */
   getResourceName (spanId) {
     this.flushChangeQueue()
-    return this._state.getResourceName(this.#bufferToBigInt(spanId))
+    return this._state.getResourceName(this.#bufferToNumber(spanId))
   }
 
   /**
@@ -469,7 +486,7 @@ class NativeSpansInterface {
    */
   getType (spanId) {
     this.flushChangeQueue()
-    return this._state.getType(this.#bufferToBigInt(spanId))
+    return this._state.getType(this.#bufferToNumber(spanId))
   }
 
   /**
@@ -480,7 +497,7 @@ class NativeSpansInterface {
    */
   getError (spanId) {
     this.flushChangeQueue()
-    return this._state.getError(this.#bufferToBigInt(spanId))
+    return this._state.getError(this.#bufferToNumber(spanId))
   }
 
   /**
@@ -491,7 +508,7 @@ class NativeSpansInterface {
    */
   getStart (spanId) {
     this.flushChangeQueue()
-    return this._state.getStart(this.#bufferToBigInt(spanId))
+    return this._state.getStart(this.#bufferToNumber(spanId))
   }
 
   /**
@@ -502,7 +519,7 @@ class NativeSpansInterface {
    */
   getDuration (spanId) {
     this.flushChangeQueue()
-    return this._state.getDuration(this.#bufferToBigInt(spanId))
+    return this._state.getDuration(this.#bufferToNumber(spanId))
   }
 
   /**
@@ -514,7 +531,7 @@ class NativeSpansInterface {
    */
   getTraceMetaAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getTraceMetaAttr(this.#bufferToBigInt(spanId), key)
+    return this._state.getTraceMetaAttr(this.#bufferToNumber(spanId), key)
   }
 
   /**
@@ -526,7 +543,7 @@ class NativeSpansInterface {
    */
   getTraceMetricAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getTraceMetricAttr(this.#bufferToBigInt(spanId), key)
+    return this._state.getTraceMetricAttr(this.#bufferToNumber(spanId), key)
   }
 
   /**
@@ -537,29 +554,11 @@ class NativeSpansInterface {
    */
   getTraceOrigin (spanId) {
     this.flushChangeQueue()
-    return this._state.getTraceOrigin(this.#bufferToBigInt(spanId))
+    return this._state.getTraceOrigin(this.#bufferToNumber(spanId))
   }
 
-  /**
-   * Perform priority sampling for a span/trace.
-   *
-   * This delegates to the native Rust sampling implementation which
-   * makes the sampling decision based on configured rules and rates.
-   *
-   * @param {Uint8Array|number[]} spanId The span ID buffer to sample
-   * @returns {number} The sampling priority (-1=AUTO_REJECT, 0=AUTO_KEEP, 1=USER_REJECT, 2=USER_KEEP)
-   */
-  sample (spanId) {
-    // Flush pending changes so native has current span state
-    this.flushChangeQueue()
-
-    // Write span ID to sampling buffer as u64 LE (convert from big-endian)
-    for (let i = 0; i < 8; i++) {
-      this._samplingBuffer[i] = spanId[7 - i]
-    }
-
-    return this._state.sample()
-  }
+  // Note: sample() is not available in the WASM pipeline module.
+  // Sampling is handled by the JS-side priority sampler.
 }
 
 module.exports = NativeSpansInterface
