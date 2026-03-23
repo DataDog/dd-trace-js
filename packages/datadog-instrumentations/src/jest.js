@@ -98,6 +98,9 @@ const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkers = new WeakSet()
+// New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
+// Populated in-process for runInBand, and via worker-report:trace for parallel mode.
+const newTestsWithDynamicNames = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
 // Per-test: how many EFD retries were determined after the first execution.
@@ -142,6 +145,19 @@ function getTestEnvironmentOptions (config) {
 
 const MAX_IGNORED_TEST_NAMES = 10
 
+// Matches patterns that are almost certainly runtime-generated values in test names:
+// - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
+// - UUIDs (8-4-4-4-12 hex)
+// - ISO 8601 date-times (2024-03-23T14:30)
+// - Random localhost ports (localhost:12345)
+const DYNAMIC_NAME_RE = new RegExp(
+  String.raw`\b1[6-9]\d{8,11}\b|` +
+  String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|` +
+  String.raw`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}|` +
+  String.raw`localhost:\d{4,5}\b`,
+  'i'
+)
+
 function getTestStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
     acc[testStatus]++
@@ -154,25 +170,58 @@ function getTestStats (testStatuses) {
  * @param {string[]} quarantineNames
  * @param {number} totalCount
  */
-function logIgnoredFailuresSummary (efdNames, quarantineNames, totalCount) {
-  const names = []
-  for (const n of efdNames) {
-    names.push({ name: n, reason: 'Early Flake Detection' })
-  }
-  for (const n of quarantineNames) {
-    names.push({ name: n, reason: 'Quarantine' })
-  }
-  const shown = names.slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = names.length - shown.length
+/**
+ * Renders a truncated bullet list from an array of items.
+ *
+ * @param {Array<{ text: string, suffix?: string }>} items
+ * @returns {string}
+ */
+function formatList (items) {
+  const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const list = shown.map(({ name, reason }) => `  • ${name} (${reason})`).join('\n')
+  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+}
+
+/**
+ * Logs a single "Datadog Test Optimization" summary at session end,
+ * combining all relevant sections (ignored failures, dynamic names).
+ *
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ */
+function logSessionSummary (ignoredFailures) {
+  const sections = []
+
+  if (ignoredFailures) {
+    const items = []
+    for (const n of ignoredFailures.efdNames) {
+      items.push({ text: n, suffix: 'Early Flake Detection' })
+    }
+    for (const n of ignoredFailures.quarantineNames) {
+      items.push({ text: n, suffix: 'Quarantine' })
+    }
+    sections.push(
+      `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
+      formatList(items)
+    )
+  }
+
+  if (newTestsWithDynamicNames.size > 0) {
+    const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
+    sections.push(
+      `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+      'dynamic data (timestamps, UUIDs, etc.).\n' +
+      'These tests might not actually be new. Consider using constant test names.\n\n' +
+      formatList(items)
+    )
+    newTestsWithDynamicNames.clear()
+  }
+
+  if (sections.length === 0) return
+
   const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing message when exit code is flipped
-  console.warn(
-    `\n${line}\nDatadog Test Optimization\n${line}\n` +
-    `${totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
-    `${list}${moreSuffix}\n`
-  )
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -457,6 +506,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         const isJestRetry = event.test?.invocations > 1
+        const hasDynamicName = isNewTest && DYNAMIC_NAME_RE.test(testName)
         const ctx = {
           name: testName,
           suite: this.testSuite,
@@ -472,6 +522,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isDisabled,
           isQuarantined,
           isModified,
+          hasDynamicName,
           testSuiteAbsolutePath: this.testSuiteAbsolutePath,
         }
         testContexts.set(event.test, ctx)
@@ -564,6 +615,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (!isAttemptToFix && this.isKnownTestsEnabled) {
           const isNew = !this.knownTestsForThisSuite.includes(testFullName)
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
+            if (DYNAMIC_NAME_RE.test(testFullName)) {
+              // Populated directly for runInBand; for parallel workers the main process
+              // collects these from the _dd.has_dynamic_name span tag via worker-report:trace.
+              newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
+            }
             retriedTestsToNumAttempts.set(testFullName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
               testsToBeRetried.add(testFullName)
@@ -1333,13 +1389,7 @@ function getCliWrapper (isNewJestVersion) {
         })
       }
 
-      if (ignoredFailuresSummary) {
-        logIgnoredFailuresSummary(
-          ignoredFailuresSummary.efdNames,
-          ignoredFailuresSummary.quarantineNames,
-          ignoredFailuresSummary.totalCount
-        )
-      }
+      logSessionSummary(ignoredFailuresSummary)
 
       numSkippedSuites = 0
 
@@ -1791,10 +1841,30 @@ addHook({
   return runtimePackage
 })
 
+function collectDynamicNamesFromTraces (data) {
+  try {
+    const traces = JSON.parse(data)
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (span.meta?.['_dd.has_dynamic_name'] === 'true') {
+          const suite = span.meta['test.suite']
+          const name = span.meta['test.name']
+          if (suite && name) {
+            newTestsWithDynamicNames.add(`${suite} › ${name}`)
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore parse errors — trace will still be forwarded
+  }
+}
+
 function onMessageWrapper (onMessage) {
   return function () {
     const [code, data] = arguments[0]
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
+      collectDynamicNamesFromTraces(data)
       workerReportTraceCh.publish(data)
       return
     }
