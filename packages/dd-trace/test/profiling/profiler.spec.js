@@ -388,7 +388,13 @@ describe('profiler', function () {
       assert.strictEqual(infos.serverless, false)
     })
 
-    it('should include sourceMapCount: 0 when source maps are disabled', async () => {
+    it('should set hasMissingSourceMaps to true when any profile has the comment token', async () => {
+      const token = 'dd:has-missing-map-files'
+      wallProfiler.profile.returns({
+        comment: [1],
+        stringTable: { strings: ['', token] },
+      })
+
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
           resolve(exportSpec)
@@ -396,16 +402,16 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions({ sourceMap: false }))
+      await profiler._start(makeStartOptions())
 
       clock.tick(interval)
 
       const { infos } = await exporterPromise
 
-      assert.strictEqual(infos.sourceMapCount, 0)
+      assert.strictEqual(infos.hasMissingSourceMaps, true)
     })
 
-    it('should include sourceMapCount: 0 when no source maps are found', async () => {
+    it('should set hasMissingSourceMaps to false when no profile has the comment token', async () => {
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
           resolve(exportSpec)
@@ -413,36 +419,13 @@ describe('profiler', function () {
         }
       })
 
-      profiler._start(makeStartOptions({ sourceMap: true }))
-      await Promise.resolve() // flush .then() callback so #sourceMapCount is set
+      await profiler._start(makeStartOptions())
 
       clock.tick(interval)
 
       const { infos } = await exporterPromise
 
-      assert.strictEqual(infos.sourceMapCount, 0)
-    })
-
-    it('should include sourceMapCount with the number of loaded source maps', async () => {
-      mapperInstance.infoMap.set('file1.js', {})
-      mapperInstance.infoMap.set('file2.js', {})
-      mapperInstance.infoMap.set('file3.js', {})
-
-      exporterPromise = new Promise(resolve => {
-        exporter.export = (exportSpec) => {
-          resolve(exportSpec)
-          return Promise.resolve()
-        }
-      })
-
-      profiler._start(makeStartOptions({ sourceMap: true }))
-      await Promise.resolve() // flush .then() callback so #sourceMapCount is set
-
-      clock.tick(interval)
-
-      const { infos } = await exporterPromise
-
-      assert.strictEqual(infos.sourceMapCount, 3)
+      assert.strictEqual(infos.hasMissingSourceMaps, false)
     })
   })
 
@@ -520,9 +503,12 @@ describe('profiler', function () {
       assert.strictEqual(infos.serverless, true)
     })
 
-    it('should include sourceMapCount in export infos', async () => {
-      mapperInstance.infoMap.set('file1.js', {})
-      mapperInstance.infoMap.set('file2.js', {})
+    it('should set hasMissingSourceMaps to true when any profile has the comment token', async () => {
+      const token = 'dd:has-missing-map-files'
+      wallProfiler.profile.returns({
+        comment: [1],
+        stringTable: { strings: ['', token] },
+      })
 
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
@@ -531,8 +517,7 @@ describe('profiler', function () {
         }
       })
 
-      profiler._start(makeStartOptions({ sourceMap: true }))
-      await Promise.resolve() // flush .then() callback so #sourceMapCount is set
+      profiler._start(makeStartOptions())
 
       // flushAfterIntervals + 1 because it flushes after last interval
       for (let i = 0; i < flushAfterIntervals + 1; i++) {
@@ -541,7 +526,7 @@ describe('profiler', function () {
 
       const { infos } = await exporterPromise
 
-      assert.strictEqual(infos.sourceMapCount, 2)
+      assert.strictEqual(infos.hasMissingSourceMaps, true)
     })
   })
 })
