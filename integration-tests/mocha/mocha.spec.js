@@ -4821,7 +4821,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     })
   })
   context('final status tag', function () {
-    it.only('sets final_status tag to test status on regular tests without retry features', async () => {
+    it('sets final_status tag to test status on regular tests without retry features', async () => {
       receiver.setSettings({
         itr_enabled: false,
         code_coverage: false,
@@ -4858,7 +4858,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    onlyLatestIt.only('sets final_status tag only on last ATR retry when EFD is enabled but not active and ATR is active', async () => {
+    onlyLatestIt('sets tag only on last ATR retry when EFD is enabled but not active and ATR is active', async () => {
       // All mocha-flaky tests are known, so EFD will be enabled but not active for them
       receiver.setKnownTests({
         mocha: {
@@ -4913,7 +4913,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    it.only('sets final_status tag to test status reported to test framework on last retry', async () => {
+    it('sets final_status tag to test status reported to test framework on last retry', async () => {
       // ci-visibility-test-2.js will be treated as a new test (not in known tests)
       const knownTestFile = 'ci-visibility/test/ci-visibility-test.js'
       receiver.setKnownTests({
@@ -4969,7 +4969,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    onlyLatestIt.only('sets final_status tag to test status reported to test framework on last retry', async () => {
+    onlyLatestIt('sets final_status tag to test status reported to test framework on last retry', async () => {
       receiver.setSettings({
         itr_enabled: false,
         code_coverage: false,
@@ -5001,7 +5001,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test => test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
           )
           alwaysPassingTests.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
-            if (index < neverPassingTest.length - 1) {
+            if (index < alwaysPassingTests.length - 1) {
               assert.ok(!(TEST_FINAL_STATUS in test.meta))
             } else {
               assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
@@ -5013,7 +5013,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-fails.js'
           )
           alwaysFailingTests.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
-            if (index < neverPassingTest.length - 1) {
+            if (index < alwaysFailingTests.length - 1) {
               assert.ok(!(TEST_FINAL_STATUS in test.meta))
             } else {
               assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
@@ -5036,7 +5036,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    it.only('sets final_status tag to skip for disabled tests', async () => {
+    it('sets final_status tag to skip for disabled tests', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       receiver.setTestManagementTests({
         mocha: {
@@ -5076,7 +5076,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    it.only('sets final_status tag to skip for quarantined tests', async () => {
+    it('sets final_status tag to skip for quarantined tests', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       receiver.setTestManagementTests({
         mocha: {
