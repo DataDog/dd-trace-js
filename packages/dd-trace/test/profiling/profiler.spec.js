@@ -24,7 +24,8 @@ describe('profiler', function () {
   let profilers
   let consoleLogger
   let logger
-  let sourceMapCreate
+  let SourceMapperStub
+  let mapperInstance
   let interval
 
   function waitForExport () {
@@ -79,7 +80,11 @@ describe('profiler', function () {
     exporters = [exporter]
     profilers = [wallProfiler, spaceProfiler]
 
-    sourceMapCreate = sinon.stub()
+    mapperInstance = {
+      infoMap: new Map(),
+      loadDirectory: sinon.stub().resolves(),
+    }
+    SourceMapperStub = sinon.stub().returns(mapperInstance)
   }
 
   function makeStartOptions (overrides = {}) {
@@ -95,9 +100,7 @@ describe('profiler', function () {
     function initProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '@datadog/pprof': {
-          SourceMapper: {
-            create: sourceMapCreate,
-          },
+          SourceMapper: SourceMapperStub,
         },
       }).Profiler
 
@@ -347,19 +350,19 @@ describe('profiler', function () {
     })
 
     it('should pass source mapper to profilers when enabled', async () => {
-      const mapper = { infoMap: new Map() }
-      sourceMapCreate.returns(Promise.resolve(mapper))
-      await profiler._start(makeStartOptions({ sourceMap: true }))
+      profiler._start(makeStartOptions({ sourceMap: true }))
 
       const options = profilers[0].start.args[0][0]
       assert.ok(Object.hasOwn(options, 'mapper'))
-      assert.strictEqual(mapper, options.mapper)
+      assert.strictEqual(mapperInstance, options.mapper)
     })
 
     it('should work with a root working dir and source maps on', async () => {
       const error = new Error('fail')
-      sourceMapCreate.rejects(error)
-      await profiler._start(makeStartOptions({ logger, sourceMap: true }))
+      mapperInstance.loadDirectory.rejects(error)
+      profiler._start(makeStartOptions({ logger, sourceMap: true }))
+      await Promise.resolve() // let .then() propagate the rejection
+      await Promise.resolve() // let .catch() callback run
       assert.strictEqual(consoleLogger.error.args[0][0], error)
       assert.strictEqual(profiler.enabled, true)
     })
@@ -403,9 +406,6 @@ describe('profiler', function () {
     })
 
     it('should include sourceMapCount: 0 when no source maps are found', async () => {
-      const mapper = { infoMap: new Map() }
-      sourceMapCreate.returns(Promise.resolve(mapper))
-
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
           resolve(exportSpec)
@@ -413,7 +413,8 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions({ sourceMap: true }))
+      profiler._start(makeStartOptions({ sourceMap: true }))
+      await Promise.resolve() // flush .then() callback so #sourceMapCount is set
 
       clock.tick(interval)
 
@@ -423,14 +424,9 @@ describe('profiler', function () {
     })
 
     it('should include sourceMapCount with the number of loaded source maps', async () => {
-      const mapper = {
-        infoMap: new Map([
-          ['file1.js', {}],
-          ['file2.js', {}],
-          ['file3.js', {}],
-        ]),
-      }
-      sourceMapCreate.returns(Promise.resolve(mapper))
+      mapperInstance.infoMap.set('file1.js', {})
+      mapperInstance.infoMap.set('file2.js', {})
+      mapperInstance.infoMap.set('file3.js', {})
 
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
@@ -439,7 +435,8 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions({ sourceMap: true }))
+      profiler._start(makeStartOptions({ sourceMap: true }))
+      await Promise.resolve() // flush .then() callback so #sourceMapCount is set
 
       clock.tick(interval)
 
@@ -455,9 +452,7 @@ describe('profiler', function () {
     function initServerlessProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '@datadog/pprof': {
-          SourceMapper: {
-            create: sourceMapCreate,
-          },
+          SourceMapper: SourceMapperStub,
         },
       }).ServerlessProfiler
 
@@ -526,13 +521,8 @@ describe('profiler', function () {
     })
 
     it('should include sourceMapCount in export infos', async () => {
-      const mapper = {
-        infoMap: new Map([
-          ['file1.js', {}],
-          ['file2.js', {}],
-        ]),
-      }
-      sourceMapCreate.returns(Promise.resolve(mapper))
+      mapperInstance.infoMap.set('file1.js', {})
+      mapperInstance.infoMap.set('file2.js', {})
 
       exporterPromise = new Promise(resolve => {
         exporter.export = (exportSpec) => {
@@ -541,7 +531,8 @@ describe('profiler', function () {
         }
       })
 
-      await profiler._start(makeStartOptions({ sourceMap: true }))
+      profiler._start(makeStartOptions({ sourceMap: true }))
+      await Promise.resolve() // flush .then() callback so #sourceMapCount is set
 
       // flushAfterIntervals + 1 because it flushes after last interval
       for (let i = 0; i < flushAfterIntervals + 1; i++) {
