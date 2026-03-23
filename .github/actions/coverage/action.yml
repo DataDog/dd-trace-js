@@ -11,7 +11,7 @@ inputs:
     default: coverage
   dd_api_key:
     description: "Datadog API key for coverage upload"
-    required: false
+    required: true
 
 runs:
   using: composite
