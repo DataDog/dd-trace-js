@@ -109,6 +109,18 @@ async function checkAllGreen () {
 }
 
 async function printSummary (checkRuns) {
+  const runs = checkRuns.map(run => ({
+    name: run.name,
+    status: run.status,
+    conclusion: run.conclusion
+      ? `${run.conclusion} ${checkConclusionEmojis[run.conclusion]}`
+      : ' ',
+    started_at: run.started_at,
+    completed_at: run.completed_at ?? ' ',
+  }))
+
+  console.table(runs)
+
   const header = [
     { data: 'name', header: true },
     { data: 'status', header: true },
@@ -117,15 +129,13 @@ async function printSummary (checkRuns) {
     { data: 'completed_at', header: true },
   ]
 
-  const body = checkRuns.map(run => [
+  const body = runs.map(run => [
     run.name,
     run.status,
-    run.conclusion ? `${run.conclusion} ${checkConclusionEmojis[run.conclusion]}` : ' ',
+    run.conclusion,
     run.started_at,
-    run.completed_at ?? ' ',
+    run.completed_at,
   ])
-
-  console.table(checkRuns)
 
   await summary
     .addHeading('Checks Summary')
