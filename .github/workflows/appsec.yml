@@ -527,6 +527,7 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
         with:
+          flags: appsec-stripe
           dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
