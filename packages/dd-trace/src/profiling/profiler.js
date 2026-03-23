@@ -32,6 +32,14 @@ function findWebSpan (startedSpans, spanId) {
   return false
 }
 
+const MISSING_SOURCE_MAPS_TOKEN = 'dd:has-missing-map-files'
+
+function profileHasMissingSourceMaps (profile) {
+  const strings = profile?.stringTable?.strings
+  if (!strings) return false
+  return profile.comment?.some(idx => strings[idx] === MISSING_SOURCE_MAPS_TOKEN) ?? false
+}
+
 function processInfo (infos, info, type) {
   if (Object.keys(info).length > 0) {
     infos[type] = info
@@ -49,7 +57,6 @@ class Profiler extends EventEmitter {
   #logger
   #profileSeq = 0
   #spanFinishListener
-  #sourceMapCount = 0
   #timer
 
   constructor () {
@@ -195,10 +202,10 @@ class Profiler extends EventEmitter {
         mapper = new SourceMapper(config.debugSourceMaps)
         mapper.loadDirectory(process.cwd())
           .then(() => {
-            this.#sourceMapCount = mapper.infoMap.size
             if (config.debugSourceMaps) {
+              const count = mapper.infoMap.size
               this.#logger.debug(() => {
-                return this.#sourceMapCount === 0
+                return count === 0
                   ? 'Found no source maps'
                   : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
               })
@@ -315,7 +322,7 @@ class Profiler extends EventEmitter {
     return {
       serverless: this.serverless,
       settings: this.#config.systemInfoReport,
-      sourceMapCount: this.#sourceMapCount,
+      hasMissingSourceMaps: false,
     }
   }
 
@@ -362,6 +369,9 @@ class Profiler extends EventEmitter {
             ? await compressionFn(encoded, this.#compressionOptions)
             : encoded
           encodedProfiles[profiler.type] = compressed
+          if (profileHasMissingSourceMaps(profile)) {
+            infos.hasMissingSourceMaps = true
+          }
           processInfo(infos, info, profiler.type)
           this.#logger.debug(() => {
             const profileJson = JSON.stringify(profile, (_, value) => {
