@@ -7,7 +7,6 @@ const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
 const zlib = require('zlib')
-const { buffer } = require('node:stream/consumers')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
@@ -52,11 +51,18 @@ function request (data, options, callback) {
   }
 
   if (data instanceof Readable) {
-    buffer(data)
-      .then((data) => {
-        request(data, options, callback)
+    const chunks = []
+
+    data
+      .on('data', (data) => {
+        chunks.push(data)
       })
-      .catch(callback)
+      .on('end', () => {
+        request(Buffer.concat(chunks), options, callback)
+      })
+      .on('error', (err) => {
+        callback(err)
+      })
 
     return
   }
