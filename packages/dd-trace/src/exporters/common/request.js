@@ -15,7 +15,7 @@ const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 
-const maxActiveBufferSize = 64e6
+const maxActiveBufferSize = 1024 * 1024 * 64
 
 let activeBufferSize = 0
 
