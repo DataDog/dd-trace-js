@@ -9,6 +9,7 @@ const {
   sandboxCwd,
   useSandbox,
   spawnProcAndExpectExit,
+  stopProc,
 } = require('../../../../../../integration-tests/helpers')
 const { assertLlmObsSpanEvent } = require('../../util')
 
@@ -83,7 +84,7 @@ describe('typescript', () => {
       })
 
       afterEach(async () => {
-        proc && proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 

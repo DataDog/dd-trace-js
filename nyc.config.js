@@ -38,8 +38,8 @@ module.exports = {
     '**/vendor/**',
   ],
   // Avoid collisions when a single CI job runs coverage sequentially across multiple Node.js versions.
-  tempDir: `.nyc_output-node-${process.version}${label}`,
-  reportDir: `coverage-node-${process.version}${label}`,
+  tempDir: `.nyc_output/node-${process.version}${label}`,
+  reportDir: `coverage/node-${process.version}${label}`,
   // Not tracking all coverage has the downside to potentially miss some code
   // paths and files that we do not use anymore. Doing so is just going to
   // report lots of files in tests that are empty and that is more confusing.

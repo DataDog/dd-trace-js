@@ -9,6 +9,7 @@ const {
   sandboxCwd,
   useSandbox,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 describe('esm', () => {
   let agent
@@ -27,7 +28,7 @@ describe('esm', () => {
   })
 
   afterEach(async () => {
-    proc && proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 

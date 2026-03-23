@@ -11,6 +11,7 @@ const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const DataStreamsContext = require('../../dd-trace/src/datastreams/context')
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const propagationHash = require('../../dd-trace/src/propagation-hash')
 
 const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
   let edgeTags
@@ -21,7 +22,7 @@ const getDsmPathwayHash = (testTopic, isProducer, parentHash) => {
   }
 
   edgeTags.sort()
-  return computePathwayHash('test', 'tester', edgeTags, parentHash)
+  return computePathwayHash('test', 'tester', edgeTags, parentHash, propagationHash.getHash())
 }
 
 describe('Plugin', () => {

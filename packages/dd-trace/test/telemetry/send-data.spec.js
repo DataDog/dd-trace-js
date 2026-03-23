@@ -44,6 +44,7 @@ describe('sendData', () => {
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
         'dd-client-library-version': application.tracer_version,
+        'dd-session-id': '123',
       },
       url: undefined,
       hostname: '',
@@ -69,6 +70,7 @@ describe('sendData', () => {
         'dd-telemetry-request-type': 'req-type',
         'dd-client-library-language': application.language_name,
         'dd-client-library-version': application.tracer_version,
+        'dd-session-id': '123',
       },
       url: 'unix:/foo/bar/baz',
       hostname: undefined,
@@ -96,11 +98,40 @@ describe('sendData', () => {
         'dd-telemetry-debug-enabled': 'true',
         'dd-client-library-language': application.language_name,
         'dd-client-library-version': application.tracer_version,
+        'dd-session-id': '123',
       },
       url: '/test',
       hostname: undefined,
       port: undefined,
     })
+  })
+
+  it('should include dd-root-session-id header when rootSessionId differs from runtime-id', () => {
+    sendDataModule.sendData({
+      url: '/test',
+      tags: { 'runtime-id': 'child-runtime-id' },
+      rootSessionId: 'root-runtime-id',
+    }, application, 'test', 'req-type')
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+
+    assert.strictEqual(options.headers['dd-session-id'], 'child-runtime-id')
+    assert.strictEqual(options.headers['dd-root-session-id'], 'root-runtime-id')
+  })
+
+  it('should not include dd-root-session-id header when rootSessionId equals runtime-id', () => {
+    sendDataModule.sendData({
+      url: '/test',
+      tags: { 'runtime-id': 'same-id' },
+      rootSessionId: 'same-id',
+    }, application, 'test', 'req-type')
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+
+    assert.strictEqual(options.headers['dd-session-id'], 'same-id')
+    assert.strictEqual(options.headers['dd-root-session-id'], undefined)
   })
 
   it('should remove not wanted properties from a payload with object type', () => {
@@ -133,7 +164,7 @@ describe('sendData', () => {
     }, retryObjData]
 
     sendDataModule.sendData({ tags: { 'runtime-id': '123' } },
-      { language: 'js' }, 'test', 'message-batch', payload) /
+      { language: 'js' }, 'test', 'message-batch', payload)
 
     sinon.assert.calledOnce(request)
 

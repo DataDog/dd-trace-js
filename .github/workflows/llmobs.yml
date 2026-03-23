@@ -42,6 +42,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-sdk-${{ matrix.version }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -66,6 +67,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -94,6 +96,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -120,6 +123,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -148,6 +152,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -176,6 +181,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -204,6 +210,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -232,11 +239,22 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+  
+  langgraph:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: langgraph
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test
         with:
           dd_api_key: ${{ secrets.DD_API_KEY }}

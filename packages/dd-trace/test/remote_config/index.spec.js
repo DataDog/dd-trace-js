@@ -24,6 +24,10 @@ describe('RemoteConfig', () => {
   let rc
   let tagger
 
+  before(() => {
+    require('../../src/process-tags').initialize()
+  })
+
   beforeEach(() => {
     uuid = sinon.stub().returns('1234-5678')
 

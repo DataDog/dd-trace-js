@@ -47,6 +47,7 @@ const testSkippedCh = channel('ci:jest:test:skip')
 const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
+const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -505,6 +506,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         })
       }
 
+      if (event.name === 'hook_start' && (event.hook.type === 'beforeAll' || event.hook.type === 'afterAll')) {
+        const ctx = { testSuiteAbsolutePath: this.testSuiteAbsolutePath }
+        let hookFn = event.hook.fn
+        if (originalHookFns.has(event.hook)) {
+          hookFn = originalHookFns.get(event.hook)
+        } else {
+          originalHookFns.set(event.hook, hookFn)
+        }
+        event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function () {
+          return testSuiteHookFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
+        })
+      }
+
       if (event.name === 'add_test') {
         if (event.failing) {
           return
@@ -688,11 +702,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
         const ctx = testContexts.get(event.test)
+        if (!ctx) {
+          log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
+          return
+        }
 
         const finalStatus = this.getFinalStatus(testName,
           status,
-          !!ctx?.isNew,
-          !!ctx?.isModified,
+          !!ctx.isNew,
+          !!ctx.isModified,
           isEfdRetry,
           isAttemptToFix,
           numTestExecutions)
@@ -747,6 +765,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         efdDeterminedRetries.clear()
         efdSlowAbortedTests.clear()
         efdNewTestCandidates.clear()
+        retriedTestsToNumAttempts.clear()
+        attemptToFixRetriedTestsStatuses.clear()
+        testsToBeRetried.clear()
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
