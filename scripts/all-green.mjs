@@ -125,6 +125,8 @@ async function printSummary (checkRuns) {
     run.completed_at ?? ' ',
   ])
 
+  console.table(checkRuns)
+
   await summary
     .addHeading('Checks Summary')
     .addTable([header, ...body])
