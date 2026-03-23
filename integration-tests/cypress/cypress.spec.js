@@ -339,6 +339,7 @@ moduleTypes.forEach(({
 
       const envVars = getCiVisEvpProxyConfig(receiver.port)
 
+      let testOutput = ''
       childProcess = exec(
         './node_modules/.bin/cypress run --config-file cypress-legacy-plugin.config.js',
         {
@@ -350,11 +351,22 @@ moduleTypes.forEach(({
           },
         }
       )
+      childProcess.stdout?.on('data', (d) => { testOutput += d })
+      childProcess.stderr?.on('data', (d) => { testOutput += d })
 
       await Promise.all([
         once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
         receiverPromise,
-      ])
+      ]).catch((e) => {
+        const lines = testOutput.split('\n').filter(l =>
+          l.includes('supportFile') || l.includes('dd-trace') || l.includes('Error') || l.includes('error')
+        )
+        // eslint-disable-next-line no-console
+        console.log('DEBUG backwards compat output:', JSON.stringify(lines.slice(0, 20)))
+        throw e
+      })
     })
 
     over12It('reports correct source file and line for pre-compiled typescript test files', async function () {

@@ -1,5 +1,6 @@
 'use strict'
 
+const { readFileSync, writeFileSync } = require('node:fs')
 const path = require('node:path')
 
 const { DD_MAJOR } = require('../../../version')
@@ -17,17 +18,50 @@ const noopTask = {
 // module-cache mismatches between ci/init.js and this instrumentation.
 const basePath = path.resolve(__dirname, '..', '..', '..')
 
+/**
+ * Injects dd-trace's browser-side support code into the Cypress support file.
+ * Prepends a `require('dd-trace/ci/cypress/support')` to the user's support file
+ * so browser-side hooks (beforeEach, afterEach, retries, etc.) are loaded automatically.
+ *
+ * @param {object} config Cypress resolved config object
+ */
+function injectSupportFile (config) {
+  const originalSupportFile = config.supportFile
+  if (!originalSupportFile || originalSupportFile === false) return
+
+  // If the user's support file already loads our support, skip injection.
+  try {
+    const content = readFileSync(originalSupportFile, 'utf8')
+    if (content.includes('dd-trace/ci/cypress/support') || content.includes('datadog-plugin-cypress/src/support')) {
+      return
+    }
+
+    // Prepend our support require to the user's support file
+    const ddSupportRequire = "require('dd-trace/ci/cypress/support')\n"
+    writeFileSync(originalSupportFile, ddSupportRequire + content)
+  } catch {
+    // Can't read/write the file — skip injection to avoid breaking anything
+  }
+}
+
 function wrapSetupNodeEvents (originalSetupNodeEvents) {
   return function ddSetupNodeEvents (on, config) {
-    // Call user's setupNodeEvents first so dd-trace hooks register last
+    // Call user's setupNodeEvents first so dd-trace hooks register last.
+    // Cypress passes config by reference, so mutations are preserved.
+    // Only replace config if the user returns a valid config object (has projectRoot).
+    // This guards against the old manual plugin returning an empty object from cypressPlugin.init().
     if (originalSetupNodeEvents) {
       const result = originalSetupNodeEvents.call(this, on, config)
-      if (result) {
+      if (result?.projectRoot) {
         config = result
       }
     }
 
     try {
+      // Always inject the support file, even if the manual plugin was already called.
+      // This ensures browser-side hooks are loaded regardless of the approach used.
+      injectSupportFile(config)
+
       // Use global._ddtrace to bypass macOS symlink module-cache mismatch.
       // The tracer is initialized by ci/init.js via NODE_OPTIONS before this runs.
       const tracer = global._ddtrace
