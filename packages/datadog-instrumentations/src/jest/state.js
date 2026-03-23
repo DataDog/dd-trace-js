@@ -46,6 +46,8 @@ const efdNewTestCandidates = new Set()
 const testSuiteAbsolutePathsWithFastCheck = new Set()
 const testSuiteJestObjects = new Map()
 const atrSuppressedErrors = new Map()
+// New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
+const newTestsWithDynamicNames = new Set()
 
 module.exports = {
   state,
@@ -64,4 +66,5 @@ module.exports = {
   testSuiteAbsolutePathsWithFastCheck,
   testSuiteJestObjects,
   atrSuppressedErrors,
+  newTestsWithDynamicNames,
 }

@@ -24,6 +24,7 @@ const {
   state,
   newTestsTestStatuses,
   testSuiteAbsolutePathsWithFastCheck,
+  newTestsWithDynamicNames,
 } = require('./state')
 const { applySuiteSkipping } = require('./environment')
 
@@ -123,6 +124,24 @@ function logIgnoredFailuresSummary (efdNames, quarantineNames, totalCount) {
     `${totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
     `${list}${moreSuffix}\n`
   )
+}
+
+function logDynamicNameWarning () {
+  if (newTestsWithDynamicNames.size === 0) return
+  const shown = [...newTestsWithDynamicNames].slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = newTestsWithDynamicNames.size - shown.length
+  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
+  const list = shown.map(name => `  • ${name}`).join('\n')
+  const line = '-'.repeat(50)
+  // eslint-disable-next-line no-console -- Intentional user-facing warning about dynamic test names
+  console.warn(
+    `\n${line}\nDatadog Test Optimization\n${line}\n` +
+    `${newTestsWithDynamicNames.size} test(s) were detected as new but their names contain ` +
+    'dynamic data (timestamps, UUIDs, etc.).\n' +
+    'These tests might not actually be new. Consider using constant test names.\n\n' +
+    `${list}${moreSuffix}\n`
+  )
+  newTestsWithDynamicNames.clear()
 }
 
 /**
@@ -483,6 +502,8 @@ function getCliWrapper (isNewJestVersion) {
           ignoredFailuresSummary.totalCount
         )
       }
+
+      logDynamicNameWarning()
 
       state.numSkippedSuites = 0
 

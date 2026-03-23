@@ -43,7 +43,21 @@ const {
   testSuiteAbsolutePathsWithFastCheck,
   testSuiteJestObjects,
   atrSuppressedErrors,
+  newTestsWithDynamicNames,
 } = require('./state')
+
+// Matches patterns that are almost certainly runtime-generated values in test names:
+// - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
+// - UUIDs (8-4-4-4-12 hex)
+// - ISO 8601 date-times (2024-03-23T14:30)
+// - Random localhost ports (localhost:12345)
+const DYNAMIC_NAME_RE = new RegExp(
+  String.raw`\b1[6-9]\d{8,11}\b|` +
+  String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|` +
+  String.raw`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}|` +
+  String.raw`localhost:\d{4,5}\b`,
+  'i'
+)
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -506,6 +520,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       if (!isAttemptToFix && this.isKnownTestsEnabled) {
         const isNew = !this.knownTestsForThisSuite.includes(testFullName)
         if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
+          if (DYNAMIC_NAME_RE.test(testFullName)) {
+            newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
+          }
           retriedTestsToNumAttempts.set(testFullName, 0)
           if (this.isEarlyFlakeDetectionEnabled) {
             testsToBeRetried.add(testFullName)
