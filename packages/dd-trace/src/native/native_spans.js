@@ -402,23 +402,14 @@ class NativeSpansInterface {
   }
 
   /**
-   * Convert a big-endian span ID buffer to a number for WASM calls.
-   * WASM functions take f64 (JS number), not BigInt.
+   * Ensure a span ID is a Uint8Array for passing to WASM.
+   * WASM functions take &[u8] (JS Uint8Array) for span IDs.
    * @param {Uint8Array|number[]} buf The span ID buffer
-   * @returns {number}
+   * @returns {Uint8Array}
    */
-  #bufferToNumber (buf) {
-    // Read as little-endian u64 matching the change queue byte order
-    return Number(
-      (BigInt(buf[0]) << 56n) |
-      (BigInt(buf[1]) << 48n) |
-      (BigInt(buf[2]) << 40n) |
-      (BigInt(buf[3]) << 32n) |
-      (BigInt(buf[4]) << 24n) |
-      (BigInt(buf[5]) << 16n) |
-      (BigInt(buf[6]) << 8n) |
-      BigInt(buf[7])
-    )
+  #toUint8Array (buf) {
+    if (buf instanceof Uint8Array) return buf
+    return new Uint8Array(buf)
   }
 
   /**
@@ -430,7 +421,7 @@ class NativeSpansInterface {
    */
   getMetaAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getMetaAttr(this.#bufferToNumber(spanId), key)
+    return this._state.getMetaAttr(this.#toUint8Array(spanId), key)
   }
 
   /**
@@ -442,7 +433,7 @@ class NativeSpansInterface {
    */
   getMetricAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getMetricAttr(this.#bufferToNumber(spanId), key)
+    return this._state.getMetricAttr(this.#toUint8Array(spanId), key)
   }
 
   /**
@@ -453,7 +444,7 @@ class NativeSpansInterface {
    */
   getName (spanId) {
     this.flushChangeQueue()
-    return this._state.getName(this.#bufferToNumber(spanId))
+    return this._state.getName(this.#toUint8Array(spanId))
   }
 
   /**
@@ -464,7 +455,7 @@ class NativeSpansInterface {
    */
   getServiceName (spanId) {
     this.flushChangeQueue()
-    return this._state.getServiceName(this.#bufferToNumber(spanId))
+    return this._state.getServiceName(this.#toUint8Array(spanId))
   }
 
   /**
@@ -475,7 +466,7 @@ class NativeSpansInterface {
    */
   getResourceName (spanId) {
     this.flushChangeQueue()
-    return this._state.getResourceName(this.#bufferToNumber(spanId))
+    return this._state.getResourceName(this.#toUint8Array(spanId))
   }
 
   /**
@@ -486,7 +477,7 @@ class NativeSpansInterface {
    */
   getType (spanId) {
     this.flushChangeQueue()
-    return this._state.getType(this.#bufferToNumber(spanId))
+    return this._state.getType(this.#toUint8Array(spanId))
   }
 
   /**
@@ -497,7 +488,7 @@ class NativeSpansInterface {
    */
   getError (spanId) {
     this.flushChangeQueue()
-    return this._state.getError(this.#bufferToNumber(spanId))
+    return this._state.getError(this.#toUint8Array(spanId))
   }
 
   /**
@@ -508,7 +499,7 @@ class NativeSpansInterface {
    */
   getStart (spanId) {
     this.flushChangeQueue()
-    return this._state.getStart(this.#bufferToNumber(spanId))
+    return this._state.getStart(this.#toUint8Array(spanId))
   }
 
   /**
@@ -519,7 +510,7 @@ class NativeSpansInterface {
    */
   getDuration (spanId) {
     this.flushChangeQueue()
-    return this._state.getDuration(this.#bufferToNumber(spanId))
+    return this._state.getDuration(this.#toUint8Array(spanId))
   }
 
   /**
@@ -531,7 +522,7 @@ class NativeSpansInterface {
    */
   getTraceMetaAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getTraceMetaAttr(this.#bufferToNumber(spanId), key)
+    return this._state.getTraceMetaAttr(this.#toUint8Array(spanId), key)
   }
 
   /**
@@ -543,7 +534,7 @@ class NativeSpansInterface {
    */
   getTraceMetricAttr (spanId, key) {
     this.flushChangeQueue()
-    return this._state.getTraceMetricAttr(this.#bufferToNumber(spanId), key)
+    return this._state.getTraceMetricAttr(this.#toUint8Array(spanId), key)
   }
 
   /**
@@ -554,7 +545,7 @@ class NativeSpansInterface {
    */
   getTraceOrigin (spanId) {
     this.flushChangeQueue()
-    return this._state.getTraceOrigin(this.#bufferToNumber(spanId))
+    return this._state.getTraceOrigin(this.#toUint8Array(spanId))
   }
 
   // Note: sample() is not available in the WASM pipeline module.
