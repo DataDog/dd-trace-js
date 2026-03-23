@@ -15,6 +15,7 @@ const {
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   getTestEndLine,
   isModifiedTest,
+  TEST_HAS_DYNAMIC_NAME,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -617,7 +618,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
             if (DYNAMIC_NAME_RE.test(testFullName)) {
               // Populated directly for runInBand; for parallel workers the main process
-              // collects these from the _dd.has_dynamic_name span tag via worker-report:trace.
+              // collects these from the TEST_HAS_DYNAMIC_NAME span tag via worker-report:trace.
               newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
             }
             retriedTestsToNumAttempts.set(testFullName, 0)
@@ -1846,7 +1847,7 @@ function collectDynamicNamesFromTraces (data) {
     const traces = JSON.parse(data)
     for (const trace of traces) {
       for (const span of trace) {
-        if (span.meta?.['_dd.has_dynamic_name'] === 'true') {
+        if (span.meta?.[TEST_HAS_DYNAMIC_NAME] === 'true') {
           const suite = span.meta['test.suite']
           const name = span.meta['test.name']
           if (suite && name) {

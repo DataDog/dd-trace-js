@@ -88,6 +88,7 @@ const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
+const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
 const CI_APP_ORIGIN = 'ciapp-test'
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
@@ -260,6 +261,7 @@ module.exports = {
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
+  TEST_HAS_DYNAMIC_NAME,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,

@@ -23,6 +23,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
@@ -552,7 +553,7 @@ class JestPlugin extends CiPlugin {
     }
 
     if (hasDynamicName) {
-      extraTags['_dd.has_dynamic_name'] = 'true'
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
 

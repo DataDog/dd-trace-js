@@ -29,6 +29,7 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_NAME,
@@ -4075,8 +4076,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-          const dynamicTests = tests.filter(test => test.meta['_dd.has_dynamic_name'] === 'true')
-          assert.ok(dynamicTests.length > 0, 'at least one test should have _dd.has_dynamic_name tag')
+          const dynamicTests = tests.filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+          assert.ok(dynamicTests.length > 0, 'at least one test should have TEST_HAS_DYNAMIC_NAME tag')
 
           dynamicTests.forEach(test => {
             assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
@@ -4085,10 +4086,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           // The non-dynamic new tests should not have the tag
           const nonDynamicNewTests = tests.filter(
-            test => test.meta[TEST_IS_NEW] === 'true' && !test.meta['_dd.has_dynamic_name']
+            test => test.meta[TEST_IS_NEW] === 'true' && !test.meta[TEST_HAS_DYNAMIC_NAME]
           )
           nonDynamicNewTests.forEach(test => {
-            assert.ok(!('_dd.has_dynamic_name' in test.meta))
+            assert.ok(!(TEST_HAS_DYNAMIC_NAME in test.meta))
           })
         })
 
