@@ -352,12 +352,12 @@ class Profiler extends EventEmitter {
 
       const encodedProfiles = {}
       const infos = this.#createInitialInfos()
+      const compressionFn = this.#getCompressionFn()
 
       // encode and export asynchronously
       await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
         try {
           const encoded = await profiler.encode(profile)
-          const compressionFn = this.#getCompressionFn()
           const compressed = encoded instanceof Buffer && compressionFn !== undefined
             ? await compressionFn(encoded, this.#compressionOptions)
             : encoded
