@@ -55,15 +55,16 @@ async function hasCompleted () {
 }
 
 async function checkCompleted () {
-  if (RETRIES && retries > RETRIES) {
-    throw new Error(`State is still pending after ${RETRIES} retries.`)
-  }
-
   if (!await hasCompleted()) {
+    retries++
+
+    if (RETRIES && retries > RETRIES) {
+      throw new Error(`State is still pending after ${RETRIES} retries.`)
+    }
+
     console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
     await setTimeout(POLLING_INTERVAL * 60_000)
     console.log('Retrying.')
-    retries++
     await checkCompleted()
   }
 }
