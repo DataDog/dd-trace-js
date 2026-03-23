@@ -10,6 +10,7 @@ const {
   sandboxCwd,
   useSandbox,
   curlAndAssertMessage,
+  stopProc,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -31,7 +32,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill('SIGINT')
+      await stopProc(proc, { signal: 'SIGINT' })
       await agent.stop()
     })
 

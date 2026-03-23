@@ -3,8 +3,12 @@
 const assert = require('node:assert/strict')
 const axios = require('axios')
 const {
-  sandboxCwd, useSandbox, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc,
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  FakeAgent,
+  spawnPluginIntegrationTestProc,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -24,7 +28,7 @@ withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

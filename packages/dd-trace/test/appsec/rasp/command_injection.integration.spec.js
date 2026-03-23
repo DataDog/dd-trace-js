@@ -6,7 +6,13 @@ const path = require('node:path')
 const Axios = require('axios')
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const {
+  sandboxCwd,
+  useSandbox,
+  FakeAgent,
+  spawnProc,
+  stopProc,
+} = require('../../../../../integration-tests/helpers')
 
 describe('RASP - command_injection - integration', () => {
   let axios, cwd, appFile, agent, proc
@@ -39,7 +45,7 @@ describe('RASP - command_injection - integration', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
