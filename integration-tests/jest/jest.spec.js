@@ -4076,16 +4076,32 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-          const dynamicTests = tests.filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
-          assert.ok(dynamicTests.length > 0, 'at least one test should have TEST_HAS_DYNAMIC_NAME tag')
+          // Deduplicate by test name (EFD retries produce multiple spans per test)
+          const uniqueTests = new Map()
+          for (const test of tests) {
+            if (!uniqueTests.has(test.meta[TEST_NAME])) {
+              uniqueTests.set(test.meta[TEST_NAME], test)
+            }
+          }
+
+          const dynamicTests = [...uniqueTests.values()]
+            .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+          // 4 dynamic tests: timestamp, localhost port, uuid, iso date
+          assert.strictEqual(dynamicTests.length, 4)
 
           dynamicTests.forEach(test => {
             assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
-            assert.match(test.meta[TEST_NAME], /can do stuff at \d+/)
           })
 
+          // Verify each pattern type is detected
+          const dynamicNames = dynamicTests.map(test => test.meta[TEST_NAME])
+          assert.ok(dynamicNames.some(n => /can do stuff at \d+/.test(n)), 'timestamp test detected')
+          assert.ok(dynamicNames.some(n => /localhost:\d+/.test(n)), 'localhost port test detected')
+          assert.ok(dynamicNames.some(n => /user session [0-9a-f-]+/.test(n)), 'uuid test detected')
+          assert.ok(dynamicNames.some(n => /created at \d{4}-\d{2}-\d{2}T/.test(n)), 'iso date test detected')
+
           // The non-dynamic new tests should not have the tag
-          const nonDynamicNewTests = tests.filter(
+          const nonDynamicNewTests = [...uniqueTests.values()].filter(
             test => test.meta[TEST_IS_NEW] === 'true' && !test.meta[TEST_HAS_DYNAMIC_NAME]
           )
           nonDynamicNewTests.forEach(test => {

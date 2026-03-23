@@ -16,6 +16,8 @@ const {
   getTestEndLine,
   isModifiedTest,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_SUITE,
+  TEST_NAME,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -1848,8 +1850,8 @@ function collectDynamicNamesFromTraces (data) {
     for (const trace of traces) {
       for (const span of trace) {
         if (span.meta?.[TEST_HAS_DYNAMIC_NAME] === 'true') {
-          const suite = span.meta['test.suite']
-          const name = span.meta['test.name']
+          const suite = span.meta[TEST_SUITE]
+          const name = span.meta[TEST_NAME]
           if (suite && name) {
             newTestsWithDynamicNames.add(`${suite} › ${name}`)
           }
