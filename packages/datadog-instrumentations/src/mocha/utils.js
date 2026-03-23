@@ -242,6 +242,43 @@ function getOnTestHandler (isMain) {
   }
 }
 
+function getFinalStatus (status, hasFailedAllRetries, isFlakyTestRetriesEnabled, isLastAtrAttempt, isEfdRetry, isLastEfdRetry, isAttemptToFix, isLastAttemptToFix, attemptToFixPassed, isQuarantined) {
+  // If the test is quarantined, regardless of its actual execution result or active retry features,
+  // the final status of its last execution should be reported as 'skip'.
+  if (isQuarantined) {
+    return 'skip'
+  }
+
+  const isAtrActive = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry
+  const noRetryFeatureActive = !isAtrActive && !isEfdRetry && !isAttemptToFix
+  const isFinalExecution = noRetryFeatureActive ||
+    (isAtrActive && isLastAtrAttempt) ||
+    (isEfdRetry && isLastEfdRetry) ||
+    (isAttemptToFix && isLastAttemptToFix)
+
+  // When no retry feature is active, every execution is final
+  if (noRetryFeatureActive) {
+    return status
+  }
+
+  // Intermediate executions DO NOT report a final status tag
+  if (!isFinalExecution) {
+    return
+  }
+
+  if (isAtrActive && isLastAtrAttempt) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isEfdRetry && isLastEfdRetry) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isAttemptToFix && isLastAttemptToFix) {
+    return attemptToFixPassed ? 'pass' : 'fail'
+  }
+
+  return
+}
+
 function getOnTestEndHandler (config) {
   return async function (test) {
     const ctx = getTestContext(test)
@@ -272,6 +309,11 @@ function getOnTestEndHandler (config) {
 
     const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
     const isLastEfdRetry = testStatuses.length === config.earlyFlakeDetectionNumRetries + 1
+    const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
+
+    // Needed for the getFinalStatus call. This is because EFD does NOT tag as
+    // EFD retry the first run of the test. It only tags as retries the clones
+    const isEfdRetry = test._ddIsEfdRetry || (test._ddIsNew && config.isEarlyFlakeDetectionEnabled)
 
     if (test._ddIsAttemptToFix && isLastAttempt) {
       if (testStatuses.includes('fail')) {
@@ -300,6 +342,31 @@ function getOnTestEndHandler (config) {
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
+    console.log('EFD DEBUG: ', {
+      'name': testName,
+      'hasFailedAllRetries': hasFailedAllRetries,
+      'config.isFlakyTestRetriesEnabled': config.isFlakyTestRetriesEnabled,
+      'isLastAtrAttempt': isLastAtrAttempt,
+      'test._ddIsEfdRetry': test._ddIsEfdRetry,
+      'isLastEfdRetry': isLastEfdRetry,
+      'test._ddIsAttemptToFix': test._ddIsAttemptToFix,
+      'isLastAttempt': isLastAttempt,
+      'attemptToFixPassed': attemptToFixPassed,
+      'test._ddIsQuarantined': test._ddIsQuarantined
+    })
+
+    const finalStatus = getFinalStatus(status,
+      hasFailedAllRetries,
+      config.isFlakyTestRetriesEnabled,
+      isLastAtrAttempt,
+      isEfdRetry,
+      isLastEfdRetry,
+      test._ddIsAttemptToFix,
+      isLastAttempt,
+      attemptToFixPassed,
+      test._ddIsQuarantined
+    )
+
     // if there are afterEach to be run, we don't finish the test yet
     if (ctx && !getAfterEachHooks(test).length) {
       testFinishCh.publish({
@@ -312,7 +379,10 @@ function getOnTestEndHandler (config) {
         isAttemptToFixRetry,
         isAtrRetry,
         ...ctx.currentStore,
+        finalStatus,
       })
+    } else if (ctx) { // if there is an afterEach to run, let's store the finalStatus for getOnHookEndHandler
+      ctx.finalStatus = finalStatus
     }
   }
 }
@@ -332,6 +402,7 @@ function getOnHookEndHandler () {
             hasBeenRetried: isMochaRetry(test),
             isLastRetry: getIsLastRetry(test),
             ...ctx.currentStore,
+            finalStatus: ctx.finalStatus,
           })
         }
       }
@@ -357,7 +428,7 @@ function getOnFailHandler (isMain) {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
         // if it's a hook and it has failed, 'test end' will not be called
-        testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test), ...testContext.currentStore })
+        testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test), ...testContext.currentStore, finalStatus: 'fail' })
       } else {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
