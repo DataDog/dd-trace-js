@@ -7,6 +7,7 @@ const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
 const zlib = require('zlib')
+const { buffer } = require('node:stream/consumers')
 
 const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
@@ -50,7 +51,15 @@ function request (data, options, callback) {
     }
   }
 
-  const isReadable = data instanceof Readable
+  if (data instanceof Readable) {
+    buffer(data)
+      .then((data) => {
+        request(data, options, callback)
+      })
+      .catch(callback)
+
+    return
+  }
 
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
@@ -58,12 +67,10 @@ function request (data, options, callback) {
   const client = isSecure ? https : http
   let dataArray = data
 
-  if (!isReadable) {
-    if (!Array.isArray(data)) {
-      dataArray = [data]
-    }
-    options.headers['Content-Length'] = byteLength(dataArray)
+  if (!Array.isArray(data)) {
+    dataArray = [data]
   }
+  options.headers['Content-Length'] = byteLength(dataArray)
 
   docker.inject(options.headers)
 
@@ -158,12 +165,8 @@ function request (data, options, callback) {
         }
       })
 
-      if (isReadable) {
-        data.pipe(req) // TODO: Validate whether this is actually retriable.
-      } else {
-        for (const buffer of dataArray) req.write(buffer)
-        req.end()
-      }
+      for (const buffer of dataArray) req.write(buffer)
+      req.end()
     })
   }
 
