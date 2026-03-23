@@ -101,47 +101,57 @@ function getTestStats (testStatuses) {
 }
 
 /**
- * @param {string[]} efdNames
- * @param {string[]} quarantineNames
- * @param {number} totalCount
+ * Renders a truncated bullet list from an array of items.
+ *
+ * @param {Array<{ text: string, suffix?: string }>} items
+ * @returns {string}
  */
-function logIgnoredFailuresSummary (efdNames, quarantineNames, totalCount) {
-  const names = []
-  for (const n of efdNames) {
-    names.push({ name: n, reason: 'Early Flake Detection' })
-  }
-  for (const n of quarantineNames) {
-    names.push({ name: n, reason: 'Quarantine' })
-  }
-  const shown = names.slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = names.length - shown.length
+function formatList (items) {
+  const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const list = shown.map(({ name, reason }) => `  • ${name} (${reason})`).join('\n')
-  const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing message when exit code is flipped
-  console.warn(
-    `\n${line}\nDatadog Test Optimization\n${line}\n` +
-    `${totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
-    `${list}${moreSuffix}\n`
-  )
+  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
 }
 
-function logDynamicNameWarning () {
-  if (newTestsWithDynamicNames.size === 0) return
-  const shown = [...newTestsWithDynamicNames].slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = newTestsWithDynamicNames.size - shown.length
-  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const list = shown.map(name => `  • ${name}`).join('\n')
+/**
+ * Logs a single "Datadog Test Optimization" summary at session end,
+ * combining all relevant sections (ignored failures, dynamic names).
+ *
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ */
+function logSessionSummary (ignoredFailures) {
+  const sections = []
+
+  if (ignoredFailures) {
+    const items = []
+    for (const n of ignoredFailures.efdNames) {
+      items.push({ text: n, suffix: 'Early Flake Detection' })
+    }
+    for (const n of ignoredFailures.quarantineNames) {
+      items.push({ text: n, suffix: 'Quarantine' })
+    }
+    sections.push(
+      `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
+      formatList(items)
+    )
+  }
+
+  if (newTestsWithDynamicNames.size > 0) {
+    const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
+    sections.push(
+      `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+      'dynamic data (timestamps, UUIDs, etc.).\n' +
+      'These tests might not actually be new. Consider using constant test names.\n\n' +
+      formatList(items)
+    )
+    newTestsWithDynamicNames.clear()
+  }
+
+  if (sections.length === 0) return
+
   const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing warning about dynamic test names
-  console.warn(
-    `\n${line}\nDatadog Test Optimization\n${line}\n` +
-    `${newTestsWithDynamicNames.size} test(s) were detected as new but their names contain ` +
-    'dynamic data (timestamps, UUIDs, etc.).\n' +
-    'These tests might not actually be new. Consider using constant test names.\n\n' +
-    `${list}${moreSuffix}\n`
-  )
-  newTestsWithDynamicNames.clear()
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
 }
 
 /**
@@ -495,15 +505,7 @@ function getCliWrapper (isNewJestVersion) {
         })
       }
 
-      if (ignoredFailuresSummary) {
-        logIgnoredFailuresSummary(
-          ignoredFailuresSummary.efdNames,
-          ignoredFailuresSummary.quarantineNames,
-          ignoredFailuresSummary.totalCount
-        )
-      }
-
-      logDynamicNameWarning()
+      logSessionSummary(ignoredFailuresSummary)
 
       state.numSkippedSuites = 0
 

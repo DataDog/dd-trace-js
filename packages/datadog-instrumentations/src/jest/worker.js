@@ -19,12 +19,33 @@ const {
 const {
   state,
   wrappedWorkers,
+  newTestsWithDynamicNames,
 } = require('./state')
+
+function collectDynamicNamesFromTraces (data) {
+  try {
+    const traces = JSON.parse(data)
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (span.meta?.['_dd.has_dynamic_name'] === 'true') {
+          const suite = span.meta['test.suite']
+          const name = span.meta['test.name']
+          if (suite && name) {
+            newTestsWithDynamicNames.add(`${suite} › ${name}`)
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore parse errors — trace will still be forwarded
+  }
+}
 
 function onMessageWrapper (onMessage) {
   return function () {
     const [code, data] = arguments[0]
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
+      collectDynamicNamesFromTraces(data)
       workerReportTraceCh.publish(data)
       return
     }

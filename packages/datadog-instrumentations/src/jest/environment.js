@@ -409,6 +409,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       const isJestRetry = event.test?.invocations > 1
+      const hasDynamicName = isNewTest && DYNAMIC_NAME_RE.test(testName)
       const ctx = {
         name: testName,
         suite: this.testSuite,
@@ -424,6 +425,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         isDisabled,
         isQuarantined,
         isModified,
+        hasDynamicName,
         testSuiteAbsolutePath: this.testSuiteAbsolutePath,
       }
       testContexts.set(event.test, ctx)
@@ -521,6 +523,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const isNew = !this.knownTestsForThisSuite.includes(testFullName)
         if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
           if (DYNAMIC_NAME_RE.test(testFullName)) {
+            // Populated directly for runInBand; for parallel workers the main process
+            // collects these from the _dd.has_dynamic_name span tag via worker-report:trace.
             newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
           }
           retriedTestsToNumAttempts.set(testFullName, 0)

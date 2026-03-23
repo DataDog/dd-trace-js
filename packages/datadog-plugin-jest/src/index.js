@@ -501,6 +501,7 @@ class JestPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      hasDynamicName,
       testSuiteAbsolutePath,
     } = test
 
@@ -548,6 +549,10 @@ class JestPlugin extends CiPlugin {
 
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
+    }
+
+    if (hasDynamicName) {
+      extraTags['_dd.has_dynamic_name'] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
 
