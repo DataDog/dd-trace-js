@@ -75,15 +75,15 @@ describe('request', function () {
 
     request(
       Buffer.from(JSON.stringify({ foo: 'bar' })), {
-      protocol: 'http:',
-      hostname: 'test',
-      port: 123,
-      path: '/path',
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/octet-stream',
+        protocol: 'http:',
+        hostname: 'test',
+        port: 123,
+        path: '/path',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
       },
-    },
       (err, res) => {
         assert.strictEqual(res, 'OK')
         done(err)
@@ -271,12 +271,12 @@ describe('request', function () {
 
     request(
       Buffer.from(JSON.stringify({ foo: 'bar' })), {
-      url: 'http://[2607:f0d0:1002:51::4]:123/path',
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/octet-stream',
+        url: 'http://[2607:f0d0:1002:51::4]:123/path',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
       },
-    },
       (err, res) => {
         assert.strictEqual(res, 'OK')
         done(err)
@@ -288,9 +288,9 @@ describe('request', function () {
 
     request(
       Buffer.from(''), {
-      url: 'unix:' + sock,
-      method: 'PUT',
-    },
+        url: 'unix:' + sock,
+        method: 'PUT',
+      },
       (err, _) => {
         assert.strictEqual(err.address, sock)
         done()
@@ -302,9 +302,9 @@ describe('request', function () {
 
     request(
       Buffer.from(''), {
-      url: 'unix:' + pipe,
-      method: 'PUT',
-    },
+        url: 'unix:' + pipe,
+        method: 'PUT',
+      },
       (err, _) => {
         assert.strictEqual(err.address, pipe)
         done()
@@ -364,12 +364,12 @@ describe('request', function () {
 
       request(
         Buffer.from(JSON.stringify({ foo: 'bar' })), {
-        url: new URL('http://[1337::cafe]:123/path'),
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/octet-stream',
+          url: new URL('http://[1337::cafe]:123/path'),
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+          },
         },
-      },
         (err, res) => {
           const options = http.request.getCall(0).args[0]
           assert.strictEqual(options.hostname, '1337::cafe') // no brackets
