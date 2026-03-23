@@ -231,10 +231,10 @@
   dependencies:
     "@datadog/flagging-core" "1.1.0"
 
-"@datadog/pprof@5.13.5":
-  version "5.13.5"
-  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.13.5.tgz#36eea628f321ed512fe4ce440de4cffa2e056569"
-  integrity sha512-W0dvo91ff2EMQI9Vhv8PNM+w1ZWuClm1pBVdLB6y0bMB3+E+wEGg0VD1iNJxsuPbwDt5+yV0u3e4WkqK12Lzlg==
+"@datadog/pprof@5.14.0":
+  version "5.14.0"
+  resolved "https://registry.yarnpkg.com/@datadog/pprof/-/pprof-5.14.0.tgz#a5a43fde3ca9369345994cc5cf82d5dcf743fb1c"
+  integrity sha512-bXYptMf0BY3NdKcAmX5aAOnozj7GFdNYE4SIdPF0/Q/Yfb2fYBIYZaN/Le6BhiDIepBvvH/H75d3EIFhB64kOw==
   dependencies:
     node-gyp-build "<4.0"
     pprof-format "^2.2.1"
@@ -2183,9 +2183,9 @@ flat@^5.0.2:
   integrity sha512-b6suED+5/3rTpUBdG1gupIl8MPFCAMA0QXwmljLhvCUKcUvdE4gWky9zpuGCcXHOsz4J9wPGNWq6OKpmIzz3hQ==
 
 flatted@^3.2.9:
-  version "3.3.4"
-  resolved "https://registry.yarnpkg.com/flatted/-/flatted-3.3.4.tgz#0986e681008f0f13f58e18656c47967682db5ff6"
-  integrity sha512-3+mMldrTAPdta5kjX2G2J7iX4zxtnwpdA8Tr2ZSjkyPSanvbZAcy6flmtnXbEybHrDcU9641lxrMfFuUxVz9vA==
+  version "3.4.2"
+  resolved "https://registry.yarnpkg.com/flatted/-/flatted-3.4.2.tgz#f5c23c107f0f37de8dbdf24f13722b3b98d52726"
+  integrity sha512-PjDse7RzhcPkIJwy5t7KPWQSZ9cAbzQXcafsetQoD7sOJRQlGikNbx7yZp2OotDnJyrDcbyRq3Ttb18iYOqkxA==
 
 follow-redirects@^1.15.11:
   version "1.15.11"

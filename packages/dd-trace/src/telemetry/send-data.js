@@ -91,12 +91,17 @@ let agentTelemetry = true
  * @returns {Record<string, string>}
  */
 function getHeaders (config, application, reqType) {
+  const sessionId = config.tags['runtime-id']
   const headers = {
     'content-type': 'application/json',
     'dd-telemetry-api-version': 'v2',
     'dd-telemetry-request-type': reqType,
     'dd-client-library-language': application.language_name,
     'dd-client-library-version': application.tracer_version,
+    'dd-session-id': sessionId,
+  }
+  if (config.rootSessionId && config.rootSessionId !== sessionId) {
+    headers['dd-root-session-id'] = config.rootSessionId
   }
   const debug = config.telemetry && config.telemetry.debug
   if (debug) {

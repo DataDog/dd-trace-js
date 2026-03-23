@@ -49,6 +49,8 @@ const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'igno
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 const DEFAULT_OTLP_PORT = 4318
 const RUNTIME_ID = uuid()
+// eslint-disable-next-line eslint-rules/eslint-process-env -- internal propagation, not user config
+const ROOT_SESSION_ID = process.env.DD_ROOT_JS_SESSION_ID || RUNTIME_ID
 const NAMING_VERSIONS = new Set(['v0', 'v1'])
 const DEFAULT_NAMING_VERSION = 'v0'
 
@@ -144,6 +146,8 @@ class Config {
       version: this.version,
       'runtime-id': RUNTIME_ID,
     })
+
+    this.rootSessionId = ROOT_SESSION_ID
 
     if (this.isCiVisibility) {
       tagger.add(this.tags, {
@@ -1157,6 +1161,8 @@ class Config {
       setBoolean(calc, 'reportHostname', true)
       // Clear sampling rules - server-side sampling handles this
       calc['sampler.rules'] = []
+      // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
+      setBoolean(calc, 'traceId128BitGenerationEnabled', false)
     }
 
     if (this.#isCiVisibility()) {

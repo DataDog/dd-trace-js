@@ -2,6 +2,7 @@
 
 const pkg = require('../pkg')
 const { isFalse, isTrue } = require('../util')
+const { DD_MAJOR } = require('../../../../version')
 const { getEnvironmentVariable: getEnv } = require('./helper')
 
 const {
@@ -118,6 +119,7 @@ const defaultsWithoutSupportedConfigurationEntry = {
 // TODO: These entries should be removed. They are off by default
 // because they rely on other configs.
 const defaultsWithConditionalRuntimeBehavior = {
+  startupLogs: DD_MAJOR >= 6,
   isGitUploadEnabled: false,
   isImpactedTestsEnabled: false,
   isIntelligentTestRunnerEnabled: false,
