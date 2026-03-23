@@ -997,6 +997,56 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  context('when jest is using worker threads', () => {
+    onlyLatestIt('reports tests when using agentless', (done) => {
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+
+      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
+        const events = eventsRequests.map(({ payload }) => payload)
+          .flatMap(({ events }) => events)
+        const eventTypes = events.map(event => event.type)
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.ok(tests.length >= 2)
+        tests.forEach(testEvent => {
+          assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
+        })
+
+        done()
+      }).catch(done)
+    })
+
+    onlyLatestIt('reports tests when using evp proxy', (done) => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+
+      receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
+        .then(eventsRequests => {
+          const eventTypes = eventsRequests.map(({ payload }) => payload)
+            .flatMap(({ events }) => events)
+            .map(event => event.type)
+
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+          done()
+        }).catch(done)
+    })
+  })
+
   it('reports timeout error message', (done) => {
     childProcess = fork(testFile, {
       cwd,
