@@ -2,8 +2,13 @@
 
 const assert = require('node:assert/strict')
 const {
-  useSandbox, sandboxCwd, varySandbox, curl,
-  FakeAgent, spawnPluginIntegrationTestProc,
+  useSandbox,
+  sandboxCwd,
+  varySandbox,
+  curl,
+  FakeAgent,
+  spawnPluginIntegrationTestProc,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 
 describe('ESM', () => {
@@ -21,7 +26,7 @@ describe('ESM', () => {
   })
 
   afterEach(async () => {
-    proc?.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
