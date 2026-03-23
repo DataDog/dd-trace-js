@@ -4057,6 +4057,64 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
+
+    it('tags new tests with dynamic names and logs a warning', (done) => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // No known tests, so both will be considered new
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 1 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const dynamicTests = tests.filter(test => test.meta['_dd.has_dynamic_name'] === 'true')
+          assert.ok(dynamicTests.length > 0, 'at least one test should have _dd.has_dynamic_name tag')
+
+          dynamicTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.match(test.meta[TEST_NAME], /can do stuff at \d+/)
+          })
+
+          // The non-dynamic new tests should not have the tag
+          const nonDynamicNewTests = tests.filter(
+            test => test.meta[TEST_IS_NEW] === 'true' && !test.meta['_dd.has_dynamic_name']
+          )
+          nonDynamicNewTests.forEach(test => {
+            assert.ok(!('_dd.has_dynamic_name' in test.meta))
+          })
+        })
+
+      childProcess = fork(startupTestFile, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'test/(dynamic-name-test|ci-visibility-test-2)',
+        },
+        stdio: 'pipe',
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          assert.match(testOutput, /detected as new but their names contain dynamic data/)
+          assert.match(testOutput, /can do stuff at/)
+          done()
+        }).catch(done)
+      })
+    })
   })
 
   context('flaky test retries', () => {
