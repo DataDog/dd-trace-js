@@ -55,15 +55,16 @@ async function hasCompleted () {
 }
 
 async function checkCompleted () {
-  if (RETRIES && retries > RETRIES) {
-    throw new Error(`State is still pending after ${RETRIES} retries.`)
-  }
-
   if (!await hasCompleted()) {
+    retries++
+
+    if (RETRIES && retries > RETRIES) {
+      throw new Error(`State is still pending after ${RETRIES} retries.`)
+    }
+
     console.log(`Status is still pending, waiting for ${POLLING_INTERVAL} minutes before retrying.`)
     await setTimeout(POLLING_INTERVAL * 60_000)
     console.log('Retrying.')
-    retries++
     await checkCompleted()
   }
 }
@@ -108,6 +109,18 @@ async function checkAllGreen () {
 }
 
 async function printSummary (checkRuns) {
+  const runs = checkRuns.map(run => ({
+    name: run.name,
+    status: run.status,
+    conclusion: run.conclusion
+      ? `${run.conclusion} ${checkConclusionEmojis[run.conclusion]}`
+      : ' ',
+    started_at: run.started_at,
+    completed_at: run.completed_at ?? ' ',
+  }))
+
+  console.table(runs)
+
   const header = [
     { data: 'name', header: true },
     { data: 'status', header: true },
@@ -116,12 +129,12 @@ async function printSummary (checkRuns) {
     { data: 'completed_at', header: true },
   ]
 
-  const body = checkRuns.map(run => [
+  const body = runs.map(run => [
     run.name,
     run.status,
-    run.conclusion ? `${run.conclusion} ${checkConclusionEmojis[run.conclusion]}` : ' ',
+    run.conclusion,
     run.started_at,
-    run.completed_at ?? ' ',
+    run.completed_at,
   ])
 
   await summary
