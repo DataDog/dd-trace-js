@@ -153,7 +153,6 @@ async function checkAllGreen () {
     await checkCompleted()
   } finally {
     latestRuns = await getLatestRuns()
-    await printSummary(latestRuns)
   }
 
   const failedRuns = latestRuns.filter(run =>
@@ -161,6 +160,7 @@ async function checkAllGreen () {
   )
 
   if (failedRuns.length === 0) {
+    await printSummary(latestRuns)
     console.log('All jobs were successful.')
     return
   }
@@ -178,6 +178,7 @@ async function checkAllGreen () {
     }
   }
 
+  await printSummary(latestRuns)
   throw new Error('One or more jobs failed.')
 }
 
