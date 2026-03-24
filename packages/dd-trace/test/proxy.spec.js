@@ -733,7 +733,6 @@ describe('TracerProxy', () => {
         assert.strictEqual(setTagSpy.callCount, 1)
       })
 
-
       it('should call setTag twice when a service override is provided', () => {
         const spanStub = { setTag: sinon.spy() }
         noop.startSpan.returns(spanStub)
