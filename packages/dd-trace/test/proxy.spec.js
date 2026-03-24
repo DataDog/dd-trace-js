@@ -624,6 +624,19 @@ describe('TracerProxy', () => {
         assert.strictEqual(returnValue, 'test')
       })
 
+      it('should add _dd.svc_src when a service override is provided', () => {
+        const callback = () => 'test'
+
+        proxy.trace('a', { service: 'custom-service' }, callback)
+
+        sinon.assert.calledWith(noop.trace, 'a', {
+          service: 'custom-service',
+          tags: {
+            '_dd.svc_src': 'm'
+          }
+        }, callback)
+      })
+
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
@@ -648,6 +661,21 @@ describe('TracerProxy', () => {
         assert.strictEqual(returnValue, 'fn')
       })
 
+      it('should add _dd.svc_src to tags when a service override is provided', () => {
+        const callback = () => 'test'
+        const returnValue = proxy.wrap('a', {
+          service: 'custom-service'
+        }, callback)
+
+        sinon.assert.calledWith(noop.wrap, 'a', {
+          service: 'custom-service',
+          tags: {
+            '_dd.svc_src': 'm'
+          }
+        }, callback)
+        assert.strictEqual(returnValue, 'fn')
+      })
+
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
@@ -669,6 +697,79 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(noop.startSpan, 'a', 'b', 'c')
+        assert.strictEqual(returnValue, 'span')
+      })
+
+      it('should add _dd.svc_src to tags when a service override is provided', () => {
+        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
+
+        sinon.assert.calledWith(noop.startSpan, 'a', {
+          tags: {
+            service: 'custom-service',
+            '_dd.svc_src': 'm'
+          }
+        })
+        assert.strictEqual(returnValue, 'span')
+      })
+
+      it('should call setTag only once when there is no service name overrride', () => {
+        // Capture the spy before startSpan monkey-patches spanInstance.setTag
+        const spanStub = { setTag: sinon.spy() }
+        noop.startSpan.returns(spanStub)
+        const setTagSpy = spanStub.setTag
+
+        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
+
+        sinon.assert.calledWith(noop.startSpan, 'a', {
+          tags: {
+            service: 'custom-service',
+            '_dd.svc_src': 'm'
+          }
+        })
+        assert.strictEqual(returnValue, noop.startSpan.returnValues[0])
+
+        returnValue.setTag('some-tag', 'some-value')
+
+        assert.strictEqual(setTagSpy.callCount, 1)
+      })
+
+
+      it('should call setTag twice when a service override is provided', () => {
+        const spanStub = { setTag: sinon.spy() }
+        noop.startSpan.returns(spanStub)
+        const setTagSpy = spanStub.setTag
+
+        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
+
+        sinon.assert.calledWith(noop.startSpan, 'a', {
+          tags: {
+            service: 'custom-service',
+            '_dd.svc_src': 'm'
+          }
+        })
+        assert.strictEqual(returnValue, noop.startSpan.returnValues[0])
+
+        returnValue.setTag('service', 'custom-name')
+
+        assert.strictEqual(setTagSpy.callCount, 2)
+        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
+      })
+
+      it('should mantain previous tags when a service override is provided', () => {
+        const returnValue = proxy.startSpan('a', {
+          tags: {
+            service: 'custom-service',
+            'random-tag': 'previous-service'
+          }
+        })
+
+        sinon.assert.calledWith(noop.startSpan, 'a', {
+          tags: {
+            service: 'custom-service',
+            'random-tag': 'previous-service',
+            '_dd.svc_src': 'm'
+          }
+        })
         assert.strictEqual(returnValue, 'span')
       })
     })
@@ -849,6 +950,21 @@ describe('TracerProxy', () => {
         assert.strictEqual(returnValue, 'test')
       })
 
+      it('should add _dd.svc_src to tags when a service override is provided', () => {
+        const callback = () => 'test'
+        const returnValue = proxy.trace('a', {
+          service: 'custom-service'
+        }, callback)
+
+        sinon.assert.calledWith(tracer.trace, 'a', {
+          service: 'custom-service',
+          tags: {
+            '_dd.svc_src': 'm'
+          }
+        }, callback)
+        assert.strictEqual(returnValue, 'test')
+      })
+
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
@@ -867,6 +983,21 @@ describe('TracerProxy', () => {
         assert.strictEqual(returnValue, 'fn')
       })
 
+      it('should add _dd.svc_src to tags when a service override is provided', () => {
+        const callback = () => 'test'
+        const returnValue = proxy.wrap('a', {
+          service: 'custom-service',
+        }, callback)
+
+        sinon.assert.calledWith(tracer.wrap, 'a', {
+          service: 'custom-service',
+          tags: {
+            '_dd.svc_src': 'm'
+          }
+        }, callback)
+        assert.strictEqual(returnValue, 'fn')
+      })
+
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
@@ -881,6 +1012,82 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(tracer.startSpan, 'a', 'b', 'c')
+        assert.strictEqual(returnValue, 'span')
+      })
+
+      it('should add _dd.svc_src to tags when a service override is provided', () => {
+        const returnValue = proxy.startSpan('a', {
+          tags: {
+            service: 'custom-service'
+          }
+        })
+
+        sinon.assert.calledWith(tracer.startSpan, 'a', {
+          tags: {
+            service: 'custom-service',
+            '_dd.svc_src': 'm'
+          }
+        })
+        assert.strictEqual(returnValue, 'span')
+      })
+
+      it('should call setTag only once when there is no service name overrride', () => {
+        // Capture the spy before startSpan monkey-patches spanInstance.setTag
+        const spanStub = { setTag: sinon.spy() }
+        tracer.startSpan.returns(spanStub)
+        const setTagSpy = spanStub.setTag
+
+        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
+
+        sinon.assert.calledWith(tracer.startSpan, 'a', {
+          tags: {
+            service: 'custom-service',
+            '_dd.svc_src': 'm'
+          }
+        })
+        assert.strictEqual(returnValue, tracer.startSpan.returnValues[0])
+
+        returnValue.setTag('some-tag', 'some-value')
+
+        assert.strictEqual(setTagSpy.callCount, 1)
+      })
+
+      it('should call setTag twice when a service override is provided', () => {
+        const spanStub = { setTag: sinon.spy() }
+        tracer.startSpan.returns(spanStub)
+        const setTagSpy = spanStub.setTag
+
+        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
+
+        sinon.assert.calledWith(tracer.startSpan, 'a', {
+          tags: {
+            service: 'custom-service',
+            '_dd.svc_src': 'm'
+          }
+        })
+        assert.strictEqual(returnValue, tracer.startSpan.returnValues[0])
+
+        returnValue.setTag('service', 'custom-name')
+
+        assert.strictEqual(setTagSpy.callCount, 2)
+        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
+      })
+
+      it('should maintain previous tags when a service override is provided', () => {
+        const returnValue = proxy.startSpan('a', {
+          tags: {
+            service: 'custom-service',
+            'random-tag': 'previous-service'
+          }
+        })
+
+        sinon.assert.calledWith(tracer.startSpan, 'a', {
+          tags: {
+            service: 'custom-service',
+            'random-tag': 'previous-service',
+            '_dd.svc_src': 'm'
+          }
+        })
         assert.strictEqual(returnValue, 'span')
       })
     })

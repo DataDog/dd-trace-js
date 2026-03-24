@@ -6,6 +6,7 @@ const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
+const { SVC_SRC_KEY } = require('../constants')
 
 const noop = new NoopTracer()
 const noopAppsec = new NoopAppsecSdk()
@@ -51,7 +52,12 @@ class NoopProxy {
     if (typeof fn !== 'function') return
 
     options = options || {}
-
+    if (options.service || options?.tags?.service) {
+      options.tags = {
+        ...options.tags,
+        [SVC_SRC_KEY]: 'm',
+      }
+    }
     return this._tracer.trace(name, options, fn)
   }
 
@@ -64,7 +70,12 @@ class NoopProxy {
     if (typeof fn !== 'function') return fn
 
     options = options || {}
-
+    if (options.service || options?.tags?.service) {
+      options.tags = {
+        ...options.tags,
+        [SVC_SRC_KEY]: 'm',
+      }
+    }
     return this._tracer.wrap(name, options, fn)
   }
 
@@ -74,7 +85,26 @@ class NoopProxy {
   }
 
   startSpan () {
-    return this._tracer.startSpan.apply(this._tracer, arguments)
+    const options = arguments[1]
+    if (options?.tags && (options.tags.service !== undefined || options.tags['service.name'] !== undefined)) {
+      options.tags = {
+        ...options.tags,
+        [SVC_SRC_KEY]: 'm',
+      }
+      arguments[1] = options
+    }
+    // Monkey patch setTag to add _dd.svc_src tag whenever it's called through the proxy
+    const spanInstance = this._tracer.startSpan.apply(this._tracer, arguments)
+    const originalSetTag = spanInstance.setTag
+    if (originalSetTag) {
+      spanInstance.setTag = function (key, value) {
+        if (key === 'service' || key === 'service.name') {
+          originalSetTag.call(this, SVC_SRC_KEY, 'm')
+        }
+        return originalSetTag.call(this, key, value)
+      }
+    }
+    return spanInstance
   }
 
   inject () {
