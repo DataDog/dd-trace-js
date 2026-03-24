@@ -18,6 +18,10 @@ let NativeSpansInterfaceModule = null
 let NativeSpanContextModule = null
 let NativeDatadogSpanModule = null
 
+// Lazily cached WASM constants — these never change after first access
+let cachedOpCode = null
+let cachedWasmMemory = null
+
 // Flag to track if we're currently loading a module to prevent recursion
 let isLoading = false
 
@@ -80,7 +84,8 @@ module.exports = {
    * @type {Object | null}
    */
   get OpCode () {
-    return pipeline ? pipeline.getOpCodes() : null
+    if (!cachedOpCode && pipeline) cachedOpCode = pipeline.getOpCodes()
+    return cachedOpCode
   },
 
   /**
@@ -88,7 +93,8 @@ module.exports = {
    * @type {WebAssembly.Memory | null}
    */
   get wasmMemory () {
-    return pipeline ? pipeline.getWasmMemory() : null
+    if (!cachedWasmMemory && pipeline) cachedWasmMemory = pipeline.getWasmMemory()
+    return cachedWasmMemory
   },
 
   /**

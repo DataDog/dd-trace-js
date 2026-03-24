@@ -8,14 +8,7 @@ const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
 
-// Pre-compute BigInt versions of opcodes to avoid allocation in hot path
-// Index by opcode number for O(1) lookup
-const OpCodeBigInt = []
-if (OpCode) {
-  for (const value of Object.values(OpCode)) {
-    OpCodeBigInt[value] = BigInt(value)
-  }
-}
+// OpCode values are small integers (0-12), written as u64 LE via two u32 writes.
 
 /**
  * NativeSpansInterface provides the JavaScript bridge to the native span storage.
@@ -70,6 +63,9 @@ class NativeSpansInterface {
     this._cqbIndex = 8
     this._cqbCount = 0
 
+
+
+
     // String table state
     this._stringMap = new Map()
     this._stringIdCounter = 0
@@ -92,10 +88,11 @@ class NativeSpansInterface {
       this._options.runtimeId,
     )
 
-    // Get the WASM memory view for writing to the change queue buffer
+    // Get the WASM memory views for writing to the change queue buffer
     this._wasmMemory = wasmMemory
     this._cqbPtr = this._state.change_queue_ptr()
     this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
+    this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
 
     // Start stats flush interval if stats are enabled
     if (this._options.statsEnabled) {
@@ -215,6 +212,7 @@ class NativeSpansInterface {
     } catch (e) {
       log.error('Error flushing change queue to native spans:', e)
     }
+    this.#checkDetach()
     this.resetChangeQueue()
   }
 
@@ -231,8 +229,20 @@ class NativeSpansInterface {
 
     id = this._stringIdCounter++
     this._stringMap.set(str, id)
+    // This WASM call may trigger memory growth, detaching the ArrayBuffer.
     this._state.stringTableInsertOne(id, str)
+    this.#checkDetach()
     return id
+  }
+
+  /**
+   * Check if WASM memory was detached (grew) and refresh views if so.
+   * Cheap: one reference comparison per call.
+   */
+  #checkDetach () {
+    if (this._wasmMemory.buffer !== this._cqbView.buffer) {
+      this.#refreshViews()
+    }
   }
 
   /**
@@ -252,139 +262,85 @@ class NativeSpansInterface {
   /**
    * Queue an operation to the change buffer.
    *
-   * The change buffer uses a binary protocol:
-   * [Count:u64][OpCode:u64, SpanId:u64, Args...]...
+   * Stages the operation in a JS-side buffer (fast writes), then copies
+   * it to WASM memory in a single Uint8Array.set() call.
    *
    * @param {number} op The OpCode value
-   * @param {Uint8Array|number[]} spanId The span ID as a byte buffer (big-endian)
+   * @param {Uint8Array} spanId The span ID as a little-endian byte buffer
    * @param {...(string|Array)} args Operation arguments
    */
   queueOp (op, spanId, ...args) {
-    // WASM memory may grow/be detached, so refresh the view if needed
-    if (this._wasmMemory.buffer !== this._cqbView.buffer) {
-      this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
-      this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
-    }
+    this.#ensureWasmViews()
 
-    // Check if Rust flushed the queue (wrote 0 to count position)
-    if (this._cqbView.getUint32(0, true) === 0 && this._cqbCount > 0) {
-      this._cqbIndex = 8
-      this._cqbCount = 0
-    }
-
-    // Check if we have enough space (rough estimate)
-    const estimatedSize = 16 + args.length * 16 // op + spanId + args
-    if (this._cqbIndex + estimatedSize > CHANGE_QUEUE_BUFFER_SIZE) {
-      // Buffer full, flush first
-      this.flushChangeQueue()
-    }
-
-    const buf = this._cqbBytes || (this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr))
-    const view = this._cqbView
     let idx = this._cqbIndex
 
-    // Write opcode (use pre-computed BigInt)
-    view.setBigUint64(idx, OpCodeBigInt[op] ?? BigInt(op), true)
+    if (idx + 80 > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
+    }
+
+    // Resolve all string IDs first — these may trigger WASM memory growth.
+    // After this loop, views are safe to cache locally.
+    const resolvedArgs = args
+    for (let i = 0; i < resolvedArgs.length; i++) {
+      if (typeof resolvedArgs[i] === 'string') {
+        resolvedArgs[i] = this.getStringId(resolvedArgs[i])
+      }
+    }
+
+    // Grab locals after all WASM calls are done — safe until method returns.
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint32(idx, op, true)
+    view.setUint32(idx + 4, 0, true)
+    idx += 8
+    buf.set(spanId, idx)
     idx += 8
 
-    // Write span ID (convert from big-endian buffer to little-endian)
-    buf[idx] = spanId[7]
-    buf[idx + 1] = spanId[6]
-    buf[idx + 2] = spanId[5]
-    buf[idx + 3] = spanId[4]
-    buf[idx + 4] = spanId[3]
-    buf[idx + 5] = spanId[2]
-    buf[idx + 6] = spanId[1]
-    buf[idx + 7] = spanId[0]
-    idx += 8
-
-    // Write arguments
-    for (let i = 0; i < args.length; i++) {
-      const arg = args[i]
-      if (typeof arg === 'string') {
-        const stringId = this.getStringId(arg)
-        view.setUint32(idx, stringId, true)
+    for (let i = 0; i < resolvedArgs.length; i++) {
+      const arg = resolvedArgs[i]
+      if (typeof arg === 'number') {
+        // Pre-resolved string ID
+        view.setUint32(idx, arg, true)
         idx += 4
       } else {
         const type = arg[0]
         const value = arg[1]
         switch (type) {
-          case 'id64': {
-            // value is an Identifier, its _buffer (big-endian bytes), or null
+          case 'id64':
             if (value === null || value === undefined) {
-              // Write 8 zero bytes
-              view.setBigUint64(idx, 0n, true)
+              view.setUint32(idx, 0, true)
+              view.setUint32(idx + 4, 0, true)
             } else {
               const b = value._buffer ?? value
-              // Write 8 bytes as little-endian (reverse big-endian buffer)
-              buf[idx] = b[7]
-              buf[idx + 1] = b[6]
-              buf[idx + 2] = b[5]
-              buf[idx + 3] = b[4]
-              buf[idx + 4] = b[3]
-              buf[idx + 5] = b[2]
-              buf[idx + 6] = b[1]
-              buf[idx + 7] = b[0]
+              buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
+              buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
             }
             idx += 8
             break
-          }
           case 'id128': {
-            // value is an Identifier or its _buffer (big-endian bytes)
             const b = value._buffer ?? value
             if (b.length > 8) {
-              // 128-bit: write low 8 bytes as LE, then high 8 bytes as LE
-              buf[idx] = b[15]
-              buf[idx + 1] = b[14]
-              buf[idx + 2] = b[13]
-              buf[idx + 3] = b[12]
-              buf[idx + 4] = b[11]
-              buf[idx + 5] = b[10]
-              buf[idx + 6] = b[9]
-              buf[idx + 7] = b[8]
+              buf[idx] = b[15]; buf[idx + 1] = b[14]; buf[idx + 2] = b[13]; buf[idx + 3] = b[12]
+              buf[idx + 4] = b[11]; buf[idx + 5] = b[10]; buf[idx + 6] = b[9]; buf[idx + 7] = b[8]
               idx += 8
-              buf[idx] = b[7]
-              buf[idx + 1] = b[6]
-              buf[idx + 2] = b[5]
-              buf[idx + 3] = b[4]
-              buf[idx + 4] = b[3]
-              buf[idx + 5] = b[2]
-              buf[idx + 6] = b[1]
-              buf[idx + 7] = b[0]
+              buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
+              buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
               idx += 8
             } else {
-              // 64-bit: write as LE, high part is zero
-              buf[idx] = b[7]
-              buf[idx + 1] = b[6]
-              buf[idx + 2] = b[5]
-              buf[idx + 3] = b[4]
-              buf[idx + 4] = b[3]
-              buf[idx + 5] = b[2]
-              buf[idx + 6] = b[1]
-              buf[idx + 7] = b[0]
+              buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
+              buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
               idx += 8
-              // High part is zero
-              view.setBigUint64(idx, 0n, true)
+              view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
               idx += 8
             }
             break
           }
-          case 'u64':
-            view.setBigUint64(idx, value, true)
-            idx += 8
-            break
-          case 'i64':
-            view.setBigInt64(idx, value, true)
-            idx += 8
-            break
           case 'ns': {
-            // Nanoseconds from milliseconds - avoid BigInt allocation
-            // Split into low and high 32-bit parts using Math ops (bitwise only works up to 2^32)
             const ns = Math.round(value * 1e6)
-            const low = ns % 0x100000000
-            const high = Math.floor(ns / 0x100000000)
-            view.setUint32(idx, low, true)
-            view.setUint32(idx + 4, high, true)
+            view.setUint32(idx, ns % 0x100000000, true)
+            view.setUint32(idx + 4, Math.floor(ns / 0x100000000), true)
             idx += 8
             break
           }
@@ -396,24 +352,298 @@ class NativeSpansInterface {
             view.setFloat64(idx, value, true)
             idx += 8
             break
-          default:
-            throw new Error(`Unsupported argument type: ${type}`)
         }
       }
     }
 
     this._cqbIndex = idx
-
-    // Update count (write as two 32-bit values to avoid BigInt allocation)
     this._cqbCount++
     view.setUint32(0, this._cqbCount, true)
-    view.setUint32(4, 0, true) // high 32 bits are always 0
+    view.setUint32(4, 0, true)
+  }
+
+  /**
+   * Increment the op count and write it to WASM memory.
+   * Checks for detach first since a getStringId call may have grown memory.
+   */
+  #updateCount () {
+    this.#checkDetach()
+    this._cqbCount++
+    this._cqbView.setUint32(0, this._cqbCount, true)
+    this._cqbView.setUint32(4, 0, true)
+  }
+
+  /**
+   * Ensure WASM memory views are fresh (memory may have grown).
+   * Also checks if Rust drained the queue.
+   */
+  #ensureWasmViews () {
+    if (this._wasmMemory.buffer !== this._cqbView.buffer || this._cqbBytes.buffer.byteLength === 0) {
+      this.#refreshViews()
+    }
+    if (this._cqbView.getUint32(0, true) === 0 && this._cqbCount > 0) {
+      this._cqbIndex = 8
+      this._cqbCount = 0
+    }
+  }
+
+  /**
+   * Refresh WASM memory views after memory growth (buffer detach).
+   */
+  #refreshViews () {
+    this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
+    this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
+  }
+
+  /**
+   * Queue a CreateSpan operation (combined Create + SetName + SetStart).
+   *
+   * @param {Uint8Array} spanId LE span ID
+   * @param {Uint8Array|number[]} traceId BE Identifier buffer (8 or 16 bytes)
+   * @param {Uint8Array|number[]|null} parentId BE Identifier buffer or null
+   * @param {string} name Span name
+   * @param {number} startMs Start time in milliseconds
+   */
+  queueCreateSpan (spanId, traceId, parentId, name, startMs) {
+    this.#ensureWasmViews()
+
+    let idx = this._cqbIndex
+
+    if (idx + 64 > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
+    }
+
+    // Resolve string ID first (may trigger memory growth)
+    const nameId = this.getStringId(name)
+
+    // Cache locals after all WASM calls are done
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint32(idx, 13, true); view.setUint32(idx + 4, 0, true)
+    idx += 8
+    buf.set(spanId, idx)
+    idx += 8
+
+    const tb = traceId._buffer ?? traceId
+    if (tb.length > 8) {
+      buf[idx] = tb[15]; buf[idx + 1] = tb[14]; buf[idx + 2] = tb[13]; buf[idx + 3] = tb[12]
+      buf[idx + 4] = tb[11]; buf[idx + 5] = tb[10]; buf[idx + 6] = tb[9]; buf[idx + 7] = tb[8]
+      idx += 8
+      buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
+      buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
+      idx += 8
+    } else {
+      buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
+      buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
+      idx += 8
+      view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
+      idx += 8
+    }
+
+    if (parentId === null || parentId === undefined) {
+      view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
+    } else {
+      const pb = parentId._buffer ?? parentId
+      buf[idx] = pb[7]; buf[idx + 1] = pb[6]; buf[idx + 2] = pb[5]; buf[idx + 3] = pb[4]
+      buf[idx + 4] = pb[3]; buf[idx + 5] = pb[2]; buf[idx + 6] = pb[1]; buf[idx + 7] = pb[0]
+    }
+    idx += 8
+
+    view.setUint32(idx, nameId, true)
+    idx += 4
+
+    const ns = Math.round(startMs * 1e6)
+    view.setUint32(idx, ns % 0x100000000, true)
+    view.setUint32(idx + 4, Math.floor(ns / 0x100000000), true)
+    idx += 8
+
+    this._cqbIndex = idx
+    this._cqbCount++
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true)
+  }
+
+  /**
+   * Queue a CreateSpanFull operation (Create + name + service + resource + type + start).
+   *
+   * @param {Uint8Array} spanId LE span ID
+   * @param {Uint8Array|number[]} traceId BE Identifier buffer
+   * @param {Uint8Array|number[]|null} parentId BE Identifier buffer or null
+   * @param {string} name Span name
+   * @param {string} service Service name
+   * @param {string} resource Resource name
+   * @param {string} type Span type
+   * @param {number} startMs Start time in milliseconds
+   */
+  queueCreateSpanFull (spanId, traceId, parentId, name, service, resource, type, startMs) {
+    this.#ensureWasmViews()
+
+    let idx = this._cqbIndex
+
+    if (idx + 80 > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
+    }
+
+    // Resolve all string IDs first (may trigger memory growth)
+    const nameId = this.getStringId(name)
+    const serviceId = this.getStringId(service)
+    const resourceId = this.getStringId(resource)
+    const typeId = this.getStringId(type)
+
+    // Cache locals after all WASM calls
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint32(idx, 14, true); view.setUint32(idx + 4, 0, true)
+    idx += 8
+    buf.set(spanId, idx)
+    idx += 8
+
+    const tb = traceId._buffer ?? traceId
+    if (tb.length > 8) {
+      buf[idx] = tb[15]; buf[idx + 1] = tb[14]; buf[idx + 2] = tb[13]; buf[idx + 3] = tb[12]
+      buf[idx + 4] = tb[11]; buf[idx + 5] = tb[10]; buf[idx + 6] = tb[9]; buf[idx + 7] = tb[8]
+      idx += 8
+      buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
+      buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
+      idx += 8
+    } else {
+      buf[idx] = tb[7]; buf[idx + 1] = tb[6]; buf[idx + 2] = tb[5]; buf[idx + 3] = tb[4]
+      buf[idx + 4] = tb[3]; buf[idx + 5] = tb[2]; buf[idx + 6] = tb[1]; buf[idx + 7] = tb[0]
+      idx += 8
+      view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
+      idx += 8
+    }
+
+    if (parentId === null || parentId === undefined) {
+      view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
+    } else {
+      const pb = parentId._buffer ?? parentId
+      buf[idx] = pb[7]; buf[idx + 1] = pb[6]; buf[idx + 2] = pb[5]; buf[idx + 3] = pb[4]
+      buf[idx + 4] = pb[3]; buf[idx + 5] = pb[2]; buf[idx + 6] = pb[1]; buf[idx + 7] = pb[0]
+    }
+    idx += 8
+
+    view.setUint32(idx, nameId, true); idx += 4
+    view.setUint32(idx, serviceId, true); idx += 4
+    view.setUint32(idx, resourceId, true); idx += 4
+    view.setUint32(idx, typeId, true); idx += 4
+
+    const ns = Math.round(startMs * 1e6)
+    view.setUint32(idx, ns % 0x100000000, true)
+    view.setUint32(idx + 4, Math.floor(ns / 0x100000000), true)
+    idx += 8
+
+    this._cqbIndex = idx
+    this._cqbCount++
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true)
+  }
+
+  /**
+   * Queue multiple meta (string) tags using the BatchSetMeta opcode.
+   * Single header, N key/value pairs. Written directly to WASM memory.
+   *
+   * @param {Uint8Array} spanId The span ID (little-endian)
+   * @param {Array<[string, string]>} tags Array of [key, value] pairs
+   */
+  queueBatchMeta (spanId, tags) {
+    if (tags.length === 0) return
+
+    this.#ensureWasmViews()
+
+    let idx = this._cqbIndex
+    const needed = 20 + tags.length * 8
+
+    if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
+    }
+
+    // Resolve all string IDs first (may trigger memory growth)
+    const ids = new Array(tags.length * 2)
+    for (let i = 0; i < tags.length; i++) {
+      ids[i * 2] = this.getStringId(tags[i][0])
+      ids[i * 2 + 1] = this.getStringId(tags[i][1])
+    }
+
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint32(idx, 15, true); view.setUint32(idx + 4, 0, true)
+    idx += 8
+    buf.set(spanId, idx)
+    idx += 8
+    view.setUint32(idx, tags.length, true)
+    idx += 4
+    for (let i = 0; i < tags.length; i++) {
+      view.setUint32(idx, ids[i * 2], true)
+      idx += 4
+      view.setUint32(idx, ids[i * 2 + 1], true)
+      idx += 4
+    }
+
+    this._cqbIndex = idx
+    this._cqbCount++
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true)
+  }
+
+  /**
+   * Queue multiple metric tags using the BatchSetMetric opcode.
+   * Single header, N key/value pairs. Written directly to WASM memory.
+   *
+   * @param {Uint8Array} spanId The span ID (little-endian)
+   * @param {Array<[string, number]>} tags Array of [key, value] pairs
+   */
+  queueBatchMetrics (spanId, tags) {
+    if (tags.length === 0) return
+
+    this.#ensureWasmViews()
+
+    let idx = this._cqbIndex
+    const needed = 20 + tags.length * 12
+
+    if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
+      this.flushChangeQueue()
+      idx = this._cqbIndex
+    }
+
+    // Resolve all string IDs first (may trigger memory growth)
+    const keyIds = new Array(tags.length)
+    for (let i = 0; i < tags.length; i++) {
+      keyIds[i] = this.getStringId(tags[i][0])
+    }
+
+    const view = this._cqbView
+    const buf = this._cqbBytes
+
+    view.setUint32(idx, 16, true); view.setUint32(idx + 4, 0, true)
+    idx += 8
+    buf.set(spanId, idx)
+    idx += 8
+    view.setUint32(idx, tags.length, true)
+    idx += 4
+    for (let i = 0; i < tags.length; i++) {
+      view.setUint32(idx, keyIds[i], true)
+      idx += 4
+      view.setFloat64(idx, tags[i][1], true)
+      idx += 8
+    }
+
+    this._cqbIndex = idx
+    this._cqbCount++
+    view.setUint32(0, this._cqbCount, true)
+    view.setUint32(4, 0, true)
   }
 
   /**
    * Flush spans to the Datadog agent.
    *
-   * @param {Array<Uint8Array|number[]>} spanIds Array of span ID buffers (big-endian)
+   * @param {Array<Uint8Array>} spanIds Array of span ID buffers (little-endian)
    * @param {boolean} [firstIsLocalRoot=true] Whether the first span is the local root
    * @returns {Promise<string>} Response from the agent
    */
@@ -431,12 +661,10 @@ class NativeSpansInterface {
       this._flushBuffer = Buffer.alloc(requiredSize)
     }
 
-    // Write span IDs to flush buffer (convert from big-endian to little-endian)
+    // Write span IDs to flush buffer (already little-endian, just copy)
     let index = 0
     for (const spanId of spanIds) {
-      for (let i = 0; i < 8; i++) {
-        this._flushBuffer[index + i] = spanId[7 - i]
-      }
+      this._flushBuffer.set(spanId, index)
       index += 8
     }
 
