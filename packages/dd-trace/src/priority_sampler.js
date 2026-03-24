@@ -45,10 +45,8 @@ const DEFAULT_KEY = 'service:,env:'
 function formatKnuthRate (rate) {
   const string = Number(rate).toFixed(6)
   for (let i = string.length - 1; i > 0; i--) {
-    if (string[i] === '.') return string.slice(0, i)
-    if (string[i] !== '0') return string.slice(0, i + 1)
+    if (string[i] !== '0') return string.slice(0, i + (string[i] !== '.' ? 1 : 0))
   }
-  return string
 }
 
 const defaultSampler = new Sampler(AUTO_KEEP)
