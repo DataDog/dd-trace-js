@@ -37,15 +37,17 @@ function wrapModelWithAIGuard (model) {
   if (typeof model.doGenerate === 'function') {
     shimmer.wrap(model, 'doGenerate', function (original) {
       return function (options) {
-        if (!aiguardChannel.hasSubscribers) return original.call(this, options)
-        if (!options.prompt?.length) return original.call(this, options)
+        const originalResult = original.call(this, options)
+
+        if (!aiguardChannel.hasSubscribers) return originalResult
+        if (!options.prompt?.length) return originalResult
 
         const inputMessages = convertVercelPromptToMessages(options.prompt)
-        if (!inputMessages.length) return original.call(this, options)
+        if (!inputMessages.length) return originalResult
 
         // Run AI Guard input evaluation and LLM call in parallel.
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), original.call(this, options)])
+        return Promise.all([publishToAIGuard(inputMessages), originalResult])
           .then(([, result]) => {
             const content = result.content ?? []
             if (!content.length) return result
@@ -59,15 +61,17 @@ function wrapModelWithAIGuard (model) {
   if (typeof model.doStream === 'function') {
     shimmer.wrap(model, 'doStream', function (original) {
       return function (options) {
-        if (!aiguardChannel.hasSubscribers) return original.call(this, options)
-        if (!options.prompt?.length) return original.call(this, options)
+        const originalResult = original.call(this, options)
+
+        if (!aiguardChannel.hasSubscribers) return originalResult
+        if (!options.prompt?.length) return originalResult
 
         const inputMessages = convertVercelPromptToMessages(options.prompt)
-        if (!inputMessages.length) return original.call(this, options)
+        if (!inputMessages.length) return originalResult
 
         // Run AI Guard input evaluation and LLM call in parallel.
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), original.call(this, options)])
+        return Promise.all([publishToAIGuard(inputMessages), originalResult])
           .then(([, result]) => {
             const chunks = []
             const reader = result.stream.getReader()
