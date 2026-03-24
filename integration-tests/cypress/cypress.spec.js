@@ -339,9 +339,46 @@ moduleTypes.forEach(({
 
       const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-      let testOutput = ''
       childProcess = exec(
         './node_modules/.bin/cypress run --config-file cypress-legacy-plugin.config.js',
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
+    it('custom after:spec and after:run handlers are chained with dd-trace instrumentation', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const ciVisPayloads = payloads.filter(({ payload }) => payload.metadata?.test)
+          const events = ciVisPayloads.flatMap(({ payload }) => payload.events)
+          const passedTest = events.find(event =>
+            event.type === 'test' &&
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      let testOutput = ''
+      childProcess = exec(
+        './node_modules/.bin/cypress run --config-file cypress-custom-after-hooks.config.js',
         {
           cwd,
           env: {
@@ -359,14 +396,13 @@ moduleTypes.forEach(({
         once(childProcess.stdout, 'end'),
         once(childProcess.stderr, 'end'),
         receiverPromise,
-      ]).catch((e) => {
-        const lines = testOutput.split('\n').filter(l =>
-          l.includes('supportFile') || l.includes('dd-trace') || l.includes('Error') || l.includes('error')
-        )
-        // eslint-disable-next-line no-console
-        console.log('DEBUG backwards compat output:', JSON.stringify(lines.slice(0, 20)))
-        throw e
-      })
+      ])
+
+      // Verify both dd-trace spans AND the custom handlers ran (including their async resolutions)
+      assert.match(testOutput, /\[custom:after:spec\]/)
+      assert.match(testOutput, /\[custom:after:spec:resolved\]/)
+      assert.match(testOutput, /\[custom:after:run\]/)
+      assert.match(testOutput, /\[custom:after:run:resolved\]/)
     })
 
     over12It('reports correct source file and line for pre-compiled typescript test files', async function () {
