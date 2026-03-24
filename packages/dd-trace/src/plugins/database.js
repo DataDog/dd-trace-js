@@ -56,7 +56,7 @@ class DatabasePlugin extends StoragePlugin {
       return null
     }
 
-    const peerData = this.getPeerService(span.context()._tags)
+    const peerData = this.getPeerService(span.context().getTags())
     const dbmService = this.#getDbmServiceName(serviceName, peerData)
     const servicePropagation = this.#createDBMPropagationCommentService(dbmService, span, peerData)
 

@@ -806,7 +806,7 @@ class CypressPlugin {
         }
         // Update test status - but NOT for quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
         if (cypressTestStatus !== finishedTest.testStatus && !isQuarantinedTest) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
@@ -1050,15 +1050,15 @@ class CypressPlugin {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
         // test spans are finished at after:spec
-        const activeSpanTags = this.activeTestSpan.context()._tags
+        const spanContext = this.activeTestSpan.context()
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeOwners: !!this.activeTestSpan.context().getTag(TEST_CODE_OWNERS),
+          hasCodeOwners: !!spanContext.getTag(TEST_CODE_OWNERS),
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
           isQuarantined: isQuarantinedFromSupport,
           isModified,
-          isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+          isDisabled: spanContext.getTag(TEST_MANAGEMENT_IS_DISABLED) === 'true',
         })
         this.activeTestSpan = null
 

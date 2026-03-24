@@ -206,13 +206,13 @@ const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trun
 
 /**
  * Returns request error tags from a test session span for propagation to child events.
- * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @param {{ context: () => { getTag?: (key: string) => string } } | undefined} sessionSpan
  * @returns {Record<string, string>}
  */
 function getSessionRequestErrorTags (sessionSpan) {
-  const tags = sessionSpan?.context()._tags
-  if (!tags || typeof tags !== 'object') return {}
-  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR] === 'true') {
+  const spanContext = sessionSpan?.context()
+  if (!spanContext) return {}
+  if (spanContext.getTag(DD_CI_LIBRARY_CONFIGURATION_ERROR) === 'true') {
     return {
       [DD_CI_LIBRARY_CONFIGURATION_ERROR]: 'true',
     }

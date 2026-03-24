@@ -79,7 +79,7 @@ function getRouteOrEndpoint (context, statusCode) {
 
   // If route is not available, fallback to http.endpoint
   if (statusCode !== 404) {
-    const endpoint = context?.span?.context()?._tags?.['http.endpoint']
+    const endpoint = context?.span?.context()?.getTag('http.endpoint')
     if (endpoint) {
       return endpoint
     }

@@ -296,7 +296,7 @@ class NativeWallProfiler {
       // so the first enterCh event fires before the type is known. Without this
       // guard we'd cache webTags=undefined and then serve that stale value on the
       // subsequent activation (when span.type='web' is already set).
-      if (!this.#endpointCollectionEnabled || webTags !== undefined || context._tags['span.type']) {
+      if (!this.#endpointCollectionEnabled || webTags !== undefined || context.getTag('span.type')) {
         span[ProfilingContext] = profilingContext
       }
     }
