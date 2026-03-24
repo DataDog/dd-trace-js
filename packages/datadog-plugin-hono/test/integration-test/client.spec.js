@@ -8,6 +8,7 @@ const {
   spawnPluginIntegrationTestProc,
   assertObjectContains,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -29,7 +30,7 @@ describe('esm integration test', () => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

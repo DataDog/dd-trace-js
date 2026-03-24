@@ -89,6 +89,9 @@ typings/
 # Output of tap
 .tap/*
 
+# JUnit artifacts emitted by local/agent CI-style Mocha runs
+node-*-junit.xml
+
 
 ### VSCode ###
 .vscode/*

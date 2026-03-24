@@ -580,7 +580,7 @@ describe('Config', () => {
       { name: 'spanAttributeSchema', value: 'v0', origin: 'default' },
       { name: 'spanComputePeerService', value: false, origin: 'calculated' },
       { name: 'spanRemoveIntegrationFromService', value: false, origin: 'default' },
-      { name: 'startupLogs', value: false, origin: 'default' },
+      { name: 'startupLogs', value: DD_MAJOR >= 6, origin: 'default' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
@@ -3878,6 +3878,20 @@ rules:
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
       assert.deepStrictEqual(config.sampler.rules, [])
+    })
+
+    it('should disable 128-bit trace ID generation when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.traceId128BitGenerationEnabled, false)
+    })
+
+    it('should allow env var to override agentless 128-bit disable', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
+      const config = getConfig()
+      // Env var has higher priority than calculated; encoder truncation is the safety net
+      assert.strictEqual(config.traceId128BitGenerationEnabled, true)
     })
 
     it('should not affect other config when agentless is disabled', () => {

@@ -21,5 +21,6 @@ function busyWait (ms) {
   }))
 }
 
+const tracer = require('dd-trace')
 const durationMs = Number.parseInt(process.env.TEST_DURATION_MS ?? '500')
-setImmediate(async () => busyWait(durationMs))
+setImmediate(() => tracer.trace('test-operation', () => busyWait(durationMs)))
