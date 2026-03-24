@@ -34,6 +34,7 @@ describe('OpenTelemetry Traces', () => {
       './src': TracerProxy,
     })
     tracer._initialized = false
+    tracer._tracingInitialized = false
     tracer.init()
     return tracer
   }
@@ -112,6 +113,17 @@ describe('OpenTelemetry Traces', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env }
+    // Clear OTEL env vars that may be set by the host environment (e.g. Claude Code telemetry)
+    // to prevent test pollution. afterEach restores the original env.
+    delete process.env.OTEL_TRACES_EXPORTER
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+    delete process.env.OTEL_EXPORTER_OTLP_HEADERS
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_HEADERS
+    delete process.env.OTEL_EXPORTER_OTLP_TIMEOUT
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT
   })
 
   afterEach(() => {

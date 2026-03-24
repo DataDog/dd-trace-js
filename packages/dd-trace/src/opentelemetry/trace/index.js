@@ -12,9 +12,8 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
  * OpenTelemetry Trace Export for dd-trace-js
  *
  * This module provides OTLP trace export support that integrates with
- * the existing Datadog tracing pipeline. It hooks into the SpanProcessor's
- * exporter to send DD-formatted spans to an OTLP endpoint instead of the
- * Datadog Agent.
+ * the existing Datadog tracing pipeline. When enabled, the OTLP exporter
+ * replaces the default Datadog Agent exporter at tracer initialization time.
  *
  * Key Components:
  * - OtlpHttpTraceExporter: Exports spans via OTLP over HTTP/JSON (port 4318)
@@ -72,21 +71,8 @@ function createOtlpTraceExporter (config, resourceAttributes) {
   )
 }
 
-/**
- * Initializes OTLP trace export by replacing the existing span exporter
- * so that spans are sent exclusively to the OTLP endpoint.
- *
- * @param {Config} config - Tracer configuration instance
- * @param {DatadogTracer} tracer - The Datadog tracer instance
- */
-function initializeOtlpTraceExport (config, tracer) {
-  const resourceAttributes = buildResourceAttributes(config)
-  const otlpExporter = createOtlpTraceExporter(config, resourceAttributes)
-
-  tracer._processor._exporter = otlpExporter
-}
-
 module.exports = {
   OtlpHttpTraceExporter,
-  initializeOtlpTraceExport,
+  buildResourceAttributes,
+  createOtlpTraceExporter,
 }
