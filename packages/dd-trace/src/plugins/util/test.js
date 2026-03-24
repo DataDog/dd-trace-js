@@ -150,7 +150,6 @@ const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test
 const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
 
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
-const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
   playwright: '>=1.38.0',
 }
@@ -986,9 +985,8 @@ function getFormattedError (error, repositoryRoot) {
   return newError
 }
 
-function isTiaSupported (testFramework, isParallel) {
-  return !(UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework) ||
-           (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)))
+function isTiaSupported (testFramework) {
+  return !UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)
 }
 
 function isEarlyFlakeDetectionSupported (testFramework, frameworkVersion) {
@@ -1015,7 +1013,7 @@ function isDisableSupported (testFramework, frameworkVersion) {
     : true
 }
 
-function isAttemptToFixSupported (testFramework, isParallel, frameworkVersion) {
+function isAttemptToFixSupported (testFramework, frameworkVersion) {
   if (testFramework === 'playwright') {
     return satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX[testFramework])
   }
@@ -1029,9 +1027,9 @@ function isFailedTestReplaySupported (testFramework, frameworkVersion) {
     : true
 }
 
-function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion) {
+function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
   return {
-    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel)
+    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework)
       ? '1'
       : undefined,
     [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionSupported(testFramework, frameworkVersion)
@@ -1048,7 +1046,7 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
       ? '1'
       : undefined,
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]:
-      isAttemptToFixSupported(testFramework, isParallel, frameworkVersion)
+      isAttemptToFixSupported(testFramework, frameworkVersion)
         ? '5'
         : undefined,
     [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)

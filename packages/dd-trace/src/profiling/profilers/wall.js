@@ -290,7 +290,15 @@ class NativeWallProfiler {
       }
 
       profilingContext = { spanId, rootSpanId, webTags }
-      span[ProfilingContext] = profilingContext
+      // Don't cache if endpoint collection is enabled and webTags is undefined but
+      // the span's type hasn't been set yet. TracingPlugin.startSpan() calls
+      // enterWith() before the plugin sets span.type='web' via addRequestTags(),
+      // so the first enterCh event fires before the type is known. Without this
+      // guard we'd cache webTags=undefined and then serve that stale value on the
+      // subsequent activation (when span.type='web' is already set).
+      if (!this.#endpointCollectionEnabled || webTags !== undefined || context._tags['span.type']) {
+        span[ProfilingContext] = profilingContext
+      }
     }
     return profilingContext
   }

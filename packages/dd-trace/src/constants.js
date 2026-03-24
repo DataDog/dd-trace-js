@@ -24,6 +24,7 @@ module.exports = {
   SVC_SRC_KEY: '_dd.svc_src',
   DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
   DECISION_MAKER_KEY: '_dd.p.dm',
+  SAMPLING_KNUTH_RATE: '_dd.p.ksr',
   PROCESS_ID: 'process_id',
   ERROR_TYPE: 'error.type',
   ERROR_MESSAGE: 'error.message',

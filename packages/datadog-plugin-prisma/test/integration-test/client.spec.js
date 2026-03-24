@@ -14,6 +14,7 @@ const {
   spawnPluginIntegrationTestProcAndExpectExit,
   assertObjectContains,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const externals = require('../../../dd-trace/test/plugins/externals')
@@ -299,7 +300,7 @@ describe('esm', () => {
         })
 
         afterEach(async () => {
-          proc?.kill()
+          await stopProc(proc)
           await agent?.stop()
         })
 
