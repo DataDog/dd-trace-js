@@ -21,7 +21,9 @@ class Http2ServerPlugin extends ServerPlugin {
 
     const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
     const service = this.config.service || schemaServiceName
-    const serviceSource = this.config.service ? () => 'opt.plugin' : schemaServiceSource
+    const serviceSource = (this.config.service && service !== this.tracer._service)
+      ? () => 'opt.plugin'
+      : (service === this.tracer._service ? undefined : schemaServiceSource)
     const span = web.startSpan(
       this.tracer,
       {

@@ -191,12 +191,18 @@ class TracingPlugin extends Plugin {
       childOf = /** @type {import('../opentracing/span') | undefined} */ (store.span)
     }
 
+    // clear service source if service is the same as tracer._service
+    const serviceName = service || meta?.service
+    if (serviceName === tracer._service) {
+      serviceSource = undefined
+    }
+
     const span = tracer.startSpan(name, {
       startTime,
       childOf,
       tags: {
         [COMPONENT]: component,
-        'service.name': service || meta?.service || tracer._service,
+        'service.name': serviceName || tracer._service,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
