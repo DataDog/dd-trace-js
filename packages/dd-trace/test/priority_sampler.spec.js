@@ -421,6 +421,45 @@ describe('PrioritySampler', () => {
       assert.strictEqual(typeof context._trace.tags[SAMPLING_KNUTH_RATE], 'string')
     })
 
+    it('should format _dd.p.ksr with decimal notation for very small rates', () => {
+      Sampler.withArgs(0.000001).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.000001),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.000001,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.000001')
+    })
+
+    it('should round _dd.p.ksr to zero when rate is below 6 decimal precision', () => {
+      Sampler.withArgs(0.0000001).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.0000001),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.0000001,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0')
+    })
+
+    it('should round _dd.p.ksr up to 0.000001 when rate rounds up', () => {
+      Sampler.withArgs(0.0000005).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.0000005),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.0000005,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.000001')
+    })
+
     it('should not set _dd.p.ksr tag for manual sampling', () => {
       context._tags[MANUAL_KEEP] = undefined
 

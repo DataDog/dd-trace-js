@@ -37,13 +37,14 @@ const {
 const DEFAULT_KEY = 'service:,env:'
 
 /**
- * Formats a sampling rate as a string with up to 6 significant digits and no trailing zeros.
+ * Formats a sampling rate as a string with up to 6 decimal digits and no trailing zeros.
+ * Rounds at the integer level to avoid IEEE 754 precision issues with toFixed.
  *
  * @param {number} rate
  * @returns {string}
  */
 function formatKnuthRate (rate) {
-  return Number(rate.toPrecision(6)).toString()
+  return (Math.round(rate * 1e6) / 1e6).toFixed(6).replace(/\.?0+$/, '')
 }
 
 const defaultSampler = new Sampler(AUTO_KEEP)
