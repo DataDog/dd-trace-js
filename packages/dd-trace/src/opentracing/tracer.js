@@ -59,7 +59,12 @@ class DatadogTracer {
           langVersion: process.version,
           langInterpreter: process.jsEngine || 'v8',
           pid: process.pid,
-          tracerService: config.service
+          tracerService: config.service,
+          statsEnabled: config.stats?.enabled || false,
+          hostname: config.hostname || require('os').hostname(),
+          env: config.env || '',
+          appVersion: config.version || '',
+          runtimeId: config.tags?.['runtime-id'] || '',
         })
 
         this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)

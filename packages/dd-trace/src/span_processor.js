@@ -27,8 +27,12 @@ class SpanProcessor {
     // Native mode is enabled when experimental.nativeSpans.enabled is set and the exporter is NativeExporter
     this._isNativeMode = config.experimental?.nativeSpans?.enabled === true && nativeSpans !== null
 
+    // In native mode with stats, the WASM concentrator handles stats aggregation
+    // (spans are fed to it during flush_chunk), so we skip the JS stats processor.
+    this._isNativeStats = this._isNativeMode && config.stats?.enabled
+
     // TODO: This should already have been calculated in `config.js`.
-    if (config.stats?.enabled && !config.appsec?.standalone?.enabled) {
+    if (config.stats?.enabled && !config.appsec?.standalone?.enabled && !this._isNativeStats) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config)
     }
@@ -169,8 +173,11 @@ class SpanProcessor {
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       if (this._isNativeMode) {
-        // Native mode: pass raw spans to native exporter
-        // Native side handles serialization
+        // Native mode: pass raw spans to native exporter.
+        // When native stats are enabled, the WASM concentrator handles stats
+        // aggregation during flush_chunk (no spanFormat call needed).
+        // When native stats are NOT enabled but JS stats are, we still need
+        // spanFormat for the JS stats processor.
         const finishedSpans = []
 
         let isFirstSpanInChunk = true
@@ -180,7 +187,7 @@ class SpanProcessor {
             active.push(span)
           } else {
             finishedSpans.push(span)
-            // Still collect stats if enabled (requires formatted span)
+            // JS stats fallback (only when native stats are disabled)
             if (this._stats) {
               const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
               isFirstSpanInChunk = false

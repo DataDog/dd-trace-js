@@ -27,16 +27,21 @@ if (OpCode) {
  * - Span export to the Datadog agent
  */
 class NativeSpansInterface {
-  /**
-   * @param {Object} options Configuration options
-   * @param {string} options.agentUrl URL of the Datadog agent
-   * @param {string} options.tracerVersion Version of dd-trace
-   * @param {string} [options.lang='nodejs'] Language identifier
-   * @param {string} [options.langVersion] Language version (defaults to process.version)
-   * @param {string} [options.langInterpreter='v8'] Language interpreter
-   * @param {number} [options.pid] Process ID (defaults to process.pid)
-   * @param {string} options.tracerService Default service name
-   */
+   /**
+    * @param {Object} options Configuration options
+    * @param {string} options.agentUrl URL of the Datadog agent
+    * @param {string} options.tracerVersion Version of dd-trace
+    * @param {string} [options.lang='nodejs'] Language identifier
+    * @param {string} [options.langVersion] Language version (defaults to process.version)
+    * @param {string} [options.langInterpreter='v8'] Language interpreter
+    * @param {number} [options.pid] Process ID (defaults to process.pid)
+    * @param {string} options.tracerService Default service name
+    * @param {boolean} [options.statsEnabled=false] Enable native stats collection
+    * @param {string} [options.hostname=''] Hostname for stats payload
+    * @param {string} [options.env=''] Environment for stats payload
+    * @param {string} [options.appVersion=''] App version for stats payload
+    * @param {string} [options.runtimeId=''] Runtime ID for stats payload
+    */
   constructor (options) {
     if (!WasmSpanState) {
       throw new Error('Native spans module is not available')
@@ -49,7 +54,12 @@ class NativeSpansInterface {
       langVersion: options.langVersion || process.version,
       langInterpreter: options.langInterpreter || 'v8',
       pid: options.pid ?? process.pid,
-      tracerService: options.tracerService
+      tracerService: options.tracerService,
+      statsEnabled: options.statsEnabled || false,
+      hostname: options.hostname || '',
+      env: options.env || '',
+      appVersion: options.appVersion || '',
+      runtimeId: options.runtimeId || '',
     }
 
     // Flush buffer for span export
@@ -74,7 +84,12 @@ class NativeSpansInterface {
       CHANGE_QUEUE_BUFFER_SIZE,
       STRING_TABLE_INPUT_BUFFER_SIZE,
       this._options.pid,
-      this._options.tracerService
+      this._options.tracerService,
+      this._options.statsEnabled,
+      this._options.hostname,
+      this._options.env,
+      this._options.appVersion,
+      this._options.runtimeId,
     )
 
     // Get the WASM memory view for writing to the change queue buffer
@@ -82,7 +97,35 @@ class NativeSpansInterface {
     this._cqbPtr = this._state.change_queue_ptr()
     this._cqbView = new DataView(this._wasmMemory.buffer, this._cqbPtr)
 
+    // Start stats flush interval if stats are enabled
+    if (this._options.statsEnabled) {
+      this._statsInterval = setInterval(() => {
+        this._state.flushStats(false).catch((err) => {
+          log.error('Error flushing native stats:', err)
+        })
+      }, 10000)
+      this._statsInterval.unref()
+
+      // Force flush stats on process exit
+      const handler = () => {
+        this._state.flushStats(true).catch(() => {})
+      }
+      if (globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers) {
+        globalThis[Symbol.for('dd-trace')].beforeExitHandlers.push(handler)
+      }
+    }
+
     log.debug('Native spans interface initialized')
+  }
+
+  /**
+   * Flush aggregated stats to the agent.
+   * @param {boolean} [force=false] Force flush all buckets (for shutdown)
+   * @returns {Promise<boolean>}
+   */
+  flushStats (force = false) {
+    if (!this._state) return Promise.resolve(false)
+    return this._state.flushStats(force)
   }
 
   /**
@@ -112,7 +155,12 @@ class NativeSpansInterface {
       CHANGE_QUEUE_BUFFER_SIZE,
       STRING_TABLE_INPUT_BUFFER_SIZE,
       this._options.pid,
-      this._options.tracerService
+      this._options.tracerService,
+      this._options.statsEnabled,
+      this._options.hostname,
+      this._options.env,
+      this._options.appVersion,
+      this._options.runtimeId,
     )
 
     // Update WASM memory pointers (may have changed after reallocation)
