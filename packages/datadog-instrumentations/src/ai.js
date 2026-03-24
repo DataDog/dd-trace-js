@@ -49,9 +49,8 @@ function wrapModelWithAIGuard (model) {
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
         return Promise.all([publishToAIGuard(inputMessages), originalResult])
           .then(([, result]) => {
-            const content = result.content ?? []
-            if (!content.length) return result
-            return publishToAIGuard(buildOutputMessages(inputMessages, content))
+            if (!result.content?.length) return result
+            return publishToAIGuard(buildOutputMessages(inputMessages, result.content))
               .then(() => result)
           })
       }

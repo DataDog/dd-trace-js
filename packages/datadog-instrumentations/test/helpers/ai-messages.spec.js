@@ -213,6 +213,28 @@ describe('ai-messages', () => {
       }])
     })
 
+    it('should convert assistant tool calls using input field', () => {
+      const prompt = [{
+        role: 'assistant',
+        content: [{
+          type: 'tool-call',
+          toolCallId: 'call_1',
+          toolName: 'search',
+          input: { query: 'test' },
+        }],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'assistant',
+        tool_calls: [{
+          id: 'call_1',
+          function: {
+            name: 'search',
+            arguments: '{"query":"test"}',
+          },
+        }],
+      }])
+    })
+
     it('should convert tool result messages', () => {
       const prompt = [{
         role: 'tool',
@@ -236,6 +258,22 @@ describe('ai-messages', () => {
           type: 'tool-result',
           toolCallId: 'call_1',
           result: { count: 5 },
+        }],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{
+        role: 'tool',
+        tool_call_id: 'call_1',
+        content: '{"count":5}',
+      }])
+    })
+
+    it('should convert tool result using output field', () => {
+      const prompt = [{
+        role: 'tool',
+        content: [{
+          type: 'tool-result',
+          toolCallId: 'call_1',
+          output: { count: 5 },
         }],
       }]
       assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [{

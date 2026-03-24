@@ -711,6 +711,7 @@ tracer.init({
   experimental: {
     aiguard: {
       enabled: true,
+      block: true,
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,

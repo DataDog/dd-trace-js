@@ -77,11 +77,12 @@ function convertVercelPromptToMessages (prompt) {
             if (part.type === 'text') {
               textParts.push(part.text)
             } else if (part.type === 'tool-call') {
+              const args = part.args ?? part.input
               toolCalls.push({
                 id: part.toolCallId,
                 function: {
                   name: part.toolName,
-                  arguments: typeof part.args === 'string' ? part.args : JSON.stringify(part.args),
+                  arguments: typeof args === 'string' ? args : JSON.stringify(args),
                 },
               })
             }
@@ -96,15 +97,16 @@ function convertVercelPromptToMessages (prompt) {
       }
 
       case 'tool': {
-        if (Array.isArray(msg.content)) {
-          for (const part of msg.content) {
-            if (part.type === 'tool-result') {
-              messages.push({
-                role: 'tool',
-                tool_call_id: part.toolCallId,
-                content: typeof part.result === 'string' ? part.result : JSON.stringify(part.result),
-              })
-            }
+        if (!Array.isArray(msg.content)) break
+
+        for (const part of msg.content) {
+          if (part.type === 'tool-result') {
+            const result = part.result ?? part.output
+            messages.push({
+              role: 'tool',
+              tool_call_id: part.toolCallId,
+              content: typeof result === 'string' ? result : JSON.stringify(result),
+            })
           }
         }
         break
