@@ -14,6 +14,18 @@ const { BASE_SERVICE } = require('../../../../ext/tags')
  * - Has a _nativeSpanId (byte buffer) for native operations
  * - setTag() syncs to native storage immediately
  */
+// Tags that have dedicated OpCodes or special handling in syncTagToNative.
+// Everything else is a plain meta string or metric number.
+const SPECIAL_KEYS = new Set([
+  'service.name', 'service', 'resource.name', 'span.type',
+  'error', 'http.status_code', 'error.type',
+])
+
+// Symbol keys for internal backing storage — avoids Object.defineProperty deopt
+// while keeping properties non-enumerable to external code.
+const NAME_VALUE = Symbol('nameValue')
+const NATIVE_READY = Symbol('nativeReady')
+
 class NativeSpanContext extends DatadogSpanContext {
   #nativeSpans
 
@@ -30,25 +42,42 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {string} [props.tracerService] - Tracer's configured service name (for BASE_SERVICE)
    */
   constructor (nativeSpans, props) {
+    // NAME_VALUE and NATIVE_READY are set before super() so the _name setter
+    // (which fires during super(props) when parent assigns this._name) can
+    // store the value without throwing.
     super(props)
 
     this.#nativeSpans = nativeSpans
-    this._nativeSpanId = props.spanId.toBuffer()
-    this._tracerService = props.tracerService // Store for BASE_SERVICE check
 
-    // Override _name property with getter/setter to sync name changes to native storage.
-    // This is needed because web.js setFramework() directly sets span.context()._name.
-    // We do this after super() to avoid issues with private field access during construction.
-    let nameValue = this._name // Get the value set by super()
-    Object.defineProperty(this, '_name', {
-      get: () => nameValue,
-      set: (value) => {
-        nameValue = value
-        this._syncNameToNative(value)
-      },
-      configurable: true,
-      enumerable: true
-    })
+    // Store span ID as little-endian Uint8Array to avoid per-operation byte
+    // reversal when writing to the WASM change buffer (which expects LE).
+    const beBuf = props.spanId.toBuffer()
+    const leId = new Uint8Array(8)
+    leId[0] = beBuf[7]
+    leId[1] = beBuf[6]
+    leId[2] = beBuf[5]
+    leId[3] = beBuf[4]
+    leId[4] = beBuf[3]
+    leId[5] = beBuf[2]
+    leId[6] = beBuf[1]
+    leId[7] = beBuf[0]
+    this._nativeSpanId = leId
+    this._tracerService = props.tracerService // Store for BASE_SERVICE check
+    this[NATIVE_READY] = true
+  }
+
+  // Class-level getter/setter for _name — intercepts writes to sync to native.
+  // Uses Symbol-keyed backing store instead of Object.defineProperty to preserve
+  // V8 hidden class optimization (all instances share the same shape).
+  get _name () {
+    return this[NAME_VALUE]
+  }
+
+  set _name (value) {
+    this[NAME_VALUE] = value
+    if (this[NATIVE_READY]) {
+      this._syncNameToNative(value)
+    }
   }
 
   /**
@@ -61,13 +90,110 @@ class NativeSpanContext extends DatadogSpanContext {
     super.setTag(key, value)
 
     // Symbol keys are for internal JS use only (e.g., IGNORE_OTEL_ERROR)
-    // They should not be synced to native storage
-    if (typeof key === 'symbol') {
+    if (typeof key === 'symbol') return
+    if (value === undefined || value === null) return
+
+    // Fast path: non-special string tags skip the switch dispatch entirely
+    if (typeof value === 'string' && !SPECIAL_KEYS.has(key)) {
+      this.#nativeSpans.queueOp(
+        OpCode.SetMetaAttr,
+        this._nativeSpanId,
+        key,
+        value,
+      )
       return
     }
 
-    // Sync to native storage
+    // Fast path: non-special number tags
+    if (typeof value === 'number' && !SPECIAL_KEYS.has(key)) {
+      this.#nativeSpans.queueOp(
+        OpCode.SetMetricAttr,
+        this._nativeSpanId,
+        key,
+        ['f64', value],
+      )
+      return
+    }
+
+    // Sync to native storage (special tags + booleans)
     this.#syncTagToNative(key, value)
+  }
+
+  /**
+   * Sync a batch of initial tags to native storage efficiently.
+   *
+   * Separates special tags (service.name, error, etc.) from plain meta/metric
+   * tags. Special tags go through the normal setTag path. Plain tags are
+   * batched into a single queueBatchMeta/queueBatchMetrics call, avoiding
+   * per-tag queueOp overhead.
+   *
+   * @param {Object} tags - Tag object from span fields
+   */
+  syncInitialTags (tags) {
+    const metaBatch = []
+    const metricBatch = []
+
+    for (const key in tags) {
+      const value = tags[key]
+      if (value === undefined || value === null) continue
+
+      // Store in JS cache
+      super.setTag(key, value)
+
+      if (typeof key === 'symbol') continue
+
+      if (SPECIAL_KEYS.has(key)) {
+        // Special tags need individual handling (dedicated opcodes, side effects)
+        this.#syncTagToNative(key, value)
+      } else if (typeof value === 'number') {
+        metricBatch.push([key, value])
+      } else if (typeof value === 'boolean') {
+        metricBatch.push([key, value ? 1 : 0])
+      } else {
+        metaBatch.push([key, String(value)])
+      }
+    }
+
+    if (metaBatch.length > 0) {
+      this.#nativeSpans.queueBatchMeta(this._nativeSpanId, metaBatch)
+    }
+    if (metricBatch.length > 0) {
+      this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, metricBatch)
+    }
+  }
+
+  /**
+   * Sync tags to native storage only (JS cache already populated).
+   * Separates special tags from plain meta/metric tags and batches the latter.
+   *
+   * @param {Object} tags - Tag object to sync
+   */
+  syncToNativeOnly (tags) {
+    const metaBatch = []
+    const metricBatch = []
+
+    for (const key in tags) {
+      const value = tags[key]
+      if (value === undefined || value === null) continue
+      if (typeof key === 'symbol') continue
+
+      if (SPECIAL_KEYS.has(key)) {
+        this.#syncTagToNative(key, value)
+      } else if (typeof value === 'number') {
+        metricBatch.push([key, value])
+      } else if (typeof value === 'boolean') {
+        metricBatch.push([key, value ? 1 : 0])
+      } else {
+        metaBatch.push([key, String(value)])
+      }
+    }
+
+    if (metaBatch.length > 0) {
+      this.#nativeSpans.queueBatchMeta(this._nativeSpanId, metaBatch)
+    }
+    if (metricBatch.length > 0) {
+      this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, metricBatch)
+    }
   }
 
   /**
@@ -207,6 +333,15 @@ class NativeSpanContext extends DatadogSpanContext {
           )
         }
     }
+  }
+
+  /**
+   * Set the name locally without syncing to native storage.
+   * Used during construction when CreateSpan already set the name natively.
+   * @param {string} name - Span name
+   */
+  _setNameLocal (name) {
+    this[NAME_VALUE] = name
   }
 
   /**

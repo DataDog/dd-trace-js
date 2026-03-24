@@ -44,7 +44,7 @@ class DatadogTracer {
 
         // Get agent URL from config
         const { URL, format } = require('url')
-        const defaults = require('../config_defaults')
+        const defaults = require('../config/defaults')
         const { url, hostname = defaults.hostname, port } = config
         const agentUrl = url || new URL(format({
           protocol: 'http:',
