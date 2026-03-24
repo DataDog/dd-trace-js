@@ -20,7 +20,7 @@ const owner = 'DataDog'
 const repo = 'dd-trace-js'
 const ref = context.payload.pull_request?.head.sha || GITHUB_SHA
 const params = { owner, repo, ref }
-const checkConclusionEmojis = {
+const conclusionEmojis = {
   action_required: '🔶',
   cancelled: '🚫',
   failure: '❌',
@@ -29,6 +29,17 @@ const checkConclusionEmojis = {
   skipped: '⏭️',
   stale: '🔄',
   timed_out: '⌛',
+}
+
+const conclusionSeverity = {
+  failure: 0,
+  timed_out: 1,
+  action_required: 2,
+  cancelled: 3,
+  stale: 4,
+  neutral: 5,
+  skipped: 6,
+  success: 7,
 }
 
 let retries = 0
@@ -171,15 +182,17 @@ async function checkAllGreen () {
 }
 
 async function printSummary (checkRuns) {
-  const runs = checkRuns.map(run => ({
-    name: run.name,
-    status: run.status,
-    conclusion: run.conclusion
-      ? `${run.conclusion} ${checkConclusionEmojis[run.conclusion]}`
-      : ' ',
-    started_at: run.started_at,
-    completed_at: run.completed_at ?? ' ',
-  }))
+  const runs = [...checkRuns]
+    .sort((a, b) => (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8))
+    .map(run => ({
+      name: run.name,
+      status: run.status,
+      conclusion: run.conclusion
+        ? `${run.conclusion} ${conclusionEmojis[run.conclusion]}`
+        : ' ',
+      started_at: run.started_at,
+      completed_at: run.completed_at ?? ' ',
+    }))
 
   console.table(runs)
 
