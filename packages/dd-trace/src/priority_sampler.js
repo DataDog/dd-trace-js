@@ -38,19 +38,17 @@ const DEFAULT_KEY = 'service:,env:'
 
 /**
  * Formats a sampling rate as a string with up to 6 decimal digits and no trailing zeros.
- * Pre-rounds to 6 decimal places before calling toFixed to work around V8's imprecise
- * rounding for sub-precision values (e.g. 0.0000005.toFixed(6) returns '0.000000').
  *
  * @param {number} rate
  * @returns {string}
  */
 function formatKnuthRate (rate) {
-  const string = (Math.round(Number(rate) * 1e6) / 1e6).toFixed(6)
-  const dot = string.indexOf('.')
-  for (let i = string.length - 1; i > dot; i--) {
+  const string = Number(rate).toFixed(6)
+  for (let i = string.length - 1; i > 0; i--) {
+    if (string[i] === '.') return string.slice(0, i)
     if (string[i] !== '0') return string.slice(0, i + 1)
   }
-  return string.slice(0, dot)
+  return string
 }
 
 const defaultSampler = new Sampler(AUTO_KEEP)

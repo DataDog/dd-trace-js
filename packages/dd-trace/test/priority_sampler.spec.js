@@ -448,12 +448,12 @@ describe('PrioritySampler', () => {
     })
 
     it('should round _dd.p.ksr up to 0.000001 when rate rounds up', () => {
-      Sampler.withArgs(0.0000005).returns({
+      Sampler.withArgs(0.00000051).returns({
         isSampled: sinon.stub().returns(true),
-        rate: sinon.stub().returns(0.0000005),
+        rate: sinon.stub().returns(0.00000051),
       })
       prioritySampler = new PrioritySampler('test', {
-        sampleRate: 0.0000005,
+        sampleRate: 0.00000051,
       })
       prioritySampler.sample(span)
 
