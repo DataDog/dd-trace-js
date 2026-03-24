@@ -13,6 +13,8 @@ const {
   RETRIES,
 } = process.env
 
+const maxRerunFailedJobs = 3
+
 const octokit = new Octokit({ auth: GITHUB_TOKEN })
 const owner = 'DataDog'
 const repo = 'dd-trace-js'
@@ -93,10 +95,29 @@ async function getLatestRuns () {
 }
 
 async function rerunFailedWorkflows (failedRuns) {
-  const checkSuiteIds = [...new Set(failedRuns.map(run => run.check_suite?.id).filter(Boolean))]
+  const failedCountByCheckSuiteId = new Map()
+  for (const run of failedRuns) {
+    const id = run.check_suite?.id
+    if (id !== undefined) {
+      failedCountByCheckSuiteId.set(id, (failedCountByCheckSuiteId.get(id) ?? 0) + 1)
+    }
+  }
+
+  const eligibleSuiteIds = [...failedCountByCheckSuiteId.entries()]
+    .filter(([, count]) => count <= maxRerunFailedJobs)
+    .map(([id]) => id)
+
+  // If a workflow has many jobs failed, it's unlikely to be flakiness to no
+  // point in re-running.
+  if (eligibleSuiteIds.length < failedCountByCheckSuiteId.size) {
+    console.log(
+      `Skipping rerun for ${failedCountByCheckSuiteId.size - eligibleSuiteIds.length} workflow(s) ` +
+      `with more than ${maxRerunFailedJobs} failed job(s).`
+    )
+  }
 
   const workflowRunsPerSuite = await Promise.all(
-    checkSuiteIds.map(checkSuiteId =>
+    eligibleSuiteIds.map(checkSuiteId =>
       octokit.rest.actions.listWorkflowRunsForRepo({ owner, repo, check_suite_id: checkSuiteId })
         .then(({ data }) => data.workflow_runs)
     )
