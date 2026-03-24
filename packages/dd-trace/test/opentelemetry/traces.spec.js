@@ -513,6 +513,34 @@ describe('OpenTelemetry Traces', () => {
       assert(!exportCalled, 'No HTTP request should be made for empty span arrays')
     })
 
+    it('does not export spans with rejected sampling priority (0)', () => {
+      let exportCalled = false
+      sinon.stub(http, 'request').callsFake(() => {
+        exportCalled = true
+        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+      })
+
+      const tracer = setupTracer()
+      const exporter = tracer._tracer._processor._exporter
+
+      exporter.export([createMockSpan({ metrics: { '_sampling_priority_v1': 0 } })])
+      assert(!exportCalled, 'No HTTP request should be made for rejected traces')
+    })
+
+    it('does not export spans with user-rejected sampling priority (-1)', () => {
+      let exportCalled = false
+      sinon.stub(http, 'request').callsFake(() => {
+        exportCalled = true
+        return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
+      })
+
+      const tracer = setupTracer()
+      const exporter = tracer._tracer._processor._exporter
+
+      exporter.export([createMockSpan({ metrics: { '_sampling_priority_v1': -1 } })])
+      assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
+    })
+
     it('replaces the original DD Agent exporter', () => {
       mockOtlpExport(() => {})
 

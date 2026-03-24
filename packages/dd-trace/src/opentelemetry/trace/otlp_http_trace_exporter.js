@@ -2,6 +2,8 @@
 
 const OtlpHttpExporterBase = require('../otlp/otlp_http_exporter_base')
 const OtlpTraceTransformer = require('./otlp_transformer')
+const { SAMPLING_PRIORITY_KEY } = require('../../constants')
+const { AUTO_KEEP } = require('../../../../../ext/priority')
 
 /**
  * OtlpHttpTraceExporter exports DD-formatted spans via OTLP over HTTP/JSON.
@@ -38,6 +40,12 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    */
   export (spans) {
     if (spans.length === 0) {
+      return
+    }
+
+    // Drop unsampled traces — OTLP endpoints have no agent-side sampling.
+    const priority = spans[0]?.metrics?.[SAMPLING_PRIORITY_KEY]
+    if (priority !== undefined && priority < AUTO_KEEP) {
       return
     }
 
