@@ -34,7 +34,7 @@ class GrpcServerPlugin extends ServerPlugin {
     const method = getMethodMetadata(name, type)
     const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
     const service = this.config.service || schemaServiceName
-    const serviceSource = this.config.service ? () => 'opt.plugin' : schemaServiceSource
+    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
     const span = this.startSpan(this.operationName(), {
       childOf,
       service,
