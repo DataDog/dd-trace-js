@@ -632,8 +632,8 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(noop.trace, 'a', {
           service: 'custom-service',
           tags: {
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         }, callback)
       })
 
@@ -664,14 +664,14 @@ describe('TracerProxy', () => {
       it('should add _dd.svc_src to tags when a service override is provided', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', {
-          service: 'custom-service'
+          service: 'custom-service',
         }, callback)
 
         sinon.assert.calledWith(noop.wrap, 'a', {
           service: 'custom-service',
           tags: {
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         }, callback)
         assert.strictEqual(returnValue, 'fn')
       })
@@ -706,8 +706,8 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(noop.startSpan, 'a', {
           tags: {
             service: 'custom-service',
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         })
         assert.strictEqual(returnValue, 'span')
       })
@@ -723,8 +723,8 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(noop.startSpan, 'a', {
           tags: {
             service: 'custom-service',
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         })
         assert.strictEqual(returnValue, noop.startSpan.returnValues[0])
 
@@ -744,8 +744,8 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(noop.startSpan, 'a', {
           tags: {
             service: 'custom-service',
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         })
         assert.strictEqual(returnValue, noop.startSpan.returnValues[0])
 
@@ -759,16 +759,16 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', {
           tags: {
             service: 'custom-service',
-            'random-tag': 'previous-service'
-          }
+            'random-tag': 'previous-service',
+          },
         })
 
         sinon.assert.calledWith(noop.startSpan, 'a', {
           tags: {
             service: 'custom-service',
             'random-tag': 'previous-service',
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         })
         assert.strictEqual(returnValue, 'span')
       })
@@ -953,14 +953,14 @@ describe('TracerProxy', () => {
       it('should add _dd.svc_src to tags when a service override is provided', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', {
-          service: 'custom-service'
+          service: 'custom-service',
         }, callback)
 
         sinon.assert.calledWith(tracer.trace, 'a', {
           service: 'custom-service',
           tags: {
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         }, callback)
         assert.strictEqual(returnValue, 'test')
       })
@@ -992,8 +992,8 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(tracer.wrap, 'a', {
           service: 'custom-service',
           tags: {
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         }, callback)
         assert.strictEqual(returnValue, 'fn')
       })
@@ -1018,15 +1018,15 @@ describe('TracerProxy', () => {
       it('should add _dd.svc_src to tags when a service override is provided', () => {
         const returnValue = proxy.startSpan('a', {
           tags: {
-            service: 'custom-service'
-          }
+            service: 'custom-service',
+          },
         })
 
         sinon.assert.calledWith(tracer.startSpan, 'a', {
           tags: {
             service: 'custom-service',
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         })
         assert.strictEqual(returnValue, 'span')
       })
@@ -1042,8 +1042,8 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(tracer.startSpan, 'a', {
           tags: {
             service: 'custom-service',
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         })
         assert.strictEqual(returnValue, tracer.startSpan.returnValues[0])
 
@@ -1062,8 +1062,8 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(tracer.startSpan, 'a', {
           tags: {
             service: 'custom-service',
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         })
         assert.strictEqual(returnValue, tracer.startSpan.returnValues[0])
 
@@ -1077,16 +1077,16 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', {
           tags: {
             service: 'custom-service',
-            'random-tag': 'previous-service'
-          }
+            'random-tag': 'previous-service',
+          },
         })
 
         sinon.assert.calledWith(tracer.startSpan, 'a', {
           tags: {
             service: 'custom-service',
             'random-tag': 'previous-service',
-            '_dd.svc_src': 'm'
-          }
+            '_dd.svc_src': 'm',
+          },
         })
         assert.strictEqual(returnValue, 'span')
       })
