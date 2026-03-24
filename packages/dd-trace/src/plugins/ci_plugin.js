@@ -773,18 +773,18 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   getTestTelemetryTags (testSpan) {
-    const activeSpanTags = testSpan.context()._tags
+    const spanContext = testSpan.context()
     return {
-      hasCodeOwners: !!activeSpanTags[TEST_CODE_OWNERS] || undefined,
-      isNew: activeSpanTags[TEST_IS_NEW] === 'true' || undefined,
-      isRum: activeSpanTags[TEST_IS_RUM_ACTIVE] === 'true' || undefined,
-      browserDriver: activeSpanTags[TEST_BROWSER_DRIVER],
-      isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true' || undefined,
-      isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true' || undefined,
-      isModified: activeSpanTags[TEST_IS_MODIFIED] === 'true' || undefined,
-      isRetry: activeSpanTags[TEST_IS_RETRY] === 'true' || undefined,
-      retryReason: activeSpanTags[TEST_RETRY_REASON],
-      isFailedTestReplayEnabled: activeSpanTags[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true' || undefined,
+      hasCodeOwners: !!spanContext.getTag(TEST_CODE_OWNERS) || undefined,
+      isNew: spanContext.getTag(TEST_IS_NEW) === 'true' || undefined,
+      isRum: spanContext.getTag(TEST_IS_RUM_ACTIVE) === 'true' || undefined,
+      browserDriver: spanContext.getTag(TEST_BROWSER_DRIVER),
+      isQuarantined: spanContext.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true' || undefined,
+      isDisabled: spanContext.getTag(TEST_MANAGEMENT_IS_DISABLED) === 'true' || undefined,
+      isModified: spanContext.getTag(TEST_IS_MODIFIED) === 'true' || undefined,
+      isRetry: spanContext.getTag(TEST_IS_RETRY) === 'true' || undefined,
+      retryReason: spanContext.getTag(TEST_RETRY_REASON),
+      isFailedTestReplayEnabled: spanContext.getTag(DI_ERROR_DEBUG_INFO_CAPTURED) === 'true' || undefined,
     }
   }
 }

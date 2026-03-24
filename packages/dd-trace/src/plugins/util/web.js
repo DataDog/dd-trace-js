@@ -424,7 +424,7 @@ function addResponseTags (context) {
 function applyRouteOrEndpointTag (context) {
   const { paths, span, config } = context
   if (!span) return
-  const tags = span.context()._tags
+  const spanContext = span.context()
   const route = paths.join('')
 
   if (route) {
@@ -433,12 +433,12 @@ function applyRouteOrEndpointTag (context) {
     return
   }
 
-  if (!config.resourceRenamingEnabled || tags[HTTP_ENDPOINT]) {
+  if (!config.resourceRenamingEnabled || spanContext.getTag(HTTP_ENDPOINT)) {
     return
   }
 
   // Route is unavailable, compute http.endpoint once.
-  const url = tags[HTTP_URL]
+  const url = spanContext.getTag(HTTP_URL)
   const endpoint = url ? calculateHttpEndpoint(url) : '/'
   span.setTag(HTTP_ENDPOINT, endpoint)
 }

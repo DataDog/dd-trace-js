@@ -949,7 +949,7 @@ class CypressPlugin {
         }
         // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
@@ -1246,14 +1246,15 @@ class CypressPlugin {
           this.finishedTestsByFile[testSuite] = [finishedTest]
         }
         // test spans are finished at after:spec
+        const spanContext = this.activeTestSpan.context()
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', {
-          hasCodeOwners: !!this.activeTestSpan.context().getTag(TEST_CODE_OWNERS),
+          hasCodeOwners: !!spanContext.getTag(TEST_CODE_OWNERS),
           isNew,
           isRum: isRUMActive,
           browserDriver: 'cypress',
           isQuarantined: activeSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
           isModified,
-          isDisabled: activeSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+          isDisabled: spanContext.getTag(TEST_MANAGEMENT_IS_DISABLED) === 'true',
         })
         this.activeTestSpan = null
 
