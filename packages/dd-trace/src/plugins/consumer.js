@@ -11,7 +11,7 @@ class ConsumerPlugin extends InboundPlugin {
     if (!options.service) {
       if (this.config.service) {
         options.service = this.config.service
-        options.serviceSource = () => 'opt.plugin'
+        options.serviceSource = 'opt.plugin'
       } else {
         const { name, source } = this.serviceName()
         options.service = name
