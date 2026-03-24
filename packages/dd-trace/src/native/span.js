@@ -16,14 +16,15 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
 const { channel } = require('dc-polyfill')
 const util = require('util')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getValueFromEnvSources } = require('../config/helper')
+const { isTrue } = require('../util')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
-const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
+const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING'))
+const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS'))
 
-const OTEL_ENABLED = !!getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')
+const OTEL_ENABLED = !!getValueFromEnvSources('DD_TRACE_OTEL_ENABLED')
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
@@ -116,35 +117,36 @@ class NativeDatadogSpan {
 
     getIntegrationCounter('spans_created', this._integrationName).inc()
 
-    // Create the span context with native backing
+    // Create the span context with native backing.
+    // Uses combined CreateSpan opcode (Create + SetName + SetStart in one op).
     this._spanContext = this.#createContext(parent, fields)
-    this._spanContext._name = operationName // Setter automatically syncs to native
     this._spanContext._hostname = hostname
 
-    // Note: We do NOT set error:0 here as a tag. Native spans default to error=0
-    // in native storage, but the JS tags should not contain 'error' until explicitly
-    // set. This matches regular span behavior where getTags() doesn't include 'error'.
+    // Calculate start time (must happen before queueCreateSpan)
+    this._startTime = fields.startTime || this.#getTime()
 
-    // Add tags using setTag() to sync to native storage
-    for (const [key, value] of Object.entries(tags)) {
-      this._spanContext.setTag(key, value)
-    }
+    // Queue combined create + name + start as a single WASM operation
+    this._nativeSpans.queueCreateSpan(
+      this._spanContext._nativeSpanId,
+      this._spanContext._createTraceId,
+      this._spanContext._createParentId,
+      operationName,
+      this._startTime
+    )
+    // Clean up temporary refs used only for the create op
+    this._spanContext._createTraceId = undefined
+    this._spanContext._createParentId = undefined
 
-    // Note: BASE_SERVICE is handled in span_context.js setTag() when service.name changes
-    // This ensures it's set correctly whether service is set during construction or later via addTags()
+    // Set name on JS side only — skip the native sync since CreateSpan already set it.
+    // Use _setNameLocal to bypass the Object.defineProperty setter that would queue SetName.
+    this._spanContext._setNameLocal(operationName)
+
+    // Batch-sync initial tags: special tags go through individual queueOp,
+    // plain meta/metric tags use BatchSetMeta/BatchSetMetric opcodes.
+    this._spanContext.syncInitialTags(tags)
 
     // Add to trace's started spans
     this._spanContext._trace.started.push(this)
-
-    // Calculate start time
-    this._startTime = fields.startTime || this.#getTime()
-
-    // Queue start time to native storage (in nanoseconds)
-    this._nativeSpans.queueOp(
-      OpCode.SetStart,
-      this._spanContext._nativeSpanId,
-      ['ns', this._startTime]
-    )
 
     // Handle span links
     this._links = fields.links?.map(link => ({
@@ -520,13 +522,9 @@ class NativeDatadogSpan {
     }
     spanContext._isRemote = false
 
-    // Queue Create operation to native storage
-    this._nativeSpans.queueOp(
-      OpCode.Create,
-      spanContext._nativeSpanId,
-      ['id128', traceId],
-      ['id64', parentId]
-    )
+    // Stash IDs for the combined CreateSpan op (called by constructor after this returns)
+    spanContext._createTraceId = traceId
+    spanContext._createParentId = parentId
 
     return spanContext
   }
@@ -537,15 +535,20 @@ class NativeDatadogSpan {
   }
 
   #addTags (keyValuePairs) {
-    // Parse tags using tagger into a temp object, then use setTag() to sync to native
+    // Write to JS tag cache directly (same as JS mode DatadogSpan._addTags),
+    // then sync to native in bulk. Avoids per-tag setTag() dispatch overhead.
     const parsedTags = {}
     tagger.add(parsedTags, keyValuePairs)
 
-    // Use Reflect.ownKeys to include both string and Symbol keys
-    // Object.entries() skips Symbol keys which are used internally (e.g., IGNORE_OTEL_ERROR)
-    for (const key of Reflect.ownKeys(parsedTags)) {
-      this._spanContext.setTag(key, parsedTags[key])
+    // Write parsed values to JS cache
+    const tags = this._spanContext.getTags()
+    for (const key in parsedTags) {
+      tags[key] = parsedTags[key]
     }
+
+    // Sync to native (writes only to WASM, not JS cache since we just did that)
+    this._spanContext.syncToNativeOnly(parsedTags)
+
     this._prioritySampler.sample(this, false)
   }
 

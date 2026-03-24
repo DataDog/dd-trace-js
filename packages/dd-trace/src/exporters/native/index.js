@@ -2,7 +2,7 @@
 
 const { URL, format } = require('url')
 const log = require('../../log')
-const defaults = require('../../config_defaults')
+const defaults = require('../../config/defaults')
 
 /**
  * NativeExporter sends spans to the Datadog agent using native Rust code.
