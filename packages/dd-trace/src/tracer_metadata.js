@@ -15,8 +15,8 @@ function storeConfig (config) {
     const processTags = require('./process-tags')
 
     const processTagsSerialized = config.propagateProcessTags?.enabled
-      ? (processTags.serialized || '')
-      : ''
+      ? (processTags.serialized || null)
+      : null
 
     const metadata = new processDiscovery.TracerMetadata(
       config.tags['runtime-id'],
@@ -25,7 +25,7 @@ function storeConfig (config) {
       config.service || null,
       config.env || null,
       config.version || null,
-      processTagsSerialized || null,
+      processTagsSerialized,
       containerId || null
     )
 

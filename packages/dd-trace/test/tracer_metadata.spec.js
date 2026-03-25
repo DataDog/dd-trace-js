@@ -64,7 +64,7 @@ describe('tracer_metadata', () => {
     sinon.assert.calledOnce(storeMetadataStub)
   })
 
-  it('passes empty string for process_tags when propagateProcessTags is disabled', () => {
+  it('passes null for process_tags when propagateProcessTags is disabled', () => {
     storeConfig({ ...baseConfig, propagateProcessTags: { enabled: false } })
 
     const args = TracerMetadataStub.firstCall.args
