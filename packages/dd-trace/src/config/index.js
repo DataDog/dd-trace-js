@@ -430,6 +430,7 @@ class Config {
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE,
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
       OTEL_EXPORTER_OTLP_TRACES_HEADERS,
+      OTEL_EXPORTER_OTLP_TRACES_PROTOCOL,
       OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
       OTEL_TRACES_EXPORTER,
       OTEL_METRIC_EXPORT_TIMEOUT,
@@ -518,8 +519,12 @@ class Config {
       }
     }
     setString(target, 'otelTracesHeaders', OTEL_EXPORTER_OTLP_TRACES_HEADERS || target.otelHeaders)
-    // otelTracesProtocol is hard-coded because other protocols are not implemented
-    // will be set to OTEL_EXPORTER_OTLP_TRACES_PROTOCOL || target.otelProtocol after full implementation
+    if (OTEL_EXPORTER_OTLP_TRACES_PROTOCOL && OTEL_EXPORTER_OTLP_TRACES_PROTOCOL !== 'http/json') {
+      log.warn(
+        'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
+        OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+      )
+    }
     setString(target, 'otelTracesProtocol', 'http/json')
     const otelTracesTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TRACES_TIMEOUT, 'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT')
     target.otelTracesTimeout = otelTracesTimeout === undefined ? target.otelTimeout : otelTracesTimeout

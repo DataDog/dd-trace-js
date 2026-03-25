@@ -554,6 +554,8 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Configurations', () => {
+    // Only http/json is currently supported. Other protocols (grpc, http/protobuf)
+    // are not yet implemented and will be added in a future release.
     it('uses default http/json protocol', () => {
       delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
       delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL

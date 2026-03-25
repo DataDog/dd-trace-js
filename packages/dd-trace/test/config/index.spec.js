@@ -365,6 +365,26 @@ describe('Config', () => {
     assert.strictEqual(config.otelTracesEnabled, false)
   })
 
+  it('should warn and fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesProtocol, 'http/json')
+    sinon.assert.calledWith(
+      log.warn,
+      'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
+      'grpc'
+    )
+  })
+
+  it('should not warn when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is http/json', () => {
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/json'
+    getConfig()
+    const warnCall = log.warn.getCalls().find(
+      (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
+    )
+    assert.strictEqual(warnCall, undefined)
+  })
+
   it('should default sample rate to 1 when OTLP traces export is enabled', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
