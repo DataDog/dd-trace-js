@@ -139,12 +139,17 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
   }
 }
 
+const DD_WRAPPED = Symbol('dd-trace.cypress.wrapped')
+
 function wrapConfig (config) {
-  if (config?.e2e) {
+  if (!config || config[DD_WRAPPED]) return
+  config[DD_WRAPPED] = true
+
+  if (config.e2e) {
     config.e2e.setupNodeEvents = wrapSetupNodeEvents(config.e2e.setupNodeEvents)
   }
   // Also wrap component testing config if present
-  if (config?.component) {
+  if (config.component) {
     config.component.setupNodeEvents = wrapSetupNodeEvents(config.component.setupNodeEvents)
   }
 }
