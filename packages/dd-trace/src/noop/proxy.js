@@ -52,13 +52,22 @@ class NoopProxy {
     if (typeof fn !== 'function') return
 
     options = options || {}
-    if (options.service || options?.tags?.service) {
+    if (options.service || options?.tags?.service || options?.tags?.['service.name']) {
       options.tags = {
         ...options.tags,
         [SVC_SRC_KEY]: 'm',
       }
     }
-    return this._tracer.trace(name, options, fn)
+
+    const callback = fn.length > 1
+      ? function (span, done) {
+        return fn(patchSpanAddTags(addPatches(span)), done)
+      }
+      : function (span) {
+        return fn(patchSpanAddTags(addPatches(span)))
+      }
+
+    return this._tracer.trace(name, options, callback)
   }
 
   wrap (name, options, fn) {
@@ -70,13 +79,19 @@ class NoopProxy {
     if (typeof fn !== 'function') return fn
 
     options = options || {}
-    if (options.service || options?.tags?.service) {
+    if (options.service || options?.tags?.service || options?.tags?.['service.name']) {
       options.tags = {
         ...options.tags,
         [SVC_SRC_KEY]: 'm',
       }
     }
-    return this._tracer.wrap(name, options, fn)
+
+    // wrap only does callback as promise
+    const callback = function (span, done) {
+      return fn(patchSpanAddTags(addPatches(span)), done)
+    }
+
+    return this._tracer.wrap(name, options, callback)
   }
 
   setUrl () {
@@ -86,25 +101,15 @@ class NoopProxy {
 
   startSpan () {
     const options = arguments[1]
-    if (options?.tags && (options.tags.service !== undefined || options.tags['service.name'] !== undefined)) {
+    if (options?.tags && (options.tags.service !== undefined || options.tags['service.name'] !== undefined) ||
+      options?.service) {
       options.tags = {
         ...options.tags,
         [SVC_SRC_KEY]: 'm',
       }
       arguments[1] = options
     }
-    // Monkey patch setTag to add _dd.svc_src tag whenever it's called through the proxy
-    const spanInstance = this._tracer.startSpan.apply(this._tracer, arguments)
-    const originalSetTag = spanInstance.setTag
-    if (originalSetTag) {
-      spanInstance.setTag = function (key, value) {
-        if (key === 'service' || key === 'service.name') {
-          originalSetTag.call(this, SVC_SRC_KEY, 'm')
-        }
-        return originalSetTag.call(this, key, value)
-      }
-    }
-    return spanInstance
+    return addPatches(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 
   inject () {
@@ -131,6 +136,44 @@ class NoopProxy {
   get TracerProvider () {
     return require('../opentelemetry/tracer_provider')
   }
+}
+
+function addPatches (span) {
+  return patchSpanAddTags(patchSpanSetTag(span))
+}
+
+function patchSpanSetTag (span) {
+  const originalSetTag = span?.setTag
+
+  if (!originalSetTag) {
+    return span
+  }
+
+  span.setTag = function setTag (key, value) {
+    if (key === 'service' || key === 'service.name') {
+      originalSetTag.call(this, SVC_SRC_KEY, 'm')
+    }
+    return originalSetTag.call(this, key, value)
+  }
+
+  return span
+}
+
+function patchSpanAddTags (span) {
+  const originalAddTags = span?.addTags
+
+  if (!originalAddTags) {
+    return span
+  }
+
+  span.addTags = function addTags (tags) {
+    if (tags.service || tags['service.name']) {
+      tags = { ...tags, [SVC_SRC_KEY]: 'm' }
+    }
+    return originalAddTags.call(this, tags)
+  }
+
+  return span
 }
 
 module.exports = NoopProxy
