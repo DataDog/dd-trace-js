@@ -19,6 +19,8 @@ const { AUTO_KEEP } = require('../../../../../ext/priority')
  * @augments OtlpHttpExporterBase
  */
 class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
+  #transformer
+
   /**
    * Creates a new OtlpHttpTraceExporter instance.
    *
@@ -29,7 +31,7 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    */
   constructor (url, headers, timeout, resourceAttributes) {
     super(url, headers, timeout, 'http/json', '/v1/traces', 'traces')
-    this.transformer = new OtlpTraceTransformer(resourceAttributes)
+    this.#transformer = new OtlpTraceTransformer(resourceAttributes)
   }
 
   /**
@@ -52,7 +54,7 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
     const additionalTags = [`spans:${spans.length}`]
     this.recordTelemetry('otel.traces_export_attempts', 1, additionalTags)
 
-    const payload = this.transformer.transformSpans(spans)
+    const payload = this.#transformer.transformSpans(spans)
     this.sendPayload(payload, (result) => {
       if (result.code === 0) {
         this.recordTelemetry('otel.traces_export_successes', 1, additionalTags)
