@@ -32,7 +32,7 @@ class BaseOpenaiAgentsClientPlugin extends ClientPlugin {
     try {
       return new URL(baseURL).hostname
     } catch (e) {
-      log.warn('openai-agents: failed to parse baseURL %s', baseURL)
+      log.error('openai-agents: failed to parse baseURL %s', baseURL, e)
     }
   }
 

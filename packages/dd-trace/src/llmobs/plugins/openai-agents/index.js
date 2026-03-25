@@ -11,7 +11,7 @@ const ALLOWED_SETTINGS_KEYS = new Set([
 
 /**
  * Base LLMObs plugin for OpenAI Agents model operations (getResponse, getStreamedResponse).
- * Instruments the @openai/agents-openai model classes to capture LLM span events.
+ * Instruments the \@openai/agents-openai model classes to capture LLM span events.
  */
 class BaseOpenaiAgentsLLMObsPlugin extends LLMObsPlugin {
   static integration = 'openai-agents'
@@ -38,7 +38,7 @@ class BaseOpenaiAgentsLLMObsPlugin extends LLMObsPlugin {
   /**
    * Extracts and tags LLM-specific data on the span after the operation completes.
    *
-   * @param {{ currentStore?: { span: object }, arguments?: Array<*>, result?: object }} ctx
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown>, result?: object }} ctx
    */
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
@@ -82,7 +82,7 @@ class GetStreamedResponseLLMObsPlugin extends BaseOpenaiAgentsLLMObsPlugin {
    * For streaming, the span finishes before stream iteration begins.
    * Output data is not available, so we only tag inputs and metadata.
    *
-   * @param {{ currentStore?: { span: object }, arguments?: Array<*> }} ctx
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
    */
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
@@ -115,7 +115,7 @@ function getModelProvider (baseURL) {
 /**
  * Extracts input messages from the model request object.
  *
- * @param {{ systemInstructions?: string, input?: string|Array<*> }} request
+ * @param {{ systemInstructions?: string, input?: string|Array<unknown> }} request
  * @returns {Array<{ role: string, content: string }>}
  */
 function extractInputMessages (request) {
@@ -190,7 +190,7 @@ function extractInputMessages (request) {
 /**
  * Extracts output messages from the model response.
  *
- * @param {{ output?: Array<*> }} result - The model response
+ * @param {{ output?: Array<unknown> }} result - The model response
  * @returns {Array<{ role: string, content: string }>}
  */
 function extractOutputMessages (result) {

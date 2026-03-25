@@ -136,6 +136,7 @@ class OpenaiAgentsTestSetup {
       })
       // eslint-disable-next-line no-unused-vars
       for await (const _item of iter) {
+        // consume stream
       }
     })
   }
@@ -154,6 +155,7 @@ class OpenaiAgentsTestSetup {
       })
       // eslint-disable-next-line no-unused-vars
       for await (const _item of iter) {
+        // consume stream
       }
     })
   }

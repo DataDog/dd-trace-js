@@ -19,7 +19,7 @@ class BaseOpenaiAgentsInternalPlugin extends TracingPlugin {
   }
 
   /**
-   * @param {{ args?: Array<*> }} ctx - The orchestrion context with function arguments
+   * @param {{ args?: Array<unknown> }} ctx - The orchestrion context with function arguments
    * @returns {object} Span tags
    */
   getTags (ctx) {
