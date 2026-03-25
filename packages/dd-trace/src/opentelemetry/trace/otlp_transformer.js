@@ -113,37 +113,25 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @returns {object} OTLP Span object
    */
   #transformSpan (span) {
-    const result = {
+    const parentId = span.parent_id
+    const links = this.#extractLinks(span.meta?.['_dd.span_links'])
+
+    return {
       traceId: this.#idToBytes(span.trace_id, 16),
       spanId: this.#idToBytes(span.span_id, 8),
+      parentSpanId: (parentId && !this.#isZeroId(parentId)) ? this.#idToBytes(parentId, 8) : undefined,
       name: span.resource,
       kind: this.#mapSpanKind(span.meta?.['span.kind']),
       startTimeUnixNano: span.start,
       endTimeUnixNano: span.start + span.duration,
       attributes: this.#buildAttributes(span),
       droppedAttributesCount: 0,
+      events: span.span_events?.length ? span.span_events.map(event => this.#transformEvent(event)) : undefined,
       droppedEventsCount: 0,
+      links: links.length ? links : undefined,
       droppedLinksCount: 0,
+      status: this.#mapStatus(span),
     }
-
-    // Add parent span ID only if it is not zero (i.e. not a root span)
-    const parentId = span.parent_id
-    if (parentId && !this.#isZeroId(parentId)) {
-      result.parentSpanId = this.#idToBytes(parentId, 8)
-    }
-
-    result.status = this.#mapStatus(span)
-
-    if (span.span_events?.length) {
-      result.events = span.span_events.map(event => this.#transformEvent(event))
-    }
-
-    const links = this.#extractLinks(span.meta?.['_dd.span_links'])
-    if (links.length) {
-      result.links = links
-    }
-
-    return result
   }
 
   /**
@@ -270,7 +258,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @returns {object} OTLP Link object
    */
   #transformLink (link) {
-    const result = {
+    return {
       traceId: this.#hexToBytes(link.trace_id, 16),
       spanId: this.#hexToBytes(link.span_id, 8),
       traceState: link.tracestate || '',
@@ -278,13 +266,8 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         ? this.transformAttributes(link.attributes)
         : [],
       droppedAttributesCount: 0,
+      flags: link.flags !== undefined ? link.flags : undefined,
     }
-
-    if (link.flags !== undefined) {
-      result.flags = link.flags
-    }
-
-    return result
   }
 
   /**
