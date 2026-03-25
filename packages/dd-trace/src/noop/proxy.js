@@ -167,7 +167,7 @@ function patchSpanAddTags (span) {
   }
 
   span.addTags = function addTags (tags) {
-    if (tags.service || tags['service.name']) {
+    if (tags && (tags.service || tags['service.name'])) {
       tags = { ...tags, [SVC_SRC_KEY]: 'm' }
     }
     return originalAddTags.call(this, tags)
