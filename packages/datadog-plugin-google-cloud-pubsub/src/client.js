@@ -19,7 +19,7 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
     } else {
       const result = this.serviceName()
       service = result.name
-      serviceSource = () => result.source
+      serviceSource = result.source
     }
 
     const spanOptions = {
