@@ -4059,7 +4059,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    it('tags new tests with dynamic names and logs a warning', (done) => {
+    it('tags new tests with dynamic names and logs a warning', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // No known tests, so both will be considered new
       receiver.setKnownTests({ jest: {} })
@@ -4086,8 +4086,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
           const dynamicTests = [...uniqueTests.values()]
             .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
-          // 4 dynamic tests: timestamp, localhost port, uuid, iso date
-          assert.strictEqual(dynamicTests.length, 4)
+          // 8 dynamic tests: timestamp, localhost port, uuid, iso datetime,
+          //   iso date-only, Math.random float, 127.0.0.1 port, 0.0.0.0 port
+          assert.strictEqual(dynamicTests.length, 8)
 
           dynamicTests.forEach(test => {
             assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
@@ -4098,7 +4099,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           assert.ok(dynamicNames.some(n => /can do stuff at \d+/.test(n)), 'timestamp test detected')
           assert.ok(dynamicNames.some(n => /localhost:\d+/.test(n)), 'localhost port test detected')
           assert.ok(dynamicNames.some(n => /user session [0-9a-f-]+/.test(n)), 'uuid test detected')
-          assert.ok(dynamicNames.some(n => /created at \d{4}-\d{2}-\d{2}T/.test(n)), 'iso date test detected')
+          assert.ok(dynamicNames.some(n => /created at \d{4}-\d{2}-\d{2}T/.test(n)), 'iso datetime test detected')
+          assert.ok(dynamicNames.some(n => /event on \d{4}-\d{2}-\d{2}$/.test(n)), 'iso date-only test detected')
+          assert.ok(dynamicNames.some(n => /probability 0\.\d+/.test(n)), 'Math.random float test detected')
+          assert.ok(dynamicNames.some(n => /127\.0\.0\.1:\d+/.test(n)), '127.0.0.1 port test detected')
+          assert.ok(dynamicNames.some(n => /0\.0\.0\.0:\d+/.test(n)), '0.0.0.0 port test detected')
 
           // The non-dynamic new tests should not have the tag
           const nonDynamicNewTests = [...uniqueTests.values()].filter(
@@ -4124,13 +4129,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         testOutput += chunk.toString()
       })
 
-      childProcess.on('exit', () => {
-        eventsPromise.then(() => {
-          assert.match(testOutput, /detected as new but their names contain dynamic data/)
-          assert.match(testOutput, /can do stuff at/)
-          done()
-        }).catch(done)
-      })
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+      assert.match(testOutput, /detected as new but their names contain dynamic data/)
+      assert.match(testOutput, /can do stuff at/)
+      assert.match(testOutput, /connects to localhost:/)
+      assert.match(testOutput, /user session/)
+      assert.match(testOutput, /created at/)
+      assert.match(testOutput, /event on/)
+      assert.match(testOutput, /probability 0\./)
+      assert.match(testOutput, /server at 127\.0\.0\.1:/)
+      assert.match(testOutput, /bound to 0\.0\.0\.0:/)
     })
   })
 

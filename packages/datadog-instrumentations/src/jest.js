@@ -151,13 +151,15 @@ const MAX_IGNORED_TEST_NAMES = 10
 // Matches patterns that are almost certainly runtime-generated values in test names:
 // - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
 // - UUIDs (8-4-4-4-12 hex)
-// - ISO 8601 date-times (2024-03-23T14:30)
-// - Random localhost ports (localhost:12345)
+// - ISO 8601 dates (2024-03-23) or date-times (2024-03-23T14:30)
+// - Random ports on localhost, 127.0.0.1, or 0.0.0.0
+// - Math.random() float values (10+ decimal digits after 0.)
 const DYNAMIC_NAME_RE = new RegExp(
   String.raw`\b1[6-9]\d{8,11}\b|` +
   String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|` +
-  String.raw`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}|` +
-  String.raw`localhost:\d{4,5}\b`,
+  String.raw`\b\d{4}-\d{2}-\d{2}|` +
+  String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{4,5}\b|` +
+  String.raw`\b0\.\d{10,}`,
   'i'
 )
 
@@ -214,7 +216,9 @@ function logSessionSummary (ignoredFailures) {
     sections.push(
       `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
       'dynamic data (timestamps, UUIDs, etc.).\n' +
-      'These tests might not actually be new. Consider using constant test names.\n\n' +
+      'Tests with changing names are always treated as new on every run, ' +
+      'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
+      'Consider using stable, deterministic test names.\n\n' +
       formatList(items)
     )
     newTestsWithDynamicNames.clear()
