@@ -251,7 +251,7 @@ function getFinalStatus ({
   isAttemptToFix,
   isLastAttemptToFix,
   attemptToFixPassed,
-  isQuarantined
+  isQuarantined,
 }) {
   // If the test is quarantined, regardless of its actual execution result or active retry features,
   // the final status of its last execution should be reported as 'skip'.
@@ -350,17 +350,21 @@ function getOnTestEndHandler (config) {
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
-    const finalStatus = getFinalStatus(status,
+    const { isFlakyTestRetriesEnabled } = config
+    const { _ddIsAttemptToFix, _ddIsQuarantined } = test
+
+    const finalStatus = getFinalStatus({
+      status,
       hasFailedAllRetries,
-      config.isFlakyTestRetriesEnabled,
+      isFlakyTestRetriesEnabled,
       isLastAtrAttempt,
       isEfdRetry,
       isLastEfdRetry,
-      test._ddIsAttemptToFix,
-      isLastAttempt,
+      isAttemptToFix: _ddIsAttemptToFix,
+      isLastAttemptToFix: isLastAttempt,
       attemptToFixPassed,
-      test._ddIsQuarantined
-    )
+      isQuarantined: _ddIsQuarantined,
+    })
 
     // if there are afterEach to be run, we don't finish the test yet
     if (ctx && !getAfterEachHooks(test).length) {
