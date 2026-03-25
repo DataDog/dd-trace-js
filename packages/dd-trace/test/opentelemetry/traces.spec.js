@@ -181,10 +181,10 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(scopeSpans[0].scope.name, 'dd-trace-js')
 
       const otlpSpan = scopeSpans[0].spans[0]
-      assert.strictEqual(otlpSpan.name, '/api/test')
-      assert.strictEqual(otlpSpan.kind, 2) // server
-      assert.strictEqual(otlpSpan.startTimeUnixNano, 1700000000000000000)
-      assert.strictEqual(otlpSpan.endTimeUnixNano, 1700000000050000000)
+      assert.deepStrictEqual(
+        { name: otlpSpan.name, kind: otlpSpan.kind, startTimeUnixNano: otlpSpan.startTimeUnixNano, endTimeUnixNano: otlpSpan.endTimeUnixNano },
+        { name: '/api/test', kind: 2, startTimeUnixNano: 1700000000000000000, endTimeUnixNano: 1700000000050000000 }
+      )
 
       // trace-id and span-id must be hex-encoded strings per the OTLP http/json spec
       assert.strictEqual(typeof otlpSpan.traceId, 'string', 'traceId must be a string')
@@ -258,9 +258,10 @@ describe('OpenTelemetry Traces', () => {
       const decoded = decodePayload(transformer.transformSpans([span]))
       const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
 
-      assert.strictEqual(attrs['http.method'], 'POST')
-      assert.strictEqual(attrs['http.url'], 'http://example.com')
-      assert.strictEqual(attrs['http.status_code'], 404)
+      assert.deepStrictEqual(
+        { 'http.method': attrs['http.method'], 'http.url': attrs['http.url'], 'http.status_code': attrs['http.status_code'] },
+        { 'http.method': 'POST', 'http.url': 'http://example.com', 'http.status_code': 404 }
+      )
     })
 
     it('encodes meta_struct values as base64 bytesValue attributes', () => {
@@ -313,9 +314,10 @@ describe('OpenTelemetry Traces', () => {
       const decoded = decodePayload(transformer.transformSpans([span]))
       const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
 
-      assert.strictEqual(attrs['resource.name'], '/api/test')
-      assert.strictEqual(attrs['service.name'], 'test-service')
-      assert.strictEqual(attrs['span.type'], 'web')
+      assert.deepStrictEqual(
+        { 'resource.name': attrs['resource.name'], 'service.name': attrs['service.name'], 'span.type': attrs['span.type'] },
+        { 'resource.name': '/api/test', 'service.name': 'test-service', 'span.type': 'web' }
+      )
     })
 
     it('transforms span events', () => {
@@ -338,8 +340,10 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(otlpSpan.events[0].name, 'exception')
 
       const eventAttrs = extractAttrs(otlpSpan.events[0].attributes)
-      assert.strictEqual(eventAttrs['exception.message'], 'test error')
-      assert.strictEqual(eventAttrs['exception.type'], 'Error')
+      assert.deepStrictEqual(
+        { 'exception.message': eventAttrs['exception.message'], 'exception.type': eventAttrs['exception.type'] },
+        { 'exception.message': 'test error', 'exception.type': 'Error' }
+      )
     })
 
     it('transforms span links from _dd.span_links JSON', () => {
@@ -361,12 +365,12 @@ describe('OpenTelemetry Traces', () => {
       const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
 
       assert.strictEqual(otlpSpan.links.length, 1)
-      assert.strictEqual(otlpSpan.links[0].traceState, 'dd=s:1')
-      assert.strictEqual(otlpSpan.links[0].traceId, 'aabbccddaabbccddaabbccddaabbccdd')
-      assert.strictEqual(otlpSpan.links[0].spanId, '1122334455667788')
-
-      const linkAttrs = extractAttrs(otlpSpan.links[0].attributes)
-      assert.strictEqual(linkAttrs['link.reason'], 'follows-from')
+      const link = otlpSpan.links[0]
+      assert.deepStrictEqual(
+        { traceId: link.traceId, spanId: link.spanId, traceState: link.traceState },
+        { traceId: 'aabbccddaabbccddaabbccddaabbccdd', spanId: '1122334455667788', traceState: 'dd=s:1' }
+      )
+      assert.strictEqual(extractAttrs(link.attributes)['link.reason'], 'follows-from')
     })
 
     it('maps timestamps correctly', () => {
@@ -406,8 +410,10 @@ describe('OpenTelemetry Traces', () => {
       const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
 
       assert.strictEqual(otlpSpans.length, 2)
-      assert.strictEqual(otlpSpans[0].name, '/api/first')
-      assert.strictEqual(otlpSpans[1].name, '/api/second')
+      assert.deepStrictEqual(
+        [otlpSpans[0].name, otlpSpans[1].name],
+        ['/api/first', '/api/second']
+      )
     })
   })
 
@@ -632,12 +638,23 @@ describe('OpenTelemetry Traces', () => {
           resourceAttrs[attr.key] = attr.value.stringValue
         })
 
-        assert.strictEqual(resourceAttrs['service.name'], 'my-trace-service')
-        assert.strictEqual(resourceAttrs['service.version'], 'v2.0.0')
-        assert.strictEqual(resourceAttrs['deployment.environment'], 'staging')
-        assert.strictEqual(resourceAttrs['telemetry.sdk.name'], 'datadog')
+        assert.deepStrictEqual(
+          {
+            'service.name': resourceAttrs['service.name'],
+            'service.version': resourceAttrs['service.version'],
+            'deployment.environment': resourceAttrs['deployment.environment'],
+            'telemetry.sdk.name': resourceAttrs['telemetry.sdk.name'],
+            'telemetry.sdk.language': resourceAttrs['telemetry.sdk.language'],
+          },
+          {
+            'service.name': 'my-trace-service',
+            'service.version': 'v2.0.0',
+            'deployment.environment': 'staging',
+            'telemetry.sdk.name': 'datadog',
+            'telemetry.sdk.language': 'javascript',
+          }
+        )
         assert.ok(resourceAttrs['telemetry.sdk.version'], 'telemetry.sdk.version should be set')
-        assert.strictEqual(resourceAttrs['telemetry.sdk.language'], 'javascript')
       })
 
       const tracer = setupTracer()
