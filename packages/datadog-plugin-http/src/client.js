@@ -42,6 +42,7 @@ class HttpClientPlugin extends ClientPlugin {
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
+      service: serviceName,
       serviceSource,
       meta: {
         [COMPONENT]: this.constructor.id,

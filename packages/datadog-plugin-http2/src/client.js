@@ -43,6 +43,7 @@ class Http2ClientPlugin extends ClientPlugin {
       childOf,
       integrationName: this.constructor.id,
       serviceSource,
+      service: serviceName,
       meta: {
         [COMPONENT]: this.constructor.id,
         [SPAN_KIND]: CLIENT,

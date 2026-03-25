@@ -71,6 +71,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         childOf,
         meta,
         serviceSource,
+        service: serviceName,
         integrationName: 'aws-sdk',
       }, ctx)
 
