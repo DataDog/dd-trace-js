@@ -196,8 +196,26 @@ function wrapSuper (_state, node) {
 }
 
 function wrapCallback (state, node) {
-  const { channelName, functionQuery: { callbackIndex = -1 } } = state
+  const { channelName, functionQuery: { callbackIndex = -1, noCallbackFallback = false } } = state
   const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
+  // When noCallbackFallback is true, fire channels synchronously if no callback is found
+  // so that callers without a callback still get a span (closes at dispatch time).
+  const noCallbackBody = noCallbackFallback
+    ? `return ${channelVariable}.start.runStores(__apm$ctx, () => {
+        try {
+          const __apm$result = __apm$traced();
+          __apm$ctx.result = __apm$result;
+          return __apm$result;
+        } catch (__apm$err) {
+          __apm$ctx.error = __apm$err;
+          ${channelVariable}.error.publish(__apm$ctx);
+          throw __apm$err;
+        } finally {
+          ${channelVariable}.end.publish(__apm$ctx);
+          ${channelVariable}.asyncEnd.publish(__apm$ctx);
+        }
+      });`
+    : 'return __apm$traced();'
   const wrapper = parse(`
     function wrapper () {
       const __apm$cb = Array.prototype.at.call(arguments, ${callbackIndex});
@@ -233,7 +251,7 @@ function wrapCallback (state, node) {
       }
 
       if (typeof __apm$cb !== 'function') {
-        return __apm$traced();
+        ${noCallbackBody}
       }
       Array.prototype.splice.call(arguments, ${callbackIndex}, 1, __apm$wrappedCb);
 
