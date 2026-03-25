@@ -14,6 +14,8 @@ const {
   mergeCoverage,
   resetCoverage,
   getIsFaultyEarlyFlakeDetection,
+  collectDynamicNamesFromTraces,
+  logDynamicNamesWarning,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -34,6 +36,7 @@ const {
   getRunTestsWrapper,
   testsAttemptToFix,
   testsStatuses,
+  newTestsWithDynamicNames,
 } = require('./utils')
 
 require('./common')
@@ -207,6 +210,8 @@ function getOnEndHandler (isParallel) {
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
     })
+
+    logDynamicNamesWarning(newTestsWithDynamicNames)
   }
 }
 
@@ -552,6 +557,7 @@ function onMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
+      collectDynamicNamesFromTraces(payload, newTestsWithDynamicNames)
       workerReportTraceCh.publish(payload)
     }
   }

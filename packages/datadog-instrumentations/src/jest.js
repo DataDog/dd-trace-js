@@ -15,9 +15,8 @@ const {
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   getTestEndLine,
   isModifiedTest,
-  TEST_HAS_DYNAMIC_NAME,
-  TEST_SUITE,
-  TEST_NAME,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -147,21 +146,6 @@ function getTestEnvironmentOptions (config) {
 }
 
 const MAX_IGNORED_TEST_NAMES = 10
-
-// Matches patterns that are almost certainly runtime-generated values in test names:
-// - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
-// - UUIDs (8-4-4-4-12 hex)
-// - ISO 8601 dates (2024-03-23) or date-times (2024-03-23T14:30)
-// - Random ports on localhost, 127.0.0.1, or 0.0.0.0
-// - Math.random() float values (10+ decimal digits after 0.)
-const DYNAMIC_NAME_RE = new RegExp(
-  String.raw`\b1[6-9]\d{8,11}\b|` +
-  String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|` +
-  String.raw`\b\d{4}-\d{2}-\d{2}|` +
-  String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{4,5}\b|` +
-  String.raw`\b0\.\d{10,}`,
-  'i'
-)
 
 function getTestStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
@@ -1848,30 +1832,11 @@ addHook({
   return runtimePackage
 })
 
-function collectDynamicNamesFromTraces (data) {
-  try {
-    const traces = JSON.parse(data)
-    for (const trace of traces) {
-      for (const span of trace) {
-        if (span.meta?.[TEST_HAS_DYNAMIC_NAME] === 'true') {
-          const suite = span.meta[TEST_SUITE]
-          const name = span.meta[TEST_NAME]
-          if (suite && name) {
-            newTestsWithDynamicNames.add(`${suite} › ${name}`)
-          }
-        }
-      }
-    }
-  } catch {
-    // ignore parse errors — trace will still be forwarded
-  }
-}
-
 function onMessageWrapper (onMessage) {
   return function () {
     const [code, data] = arguments[0]
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
-      collectDynamicNamesFromTraces(data)
+      collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
       workerReportTraceCh.publish(data)
       return
     }

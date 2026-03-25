@@ -1247,6 +1247,36 @@ versions.forEach((version) => {
 
         await Promise.all([once(childProcess, 'exit'), receiverPromise])
       })
+
+      it('tags new tests with dynamic names and logs a warning', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 1 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setKnownTests({ playwright: {} })
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js --grep "dynamic name suite"',
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+            },
+          }
+        )
+
+        let testOutput = ''
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        await once(childProcess, 'exit')
+
+        assert.match(testOutput, /detected as new but their names contain dynamic data/)
+      })
     })
 
     it('correctly calculates test code owners when working directory is not repository root', (done) => {

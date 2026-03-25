@@ -33,6 +33,7 @@ const {
   TEST_RETRY_REASON_TYPES,
   isModifiedTest,
   TEST_IS_MODIFIED,
+  TEST_HAS_DYNAMIC_NAME,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -117,6 +118,7 @@ class VitestPlugin extends CiPlugin {
         testSuiteAbsolutePath,
         isRetry,
         isNew,
+        hasDynamicName,
         isAttemptToFix,
         isQuarantined,
         isDisabled,
@@ -147,6 +149,9 @@ class VitestPlugin extends CiPlugin {
       }
       if (isNew) {
         extraTags[TEST_IS_NEW] = 'true'
+      }
+      if (hasDynamicName) {
+        extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
       }
       if (isAttemptToFix) {
         extraTags[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = 'true'

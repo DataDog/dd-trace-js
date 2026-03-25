@@ -38,6 +38,8 @@ const {
   TEST_STATUS,
   TEST_SUITE_ID,
   TEST_SUITE,
+  TEST_HAS_DYNAMIC_NAME,
+  DYNAMIC_NAME_RE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -221,6 +223,9 @@ class PlaywrightPlugin extends CiPlugin {
             trace_id: id(span.trace_id),
             parent_id: id(span.parent_id),
           }
+          if (span.meta[TEST_IS_NEW] === 'true' && DYNAMIC_NAME_RE.test(span.meta[TEST_NAME] || '')) {
+            formattedSpan.meta[TEST_HAS_DYNAMIC_NAME] = 'true'
+          }
           if (span.name === 'playwright.test') {
             // TODO: remove this comment
             // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
@@ -303,6 +308,7 @@ class PlaywrightPlugin extends CiPlugin {
       error,
       extraTags,
       isNew,
+      hasDynamicName,
       isEfdRetry,
       isRetry,
       isAttemptToFix,
@@ -334,6 +340,9 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_IS_RETRY, 'true')
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
+      }
+      if (hasDynamicName) {
+        span.setTag(TEST_HAS_DYNAMIC_NAME, 'true')
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
