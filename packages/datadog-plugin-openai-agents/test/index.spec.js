@@ -81,7 +81,7 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
-            'out.host': 'api.openai.com',
+            'out.host': ANY_STRING,
             'ai.request.model': 'gpt-4',
             'ai.request.model_provider': 'openai',
             'openai.request.model': 'gpt-4',
@@ -103,7 +103,7 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
-            'out.host': 'api.openai.com',
+            'out.host': ANY_STRING,
             'ai.request.model': 'gpt-4',
             'ai.request.model_provider': 'openai',
             'openai.request.model': 'gpt-4',
@@ -135,7 +135,7 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
-            'out.host': 'api.openai.com',
+            'out.host': ANY_STRING,
             'ai.request.model': 'gpt-4',
             'ai.request.model_provider': 'openai',
             'openai.request.model': 'gpt-4',
@@ -160,7 +160,7 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
-            'out.host': 'api.openai.com',
+            'out.host': ANY_STRING,
             'ai.request.model': 'gpt-4',
             'ai.request.model_provider': 'openai',
             'openai.request.model': 'gpt-4',

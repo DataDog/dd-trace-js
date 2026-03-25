@@ -1,8 +1,11 @@
 'use strict'
 
+const path = require('node:path')
+
 const {
   assertLlmObsSpanEvent,
   MOCK_NOT_NULLISH,
+  MOCK_STRING,
   useLlmObs,
 } = require('../../util')
 
@@ -37,56 +40,26 @@ describe('integrations', () => {
         }
       }
 
-      // Load packages directly - instrumentation is set up by useLlmObs
-      const agentsOpenai = require('@openai/agents-openai')
-      OpenAIResponsesModel = agentsOpenai.OpenAIResponsesModel
+      const versionsDir = path.join(__dirname, '..', '..', '..', '..', '..', '..')
 
-      agentsCore = require('@openai/agents-core')
+      const agentsCoreVersionDir = path.join(versionsDir, 'versions', '@openai', 'agents-core@>=0.7.0')
+      agentsCore = require(agentsCoreVersionDir).get()
 
-      // Mock client returning a successful response
-      const mockClient = {
-        baseURL: 'https://api.openai.com/v1',
-        responses: {
-          create: async () => ({
-            id: 'resp-001',
-            output: [
-              {
-                type: 'message',
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'Hello! How can I help you?' }],
-              },
-            ],
-            usage: { input_tokens: 12, output_tokens: 8, total_tokens: 20 },
-          }),
-        },
-      }
+      const agentsOpenaiVersionDir = path.join(versionsDir, 'versions', '@openai', 'agents-openai@>=0.7.0')
+      const { OpenAIResponsesModel: Model } = require(agentsOpenaiVersionDir).get()
+      OpenAIResponsesModel = Model
 
-      // Mock client for streaming
-      const mockStreamClient = {
-        baseURL: 'https://api.openai.com/v1',
-        responses: {
-          create: async () => {
-            return (async function * () {
-              yield {
-                type: 'response.completed',
-                response: {
-                  id: 'resp-002',
-                  output: [
-                    {
-                      type: 'message',
-                      role: 'assistant',
-                      content: [{ type: 'output_text', text: 'Streamed response' }],
-                    },
-                  ],
-                  usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-                },
-              }
-            })()
-          },
-        },
-      }
+      const openaiPath = require.resolve('openai', {
+        paths: [path.join(versionsDir, 'versions', 'node_modules', '@openai', 'agents-openai')],
+      })
+      const { OpenAI } = require(openaiPath)
 
-      // Mock client that throws errors
+      const vcrClient = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY ?? 'test',
+        baseURL: 'http://127.0.0.1:9126/vcr/openai',
+      })
+
+      // Mock client that throws errors (VCR cannot simulate network-level throws)
       const mockErrorClient = {
         baseURL: 'https://api.openai.com/v1',
         responses: {
@@ -96,8 +69,8 @@ describe('integrations', () => {
         },
       }
 
-      fakeModel = new OpenAIResponsesModel(mockClient, 'gpt-4')
-      streamModel = new OpenAIResponsesModel(mockStreamClient, 'gpt-4')
+      fakeModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
+      streamModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
       errorModel = new OpenAIResponsesModel(mockErrorClient, 'gpt-4')
     })
 
@@ -128,7 +101,7 @@ describe('integrations', () => {
             { role: 'user', content: 'Hello' },
           ],
           outputMessages: [
-            { role: 'assistant', content: 'Hello! How can I help you?' },
+            { role: 'assistant', content: MOCK_STRING },
           ],
           metrics: {
             input_tokens: MOCK_NOT_NULLISH,
@@ -164,7 +137,7 @@ describe('integrations', () => {
             { role: 'user', content: 'What is 2 + 2?' },
           ],
           outputMessages: [
-            { role: 'assistant', content: 'Hello! How can I help you?' },
+            { role: 'assistant', content: MOCK_STRING },
           ],
           metrics: {
             input_tokens: MOCK_NOT_NULLISH,
@@ -246,7 +219,7 @@ describe('integrations', () => {
             { role: 'user', content: 'Tell me a joke' },
           ],
           outputMessages: [
-            { role: 'assistant', content: 'Hello! How can I help you?' },
+            { role: 'assistant', content: MOCK_STRING },
           ],
           metrics: {
             input_tokens: MOCK_NOT_NULLISH,

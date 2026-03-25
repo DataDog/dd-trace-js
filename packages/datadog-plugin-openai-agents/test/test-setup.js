@@ -6,80 +6,23 @@ class OpenaiAgentsTestSetup {
   async setup (module) {
     this.module = module
 
-    module.setDefaultModelProvider({
-      createModel (modelName) {
-        return {
-          async getResponse (request) {
-            return {
-              output: [
-                { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'test response' }] },
-              ],
-              usage: { requests: 1, inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              responseId: 'fake-response-id',
-              referencedTools: [],
-            }
-          },
-          async * getStreamedResponse (request) {
-            yield {
-              type: 'response.completed',
-              response: {
-                output: [
-                  { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'streamed' }] },
-                ],
-              },
-            }
-          },
-        }
-      },
-    })
-
-    // Load @openai/agents-openai from its own version directory to get the actual
-    // OpenAIResponsesModel class (instrumented by orchestrion on the prototype)
     const agentsOpenaiVersionDir = path.join(
       __dirname, '..', '..', '..', 'versions', '@openai', 'agents-openai@>=0.7.0'
     )
-    const agentsOpenaiWrapper = require(agentsOpenaiVersionDir)
-    const agentsOpenai = agentsOpenaiWrapper.get()
-    const { OpenAIResponsesModel } = agentsOpenai
+    const { OpenAIResponsesModel } = require(agentsOpenaiVersionDir).get()
+    const openaiPath = require.resolve('openai', {
+      paths: [path.join(__dirname, '..', '..', '..', 'versions', 'node_modules', '@openai', 'agents-openai')],
+    })
+    const { OpenAI } = require(openaiPath)
 
-    const mockClient = {
-      baseURL: 'https://api.openai.com/v1',
-      responses: {
-        create: async (requestData, options) => {
-          return {
-            id: 'resp-001',
-            output: [
-              { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'test response' }] },
-            ],
-            usage: {
-              input_tokens: 10,
-              output_tokens: 5,
-              total_tokens: 15,
-            },
-          }
-        },
-      },
-    }
+    const vcrClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY ?? 'test',
+      baseURL: 'http://127.0.0.1:9126/vcr/openai',
+    })
 
-    const mockStreamClient = {
-      baseURL: 'https://api.openai.com/v1',
-      responses: {
-        create: async (requestData, options) => {
-          return (async function * () {
-            yield {
-              type: 'response.completed',
-              response: {
-                id: 'resp-002',
-                output: [
-                  { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'streamed' }] },
-                ],
-                usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-              },
-            }
-          })()
-        },
-      },
-    }
+    module.setDefaultModelProvider({
+      createModel: (modelName) => new OpenAIResponsesModel(vcrClient, modelName),
+    })
 
     const mockErrorClient = {
       baseURL: 'https://api.openai.com/v1',
@@ -90,8 +33,8 @@ class OpenaiAgentsTestSetup {
       },
     }
 
-    this.fakeModel = new OpenAIResponsesModel(mockClient, 'gpt-4')
-    this.streamModel = new OpenAIResponsesModel(mockStreamClient, 'gpt-4')
+    this.fakeModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
+    this.streamModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
     this.errorModel = new OpenAIResponsesModel(mockErrorClient, 'gpt-4')
 
     this.agent = new module.Agent({

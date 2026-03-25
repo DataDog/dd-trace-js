@@ -2934,14 +2934,14 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
-     */
-    /**
-     * This plugin automatically instruments the
      * [openai-agents](https://github.com/npmjs/package/@openai/agents) library.
-     */
-    interface openai_agents extends Instrumentation {}
-
+    */
+   interface openai_agents extends Instrumentation {}
+   
+   /**
+    * This plugin automatically instruments the
+    * [opensearch](https://github.com/opensearch-project/opensearch-js) module.
+    */
     interface opensearch extends elasticsearch {}
 
     /**
