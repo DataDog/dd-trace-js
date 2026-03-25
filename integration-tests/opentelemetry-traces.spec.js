@@ -51,17 +51,18 @@ describe('OTLP Trace Export', () => {
     const exitPromise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Process timed out')), timeout)
       proc.on('error', reject)
-      proc.on('exit', (code) => {
+      proc.on('exit', (code, signal) => {
         clearTimeout(timer)
-        if (code !== 0) {
-          reject(new Error(`Process exited with status code ${code}`))
-        } else {
+        if (code === 0 || signal === 'SIGTERM') {
           resolve()
+        } else {
+          reject(new Error(`Process exited with status code ${code}`))
         }
       })
     })
 
     const { headers, payload } = await tracesPromise
+    proc.kill()
     await exitPromise
 
     assert.strictEqual(headers['content-type'], 'application/json')

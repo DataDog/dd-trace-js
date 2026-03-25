@@ -20,6 +20,3 @@ errorSpan.setTag('error.message', 'test error message')
 errorSpan.finish()
 
 rootSpan.finish()
-
-// Allow time for the HTTP export request to complete
-setTimeout(() => process.exit(0), 1500)
