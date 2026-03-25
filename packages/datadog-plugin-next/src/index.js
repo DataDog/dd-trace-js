@@ -22,7 +22,9 @@ class NextPlugin extends ServerPlugin {
     const childOf = store ? store.span : store
     const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
     const serviceName = this.config.service || schemaServiceName
-    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
+    let serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
+    if (!serviceName || serviceName === this.tracer._service) serviceSource = undefined
+
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
       tags: {

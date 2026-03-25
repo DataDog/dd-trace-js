@@ -18,7 +18,7 @@ class ProducerPlugin extends OutboundPlugin {
       } else {
         const { name, source } = this.serviceName()
         options.service = name
-        options.serviceSource = () => source
+        options.serviceSource = source
       }
     }
     for (const key of Object.keys(spanDefaults)) {

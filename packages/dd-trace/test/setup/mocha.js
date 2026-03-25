@@ -62,7 +62,7 @@ function withNamingSchema (
 
         hooks(versionName, false)
 
-        const { opName, serviceName } = expected[versionName]
+        const { opName, serviceName, defaultTracerService } = expected[versionName]
 
         it('should conform to the naming schema', function () {
           this.retries(3)
@@ -82,7 +82,8 @@ function withNamingSchema (
                 assert.strictEqual(span.name, expectedOpName)
                 assert.strictEqual(span.service, expectedServiceName)
 
-                const tracerService = Nomenclature.config.service
+                const tracerService = defaultTracerService || Nomenclature.config.service
+
                 if (span.service !== tracerService) {
                   assert.notStrictEqual(
                     span.meta[SVC_SRC_KEY],
@@ -122,7 +123,7 @@ function withNamingSchema (
 
       hooks('v0', true)
 
-      const { serviceName } = expected.v1
+      const { serviceName, defaultTracerService } = expected.v1
 
       it('should pass service name through', function () {
         this.retries(3)
@@ -137,7 +138,7 @@ function withNamingSchema (
                 : serviceName
               assert.strictEqual(span.service, expectedServiceName)
 
-              const tracerService = Nomenclature.config.service
+              const tracerService = defaultTracerService || Nomenclature.config.service
               if (span.service !== tracerService) {
                 assert.notStrictEqual(
                   span.meta[SVC_SRC_KEY],

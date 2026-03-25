@@ -193,7 +193,8 @@ class TracingPlugin extends Plugin {
 
     // clear service source if service is the same as tracer._service
     const serviceName = service || meta?.service
-    if (serviceName === tracer._service) {
+
+    if (!serviceName || serviceName === tracer._service) {
       serviceSource = undefined
     }
 

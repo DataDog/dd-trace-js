@@ -100,16 +100,25 @@ const storage = {
     mariadb: {
       opName: () => 'mariadb.query',
       serviceName: mysqlServiceName,
+      serviceSource: ({ tracerService, pluginConfig, connectionName }) => {
+        return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'mysql' })
+      },
     },
     memcached: {
       opName: () => 'memcached.command',
       serviceName: ({ tracerService, pluginConfig, system }) =>
         pluginConfig.service || fromSystem(tracerService, system),
+      serviceSource: ({ tracerService, pluginConfig, connectionName }) => {
+        return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'memcached' })
+      },
     },
     'mongodb-core': {
       opName: () => 'mongodb.query',
       serviceName: ({ tracerService, pluginConfig }) =>
         pluginConfig.service || `${tracerService}-mongodb`,
+      serviceSource: ({ tracerService, pluginConfig, connectionName }) => {
+        return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'mongodb' })
+      },
     },
     mysql: {
       opName: () => 'mysql.query',
