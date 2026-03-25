@@ -123,7 +123,16 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
     const topicName = topic?.slice(topic.lastIndexOf('/') + 1) ??
       subscription.name.slice(subscription.name.lastIndexOf('/') + 1)
     const baseService = this.tracer._service || 'unknown'
-    const serviceName = this.config.service || `${baseService}-pubsub`
+    let serviceName
+    let serviceSource
+    if (this.config.service) {
+      serviceSource = 'opt.plugin'
+      serviceName = this.config.service
+    } else {
+      serviceSource = baseService
+      serviceName = `${baseService}-pubsub`
+    }
+
     const meta = {
       'gcloud.project_id': subscription.pubsub.projectId,
       'pubsub.topic': topic,
@@ -168,6 +177,7 @@ class GoogleCloudPubsubConsumerPlugin extends ConsumerPlugin {
       resource: `Message from ${topicName}`,
       type: 'worker',
       service: serviceName,
+      serviceSource,
       meta,
       metrics,
     }, ctx)
