@@ -316,7 +316,7 @@ describe('Config', () => {
       getConfig()
       sinon.assert.calledWith(
         log.info,
-        'OTEL_TRACES_SAMPLER=%s is not supported; using %s instead',
+        'OTEL_TRACES_SAMPLER=%s does not respect upstream sampling decisions; using parent-based equivalent %s instead',
         sampler,
         parentBased
       )
@@ -330,7 +330,7 @@ describe('Config', () => {
       process.env.OTEL_TRACES_SAMPLER_ARG = '0.5'
       getConfig()
       const upgradeCall = log.info.getCalls().find(
-        (call) => call.args[0]?.includes?.('is not supported')
+        (call) => call.args[0]?.includes?.('does not respect upstream sampling decisions')
       )
       assert.strictEqual(upgradeCall, undefined)
     }

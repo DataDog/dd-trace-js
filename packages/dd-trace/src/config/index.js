@@ -746,15 +746,13 @@ class Config {
       maybeJsonFile(DD_SPAN_SAMPLING_RULES_FILE) ??
       safeJsonParse(DD_SPAN_SAMPLING_RULES)
     ))
-    let otelTracesSampleRate = getFromOtelSamplerMap(OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG)
-    if (OTEL_TRACES_EXPORTER === 'otlp') {
-      otelTracesSampleRate = getFromOtelSamplerMap(OTEL_TRACES_SAMPLER || 'parentbased_always_on'
-        , OTEL_TRACES_SAMPLER_ARG)
-    }
+    const effectiveSampler = (OTEL_TRACES_EXPORTER === 'otlp' && !OTEL_TRACES_SAMPLER)
+      ? 'parentbased_always_on'
+      : OTEL_TRACES_SAMPLER
     setUnit(
       target,
       'sampleRate',
-      DD_TRACE_SAMPLE_RATE || otelTracesSampleRate
+      DD_TRACE_SAMPLE_RATE || getFromOtelSamplerMap(effectiveSampler, OTEL_TRACES_SAMPLER_ARG)
     )
     target['sampler.rateLimit'] = DD_TRACE_RATE_LIMIT
     setSamplingRule(target, 'sampler.rules', safeJsonParse(DD_TRACE_SAMPLING_RULES))
@@ -1392,7 +1390,7 @@ function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   const parentBasedEquivalent = NON_PARENTBASED_TO_PARENTBASED[otelTracesSampler]
   if (parentBasedEquivalent) {
     log.info(
-      'OTEL_TRACES_SAMPLER=%s is not supported; using %s instead',
+      'OTEL_TRACES_SAMPLER=%s does not respect upstream sampling decisions; using parent-based equivalent %s instead',
       otelTracesSampler, parentBasedEquivalent
     )
     otelTracesSampler = parentBasedEquivalent
