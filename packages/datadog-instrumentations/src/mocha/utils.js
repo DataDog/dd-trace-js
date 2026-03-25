@@ -241,7 +241,8 @@ function getOnTestHandler (isMain) {
   }
 }
 
-function getFinalStatus (status,
+function getFinalStatus ({
+  status,
   hasFailedAllRetries,
   isFlakyTestRetriesEnabled,
   isLastAtrAttempt,
@@ -250,7 +251,8 @@ function getFinalStatus (status,
   isAttemptToFix,
   isLastAttemptToFix,
   attemptToFixPassed,
-  isQuarantined) {
+  isQuarantined
+}) {
   // If the test is quarantined, regardless of its actual execution result or active retry features,
   // the final status of its last execution should be reported as 'skip'.
   if (isQuarantined) {
