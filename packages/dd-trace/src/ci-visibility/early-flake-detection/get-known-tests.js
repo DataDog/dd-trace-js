@@ -17,6 +17,38 @@ const {
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
 
+const MAX_KNOWN_TESTS_PAGES = 10_000
+
+/**
+ * Deep-merges page tests into aggregate.
+ * Structure: { module: { suite: [testName, ...] } }
+ */
+function mergeKnownTests (aggregate, page) {
+  if (!page) return aggregate
+  if (!aggregate) return page
+
+  for (const [moduleName, suites] of Object.entries(page)) {
+    if (!suites) continue
+
+    if (!aggregate[moduleName]) {
+      aggregate[moduleName] = suites
+      continue
+    }
+
+    for (const [suiteName, tests] of Object.entries(suites)) {
+      if (!tests || tests.length === 0) continue
+
+      if (!aggregate[moduleName][suiteName]) {
+        aggregate[moduleName][suiteName] = tests
+      } else {
+        aggregate[moduleName][suiteName] = aggregate[moduleName][suiteName].concat(tests)
+      }
+    }
+  }
+
+  return aggregate
+}
+
 function getKnownTests ({
   url,
   isEvpProxy,
@@ -59,53 +91,94 @@ function getKnownTests ({
     options.headers['dd-api-key'] = apiKey
   }
 
-  const data = JSON.stringify({
-    data: {
-      id: id().toString(10),
-      type: 'ci_app_libraries_tests_request',
-      attributes: {
-        configurations: {
-          'os.platform': osPlatform,
-          'os.version': osVersion,
-          'os.architecture': osArchitecture,
-          'runtime.name': runtimeName,
-          'runtime.version': runtimeVersion,
-          custom,
-        },
-        service,
-        env,
-        repository_url: repositoryUrl,
-        sha,
-      },
-    },
-  })
+  const configurations = {
+    'os.platform': osPlatform,
+    'os.version': osVersion,
+    'os.architecture': osArchitecture,
+    'runtime.name': runtimeName,
+    'runtime.version': runtimeVersion,
+    custom,
+  }
 
   incrementCountMetric(TELEMETRY_KNOWN_TESTS)
 
   const startTime = Date.now()
+  let aggregateTests = null
+  let totalResponseBytes = 0
+  let pageNumber = 0
 
-  request(data, options, (err, res, statusCode) => {
-    distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
-    if (err) {
-      incrementCountMetric(TELEMETRY_KNOWN_TESTS_ERRORS, { statusCode })
-      done(err)
-    } else {
+  function fetchPage (pageState) {
+    pageNumber++
+
+    if (pageNumber > MAX_KNOWN_TESTS_PAGES) {
+      log.error(`Known tests pagination exceeded maximum of ${MAX_KNOWN_TESTS_PAGES} pages. Aborting.`)
+      distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+      return done(new Error(`Known tests pagination exceeded maximum of ${MAX_KNOWN_TESTS_PAGES} pages`))
+    }
+
+    const pageInfo = pageState ? { page_state: pageState } : {}
+
+    const data = JSON.stringify({
+      data: {
+        id: id().toString(10),
+        type: 'ci_app_libraries_tests_request',
+        attributes: {
+          configurations,
+          service,
+          env,
+          repository_url: repositoryUrl,
+          sha,
+          page_info: pageInfo,
+        },
+      },
+    })
+
+    request(data, options, (err, res, statusCode) => {
+      if (err) {
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+        incrementCountMetric(TELEMETRY_KNOWN_TESTS_ERRORS, { statusCode })
+        return done(err)
+      }
+
       try {
-        const { data: { attributes: { tests: knownTests } } } = JSON.parse(res)
+        totalResponseBytes += res.length
 
-        const numTests = getNumFromKnownTests(knownTests)
+        const { data: { attributes } } = JSON.parse(res)
+        const { tests: pageTests, page_info: responsePageInfo } = attributes
+
+        aggregateTests = mergeKnownTests(aggregateTests, pageTests)
+
+        // Check if there are more pages
+        if (responsePageInfo && responsePageInfo.has_next) {
+          if (!responsePageInfo.cursor) {
+            log.error(
+              `Known tests response has has_next=true but no cursor on page ${pageNumber}. Aborting pagination.`
+            )
+            distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+            return done(new Error('Known tests pagination: has_next=true but no cursor'))
+          }
+          return fetchPage(responsePageInfo.cursor)
+        }
+
+        // Done — no more pages
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+
+        const numTests = getNumFromKnownTests(aggregateTests)
 
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
-        distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, totalResponseBytes)
 
         log.debug('Number of received known tests:', numTests)
 
-        done(null, knownTests)
+        done(null, aggregateTests)
       } catch (err) {
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
         done(err)
       }
-    }
-  })
+    })
+  }
+
+  fetchPage(null)
 }
 
-module.exports = { getKnownTests }
+module.exports = { getKnownTests, mergeKnownTests }
