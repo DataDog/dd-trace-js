@@ -58,33 +58,30 @@ function ensureChannelsActivated (asyncContextFrameEnabled) {
   if (channelsActivated) return
 
   const shimmer = require('../../../../datadog-shimmer')
-  const asyncHooks = require('async_hooks')
 
-  // When using AsyncContextFrame to store sample context, we do not need to use
-  // async_hooks.createHook to create a "before" callback anymore.
-  if (!asyncContextFrameEnabled) {
-    const { createHook } = asyncHooks
-    beforeCh = dc.channel('dd-trace:storage:before')
-    createHook({ before: () => beforeCh.publish() }).enable()
-  }
-
-  const { AsyncLocalStorage } = asyncHooks
-
-  // We need to instrument AsyncLocalStorage.enterWith() both with and without AsyncContextFrame.
+  // We need to instrument enterWith() on the legacy storage — that's the storage
+  // carrying span data and the only one the profiler cares about.
+  const legacyStorage = storage('legacy')
   let inRun = false
-  shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
-    return function (...args) {
-      const retVal = original.apply(this, args)
+  shimmer.wrap(legacyStorage, 'enterWith', function (original) {
+    return function (store) {
+      const retVal = original.call(this, store)
       if (!inRun) enterCh.publish()
       return retVal
     }
   })
 
-  // We only need to instrument AsyncLocalStorage.run() when not using AsyncContextFrame.
-  // AsyncContextFrame-based implementation of AsyncLocalStorage.run() delegates
-  // to AsyncLocalStorage.enterWith() so it doesn't need to be separately instrumented.
+  // When not using AsyncContextFrame, we need additional instrumentation.
   if (!asyncContextFrameEnabled) {
-    shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
+    // We need async_hooks.createHook to create a "before" callback.
+    const { createHook } = require('async_hooks')
+    beforeCh = dc.channel('dd-trace:storage:before')
+    createHook({ before: () => beforeCh.publish() }).enable()
+
+    // In ACF-based implementation run() delegates to enterWith()  so it doesn't
+    // need to be separately instrumented. in non-ACF implementation run()
+    // doesn't delegate to enterWith(), so separate instrumentation is necessary.
+    shimmer.wrap(legacyStorage, 'run', function (original) {
       return function (store, callback, ...args) {
         const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
           inRun = false
