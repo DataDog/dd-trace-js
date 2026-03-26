@@ -366,13 +366,12 @@ function getOnTestEndHandler (config) {
       isQuarantined: _ddIsQuarantined,
     })
 
+    // if there are afterEach to be run, we don't finish the test yet.
     // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
     // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
     // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
     // directly sets finalStatus without waiting for hooks
-    const isDisabledPending = test._ddIsDisabled && !test._ddIsAttemptToFix
-    // if there are afterEach to be run, we don't finish the test yet
-    if (ctx && (!getAfterEachHooks(test).length || isDisabledPending)) {
+    if (ctx && (!getAfterEachHooks(test).length || test._ddIsDisabled)) {
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
@@ -400,9 +399,9 @@ function getOnHookEndHandler () {
       if (isLastAfterEach) {
         const status = getTestStatus(test)
         const ctx = getTestContext(test)
-        // Purely disabled tests (not attempt-to-fix) are already finished in getOnTestEndHandler,
+        // Disabled tests are already finished in getOnTestEndHandler,
         // skip to avoid double-publishing
-        if (ctx && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
+        if (ctx && !test._ddIsDisabled) {
           testFinishCh.publish({
             status,
             hasBeenRetried: isMochaRetry(test),
@@ -434,9 +433,9 @@ function getOnFailHandler (isMain) {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
         // if it's a hook and it has failed, 'test end' will not be called
-        // quarantined and disabled (without attempt to fix) tests always report 'skip'
+        // quarantined and disabled tests always report 'skip'
         // as final status, even when hooks fail
-        const isSkippedByManagement = test._ddIsQuarantined || (test._ddIsDisabled && !test._ddIsAttemptToFix)
+        const isSkippedByManagement = test._ddIsQuarantined || test._ddIsDisabled
         testFinishCh.publish({
           status: 'fail',
           hasBeenRetried: isMochaRetry(test),
