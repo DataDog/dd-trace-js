@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" font-family="system-ui, -apple-system, sans-serif">
+  <defs>
+    <style>
+      .grid { stroke: #e0e0e0; stroke-width: 0.5; }
+      .axis { stroke: #333; stroke-width: 1.5; }
+      .label { font-size: 12px; fill: #555; }
+      .title { font-size: 16px; fill: #222; font-weight: 600; }
+      .tick { font-size: 11px; fill: #666; }
+      .legend-text { font-size: 12px; fill: #333; }
+    </style>
+  </defs>
+
+  <rect width="720" height="420" fill="#fafafa" rx="6"/>
+
+  <text x="360" y="30" text-anchor="middle" class="title">Native Spans Throughput — Before &amp; After Fix (upstream)</text>
+
+  <!-- Grid lines: y = 350 - (val/13000)*300 -->
+  <line x1="80" y1="350" x2="680" y2="350" class="grid"/>
+  <line x1="80" y1="292" x2="680" y2="292" class="grid"/>
+  <line x1="80" y1="234" x2="680" y2="234" class="grid"/>
+  <line x1="80" y1="177" x2="680" y2="177" class="grid"/>
+  <line x1="80" y1="119" x2="680" y2="119" class="grid"/>
+  <line x1="80" y1="61"  x2="680" y2="61"  class="grid"/>
+
+  <!-- Axes -->
+  <line x1="80" y1="50" x2="80"  y2="350" class="axis"/>
+  <line x1="80" y1="350" x2="680" y2="350" class="axis"/>
+
+  <!-- Y axis ticks (0, 2.5K, 5K, 7.5K, 10K, 12.5K) -->
+  <text x="72" y="354" text-anchor="end" class="tick">0</text>
+  <text x="72" y="296" text-anchor="end" class="tick">2.5K</text>
+  <text x="72" y="238" text-anchor="end" class="tick">5K</text>
+  <text x="72" y="181" text-anchor="end" class="tick">7.5K</text>
+  <text x="72" y="123" text-anchor="end" class="tick">10K</text>
+  <text x="72" y="65"  text-anchor="end" class="tick">12.5K</text>
+
+  <text x="20" y="200" text-anchor="middle" class="label" transform="rotate(-90 20 200)">req/s</text>
+
+  <!-- X axis ticks -->
+  <text x="130" y="370" text-anchor="middle" class="tick">5K</text>
+  <text x="240" y="370" text-anchor="middle" class="tick">10K</text>
+  <text x="350" y="370" text-anchor="middle" class="tick">15K</text>
+  <text x="460" y="370" text-anchor="middle" class="tick">20K</text>
+  <text x="570" y="370" text-anchor="middle" class="tick">25K</text>
+  <text x="680" y="370" text-anchor="middle" class="tick">30K</text>
+
+  <text x="380" y="395" text-anchor="middle" class="label">total requests processed</text>
+
+  <!-- y = 350 - (val/13000)*300 -->
+  <!-- No tracer: 9381 10460 10638 11186 11312 11990 -->
+  <!--   y:       133.5 108.6 104.5  91.9  89.0  73.4 -->
+  <!-- JS mode:  5423  6519  6803  7032  7257  7123 -->
+  <!--   y:       224.8 199.5 193.0 187.7 182.6 185.7 -->
+  <!-- Native:   4550  5488  5828  6002  6234  6203 -->
+  <!--   y:       245.0 223.3 215.5 211.5 206.1 206.8 -->
+  <!-- Old:      3800  3962  3600  3145  2703  2567 -->
+  <!--   y:       262.3 258.6 266.9 277.4 287.6 290.8 -->
+
+  <!-- No tracer (green) -->
+  <polyline fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+    points="130,134 240,109 350,105 460,92 570,89 680,73"/>
+  <circle cx="130" cy="134" r="4" fill="#22c55e"/>
+  <circle cx="240" cy="109" r="4" fill="#22c55e"/>
+  <circle cx="350" cy="105" r="4" fill="#22c55e"/>
+  <circle cx="460" cy="92"  r="4" fill="#22c55e"/>
+  <circle cx="570" cy="89"  r="4" fill="#22c55e"/>
+  <circle cx="680" cy="73"  r="4" fill="#22c55e"/>
+
+  <!-- JS mode (blue) -->
+  <polyline fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+    points="130,225 240,200 350,193 460,188 570,183 680,186"/>
+  <circle cx="130" cy="225" r="4" fill="#3b82f6"/>
+  <circle cx="240" cy="200" r="4" fill="#3b82f6"/>
+  <circle cx="350" cy="193" r="4" fill="#3b82f6"/>
+  <circle cx="460" cy="188" r="4" fill="#3b82f6"/>
+  <circle cx="570" cy="183" r="4" fill="#3b82f6"/>
+  <circle cx="680" cy="186" r="4" fill="#3b82f6"/>
+
+  <!-- Native spans fixed (purple) -->
+  <polyline fill="none" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+    points="130,245 240,223 350,216 460,212 570,206 680,207"/>
+  <circle cx="130" cy="245" r="4" fill="#8b5cf6"/>
+  <circle cx="240" cy="223" r="4" fill="#8b5cf6"/>
+  <circle cx="350" cy="216" r="4" fill="#8b5cf6"/>
+  <circle cx="460" cy="212" r="4" fill="#8b5cf6"/>
+  <circle cx="570" cy="206" r="4" fill="#8b5cf6"/>
+  <circle cx="680" cy="207" r="4" fill="#8b5cf6"/>
+
+  <!-- Native spans before (red dashed) -->
+  <polyline fill="none" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" stroke-linecap="round" stroke-linejoin="round"
+    points="130,262 240,259 350,267 460,277 570,288 680,291"/>
+  <circle cx="130" cy="262" r="3.5" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+  <circle cx="240" cy="259" r="3.5" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+  <circle cx="350" cy="267" r="3.5" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+  <circle cx="460" cy="277" r="3.5" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+  <circle cx="570" cy="288" r="3.5" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+  <circle cx="680" cy="291" r="3.5" fill="none" stroke="#ef4444" stroke-width="1.5"/>
+
+  <!-- Legend -->
+  <rect x="105" y="42" width="510" height="24" rx="4" fill="white" fill-opacity="0.85"/>
+  <line x1="115" y1="54" x2="140" y2="54" stroke="#22c55e" stroke-width="2.5"/>
+  <text x="145" y="58" class="legend-text">No tracer</text>
+  <line x1="225" y1="54" x2="250" y2="54" stroke="#3b82f6" stroke-width="2.5"/>
+  <text x="255" y="58" class="legend-text">JS mode</text>
+  <line x1="325" y1="54" x2="350" y2="54" stroke="#8b5cf6" stroke-width="2.5"/>
+  <text x="355" y="58" class="legend-text">Native (fixed)</text>
+  <line x1="460" y1="54" x2="485" y2="54" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="490" y="58" class="legend-text">Native (before)</text>
+</svg>
