@@ -669,7 +669,8 @@ class NativeSpansInterface {
     }
 
     try {
-      const result = await this._state.flushChunk(spanIds.length, firstIsLocalRoot, this._flushBuffer)
+      this._state.prepareChunk(spanIds.length, firstIsLocalRoot, this._flushBuffer)
+      const result = await this._state.sendPreparedChunk()
       return result
     } catch (e) {
       log.error('Error flushing spans to agent:', e)
