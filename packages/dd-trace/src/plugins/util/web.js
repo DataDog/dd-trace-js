@@ -410,6 +410,13 @@ const web = {
       },
     })
   },
+  setRouteOrEndpointTag (req) {
+    const context = contexts.get(req)
+
+    if (!context) return
+
+    applyRouteOrEndpointTag(context)
+  },
 }
 
 function addAllowHeaders (req, res, headers) {
@@ -481,18 +488,9 @@ function addRequestTags (context, spanType) {
 }
 
 function addResponseTags (context) {
-  const { req, res, paths, span, inferredProxySpan, config } = context
+  const { req, res, inferredProxySpan, span } = context
 
-  const route = paths.join('')
-  if (route) {
-    // Use http.route from trusted framework instrumentation
-    span.setTag(HTTP_ROUTE, route)
-  } else if (config.resourceRenamingEnabled) {
-    // Route is unavailable, compute http.endpoint instead
-    const url = span.context()._tags[HTTP_URL]
-    const endpoint = url ? calculateHttpEndpoint(url) : '/'
-    span.setTag(HTTP_ENDPOINT, endpoint)
-  }
+  applyRouteOrEndpointTag(context)
 
   span.addTags({
     [HTTP_STATUS_CODE]: res.statusCode,
@@ -502,6 +500,28 @@ function addResponseTags (context) {
   })
 
   web.addStatusError(req, res.statusCode)
+}
+
+function applyRouteOrEndpointTag (context) {
+  const { paths, span, config } = context
+  if (!span) return
+  const tags = span.context()._tags
+  const route = paths.join('')
+
+  if (route) {
+    // Use http.route from trusted framework instrumentation.
+    span.setTag(HTTP_ROUTE, route)
+    return
+  }
+
+  if (!config.resourceRenamingEnabled || tags[HTTP_ENDPOINT]) {
+    return
+  }
+
+  // Route is unavailable, compute http.endpoint once.
+  const url = tags[HTTP_URL]
+  const endpoint = url ? calculateHttpEndpoint(url) : '/'
+  span.setTag(HTTP_ENDPOINT, endpoint)
 }
 
 function addResourceTag (context) {

@@ -228,6 +228,7 @@ interface Plugins {
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
+  "azure-durable-functions": tracer.plugins.azure_durable_functions
   "bullmq": tracer.plugins.bullmq;
   "bunyan": tracer.plugins.bunyan;
   "cassandra-driver": tracer.plugins.cassandra_driver;
@@ -261,6 +262,7 @@ interface Plugins {
   "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
+  "langgraph": tracer.plugins.langgraph;
   "mariadb": tracer.plugins.mariadb;
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
@@ -1339,6 +1341,15 @@ declare namespace tracer {
      * @returns The DSM context associated with the current pathway.
      */
     setConsumeCheckpoint (type: string, source: string, carrier: any, manualCheckpoint?: boolean): any;
+
+    /**
+     * Records a transaction ID at a named checkpoint without pathway propagation.
+     * Tags the active span (or the provided span) with dsm.transaction.id and dsm.transaction.checkpoint.
+     * @param transactionId The unique transaction identifier (truncated to 255 UTF-8 bytes).
+     * @param checkpointName The logical checkpoint name (stable 1-byte ID per process lifetime).
+     * @param span The span to tag. Defaults to the currently active span.
+     */
+    trackTransaction(transactionId: string, checkpointName: string, span?: Span | null): void;
   }
 
   export interface EventTrackingV2 {
@@ -1617,6 +1628,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Sensitive Data Scanner findings from the evaluation.
+       */
+      sds: Object[];
     }
 
     /**
@@ -1632,6 +1647,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Sensitive Data Scanner findings from the evaluation.
+       */
+      sds: Object[];
     }
 
     /**
@@ -2025,6 +2044,22 @@ declare namespace tracer {
        * @default true
        */
       signature?: boolean;
+
+      /**
+       * An object of optional callbacks to be executed during the respective
+       * phase of an Apollo Gateway operation. Undefined callbacks default to a
+       * noop function.
+       *
+       * @default {}
+       */
+      hooks?: {
+        request?: (span?: Span, ctx?: any) => void;
+        validate?: (span?: Span, ctx?: any) => void;
+        plan?: (span?: Span, ctx?: any) => void;
+        execute?: (span?: Span, ctx?: any) => void;
+        fetch?: (span?: Span, ctx?: any) => void;
+        postprocessing?: (span?: Span, ctx?: any) => void;
+      };
     }
 
     /**
@@ -2087,6 +2122,12 @@ declare namespace tracer {
      * @azure/service-bus module
      */
     interface azure_service_bus extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
+     * durable-functions module
+     */
+      interface azure_durable_functions extends Integration {}
 
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
@@ -2538,6 +2579,12 @@ declare namespace tracer {
     interface langchain extends Instrumentation {}
 
     /**
+     * This plugin automatically instruments the
+     * [langgraph](https://github.com/npmjs/package/langgraph) library.
+     */
+    interface langgraph extends Instrumentation {}
+
+      /**
      * This plugin automatically instruments the
      * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
      */

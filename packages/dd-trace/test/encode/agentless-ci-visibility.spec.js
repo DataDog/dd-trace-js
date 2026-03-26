@@ -72,26 +72,32 @@ describe('agentless-ci-visibility-encode', () => {
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
 
-    assert.strictEqual(decodedTrace.version, 1)
-    assertObjectContains(decodedTrace.metadata['*'], {
-      language: 'javascript',
-      library_version: ddTraceVersion,
-    })
     const spanEvent = decodedTrace.events[0]
-    assert.strictEqual(spanEvent.type, 'span')
-    assert.strictEqual(spanEvent.version, 1)
     assert.strictEqual(spanEvent.content.trace_id.toString(10), trace[0].trace_id.toString(10))
     assert.strictEqual(spanEvent.content.span_id.toString(10), trace[0].span_id.toString(10))
     assert.strictEqual(spanEvent.content.parent_id.toString(10), trace[0].parent_id.toString(10))
-    assertObjectContains(spanEvent.content, {
-      name: 'test',
-      resource: 'test-r',
-      service: 'test-s',
-      type: 'foo',
+    assertObjectContains(decodedTrace, {
+      version: 1,
+      metadata: {
+        '*': {
+          language: 'javascript',
+          library_version: ddTraceVersion,
+        },
+      },
+      events: [{
+        type: 'span',
+        version: 1,
+        content: {
+          name: 'test',
+          resource: 'test-r',
+          service: 'test-s',
+          type: 'foo',
+          error: 0,
+          start: 123,
+          duration: 456,
+        },
+      }],
     })
-    assert.strictEqual(spanEvent.content.error, 0)
-    assert.strictEqual(spanEvent.content.start, 123)
-    assert.strictEqual(spanEvent.content.duration, 456)
 
     assert.deepStrictEqual(spanEvent.content.meta, {
       bar: 'baz',
@@ -218,8 +224,8 @@ describe('agentless-ci-visibility-encode', () => {
     })
   })
 
-  it('should not encode events other than sessions and suites if the trace is a test session', () => {
-    const traceToFilter = [
+  it('should encode all events including non-test spans alongside test sessions', () => {
+    const traceWithMixedSpans = [
       {
         trace_id: id('1234abcd1234abcd'),
         span_id: id('1234abcd1234abcd'),
@@ -250,13 +256,14 @@ describe('agentless-ci-visibility-encode', () => {
       },
     ]
 
-    encoder.encode(traceToFilter)
+    encoder.encode(traceWithMixedSpans)
 
     const buffer = encoder.makePayload()
     const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
-    assert.strictEqual(decodedTrace.events.length, 1)
+    assert.strictEqual(decodedTrace.events.length, 2)
     assert.strictEqual(decodedTrace.events[0].type, 'test_session_end')
     assert.deepStrictEqual(decodedTrace.events[0].content.type, 'test_session_end')
+    assert.strictEqual(decodedTrace.events[1].type, 'span')
   })
 
   it('does not crash if test_session_id is in meta but not test_module_id', () => {

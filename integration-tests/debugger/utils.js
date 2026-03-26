@@ -416,7 +416,9 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
   const topFrame = data.debugger.snapshot.stack[0]
   // path seems to be prefixed with `/private` on Mac
   assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
-  assert.strictEqual(topFrame.function, 'fooHandler')
-  assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)
-  assert.strictEqual(topFrame.columnNumber, 3)
+  assertObjectContains(topFrame, {
+    function: 'fooHandler',
+    lineNumber: t.breakpoint.line,
+    columnNumber: 3,
+  })
 }

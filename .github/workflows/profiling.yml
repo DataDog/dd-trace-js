@@ -34,11 +34,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-macos
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
@@ -61,11 +61,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-ubuntu
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   windows:
     name: ${{ github.workflow }} / windows
@@ -81,8 +81,8 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-windows
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ secrets.DD_API_KEY }}

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { fork } = require('child_process')
 const { join } = require('path')
 const axios = require('axios')
-const { FakeAgent, sandboxCwd, useSandbox } = require('./helpers')
+const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
@@ -74,7 +74,7 @@ describe('opentelemetry', () => {
   })
 
   after(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 

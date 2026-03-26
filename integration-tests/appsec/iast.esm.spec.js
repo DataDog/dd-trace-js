@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, spawnProc, FakeAgent } = require('../helpers')
+const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('ESM', () => {
   let axios, cwd, appFile, agent, proc
 
@@ -40,7 +40,7 @@ describe('ESM', () => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 

@@ -16,6 +16,7 @@ const { trace, context } = require('@opentelemetry/api')
 require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
@@ -131,9 +132,13 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(log1.spanId.toString('hex'), '1234567890abcdef')
 
         const log2 = scope.logRecords[1]
-        assert.strictEqual(log2.severityText, 'ERROR')
-        assert.strictEqual(log2.severityNumber, 17)
-        assert.strictEqual(log2.body.stringValue, 'Test error message')
+        assertObjectContains(log2, {
+          severityText: 'ERROR',
+          severityNumber: 17,
+          body: {
+            stringValue: 'Test error message',
+          },
+        })
         assert.strictEqual(log2.traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
         assert.strictEqual(log2.spanId.toString('hex'), '1234567890abcdef')
       })
@@ -441,10 +446,12 @@ describe('OpenTelemetry Logs', () => {
         const resourceAttrs = {}
         resource.attributes.forEach(attr => { resourceAttrs[attr.key] = attr.value.stringValue })
 
-        assert.strictEqual(resourceAttrs['service.name'], 'my-service')
-        assert.strictEqual(resourceAttrs['service.version'], 'v1.2.3')
-        assert.strictEqual(resourceAttrs['deployment.environment'], 'production')
-        assert.strictEqual(resourceAttrs['host.name'], os.hostname())
+        assertObjectContains(resourceAttrs, {
+          'service.name': 'my-service',
+          'service.version': 'v1.2.3',
+          'deployment.environment': 'production',
+          'host.name': os.hostname(),
+        })
         done()
       })
 

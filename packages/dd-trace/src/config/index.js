@@ -49,6 +49,8 @@ const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'igno
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 const DEFAULT_OTLP_PORT = 4318
 const RUNTIME_ID = uuid()
+// eslint-disable-next-line eslint-rules/eslint-process-env -- internal propagation, not user config
+const ROOT_SESSION_ID = process.env.DD_ROOT_JS_SESSION_ID || RUNTIME_ID
 const NAMING_VERSIONS = new Set(['v0', 'v1'])
 const DEFAULT_NAMING_VERSION = 'v0'
 
@@ -144,6 +146,8 @@ class Config {
       version: this.version,
       'runtime-id': RUNTIME_ID,
     })
+
+    this.rootSessionId = ROOT_SESSION_ID
 
     if (this.isCiVisibility) {
       tagger.add(this.tags, {
@@ -352,6 +356,7 @@ class Config {
       DD_TELEMETRY_HEARTBEAT_INTERVAL,
       DD_TELEMETRY_LOG_COLLECTION_ENABLED,
       DD_TELEMETRY_METRICS_ENABLED,
+      DD_TEST_TIA_KEEP_COV_CONFIG,
       DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED,
       DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED,
       DD_TRACE_AGENT_PORT,
@@ -721,8 +726,10 @@ class Config {
     // Priority:
     // DD_SERVICE > tags.service > OTEL_SERVICE_NAME > NX_TASK_TARGET_PROJECT (if DD_ENABLE_NX_SERVICE_NAME) > default
     let serviceName = DD_SERVICE || tags.service || OTEL_SERVICE_NAME
+    let isServiceNameInferred
     if (!serviceName && NX_TASK_TARGET_PROJECT) {
       if (isTrue(DD_ENABLE_NX_SERVICE_NAME)) {
+        isServiceNameInferred = true
         serviceName = NX_TASK_TARGET_PROJECT
       } else if (DD_MAJOR < 6) {
         // Warn about v6 behavior change for Nx projects
@@ -733,6 +740,7 @@ class Config {
       }
     }
     setString(target, 'service', serviceName)
+    if (serviceName) setBoolean(target, 'isServiceNameInferred', isServiceNameInferred ?? false)
     if (DD_SERVICE_MAPPING) {
       target.serviceMapping = Object.fromEntries(
         DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
@@ -757,6 +765,7 @@ class Config {
     unprocessedTarget['telemetry.heartbeatInterval'] = DD_TELEMETRY_HEARTBEAT_INTERVAL
     setBoolean(target, 'telemetry.logCollection', DD_TELEMETRY_LOG_COLLECTION_ENABLED)
     setBoolean(target, 'telemetry.metrics', DD_TELEMETRY_METRICS_ENABLED)
+    setBoolean(target, 'isKeepingCoverageConfiguration', DD_TEST_TIA_KEEP_COV_CONFIG)
     setBoolean(target, 'traceId128BitGenerationEnabled', DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED)
     setBoolean(target, 'traceId128BitLoggingEnabled', DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED)
     warnIfPropagationStyleConflict(
@@ -1002,7 +1011,11 @@ class Config {
     setUnit(opts, 'sampleRate', options.sampleRate ?? options.ingestion.sampleRate)
     opts['sampler.rateLimit'] = maybeInt(options.rateLimit ?? options.ingestion.rateLimit)
     setSamplingRule(opts, 'sampler.rules', options.samplingRules)
-    setString(opts, 'service', options.service || tags.service)
+    const optService = options.service || tags.service
+    setString(opts, 'service', optService)
+    if (optService) {
+      setBoolean(opts, 'isServiceNameInferred', false)
+    }
     opts.serviceMapping = options.serviceMapping
     setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {
@@ -1116,6 +1129,8 @@ class Config {
       setBoolean(calc, 'reportHostname', true)
       // Clear sampling rules - server-side sampling handles this
       calc['sampler.rules'] = []
+      // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
+      setBoolean(calc, 'traceId128BitGenerationEnabled', false)
     }
 
     if (this.#isCiVisibility()) {
@@ -1659,6 +1674,7 @@ function getAgentUrl (url, options) {
     !options.port &&
     !getEnv('DD_AGENT_HOST') &&
     !getEnv('DD_TRACE_AGENT_PORT') &&
+    !isTrue(getEnv('DD_CIVISIBILITY_AGENTLESS_ENABLED')) &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')

@@ -23,6 +23,10 @@ describe('telemetry (proxy)', () => {
   let telemetry
   let proxy
 
+  before(() => {
+    require('../../src/process-tags').initialize()
+  })
+
   beforeEach(() => {
     telemetry = sinon.spy({
       start () {},

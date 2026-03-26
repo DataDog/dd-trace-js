@@ -107,10 +107,13 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   useSandbox([
     `jest@${JEST_VERSION}`,
     `jest-jasmine2@${JEST_VERSION}`,
+    `babel-jest@${JEST_VERSION}`,
     // jest-environment-jsdom is included in older versions of jest
     JEST_VERSION === 'latest' ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
+    '@babel/core',
+    '@babel/preset-typescript',
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
@@ -245,26 +248,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               (!parameters || test.meta[TEST_PARAMETERS] === JSON.stringify(parameters))
             )
 
-            assert.ok(test)
-
-            assert.strictEqual(test.meta.language, 'javascript')
-            assert.strictEqual(test.meta.service, 'plugin-tests')
-            assert.strictEqual(test.meta[ORIGIN_KEY], CI_APP_ORIGIN)
-            assert.strictEqual(test.meta[TEST_FRAMEWORK], 'jest')
-            assert.strictEqual(test.meta[TEST_NAME], name)
-            assert.strictEqual(test.meta[TEST_STATUS], status)
-            assert.strictEqual(test.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test.js')
-            assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/jest-plugin-tests/jest-test.js')
-            assert.strictEqual(test.meta[TEST_TYPE], 'test')
-            assert.strictEqual(test.meta[JEST_TEST_RUNNER], 'jest-circus')
-            assert.strictEqual(test.meta[LIBRARY_VERSION], ddTraceVersion)
-            assert.strictEqual(test.meta[COMPONENT], 'jest')
             assert.match(test.meta[TEST_CODE_OWNERS], /@datadog-dd-trace-js/)
 
-            assert.strictEqual(test.type, 'test')
-            assert.strictEqual(test.name, 'jest.test')
-            assert.strictEqual(test.service, 'plugin-tests')
-            assert.strictEqual(test.resource, `ci-visibility/jest-plugin-tests/jest-test.js.${name}`)
+            assertObjectContains(test, {
+              type: 'test',
+              name: 'jest.test',
+              service: 'plugin-tests',
+              resource: `ci-visibility/jest-plugin-tests/jest-test.js.${name}`,
+              meta: {
+                language: 'javascript',
+                [ORIGIN_KEY]: CI_APP_ORIGIN,
+                [TEST_FRAMEWORK]: 'jest',
+                [TEST_NAME]: name,
+                [TEST_STATUS]: status,
+                [TEST_SUITE]: 'ci-visibility/jest-plugin-tests/jest-test.js',
+                [TEST_SOURCE_FILE]: 'ci-visibility/jest-plugin-tests/jest-test.js',
+                [TEST_TYPE]: 'test',
+                [JEST_TEST_RUNNER]: 'jest-circus',
+                [LIBRARY_VERSION]: ddTraceVersion,
+                [COMPONENT]: 'jest',
+              },
+            })
 
             assert.ok(test.metrics[TEST_SOURCE_START])
             assert.ok(test.meta[TEST_FRAMEWORK_VERSION])
@@ -1376,6 +1380,45 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  it('preserves custom testEnvironmentOptions for coverage transforms', async function () {
+    // This repro exists because one of our hooks modified `testEnvironmentOptions`,
+    // which can cause downstream transform errors.
+    this.timeout(60_000)
+
+    let outputWithTracer = ''
+    const command = 'node ./node_modules/jest/bin/jest --config ./jest/dd-trace-transform-repro.config.js --coverage'
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testEvents = events.filter(event => event.type === 'test')
+
+        assert.ok(testEvents.length > 0)
+      })
+
+    childProcess = exec(
+      command,
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+
+    childProcess.stdout?.on('data', (chunk) => {
+      outputWithTracer += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      outputWithTracer += chunk.toString()
+    })
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+
+    assert.strictEqual(exitCode, 0, outputWithTracer)
+    assert.doesNotMatch(outputWithTracer, /testEnvironmentOptions prototype was lost/)
+  })
+
   context('intelligent test runner', () => {
     context('if the agent is not event platform proxy compatible', () => {
       it('does not do any intelligent test runner request', (done) => {
@@ -1542,9 +1585,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
         const [coveragePayload] = coverageRequest.payload
         assert.strictEqual(coverageRequest.headers['dd-api-key'], '1')
-        assert.strictEqual(coveragePayload.name, 'coverage1')
-        assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-        assert.strictEqual(coveragePayload.type, 'application/msgpack')
+        assertObjectContains(coveragePayload, {
+          name: 'coverage1',
+          filename: 'coverage1.msgpack',
+          type: 'application/msgpack',
+        })
 
         assert.strictEqual(eventsRequest.headers['dd-api-key'], '1')
         const eventTypes = eventsRequest.payload.events.map(event => event.type)
@@ -1943,6 +1988,113 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    it('keeps user coverage reporters when DD_TEST_TIA_KEEP_COV_CONFIG is true', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            COVERAGE_REPORTERS: 'lcov',
+            DD_TEST_TIA_KEEP_COV_CONFIG: 'true',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), true)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
+    })
+
+    it('overrides user coverage reporters when code coverage is enabled because of us', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            COVERAGE_REPORTERS: 'lcov',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), false)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
+    })
+
+    it('keeps user coverage reporters when code coverage is enabled by the user', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: true,
+      })
+
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const lcovPath = path.join(cwd, 'coverage', 'lcov.info')
+      fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            ENABLE_CODE_COVERAGE: '1',
+            COVERAGE_REPORTERS: 'lcov',
+          },
+        }
+      )
+      try {
+        await once(childProcess, 'exit')
+        assert.strictEqual(fs.existsSync(lcovPath), true)
+      } finally {
+        fs.rmSync(path.join(cwd, 'coverage'), { recursive: true, force: true })
+      }
     })
 
     it('calculates executable lines even if there have been skipped suites', (done) => {
@@ -2725,7 +2877,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('retries flaky tests', (done) => {
+    it('retries flaky tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({ jest: {} })
@@ -2777,12 +2929,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         }
       )
-      childProcess.on('exit', () => {
-        // TODO: check exit code: if a new, retried test fails, the exit code should remain 0
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     it('does not retry new tests that are skipped', (done) => {
@@ -4163,6 +4315,64 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       childProcess.on('exit', () => {
         eventsPromise.then(() => done()).catch(done)
       })
+    })
+
+    it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Mark fail-test as known so EFD does not run; only ATR will retry
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/fail-test.js': ['can report failed tests'],
+        },
+      })
+      const NUM_RETRIES_ATR = 2
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        flaky_test_retries_count: NUM_RETRIES_ATR,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const failTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/fail-test.js'
+          )
+
+          // Should have 1 initial attempt + NUM_RETRIES_ATR retries
+          assert.strictEqual(failTests.length, NUM_RETRIES_ATR + 1)
+
+          failTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          })
+
+          const retriedTests = failTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_ATR)
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          })
+
+          // Only the last retry should have TEST_HAS_FAILED_ALL_RETRIES set
+          const lastRetry = failTests[failTests.length - 1]
+          assert.strictEqual(lastRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+
+          for (let i = 0; i < failTests.length - 1; i++) {
+            assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in failTests[i].meta))
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            TESTS_TO_RUN: 'test/fail-test',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: String(NUM_RETRIES_ATR),
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
   })
 
@@ -6166,6 +6376,54 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'ci-visibility/test-custom-tags',
+          },
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('does detect custom tags on test suites from beforeAll and afterAll hooks', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
+
+          assertObjectContains(testSuite, {
+            meta: {
+              'suite.beforeAll': 'true',
+              'suite.afterAll': 'true',
+            },
+          })
+
+          const suiteSpanId = testSuite.test_suite_id.toString()
+          const sessionTraceId = testSuite.test_session_id.toString()
+
+          // Spans created in beforeAll/afterAll appear as 'span' events and are children of the test suite span
+          const spans = events.filter(event => event.type === 'span').map(event => event.content)
+          const beforeAllSpan = spans.find(span => span.resource === 'beforeAll.setup')
+          const afterAllSpan = spans.find(span => span.resource === 'afterAll.teardown')
+
+          assert.ok(beforeAllSpan)
+          assert.strictEqual(beforeAllSpan.parent_id.toString(), suiteSpanId)
+          assert.strictEqual(beforeAllSpan.trace_id.toString(), sessionTraceId)
+
+          assert.ok(afterAllSpan)
+          assert.strictEqual(afterAllSpan.parent_id.toString(), suiteSpanId)
+          assert.strictEqual(afterAllSpan.trace_id.toString(), sessionTraceId)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'ci-visibility/test-suite-custom-tags',
           },
         }
       )

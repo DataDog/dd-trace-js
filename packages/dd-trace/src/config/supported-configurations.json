@@ -1770,6 +1770,16 @@
         ]
       }
     ],
+    "DD_TEST_TIA_KEEP_COV_CONFIG": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "configurationNames": [
+          "isKeepingCoverageConfiguration"
+        ]
+      }
+    ],
     "DD_TEST_SESSION_NAME": [
       {
         "implementation": "A",
@@ -2168,6 +2178,13 @@
     "DD_TRACE_AXIOS_ENABLED": [
       {
         "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_AZURE_DURABLE_FUNCTIONS_ENABLED": [
+      {
+        "implementation": "B",
         "type": "boolean",
         "default": "true"
       }
@@ -2974,6 +2991,13 @@
     "DD_TRACE_LANGCHAIN_OPENAI_ENABLED": [
       {
         "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_LANGGRAPH_ENABLED": [
+      {
+        "implementation": "C",
         "type": "boolean",
         "default": "true"
       }

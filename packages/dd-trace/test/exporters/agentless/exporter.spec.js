@@ -7,6 +7,8 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+
 require('../../setup/core')
 
 describe('AgentlessExporter', () => {
@@ -14,8 +16,11 @@ describe('AgentlessExporter', () => {
   let exporter
   let writer
   let initialHandlersSize
+  let clock
 
   beforeEach(() => {
+    clock = sinon.useFakeTimers()
+
     writer = {
       append: sinon.stub(),
       flush: sinon.stub().callsFake((cb) => cb && cb()),
@@ -35,8 +40,8 @@ describe('AgentlessExporter', () => {
   })
 
   afterEach(() => {
+    clock.restore()
     sinon.restore()
-    // Clean up any handlers added by tests
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.clear()
   })
 
@@ -84,41 +89,113 @@ describe('AgentlessExporter', () => {
       sinon.assert.calledOnce(log.error)
       assert.strictEqual(exporter._url, null)
     })
+
+    it('should pass metadata from config to writer', () => {
+      const writerOptions = {}
+      const Writer = function (opts) {
+        Object.assign(writerOptions, opts)
+        return writer
+      }
+
+      Exporter = proxyquire('../../../src/exporters/agentless', {
+        './writer': Writer,
+      })
+
+      exporter = new Exporter({
+        site: 'datadoghq.com',
+        env: 'production',
+        tags: { 'runtime-id': 'test-uuid' },
+      })
+
+      assert.ok(writerOptions.metadata)
+      assertObjectContains(writerOptions.metadata, {
+        env: 'production',
+        runtimeID: 'test-uuid',
+        languageName: 'nodejs',
+      })
+    })
   })
 
   describe('export', () => {
-    beforeEach(() => {
-      exporter = new Exporter({})
+    it('should append spans to writer and schedule flush', () => {
+      exporter = new Exporter({ flushInterval: 1000 })
+      const spans = [{ name: 'test' }]
+
+      exporter.export(spans)
+
+      sinon.assert.calledWith(writer.append, spans)
+      sinon.assert.notCalled(writer.flush)
+
+      clock.tick(1000)
+
+      sinon.assert.calledOnce(writer.flush)
     })
 
-    it('should append spans to writer and flush immediately', () => {
+    it('should batch multiple exports into one flush', () => {
+      exporter = new Exporter({ flushInterval: 1000 })
       const spans = [{ name: 'test' }]
+
+      exporter.export(spans)
+      exporter.export(spans)
+      exporter.export(spans)
+
+      sinon.assert.calledThrice(writer.append)
+      sinon.assert.notCalled(writer.flush)
+
+      clock.tick(1000)
+
+      sinon.assert.calledOnce(writer.flush)
+    })
+
+    it('should re-arm timer after flush for subsequent exports', () => {
+      exporter = new Exporter({ flushInterval: 1000 })
+      const spans = [{ name: 'test' }]
+
+      // First cycle
+      exporter.export(spans)
+      clock.tick(1000)
+      sinon.assert.calledOnce(writer.flush)
+
+      // Second cycle
+      exporter.export(spans)
+      sinon.assert.calledOnce(writer.flush) // not yet
+
+      clock.tick(1000)
+      sinon.assert.calledTwice(writer.flush)
+    })
+
+    it('should flush immediately when flushInterval is 0', () => {
+      exporter = new Exporter({ flushInterval: 0 })
+      const spans = [{ name: 'test' }]
+
       exporter.export(spans)
 
       sinon.assert.calledWith(writer.append, spans)
       sinon.assert.calledOnce(writer.flush)
     })
-
-    it('should flush after each export', () => {
-      const spans = [{ name: 'test' }]
-
-      exporter.export(spans)
-      exporter.export(spans)
-      exporter.export(spans)
-
-      sinon.assert.calledThrice(writer.flush)
-    })
   })
 
   describe('flush', () => {
     beforeEach(() => {
-      exporter = new Exporter({})
+      exporter = new Exporter({ flushInterval: 1000 })
     })
 
-    it('should flush writer', () => {
+    it('should flush writer immediately', () => {
       exporter.flush()
 
       sinon.assert.called(writer.flush)
+    })
+
+    it('should clear pending timer on explicit flush', () => {
+      exporter.export([{ name: 'test' }])
+      exporter.flush()
+
+      sinon.assert.calledOnce(writer.flush)
+
+      // Timer should be cleared, so ticking should not trigger another flush
+      clock.tick(1000)
+
+      sinon.assert.calledOnce(writer.flush)
     })
 
     it('should call callback when done', (done) => {

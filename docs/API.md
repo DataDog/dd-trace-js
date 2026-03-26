@@ -34,6 +34,7 @@ tracer.use('pg', {
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
+<h5 id="azure-durable-functions"></h5>
 <h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
 <h5 id="cassandra-driver"></h5>
@@ -67,6 +68,7 @@ tracer.use('pg', {
 <h5 id="knex"></h5>
 <h5 id="koa"></h5>
 <h5 id="langchain"></h5>
+<h5 id="langgraph"></h5>
 <h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
 <h5 id="microgateway-core"></h5>
@@ -112,6 +114,7 @@ tracer.use('pg', {
 * [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
+* [azure-durable-functions](./interfaces/export_.plugins.azure_durable_functions.html)
 * [bullmq](./interfaces/export_.plugins.bullmq.html)
 * [bunyan](./interfaces/export_.plugins.bunyan.html)
 * [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
@@ -145,6 +148,7 @@ tracer.use('pg', {
 * [knex](./interfaces/export_.plugins.knex.html)
 * [koa](./interfaces/export_.plugins.koa.html)
 * [langchain](./interfaces/export_.plugins.langchain.html)
+* [langgraph](./interfaces/export_.plugins.langgraph.html)
 * [mariadb](./interfaces/export_.plugins.mariadb.html)
 * [memcached](./interfaces/export_.plugins.memcached.html)
 * [microgateway-core](./interfaces/export_.plugins.microgateway_core.html)

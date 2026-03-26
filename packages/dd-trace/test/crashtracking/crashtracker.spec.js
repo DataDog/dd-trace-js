@@ -16,6 +16,10 @@ describeNotWindows('crashtracker', () => {
   let libdatadog
   let log
 
+  before(() => {
+    require('../../src/process-tags').initialize()
+  })
+
   beforeEach(() => {
     libdatadog = require('@datadog/libdatadog')
 
@@ -73,7 +77,7 @@ describeNotWindows('crashtracker', () => {
     it('should handle errors', () => {
       crashtracker.start(null)
 
-      assert.doesNotThrow(() => crashtracker.start(config))
+      crashtracker.start(config)
     })
 
     it('should handle unix sockets', () => {
@@ -106,7 +110,7 @@ describeNotWindows('crashtracker', () => {
       crashtracker.start(config)
       crashtracker.configure(null)
 
-      assert.doesNotThrow(() => crashtracker.configure(config))
+      crashtracker.configure(config)
     })
   })
 

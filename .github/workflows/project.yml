@@ -19,7 +19,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - name: actionlint
         id: actionlint
-        uses: raven-actions/actionlint@e01d1ea33dd6a5ed517d95b4c0c357560ac6f518 # v2.1.1
+        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
         with:
           matcher: true
           fail-on-error: true
@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
-      - run: npm run lint && npm run lint:codeowners
+      - run: npm run lint && npm run lint:codeowners:ci
 
   verify-exercised-tests:
     runs-on: ubuntu-latest
@@ -76,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
-      - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
+      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
       - run: rm -rf *
       - run: tar -zxf /tmp/dd-trace.tgz -C $(pwd) --strip-components=1
       - run: yarn --prod --ignore-optional
@@ -212,7 +212,7 @@ jobs:
           scope: DataDog/dd-trace-js
           policy: yarn-dedupe
 
-      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: yarn-lock
           path: ${{ runner.temp }}/yarn-lock-artifact
@@ -228,10 +228,12 @@ jobs:
 
           test -f "${{ runner.temp }}/yarn-lock-artifact/yarn.lock"
           sha="$(gh api -q '.sha' "repos/${OWNER}/${REPO}/contents/yarn.lock?ref=${BRANCH}")"
-          content="$(base64 -w 0 "${{ runner.temp }}/yarn-lock-artifact/yarn.lock")"
+          base64 -w 0 "${{ runner.temp }}/yarn-lock-artifact/yarn.lock" > "${{ runner.temp }}/yarn-lock-b64.txt"
 
-          gh api -X PUT "repos/${OWNER}/${REPO}/contents/yarn.lock" \
-            -f message="chore: deduplicate yarn.lock" \
-            -f content="${content}" \
-            -f sha="${sha}" \
-            -f branch="${BRANCH}"
+          jq -n \
+            --arg message "chore: deduplicate yarn.lock" \
+            --rawfile content "${{ runner.temp }}/yarn-lock-b64.txt" \
+            --arg sha "$sha" \
+            --arg branch "$BRANCH" \
+            '{message: $message, content: $content, sha: $sha, branch: $branch}' \
+          | gh api -X PUT "repos/${OWNER}/${REPO}/contents/yarn.lock" --input -

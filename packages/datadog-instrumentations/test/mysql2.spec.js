@@ -27,7 +27,7 @@ describe('mysql2 instrumentation', () => {
     }
 
     const sql = 'SELECT 1'
-    let startCh, mysql2, shouldEmitEndAfterQueryAbort
+    let startCh, mysql2, shouldEmitEndAfterQueryAbort, poolAddsErrorListenerOnQuery
     let apmQueryStartChannel, apmQueryStart, mysql2Version
 
     before(() => {
@@ -40,6 +40,8 @@ describe('mysql2 instrumentation', () => {
       mysql2Version = mysql2Require.version()
       // in v1.3.3 CommandQuery started to emit 'end' after 'error' event
       shouldEmitEndAfterQueryAbort = semver.intersects(mysql2Version, '>=1.3.3')
+      // in v3.17.2 Pool.query adds a once('error') listener for isReadOnlyError handling
+      poolAddsErrorListenerOnQuery = semver.intersects(mysql2Version, '>=3.17.2')
       mysql2 = mysql2Require.get()
       apmQueryStartChannel = channel('apm:mysql2:query:start')
     })
@@ -490,7 +492,7 @@ describe('mysql2 instrumentation', () => {
 
               await once(query, 'end')
 
-              assert.strictEqual(query.listenerCount('error'), 0)
+              assert.strictEqual(query.listenerCount('error'), poolAddsErrorListenerOnQuery ? 1 : 0)
 
               sinon.assert.called(apmQueryStart)
             })
