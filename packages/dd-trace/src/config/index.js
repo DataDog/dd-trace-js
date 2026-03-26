@@ -517,7 +517,7 @@ class Config {
         setString(target, 'otelTracesUrl', OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/traces')
       }
     }
-    setString(target, 'otelTracesHeaders', OTEL_EXPORTER_OTLP_TRACES_HEADERS || target.otelHeaders)
+    setString(target, 'otelTracesHeaders', OTEL_EXPORTER_OTLP_TRACES_HEADERS || OTEL_EXPORTER_OTLP_HEADERS)
     if (OTEL_EXPORTER_OTLP_TRACES_PROTOCOL && OTEL_EXPORTER_OTLP_TRACES_PROTOCOL !== 'http/json') {
       log.warn(
         'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
