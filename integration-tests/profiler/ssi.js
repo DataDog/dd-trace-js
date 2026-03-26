@@ -21,4 +21,4 @@ async function run () {
   await Promise.all(tasks)
 }
 
-tracer.profilerStarted().then(run)
+setImmediate(run)
