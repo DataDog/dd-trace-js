@@ -149,6 +149,9 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     if (span.service) {
       attributes.push({ key: 'service.name', value: { stringValue: span.service } })
     }
+    if (span.name) {
+      attributes.push({ key: 'operation.name', value: { stringValue: span.name } })
+    }
     if (span.resource) {
       attributes.push({ key: 'resource.name', value: { stringValue: span.resource } })
     }

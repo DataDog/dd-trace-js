@@ -307,7 +307,7 @@ describe('OpenTelemetry Traces', () => {
       assert(keys.includes('keep.this'), 'Other meta keys should be present')
     })
 
-    it('includes resource, service, and type as attributes', () => {
+    it('includes resource, service, type, and operation name as attributes', () => {
       const transformer = new OtlpTraceTransformer({})
       const span = createMockSpan()
 
@@ -315,8 +315,18 @@ describe('OpenTelemetry Traces', () => {
       const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
 
       assert.deepStrictEqual(
-        { 'resource.name': attrs['resource.name'], 'service.name': attrs['service.name'], 'span.type': attrs['span.type'] },
-        { 'resource.name': '/api/test', 'service.name': 'test-service', 'span.type': 'web' }
+        {
+          'resource.name': attrs['resource.name'],
+          'service.name': attrs['service.name'],
+          'span.type': attrs['span.type'],
+          'operation.name': attrs['operation.name'],
+        },
+        {
+          'resource.name': '/api/test',
+          'service.name': 'test-service',
+          'span.type': 'web',
+          'operation.name': 'test.operation',
+        }
       )
     })
 
