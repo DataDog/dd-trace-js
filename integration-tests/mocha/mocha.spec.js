@@ -5128,7 +5128,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         },
       })
       receiver.setSettings({
-        flaky_test_retries_enabled: true,
+        flaky_test_retries_enabled: true, // ATR enabled
         early_flake_detection: {
           enabled: true,
           slow_test_retries: { '5s': 3 },
@@ -5140,10 +5140,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const tests = events
+          const allTests = events
             .filter(event => event.type === 'test')
             .map(event => event.content)
-            .filter(test => test.meta[TEST_NAME] === 'mocha-flaky can retry flaky tests')
+          const tests = allTests.filter(test => test.meta[TEST_NAME] === 'mocha-flaky can retry flaky tests')
 
           // We expect 2 executions: the failed (retry) and the passed (last one)
           assert.strictEqual(tests.length, 2)
@@ -5159,6 +5159,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               assert.strictEqual(test.meta[TEST_STATUS], 'pass')
             }
           })
+
+          // A test that passes on the first run (no retries) should have TEST_FINAL_STATUS set immediately
+          const alwaysPassingTests = allTests.filter(
+            test => test.meta[TEST_NAME] === 'mocha-flaky will not retry passed tests'
+          )
+          assert.strictEqual(alwaysPassingTests.length, 1)
+          assert.strictEqual(alwaysPassingTests[0].meta[TEST_FINAL_STATUS], 'pass')
         })
 
       childProcess = exec(runTestsCommand, {
@@ -5254,7 +5261,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               if (!acc[name]) acc[name] = []
               acc[name].push(test)
               return acc
-            }, {})
+            }, {}) // Object that associates name to test retries events
             Object.values(eventuallyPassingByName).forEach(testGroup => {
               testGroup.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
                 if (index < testGroup.length - 1) {
@@ -5393,12 +5400,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
 
-    it('sets final_status tag to skip for quarantined tests with beforeEach and afterEach hooks', async () => {
+    it('sets final_status tag to skip for quarantined tests with hooks', async () => {
       receiver.setSettings({ test_management: { enabled: true } })
       receiver.setTestManagementTests({
         mocha: {
           suites: {
-            'ci-visibility/test-management/test-quarantine-with-hooks.js': {
+            'ci-visibility/mocha-hooks/test-quarantine-with-hooks.js': {
               tests: {
                 'quarantine tests with hooks can quarantine a test with hooks': {
                   properties: { quarantined: true },
@@ -5434,8 +5441,50 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          TESTS_TO_RUN: JSON.stringify(['./test-management/test-quarantine-with-hooks.js']),
+          TESTS_TO_RUN: JSON.stringify(['./mocha-hooks/test-quarantine-with-hooks.js']),
           SHOULD_CHECK_RESULTS: '1',
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('sets final_status tag to skip for quarantined tests when hook throws', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/mocha-hooks/test-quarantine-with-failing-after-each.js': {
+              tests: {
+                'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const quarantinedTest = tests.find(
+            test => test.meta[TEST_NAME] ===
+              'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails'
+          )
+          assert.ok(quarantinedTest)
+          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify(['./mocha-hooks/test-quarantine-with-failing-after-each.js']),
         },
       })
 
@@ -5636,10 +5685,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events
+            const allTests = events
               .filter(event => event.type === 'test')
               .map(event => event.content)
-              .filter(test => test.meta[TEST_NAME] === 'mocha-hooks flaky-passes can retry flaky tests')
+            const tests = allTests.filter(
+              test => test.meta[TEST_NAME] === 'mocha-hooks flaky-passes can retry flaky tests'
+            )
 
             // We expect 2 executions: the failed (retry) and the passed (last one)
             assert.strictEqual(tests.length, 2)
@@ -5655,6 +5706,13 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.strictEqual(test.meta[TEST_STATUS], 'pass')
               }
             })
+
+            // A test that passes on the first run (no retries) should have TEST_FINAL_STATUS set immediately
+            const alwaysPassingTests = allTests.filter(
+              test => test.meta[TEST_NAME] === 'mocha-hooks flaky-passes will not retry passed tests'
+            )
+            assert.strictEqual(alwaysPassingTests.length, 1)
+            assert.strictEqual(alwaysPassingTests[0].meta[TEST_FINAL_STATUS], 'pass')
           })
 
         childProcess = exec(runTestsCommand, {
