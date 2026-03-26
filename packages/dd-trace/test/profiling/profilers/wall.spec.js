@@ -323,7 +323,13 @@ describe('profilers/native/wall', () => {
 
       WallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
         '@datadog/pprof': localPprof,
-        '../../../../datadog-core': { storage: () => ({ getStore: () => currentStore }) },
+        '../../../../datadog-core': {
+          storage: () => ({
+            getStore: () => currentStore,
+            enterWith () {},
+            run (store, cb, ...args) { return cb(...args) },
+          }),
+        },
       })
     })
 
