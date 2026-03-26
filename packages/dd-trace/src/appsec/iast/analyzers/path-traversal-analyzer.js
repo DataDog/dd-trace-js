@@ -2,6 +2,7 @@
 
 const path = require('path')
 
+const { APPSEC_FS_STORAGE } = require('../../rasp/fs-plugin')
 const { getIastContext } = require('../iast-context')
 const { storage } = require('../../../../../datadog-core')
 const { PATH_TRAVERSAL } = require('../vulnerabilities')
@@ -29,8 +30,8 @@ class PathTraversalAnalyzer extends InjectionAnalyzer {
 
   onConfigure () {
     this.addSub('apm:fs:operation:start', (obj) => {
-      const store = storage('legacy').getStore()
-      const outOfReqOrChild = !store?.fs?.root
+      const fs = storage(APPSEC_FS_STORAGE).getStore()
+      const outOfReqOrChild = !fs?.root
 
       // we could filter out all the nested fs.operations based on store.fs.root
       // but if we spect a store in the context to be present we are going to exclude

@@ -7,13 +7,17 @@ const proxyquire = require('proxyquire')
 
 const { fsOperationStart, incomingHttpRequestStart } = require('../../../src/appsec/channels')
 const { FS_OPERATION_PATH } = require('../../../src/appsec/addresses')
-const { RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
+const { APPSEC_FS_STORAGE, RASP_MODULE } = require('../../../src/appsec/rasp/fs-plugin')
 
 describe('RASP - lfi.js', () => {
-  let waf, legacyStorage, lfi, web, blocking, appsecFsPlugin, config
+  let waf, legacyStorage, appsecFsStorage, lfi, web, blocking, appsecFsPlugin, config
 
   beforeEach(() => {
     legacyStorage = {
+      getStore: sinon.stub(),
+    }
+
+    appsecFsStorage = {
       getStore: sinon.stub(),
     }
 
@@ -35,7 +39,9 @@ describe('RASP - lfi.js', () => {
     }
 
     lfi = proxyquire('../../../src/appsec/rasp/lfi', {
-      '../../../../datadog-core': { storage: () => legacyStorage },
+      '../../../../datadog-core': {
+        storage: (name) => name === APPSEC_FS_STORAGE ? appsecFsStorage : legacyStorage,
+      },
       '../waf': waf,
       '../../plugins/util/web': web,
       '../blocking': blocking,
@@ -107,7 +113,8 @@ describe('RASP - lfi.js', () => {
 
     it('should analyze lfi for root fs operations', () => {
       const fs = { root: true }
-      legacyStorage.getStore.returns({ req, fs })
+      legacyStorage.getStore.returns({ req })
+      appsecFsStorage.getStore.returns(fs)
 
       fsOperationStart.publish(ctx)
 
@@ -117,7 +124,8 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for child fs operations', () => {
       const fs = {}
-      legacyStorage.getStore.returns({ req, fs })
+      legacyStorage.getStore.returns({ req })
+      appsecFsStorage.getStore.returns(fs)
 
       fsOperationStart.publish(ctx)
 
@@ -125,8 +133,8 @@ describe('RASP - lfi.js', () => {
     })
 
     it('should NOT analyze lfi for undefined fs (AppsecFsPlugin disabled)', () => {
-      const fs = undefined
-      legacyStorage.getStore.returns({ req, fs })
+      legacyStorage.getStore.returns({ req })
+      appsecFsStorage.getStore.returns(undefined)
 
       fsOperationStart.publish(ctx)
 
@@ -135,7 +143,8 @@ describe('RASP - lfi.js', () => {
 
     it('should NOT analyze lfi for excluded operations', () => {
       const fs = { opExcluded: true, root: true }
-      legacyStorage.getStore.returns({ req, fs })
+      legacyStorage.getStore.returns({ req })
+      appsecFsStorage.getStore.returns(fs)
 
       fsOperationStart.publish(ctx)
 
