@@ -269,7 +269,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
         ? this.transformAttributes(link.attributes)
         : [],
       droppedAttributesCount: 0,
-      flags: link.flags !== undefined ? link.flags : undefined,
+      flags: link.flags,
     }
   }
 

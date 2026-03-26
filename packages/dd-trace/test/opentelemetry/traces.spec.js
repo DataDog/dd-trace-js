@@ -181,10 +181,17 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(scopeSpans[0].scope.name, 'dd-trace-js')
 
       const otlpSpan = scopeSpans[0].spans[0]
-      assert.deepStrictEqual(
-        { name: otlpSpan.name, kind: otlpSpan.kind, startTimeUnixNano: otlpSpan.startTimeUnixNano, endTimeUnixNano: otlpSpan.endTimeUnixNano },
-        { name: '/api/test', kind: 2, startTimeUnixNano: 1700000000000000000, endTimeUnixNano: 1700000000050000000 }
-      )
+      assert.deepStrictEqual({
+        name: otlpSpan.name,
+        kind: otlpSpan.kind,
+        startTimeUnixNano: otlpSpan.startTimeUnixNano,
+        endTimeUnixNano: otlpSpan.endTimeUnixNano,
+      }, {
+        name: '/api/test',
+        kind: 2,
+        startTimeUnixNano: 1700000000000000000,
+        endTimeUnixNano: 1700000000050000000,
+      })
 
       // trace-id and span-id must be hex-encoded strings per the OTLP http/json spec
       assert.strictEqual(typeof otlpSpan.traceId, 'string', 'traceId must be a string')
@@ -258,10 +265,15 @@ describe('OpenTelemetry Traces', () => {
       const decoded = decodePayload(transformer.transformSpans([span]))
       const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
 
-      assert.deepStrictEqual(
-        { 'http.method': attrs['http.method'], 'http.url': attrs['http.url'], 'http.status_code': attrs['http.status_code'] },
-        { 'http.method': 'POST', 'http.url': 'http://example.com', 'http.status_code': 404 }
-      )
+      assert.deepStrictEqual({
+        'http.method': attrs['http.method'],
+        'http.url': attrs['http.url'],
+        'http.status_code': attrs['http.status_code'],
+      }, {
+        'http.method': 'POST',
+        'http.url': 'http://example.com',
+        'http.status_code': 404,
+      })
     })
 
     it('encodes meta_struct values as base64 bytesValue attributes', () => {
@@ -539,7 +551,7 @@ describe('OpenTelemetry Traces', () => {
       const tracer = setupTracer()
       const exporter = tracer._tracer._processor._exporter
 
-      exporter.export([createMockSpan({ metrics: { '_sampling_priority_v1': 0 } })])
+      exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: 0 } })])
       assert(!exportCalled, 'No HTTP request should be made for rejected traces')
     })
 
@@ -553,7 +565,7 @@ describe('OpenTelemetry Traces', () => {
       const tracer = setupTracer()
       const exporter = tracer._tracer._processor._exporter
 
-      exporter.export([createMockSpan({ metrics: { '_sampling_priority_v1': -1 } })])
+      exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: -1 } })])
       assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
     })
 

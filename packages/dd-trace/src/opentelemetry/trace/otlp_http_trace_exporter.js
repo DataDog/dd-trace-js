@@ -1,9 +1,9 @@
 'use strict'
 
 const OtlpHttpExporterBase = require('../otlp/otlp_http_exporter_base')
-const OtlpTraceTransformer = require('./otlp_transformer')
 const { SAMPLING_PRIORITY_KEY } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
+const OtlpTraceTransformer = require('./otlp_transformer')
 
 /**
  * OtlpHttpTraceExporter exports DD-formatted spans via OTLP over HTTP/JSON.
