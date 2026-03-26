@@ -38,11 +38,9 @@ function mergeKnownTests (aggregate, page) {
     for (const [suiteName, tests] of Object.entries(suites)) {
       if (!tests || tests.length === 0) continue
 
-      if (!aggregate[moduleName][suiteName]) {
-        aggregate[moduleName][suiteName] = tests
-      } else {
-        aggregate[moduleName][suiteName] = aggregate[moduleName][suiteName].concat(tests)
-      }
+      aggregate[moduleName][suiteName] = aggregate[moduleName][suiteName]
+        ? [...aggregate[moduleName][suiteName], ...tests]
+        : tests
     }
   }
 
@@ -111,7 +109,7 @@ function getKnownTests ({
     pageNumber++
 
     if (pageNumber > MAX_KNOWN_TESTS_PAGES) {
-      log.error(`Known tests pagination exceeded maximum of ${MAX_KNOWN_TESTS_PAGES} pages. Aborting.`)
+      log.error('Known tests pagination exceeded maximum of %d pages. Aborting.', MAX_KNOWN_TESTS_PAGES)
       distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
       return done(new Error(`Known tests pagination exceeded maximum of ${MAX_KNOWN_TESTS_PAGES} pages`))
     }
@@ -152,7 +150,7 @@ function getKnownTests ({
         if (responsePageInfo && responsePageInfo.has_next) {
           if (!responsePageInfo.cursor) {
             log.error(
-              `Known tests response has has_next=true but no cursor on page ${pageNumber}. Aborting pagination.`
+              'Known tests response has has_next=true but no cursor on page %d. Aborting pagination.', pageNumber
             )
             distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
             return done(new Error('Known tests pagination: has_next=true but no cursor'))
