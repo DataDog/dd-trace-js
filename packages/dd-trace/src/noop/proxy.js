@@ -6,6 +6,7 @@ const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
 const { SVC_SRC_KEY } = require('../constants')
 const NoopDogStatsDClient = require('./dogstatsd')
+const NoopSpan = require('./span')
 const NoopTracer = require('./tracer')
 
 const noop = new NoopTracer()
@@ -61,10 +62,10 @@ class NoopProxy {
 
     const callback = fn.length > 1
       ? function (span, done) {
-        return fn(patchSpanAddTags(addPatches(span)), done)
+        return fn(addPatches(span), done)
       }
       : function (span) {
-        return fn(patchSpanAddTags(addPatches(span)))
+        return fn(addPatches(span))
       }
 
     return this._tracer.trace(name, options, callback)
@@ -88,7 +89,7 @@ class NoopProxy {
 
     // wrap only does callback as promise
     const callback = function (span, done) {
-      return fn(patchSpanAddTags(addPatches(span)), done)
+      return fn(addPatches(span), done)
     }
 
     return this._tracer.wrap(name, options, callback)
@@ -139,6 +140,8 @@ class NoopProxy {
 }
 
 function addPatches (span) {
+  if (span instanceof NoopSpan) return span
+
   return patchSpanAddTags(patchSpanSetTag(span))
 }
 
