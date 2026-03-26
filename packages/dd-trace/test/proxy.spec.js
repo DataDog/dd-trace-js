@@ -620,47 +620,16 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', 'b', callback)
 
-        sinon.assert.calledOnce(noop.trace)
-        sinon.assert.calledWith(noop.trace, 'a', 'b', sinon.match.func)
-        assert.notStrictEqual(noop.trace.firstCall.args[2], callback)
+        sinon.assert.calledWith(noop.trace, 'a', 'b', callback)
         assert.strictEqual(returnValue, 'test')
-      })
-
-      it('should add _dd.svc_src when a service override is provided', () => {
-        const callback = () => 'test'
-
-        proxy.trace('a', { service: 'custom-service' }, callback)
-
-        sinon.assert.calledOnce(noop.trace)
-        sinon.assert.calledWith(noop.trace, 'a', {
-          service: 'custom-service',
-          tags: {
-            '_dd.svc_src': 'm',
-          },
-        }, sinon.match.func)
-        assert.notStrictEqual(noop.trace.firstCall.args[2], callback)
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
-        sinon.assert.calledOnce(noop.trace)
-        sinon.assert.calledWith(noop.trace, 'a', {}, sinon.match.func)
-        assert.notStrictEqual(noop.trace.firstCall.args[2], callback)
+        sinon.assert.calledWith(noop.trace, 'a', {}, callback)
         assert.strictEqual(returnValue, 'test')
-      })
-
-      it('should patch the trace callback span setTag when a service override is provided', () => {
-        const spanStub = { setTag: sinon.spy() }
-        const setTagSpy = spanStub.setTag
-        noop.trace.callsFake((name, options, callback) => callback(spanStub))
-
-        proxy.trace('a', span => span.setTag('service', 'custom-name'))
-
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'custom-name')
       })
 
       it('should ignore calls without an invalid callback', () => {
@@ -675,24 +644,7 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', 'b', callback)
 
-        sinon.assert.calledWith(noop.wrap, 'a', 'b', sinon.match.func)
-        assert.notStrictEqual(noop.wrap.firstCall.args[2], callback)
-        assert.strictEqual(returnValue, 'fn')
-      })
-
-      it('should add _dd.svc_src to tags when a service override is provided', () => {
-        const callback = () => 'test'
-        const returnValue = proxy.wrap('a', {
-          service: 'custom-service',
-        }, callback)
-
-        sinon.assert.calledWith(noop.wrap, 'a', {
-          service: 'custom-service',
-          tags: {
-            '_dd.svc_src': 'm',
-          },
-        }, sinon.match.func)
-        assert.notStrictEqual(noop.wrap.firstCall.args[2], callback)
+        sinon.assert.calledWith(noop.wrap, 'a', 'b', callback)
         assert.strictEqual(returnValue, 'fn')
       })
 
@@ -700,20 +652,8 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
 
-        sinon.assert.calledWith(noop.wrap, 'a', {}, sinon.match.func)
-        assert.notStrictEqual(noop.wrap.firstCall.args[2], callback)
+        sinon.assert.calledWith(noop.wrap, 'a', {}, callback)
         assert.strictEqual(returnValue, 'fn')
-      })
-
-      it('should patch the wrap callback span setTag when a service override is provided', () => {
-        const spanStub = { setTag: sinon.spy() }
-        const setTagSpy = spanStub.setTag
-        noop.wrap.callsFake((name, options, callback) => callback(spanStub))
-
-        proxy.wrap('a', (span, done) => span.setTag('service', 'custom-service'))
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'custom-service')
       })
 
       it('should ignore calls without an invalid callback', () => {
@@ -729,110 +669,6 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(noop.startSpan, 'a', 'b', 'c')
-        assert.strictEqual(returnValue, 'span')
-      })
-
-      it('should add _dd.svc_src to tags when a service override is provided', () => {
-        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
-
-        sinon.assert.calledWith(noop.startSpan, 'a', {
-          tags: {
-            service: 'custom-service',
-            '_dd.svc_src': 'm',
-          },
-        })
-        assert.strictEqual(returnValue, 'span')
-      })
-
-      it('should call setTag only once when there is no service name overrride', () => {
-        // Capture the spy before startSpan monkey-patches spanInstance.setTag
-        const spanStub = { setTag: sinon.spy() }
-        noop.startSpan.returns(spanStub)
-        const setTagSpy = spanStub.setTag
-
-        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
-
-        sinon.assert.calledWith(noop.startSpan, 'a', {
-          tags: {
-            service: 'custom-service',
-            '_dd.svc_src': 'm',
-          },
-        })
-        assert.strictEqual(returnValue, noop.startSpan.returnValues[0])
-
-        returnValue.setTag('some-tag', 'some-value')
-
-        assert.strictEqual(setTagSpy.callCount, 1)
-      })
-
-      it('should call addTags with the correct values when a service override', () => {
-        const spanStub = { addTags: sinon.spy() }
-        noop.startSpan.returns(spanStub)
-        const addTagsSpy = spanStub.addTags
-
-        const returnValue = proxy.startSpan('a', { tags: { random: 'random-tag' } })
-
-        assert.strictEqual(returnValue, noop.startSpan.returnValues[0])
-
-        returnValue.addTags({ service: 'custom-name' })
-
-        sinon.assert.calledWith(addTagsSpy, {
-          service: 'custom-name',
-          '_dd.svc_src': 'm',
-        })
-      })
-
-      it('should not add service override tag when no service is provided', () => {
-        const spanStub = { addTags: sinon.spy() }
-        noop.startSpan.returns(spanStub)
-        const addTagsSpy = spanStub.addTags
-
-        const returnValue = proxy.startSpan('a', { tags: { random: 'random-tag' } })
-        assert.strictEqual(returnValue, noop.startSpan.returnValues[0])
-
-        returnValue.addTags({ someOtherTag: 'other-tag' })
-
-        sinon.assert.calledWith(addTagsSpy, {
-          someOtherTag: 'other-tag',
-        })
-      })
-
-      it('should call setTag twice when a service override is provided', () => {
-        const spanStub = { setTag: sinon.spy() }
-        noop.startSpan.returns(spanStub)
-        const setTagSpy = spanStub.setTag
-
-        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
-
-        sinon.assert.calledWith(noop.startSpan, 'a', {
-          tags: {
-            service: 'custom-service',
-            '_dd.svc_src': 'm',
-          },
-        })
-        assert.strictEqual(returnValue, noop.startSpan.returnValues[0])
-
-        returnValue.setTag('service', 'custom-name')
-
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-      })
-
-      it('should mantain previous tags when a service override is provided', () => {
-        const returnValue = proxy.startSpan('a', {
-          tags: {
-            service: 'custom-service',
-            'random-tag': 'previous-service',
-          },
-        })
-
-        sinon.assert.calledWith(noop.startSpan, 'a', {
-          tags: {
-            service: 'custom-service',
-            'random-tag': 'previous-service',
-            '_dd.svc_src': 'm',
-          },
-        })
         assert.strictEqual(returnValue, 'span')
       })
     })
@@ -1009,24 +845,7 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', 'b', callback)
 
-        sinon.assert.calledWith(tracer.trace, 'a', 'b', sinon.match.func)
-        assert.notStrictEqual(tracer.trace.firstCall.args[2], callback)
-        assert.strictEqual(returnValue, 'test')
-      })
-
-      it('should add _dd.svc_src to tags when a service override is provided', () => {
-        const callback = () => 'test'
-        const returnValue = proxy.trace('a', {
-          service: 'custom-service',
-        }, callback)
-
-        sinon.assert.calledWith(tracer.trace, 'a', {
-          service: 'custom-service',
-          tags: {
-            '_dd.svc_src': 'm',
-          },
-        }, sinon.match.func)
-        assert.notStrictEqual(tracer.trace.firstCall.args[2], callback)
+        sinon.assert.calledWith(tracer.trace, 'a', 'b', callback)
         assert.strictEqual(returnValue, 'test')
       })
 
@@ -1034,21 +853,8 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
-        sinon.assert.calledWith(tracer.trace, 'a', {}, sinon.match.func)
-        assert.notStrictEqual(tracer.trace.firstCall.args[2], callback)
+        sinon.assert.calledWith(tracer.trace, 'a', {}, callback)
         assert.strictEqual(returnValue, 'test')
-      })
-
-      it('should patch the trace callback span setTag when a service override is provided', () => {
-        const spanStub = { setTag: sinon.spy() }
-        const setTagSpy = spanStub.setTag
-        tracer.trace.callsFake((name, options, callback) => callback(spanStub))
-
-        proxy.trace('a', span => span.setTag('service', 'custom-name'))
-
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'custom-name')
       })
     })
 
@@ -1057,44 +863,15 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', 'b', callback)
 
-        sinon.assert.calledWith(tracer.wrap, 'a', 'b', sinon.match.func)
-        assert.notStrictEqual(tracer.wrap.firstCall.args[2], callback)
+        sinon.assert.calledWith(tracer.wrap, 'a', 'b', callback)
         assert.strictEqual(returnValue, 'fn')
-      })
-
-      it('should add _dd.svc_src to tags when a service override is provided', () => {
-        const callback = () => 'test'
-        const returnValue = proxy.wrap('a', {
-          service: 'custom-service',
-        }, callback)
-
-        sinon.assert.calledWith(tracer.wrap, 'a', {
-          service: 'custom-service',
-          tags: {
-            '_dd.svc_src': 'm',
-          },
-        }, sinon.match.func)
-        assert.notStrictEqual(tracer.wrap.firstCall.args[2], callback)
-        assert.strictEqual(returnValue, 'fn')
-      })
-
-      it('should patch the wrap callback span setTag when a service override is provided', () => {
-        const spanStub = { setTag: sinon.spy() }
-        const setTagSpy = spanStub.setTag
-        tracer.wrap.callsFake((name, options, callback) => callback(spanStub))
-
-        proxy.wrap('a', (span, done) => span.setTag('service', 'custom-service'))
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'custom-service')
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
 
-        sinon.assert.calledWith(tracer.wrap, 'a', {}, sinon.match.func)
-        assert.notStrictEqual(tracer.wrap.firstCall.args[2], callback)
+        sinon.assert.calledWith(tracer.wrap, 'a', {}, callback)
         assert.strictEqual(returnValue, 'fn')
       })
     })
@@ -1104,114 +881,6 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(tracer.startSpan, 'a', 'b', 'c')
-        assert.strictEqual(returnValue, 'span')
-      })
-
-      it('should add _dd.svc_src to tags when a service override is provided', () => {
-        const returnValue = proxy.startSpan('a', {
-          tags: {
-            service: 'custom-service',
-          },
-        })
-
-        sinon.assert.calledWith(tracer.startSpan, 'a', {
-          tags: {
-            service: 'custom-service',
-            '_dd.svc_src': 'm',
-          },
-        })
-        assert.strictEqual(returnValue, 'span')
-      })
-
-      it('should call setTag only once when there is no service name overrride', () => {
-        // Capture the spy before startSpan monkey-patches spanInstance.setTag
-        const spanStub = { setTag: sinon.spy() }
-        tracer.startSpan.returns(spanStub)
-        const setTagSpy = spanStub.setTag
-
-        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
-
-        sinon.assert.calledWith(tracer.startSpan, 'a', {
-          tags: {
-            service: 'custom-service',
-            '_dd.svc_src': 'm',
-          },
-        })
-        assert.strictEqual(returnValue, tracer.startSpan.returnValues[0])
-
-        returnValue.setTag('some-tag', 'some-value')
-
-        assert.strictEqual(setTagSpy.callCount, 1)
-      })
-
-      it('should call setTag twice when a service override is provided', () => {
-        const spanStub = { setTag: sinon.spy() }
-        tracer.startSpan.returns(spanStub)
-        const setTagSpy = spanStub.setTag
-
-        const returnValue = proxy.startSpan('a', { tags: { service: 'custom-service' } })
-
-        sinon.assert.calledWith(tracer.startSpan, 'a', {
-          tags: {
-            service: 'custom-service',
-            '_dd.svc_src': 'm',
-          },
-        })
-        assert.strictEqual(returnValue, tracer.startSpan.returnValues[0])
-
-        returnValue.setTag('service', 'custom-name')
-
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-      })
-
-      it('should call addTags with the correct values when a service override is provided to addTags', () => {
-        const spanStub = { addTags: sinon.spy() }
-        tracer.startSpan.returns(spanStub)
-        const addTagsSpy = spanStub.addTags
-
-        const returnValue = proxy.startSpan('a', { tags: { random: 'random-tag' } })
-
-        assert.strictEqual(returnValue, tracer.startSpan.returnValues[0])
-
-        returnValue.addTags({ service: 'custom-name' })
-
-        sinon.assert.calledWith(addTagsSpy, {
-          service: 'custom-name',
-          '_dd.svc_src': 'm',
-        })
-      })
-
-      it('should not add service override tag when no service tag is provided to addTags', () => {
-        const spanStub = { addTags: sinon.spy() }
-        tracer.startSpan.returns(spanStub)
-        const addTagsSpy = spanStub.addTags
-
-        const returnValue = proxy.startSpan('a', { tags: { random: 'random-tag' } })
-        assert.strictEqual(returnValue, tracer.startSpan.returnValues[0])
-
-        returnValue.addTags({ someOtherTag: 'other-tag' })
-
-        sinon.assert.calledWith(addTagsSpy, {
-          someOtherTag: 'other-tag',
-        })
-      })
-
-      it('should maintain previous tags when a service override is provided', () => {
-        const returnValue = proxy.startSpan('a', {
-          tags: {
-            service: 'custom-service',
-            'random-tag': 'previous-service',
-          },
-        })
-
-        sinon.assert.calledWith(tracer.startSpan, 'a', {
-          tags: {
-            service: 'custom-service',
-            'random-tag': 'previous-service',
-            '_dd.svc_src': 'm',
-          },
-        })
         assert.strictEqual(returnValue, 'span')
       })
     })
