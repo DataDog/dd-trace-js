@@ -285,10 +285,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #idToBytes (identifier, targetLength) {
     const buffer = identifier.toBuffer()
     if (buffer.length === targetLength) {
-      return buffer.toString('hex')
+      return Buffer.from(buffer).toString('hex')
     }
     if (buffer.length > targetLength) {
-      return buffer.slice(buffer.length - targetLength).toString('hex')
+      return Buffer.from(buffer.slice(buffer.length - targetLength)).toString('hex')
     }
     // Pad with leading zeros to reach target length
     const result = Buffer.alloc(targetLength)
