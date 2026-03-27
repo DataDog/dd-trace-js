@@ -25,10 +25,20 @@ addHook({ name: names }, function (url) {
   })
 
   const URLPrototype = url.URL.prototype.constructor.prototype
+  // Store the original property descriptors before shimmer modifies them
+  // This is needed because getters that access private fields (like #context in URL)
+  // cannot be called via .call() - we need to keep a reference to the original getter
+  const originalDescriptors = {}
   for (const property of instrumentedGetters) {
-    shimmer.wrap(URLPrototype, property, function (originalGet) {
+    originalDescriptors[property] = Object.getOwnPropertyDescriptor(URLPrototype, property)
+  }
+  for (const property of instrumentedGetters) {
+    const originalDescriptor = originalDescriptors[property]
+    if (!originalDescriptor || !originalDescriptor.get) continue
+    shimmer.wrap(URLPrototype, property, function () {
       return function get () {
-        const result = originalGet.call(this)
+        // Use the original descriptor's getter to preserve private field access
+        const result = originalDescriptor.get.call(this)
         if (!urlGetterChannel.hasSubscribers) return result
 
         const context = { urlObject: this, result, property }

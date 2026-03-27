@@ -55,6 +55,49 @@ let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
 let isEarlyFlakeDetectionFaulty = false
+
+let vitestRunnerModule = null
+function getVitestRunnerFunctions () {
+  if (!vitestRunnerModule) {
+    try {
+      // eslint-disable-next-line n/no-missing-require
+      vitestRunnerModule = require('@vitest/runner')
+      log.debug('dd-trace: Loaded @vitest/runner module')
+    } catch (e) {
+      // When dd-trace is installed from a local file path, @vitest/runner
+      // may not be resolvable from dd-trace's directory. Try alternative resolution paths.
+      const Module = require('module')
+      const pathsToTry = [
+        // Try from process.cwd() which should be the test project directory
+        process.cwd(),
+        // Try from vitest worker's file path if available
+        globalThis.__vitest_worker__?.filepath,
+        // Try from require.main if available
+        require.main?.filename,
+      ].filter(Boolean)
+
+      for (const basePath of pathsToTry) {
+        try {
+          const customRequire = Module.createRequire(
+            basePath.endsWith('.js') || basePath.endsWith('.ts') ? basePath : `${basePath}/package.json`
+          )
+          vitestRunnerModule = customRequire('@vitest/runner')
+          log.debug('dd-trace: Loaded @vitest/runner from %s', basePath)
+          break
+        } catch {
+          // Continue to next path
+        }
+      }
+
+      if (!vitestRunnerModule) {
+        log.warn('dd-trace: Failed to load @vitest/runner: %s', e.message)
+        vitestRunnerModule = false
+      }
+    }
+  }
+  return vitestRunnerModule || {}
+}
+
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
@@ -64,7 +107,6 @@ let testCodeCoverageLinesTotal
 let coverageRootDir
 let isSessionStarted = false
 let vitestPool = null
-let vitestRunnerModule = null
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -838,28 +880,31 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
     taskToCtx.set(task, ctx)
 
-    // Wrap the test function to run inside active span context on first execution.
-    // This ensures HTTP spans created during test execution are linked as children of the test span.
-    // Similar to Jest implementation at jest.js:501-503
-    if (numAttempt === 0 && numRepetition === 0 && vitestRunnerModule) {
+    testStartCh.runStores(ctx, () => {})
+
+    // FIX: Wrap the actual test function to run inside active span context
+    // so that HTTP requests during test execution are linked as children of the test span.
+    // We use storage('legacy').run() directly because the channel's bindStore mechanism
+    // doesn't properly propagate the store context in vitest worker processes.
+    if (numAttempt === 0 && numRepetition === 0) {
       try {
-        const { getFn, setFn } = vitestRunnerModule
+        const { getFn, setFn } = getVitestRunnerFunctions()
         if (getFn && setFn) {
           const originalFn = getFn(task)
           if (originalFn && !originalFn.__ddTraceWrapped) {
             const wrappedFn = shimmer.wrapFunction(originalFn, testFn => function () {
-              return testStartCh.runStores(ctx, () => testFn.apply(this, arguments))
+              const { storage } = require('../../datadog-core')
+              return storage('legacy').run(ctx.currentStore, () => testFn.apply(this, arguments))
             })
             wrappedFn.__ddTraceWrapped = true
             setFn(task, wrappedFn)
           }
         }
       } catch (e) {
-        log.debug('dd-trace: could not wrap vitest test function: %s', e.message)
+        log.warn('dd-trace: Failed to wrap Vitest test function:', e)
       }
     }
 
-    testStartCh.runStores(ctx, () => {})
     return onBeforeTryTask.apply(this, arguments)
   })
 
@@ -1035,9 +1080,6 @@ addHook({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
 }, (vitestPackage, frameworkVersion) => {
-  // Store the module for use in onBeforeTryTask to wrap test functions with span context
-  vitestRunnerModule = vitestPackage
-
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteFinishCh.hasSubscribers) {
