@@ -104,7 +104,6 @@ benchmark:
   variables:
     SPLITS: 4
 
-
 benchmark-serverless:
   stage: benchmarks
   image: $SLS_CI_IMAGE
