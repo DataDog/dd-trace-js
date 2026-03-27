@@ -128,6 +128,7 @@ benchmark-serverless:
     - git clone https://serverless-tools:${GITLAB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
     - ./ci/check_trigger_status.sh
 
+
 benchmark-serverless-trigger:
   stage: benchmarks
   needs: []
