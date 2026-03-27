@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
 
 describe('otlp_runtime_metrics', () => {
@@ -25,13 +24,13 @@ describe('otlp_runtime_metrics', () => {
       addBatchObservableCallback (callback, observables) {
         observeCallbacks.push(callback)
         return {}
-      }
+      },
     }
 
     mockMeterProvider = {
       getMeter (name) {
         return mockMeter
-      }
+      },
     }
 
     otlpMetrics = proxyquire('../../src/runtime_metrics/otlp_runtime_metrics', {
@@ -39,13 +38,13 @@ describe('otlp_runtime_metrics', () => {
         metrics: {
           getMeterProvider () {
             return mockMeterProvider
-          }
-        }
+          },
+        },
       },
       '../log': {
         debug () {},
-        error () {}
-      }
+        error () {},
+      },
     })
   })
 
@@ -59,8 +58,14 @@ describe('otlp_runtime_metrics', () => {
     // V8 heap metrics
     assert.ok(createdGauges['v8js.memory.heap.used'], 'v8js.memory.heap.used should be created')
     assert.ok(createdGauges['v8js.memory.heap.limit'], 'v8js.memory.heap.limit should be created')
-    assert.ok(createdGauges['v8js.memory.heap.space.available_size'], 'v8js.memory.heap.space.available_size should be created')
-    assert.ok(createdGauges['v8js.memory.heap.space.physical_size'], 'v8js.memory.heap.space.physical_size should be created')
+    assert.ok(
+      createdGauges['v8js.memory.heap.space.available_size'],
+      'v8js.memory.heap.space.available_size should be created'
+    )
+    assert.ok(
+      createdGauges['v8js.memory.heap.space.physical_size'],
+      'v8js.memory.heap.space.physical_size should be created'
+    )
 
     // Process metrics
     assert.ok(createdGauges['process.memory.usage'], 'process.memory.usage should be created')
@@ -93,7 +98,7 @@ describe('otlp_runtime_metrics', () => {
     const observer = {
       observe (instrument, value, attrs) {
         observations.push({ name: instrument.name, value, attrs })
-      }
+      },
     }
 
     // Execute the callback
@@ -116,7 +121,7 @@ describe('otlp_runtime_metrics', () => {
     const observer = {
       observe (instrument, value, attrs) {
         observations.push({ name: instrument.name, value, attrs })
-      }
+      },
     }
 
     observeCallbacks[0](observer)
@@ -134,7 +139,7 @@ describe('otlp_runtime_metrics', () => {
     const observer = {
       observe (instrument, value, attrs) {
         observations.push({ name: instrument.name, value, attrs })
-      }
+      },
     }
 
     // Need two callback invocations for CPU delta (first sets baseline)

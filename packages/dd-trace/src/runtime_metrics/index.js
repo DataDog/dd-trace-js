@@ -17,14 +17,11 @@ module.exports = {
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
-    if (config.otelMetricsEnabled) {
-      // Use OTLP runtime metrics with OTel-native naming (v8js.*, nodejs.*, process.*)
-      // when the OTel metrics pipeline is active. DogStatsD runtime metrics are skipped
-      // to avoid double-reporting.
-      runtimeMetrics = require('./otlp_runtime_metrics')
-    } else {
-      runtimeMetrics = require('./runtime_metrics')
-    }
+    // Use OTLP runtime metrics with OTel-native naming when the OTel metrics
+    // pipeline is active. DogStatsD runtime metrics are skipped to avoid double-reporting.
+    runtimeMetrics = config.otelMetricsEnabled
+      ? require('./otlp_runtime_metrics')
+      : require('./runtime_metrics')
 
     Object.setPrototypeOf(module.exports, runtimeMetrics)
 
