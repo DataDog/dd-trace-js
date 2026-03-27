@@ -86,7 +86,7 @@ class Transformer {
   }
 
   #fromFunctionQuery (functionQuery) {
-    const { functionName, expressionName, className } = functionQuery
+    const { functionName, expressionName, className, thisPropertyName } = functionQuery
     const method = functionQuery.methodName || functionQuery.privateMethodName
     const type = functionQuery.privateMethodName ? 'PrivateIdentifier' : 'Identifier'
     const queries = []
@@ -111,6 +111,12 @@ class Transformer {
       queries.push(
         `FunctionExpression[id.name="${expressionName}"][async]`,
         `ArrowFunctionExpression[id.name="${expressionName}"][async]`
+      )
+    }
+
+    if (thisPropertyName) {
+      queries.push(
+        `AssignmentExpression[left.object.type=ThisExpression][left.property.name="${thisPropertyName}"] > [async]`
       )
     }
 
