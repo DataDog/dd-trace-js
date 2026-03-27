@@ -20,6 +20,7 @@ const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 let beforeCh
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
+const tagsUpdateCh = dc.channel('dd-trace:span:tags:update')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
@@ -122,6 +123,7 @@ class NativeWallProfiler {
   // Bind these to this so they can be used as callbacks
   #boundEnter = this.#enter.bind(this)
   #boundSpanFinished = this.#spanFinished.bind(this)
+  #boundSpanTagsUpdated = this.#spanTagsUpdated.bind(this)
   #boundGenerateLabels = this._generateLabels.bind(this)
 
   get type () { return 'wall' }
@@ -201,6 +203,9 @@ class NativeWallProfiler {
         }
         enterCh.subscribe(this.#boundEnter)
         spanFinishCh.subscribe(this.#boundSpanFinished)
+        if (this.#endpointCollectionEnabled) {
+          tagsUpdateCh.subscribe(this.#boundSpanTagsUpdated)
+        }
       }
     }
 
@@ -287,15 +292,7 @@ class NativeWallProfiler {
       }
 
       profilingContext = { spanId, rootSpanId, webTags }
-      // Don't cache if endpoint collection is enabled and webTags is undefined but
-      // the span's type hasn't been set yet. TracingPlugin.startSpan() calls
-      // enterWith() before the plugin sets span.type='web' via addRequestTags(),
-      // so the first enterCh event fires before the type is known. Without this
-      // guard we'd cache webTags=undefined and then serve that stale value on the
-      // subsequent activation (when span.type='web' is already set).
-      if (!this.#endpointCollectionEnabled || webTags !== undefined || context._tags['span.type']) {
-        span[ProfilingContext] = profilingContext
-      }
+      span[ProfilingContext] = profilingContext
     }
     return profilingContext
   }
@@ -311,6 +308,16 @@ class NativeWallProfiler {
   #spanFinished (span) {
     if (span[ProfilingContext] !== undefined) {
       span[ProfilingContext] = undefined
+    }
+  }
+
+  #spanTagsUpdated (span) {
+    if (!this.#started) return
+    const profilingContext = span[ProfilingContext]
+    if (profilingContext === undefined || profilingContext.webTags !== undefined) return
+    const tags = span.context()._tags
+    if (isWebServerSpan(tags)) {
+      profilingContext.webTags = tags
     }
   }
 
@@ -352,6 +359,9 @@ class NativeWallProfiler {
         }
         enterCh.unsubscribe(this.#boundEnter)
         spanFinishCh.unsubscribe(this.#boundSpanFinished)
+        if (this.#endpointCollectionEnabled) {
+          tagsUpdateCh.unsubscribe(this.#boundSpanTagsUpdated)
+        }
         this._profilerState = undefined
       }
       this.#started = false
