@@ -148,23 +148,14 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
 
     // Get the base service name and construct the pubsub service override
     const baseService = this.tracer._service
-    let serviceOverride
-    let serviceSource
-    if (this.config.service) {
-      serviceSource = 'opt.plugin'
-      serviceOverride = this.config.service
-    } else {
-      serviceSource = baseService
-      serviceOverride = `${baseService}-pubsub`
-    }
+    const service = this.config.service || { name: `${baseService}-pubsub`, source: baseService }
 
     // Use this.startSpan() which automatically activates the span
     const span = this.startSpan('pubsub.push.receive', {
       childOf: parentContext,
       startTime,
       kind: 'consumer',
-      service: serviceOverride,
-      serviceSource,
+      service,
       meta: {
         component: 'google-cloud-pubsub',
         'pubsub.method': 'receive',

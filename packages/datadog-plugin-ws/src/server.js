@@ -46,10 +46,9 @@ class WSServerPlugin extends TracingPlugin {
     // Extract distributed tracing context from request headers
     const childOf = this.tracer.extract(HTTP_HEADERS, req.headers)
 
-    const { name: service, source: serviceSource } = this.serviceName({ pluginConfig: this.config })
+    const service = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
       service,
-      serviceSource,
       childOf,
       meta: {
         'span.type': 'websocket',
@@ -65,7 +64,7 @@ class WSServerPlugin extends TracingPlugin {
 
     ctx.socket.spanTags = {
       'resource.name': resourceName,
-      'service.name': service,
+      'service.name': service.name,
     }
     ctx.socket.spanContext = createWebSocketSpanContext(ctx.span._spanContext)
     ctx.socket.hasTraceHeaders = hasTraceHeaders(req.headers)

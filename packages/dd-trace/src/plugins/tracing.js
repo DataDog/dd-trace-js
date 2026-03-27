@@ -157,8 +157,8 @@ class TracingPlugin extends Plugin {
    * @param {string} [options.kind] - The kind of the span.
    * @param {object} [options.meta] - The meta data for the span.
    * @param {object} [options.metrics] - The metrics for the span.
-   * @param {string} [options.service] - The service name.
-   * @param {string} [options.serviceSource] - The source that determined the service name (sets _dd.svc_src tag).
+   * @param {string | { name: string, source?: string }} [options.service] - The service name, or an object with
+   *   name and source.
    * @param {number} [options.startTime] - The start time of the span.
    * @param {string} [options.resource] - The resource name.
    * @param {string} [options.type] - The type of the span.
@@ -177,14 +177,21 @@ class TracingPlugin extends Plugin {
       meta,
       metrics,
       service,
-      serviceSource,
       startTime,
       resource,
       type,
     } = options
-
+    let serviceSource
     const tracer = options.tracer || this.tracer
     const config = options.config || this.config
+
+    if (service && typeof service === 'object') {
+      serviceSource = service.source
+      service = service.name
+    } else if (service) {
+      // service is a plain string (e.g. this.config.service), default source to 'opt.plugin'
+      serviceSource = 'opt.plugin'
+    }
 
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {

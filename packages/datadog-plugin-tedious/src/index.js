@@ -9,11 +9,9 @@ class TediousPlugin extends DatabasePlugin {
   static system = 'mssql'
 
   bindStart (ctx) {
-    const { name: service, source: serviceSource } =
-      this.serviceName({ pluginConfig: this.config, system: this.system })
+    const serviceResult = this.serviceName({ pluginConfig: this.config, system: this.system })
     const span = this.startSpan(this.operationName(), {
-      service,
-      serviceSource,
+      service: serviceResult,
       resource: ctx.queryOrProcedure,
       type: 'sql',
       kind: 'client',
@@ -30,7 +28,7 @@ class TediousPlugin extends DatabasePlugin {
 
     // SQL Server includes comments when caching queries
     // For that reason we allow service mode but not full mode
-    ctx.sql = this.injectDbmQuery(span, ctx.queryOrProcedure, service, true)
+    ctx.sql = this.injectDbmQuery(span, ctx.queryOrProcedure, serviceResult.name, true)
     return ctx.currentStore
   }
 }

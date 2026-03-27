@@ -16,7 +16,6 @@ class CouchBasePlugin extends StoragePlugin {
   }
 
   startSpan (operation, customTags, { bucket, collection, seedNodes }, ctx) {
-    const { name: service, source: serviceSource } = this.serviceName({ pluginConfig: this.config })
     const tags = {
       'db.type': 'couchbase',
       component: 'couchbase',
@@ -35,8 +34,7 @@ class CouchBasePlugin extends StoragePlugin {
     return super.startSpan(
       this.operationName({ operation }),
       {
-        service,
-        serviceSource,
+        service: this.serviceName({ pluginConfig: this.config }),
         meta: tags,
       },
       ctx

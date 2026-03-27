@@ -12,14 +12,7 @@ class ProducerPlugin extends OutboundPlugin {
       kind: this.constructor.kind,
     }
     if (!options.service) {
-      if (this.config.service) {
-        options.service = this.config.service
-        options.serviceSource = 'opt.plugin'
-      } else {
-        const { name, source } = this.serviceName()
-        options.service = name
-        options.serviceSource = source
-      }
+      options.service = this.config.service || this.serviceName()
     }
     for (const key of Object.keys(spanDefaults)) {
       if (!options[key]) {

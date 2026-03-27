@@ -25,10 +25,8 @@ class WSProducerPlugin extends TracingPlugin {
     const spanTags = socket.spanTags
     const path = spanTags['resource.name'].split(' ')[1]
     const opCode = binary ? 'binary' : 'text'
-    const { name: service, source: serviceSource } = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
-      service,
-      serviceSource,
+      service: this.serviceName({ pluginConfig: this.config }),
       meta: {
         'span.type': 'websocket',
         'span.kind': 'producer',

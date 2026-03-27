@@ -22,12 +22,9 @@ class RedisPlugin extends CachePlugin {
       return { noop: true }
     }
 
-    const { name: service, source: serviceSource } =
-      this.serviceName({ pluginConfig: this.config, system: this.system, connectionName })
     this.startSpan({
       resource,
-      service,
-      serviceSource,
+      service: this.serviceName({ pluginConfig: this.config, system: this.system, connectionName }),
       type: this._spanType,
       meta: {
         'db.type': this._spanType,

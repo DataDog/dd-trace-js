@@ -19,11 +19,9 @@ class MySQLPlugin extends DatabasePlugin {
   }
 
   bindStart (ctx) {
-    const { name: service, source: serviceSource } =
-      this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system })
+    const serviceResult = this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system })
     const span = this.startSpan(this.operationName(), {
-      service,
-      serviceSource,
+      service: serviceResult,
       resource: ctx.sql,
       type: 'sql',
       kind: 'client',
@@ -35,7 +33,7 @@ class MySQLPlugin extends DatabasePlugin {
         [CLIENT_PORT_KEY]: ctx.conf.port,
       },
     }, ctx)
-    ctx.sql = this.injectDbmQuery(span, ctx.sql, service)
+    ctx.sql = this.injectDbmQuery(span, ctx.sql, serviceResult.name)
 
     return ctx.currentStore
   }

@@ -10,12 +10,8 @@ class MoleculerClientPlugin extends ClientPlugin {
   bindStart (ctx) {
     const { actionName, opts } = ctx
 
-    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
-    const service = this.config.service || schemaServiceName
-    const serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
     const span = this.startSpan(this.operationName(), {
-      service,
-      serviceSource,
+      service: this.config.service || this.serviceName(),
       resource: actionName,
       kind: 'client',
     }, ctx)
