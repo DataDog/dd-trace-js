@@ -20,6 +20,7 @@ const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 let beforeCh
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
+const tagsUpdateCh = dc.channel('dd-trace:span:tags:update')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
@@ -58,33 +59,30 @@ function ensureChannelsActivated (asyncContextFrameEnabled) {
   if (channelsActivated) return
 
   const shimmer = require('../../../../datadog-shimmer')
-  const asyncHooks = require('async_hooks')
 
-  // When using AsyncContextFrame to store sample context, we do not need to use
-  // async_hooks.createHook to create a "before" callback anymore.
-  if (!asyncContextFrameEnabled) {
-    const { createHook } = asyncHooks
-    beforeCh = dc.channel('dd-trace:storage:before')
-    createHook({ before: () => beforeCh.publish() }).enable()
-  }
-
-  const { AsyncLocalStorage } = asyncHooks
-
-  // We need to instrument AsyncLocalStorage.enterWith() both with and without AsyncContextFrame.
+  // We need to instrument enterWith() on the legacy storage — that's the storage
+  // carrying span data and the only one the profiler cares about.
+  const legacyStorage = storage('legacy')
   let inRun = false
-  shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
-    return function (...args) {
-      const retVal = original.apply(this, args)
+  shimmer.wrap(legacyStorage, 'enterWith', function (original) {
+    return function (store) {
+      const retVal = original.call(this, store)
       if (!inRun) enterCh.publish()
       return retVal
     }
   })
 
-  // We only need to instrument AsyncLocalStorage.run() when not using AsyncContextFrame.
-  // AsyncContextFrame-based implementation of AsyncLocalStorage.run() delegates
-  // to AsyncLocalStorage.enterWith() so it doesn't need to be separately instrumented.
+  // When not using AsyncContextFrame, we need additional instrumentation.
   if (!asyncContextFrameEnabled) {
-    shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
+    // We need async_hooks.createHook to create a "before" callback.
+    const { createHook } = require('async_hooks')
+    beforeCh = dc.channel('dd-trace:storage:before')
+    createHook({ before: () => beforeCh.publish() }).enable()
+
+    // In ACF-based implementation run() delegates to enterWith()  so it doesn't
+    // need to be separately instrumented. in non-ACF implementation run()
+    // doesn't delegate to enterWith(), so separate instrumentation is necessary.
+    shimmer.wrap(legacyStorage, 'run', function (original) {
       return function (store, callback, ...args) {
         const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
           inRun = false
@@ -125,6 +123,7 @@ class NativeWallProfiler {
   // Bind these to this so they can be used as callbacks
   #boundEnter = this.#enter.bind(this)
   #boundSpanFinished = this.#spanFinished.bind(this)
+  #boundSpanTagsUpdated = this.#spanTagsUpdated.bind(this)
   #boundGenerateLabels = this._generateLabels.bind(this)
 
   get type () { return 'wall' }
@@ -204,6 +203,9 @@ class NativeWallProfiler {
         }
         enterCh.subscribe(this.#boundEnter)
         spanFinishCh.subscribe(this.#boundSpanFinished)
+        if (this.#endpointCollectionEnabled) {
+          tagsUpdateCh.subscribe(this.#boundSpanTagsUpdated)
+        }
       }
     }
 
@@ -290,15 +292,7 @@ class NativeWallProfiler {
       }
 
       profilingContext = { spanId, rootSpanId, webTags }
-      // Don't cache if endpoint collection is enabled and webTags is undefined but
-      // the span's type hasn't been set yet. TracingPlugin.startSpan() calls
-      // enterWith() before the plugin sets span.type='web' via addRequestTags(),
-      // so the first enterCh event fires before the type is known. Without this
-      // guard we'd cache webTags=undefined and then serve that stale value on the
-      // subsequent activation (when span.type='web' is already set).
-      if (!this.#endpointCollectionEnabled || webTags !== undefined || context._tags['span.type']) {
-        span[ProfilingContext] = profilingContext
-      }
+      span[ProfilingContext] = profilingContext
     }
     return profilingContext
   }
@@ -314,6 +308,16 @@ class NativeWallProfiler {
   #spanFinished (span) {
     if (span[ProfilingContext] !== undefined) {
       span[ProfilingContext] = undefined
+    }
+  }
+
+  #spanTagsUpdated (span) {
+    if (!this.#started) return
+    const profilingContext = span[ProfilingContext]
+    if (profilingContext === undefined || profilingContext.webTags !== undefined) return
+    const tags = span.context()._tags
+    if (isWebServerSpan(tags)) {
+      profilingContext.webTags = tags
     }
   }
 
@@ -355,6 +359,9 @@ class NativeWallProfiler {
         }
         enterCh.unsubscribe(this.#boundEnter)
         spanFinishCh.unsubscribe(this.#boundSpanFinished)
+        if (this.#endpointCollectionEnabled) {
+          tagsUpdateCh.unsubscribe(this.#boundSpanTagsUpdated)
+        }
         this._profilerState = undefined
       }
       this.#started = false

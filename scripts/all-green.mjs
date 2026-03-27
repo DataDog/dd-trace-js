@@ -13,12 +13,14 @@ const {
   RETRIES,
 } = process.env
 
+const maxRerunFailedJobs = 3
+
 const octokit = new Octokit({ auth: GITHUB_TOKEN })
 const owner = 'DataDog'
 const repo = 'dd-trace-js'
 const ref = context.payload.pull_request?.head.sha || GITHUB_SHA
 const params = { owner, repo, ref }
-const checkConclusionEmojis = {
+const conclusionEmojis = {
   action_required: '🔶',
   cancelled: '🚫',
   failure: '❌',
@@ -29,7 +31,19 @@ const checkConclusionEmojis = {
   timed_out: '⌛',
 }
 
+const conclusionSeverity = {
+  failure: 0,
+  timed_out: 1,
+  action_required: 2,
+  cancelled: 3,
+  stale: 4,
+  neutral: 5,
+  skipped: 6,
+  success: 7,
+}
+
 let retries = 0
+let hasRerun = false
 
 async function hasCompleted () {
   const { data: inProgressRuns } = await octokit.rest.checks.listForRef({
@@ -69,55 +83,117 @@ async function checkCompleted () {
   }
 }
 
+async function getLatestRuns () {
+  const checkRuns = await octokit.paginate(
+    'GET /repos/:owner/:repo/commits/:ref/check-runs',
+    {
+      ...params,
+      per_page: 100,
+    }
+  )
+
+  // When a check is re-run, older runs remain with their original conclusions.
+  // Deduplicate by name and evaluate only the latest run for each check.
+  const latestByName = new Map()
+  for (const run of checkRuns) {
+    const existing = latestByName.get(run.name)
+    if (!existing || new Date(run.started_at) >= new Date(existing.started_at)) {
+      latestByName.set(run.name, run)
+    }
+  }
+
+  return [...latestByName.values()]
+}
+
+async function rerunFailedWorkflows (failedRuns) {
+  const failedCountByCheckSuiteId = new Map()
+  for (const run of failedRuns) {
+    const id = run.check_suite?.id
+    if (id !== undefined) {
+      failedCountByCheckSuiteId.set(id, (failedCountByCheckSuiteId.get(id) ?? 0) + 1)
+    }
+  }
+
+  const eligibleSuiteIds = [...failedCountByCheckSuiteId.entries()]
+    .filter(([, count]) => count <= maxRerunFailedJobs)
+    .map(([id]) => id)
+
+  // If a workflow has many jobs failed, it's unlikely to be flakiness to no
+  // point in re-running.
+  if (eligibleSuiteIds.length < failedCountByCheckSuiteId.size) {
+    console.log(
+      `Skipping rerun for ${failedCountByCheckSuiteId.size - eligibleSuiteIds.length} workflow(s) ` +
+      `with more than ${maxRerunFailedJobs} failed job(s).`
+    )
+  }
+
+  const workflowRunsPerSuite = await Promise.all(
+    eligibleSuiteIds.map(checkSuiteId =>
+      octokit.rest.actions.listWorkflowRunsForRepo({ owner, repo, check_suite_id: checkSuiteId })
+        .then(({ data }) => data.workflow_runs)
+    )
+  )
+
+  const workflowRuns = workflowRunsPerSuite.flat()
+
+  await Promise.all(
+    workflowRuns.map(workflowRun => {
+      console.log(`Rerunning failed jobs for workflow run ${workflowRun.id} (${workflowRun.name}).`)
+      return octokit.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: workflowRun.id })
+    })
+  )
+
+  return workflowRuns.length > 0
+}
+
 async function checkAllGreen () {
   let latestRuns
 
   try {
     await checkCompleted()
   } finally {
-    const checkRuns = await octokit.paginate(
-      'GET /repos/:owner/:repo/commits/:ref/check-runs',
-      {
-        ...params,
-        per_page: 100,
-      }
-    )
-
-    // When a check is re-run, older runs remain with their original conclusions.
-    // Deduplicate by name and evaluate only the latest run for each check.
-    const latestByName = new Map()
-    for (const run of checkRuns) {
-      const existing = latestByName.get(run.name)
-      if (!existing || new Date(run.started_at) >= new Date(existing.started_at)) {
-        latestByName.set(run.name, run)
-      }
-    }
-    latestRuns = [...latestByName.values()]
-
-    await printSummary(latestRuns)
+    latestRuns = await getLatestRuns()
   }
 
-  const allGreen = !latestRuns.some(run => (
+  const failedRuns = latestRuns.filter(run =>
     run.conclusion === 'failure' || run.conclusion === 'timed_out'
-  ))
+  )
 
-  if (allGreen) {
+  if (failedRuns.length === 0) {
+    await printSummary(latestRuns)
     console.log('All jobs were successful.')
-  } else {
-    throw new Error('One or more jobs failed.')
+    return
   }
+
+  if (!hasRerun) {
+    hasRerun = true
+    console.log(`${failedRuns.length} job(s) failed. Rerunning failed workflows...`)
+    const didRerun = await rerunFailedWorkflows(failedRuns)
+    if (didRerun) {
+      retries = 0
+      console.log(`Waiting for ${POLLING_INTERVAL} minutes before polling for rerun results.`)
+      await setTimeout(POLLING_INTERVAL * 60_000)
+      await checkAllGreen()
+      return
+    }
+  }
+
+  await printSummary(latestRuns)
+  throw new Error('One or more jobs failed.')
 }
 
 async function printSummary (checkRuns) {
-  const runs = checkRuns.map(run => ({
-    name: run.name,
-    status: run.status,
-    conclusion: run.conclusion
-      ? `${run.conclusion} ${checkConclusionEmojis[run.conclusion]}`
-      : ' ',
-    started_at: run.started_at,
-    completed_at: run.completed_at ?? ' ',
-  }))
+  const runs = [...checkRuns]
+    .sort((a, b) => (conclusionSeverity[a.conclusion] ?? 8) - (conclusionSeverity[b.conclusion] ?? 8))
+    .map(run => ({
+      name: run.name,
+      status: run.status,
+      conclusion: run.conclusion
+        ? `${run.conclusion} ${conclusionEmojis[run.conclusion]}`
+        : ' ',
+      started_at: run.started_at,
+      completed_at: run.completed_at ?? ' ',
+    }))
 
   console.table(runs)
 
