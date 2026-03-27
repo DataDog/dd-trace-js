@@ -12,10 +12,8 @@ class GoogleCloudPubsubClientPlugin extends ClientPlugin {
 
     if (api === 'publish') return
 
-    const service = this.config.service || this.serviceName()
-
     const spanOptions = {
-      service,
+      service: this.config.service || this.serviceName(),
       resource: [api, request.name].filter(Boolean).join(' '),
       kind: this.constructor.kind,
       meta: {

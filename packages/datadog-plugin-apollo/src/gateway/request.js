@@ -17,10 +17,8 @@ class ApolloGatewayRequestPlugin extends ApolloBasePlugin {
     const childOf = store ? store.span : null
     const spanData = {
       childOf,
-      service: this.serviceName({
-        id: `${this.constructor.id}.${this.constructor.operation}`,
-        pluginConfig: this.config,
-      }),
+      service: this.serviceName(
+        { id: `${this.constructor.id}.${this.constructor.operation}`, pluginConfig: this.config }),
       type: this.constructor.type,
       kind: this.constructor.kind,
       meta: {},
