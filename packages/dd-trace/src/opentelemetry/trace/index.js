@@ -36,7 +36,7 @@ function buildResourceAttributes (config) {
     'service.name': config.service || config.tags.service,
     'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.version': VERSION,
-    'telemetry.sdk.language': 'javascript',
+    'telemetry.sdk.language': 'nodejs',
   }
 
   const env = config.env || config.tags.env
