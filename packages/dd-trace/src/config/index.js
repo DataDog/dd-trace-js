@@ -1200,7 +1200,7 @@ class Config {
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
-    calc.otelTracesUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/traces`
+    calc.otelTracesUrl = `http://localhost:${DEFAULT_OTLP_PORT}/v1/traces`
     calc['telemetry.heartbeatInterval'] = maybeInt(Math.floor(this.#defaults['telemetry.heartbeatInterval'] * 1000))
 
     setBoolean(calc, 'isGitUploadEnabled',

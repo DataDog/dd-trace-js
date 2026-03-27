@@ -277,6 +277,14 @@ describe('Config', () => {
     })
   })
 
+  // TODO: update default when adding grpc support
+  it('should set default otelTracesUrl', () => {
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesUrl, 'http://localhost:4318/v1/traces')
+  })
+
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
     process.env.OTEL_TRACES_SAMPLER = 'always_on'
     process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
