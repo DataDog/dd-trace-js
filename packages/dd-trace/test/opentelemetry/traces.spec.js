@@ -673,7 +673,7 @@ describe('OpenTelemetry Traces', () => {
             'service.version': 'v2.0.0',
             'deployment.environment': 'staging',
             'telemetry.sdk.name': 'datadog',
-            'telemetry.sdk.language': 'javascript',
+            'telemetry.sdk.language': 'nodejs',
           }
         )
         assert.ok(resourceAttrs['telemetry.sdk.version'], 'telemetry.sdk.version should be set')
