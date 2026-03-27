@@ -61,99 +61,95 @@ describe('OTLP Trace Export', () => {
       })
     })
 
-    try {
-      const { headers, payload } = await tracesPromise
-      proc.kill()
-      await exitPromise
+    const { headers, payload } = await tracesPromise
+    proc.kill()
+    await exitPromise
 
-      assert.strictEqual(headers['content-type'], 'application/json')
+    assert.strictEqual(headers['content-type'], 'application/json')
 
-      // Validate ExportTraceServiceRequest top-level structure
-      assert.ok(payload.resourceSpans, 'payload should have resourceSpans')
-      assert.strictEqual(payload.resourceSpans.length, 1)
+    // Validate ExportTraceServiceRequest top-level structure
+    assert.ok(payload.resourceSpans, 'payload should have resourceSpans')
+    assert.strictEqual(payload.resourceSpans.length, 1)
 
-      const resourceSpan = payload.resourceSpans[0]
+    const resourceSpan = payload.resourceSpans[0]
 
-      // Validate resource attributes
-      const resource = resourceSpan.resource
-      assert.ok(resource, 'resourceSpan should have resource')
-      assert.ok(Array.isArray(resource.attributes), 'resource should have attributes array')
+    // Validate resource attributes
+    const resource = resourceSpan.resource
+    assert.ok(resource, 'resourceSpan should have resource')
+    assert.ok(Array.isArray(resource.attributes), 'resource should have attributes array')
 
-      const resourceAttrs = Object.fromEntries(
-        resource.attributes.map(({ key, value }) => [key, value])
-      )
-      assert.deepStrictEqual(resourceAttrs['service.name'], { stringValue: 'otlp-test-service' })
-      assert.deepStrictEqual(resourceAttrs['deployment.environment'], { stringValue: 'test' })
-      assert.deepStrictEqual(resourceAttrs['service.version'], { stringValue: '1.0.0' })
+    const resourceAttrs = Object.fromEntries(
+      resource.attributes.map(({ key, value }) => [key, value])
+    )
+    assert.deepStrictEqual(resourceAttrs['service.name'], { stringValue: 'otlp-test-service' })
+    assert.deepStrictEqual(resourceAttrs['deployment.environment'], { stringValue: 'test' })
+    assert.deepStrictEqual(resourceAttrs['service.version'], { stringValue: '1.0.0' })
 
-      // Validate scopeSpans
-      assert.ok(Array.isArray(resourceSpan.scopeSpans), 'resourceSpan should have scopeSpans')
-      assert.strictEqual(resourceSpan.scopeSpans.length, 1)
+    // Validate scopeSpans
+    assert.ok(Array.isArray(resourceSpan.scopeSpans), 'resourceSpan should have scopeSpans')
+    assert.strictEqual(resourceSpan.scopeSpans.length, 1)
 
-      const scopeSpan = resourceSpan.scopeSpans[0]
-      assert.strictEqual(scopeSpan.scope.name, 'dd-trace-js')
-      assert.ok(scopeSpan.scope.version, 'scope should have a version')
+    const scopeSpan = resourceSpan.scopeSpans[0]
+    assert.strictEqual(scopeSpan.scope.name, 'dd-trace-js')
+    assert.ok(scopeSpan.scope.version, 'scope should have a version')
 
-      // Validate spans
-      const spans = scopeSpan.spans
-      assert.strictEqual(spans.length, 3, 'should have 3 spans')
+    // Validate spans
+    const spans = scopeSpan.spans
+    assert.strictEqual(spans.length, 3, 'should have 3 spans')
 
-      // Sort by name for stable ordering
-      spans.sort((a, b) => a.name.localeCompare(b.name))
+    // Sort by name for stable ordering
+    spans.sort((a, b) => a.name.localeCompare(b.name))
 
-      const [dbSpan, errSpan, webSpan] = spans
+    const [dbSpan, errSpan, webSpan] = spans
 
-      // All spans should share the same traceId
-      assert.deepStrictEqual(dbSpan.traceId, webSpan.traceId, 'all spans should share a traceId')
-      assert.deepStrictEqual(errSpan.traceId, webSpan.traceId, 'all spans should share a traceId')
+    // All spans should share the same traceId
+    assert.deepStrictEqual(dbSpan.traceId, webSpan.traceId, 'all spans should share a traceId')
+    assert.deepStrictEqual(errSpan.traceId, webSpan.traceId, 'all spans should share a traceId')
 
-      // Root span (web.request) should not have parentSpanId
-      assert.strictEqual(webSpan.parentSpanId, undefined, 'root span should not have parentSpanId')
+    // Root span (web.request) should not have parentSpanId
+    assert.strictEqual(webSpan.parentSpanId, undefined, 'root span should not have parentSpanId')
 
-      // Child spans should have parentSpanId equal to root span's spanId
-      assert.deepStrictEqual(dbSpan.parentSpanId, webSpan.spanId, 'child span should reference parent')
-      assert.deepStrictEqual(errSpan.parentSpanId, webSpan.spanId, 'error span should reference parent')
+    // Child spans should have parentSpanId equal to root span's spanId
+    assert.deepStrictEqual(dbSpan.parentSpanId, webSpan.spanId, 'child span should reference parent')
+    assert.deepStrictEqual(errSpan.parentSpanId, webSpan.spanId, 'error span should reference parent')
 
-      // Validate span names
-      assert.strictEqual(webSpan.name, 'web.request')
-      assert.strictEqual(dbSpan.name, 'db.query')
-      assert.strictEqual(errSpan.name, 'error.operation')
+    // Validate span names
+    assert.strictEqual(webSpan.name, 'web.request')
+    assert.strictEqual(dbSpan.name, 'db.query')
+    assert.strictEqual(errSpan.name, 'error.operation')
 
-      // Validate span kind (server=2, client=3 per OTLP proto SpanKind enum)
-      assert.strictEqual(webSpan.kind, 2, 'web.request should be SERVER kind')
-      assert.strictEqual(dbSpan.kind, 3, 'db.query should be CLIENT kind')
+    // Validate span kind (server=2, client=3 per OTLP proto SpanKind enum)
+    assert.strictEqual(webSpan.kind, 2, 'web.request should be SERVER kind')
+    assert.strictEqual(dbSpan.kind, 3, 'db.query should be CLIENT kind')
 
-      // Validate timing fields
-      for (const span of spans) {
-        assert.ok(span.startTimeUnixNano >= beforeNs, 'span startTimeUnixNano should be >= test start time')
-        assert.ok(span.endTimeUnixNano > 0, 'span should have a positive endTimeUnixNano')
-        assert.ok(span.endTimeUnixNano >= span.startTimeUnixNano, 'endTime should be >= startTime')
-      }
-
-      // Validate error span status
-      assert.strictEqual(errSpan.status.code, 2, 'error span should have STATUS_CODE_ERROR')
-      assert.strictEqual(errSpan.status.message, 'test error message')
-
-      // Validate non-error span status
-      assert.strictEqual(webSpan.status.code, 0, 'non-error span should have STATUS_CODE_UNSET')
-
-      // Validate span attributes include service.name and resource.name
-      const webAttrs = Object.fromEntries(
-        webSpan.attributes.map(({ key, value }) => [key, value])
-      )
-      assert.deepStrictEqual(webAttrs['service.name'], { stringValue: 'otlp-test-service' })
-      assert.ok(webAttrs['resource.name'], 'span should have resource.name attribute')
-
-      // Validate custom tags appear as attributes
-      assert.deepStrictEqual(webAttrs['http.method'], { stringValue: 'GET' })
-      assert.deepStrictEqual(webAttrs['http.url'], { stringValue: '/api/test' })
-
-      const dbAttrs = Object.fromEntries(
-        dbSpan.attributes.map(({ key, value }) => [key, value])
-      )
-      assert.deepStrictEqual(dbAttrs['db.type'], { stringValue: 'postgres' })
-    } finally {
-      proc.kill()
+    // Validate timing fields
+    for (const span of spans) {
+      assert.ok(span.startTimeUnixNano >= beforeNs, 'span startTimeUnixNano should be >= test start time')
+      assert.ok(span.endTimeUnixNano > 0, 'span should have a positive endTimeUnixNano')
+      assert.ok(span.endTimeUnixNano >= span.startTimeUnixNano, 'endTime should be >= startTime')
     }
+
+    // Validate error span status
+    assert.strictEqual(errSpan.status.code, 2, 'error span should have STATUS_CODE_ERROR')
+    assert.strictEqual(errSpan.status.message, 'test error message')
+
+    // Validate non-error span status
+    assert.strictEqual(webSpan.status.code, 0, 'non-error span should have STATUS_CODE_UNSET')
+
+    // Validate span attributes include service.name and resource.name
+    const webAttrs = Object.fromEntries(
+      webSpan.attributes.map(({ key, value }) => [key, value])
+    )
+    assert.deepStrictEqual(webAttrs['service.name'], { stringValue: 'otlp-test-service' })
+    assert.ok(webAttrs['resource.name'], 'span should have resource.name attribute')
+
+    // Validate custom tags appear as attributes
+    assert.deepStrictEqual(webAttrs['http.method'], { stringValue: 'GET' })
+    assert.deepStrictEqual(webAttrs['http.url'], { stringValue: '/api/test' })
+
+    const dbAttrs = Object.fromEntries(
+      dbSpan.attributes.map(({ key, value }) => [key, value])
+    )
+    assert.deepStrictEqual(dbAttrs['db.type'], { stringValue: 'postgres' })
   })
 })
