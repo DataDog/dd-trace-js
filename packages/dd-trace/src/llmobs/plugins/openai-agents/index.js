@@ -9,6 +9,220 @@ const ALLOWED_SETTINGS_KEYS = new Set([
   'stream',
 ])
 
+// ── Orchestration plugins (workflow / agent / tool / task span kinds) ─────────
+
+/**
+ * LLMObs plugin for the top-level `run()` orchestration entry point.
+ * Emits a `workflow` span capturing the agent name, input query, and final output.
+ */
+class RunLLMObsPlugin extends LLMObsPlugin {
+  static id = 'llmobs_openai_agents_run'
+  static integration = 'openai-agents'
+  static prefix = 'tracing:orchestrion:@openai/agents-core:run'
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
+   * @returns {{ kind: string, name: string }}
+   */
+  getLLMObsSpanRegisterOptions (ctx) {
+    return {
+      kind: 'workflow',
+      name: 'openai-agents.run',
+    }
+  }
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown>, result?: object }} ctx
+   */
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    const input = ctx.arguments?.[1]
+    const inputValue = input === undefined ? '' : String(input)
+
+    const error = !!span.context()._tags.error
+    if (error) {
+      this._tagger.tagTextIO(span, inputValue, '')
+      return
+    }
+
+    const outputValue = ctx.result?.finalOutput === undefined ? '' : String(ctx.result.finalOutput)
+    this._tagger.tagTextIO(span, inputValue, outputValue)
+  }
+}
+
+/**
+ * LLMObs plugin for individual tool / function invocations.
+ * Emits a `tool` span capturing the tool name, serialized arguments, and result.
+ */
+class InvokeFunctionToolLLMObsPlugin extends LLMObsPlugin {
+  static id = 'llmobs_openai_agents_invoke_function_tool'
+  static integration = 'openai-agents'
+  static prefix = 'tracing:orchestrion:@openai/agents-core:invokeFunctionTool'
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
+   * @returns {{ kind: string, name: string }}
+   */
+  getLLMObsSpanRegisterOptions (ctx) {
+    return {
+      kind: 'tool',
+      name: 'openai-agents.invokeFunctionTool',
+    }
+  }
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown>, result?: unknown }} ctx
+   */
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    const params = ctx.arguments?.[0]
+    const toolName = params?.tool?.name
+    if (toolName) span.setTag('tool.name', toolName)
+
+    const inputValue = params?.input === undefined ? '' : String(params.input)
+
+    const error = !!span.context()._tags.error
+    if (error) {
+      this._tagger.tagTextIO(span, inputValue, '')
+      return
+    }
+
+    const outputValue = ctx.result === undefined ? '' : String(ctx.result)
+    this._tagger.tagTextIO(span, inputValue, outputValue)
+  }
+}
+
+/**
+ * LLMObs plugin for agent-to-agent handoff operations.
+ * Emits an `agent` span capturing the handoff input and result.
+ */
+class OnInvokeHandoffLLMObsPlugin extends LLMObsPlugin {
+  static id = 'llmobs_openai_agents_on_invoke_handoff'
+  static integration = 'openai-agents'
+  static prefix = 'tracing:orchestrion:@openai/agents-core:onInvokeHandoff'
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
+   * @returns {{ kind: string, name: string }}
+   */
+  getLLMObsSpanRegisterOptions (ctx) {
+    return {
+      kind: 'agent',
+      name: 'openai-agents.onInvokeHandoff',
+    }
+  }
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown>, result?: unknown }} ctx
+   */
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    const input = ctx.arguments?.[1]
+    const inputValue = input === undefined ? '' : String(input)
+
+    const error = !!span.context()._tags.error
+    if (error) {
+      this._tagger.tagTextIO(span, inputValue, '')
+      return
+    }
+
+    const outputValue = ctx.result === undefined ? '' : String(ctx.result)
+    this._tagger.tagTextIO(span, inputValue, outputValue)
+  }
+}
+
+/**
+ * LLMObs plugin for tool-input guardrail validation.
+ * Emits a `task` span capturing the tool call and guardrail result.
+ */
+class RunToolInputGuardrailsLLMObsPlugin extends LLMObsPlugin {
+  static id = 'llmobs_openai_agents_run_tool_input_guardrails'
+  static integration = 'openai-agents'
+  static prefix = 'tracing:orchestrion:@openai/agents-core:runToolInputGuardrails'
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
+   * @returns {{ kind: string, name: string }}
+   */
+  getLLMObsSpanRegisterOptions (ctx) {
+    return {
+      kind: 'task',
+      name: 'openai-agents.runInputGuardrails',
+    }
+  }
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown>, result?: unknown }} ctx
+   */
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    const params = ctx.arguments?.[0]
+    const inputValue = params?.toolCall === undefined ? '' : JSON.stringify(params.toolCall)
+
+    const error = !!span.context()._tags.error
+    if (error) {
+      this._tagger.tagTextIO(span, inputValue, '')
+      return
+    }
+
+    const outputValue = ctx.result === undefined ? '' : JSON.stringify(ctx.result)
+    this._tagger.tagTextIO(span, inputValue, outputValue)
+  }
+}
+
+/**
+ * LLMObs plugin for tool-output guardrail validation.
+ * Emits a `task` span capturing the tool output and guardrail result.
+ */
+class RunToolOutputGuardrailsLLMObsPlugin extends LLMObsPlugin {
+  static id = 'llmobs_openai_agents_run_tool_output_guardrails'
+  static integration = 'openai-agents'
+  static prefix = 'tracing:orchestrion:@openai/agents-core:runToolOutputGuardrails'
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
+   * @returns {{ kind: string, name: string }}
+   */
+  getLLMObsSpanRegisterOptions (ctx) {
+    return {
+      kind: 'task',
+      name: 'openai-agents.runOutputGuardrails',
+    }
+  }
+
+  /**
+   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown>, result?: unknown }} ctx
+   */
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    const params = ctx.arguments?.[0]
+    const inputValue = params?.toolCall === undefined
+      ? ''
+      : JSON.stringify({ toolCall: params.toolCall, toolOutput: params.toolOutput })
+
+    const error = !!span.context()._tags.error
+    if (error) {
+      this._tagger.tagTextIO(span, inputValue, '')
+      return
+    }
+
+    const outputValue = ctx.result === undefined ? '' : JSON.stringify(ctx.result)
+    this._tagger.tagTextIO(span, inputValue, outputValue)
+  }
+}
+
+// ── LLM plugins (llm span kind, model layer) ──────────────────────────────────
+
 /**
  * Base LLMObs plugin for OpenAI Agents model operations (getResponse, getStreamedResponse).
  * Instruments the \@openai/agents-openai model classes to capture LLM span events.
@@ -283,6 +497,11 @@ function extractMetadata (request) {
 }
 
 module.exports = {
+  RunLLMObsPlugin,
+  InvokeFunctionToolLLMObsPlugin,
+  OnInvokeHandoffLLMObsPlugin,
+  RunToolInputGuardrailsLLMObsPlugin,
+  RunToolOutputGuardrailsLLMObsPlugin,
   GetResponseLLMObsPlugin,
   GetStreamedResponseLLMObsPlugin,
 }
