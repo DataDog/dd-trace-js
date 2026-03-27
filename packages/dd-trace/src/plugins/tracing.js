@@ -188,9 +188,9 @@ class TracingPlugin extends Plugin {
     if (service && typeof service === 'object') {
       serviceSource = service.source
       service = service.name
-    } else if (service) {
-      // service is a plain string (e.g. this.config.service), default source to 'opt.plugin'
-      serviceSource = 'opt.plugin'
+    } else if (service !== undefined) {
+      // service is a plain value returned by service naming/config logic
+      serviceSource = service ? 'opt.plugin' : undefined
     }
 
     const store = storage('legacy').getStore()
