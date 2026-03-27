@@ -205,6 +205,7 @@ describe('Child process plugin', () => {
               'span.kind': undefined,
               'span.type': 'system',
               'cmd.shell': 'ls -l /home -t',
+              '_dd.svc_src': 'opt.plugin',
               'cmd.truncated': 'true',
             },
             integrationName: 'child_process',
