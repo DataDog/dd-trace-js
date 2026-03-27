@@ -53,10 +53,8 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         return parentStore
       }
 
-      const serviceResult = this.serviceName()
       const meta = {
         'span.kind': 'client',
-        'service.name': serviceResult.name,
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
@@ -70,7 +68,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       const span = this.startSpan(this.operationFromRequest(request), {
         childOf,
         meta,
-        service: serviceResult,
+        service: this.serviceName(),
         integrationName: 'aws-sdk',
       }, ctx)
 
@@ -187,15 +185,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
   }
 
   serviceName () {
-    if (this.config.service) {
-      return { name: this.config.service, source: 'opt.plugin' }
-    }
-    return super.serviceName({
-      id: 'aws',
-      type: 'web',
-      kind: 'client',
-      awsService: this.serviceIdentifier,
-    })
+    return this.config.service ||
+      super.serviceName({
+        id: 'aws',
+        type: 'web',
+        kind: 'client',
+        awsService: this.serviceIdentifier,
+      })
   }
 
   isEnabled (request) {

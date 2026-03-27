@@ -29,9 +29,10 @@ class WSClosePlugin extends TracingPlugin {
 
     const spanKind = isPeerClose ? 'consumer' : 'producer'
     const spanTags = socket.spanTags
+    const service = this.serviceName({ pluginConfig: this.config })
     const path = spanTags['resource.name'].split(' ')[1]
     const span = this.startSpan(this.operationName(), {
-      service: this.serviceName({ pluginConfig: this.config }),
+      service,
       meta: {
         'resource.name': `websocket ${path}`,
         'span.type': 'websocket',
@@ -46,7 +47,7 @@ class WSClosePlugin extends TracingPlugin {
     }
 
     if (isPeerClose && traceWebsocketMessagesInheritSampling && traceWebsocketMessagesSeparateTraces) {
-      span.setTag('_dd.dm.service', spanTags['service.name'] || this.serviceName({ pluginConfig: this.config }).name)
+      span.setTag('_dd.dm.service', spanTags['service.name'] || service.name)
       span.setTag('_dd.dm.resource', spanTags['resource.name'] || `websocket ${path}`)
       span.setTag('_dd.dm.inherited', 1)
     }

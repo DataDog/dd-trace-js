@@ -145,17 +145,12 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     const subscriptionName = subscription?.slice(subscription.lastIndexOf('/') + 1) ?? subscription
     const publishStartTime = attrs['x-dd-publish-start-time']
     const startTime = publishStartTime ? Number.parseInt(publishStartTime, 10) : undefined
-
-    // Get the base service name and construct the pubsub service override
-    const baseService = this.tracer._service
-    const service = this.config.service || { name: `${baseService}-pubsub`, source: baseService }
-
     // Use this.startSpan() which automatically activates the span
     const span = this.startSpan('pubsub.push.receive', {
       childOf: parentContext,
       startTime,
       kind: 'consumer',
-      service,
+      service: this.config.service || { name: `${this.tracer._service}-pubsub`, source: this.tracer._service },
       meta: {
         component: 'google-cloud-pubsub',
         'pubsub.method': 'receive',
@@ -163,7 +158,7 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
         'pubsub.message_id': message.messageId,
         'pubsub.subscription_type': 'push',
         'pubsub.topic': topicName,
-        '_dd.base_service': baseService,
+        '_dd.base_service': this.tracer._service,
         '_dd.serviceoverride.type': 'integration',
         'resource.name': `Push Subscription ${subscriptionName}`,
       },
