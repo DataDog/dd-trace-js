@@ -64,6 +64,7 @@ let testCodeCoverageLinesTotal
 let coverageRootDir
 let isSessionStarted = false
 let vitestPool = null
+let vitestRunnerModule = null
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -837,6 +838,27 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
     taskToCtx.set(task, ctx)
 
+    // Wrap the test function to run inside active span context on first execution.
+    // This ensures HTTP spans created during test execution are linked as children of the test span.
+    // Similar to Jest implementation at jest.js:501-503
+    if (numAttempt === 0 && numRepetition === 0 && vitestRunnerModule) {
+      try {
+        const { getFn, setFn } = vitestRunnerModule
+        if (getFn && setFn) {
+          const originalFn = getFn(task)
+          if (originalFn && !originalFn.__ddTraceWrapped) {
+            const wrappedFn = shimmer.wrapFunction(originalFn, testFn => function () {
+              return testStartCh.runStores(ctx, () => testFn.apply(this, arguments))
+            })
+            wrappedFn.__ddTraceWrapped = true
+            setFn(task, wrappedFn)
+          }
+        }
+      } catch (e) {
+        log.debug('dd-trace: could not wrap vitest test function: %s', e.message)
+      }
+    }
+
     testStartCh.runStores(ctx, () => {})
     return onBeforeTryTask.apply(this, arguments)
   })
@@ -1013,6 +1035,9 @@ addHook({
   name: '@vitest/runner',
   versions: ['>=1.6.0'],
 }, (vitestPackage, frameworkVersion) => {
+  // Store the module for use in onBeforeTryTask to wrap test functions with span context
+  vitestRunnerModule = vitestPackage
+
   shimmer.wrap(vitestPackage, 'startTests', startTests => async function (testPaths) {
     let testSuiteError = null
     if (!testSuiteFinishCh.hasSubscribers) {
