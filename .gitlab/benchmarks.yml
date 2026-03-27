@@ -137,6 +137,7 @@ benchmark-serverless-trigger:
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools
+    branch: onzia/check-performance-gate-increases
     strategy: depend
   allow_failure: true
   variables:
