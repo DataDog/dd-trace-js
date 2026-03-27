@@ -6,6 +6,7 @@ variables:
   UNCONFIDENCE_THRESHOLD: "5.0"
   MD_REPORT_ONLY_CHANGES: "1"
 
+
 .benchmarks:
   stage: benchmarks
   needs: [ ]
