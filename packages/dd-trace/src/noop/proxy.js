@@ -4,7 +4,10 @@ const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
+const PublicSpan = require('../opentracing/public/span')
+const PublicScope = require('../opentracing/public/scope')
 const NoopDogStatsDClient = require('./dogstatsd')
+const { SVC_SRC_KEY } = require('../../src/constants')
 const NoopTracer = require('./tracer')
 
 const noop = new NoopTracer()
@@ -55,8 +58,17 @@ class NoopProxy {
     if (typeof fn !== 'function') return
 
     options = options || {}
+    if (options.service || options?.tags?.service || options?.tags?.['service.name']) {
+      options.tags = {
+        ...options.tags,
+        [SVC_SRC_KEY]: 'm',
+      }
+    }
 
-    return this._tracer.trace(name, options, fn)
+    const callback = (span, done) => {
+      return fn(new PublicSpan(span), done)
+    }
+    return this._tracer.trace(name, options, callback)
   }
 
   wrap (name, options, fn) {
@@ -68,8 +80,17 @@ class NoopProxy {
     if (typeof fn !== 'function') return fn
 
     options = options || {}
+    if (options.service || options?.tags?.service || options?.tags?.['service.name']) {
+      options.tags = {
+        ...options.tags,
+        [SVC_SRC_KEY]: 'm',
+      }
+    }
+    const callback = (span, done) => {
+      return fn(new PublicSpan(span), done)
+    }
 
-    return this._tracer.wrap(name, options, fn)
+    return this._tracer.wrap(name, options, callback)
   }
 
   setUrl () {
@@ -77,8 +98,14 @@ class NoopProxy {
     return this
   }
 
-  startSpan () {
-    return this._tracer.startSpan.apply(this._tracer, arguments)
+  startSpan (name, options) {
+    if (options?.tags?.service || options?.tags?.['service.name']) {
+      options.tags = {
+        ...options.tags,
+        [SVC_SRC_KEY]: 'm',
+      }
+    }
+    return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 
   inject () {
@@ -90,7 +117,7 @@ class NoopProxy {
   }
 
   scope () {
-    return this._tracer.scope.apply(this._tracer, arguments)
+    return new PublicScope(this._tracer.scope.apply(this._tracer, arguments))
   }
 
   getRumData () {
