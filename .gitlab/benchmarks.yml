@@ -9,7 +9,7 @@ variables:
 
 .benchmarks:
   stage: benchmarks
-  needs: [ ]
+  needs: []
   tags: ["runner:apm-k8s-m7i-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
   rules:
