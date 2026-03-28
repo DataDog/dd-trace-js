@@ -83,6 +83,11 @@ class NextPlugin extends ServerPlugin {
     this.config.hooks.request(span, req, res)
 
     span.finish()
+
+    // Cleanup: Remove request reference so IncomingMessage can be GC'd.
+    // WeakMap keys (_spanId) live as long as the span context, which is retained
+    // by the profiler and analytics pipeline long after the request finishes.
+    this.#requestsBySpanId.delete(span.context()._spanId)
   }
 
   pageLoad ({ page, isAppPath = false, isStatic = false }) {
