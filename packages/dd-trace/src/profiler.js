@@ -14,4 +14,26 @@ module.exports = {
   stop: () => {
     profiler.stop()
   },
+
+  /**
+   * Declares the set of custom label keys that will be used with
+   * {@link runWithLabels}.
+   *
+   * @param {Iterable<string>} keys - Custom label key names
+   */
+  setCustomLabelKeys: (keys) => {
+    profiler.setCustomLabelKeys(keys)
+  },
+
+  /**
+   * Runs a function with custom profiling labels attached to wall profiler samples.
+   *
+   * @param {Record<string, string | number>} labels - Custom labels to attach
+   * @param {function(): T} fn - Function to execute with the labels
+   * @returns {T} The return value of fn
+   * @template T
+   */
+  runWithLabels: (labels, fn) => {
+    return profiler.runWithLabels(labels, fn)
+  },
 }
