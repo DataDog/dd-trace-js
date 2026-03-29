@@ -140,7 +140,8 @@ describe('OTLP Trace Export', () => {
       webSpan.attributes.map(({ key, value }) => [key, value])
     )
     assert.deepStrictEqual(webAttrs['service.name'], { stringValue: 'otlp-test-service' })
-    assert.ok(webAttrs['resource.name'], 'span should have resource.name attribute')
+    assert.deepStrictEqual(webAttrs['operation.name'], { stringValue: 'web.request' })
+    assert.deepStrictEqual(webAttrs['resource.name'], { stringValue: 'web.request' })
 
     // Validate custom tags appear as attributes
     assert.deepStrictEqual(webAttrs['http.method'], { stringValue: 'GET' })
