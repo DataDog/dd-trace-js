@@ -24,11 +24,11 @@ describe('Plugin', () => {
 
   describe('express', () => {
     withVersions('express', 'express', version => {
-    // Express.js 4.10.5 and below have a Node.js incompatibility in the `fresh` package RE res._headers missing
+      // Express.js 4.10.5 and below have a Node.js incompatibility in the `fresh` package RE res._headers missing
       if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
         describe.skip(
           `refusing to run tests as express@${version} is incompatible with Node.js ${NODE_MAJOR}`,
-          () => {}
+          () => { }
         )
         return
       }
@@ -235,7 +235,7 @@ describe('Plugin', () => {
             res.status(200).send()
           })
 
-          app.use(function named (req, res, next) { next() })
+          app.use(function named(req, res, next) { next() })
           app.use('/app', router)
 
           appListener = app.listen(0, 'localhost', () => {
@@ -344,7 +344,7 @@ describe('Plugin', () => {
             }
           })
 
-          app.use(function breaking (req, res, _next) {
+          app.use(function breaking(req, res, _next) {
             next = _next
           })
           app.get('/user/:id', (req, res) => {
@@ -399,7 +399,7 @@ describe('Plugin', () => {
             }
           })
 
-          app.use(function breaking (req, res, _next) {
+          app.use(function breaking(req, res, _next) {
             next = _next
           })
           app.use(() => { throw error })
@@ -781,7 +781,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/v1/a`)
-              .catch(() => {})
+              .catch(() => { })
           })
         })
 
@@ -952,7 +952,7 @@ describe('Plugin', () => {
 
             axios
               .get(`http://localhost:${port}/v1/a`)
-              .catch(() => {})
+              .catch(() => { })
           })
         })
 
@@ -1541,11 +1541,11 @@ describe('Plugin', () => {
           it('should handle loopback re-sorting', done => {
             const app = loopback()
 
-            app.middleware('final', [], function throwError (req, res) {
+            app.middleware('final', [], function throwError(req, res) {
               throw new Error('should not reach')
             })
 
-            app.get('/dd', function handleDD (req, res) {
+            app.get('/dd', function handleDD(req, res) {
               res.status(200).send()
             })
 
