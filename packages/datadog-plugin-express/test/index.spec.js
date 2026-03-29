@@ -628,7 +628,7 @@ describe('Plugin', () => {
           let span
 
           app.use((req, res, next) => {
-            span = tracer.scope().active()
+            span = tracer.scope().active()._span
 
             sinon.spy(span, 'finish')
 

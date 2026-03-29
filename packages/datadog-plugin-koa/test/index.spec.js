@@ -192,7 +192,7 @@ describe('Plugin', () => {
           let childSpan
 
           app.use((ctx, next) => {
-            parentSpan = tracer.scope().active()
+            parentSpan = tracer.scope().active()._span
 
             sinon.spy(parentSpan, 'finish')
 
