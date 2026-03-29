@@ -13,11 +13,11 @@ class Scope {
   }
 
   activate (span, fn) {
-    return this._scope.activate(span, fn)
+    return this._scope.activate(span?._span || span, fn)
   }
 
   bind (fn, span) {
-    return this._scope.bind(fn, span)
+    return this._scope.bind(fn, span?._span || span)
   }
 }
 

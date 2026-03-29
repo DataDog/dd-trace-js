@@ -643,8 +643,8 @@ describe('Plugin', () => {
           let didFindPointerLink = false
 
           await agent.assertSomeTraces(traces => {
-            const producerSpan = traces[0][0]
-            assert.strictEqual(producerSpan.name, 'websocket.send')
+            const producerSpan = traces.flat().find(s => s.name === 'websocket.send')
+            assert.ok(producerSpan, 'Should have a producer span')
             assert.strictEqual(producerSpan.service, 'ws-with-pointers')
 
             // Check for span links with span pointer attributes
@@ -698,6 +698,7 @@ describe('Plugin', () => {
             const pointerLink = spanLinks.find(link =>
               link.attributes && link.attributes['dd.kind'] === 'span-pointer'
             )
+            assert.ok(pointerLink, 'Should have a span pointer link')
 
             assertObjectContains(pointerLink, {
               attributes: {

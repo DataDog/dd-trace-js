@@ -5,7 +5,6 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
-const PublicSpan = require('../src/opentracing/public/span')
 require('./setup/core')
 
 describe('TracerProxy', () => {
@@ -825,9 +824,9 @@ describe('TracerProxy', () => {
           activate: sinon.stub().callsFake((span, fn) => fn()),
           bind: sinon.stub(),
         }
-        const internalSpan = new PublicSpan({
+        const internalSpan = {
           context: sinon.stub(),
-        })
+        }
 
         noop.scope.returns(scope)
         noop.startSpan.returns(internalSpan)
@@ -847,9 +846,9 @@ describe('TracerProxy', () => {
           activate: sinon.stub(),
           bind: sinon.stub().callsFake((fn, span) => ({ fn, span })),
         }
-        const internalSpan = new PublicSpan({
+        const internalSpan = {
           context: sinon.stub(),
-        })
+        }
         const fn = sinon.stub()
 
         noop.scope.returns(scope)
@@ -1200,9 +1199,9 @@ describe('TracerProxy', () => {
           activate: sinon.stub().callsFake((span, fn) => fn()),
           bind: sinon.stub(),
         }
-        const internalSpan = new PublicSpan({
+        const internalSpan = {
           context: sinon.stub(),
-        })
+        }
 
         tracer.scope.returns(scope)
         tracer.startSpan.returns(internalSpan)
@@ -1221,9 +1220,9 @@ describe('TracerProxy', () => {
           activate: sinon.stub(),
           bind: sinon.stub().callsFake((fn, span) => ({ fn, span })),
         }
-        const internalSpan = new PublicSpan({
+        const internalSpan = {
           context: sinon.stub(),
-        })
+        }
         const fn = sinon.stub()
 
         tracer.scope.returns(scope)

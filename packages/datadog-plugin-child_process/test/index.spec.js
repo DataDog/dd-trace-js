@@ -551,10 +551,11 @@ describe('Child process plugin', () => {
               it('should maintain previous span after the execution', (done) => {
                 const res = childProcess[methodName]('ls')
                 const span = storage('legacy').getStore()?.span
-                assert.strictEqual(span, parentSpan)
+                const expectedParentSpan = parentSpan?._span || parentSpan
+                assert.strictEqual(span, expectedParentSpan)
                 if (async) {
                   res.on('close', () => {
-                    assert.strictEqual(span, parentSpan)
+                    assert.strictEqual(span, expectedParentSpan)
                     done()
                   })
                 } else {
@@ -566,7 +567,8 @@ describe('Child process plugin', () => {
                 it('should maintain previous span in the callback', (done) => {
                   childProcess[methodName]('ls', () => {
                     const span = storage('legacy').getStore()?.span
-                    assert.strictEqual(span, parentSpan)
+                    const expectedParentSpan = parentSpan?._span || parentSpan
+                    assert.strictEqual(span, expectedParentSpan)
                     done()
                   })
                 })

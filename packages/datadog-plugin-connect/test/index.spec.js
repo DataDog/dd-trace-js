@@ -84,7 +84,7 @@ describe('Plugin', () => {
         it('should do automatic instrumentation on middleware', done => {
           const app = connect()
 
-          app.use(function named (req, res, next) { next() })
+          app.use(function named(req, res, next) { next() })
           app.use('/app/user', (req, res) => res.end())
 
           appListener = http.createServer(app).listen(0, 'localhost', () => {
@@ -794,7 +794,7 @@ describe('Plugin', () => {
         it('should not do automatic instrumentation on middleware', done => {
           const app = connect()
 
-          app.use(function named (req, res, next) { next() })
+          app.use(function named(req, res, next) { next() })
           app.use('/app/user', (req, res) => res.end())
 
           appListener = http.createServer(app).listen(0, 'localhost', () => {
