@@ -519,7 +519,7 @@ describe('Plugin', () => {
               }).then(client => {
                 tracer.scope().activate(span, () => {
                   client.getUnary({ first: 'foobar' }, (err, response) => {
-                    assert.strictEqual(tracer.scope().active(), span)
+                    assert.strictEqual(tracer.scope().active()._span, span)
                     done(err)
                   })
                 })
@@ -539,7 +539,7 @@ describe('Plugin', () => {
                   const call = client.getServerStream({ first: 'foobar' })
 
                   call.on('data', () => {
-                    assert.strictEqual(tracer.scope().active(), span)
+                    assert.strictEqual(tracer.scope().active()._span, span)
                     done()
                   })
                 })

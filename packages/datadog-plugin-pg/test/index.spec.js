@@ -223,7 +223,7 @@ describe('Plugin', () => {
               const span = tracer.scope().active()
 
               client.query('SELECT $1::text as message', ['Hello World!'], () => {
-                assert.strictEqual(tracer.scope().active(), span)
+                assert.strictEqual(tracer.scope().active()._span, span)
                 done()
               })
 

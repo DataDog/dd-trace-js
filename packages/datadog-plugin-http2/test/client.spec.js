@@ -516,7 +516,7 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               const req = client.request({ ':path': '/user' })
               req.on('response', (headers, flags) => {
-                assert.strictEqual(tracer.scope().active(), span)
+                assert.strictEqual(tracer.scope().active()._span, span)
                 done()
               })
 
