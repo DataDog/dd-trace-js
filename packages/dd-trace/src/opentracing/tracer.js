@@ -8,6 +8,7 @@ const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
 const Span = require('./span')
+const PublicSpan = require('./public/span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
 const HttpPropagator = require('./propagation/http')
@@ -114,7 +115,7 @@ class DatadogTracer {
  * @returns {SpanContext}
  */
 function getContext (spanContext) {
-  if (spanContext instanceof Span) {
+  if (spanContext instanceof Span || spanContext instanceof PublicSpan) {
     spanContext = spanContext.context()
   }
 
