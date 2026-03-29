@@ -5,6 +5,8 @@ const { SVC_SRC_KEY } = require('../../constants')
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
 
+const cache = new WeakMap()
+
 /**
  * This is a public wrapper of Span, this allows distinguishing internal usage from
  * external usage and acting accordingly.
@@ -17,13 +19,21 @@ class PublicSpan {
   // This is needed for activate()
   get _store () { return this._span._store }
 
-  // This safely wraps a span, this is needed in cases i which active returns the same span resulting
-  // double wrapping
+  // A WeakMap cache ensures the same wrapper instance is returned for the same
+  // underlying span, so reference equality checks (===) in user code remain stable.
   static wrap (span) {
     if (span instanceof PublicSpan) {
       return span
     }
-    return new PublicSpan(span)
+    const cached = cache.get(span)
+    if (cached !== undefined) {
+      return cached
+    }
+    const wrapper = new PublicSpan(span)
+    try {
+      cache.set(span, wrapper)
+    } catch {}
+    return wrapper
   }
 
   setTag (key, value) {
