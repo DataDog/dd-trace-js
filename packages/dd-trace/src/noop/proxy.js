@@ -66,7 +66,7 @@ class NoopProxy {
     }
 
     const callback = (span, done) => {
-      return fn(new PublicSpan(span), done)
+      return fn(PublicSpan.wrap(span), done)
     }
     return this._tracer.trace(name, options, callback)
   }
@@ -87,7 +87,7 @@ class NoopProxy {
       }
     }
     const callback = (span, done) => {
-      return fn(new PublicSpan(span), done)
+      return fn(PublicSpan.wrap(span), done)
     }
 
     return this._tracer.wrap(name, options, callback)
@@ -105,7 +105,7 @@ class NoopProxy {
         [SVC_SRC_KEY]: 'm',
       }
     }
-    return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
+    return PublicSpan.wrap(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 
   inject () {

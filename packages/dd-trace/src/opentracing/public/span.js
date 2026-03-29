@@ -14,6 +14,18 @@ class PublicSpan {
     this._span = span
   }
 
+  // This is needed for activate()
+  get _store () { return this._span._store }
+
+  // This safely wraps a span, this is needed in cases i which active returns the same span resulting
+  // double wrapping
+  static wrap (span) {
+    if (span instanceof PublicSpan) {
+      return span
+    }
+    return new PublicSpan(span)
+  }
+
   setTag (key, value) {
     if (key === SERVICE_KEY || key === SERVICE_NAME_KEY) {
       this._span.setTag(SVC_SRC_KEY, 'm')
