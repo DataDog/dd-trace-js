@@ -17,10 +17,6 @@ const SERVICE_NAME_KEY = 'service.name'
  */
 class PublicSpan {
   constructor (span) {
-    this._span = span
-  }
-
-  static wrap (span) {
     if (span instanceof PublicSpan) {
       return span
     }
@@ -28,11 +24,10 @@ class PublicSpan {
     if (cached !== undefined) {
       return cached
     }
-    const wrapper = new PublicSpan(span)
+    this._span = span
     try {
-      cache.set(span, wrapper)
+      cache.set(span, this)
     } catch {}
-    return wrapper
   }
 
   setTag (key, value) {
