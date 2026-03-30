@@ -93,7 +93,7 @@ class NoopProxy {
         [SVC_SRC_KEY]: 'm',
       }
     }
-    return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
+    return PublicSpan.wrap(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 
   inject () {

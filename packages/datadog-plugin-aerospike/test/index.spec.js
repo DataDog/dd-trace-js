@@ -247,7 +247,7 @@ describe('Plugin', () => {
             aerospike.connect(config).then(client => {
               tracer.scope().activate(span, () => {
                 client.put(key, { i: 123 }, () => {
-                  assert.strictEqual(tracer.scope().active()._span, span)
+                  assert.strictEqual(tracer.scope().active(), span)
                   client.close(false)
                   done()
                 })

@@ -206,7 +206,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             s3.listBuckets({}, () => {
               try {
-                assert.strictEqual(tracer.scope().active()._span, span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)

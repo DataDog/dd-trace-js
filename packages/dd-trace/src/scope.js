@@ -12,7 +12,7 @@ class Scope {
     const store = storage('legacy').getStore()
     const span = (store && store.span) || null
 
-    return span ? new PublicSpan(span) : null
+    return span ? PublicSpan.wrap(span) : null
   }
 
   activate (span, callback) {
@@ -41,8 +41,10 @@ class Scope {
   bind (fn, span) {
     if (typeof fn !== 'function') return fn
 
+    span = span?._span || span
+
     const scope = this
-    const spanOrActive = this._spanOrActive(span?._span || span)
+    const spanOrActive = this._spanOrActive(span)
 
     const bound = function () {
       return scope.activate(spanOrActive, () => {

@@ -136,10 +136,10 @@ describe('Plugin', () => {
         )
 
         it('should restore the parent context in the callback', async () => {
-          const span = {}
+          const span = tracer.startSpan('test')
           tracer.scope().activate(span, () => {
             client.get('foo', () => {
-              assert.strictEqual(span.context().active()._span, span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })
