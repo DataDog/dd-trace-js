@@ -62,8 +62,8 @@ class NoopProxy {
     }
 
     const callback = fn.length > 1
-      ? (span, done) => fn(PublicSpan.wrap(span), done)
-      : span => fn(PublicSpan.wrap(span))
+      ? function (span, done) { return fn(PublicSpan.wrap(span), done) }
+      : function (span) { return fn(PublicSpan.wrap(span)) }
     return this._tracer.trace(name, options, callback)
   }
 
@@ -83,8 +83,8 @@ class NoopProxy {
       }
     }
     const callback = fn.length > 1
-      ? (span, done) => fn(PublicSpan.wrap(span), done)
-      : span => fn(PublicSpan.wrap(span))
+      ? function (span, done) { return fn(PublicSpan.wrap(span), done) }
+      : function (span) { return fn(PublicSpan.wrap(span)) }
 
     return this._tracer.wrap(name, options, callback)
   }
