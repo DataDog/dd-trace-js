@@ -11,6 +11,7 @@ const {
   useSandbox,
   curlAndAssertMessage,
   assertObjectContains,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -35,10 +36,7 @@ describe('esm', () => {
 
     afterEach(async () => {
       // after each test, kill process and wait for exit before continuing
-      if (proc) {
-        proc.kill('SIGINT')
-        await new Promise(resolve => proc.on('exit', resolve))
-      }
+      await stopProc(proc, { signal: 'SIGINT' })
       await agent.stop()
     })
 

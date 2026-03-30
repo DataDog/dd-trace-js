@@ -154,6 +154,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       })
 
       this.finish(ctx)
+
+      if (IS_SERVERLESS) {
+        const peerStore = storage('peerServerless').getStore()
+        if (peerStore) delete peerStore.peerHostname
+      }
     })
 
     this.addBind(`apm:aws:response:start:${this.serviceIdentifier}`, ctx => {

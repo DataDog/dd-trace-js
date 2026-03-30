@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const path = require('path')
 
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../integration-tests/helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../integration-tests/helpers')
 const { calculateHttpEndpoint } = require('../../src/plugins/util/url')
 
 describe('API Security sampling integration', () => {
@@ -59,7 +59,7 @@ describe('API Security sampling integration', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
