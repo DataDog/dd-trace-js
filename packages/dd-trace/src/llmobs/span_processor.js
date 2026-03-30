@@ -45,7 +45,7 @@ const LLMObsTagger = require('./tagger')
  */
 function resolveTagMapKey (span) {
   if (LLMObsTagger.tagMap.has(span)) return span
-  const wrapped = PublicSpan.wrap(span)
+  const wrapped = new PublicSpan(span)
   if (LLMObsTagger.tagMap.has(wrapped)) return wrapped
 }
 

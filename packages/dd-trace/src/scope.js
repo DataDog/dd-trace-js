@@ -12,7 +12,7 @@ class Scope {
     const store = storage('legacy').getStore()
     const span = (store && store.span) || null
 
-    return span ? PublicSpan.wrap(span) : null
+    return span ? new PublicSpan(span) : null
   }
 
   activate (span, callback) {

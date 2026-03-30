@@ -9,7 +9,7 @@ class Scope {
 
   active () {
     const span = this._scope.active()
-    return span ? PublicSpan.wrap(span) : null
+    return span ? new PublicSpan(span) : null
   }
 
   activate (span, fn) {
