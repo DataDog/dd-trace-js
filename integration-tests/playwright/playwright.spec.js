@@ -1260,11 +1260,12 @@ versions.forEach((version) => {
         receiver.setKnownTests({ playwright: {} })
 
         childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js --grep "dynamic name suite"',
+          './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
             env: {
               ...getCiVisEvpProxyConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-tests-dynamic',
             },
           }
         )
