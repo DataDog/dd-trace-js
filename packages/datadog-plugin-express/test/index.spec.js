@@ -1047,7 +1047,7 @@ describe('Plugin', () => {
         it('should activate a span for every middleware on a route', done => {
           const app = express()
 
-          const span = {}
+          const span = tracer.startSpan('test')
 
           app.get(
             '/user',
