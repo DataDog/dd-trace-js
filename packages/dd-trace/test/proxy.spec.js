@@ -65,7 +65,7 @@ describe('TracerProxy', () => {
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
       wrap: sinon.stub().returns('fn'),
-      startSpan: sinon.stub().returns('span'),
+      startSpan: sinon.stub().returns({ id: 'span' }),
       inject: sinon.stub().returns('tracer'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
@@ -76,7 +76,7 @@ describe('TracerProxy', () => {
       use: sinon.stub().returns('tracer'),
       trace: sinon.stub().returns('test'),
       wrap: sinon.stub().returns('fn'),
-      startSpan: sinon.stub().returns('span'),
+      startSpan: sinon.stub().returns({ id: 'span' }),
       inject: sinon.stub().returns('noop'),
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
@@ -621,14 +621,14 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', 'b', callback)
 
-        sinon.assert.calledWith(noop.trace, 'a', 'b', sinon.match.func)
+        sinon.assert.calledWith(noop.trace, 'a', 'b', callback)
         assert.strictEqual(returnValue, 'test')
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
-        sinon.assert.calledWith(noop.trace, 'a', {}, sinon.match.func)
+        sinon.assert.calledWith(noop.trace, 'a', {}, callback)
         assert.strictEqual(returnValue, 'test')
       })
 
@@ -641,19 +641,7 @@ describe('TracerProxy', () => {
           tags: {
             '_dd.svc_src': 'm',
           },
-        }, sinon.match.func)
-        assert.notStrictEqual(noop.trace.firstCall.args[2], callback)
-      })
-
-      it('should set service source tag when the span inside callback does a service override', () => {
-        const spanStub = { setTag: sinon.stub() }
-        const setTagSpy = spanStub.setTag
-
-        noop.trace.callsFake((name, options, callback) => callback(spanStub))
-        proxy.trace('a', span => span.setTag('service', 'b'))
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'b')
+        }, callback)
       })
 
       it('should ignore calls without an invalid callback', () => {
@@ -693,7 +681,7 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(noop.startSpan, 'a', 'b', 'c')
-        assert.strictEqual(returnValue._span, 'span')
+        assert.deepEqual(returnValue._span, { id: 'span' })
       })
 
       it('should set service source override tag when returned span does a setTag', () => {
@@ -748,7 +736,7 @@ describe('TracerProxy', () => {
     })
 
     describe('scope', () => {
-      it('should wrap the underlying noop scope', () => {
+      it('should return the underlying noop scope', () => {
         const scope = {
           active: sinon.stub().returns(null),
           activate: sinon.stub(),
@@ -759,80 +747,8 @@ describe('TracerProxy', () => {
 
         const returnValue = proxy.scope()
 
-        assert.notStrictEqual(returnValue, scope)
+        assert.strictEqual(returnValue, scope)
         sinon.assert.calledOnce(noop.scope)
-        assert.strictEqual(returnValue._scope, scope)
-      })
-
-      it('should expose wrapped active spans and apply public span behavior', () => {
-        const span = {
-          context: sinon.stub().returns('context'),
-          setTag: sinon.spy(),
-        }
-        const scope = {
-          active: sinon.stub().returns(span),
-          activate: sinon.stub(),
-          bind: sinon.stub(),
-        }
-
-        noop.scope.returns(scope)
-
-        const activeSpan = proxy.scope().active()
-
-        assert.notStrictEqual(activeSpan, span)
-        assert.strictEqual(activeSpan._span, span)
-        assert.strictEqual(activeSpan.context(), 'context')
-
-        activeSpan.setTag('service', 'test-service')
-
-        assert.strictEqual(span.setTag.callCount, 2)
-        sinon.assert.calledWith(span.setTag.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(span.setTag.secondCall, 'service', 'test-service')
-        sinon.assert.calledOnce(scope.active)
-      })
-
-      it('should unwrap public spans when activating a scope', () => {
-        const scope = {
-          active: sinon.stub().returns(null),
-          activate: sinon.stub().callsFake((span, fn) => fn()),
-          bind: sinon.stub(),
-        }
-        const internalSpan = {
-          context: sinon.stub(),
-        }
-
-        noop.scope.returns(scope)
-        noop.startSpan.returns(internalSpan)
-
-        const span = proxy.startSpan('test')
-
-        const returnValue = proxy.scope().activate(span, () => 'result')
-
-        assert.strictEqual(returnValue, 'result')
-        sinon.assert.calledOnce(scope.activate)
-        sinon.assert.calledWith(scope.activate, internalSpan, sinon.match.func)
-      })
-
-      it('should unwrap public spans when binding functions', () => {
-        const scope = {
-          active: sinon.stub().returns(null),
-          activate: sinon.stub(),
-          bind: sinon.stub().callsFake((fn, span) => ({ fn, span })),
-        }
-        const internalSpan = {
-          context: sinon.stub(),
-        }
-        const fn = sinon.stub()
-
-        noop.scope.returns(scope)
-        noop.startSpan.returns(internalSpan)
-
-        const span = proxy.startSpan('test')
-        const returnValue = proxy.scope().bind(fn, span)
-
-        assert.deepStrictEqual(returnValue, { fn, span: internalSpan })
-        sinon.assert.calledOnce(scope.bind)
-        sinon.assert.calledWith(scope.bind, fn, internalSpan)
       })
     })
 
@@ -981,7 +897,7 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', 'b', callback)
 
-        sinon.assert.calledWith(tracer.trace, 'a', 'b', sinon.match.func)
+        sinon.assert.calledWith(tracer.trace, 'a', 'b', callback)
         assert.strictEqual(returnValue, 'test')
       })
 
@@ -994,26 +910,14 @@ describe('TracerProxy', () => {
           tags: {
             '_dd.svc_src': 'm',
           },
-        }, sinon.match.func)
-        assert.notStrictEqual(tracer.trace.firstCall.args[2], callback)
-      })
-
-      it('should set service source tag when the span inside callback does a service override', () => {
-        const spanStub = { setTag: sinon.stub() }
-        const setTagSpy = spanStub.setTag
-
-        tracer.trace.callsFake((name, options, callback) => callback(spanStub))
-        proxy.trace('a', span => span.setTag('service', 'b'))
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'b')
+        }, callback)
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.trace('a', callback)
 
-        sinon.assert.calledWith(tracer.trace, 'a', {}, sinon.match.func)
+        sinon.assert.calledWith(tracer.trace, 'a', {}, callback)
         assert.strictEqual(returnValue, 'test')
       })
     })
@@ -1056,7 +960,7 @@ describe('TracerProxy', () => {
         const returnValue = proxy.startSpan('a', 'b', 'c')
 
         sinon.assert.calledWith(tracer.startSpan, 'a', 'b', 'c')
-        assert.strictEqual(returnValue._span, 'span')
+        assert.deepEqual(returnValue._span, { id: 'span' })
       })
 
       it('should set service source override tag when returned span does a setTag', () => {
@@ -1111,7 +1015,7 @@ describe('TracerProxy', () => {
     })
 
     describe('scope', () => {
-      it('should wrap the underlying tracer scope', () => {
+      it('should return the underlying tracer scope', () => {
         const scope = {
           active: sinon.stub().returns(null),
           activate: sinon.stub(),
@@ -1122,79 +1026,8 @@ describe('TracerProxy', () => {
 
         const returnValue = proxy.scope()
 
-        assert.notStrictEqual(returnValue, scope)
+        assert.strictEqual(returnValue, scope)
         sinon.assert.calledOnce(tracer.scope)
-        assert.strictEqual(returnValue._scope, scope)
-      })
-
-      it('should return wrapped active spans and apply public span behavior', () => {
-        const span = {
-          context: sinon.stub().returns('context'),
-          setTag: sinon.spy(),
-        }
-        const scope = {
-          active: sinon.stub().returns(span),
-          activate: sinon.stub(),
-          bind: sinon.stub(),
-        }
-
-        tracer.scope.returns(scope)
-
-        const activeSpan = proxy.scope().active()
-
-        assert.notStrictEqual(activeSpan, span)
-        assert.strictEqual(activeSpan._span, span)
-        assert.strictEqual(activeSpan.context(), 'context')
-
-        activeSpan.setTag('service', 'test-service')
-
-        assert.strictEqual(span.setTag.callCount, 2)
-        sinon.assert.calledWith(span.setTag.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(span.setTag.secondCall, 'service', 'test-service')
-        sinon.assert.calledOnce(scope.active)
-      })
-
-      it('should unwrap public spans for activate', () => {
-        const scope = {
-          active: sinon.stub().returns(null),
-          activate: sinon.stub().callsFake((span, fn) => fn()),
-          bind: sinon.stub(),
-        }
-        const internalSpan = {
-          context: sinon.stub(),
-        }
-
-        tracer.scope.returns(scope)
-        tracer.startSpan.returns(internalSpan)
-
-        const span = proxy.startSpan('test')
-        const returnValue = proxy.scope().activate(span, () => 'result')
-
-        assert.strictEqual(returnValue, 'result')
-        sinon.assert.calledOnce(scope.activate)
-        sinon.assert.calledWith(scope.activate, internalSpan, sinon.match.func)
-      })
-
-      it('should unwrap public spans for bind', () => {
-        const scope = {
-          active: sinon.stub().returns(null),
-          activate: sinon.stub(),
-          bind: sinon.stub().callsFake((fn, span) => ({ fn, span })),
-        }
-        const internalSpan = {
-          context: sinon.stub(),
-        }
-        const fn = sinon.stub()
-
-        tracer.scope.returns(scope)
-        tracer.startSpan.returns(internalSpan)
-
-        const span = proxy.startSpan('test')
-        const returnValue = proxy.scope().bind(fn, span)
-
-        assert.deepStrictEqual(returnValue, { fn, span: internalSpan })
-        sinon.assert.calledOnce(scope.bind)
-        sinon.assert.calledWith(scope.bind, fn, internalSpan)
       })
     })
 
