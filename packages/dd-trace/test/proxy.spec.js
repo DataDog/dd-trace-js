@@ -669,7 +669,7 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', 'b', callback)
 
-        sinon.assert.calledWith(noop.wrap, 'a', 'b', sinon.match.func)
+        sinon.assert.calledWith(noop.wrap, 'a', 'b', callback)
         assert.strictEqual(returnValue, 'fn')
       })
 
@@ -677,35 +677,8 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
 
-        sinon.assert.calledWith(noop.wrap, 'a', {}, sinon.match.func)
+        sinon.assert.calledWith(noop.wrap, 'a', {}, callback)
         assert.strictEqual(returnValue, 'fn')
-      })
-
-      it('should add _dd.svc_src to tags when a service override is provided through options', () => {
-        const callback = () => 'test'
-        const returnValue = proxy.wrap('a', {
-          service: 'custom-service',
-        }, callback)
-
-        sinon.assert.calledWith(noop.wrap, 'a', {
-          service: 'custom-service',
-          tags: {
-            '_dd.svc_src': 'm',
-          },
-        }, sinon.match.func)
-        assert.notStrictEqual(noop.wrap.firstCall.args[2], callback)
-        assert.strictEqual(returnValue, 'fn')
-      })
-
-      it('should patch the wrap callback span setTag when a service override is provided', () => {
-        const spanStub = { setTag: sinon.spy() }
-        const setTagSpy = spanStub.setTag
-        noop.wrap.callsFake((name, options, callback) => callback(spanStub))
-
-        proxy.wrap('a', (span, done) => span.setTag('service', 'b'))
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'b')
       })
 
       it('should ignore calls without an invalid callback', () => {
@@ -1051,7 +1024,7 @@ describe('TracerProxy', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', 'b', callback)
 
-        sinon.assert.calledWith(tracer.wrap, 'a', 'b', sinon.match.func)
+        sinon.assert.calledWith(tracer.wrap, 'a', 'b', callback)
         assert.strictEqual(returnValue, 'fn')
       })
 
@@ -1066,27 +1039,15 @@ describe('TracerProxy', () => {
           tags: {
             '_dd.svc_src': 'm',
           },
-        }, sinon.match.func)
-        assert.notStrictEqual(tracer.wrap.firstCall.args[2], callback)
+        }, callback)
         assert.strictEqual(returnValue, 'fn')
-      })
-
-      it('should patch the wrap callback span setTag when a service override is provided', () => {
-        const spanStub = { setTag: sinon.spy() }
-        const setTagSpy = spanStub.setTag
-        tracer.wrap.callsFake((name, options, callback) => callback(spanStub))
-
-        proxy.wrap('a', (span, done) => span.setTag('service', 'b'))
-        assert.strictEqual(setTagSpy.callCount, 2)
-        sinon.assert.calledWith(setTagSpy.firstCall, '_dd.svc_src', 'm')
-        sinon.assert.calledWith(setTagSpy.secondCall, 'service', 'b')
       })
 
       it('should work without options', () => {
         const callback = () => 'test'
         const returnValue = proxy.wrap('a', callback)
 
-        sinon.assert.calledWith(tracer.wrap, 'a', {}, sinon.match.func)
+        sinon.assert.calledWith(tracer.wrap, 'a', {}, callback)
         assert.strictEqual(returnValue, 'fn')
       })
     })

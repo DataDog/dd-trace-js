@@ -82,11 +82,7 @@ class NoopProxy {
         [SVC_SRC_KEY]: 'm',
       }
     }
-    const callback = fn.length > 1
-      ? function (span, done) { return fn(PublicSpan.wrap(span), done) }
-      : function (span) { return fn(PublicSpan.wrap(span)) }
-
-    return this._tracer.wrap(name, options, callback)
+    return this._tracer.wrap(name, options, fn)
   }
 
   setUrl () {
