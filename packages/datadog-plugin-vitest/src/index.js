@@ -180,6 +180,10 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
+    this.addBind('ci:vitest:test:fn', (ctx) => {
+      return ctx.currentStore
+    })
+
     this.addBind('ci:vitest:test:finish-time', (ctx) => {
       const { status, task, attemptToFixPassed, attemptToFixFailed } = ctx
       const span = ctx.currentStore?.span
