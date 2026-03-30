@@ -286,6 +286,20 @@ versions.forEach((version) => {
           )
           assert.strictEqual(hookHttpSpans.length, 2,
             'should have 2 http spans from hooks (beforeEach + afterEach) as children of test span')
+
+          const cleanupHookTestName =
+            'vitest-test-before-each-cleanup-http beforeEach cleanup http is linked to test span'
+          const cleanupHookTestSpan = tests.find(test => test.meta[TEST_NAME] === cleanupHookTestName)
+          assert.ok(cleanupHookTestSpan, 'should have beforeEach cleanup hook test span')
+          assert.strictEqual(cleanupHookTestSpan.meta[TEST_STATUS], 'pass')
+
+          const cleanupHookHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === cleanupHookTestSpan.trace_id.toString() &&
+            span.parent_id.toString() === cleanupHookTestSpan.span_id.toString()
+          )
+          assert.strictEqual(cleanupHookHttpSpans.length, 2,
+            'should have 2 http spans from beforeEach and its returned cleanup as children of test span')
         }, 25000)
 
       childProcess = exec(

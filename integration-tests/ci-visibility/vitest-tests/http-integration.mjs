@@ -40,3 +40,19 @@ describe('vitest-test-hook-http', () => {
     expect(true).toBe(true)
   })
 })
+
+describe('vitest-test-before-each-cleanup-http', () => {
+  beforeEach(async () => {
+    const statusCode = await httpRequest('/info')
+    expect(statusCode).toBe(200)
+
+    return async () => {
+      const cleanupStatusCode = await httpRequest('/info')
+      expect(cleanupStatusCode).toBe(200)
+    }
+  })
+
+  test('beforeEach cleanup http is linked to test span', () => {
+    expect(true).toBe(true)
+  })
+})

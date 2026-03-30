@@ -246,6 +246,37 @@ function getTestName (task) {
   return testName
 }
 
+/**
+ * Wraps a function so it runs inside the current test span context.
+ * @param {object} task
+ * @param {Function} fn
+ * @returns {Function}
+ */
+function wrapTestScopedFn (task, fn) {
+  return shimmer.wrapFunction(fn, fn => function () {
+    return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+  })
+}
+
+/**
+ * Wraps a `beforeEach` cleanup callback so it inherits the test span context.
+ * Vitest allows `beforeEach` to return a cleanup function, including via a promise.
+ * @param {object} task
+ * @param {unknown} result
+ * @returns {unknown}
+ */
+function wrapBeforeEachCleanupResult (task, result) {
+  if (typeof result === 'function') {
+    return wrapTestScopedFn(task, result)
+  }
+
+  if (result && typeof result.then === 'function') {
+    return result.then(cleanupFn => wrapBeforeEachCleanupResult(task, cleanupFn))
+  }
+
+  return result
+}
+
 function getSortWrapper (sort, frameworkVersion) {
   return async function () {
     if (!testSessionFinishCh.hasSubscribers) {
@@ -849,9 +880,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     if (vitestGetFn && vitestSetFn) {
       const originalFn = vitestGetFn(task)
       if (originalFn && !originalFn.__ddTraceWrapped) {
-        const wrappedFn = shimmer.wrapFunction(originalFn, fn => function () {
-          return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
-        })
+        const wrappedFn = wrapTestScopedFn(task, originalFn)
         wrappedFn.__ddTraceWrapped = true
         vitestSetFn(task, wrappedFn)
       }
@@ -870,7 +899,13 @@ function wrapVitestTestRunner (VitestTestRunner) {
             const currentFn = hookArray[i]
             const originalFn = originalHookFns.get(currentFn) || currentFn
             const wrappedFn = shimmer.wrapFunction(originalFn, fn => function () {
-              return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+
+              if (hookType === 'beforeEach') {
+                return wrapBeforeEachCleanupResult(task, result)
+              }
+
+              return result
             })
             originalHookFns.set(wrappedFn, originalFn)
             hookArray[i] = wrappedFn
