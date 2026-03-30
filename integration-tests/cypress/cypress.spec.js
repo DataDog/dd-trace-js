@@ -62,6 +62,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_IS_MODIFIED,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -2488,6 +2489,73 @@ moduleTypes.forEach(({
         once(childProcess, 'exit'),
         eventsPromise,
       ])
+    })
+
+    it('tags new tests with dynamic names and logs a warning', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 1 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({
+        cypress: {
+          'cypress/e2e/dynamic-name-test.cy.js': [],
+        },
+      })
+
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const uniqueTests = new Map()
+          for (const test of tests) {
+            if (!uniqueTests.has(test.meta[TEST_NAME])) {
+              uniqueTests.set(test.meta[TEST_NAME], test)
+            }
+          }
+
+          const dynamicTests = [...uniqueTests.values()]
+            .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+          assert.strictEqual(dynamicTests.length, 8)
+
+          dynamicTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          })
+        },
+        25000
+      )
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const specToRun = 'cypress/e2e/dynamic-name-test.cy.js'
+
+      childProcess = exec(
+        version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: specToRun,
+          },
+        }
+      )
+
+      let testOutput = ''
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+      assert.match(testOutput, /detected as new but their names contain dynamic data/)
     })
 
     context('known tests without early flake detection', () => {

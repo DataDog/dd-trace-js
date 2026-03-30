@@ -52,6 +52,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_IS_MODIFIED,
   DD_CAPABILITIES_IMPACTED_TESTS,
   VITEST_POOL,
@@ -242,6 +243,83 @@ versions.forEach((version) => {
           }),
         ])
       })
+    })
+
+    it('propagates test span context to HTTP requests and hooks during test execution', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const spans = events.filter(event => event.type === 'span').map(event => event.content)
+
+          // --- Test function: HTTP request + custom tag ---
+          const httpTestSpan = tests.find(
+            test => test.meta[TEST_NAME] === 'vitest-test-integration-http can do integration http'
+          )
+          assert.ok(httpTestSpan, 'should have http test span')
+          assert.strictEqual(httpTestSpan.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(httpTestSpan.meta['test.custom_tag'], 'custom_value',
+            'custom tag set via active span should be present')
+
+          const testHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === httpTestSpan.trace_id.toString()
+          )
+          assert.ok(testHttpSpans.length > 0, 'should have http span with matching trace_id')
+
+          const testHttpSpan = testHttpSpans.find(span =>
+            span.parent_id.toString() === httpTestSpan.span_id.toString()
+          )
+          assert.ok(testHttpSpan, 'HTTP span from test fn should be child of test span')
+          assert.match(testHttpSpan.meta['http.url'], /\/info/)
+
+          // --- beforeEach + afterEach hooks: HTTP requests ---
+          const hookTestSpan = tests.find(
+            test => test.meta[TEST_NAME] === 'vitest-test-hook-http hook http is linked to test span'
+          )
+          assert.ok(hookTestSpan, 'should have hook test span')
+          assert.strictEqual(hookTestSpan.meta[TEST_STATUS], 'pass')
+
+          const hookHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === hookTestSpan.trace_id.toString() &&
+            span.parent_id.toString() === hookTestSpan.span_id.toString()
+          )
+          assert.strictEqual(hookHttpSpans.length, 2,
+            'should have 2 http spans from hooks (beforeEach + afterEach) as children of test span')
+
+          const cleanupHookTestName =
+            'vitest-test-before-each-cleanup-http beforeEach cleanup http is linked to test span'
+          const cleanupHookTestSpan = tests.find(test => test.meta[TEST_NAME] === cleanupHookTestName)
+          assert.ok(cleanupHookTestSpan, 'should have beforeEach cleanup hook test span')
+          assert.strictEqual(cleanupHookTestSpan.meta[TEST_STATUS], 'pass')
+
+          const cleanupHookHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === cleanupHookTestSpan.trace_id.toString() &&
+            span.parent_id.toString() === cleanupHookTestSpan.span_id.toString()
+          )
+          assert.strictEqual(cleanupHookHttpSpans.length, 2,
+            'should have 2 http spans from beforeEach and its returned cleanup as children of test span')
+        }, 25000)
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/http-integration*',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
     })
 
     context('error tags', () => {
@@ -1263,6 +1341,61 @@ versions.forEach((version) => {
           once(childProcess, 'exit'),
           eventsPromise,
         ])
+      })
+
+      it('tags new tests with dynamic names and logs a warning', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 1 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setKnownTests({ vitest: {} })
+
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const uniqueTests = new Map()
+            for (const test of tests) {
+              if (!uniqueTests.has(test.meta[TEST_NAME])) {
+                uniqueTests.set(test.meta[TEST_NAME], test)
+              }
+            }
+
+            const dynamicTests = [...uniqueTests.values()]
+              .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+            assert.strictEqual(dynamicTests.length, 8)
+
+            dynamicTests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            })
+          }
+        )
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/dynamic-name-test*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        let testOutput = ''
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.match(testOutput, /detected as new but their names contain dynamic data/)
       })
     })
 
