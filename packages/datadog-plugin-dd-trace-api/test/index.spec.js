@@ -145,6 +145,7 @@ describe('Plugin', () => {
         })
         span = tracer.startSpan.getCall(0).returnValue
         span = span._span || span
+        sinon.spy(span)
       })
 
       describe('span:context', () => {
@@ -154,7 +155,6 @@ describe('Plugin', () => {
 
         it('should call underlying api', () => {
           dummySpanContext = {}
-          sinon.spy(span, 'context')
           testChannel({
             name: 'span:context',
             fn: span.context,
@@ -165,7 +165,6 @@ describe('Plugin', () => {
           sinon.stub(spanContext, 'toTraceId').callsFake(() => traceId)
           sinon.stub(spanContext, 'toSpanId').callsFake(() => spanId)
           sinon.stub(spanContext, 'toTraceparent').callsFake(() => traceparent)
-          span.context.restore()
         })
 
         describe('context:toTraceId', () => {
@@ -204,7 +203,6 @@ describe('Plugin', () => {
 
       describe('span:setTag', () => {
         it('should call underlying api', () => {
-          sinon.spy(span, 'setTag')
           testChannel({
             name: 'span:setTag',
             fn: span.setTag,
@@ -212,13 +210,11 @@ describe('Plugin', () => {
             ret: dummySpan,
             args: ['key', 'value'],
           })
-          span.setTag.restore()
         })
       })
 
       describe('span:addTags', () => {
         it('should call underlying api', () => {
-          sinon.spy(span, 'addTags')
           testChannel({
             name: 'span:addTags',
             fn: span.addTags,
@@ -226,26 +222,22 @@ describe('Plugin', () => {
             ret: dummySpan,
             args: [{ key: 'value' }],
           })
-          span.addTags.restore()
         })
       })
 
       describe('span:finish', () => {
         it('should call underlying api', () => {
-          sinon.spy(span, 'finish')
           testChannel({
             name: 'span:finish',
             fn: span.finish,
             self: dummySpan,
             args: [123],
           })
-          span.finish.restore()
         })
       })
 
       describe('span:addLink', () => {
         it('should call underlying api', () => {
-          sinon.spy(span, 'addLink')
           testChannel({
             name: 'span:addLink',
             fn: span.addLink,
@@ -253,7 +245,6 @@ describe('Plugin', () => {
             ret: dummySpan,
             args: [dummySpanContext],
           })
-          span.addLink.restore()
         })
       })
     })
