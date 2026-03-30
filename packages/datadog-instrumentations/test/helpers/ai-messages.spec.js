@@ -154,6 +154,19 @@ describe('ai-messages', () => {
       ])
     })
 
+    it('should skip user messages with only unsupported parts', () => {
+      const prompt = [{
+        role: 'user',
+        content: [{ type: 'file', data: 'base64data', mediaType: 'application/pdf' }],
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [])
+    })
+
+    it('should skip user messages with empty content arrays', () => {
+      const prompt = [{ role: 'user', content: [] }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [])
+    })
+
     it('should convert assistant messages with text content', () => {
       const prompt = [{
         role: 'assistant',

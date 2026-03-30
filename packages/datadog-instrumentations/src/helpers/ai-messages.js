@@ -58,6 +58,9 @@ function convertVercelPromptToMessages (prompt) {
             if (converted) contentParts.push(converted)
           }
         }
+
+        if (contentParts.length === 0) break
+
         const hasImages = contentParts.some(p => p.type === 'image_url')
         if (hasImages) {
           messages.push({ role: 'user', content: contentParts })
@@ -86,6 +89,7 @@ function convertVercelPromptToMessages (prompt) {
             })
           }
         }
+
         if (toolCalls.length > 0) {
           messages.push({ role: 'assistant', tool_calls: toolCalls })
         } else if (textParts.length > 0) {
