@@ -1,10 +1,14 @@
 'use strict'
 
 const fs = require('fs')
+const os = require('os')
+const path = require('path')
 
 const shimmer = require('../../datadog-shimmer')
 const { DD_MAJOR } = require('../../../version')
 const { addHook } = require('./helpers/instrument')
+
+const DD_WRAPPED = Symbol('dd-trace.cypress.wrapped')
 
 const noopTask = {
   'dd:testSuiteStart': () => null,
@@ -15,31 +19,137 @@ const noopTask = {
 }
 
 /**
- * Injects dd-trace's browser-side support code into the Cypress support file.
- * Prepends a `require`/`import` of dd-trace's support to the user's support file
- * so browser-side hooks (beforeEach, afterEach, retries, etc.) are loaded automatically.
+ * Creates a temporary wrapper support file under os.tmpdir() that loads
+ * dd-trace's browser-side hooks before the user's original support file.
+ * Returns the wrapper path (for cleanup) or undefined if injection was skipped.
  *
  * @param {object} config Cypress resolved config object
+ * @returns {string|undefined} wrapper file path, or undefined if skipped
  */
 function injectSupportFile (config) {
   const originalSupportFile = config.supportFile
   if (!originalSupportFile || originalSupportFile === false) return
 
-  // If the user's support file already loads our support, skip injection.
   try {
     const content = fs.readFileSync(originalSupportFile, 'utf8')
     if (content.includes('dd-trace/ci/cypress/support')) return
-
-    // Use ESM import syntax for .mjs files, CommonJS require for everything else
-    const isEsm = originalSupportFile.endsWith('.mjs')
-    const ddSupportLine = isEsm
-      ? "import 'dd-trace/ci/cypress/support'\n"
-      : "require('dd-trace/ci/cypress/support')\n"
-
-    fs.writeFileSync(originalSupportFile, ddSupportLine + content)
   } catch {
-    // Can't read/write the file — skip injection to avoid breaking anything
+    return
   }
+
+  // Resolve the absolute path to dd-trace's support file so the wrapper works
+  // from os.tmpdir() where dd-trace isn't in node_modules.
+  const ddSupportFile = require.resolve('../../../ci/cypress/support')
+
+  const ext = path.extname(originalSupportFile)
+  const wrapperFile = path.join(os.tmpdir(), `dd-cypress-support-${process.pid}${ext}`)
+  const isEsm = ext === '.mjs'
+
+  const wrapperContent = isEsm
+    ? `import ${JSON.stringify(ddSupportFile)}\nimport ${JSON.stringify(originalSupportFile)}\n`
+    : `require(${JSON.stringify(ddSupportFile)})\nrequire(${JSON.stringify(originalSupportFile)})\n`
+
+  try {
+    fs.writeFileSync(wrapperFile, wrapperContent)
+    config.supportFile = wrapperFile
+    return wrapperFile
+  } catch {
+    // Can't write wrapper — skip injection
+  }
+}
+
+/**
+ * Core instrumentation logic called from within setupNodeEvents.
+ * Registers dd-trace's Cypress hooks (before:run, after:spec, after:run, tasks)
+ * and injects the support file. Handles chaining with user-registered handlers
+ * for after:spec/after:run so both the user's code and dd-trace's run in sequence.
+ *
+ * @param {Function} on Cypress event registration function
+ * @param {object} config Cypress resolved config object
+ * @param {Function[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
+ * @param {Function[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
+ * @returns {object} the config object (possibly modified)
+ */
+function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHandlers) {
+  const wrapperFile = injectSupportFile(config)
+
+  const cleanupWrapper = () => {
+    if (wrapperFile) {
+      try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
+    }
+  }
+
+  // global._ddtrace is the singleton set by dd-trace/index.js. It is always the
+  // same object regardless of how dd-trace was required (which path was resolved).
+  // On macOS, /var -> /private/var symlinks mean the same physical file can be
+  // cached under two different paths, creating multiple module instances. Using
+  // the global bypasses module resolution entirely and guarantees we get the one
+  // tracer that ci/init.js already initialized via NODE_OPTIONS.
+  const tracer = global._ddtrace
+
+  const registerAfterRunWithCleanup = () => {
+    on('after:run', (results) => {
+      const chain = userAfterRunHandlers.reduce(
+        (p, h) => p.then(() => h(results)),
+        Promise.resolve()
+      )
+      return chain.finally(cleanupWrapper)
+    })
+  }
+
+  const registerNoopHandlers = () => {
+    for (const h of userAfterSpecHandlers) on('after:spec', h)
+    registerAfterRunWithCleanup()
+    on('task', noopTask)
+  }
+
+  if (!tracer || !tracer._initialized) {
+    registerNoopHandlers()
+    return config
+  }
+
+  const NoopTracer = require('../../../packages/dd-trace/src/noop/tracer')
+
+  if (tracer._tracer instanceof NoopTracer) {
+    registerNoopHandlers()
+    return config
+  }
+
+  const cypressPlugin = require('../../../packages/datadog-plugin-cypress/src/cypress-plugin')
+
+  // If the user already called the manual plugin (dd-trace/ci/cypress/plugin),
+  // cypressPlugin._isInit is true. Re-register their intercepted handlers and skip.
+  if (cypressPlugin._isInit) {
+    for (const h of userAfterSpecHandlers) on('after:spec', h)
+    registerAfterRunWithCleanup()
+    return config
+  }
+
+  on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
+
+  on('after:spec', (spec, results) => {
+    const chain = userAfterSpecHandlers.reduce(
+      (p, h) => p.then(() => h(spec, results)),
+      Promise.resolve()
+    )
+    return chain.then(() => cypressPlugin.afterSpec(spec, results))
+  })
+
+  on('after:run', (results) => {
+    const chain = userAfterRunHandlers.reduce(
+      (p, h) => p.then(() => h(results)),
+      Promise.resolve()
+    )
+    return chain
+      .then(() => cypressPlugin.afterRun(results))
+      .finally(cleanupWrapper)
+  })
+
+  on('task', cypressPlugin.getTasks())
+
+  // init() returns a Promise — Cypress awaits it for async config mutations
+  // (e.g. library configuration, retries). Resolve with config so Cypress gets it back.
+  return Promise.resolve(cypressPlugin.init(tracer, config)).then(() => config)
 }
 
 function wrapSetupNodeEvents (originalSetupNodeEvents) {
@@ -59,87 +169,23 @@ function wrapSetupNodeEvents (originalSetupNodeEvents) {
       }
     }
 
-    // Call user's setupNodeEvents first so user config mutations are applied.
-    // Only replace config if the user returns a valid config object (has projectRoot).
-    // This guards against the old manual plugin returning an empty object from cypressPlugin.init().
-    if (originalSetupNodeEvents) {
-      const result = originalSetupNodeEvents.call(this, wrappedOn, config)
-      if (result?.projectRoot) {
-        config = result
-      }
+    // The user's setupNodeEvents may be async (return a Promise).
+    // We must await it before proceeding so async config mutations land.
+    const maybePromise = originalSetupNodeEvents
+      ? originalSetupNodeEvents.call(this, wrappedOn, config)
+      : undefined
+
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      return maybePromise.then((result) => {
+        if (result?.projectRoot) config = result
+        return registerDdTraceHooks(on, config, userAfterSpecHandlers, userAfterRunHandlers)
+      })
     }
 
-    try {
-      // Always inject the support file, even if the manual plugin was already called.
-      injectSupportFile(config)
-
-      // global._ddtrace is the singleton set by dd-trace/index.js. It is always the
-      // same object regardless of how dd-trace was required (which path was resolved).
-      // On macOS, /var -> /private/var symlinks mean the same physical file can be
-      // cached under two different paths, creating multiple module instances. Using
-      // the global bypasses module resolution entirely and guarantees we get the one
-      // tracer that ci/init.js already initialized via NODE_OPTIONS.
-      const tracer = global._ddtrace
-
-      if (!tracer || !tracer._initialized) {
-        // Flush user's after:spec/after:run through since we won't be registering ours
-        for (const h of userAfterSpecHandlers) on('after:spec', h)
-        for (const h of userAfterRunHandlers) on('after:run', h)
-        on('task', noopTask)
-        return config
-      }
-
-      const NoopTracer = require('../../../packages/dd-trace/src/noop/tracer')
-
-      if (tracer._tracer instanceof NoopTracer) {
-        for (const h of userAfterSpecHandlers) on('after:spec', h)
-        for (const h of userAfterRunHandlers) on('after:run', h)
-        on('task', noopTask)
-        return config
-      }
-
-      const cypressPlugin = require('../../../packages/datadog-plugin-cypress/src/cypress-plugin')
-
-      // If the user already called the manual plugin (dd-trace/ci/cypress/plugin),
-      // cypressPlugin._isInit is true. Re-register their intercepted handlers and skip.
-      if (cypressPlugin._isInit) {
-        for (const h of userAfterSpecHandlers) on('after:spec', h)
-        for (const h of userAfterRunHandlers) on('after:run', h)
-        return config
-      }
-
-      on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
-
-      // Chain user's after:spec handlers with dd-trace's, awaiting each in sequence
-      on('after:spec', (spec, results) => {
-        const chain = userAfterSpecHandlers.reduce(
-          (p, h) => p.then(() => h(spec, results)),
-          Promise.resolve()
-        )
-        return chain.then(() => cypressPlugin.afterSpec(spec, results))
-      })
-
-      // Chain user's after:run handlers with dd-trace's, awaiting each in sequence
-      on('after:run', (results) => {
-        const chain = userAfterRunHandlers.reduce(
-          (p, h) => p.then(() => h(results)),
-          Promise.resolve()
-        )
-        return chain.then(() => cypressPlugin.afterRun(results))
-      })
-
-      on('task', cypressPlugin.getTasks())
-
-      return cypressPlugin.init(tracer, config)
-    } catch {
-      // If anything goes wrong, register noop tasks so Cypress can still run
-      on('task', noopTask)
-      return config
-    }
+    if (maybePromise?.projectRoot) config = maybePromise
+    return registerDdTraceHooks(on, config, userAfterSpecHandlers, userAfterRunHandlers)
   }
 }
-
-const DD_WRAPPED = Symbol('dd-trace.cypress.wrapped')
 
 function wrapConfig (config) {
   if (!config || config[DD_WRAPPED]) return
@@ -148,14 +194,15 @@ function wrapConfig (config) {
   if (config.e2e) {
     config.e2e.setupNodeEvents = wrapSetupNodeEvents(config.e2e.setupNodeEvents)
   }
-  // Also wrap component testing config if present
   if (config.component) {
     config.component.setupNodeEvents = wrapSetupNodeEvents(config.component.setupNodeEvents)
   }
 }
 
 // Cypress >=10 introduced defineConfig and setupNodeEvents.
-// Auto-instrumentation wraps these to inject the plugin automatically.
+// Auto-instrumentation wraps defineConfig() and cypress.run() to inject the
+// plugin automatically. Configs using plain module.exports = { ... } (without
+// defineConfig) need to either add defineConfig() or use the manual plugin.
 addHook({
   name: 'cypress',
   versions: ['>=10.2.0'],
@@ -170,6 +217,13 @@ addHook({
       wrapConfig(options.config)
     }
     return run.apply(this, arguments)
+  })
+
+  shimmer.wrap(cypress, 'open', (open) => function (options) {
+    if (options?.config) {
+      wrapConfig(options.config)
+    }
+    return open.apply(this, arguments)
   })
 
   return cypress

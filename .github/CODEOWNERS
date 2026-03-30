@@ -111,7 +111,9 @@
 /integration-tests/config-jest-multiproject.js @DataDog/ci-app-libraries
 /integration-tests/config-jest.js @DataDog/ci-app-libraries
 /integration-tests/cypress-config.json @DataDog/ci-app-libraries
+/integration-tests/cypress-custom-after-hooks.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-legacy-plugin.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress.config.js @DataDog/ci-app-libraries
 /integration-tests/my-nyc.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.js @DataDog/ci-app-libraries

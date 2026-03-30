@@ -316,6 +316,7 @@ moduleTypes.forEach(({
 
     // cypress-legacy-plugin.config.js uses defineConfig which only exists in Cypress >=10
     const legacyPluginIt = (version !== '6.7.0') ? it : it.skip
+    const autoInjectedSupportIt = (version !== '6.7.0') ? it : it.skip
     legacyPluginIt('is backwards compatible with the old manual plugin approach', async () => {
       receiver.setInfoResponse({ endpoints: [] })
 
@@ -355,6 +356,64 @@ moduleTypes.forEach(({
         once(childProcess, 'exit'),
         receiverPromise,
       ])
+    })
+
+    autoInjectedSupportIt('does not modify the user support file and cleans up the injected wrapper', async () => {
+      const supportFilePath = path.join(cwd, 'cypress/support/e2e.js')
+      const originalSupportContent = fs.readFileSync(supportFilePath, 'utf8')
+      const supportContentWithoutDdTrace = originalSupportContent
+        .split('\n')
+        .filter(line => !line.includes("require('dd-trace/ci/cypress/support')"))
+        .join('\n')
+
+      const getSupportWrappers = () => fs.readdirSync(os.tmpdir())
+        .filter(filename => filename.startsWith('dd-cypress-support-'))
+        .sort()
+
+      fs.writeFileSync(supportFilePath, supportContentWithoutDdTrace)
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+          const passedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const wrapperFilesBefore = getSupportWrappers()
+
+      try {
+        childProcess = exec(testCommand, {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+        assert.strictEqual(fs.readFileSync(supportFilePath, 'utf8'), supportContentWithoutDdTrace)
+        assert.doesNotMatch(fs.readFileSync(supportFilePath, 'utf8'), /dd-trace\/ci\/cypress\/support/)
+        assert.deepStrictEqual(getSupportWrappers(), wrapperFilesBefore)
+      } finally {
+        fs.writeFileSync(supportFilePath, originalSupportContent)
+      }
     })
 
     it('custom after:spec and after:run handlers are chained with dd-trace instrumentation', async () => {
