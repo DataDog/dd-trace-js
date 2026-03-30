@@ -6,6 +6,9 @@ const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
+  logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -44,6 +47,8 @@ const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
+const dynamicNameTasks = new WeakSet()
+const newTestsWithDynamicNames = new Set()
 const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
@@ -471,6 +476,8 @@ function getFinishWrapper (exitOrClose) {
       onFinish,
     })
 
+    logDynamicNamesWarning(newTestsWithDynamicNames)
+
     await flushPromise
 
     // If coverage was generated, publish coverage report channel for upload
@@ -531,6 +538,7 @@ function threadHandler (thread) {
   workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
       if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+        collectDynamicNamesFromTraces(message.data, newTestsWithDynamicNames)
         workerReportTraceCh.publish(message.data)
       } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
         workerReportLogsCh.publish(message.data)
@@ -572,6 +580,7 @@ function getWrappedOn (on) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
         if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+          collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
           workerReportTraceCh.publish(data)
         } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
           workerReportLogsCh.publish(data)
@@ -695,6 +704,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
             }
             newTasks.add(task)
             taskToStatuses.set(task, [])
+            if (DYNAMIC_NAME_RE.test(testName)) {
+              dynamicNameTasks.add(task)
+            }
           }
         },
       })
@@ -864,6 +876,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isRetryReasonEfd,
       isRetryReasonAttemptToFix: isRetryReasonAttemptToFix && numRepetition > 0,
       isNew,
+      hasDynamicName: dynamicNameTasks.has(task),
       mightHitProbe: isDiEnabled && numAttempt > 0,
       isAttemptToFix: attemptToFixTasks.has(task),
       isDisabled: disabledTasks.has(task),
