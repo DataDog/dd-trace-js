@@ -92,40 +92,48 @@ describe('Plugin', () => {
       describe('scope:active', () => {
         it('should call underlying api', () => {
           scope = tracer.scope()
-          sinon.spy(scope, 'active')
+          const internalScope = scope._scope || scope
+          sinon.spy(internalScope, 'active')
           testChannel({
             name: 'scope:active',
-            fn: scope.active,
+            fn: internalScope.active,
             self: dummyScope,
             ret: null,
+            thisValue: internalScope,
           })
-          scope.active.restore()
+          internalScope.active.restore()
         })
       })
 
       describe('scope:activate', () => {
         it('should call underlying api', () => {
           scope = tracer.scope()
-          sinon.spy(scope, 'activate')
+          const internalScope = scope._scope || scope
+          sinon.spy(internalScope, 'activate')
           testChannel({
             name: 'scope:activate',
-            fn: scope.activate,
+            fn: internalScope.activate,
             self: dummyScope,
+            args: [undefined, undefined],
+            thisValue: internalScope,
           })
-          scope.activate.restore()
+          internalScope.activate.restore()
         })
       })
 
       describe('scope:bind', () => {
         it('should call underlying api', () => {
           scope = tracer.scope()
-          sinon.spy(scope, 'bind')
+          const internalScope = scope._scope || scope
+          sinon.spy(internalScope, 'bind')
           testChannel({
             name: 'scope:bind',
-            fn: scope.bind,
+            fn: internalScope.bind,
             self: dummyScope,
+            args: [undefined, undefined],
+            thisValue: internalScope,
           })
-          scope.bind.restore()
+          internalScope.bind.restore()
         })
       })
     })
@@ -135,6 +143,8 @@ describe('Plugin', () => {
       let dummySpanContext
       let span
       let spanContext
+      let internalSpan
+      let internalSpanContext
 
       it('should call underlying api', () => {
         dummySpan = {}
@@ -144,7 +154,7 @@ describe('Plugin', () => {
           ret: dummySpan,
         })
         span = tracer.startSpan.getCall(0).returnValue
-        sinon.spy(span)
+        internalSpan = span._span || span
       })
 
       describe('span:context', () => {
@@ -154,25 +164,30 @@ describe('Plugin', () => {
 
         it('should call underlying api', () => {
           dummySpanContext = {}
+          sinon.spy(internalSpan, 'context')
           testChannel({
             name: 'span:context',
-            fn: span.context,
+            fn: internalSpan.context,
             self: dummySpan,
             ret: dummySpanContext,
+            thisValue: internalSpan,
           })
-          spanContext = span.context.getCall(0).returnValue
-          sinon.stub(spanContext, 'toTraceId').callsFake(() => traceId)
-          sinon.stub(spanContext, 'toSpanId').callsFake(() => spanId)
-          sinon.stub(spanContext, 'toTraceparent').callsFake(() => traceparent)
+          spanContext = internalSpan.context.getCall(0).returnValue
+          internalSpanContext = spanContext._spanContext || spanContext
+          sinon.stub(internalSpanContext, 'toTraceId').callsFake(() => traceId)
+          sinon.stub(internalSpanContext, 'toSpanId').callsFake(() => spanId)
+          sinon.stub(internalSpanContext, 'toTraceparent').callsFake(() => traceparent)
+          internalSpan.context.restore()
         })
 
         describe('context:toTraceId', () => {
           it('should call underlying api', () => {
             testChannel({
               name: 'context:toTraceId',
-              fn: spanContext.toTraceId,
+              fn: internalSpanContext.toTraceId,
               self: dummySpanContext,
               ret: traceId,
+              thisValue: internalSpanContext,
             })
           })
         })
@@ -181,9 +196,10 @@ describe('Plugin', () => {
           it('should call underlying api', () => {
             testChannel({
               name: 'context:toSpanId',
-              fn: spanContext.toSpanId,
+              fn: internalSpanContext.toSpanId,
               self: dummySpanContext,
               ret: spanId,
+              thisValue: internalSpanContext,
             })
           })
         })
@@ -192,9 +208,10 @@ describe('Plugin', () => {
           it('should call underlying api', () => {
             testChannel({
               name: 'context:toTraceparent',
-              fn: spanContext.toTraceparent,
+              fn: internalSpanContext.toTraceparent,
               self: dummySpanContext,
               ret: traceparent,
+              thisValue: internalSpanContext,
             })
           })
         })
@@ -202,45 +219,60 @@ describe('Plugin', () => {
 
       describe('span:setTag', () => {
         it('should call underlying api', () => {
+          sinon.spy(internalSpan, 'setTag')
           testChannel({
             name: 'span:setTag',
-            fn: span.setTag,
+            fn: internalSpan.setTag,
             self: dummySpan,
             ret: dummySpan,
+            args: ['test.tag', 'test.value'],
+            thisValue: internalSpan,
           })
+          internalSpan.setTag.restore()
         })
       })
 
       describe('span:addTags', () => {
         it('should call underlying api', () => {
+          sinon.spy(internalSpan, 'addTags')
           testChannel({
             name: 'span:addTags',
-            fn: span.addTags,
+            fn: internalSpan.addTags,
             self: dummySpan,
             ret: dummySpan,
+            args: [{ 'test.tag': 'test.value' }],
+            thisValue: internalSpan,
           })
+          internalSpan.addTags.restore()
         })
       })
 
       describe('span:finish', () => {
         it('should call underlying api', () => {
+          sinon.spy(internalSpan, 'finish')
           testChannel({
             name: 'span:finish',
-            fn: span.finish,
+            fn: internalSpan.finish,
             self: dummySpan,
+            args: [undefined],
+            thisValue: internalSpan,
           })
+          internalSpan.finish.restore()
         })
       })
 
       describe('span:addLink', () => {
         it('should call underlying api', () => {
+          sinon.spy(internalSpan, 'addLink')
           testChannel({
             name: 'span:addLink',
-            fn: span.addLink,
+            fn: internalSpan.addLink,
             self: dummySpan,
             ret: dummySpan,
             args: [dummySpanContext],
+            thisValue: internalSpan,
           })
+          internalSpan.addLink.restore()
         })
       })
     })
@@ -297,7 +329,7 @@ describe('Plugin', () => {
       })
     }
 
-    function testChannel ({ name, fn, self = dummyTracer, ret, args = [], proxy }) {
+    function testChannel ({ name, fn, self = dummyTracer, ret, args = [], proxy, thisValue }) {
       testedChannels.add('datadog-api:v1:' + name)
       const ch = dc.channel('datadog-api:v1:' + name)
       if (proxy === undefined) {
@@ -309,7 +341,11 @@ describe('Plugin', () => {
         throw payload.ret.error
       }
       assert.strictEqual(payload.ret.value, ret)
-      sinon.assert.calledOnceWithExactly(fn, ...args)
+      sinon.assert.calledOnce(fn)
+      assert.deepStrictEqual(fn.args, [args])
+      if (typeof thisValue !== 'undefined') {
+        assert.strictEqual(fn.thisValues[0], thisValue)
+      }
     }
   })
 })
