@@ -102,8 +102,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1.2', { childOf }, child12 => {
         tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
           const root = getRootSpan(tracer)
-
-          assert.strictEqual(root, child12)
+          assert.strictEqual(root, child12._span)
         })
       })
     })
