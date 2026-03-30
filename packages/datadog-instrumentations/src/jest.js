@@ -1834,7 +1834,12 @@ addHook({
 
 function onMessageWrapper (onMessage) {
   return function () {
-    const [code, data] = arguments[0]
+    const response = arguments[0]
+    if (!Array.isArray(response)) {
+      return onMessage.apply(this, arguments)
+    }
+
+    const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
       collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
       workerReportTraceCh.publish(data)
@@ -1897,14 +1902,22 @@ function sendWrapper (send) {
   }
 }
 
+function wrapWorker (worker) {
+  // ChildProcessWorker uses _child (child_process), ExperimentalWorker uses _worker (worker_threads)
+  const workerChannel = worker._child || worker._worker
+  if (!workerChannel) return
+
+  shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
+  shimmer.wrap(worker, '_onMessage', onMessageWrapper)
+  workerChannel.removeAllListeners('message')
+  workerChannel.on('message', worker._onMessage.bind(worker))
+}
+
 function enqueueWrapper (enqueue) {
   return function () {
     shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
       if (worker && !wrappedWorkers.has(worker)) {
-        shimmer.wrap(worker._child, 'send', sendWrapper)
-        shimmer.wrap(worker, '_onMessage', onMessageWrapper)
-        worker._child.removeAllListeners('message')
-        worker._child.on('message', worker._onMessage.bind(worker))
+        wrapWorker(worker)
         wrappedWorkers.add(worker)
       }
       return onStart.apply(this, arguments)
@@ -1932,6 +1945,21 @@ addHook({
     shimmer.wrap(ChildProcessWorker.prototype, 'onMessage', onMessageWrapper)
   }
   return childProcessWorker
+})
+
+addHook({
+  name: 'jest-worker',
+  versions: ['>=24.9.0 <30.0.0'],
+  file: 'build/workers/NodeThreadsWorker.js',
+}, (nodeThreadsWorker) => {
+  const ExperimentalWorker = nodeThreadsWorker.default
+  shimmer.wrap(ExperimentalWorker.prototype, 'send', sendWrapper)
+  if (ExperimentalWorker.prototype._onMessage) {
+    shimmer.wrap(ExperimentalWorker.prototype, '_onMessage', onMessageWrapper)
+  } else if (ExperimentalWorker.prototype.onMessage) {
+    shimmer.wrap(ExperimentalWorker.prototype, 'onMessage', onMessageWrapper)
+  }
+  return nodeThreadsWorker
 })
 
 addHook({
