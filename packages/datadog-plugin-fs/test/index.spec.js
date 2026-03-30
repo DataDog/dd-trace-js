@@ -1898,7 +1898,7 @@ describe('Plugin', () => {
               span.finish()
               return tracer.scope().activate(span, () => {
                 args.push((err) => {
-                  assert.strictEqual(tracer.scope().active()._span, span)
+                  assert.strictEqual(tracer.scope().active(), span)
                   if (err) {
                     if (withError) withError(err)
                     else done(err)
@@ -1919,7 +1919,7 @@ describe('Plugin', () => {
               return tracer.scope().activate(span, () => {
                 return fs.promises[name].apply(fs.promises, args)
                   .then(() => {
-                    assert.strictEqual(tracer.scope().active()._span, span)
+                    assert.strictEqual(tracer.scope().active(), span)
                   })
                   .catch((err) => {
                     if (withError) withError(err)

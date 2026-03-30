@@ -1,5 +1,10 @@
 'use strict'
 
+// A WeakMap cache at module scope ensures the same wrapper instance is returned
+// for the same underlying span across all subclasses, so reference equality
+// checks (===) in user code remain stable.
+const cache = new WeakMap()
+
 const { SVC_SRC_KEY } = require('../../constants')
 
 const SERVICE_KEY = 'service'
@@ -10,20 +15,23 @@ const SERVICE_NAME_KEY = 'service.name'
  * external usage and acting accordingly.
  */
 class PublicSpan {
-  // A WeakMap cache ensures the same wrapper instance is returned for the same
-  // underlying span, so reference equality checks (===) in user code remain stable.
-  static #cache = new WeakMap()
-
   constructor (span) {
+    this._span = span
+  }
+
+  static wrap (span) {
     if (span instanceof PublicSpan) {
       return span
     }
-    const cached = PublicSpan.#cache.get(span)
+    const cached = cache.get(span)
     if (cached !== undefined) {
       return cached
     }
-    this._span = span
-    PublicSpan.#cache.set(span, this)
+    const wrapper = new PublicSpan(span)
+    try {
+      cache.set(span, wrapper)
+    } catch {}
+    return wrapper
   }
 
   setTag (key, value) {

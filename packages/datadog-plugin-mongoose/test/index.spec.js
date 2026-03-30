@@ -80,7 +80,7 @@ describe('Plugin', () => {
 
         return tracer.scope().activate(span, () => {
           return kitty.save().then(() => {
-            assert.strictEqual(tracer.scope().active()._span, span)
+            assert.strictEqual(tracer.scope().active(), span)
           })
         })
       })
@@ -94,7 +94,7 @@ describe('Plugin', () => {
           tracer.scope().activate(span, () => {
             Cat.find({ name: 'Zildjian' }).exec(() => {
               try {
-                assert.strictEqual(tracer.scope().active()._span, span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -114,7 +114,7 @@ describe('Plugin', () => {
             )
             Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec(() => {
               try {
-                assert.strictEqual(tracer.scope().active()._span, span)
+                assert.strictEqual(tracer.scope().active(), span)
                 done()
               } catch (e) {
                 done(e)
@@ -134,7 +134,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return promise.then(() => {
-              assert.strictEqual(tracer.scope().active()._span, span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })
@@ -146,7 +146,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return Cat.find({ name: 'Zildjian' }).exec().then(() => {
-              assert.strictEqual(tracer.scope().active()._span, span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })
@@ -158,7 +158,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, () => {
             return Cat.aggregate([{ $match: { name: 'Zildjian' } }]).exec().then(() => {
-              assert.strictEqual(tracer.scope().active()._span, span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
         })

@@ -108,7 +108,7 @@ describe('Plugin', () => {
             const span = tracer.startSpan('test')
             return tracer.scope().activate(span, async () => {
               await connection.execute(dbQuery)
-              assert.strictEqual(tracer.scope().active()._span, span)
+              assert.strictEqual(tracer.scope().active(), span)
             })
           })
 
@@ -135,7 +135,7 @@ describe('Plugin', () => {
             tracer.scope().activate(span, () => {
               connection.execute(dbQuery, () => {
                 try {
-                  assert.strictEqual(tracer.scope().active()._span, span)
+                  assert.strictEqual(tracer.scope().active(), span)
                 } catch (e) {
                   return done(e)
                 }

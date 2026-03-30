@@ -60,7 +60,7 @@ describe('Plugin', () => {
 
           return tracer.scope().activate(span, async () => {
             await redis.get('foo')
-            assert.strictEqual(tracer.scope().active()._span, span)
+            assert.strictEqual(tracer.scope().active(), span)
           })
         })
 
