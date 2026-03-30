@@ -125,7 +125,7 @@ describe('OTel Tracer', () => {
 
     otelTracer.startActiveSpan('name', (span) => {
       assert.ok(span instanceof Span)
-      assert.strictEqual(span._ddSpan, tracer.scope().active())
+      assert.strictEqual(span._ddSpan, tracer.scope().active()._span)
     })
   })
 
