@@ -46,6 +46,7 @@ describe('Plugin', () => {
         let connection
 
         afterEach((done) => {
+          if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
             agent.close().then(done)
           })
@@ -232,8 +233,8 @@ describe('Plugin', () => {
           let connection
 
           afterEach(async () => {
-            await connection.end()
-            await agent.close()
+            if (connection) await connection.end()
+            await agent.close({ ritmReset: false })
           })
 
           beforeEach(async () => {
@@ -361,7 +362,7 @@ describe('Plugin', () => {
           })
 
           it('should handle errors', async () => {
-            const queryPromise = connection.query('SELECT * FROM definitely_missing_table').catch(() => {})
+            const queryPromise = connection.query('SELECT * FROM definitely_missing_table').catch(() => { })
 
             await Promise.all([
               agent.assertFirstTraceSpan({
@@ -385,8 +386,8 @@ describe('Plugin', () => {
           let connection
 
           afterEach(async () => {
-            await connection.end()
-            await agent.close()
+            if (connection) await connection.end()
+            await agent.close({ ritmReset: false })
           })
 
           beforeEach(async () => {
@@ -426,6 +427,7 @@ describe('Plugin', () => {
         let mariadb
 
         afterEach((done) => {
+          if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
             agent.close().then(done)
           })
@@ -484,8 +486,8 @@ describe('Plugin', () => {
           let mariadb
 
           afterEach(async () => {
-            await connection.end()
-            await agent.close()
+            if (connection) await connection.end()
+            await agent.close({ ritmReset: false })
           })
 
           beforeEach(async () => {
@@ -528,6 +530,7 @@ describe('Plugin', () => {
         let mariadb
 
         afterEach((done) => {
+          if (!connection) return agent.close({ ritmReset: false }).then(done)
           connection.end(() => {
             agent.close().then(done)
           })
@@ -555,7 +558,7 @@ describe('Plugin', () => {
         })
 
         withNamingSchema(
-          () => connection.query('SELECT 1 + 1 AS solution', () => {}),
+          () => connection.query('SELECT 1 + 1 AS solution', () => { }),
           {
             v0: {
               opName: 'mariadb.query',
@@ -579,7 +582,7 @@ describe('Plugin', () => {
             done()
           })
 
-          connection.query('SELECT 1 + 1 AS solution', () => {})
+          connection.query('SELECT 1 + 1 AS solution', () => { })
         })
       })
 
@@ -590,8 +593,8 @@ describe('Plugin', () => {
           let mariadb
 
           afterEach(async () => {
-            await connection.end()
-            await agent.close()
+            if (connection) await connection.end()
+            await agent.close({ ritmReset: false })
           })
 
           beforeEach(async () => {
@@ -640,6 +643,7 @@ describe('Plugin', () => {
         let mariadb
 
         afterEach((done) => {
+          if (!pool) return agent.close({ ritmReset: false }).then(done)
           pool.end(() => {
             agent.close().then(done)
           })
@@ -742,8 +746,8 @@ describe('Plugin', () => {
           let mariadb
 
           afterEach(async () => {
-            await pool.end()
-            await agent.close()
+            if (pool) await pool.end()
+            await agent.close({ ritmReset: false })
           })
 
           beforeEach(async () => {
@@ -806,6 +810,7 @@ describe('Plugin', () => {
         let mariadb
 
         afterEach((done) => {
+          if (!pool) return agent.close({ ritmReset: false }).then(done)
           pool.end(() => {
             agent.close().then(done)
           })
@@ -849,8 +854,8 @@ describe('Plugin', () => {
           let mariadb
 
           afterEach(async () => {
-            await pool.end()
-            await agent.close()
+            if (pool) await pool.end()
+            await agent.close({ ritmReset: false })
           })
 
           beforeEach(async () => {
