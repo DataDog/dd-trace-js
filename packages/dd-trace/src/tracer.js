@@ -61,7 +61,7 @@ class DatadogTracer extends Tracer {
   trace (name, options, fn) {
     options = { childOf: this.scope().active(), ...options }
 
-    const span = PublicSpan.wrap(this.startSpan(name, options))
+    const span = new PublicSpan(this.startSpan(name, options))
 
     addTags(span, options)
 
