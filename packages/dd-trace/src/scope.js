@@ -1,6 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
+const PublicSpan = require('./opentracing/public/span')
 
 // TODO: refactor bind to use shimmer once the new internal tracer lands
 
@@ -9,12 +10,15 @@ const originals = new WeakMap()
 class Scope {
   active () {
     const store = storage('legacy').getStore()
+    const span = (store && store.span) || null
 
-    return (store && store.span) || null
+    return span ? new PublicSpan(span) : null
   }
 
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
+
+    span = span?._span || span
 
     const oldStore = storage('legacy').getStore()
     const newStore = span ? storage('legacy').getStore(span._store) : oldStore
@@ -38,7 +42,7 @@ class Scope {
     if (typeof fn !== 'function') return fn
 
     const scope = this
-    const spanOrActive = this._spanOrActive(span)
+    const spanOrActive = this._spanOrActive(span?._span || span)
 
     const bound = function () {
       return scope.activate(spanOrActive, () => {

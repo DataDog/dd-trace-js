@@ -5,7 +5,6 @@ const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
 const PublicSpan = require('../opentracing/public/span')
-const PublicScope = require('../opentracing/public/scope')
 const { SVC_SRC_KEY } = require('../../src/constants')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
@@ -61,10 +60,7 @@ class NoopProxy {
       }
     }
 
-    const callback = fn.length > 1
-      ? function (span, done) { return fn(PublicSpan.wrap(span), done) }
-      : function (span) { return fn(PublicSpan.wrap(span)) }
-    return this._tracer.trace(name, options, callback)
+    return this._tracer.trace(name, options, fn)
   }
 
   wrap (name, options, fn) {
@@ -97,7 +93,7 @@ class NoopProxy {
         [SVC_SRC_KEY]: 'm',
       }
     }
-    return PublicSpan.wrap(this._tracer.startSpan.apply(this._tracer, arguments))
+    return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 
   inject () {
@@ -109,7 +105,7 @@ class NoopProxy {
   }
 
   scope () {
-    return new PublicScope(this._tracer.scope.apply(this._tracer, arguments))
+    return this._tracer.scope.apply(this._tracer, arguments)
   }
 
   getRumData () {

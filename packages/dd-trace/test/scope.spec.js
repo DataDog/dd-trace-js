@@ -22,6 +22,14 @@ describe('Scope', () => {
     it('should return null by default', () => {
       assert.strictEqual(scope.active(), null)
     })
+
+    it('should return a PublicSpan wrapping the active span', () => {
+      scope.activate(span, () => {
+        const active = scope.active()
+        assert.notStrictEqual(active, span)
+        assert.strictEqual(active._span, span)
+      })
+    })
   })
 
   describe('activate()', () => {
@@ -45,16 +53,25 @@ describe('Scope', () => {
       assert.strictEqual(scope.active(), null)
 
       scope.activate(span, () => {
-        assert.strictEqual(scope.active(), span)
+        assert.strictEqual(scope.active()._span, span)
       })
 
       assert.strictEqual(scope.active(), null)
     })
 
+    it('should unwrap a PublicSpan before activating', () => {
+      scope.activate(span, () => {
+        const publicSpan = scope.active()
+        scope.activate(publicSpan, () => {
+          assert.strictEqual(scope.active()._span, span)
+        })
+      })
+    })
+
     it('should persist through setTimeout', done => {
       scope.activate(span, () => {
         setTimeout(() => {
-          assert.strictEqual(scope.active(), span)
+          assert.strictEqual(scope.active()?._span, span)
           done()
         }, 0)
       })
@@ -63,7 +80,7 @@ describe('Scope', () => {
     it('should persist through setImmediate', done => {
       scope.activate(span, () => {
         setImmediate(() => {
-          assert.strictEqual(scope.active(), span)
+          assert.strictEqual(scope.active()?._span, span)
           done()
         }, 0)
       })
@@ -74,7 +91,7 @@ describe('Scope', () => {
         let shouldReturn = false
 
         const timer = setInterval(() => {
-          assert.strictEqual(scope.active(), span)
+          assert.strictEqual(scope.active()?._span, span)
 
           if (shouldReturn) {
             clearInterval(timer)
@@ -89,7 +106,7 @@ describe('Scope', () => {
     it('should persist through process.nextTick', done => {
       scope.activate(span, () => {
         process.nextTick(() => {
-          assert.strictEqual(scope.active(), span)
+          assert.strictEqual(scope.active()?._span, span)
           done()
         }, 0)
       })
@@ -100,7 +117,7 @@ describe('Scope', () => {
 
       return scope.activate(span, () => {
         return promise.then(() => {
-          assert.strictEqual(scope.active(), span)
+          assert.strictEqual(scope.active()?._span, span)
         })
       })
     })
@@ -108,7 +125,7 @@ describe('Scope', () => {
     it('should handle concurrency', done => {
       scope.activate(span, () => {
         setImmediate(() => {
-          assert.strictEqual(scope.active(), span)
+          assert.strictEqual(scope.active()?._span, span)
           done()
         })
       })
@@ -135,7 +152,7 @@ describe('Scope', () => {
     describe('with a function', () => {
       it('should bind the function to the active span', () => {
         let fn = () => {
-          assert.strictEqual(scope.active(), span)
+          assert.strictEqual(scope.active()?._span, span)
         }
 
         scope.activate(span, () => {
@@ -147,7 +164,7 @@ describe('Scope', () => {
 
       it('should bind the function to the provided span', () => {
         let fn = () => {
-          assert.strictEqual(scope.active(), span)
+          assert.strictEqual(scope.active()?._span, span)
         }
 
         fn = scope.bind(fn, span)
