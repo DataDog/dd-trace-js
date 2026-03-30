@@ -52,6 +52,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_IS_MODIFIED,
   DD_CAPABILITIES_IMPACTED_TESTS,
   VITEST_POOL,
@@ -1340,6 +1341,61 @@ versions.forEach((version) => {
           once(childProcess, 'exit'),
           eventsPromise,
         ])
+      })
+
+      it('tags new tests with dynamic names and logs a warning', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 1 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setKnownTests({ vitest: {} })
+
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const uniqueTests = new Map()
+            for (const test of tests) {
+              if (!uniqueTests.has(test.meta[TEST_NAME])) {
+                uniqueTests.set(test.meta[TEST_NAME], test)
+              }
+            }
+
+            const dynamicTests = [...uniqueTests.values()]
+              .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+            assert.strictEqual(dynamicTests.length, 8)
+
+            dynamicTests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            })
+          }
+        )
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/dynamic-name-test*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        let testOutput = ''
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+        assert.match(testOutput, /detected as new but their names contain dynamic data/)
       })
     })
 
