@@ -243,11 +243,11 @@ describe('Plugin', () => {
           })
 
           it('should run the callback in the parent context', done => {
-            const obj = {}
+            const span = tracer.startSpan('test')
             aerospike.connect(config).then(client => {
-              tracer.scope().activate(obj, () => {
+              tracer.scope().activate(span, () => {
                 client.put(key, { i: 123 }, () => {
-                  assert.strictEqual(tracer.scope().active()._span, obj)
+                  assert.strictEqual(tracer.scope().active()._span, span)
                   client.close(false)
                   done()
                 })

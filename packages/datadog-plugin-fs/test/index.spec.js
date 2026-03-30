@@ -1883,7 +1883,8 @@ describe('Plugin', () => {
         if (name.split('.').reduce(reducer, realFS)) {
           describe(name, () => {
             fn(name, (fs, args, done, withError) => {
-              const span = {}
+              const span = tracer.startSpan('test')
+              span.finish()
               return tracer.scope().activate(span, () => {
                 args.push((err) => {
                   assert.strictEqual(tracer.scope().active()._span, span)
@@ -1902,7 +1903,8 @@ describe('Plugin', () => {
         if (realFS.promises && name in realFS.promises) {
           describe('promises.' + name, () => {
             fn('promises.' + name, (fs, args, done, withError) => {
-              const span = {}
+              const span = tracer.startSpan('test')
+              span.finish()
               return tracer.scope().activate(span, () => {
                 return fs.promises[name].apply(fs.promises, args)
                   .then(() => {

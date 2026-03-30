@@ -57,7 +57,7 @@ describe('Plugin', () => {
         })
 
         it('should run the callback in the parent context', () => {
-          const span = {}
+          const span = tracer.startSpan('test')
 
           return tracer.scope().activate(span, async () => {
             await valkey.get('foo')

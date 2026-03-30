@@ -511,7 +511,7 @@ describe('Plugin', () => {
               .connect(`${protocol}://localhost:${port}`)
               .on('error', done)
 
-            const span = {}
+            const span = tracer.startSpan('test')
 
             tracer.scope().activate(span, () => {
               const req = client.request({ ':path': '/user' })
