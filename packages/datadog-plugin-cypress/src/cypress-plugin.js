@@ -1035,11 +1035,11 @@ class CypressPlugin {
         if (isQuarantinedFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
-
+        const activeSpan = this.activeTestSpan._span || this.activeTestSpan
         const finishedTest = {
           testName,
           testStatus,
-          finishTime: this.activeTestSpan._getTime(), // we store the finish time here
+          finishTime: activeSpan._getTime(), // we store the finish time here
           testSpan: this.activeTestSpan,
           isEfdRetry,
           isAttemptToFix,

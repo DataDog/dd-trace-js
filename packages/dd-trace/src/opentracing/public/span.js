@@ -16,9 +16,6 @@ class PublicSpan {
     this._span = span
   }
 
-  // This is needed for activate()
-  get _store () { return this._span._store }
-
   // A WeakMap cache ensures the same wrapper instance is returned for the same
   // underlying span, so reference equality checks (===) in user code remain stable.
   static wrap (span) {
@@ -71,7 +68,7 @@ for (const method of [
   'addSpanPointer',
   'addEvent',
   'finish',
-  'toString'
+  'toString',
 ]) {
   PublicSpan.prototype[method] = function (...args) {
     const result = this._span[method](...args)
