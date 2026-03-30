@@ -11,7 +11,7 @@ const {
   buildToolCallOutputMessages,
 } = require('../../src/helpers/ai-messages')
 
-describe.only('ai-messages', () => {
+describe('ai-messages', () => {
   describe('convertVercelPromptToMessages', () => {
     it('should return empty array for non-array input', () => {
       assert.deepStrictEqual(convertVercelPromptToMessages(null), [])
