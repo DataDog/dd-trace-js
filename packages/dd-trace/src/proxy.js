@@ -180,7 +180,7 @@ class Tracer extends NoopProxy {
       if (config.profiling.enabled === 'true') {
         this._profilerStarted = this._startProfiler(config)
       } else {
-        this._profilerStarted = Promise.resolve(false)
+        this._profilerStarted = false
         if (config.profiling.enabled === 'auto') {
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
@@ -252,6 +252,7 @@ class Tracer extends NoopProxy {
         'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
         e
       )
+      return false
     }
   }
 
@@ -329,11 +330,11 @@ class Tracer extends NoopProxy {
    * @override
    */
   profilerStarted () {
-    if (!this._profilerStarted) {
+    if (this._profilerStarted === undefined) {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
-    return this._profilerStarted
+    return Promise.resolve(this._profilerStarted)
   }
 
   /**

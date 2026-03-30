@@ -211,7 +211,7 @@ function getHeaders (config) {
     if (typeof header === 'string') {
       const separatorIndex = header.indexOf(':')
       result.push(separatorIndex === -1
-        ? [header, undefined]
+        ? [header.toLowerCase(), undefined]
         : [
             header.slice(0, separatorIndex).toLowerCase(),
             header.slice(separatorIndex + 1),

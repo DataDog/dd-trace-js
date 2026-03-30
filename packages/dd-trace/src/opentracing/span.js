@@ -35,6 +35,7 @@ const integrationCounters = {
 
 const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
+const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
 function getIntegrationCounter (event, integration) {
   const counters = integrationCounters[event]
@@ -399,6 +400,10 @@ class DatadogSpan {
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
   }
 }
 

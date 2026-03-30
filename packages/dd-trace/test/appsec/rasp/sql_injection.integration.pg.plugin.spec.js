@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
 // These test are here and not in the integration tests
 // because they require postgres instance
 describe('RASP - sql_injection - integration', () => {
@@ -35,7 +35,7 @@ describe('RASP - sql_injection - integration', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
