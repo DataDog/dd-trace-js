@@ -103,7 +103,7 @@ benchmark:
       - MAJOR_VERSION: 24
         GROUP: 4
   variables:
-    SPLITS: 4
+    SPLITS: 4 
 
 benchmark-serverless:
   stage: benchmarks
