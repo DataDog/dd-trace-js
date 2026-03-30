@@ -16,7 +16,8 @@ class ContextManager {
   active () {
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
-    const activeSpan = tracer.scope().active()
+    const publicSpan = tracer.scope().active()
+    const activeSpan = publicSpan?._span || publicSpan
 
     const storedSpan = store ? trace.getSpan(store) : null
 
