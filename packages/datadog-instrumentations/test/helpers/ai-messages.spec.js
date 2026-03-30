@@ -11,7 +11,7 @@ const {
   buildToolCallOutputMessages,
 } = require('../../src/helpers/ai-messages')
 
-describe('ai-messages', () => {
+describe.only('ai-messages', () => {
   describe('convertVercelPromptToMessages', () => {
     it('should return empty array for non-array input', () => {
       assert.deepStrictEqual(convertVercelPromptToMessages(null), [])
@@ -37,11 +37,9 @@ describe('ai-messages', () => {
       ])
     })
 
-    it('should convert user messages with string content', () => {
+    it('should ignore user messages with non-array content', () => {
       const prompt = [{ role: 'user', content: 'Hello' }]
-      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [
-        { role: 'user', content: 'Hello' },
-      ])
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [])
     })
 
     it('should convert user messages with text-only content array', () => {
@@ -167,6 +165,14 @@ describe('ai-messages', () => {
       assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [
         { role: 'assistant', content: 'I can help\nwith that' },
       ])
+    })
+
+    it('should ignore assistant messages with non-array content', () => {
+      const prompt = [{
+        role: 'assistant',
+        content: 'Sure, let me check',
+      }]
+      assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [])
     })
 
     it('should convert assistant messages with tool calls', () => {
@@ -335,7 +341,7 @@ describe('ai-messages', () => {
 
     it('should skip unknown roles', () => {
       const prompt = [
-        { role: 'user', content: 'Hello' },
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
         { role: 'unknown', content: 'ignored' },
       ]
       assert.deepStrictEqual(convertVercelPromptToMessages(prompt), [

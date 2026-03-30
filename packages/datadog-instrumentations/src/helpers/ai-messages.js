@@ -47,24 +47,22 @@ function convertVercelPromptToMessages (prompt) {
         break
 
       case 'user': {
-        if (typeof msg.content === 'string') {
-          messages.push({ role: 'user', content: msg.content })
-        } else if (Array.isArray(msg.content)) {
-          const contentParts = []
-          for (const part of msg.content) {
-            if (part.type === 'text') {
-              contentParts.push({ type: 'text', text: part.text })
-            } else if (part.type === 'file' && part.mediaType?.startsWith('image/')) {
-              const converted = convertFilePartToImageUrl(part)
-              if (converted) contentParts.push(converted)
-            }
+        if (!Array.isArray(msg.content)) break
+
+        const contentParts = []
+        for (const part of msg.content) {
+          if (part.type === 'text') {
+            contentParts.push({ type: 'text', text: part.text })
+          } else if (part.type === 'file' && part.mediaType?.startsWith('image/')) {
+            const converted = convertFilePartToImageUrl(part)
+            if (converted) contentParts.push(converted)
           }
-          const hasImages = contentParts.some(p => p.type === 'image_url')
-          if (hasImages) {
-            messages.push({ role: 'user', content: contentParts })
-          } else {
-            messages.push({ role: 'user', content: contentParts.map(p => p.text).join('\n') })
-          }
+        }
+        const hasImages = contentParts.some(p => p.type === 'image_url')
+        if (hasImages) {
+          messages.push({ role: 'user', content: contentParts })
+        } else {
+          messages.push({ role: 'user', content: contentParts.map(p => p.text).join('\n') })
         }
         break
       }
@@ -72,25 +70,25 @@ function convertVercelPromptToMessages (prompt) {
       case 'assistant': {
         const textParts = []
         const toolCalls = []
-        if (Array.isArray(msg.content)) {
-          for (const part of msg.content) {
-            if (part.type === 'text') {
-              textParts.push(part.text)
-            } else if (part.type === 'tool-call') {
-              const args = part.args ?? part.input
-              toolCalls.push({
-                id: part.toolCallId,
-                function: {
-                  name: part.toolName,
-                  arguments: typeof args === 'string' ? args : JSON.stringify(args),
-                },
-              })
-            }
+        if (!Array.isArray(msg.content)) break
+
+        for (const part of msg.content) {
+          if (part.type === 'text') {
+            textParts.push(part.text)
+          } else if (part.type === 'tool-call') {
+            const args = part.args ?? part.input
+            toolCalls.push({
+              id: part.toolCallId,
+              function: {
+                name: part.toolName,
+                arguments: typeof args === 'string' ? args : JSON.stringify(args),
+              },
+            })
           }
         }
         if (toolCalls.length > 0) {
           messages.push({ role: 'assistant', tool_calls: toolCalls })
-        } else {
+        } else if (textParts.length > 0) {
           messages.push({ role: 'assistant', content: textParts.join('\n') })
         }
         break
