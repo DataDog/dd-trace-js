@@ -17,7 +17,7 @@ describe('Appsec SDK utils', () => {
 
   describe('getRootSpan', () => {
     it('should return root span if there are no childs', () => {
-      tracer.trace('parent', { }, parent => {
+      tracer.trace('parent', {}, parent => {
         const root = getRootSpan()
 
         assert.strictEqual(root, parent)
@@ -49,7 +49,7 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
 
       tracer.trace('child1.1', { childOf }, child11 => {
-        tracer.trace('child1.1.2', { childOf: child11 }, child112 => {})
+        tracer.trace('child1.1.2', { childOf: child11 }, child112 => { })
       })
       tracer.trace('child1.2', { childOf }, child12 => {
         const root = getRootSpan()
@@ -98,7 +98,7 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
       childOf.setTag('_inferred_span', {})
 
-      tracer.trace('child1.1', { childOf }, child11 => {})
+      tracer.trace('child1.1', { childOf }, child11 => { })
       tracer.trace('child1.2', { childOf }, child12 => {
         tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
           const root = getRootSpan()
@@ -111,7 +111,7 @@ describe('Appsec SDK utils', () => {
     it('should return root span discarding inferred spans if it is direct parent (mutiple childs)', () => {
       const childOf = tracer.startSpan('parent')
 
-      tracer.trace('child1.1', { childOf }, child11 => {})
+      tracer.trace('child1.1', { childOf }, child11 => { })
       tracer.trace('child1.2', { childOf }, child12 => {
         child12.setTag('_inferred_span', {})
 
@@ -126,7 +126,7 @@ describe('Appsec SDK utils', () => {
     it('should return root span discarding multiple inferred spans', () => {
       const childOf = tracer.startSpan('parent')
 
-      tracer.trace('child1.1', { childOf }, child11 => {})
+      tracer.trace('child1.1', { childOf }, child11 => { })
       tracer.trace('child1.2', { childOf }, child12 => {
         child12.setTag('_inferred_span', {})
 
@@ -146,7 +146,7 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
       childOf.setTag('_inferred_span', {})
 
-      tracer.trace('child1.1', { childOf }, child11 => {})
+      tracer.trace('child1.1', { childOf }, child11 => { })
       tracer.trace('child1.2', { childOf }, child12 => {
         child12.setTag('_inferred_span', {})
 

@@ -9,6 +9,7 @@ const {
   ERROR_TYPE,
   ERROR_STACK,
 } = require('../constants')
+const PublicSpan = require('../opentracing/public/span')
 const {
   SPAN_KIND,
   MODEL_NAME,
@@ -34,6 +35,19 @@ const {
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
+
+/**
+ * Resolves the tagMap key for a raw span from the finish channel.
+ * Plugin-instrumented spans are registered with raw Span instances,
+ * while SDK spans are registered with PublicSpan wrappers.
+ * @param {import('../opentracing/span')} span - raw span from the finish channel
+ * @returns {import('../opentracing/span') | PublicSpan | undefined}
+ */
+function resolveTagMapKey (span) {
+  if (LLMObsTagger.tagMap.has(span)) return span
+  const wrapped = PublicSpan.wrap(span)
+  if (LLMObsTagger.tagMap.has(wrapped)) return wrapped
+}
 
 class LLMObservabilitySpan {
   constructor () {
@@ -73,15 +87,19 @@ class LLMObsSpanProcessor {
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
   process (span) {
     if (!this.#config.llmobs.enabled) return
+    // The finish channel always publishes raw Span instances, but the tagMap
+    // may be keyed by either a raw Span (plugin-instrumented) or a PublicSpan
+    // wrapper (SDK-instrumented). Resolve to whichever key is present.
+    const tagMapKey = resolveTagMapKey(span)
     // if the span is not in our private tagger map, it is not an llmobs span
-    if (!LLMObsTagger.tagMap.has(span)) return
+    if (!tagMapKey) return
 
     try {
-      const formattedEvent = this.format(span)
-      telemetry.incrementLLMObsSpanFinishedCount(span)
+      const formattedEvent = this.format(span, tagMapKey)
+      telemetry.incrementLLMObsSpanFinishedCount(tagMapKey)
       if (formattedEvent == null) return
 
-      const mlObsTags = LLMObsTagger.tagMap.get(span)
+      const mlObsTags = LLMObsTagger.tagMap.get(tagMapKey)
       const routing = {
         apiKey: mlObsTags[ROUTING_API_KEY],
         site: mlObsTags[ROUTING_SITE],
@@ -99,12 +117,13 @@ class LLMObsSpanProcessor {
     }
   }
 
-  format (span) {
+  format (span, tagMapKey) {
+    if (!tagMapKey) tagMapKey = resolveTagMapKey(span)
     const llmObsSpan = new LLMObservabilitySpan()
     let inputType, outputType
 
     const spanTags = span.context()._tags
-    const mlObsTags = LLMObsTagger.tagMap.get(span)
+    const mlObsTags = LLMObsTagger.tagMap.get(tagMapKey)
 
     const spanKind = mlObsTags[SPAN_KIND]
 
@@ -156,7 +175,7 @@ class LLMObsSpanProcessor {
 
     const name = mlObsTags[NAME] || span._name
 
-    const tags = this.#getTags(span, mlApp, sessionId, error)
+    const tags = this.#getTags(tagMapKey, mlApp, sessionId, error)
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
