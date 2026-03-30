@@ -252,30 +252,22 @@ function getFinalStatus ({
   isLastAttemptToFix,
   attemptToFixPassed,
   isQuarantined,
+  isDisabled,
 }) {
-  // If the test is quarantined, regardless of its actual execution result or active retry features,
+  // Note that intermediate executions DO NOT report a final status tag
+
+  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
   // the final status of its last execution should be reported as 'skip'.
-  if (isQuarantined) {
+  if (isQuarantined || isDisabled) {
     return 'skip'
   }
 
   const isAtrActive = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry
-  const noRetryFeatureActive = !isAtrActive && !isEfdRetry && !isAttemptToFix
-  const isFinalExecution = noRetryFeatureActive ||
-    (isAtrActive && isLastAtrAttempt) ||
-    (isEfdRetry && isLastEfdRetry) ||
-    (isAttemptToFix && isLastAttemptToFix)
 
   // When no retry feature is active, every execution is final
-  if (noRetryFeatureActive) {
+  if (!isAtrActive && !isEfdRetry && !isAttemptToFix) {
     return status
   }
-
-  // Intermediate executions DO NOT report a final status tag
-  if (!isFinalExecution) {
-    return
-  }
-
   if (isAtrActive && isLastAtrAttempt) {
     return hasFailedAllRetries ? 'fail' : 'pass'
   }
@@ -351,7 +343,7 @@ function getOnTestEndHandler (config) {
       !test._ddIsEfdRetry
 
     const { isFlakyTestRetriesEnabled } = config
-    const { _ddIsAttemptToFix, _ddIsQuarantined } = test
+    const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
 
     const finalStatus = getFinalStatus({
       status,
@@ -364,9 +356,10 @@ function getOnTestEndHandler (config) {
       isLastAttemptToFix: isLastAttempt,
       attemptToFixPassed,
       isQuarantined: _ddIsQuarantined,
+      isDisabled: _ddIsDisabled,
     })
 
-    // if there are afterEach to be run, we don't finish the test yet.
+    // If there are afterEach to be run, we don't finish the test yet.
     // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
     // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
     // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler

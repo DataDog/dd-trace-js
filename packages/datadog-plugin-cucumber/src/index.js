@@ -33,6 +33,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
@@ -303,6 +304,7 @@ class CucumberPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      finalStatus,
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
@@ -363,6 +365,10 @@ class CucumberPlugin extends CiPlugin {
           span.setTag(TEST_IS_RETRY, 'true')
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
+      }
+
+      if (finalStatus && !isStep) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
       }
 
       const telemetryTags = this.getTestTelemetryTags(span)
