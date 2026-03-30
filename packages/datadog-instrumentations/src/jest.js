@@ -1793,7 +1793,12 @@ addHook({
 
 function onMessageWrapper (onMessage) {
   return function () {
-    const [code, data] = arguments[0]
+    const response = arguments[0]
+    if (!Array.isArray(response)) {
+      return onMessage.apply(this, arguments)
+    }
+
+    const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
       workerReportTraceCh.publish(data)
       return

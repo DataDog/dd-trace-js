@@ -998,6 +998,43 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('when jest is using worker threads', () => {
+    onlyLatestIt('ignores non-array worker-thread messages', (done) => {
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-plugin-tests/jest-worker-message',
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      Promise.all([
+        once(childProcess, 'message'),
+        receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000),
+      ]).then(([, eventsRequests]) => {
+        const tests = eventsRequests.map(({ payload }) => payload)
+          .flatMap(({ events }) => events)
+          .filter(event => event.type === 'test')
+          .map(event => event.content)
+
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(
+          tests[0].meta[TEST_NAME],
+          'jest-worker-message passes after sending a non-array worker message'
+        )
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        assert.doesNotMatch(testOutput, /TypeError/)
+        done()
+      }).catch(done)
+    })
+
     onlyLatestIt('reports tests when using agentless', (done) => {
       childProcess = fork(testFile, {
         cwd,
