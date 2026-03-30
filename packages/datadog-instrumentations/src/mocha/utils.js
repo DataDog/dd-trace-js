@@ -1,6 +1,6 @@
 'use strict'
 
-const { getTestSuitePath } = require('../../../dd-trace/src/plugins/util/test')
+const { getTestSuitePath, DYNAMIC_NAME_RE } = require('../../../dd-trace/src/plugins/util/test')
 const { channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -23,6 +23,7 @@ const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const newTestsWithDynamicNames = new Set()
 const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
 const testsStatuses = new Map()
@@ -221,6 +222,10 @@ function getOnTestHandler (isMain) {
     testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
     testInfo.isModified = isModified
+    testInfo.hasDynamicName = isNew && DYNAMIC_NAME_RE.test(test.fullTitle())
+    if (testInfo.hasDynamicName) {
+      newTestsWithDynamicNames.add(`${getTestSuitePath(test.file, process.cwd())} › ${test.fullTitle()}`)
+    }
     // We want to store the result of the new tests
     if (isNew) {
       const testFullName = getTestFullName(test)
@@ -519,6 +524,7 @@ module.exports = {
   testFileToSuiteCtx,
   getRunTestsWrapper,
   newTests,
+  newTestsWithDynamicNames,
   testsQuarantined,
   testsAttemptToFix,
   testsStatuses,

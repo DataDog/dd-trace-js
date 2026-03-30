@@ -88,7 +88,23 @@ const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
+const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
 const CI_APP_ORIGIN = 'ciapp-test'
+
+// Matches patterns that are almost certainly runtime-generated values in test names:
+// - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
+// - UUIDs (8-4-4-4-12 hex)
+// - ISO 8601 dates (2024-03-23) or date-times (2024-03-23T14:30)
+// - Random ports on localhost, 127.0.0.1, or 0.0.0.0
+// - Math.random() float values (10+ decimal digits after 0.)
+const DYNAMIC_NAME_RE = new RegExp(
+  String.raw`\b1[6-9]\d{8,11}\b|` +
+  String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|` +
+  String.raw`\b\d{4}-\d{2}-\d{2}|` +
+  String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{4,5}\b|` +
+  String.raw`\b0\.\d{10,}`,
+  'i'
+)
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const JEST_DISPLAY_NAME = 'test.jest.display_name'
@@ -260,6 +276,7 @@ module.exports = {
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
+  TEST_HAS_DYNAMIC_NAME,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -337,6 +354,9 @@ module.exports = {
   POSSIBLE_BASE_BRANCHES,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
+  logDynamicNamesWarning,
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -1176,6 +1196,62 @@ function getModifiedFilesFromDiff (diff) {
     return null
   }
   return result
+}
+
+/**
+ * Scans serialized worker trace payloads for tests tagged with TEST_HAS_DYNAMIC_NAME
+ * and populates the provided Set. Silently ignores parse errors.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {Set<string>} newTestsWithDynamicNames - Set to populate with "suite › name" strings
+ */
+function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
+  try {
+    const traces = JSON.parse(data)
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (span.meta?.[TEST_HAS_DYNAMIC_NAME] === 'true') {
+          const suite = span.meta[TEST_SUITE]
+          const name = span.meta[TEST_NAME]
+          if (suite && name) {
+            newTestsWithDynamicNames.add(`${suite} › ${name}`)
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+}
+
+/**
+ * Logs a "Datadog Test Optimization" warning about new tests with dynamic names.
+ * Clears the Set after logging. No-op if the Set is empty.
+ *
+ * @param {Set<string>} newTestsWithDynamicNames
+ */
+function logDynamicNamesWarning (newTestsWithDynamicNames) {
+  if (newTestsWithDynamicNames.size === 0) return
+
+  const MAX_SHOWN = 10
+  const names = [...newTestsWithDynamicNames]
+  const shown = names.slice(0, MAX_SHOWN)
+  const more = names.length - shown.length
+  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
+  const nameList = shown.map(n => `  • ${n}`).join('\n') + moreSuffix
+
+  const line = '-'.repeat(50)
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(
+    `\n${line}\nDatadog Test Optimization\n${line}\n` +
+    `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+    'dynamic data (timestamps, UUIDs, etc.).\n' +
+    'Tests with changing names are always treated as new on every run, ' +
+    'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
+    'Consider using stable, deterministic test names.\n\n' +
+    `${nameList}\n`
+  )
+  newTestsWithDynamicNames.clear()
 }
 
 function isModifiedTest (testPath, testStartLine, testEndLine, modifiedFiles, testFramework) {
