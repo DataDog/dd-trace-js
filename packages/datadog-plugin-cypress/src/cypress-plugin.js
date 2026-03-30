@@ -113,7 +113,7 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
   skipped: 'skip',
 }
 
-function getSessionStatus (summary) {
+function getSessionStatus(summary) {
   if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
     return 'fail'
   }
@@ -123,7 +123,7 @@ function getSessionStatus (summary) {
   return 'pass'
 }
 
-function getCypressVersion (details) {
+function getCypressVersion(details) {
   if (details?.cypressVersion) {
     return details.cypressVersion
   }
@@ -133,21 +133,21 @@ function getCypressVersion (details) {
   return ''
 }
 
-function getRootDir (details) {
+function getRootDir(details) {
   if (details?.config) {
     return details.config.projectRoot || details.config.repoRoot || process.cwd()
   }
   return process.cwd()
 }
 
-function getCypressCommand (details) {
+function getCypressCommand(details) {
   if (!details) {
     return TEST_FRAMEWORK_NAME
   }
   return `${TEST_FRAMEWORK_NAME} ${details.specPattern || ''}`
 }
 
-function getIsTestIsolationEnabled (cypressConfig) {
+function getIsTestIsolationEnabled(cypressConfig) {
   if (!cypressConfig) {
     // If we can't read testIsolation config parameter, we default to allowing retries
     return true
@@ -155,7 +155,7 @@ function getIsTestIsolationEnabled (cypressConfig) {
   return cypressConfig.testIsolation === undefined ? true : cypressConfig.testIsolation
 }
 
-function getLibraryConfiguration (tracer, testConfiguration) {
+function getLibraryConfiguration(tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getLibraryConfiguration) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
@@ -167,7 +167,7 @@ function getLibraryConfiguration (tracer, testConfiguration) {
   })
 }
 
-function getSkippableTests (tracer, testConfiguration) {
+function getSkippableTests(tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getSkippableSuites) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
@@ -182,7 +182,7 @@ function getSkippableTests (tracer, testConfiguration) {
   })
 }
 
-function getKnownTests (tracer, testConfiguration) {
+function getKnownTests(tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getKnownTests) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
@@ -196,7 +196,7 @@ function getKnownTests (tracer, testConfiguration) {
   })
 }
 
-function getTestManagementTests (tracer, testConfiguration) {
+function getTestManagementTests(tracer, testConfiguration) {
   return new Promise(resolve => {
     if (!tracer._tracer._exporter?.getTestManagementTests) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
@@ -210,7 +210,7 @@ function getTestManagementTests (tracer, testConfiguration) {
   })
 }
 
-function getModifiedFiles (testEnvironmentMetadata) {
+function getModifiedFiles(testEnvironmentMetadata) {
   const {
     [GIT_PULL_REQUEST_BASE_BRANCH]: pullRequestBaseBranch,
     [GIT_PULL_REQUEST_BASE_BRANCH_SHA]: pullRequestBaseBranchSha,
@@ -230,7 +230,7 @@ function getModifiedFiles (testEnvironmentMetadata) {
   throw new Error('Modified tests could not be retrieved')
 }
 
-function getSuiteStatus (suiteStats) {
+function getSuiteStatus(suiteStats) {
   if (!suiteStats) {
     return 'skip'
   }
@@ -270,7 +270,7 @@ class CypressPlugin {
   modifiedFiles = []
   newTestsWithDynamicNames = new Set()
 
-  constructor () {
+  constructor() {
     const {
       [GIT_REPOSITORY_URL]: repositoryUrl,
       [GIT_COMMIT_SHA]: sha,
@@ -317,7 +317,7 @@ class CypressPlugin {
    *
    * @returns {void}
    */
-  resetRunState () {
+  resetRunState() {
     this._isInit = false
     this.finishedTestsByFile = {}
     this.testStatuses = {}
@@ -364,14 +364,14 @@ class CypressPlugin {
    *
    * @returns {number}
    */
-  _now () {
+  _now() {
     return this._timeOrigin + performance.now() - this._perfOrigin
   }
 
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
-  init (tracer, cypressConfig) {
+  init(tracer, cypressConfig) {
     this.resetRunState()
     this._isInit = true
     this.tracer = tracer
@@ -435,7 +435,7 @@ class CypressPlugin {
     return this.libraryConfigurationPromise
   }
 
-  getIsTestModified (testSuiteAbsolutePath) {
+  getIsTestModified(testSuiteAbsolutePath) {
     const relativeTestSuitePath = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
     if (!this.modifiedFiles) {
       return false
@@ -447,18 +447,18 @@ class CypressPlugin {
     return lines.length > 0
   }
 
-  getTestSuiteProperties (testSuite) {
+  getTestSuiteProperties(testSuite) {
     return this.testManagementTests?.cypress?.suites?.[testSuite]?.tests || {}
   }
 
-  getTestProperties (testSuite, testName) {
+  getTestProperties(testSuite, testName) {
     const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
       this.getTestSuiteProperties(testSuite)?.[testName]?.properties || {}
 
     return { isAttemptToFix, isDisabled, isQuarantined }
   }
 
-  getTestSuiteSpan ({ testSuite, testSuiteAbsolutePath }) {
+  getTestSuiteSpan({ testSuite, testSuiteAbsolutePath }) {
     const testSuiteSpanMetadata =
       getTestSuiteCommonTags(this.command, this.frameworkVersion, testSuite, TEST_FRAMEWORK_NAME)
 
@@ -487,7 +487,7 @@ class CypressPlugin {
     })
   }
 
-  getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
+  getTestSpan({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
     const testSuiteTags = {
       [TEST_COMMAND]: this.command,
       [TEST_MODULE]: TEST_FRAMEWORK_NAME,
@@ -559,11 +559,11 @@ class CypressPlugin {
    * Returns request error tags from the test session span for propagation to test spans.
    * @returns {Record<string, string>}
    */
-  getSessionRequestErrorTags () {
+  getSessionRequestErrorTags() {
     return getSessionRequestErrorTags(this.testSessionSpan)
   }
 
-  ciVisEvent (name, testLevel, tags = {}) {
+  ciVisEvent(name, testLevel, tags = {}) {
     incrementCountMetric(name, {
       testLevel,
       testFramework: 'cypress',
@@ -572,7 +572,7 @@ class CypressPlugin {
     })
   }
 
-  async beforeRun (details) {
+  async beforeRun(details) {
     // We need to make sure that the plugin is initialized before running the tests
     // This is for the case where the user has not returned the promise from the init function
     await this.libraryConfigurationPromise
@@ -720,7 +720,7 @@ class CypressPlugin {
     return details
   }
 
-  afterRun (suiteStats) {
+  afterRun(suiteStats) {
     if (!this._isInit) {
       log.warn('Attemping to call afterRun without initializating the plugin first')
       return
@@ -788,7 +788,7 @@ class CypressPlugin {
     })
   }
 
-  afterSpec (spec, results) {
+  afterSpec(spec, results) {
     const { tests, stats } = results || {}
     const cypressTests = tests || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
@@ -927,7 +927,7 @@ class CypressPlugin {
     }
   }
 
-  getTasks () {
+  getTasks() {
     return {
       'dd:testSuiteStart': ({ testSuite, testSuiteAbsolutePath }) => {
         const suitePayload = {
@@ -1123,7 +1123,7 @@ class CypressPlugin {
         if (isQuarantinedFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
-
+        const activeSpan = this.activeTestSpan._span || this.activeTestSpan
         const finishedTest = {
           testName,
           testStatus,
@@ -1166,7 +1166,7 @@ class CypressPlugin {
     }
   }
 
-  getTestCodeOwners ({ testSuite, testSourceFile }) {
+  getTestCodeOwners({ testSuite, testSourceFile }) {
     if (testSourceFile) {
       return getCodeOwnersForFilename(testSourceFile, this.codeOwnersEntries)
     }
