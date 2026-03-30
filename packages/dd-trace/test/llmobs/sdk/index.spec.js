@@ -710,7 +710,7 @@ describe('sdk', () => {
 
           function outerLLMObs () {
             outerLLMObsSpan = llmobs._active()
-            assert.strictEqual(outerLLMObsSpan, tracer.scope().active()._span)
+            assert.strictEqual(outerLLMObsSpan, tracer.scope().active())
 
             apmWrapped()
           }
@@ -720,7 +720,7 @@ describe('sdk', () => {
           }
           function innerLLMObs () {
             innerLLMObsSpan = llmobs._active()
-            assert.strictEqual(innerLLMObsSpan, tracer.scope().active()._span)
+            assert.strictEqual(innerLLMObsSpan, tracer.scope().active())
             assert.strictEqual(
               LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.llmobs_parent_id'],
               outerLLMObsSpan.context().toSpanId()
@@ -768,12 +768,12 @@ describe('sdk', () => {
           function outer () {
             outerSpan = llmobs._active()
             wrappedInner1(() => {})
-            assert.strictEqual(outerSpan, tracer.scope().active()._span)
+            assert.strictEqual(outerSpan, tracer.scope().active())
             wrappedInner2()
           }
 
           function inner1 (cb) {
-            const inner = tracer.scope().active()._span
+            const inner = tracer.scope().active()
             assert.strictEqual(llmobs._active(), inner)
             assert.strictEqual(
               LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'],
@@ -783,7 +783,7 @@ describe('sdk', () => {
           }
 
           function inner2 () {
-            const inner = tracer.scope().active()._span
+            const inner = tracer.scope().active()
             assert.strictEqual(llmobs._active(), inner)
             assert.strictEqual(
               LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'],
