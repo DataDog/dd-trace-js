@@ -6,6 +6,7 @@
 const cache = new WeakMap()
 
 const { SVC_SRC_KEY } = require('../../constants')
+const DatadogSpan = require('../span')
 
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
@@ -52,25 +53,11 @@ class PublicSpan {
 }
 
 // Whenever a method needs to be modified to have a unique public behavior, it
-// should be removed from this list.
-for (const method of [
-  'context',
-  'tracer',
-  'setOperationName',
-  'setBaggageItem',
-  'getBaggageItem',
-  'getAllBaggageItems',
-  'removeBaggageItem',
-  'removeAllBaggageItems',
-  'log',
-  'logEvent',
-  'addLink',
-  'addLinks',
-  'addSpanPointer',
-  'addEvent',
-  'finish',
-  'toString',
-]) {
+// should be implemented on `PublicSpan` directly so it is skipped here.
+for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
+  if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
+    continue
+  }
   PublicSpan.prototype[method] = function (...args) {
     const result = this._span[method](...args)
     // always return wrapper span when the result is the span itself
