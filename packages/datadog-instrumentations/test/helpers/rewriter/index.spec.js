@@ -261,6 +261,18 @@ describe('check-require-cache', () => {
           },
           channelName: 'trace_class_private_method',
         },
+        {
+          module: {
+            name: 'test-trace-this-property',
+            versionRange: '>=0.1',
+            filePath: 'index.js',
+          },
+          functionQuery: {
+            thisPropertyName: 'test',
+            kind: 'Sync',
+          },
+          channelName: 'test_invoke',
+        },
       ],
     })
   })
@@ -525,5 +537,18 @@ describe('check-require-cache', () => {
     assert.match(content, /\bimport\s+.+\s+from\s+"/)
     assert.match(content, /tr_ch_apm_tracingChannel/)
     assert.doesNotMatch(content, /require\("/)
+  })
+
+  it('should auto instrument arrow function instance properties (thisPropertyName)', done => {
+    const { test } = compile('test-trace-this-property')
+
+    subs = {
+      start: () => setImmediate(done),
+    }
+
+    ch = tracingChannel('orchestrion:test-trace-this-property:test_invoke')
+    ch.subscribe(subs)
+
+    test()
   })
 })
