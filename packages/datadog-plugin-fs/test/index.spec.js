@@ -1884,6 +1884,7 @@ describe('Plugin', () => {
           describe(name, () => {
             fn(name, (fs, args, done, withError) => {
               const span = tracer.startSpan('test')
+              span.finish()
               return tracer.scope().activate(span, () => {
                 args.push((err) => {
                   assert.strictEqual(tracer.scope().active(), span)
@@ -1903,6 +1904,7 @@ describe('Plugin', () => {
           describe('promises.' + name, () => {
             fn('promises.' + name, (fs, args, done, withError) => {
               const span = tracer.startSpan('test')
+              span.finish()
               return tracer.scope().activate(span, () => {
                 return fs.promises[name].apply(fs.promises, args)
                   .then(() => {
