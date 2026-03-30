@@ -360,10 +360,10 @@ moduleTypes.forEach(({
     it('custom after:spec and after:run handlers are chained with dd-trace instrumentation', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-          const ciVisPayloads = payloads.filter(({ payload }) => payload.metadata?.test)
-          const events = ciVisPayloads.flatMap(({ payload }) => payload.events)
+          const events = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
           const passedTest = events.find(event =>
-            event.type === 'test' &&
             event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
           )
           assertObjectContains(passedTest?.content, {
