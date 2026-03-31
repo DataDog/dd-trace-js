@@ -704,7 +704,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             error: formatJestError(originalError),
             shouldSetProbe,
             promises,
-            finalStatus,
           })
         }
 
