@@ -11,18 +11,18 @@ const finishCh = channel('apm:mariadb:query:finish')
 const errorCh = channel('apm:mariadb:query:error')
 const skipCh = channel('apm:mariadb:pool:skip')
 
-function wrapCommandStart (start, ctx) {
+function wrapCommandStart(start, ctx) {
   return shimmer.wrapFunction(start, start => function () {
     if (!startCh.hasSubscribers) return start.apply(this, arguments)
 
     const { reject, resolve } = this
-    shimmer.wrap(this, 'resolve', function wrapResolve () {
+    shimmer.wrap(this, 'resolve', function wrapResolve() {
       return function () {
         return finishCh.runStores(ctx, resolve, this, ...arguments)
       }
     })
 
-    shimmer.wrap(this, 'reject', function wrapReject () {
+    shimmer.wrap(this, 'reject', function wrapReject() {
       return function (error) {
         ctx.error = error
 
@@ -36,9 +36,9 @@ function wrapCommandStart (start, ctx) {
   })
 }
 
-function wrapCommand (Command) {
+function wrapCommand(Command) {
   return class extends Command {
-    constructor (...args) {
+    constructor(...args) {
       super(...args)
 
       if (!this.start) return
@@ -52,8 +52,8 @@ function wrapCommand (Command) {
   }
 }
 
-function createWrapQuery (options) {
-  return function wrapQuery (query) {
+function createWrapQuery(options) {
+  return function wrapQuery(query) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
@@ -74,8 +74,8 @@ function createWrapQuery (options) {
   }
 }
 
-function createWrapQueryCallback (options) {
-  return function wrapQuery (query) {
+function createWrapQueryCallback(options) {
+  return function wrapQuery(query) {
     return function (sql) {
       if (!startCh.hasSubscribers) return query.apply(this, arguments)
 
@@ -104,7 +104,7 @@ function createWrapQueryCallback (options) {
   }
 }
 
-function wrapConnection (promiseMethod, Connection) {
+function wrapConnection(promiseMethod, Connection) {
   return function (options) {
     Connection.apply(this, arguments)
 
@@ -113,7 +113,7 @@ function wrapConnection (promiseMethod, Connection) {
   }
 }
 
-function wrapPoolBase (PoolBase) {
+function wrapPoolBase(PoolBase) {
   return function (options, processTask, createConnectionPool, pingPromise) {
     arguments[1] = wrapPoolMethod(processTask)
     arguments[2] = wrapPoolMethod(createConnectionPool)
@@ -127,14 +127,14 @@ function wrapPoolBase (PoolBase) {
 // It's not possible to prevent connection pools from leaking across queries,
 // so instead we just skip instrumentation completely to avoid memory leaks
 // and/or orphan spans.
-function wrapPoolMethod (createConnection) {
+function wrapPoolMethod(createConnection) {
   return function () {
     return skipCh.runStores({}, createConnection, this, ...arguments)
   }
 }
 
-function wrapPoolGetConnectionMethod (getConnection) {
-  return function wrappedGetConnection () {
+function wrapPoolGetConnectionMethod(getConnection) {
+  return function wrappedGetConnection() {
     const cb = arguments[arguments.length - 1]
     if (typeof cb !== 'function') return getConnection.apply(this, arguments)
 
@@ -152,23 +152,30 @@ function wrapPoolGetConnectionMethod (getConnection) {
 
 const name = 'mariadb'
 
-addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'] }, (Query) => {
+addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'], patchDefault: true }, (Query) => {
   return wrapCommand(Query)
 })
 
-addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
+addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'], patchDefault: true }, (Execute) => {
   return wrapCommand(Execute)
 })
 
 // in 3.4.1 getConnection method start to use callbacks instead of promises
-addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
+addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'], patchDefault: true }, (Pool) => {
   shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
 
   return Pool
 })
 
-addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
+// _createConnection was renamed to _createPoolConnection in 3.5.1 alongside the ESM migration
+addHook({ name, file: 'lib/pool.js', versions: ['>=3 <3.5.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, '_createConnection', wrapPoolMethod)
+
+  return Pool
+})
+
+addHook({ name, file: 'lib/pool.js', versions: ['>=3.5.1'], patchDefault: true }, (Pool) => {
+  shimmer.wrap(Pool.prototype, '_createPoolConnection', wrapPoolMethod)
 
   return Pool
 })
