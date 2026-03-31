@@ -5915,6 +5915,86 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         )
       })
 
+      // Regression test: with workerIdleMemoryLimit=0, jest restarts the worker after every suite.
+      // Before the fix, sendWrapper was only applied to the original child process. After restart,
+      // the new child process was not wrapped, so _ddTestManagementTests was never injected.
+      onlyLatestIt('can disable in parallel mode after worker restart', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-disabled-1.js': {
+                tests: {
+                  'disable tests can disable a test': {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+              'ci-visibility/test-management/test-worker-restart-disabled.js': {
+                tests: {
+                  'worker restart disabled tests can disable a test': {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            const disabledTest1 = tests.find(
+              test => test.meta[TEST_NAME] === 'disable tests can disable a test'
+            )
+            const disabledTestRestart = tests.find(
+              test => test.meta[TEST_NAME] === 'worker restart disabled tests can disable a test'
+            )
+
+            // Both tests must be skipped, including the one that runs on a restarted worker
+            assert.strictEqual(disabledTest1.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTest1.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledTest1.meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(disabledTestRestart.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTestRestart.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledTestRestart.meta[TEST_FINAL_STATUS], 'skip')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              // Runs 3 suites with maxWorkers=1 and workerIdleMemoryLimit=0: spacer,
+              // test-disabled-1, and test-worker-restart-disabled. The memory limit forces
+              // the single worker to restart after each suite. By the 3rd suite the child
+              // process has been replaced and its send is no longer wrapped by sendWrapper.
+              TESTS_TO_RUN: 'test-management/test-(disabled-1|worker-restart)',
+              RUN_IN_PARALLEL: 'true',
+              MAX_WORKERS: '1',
+              SHOULD_CHECK_RESULTS: '1',
+              WORKER_IDLE_MEMORY_LIMIT: '0',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
+
       it('sets final_status tag to skip for disabled tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 

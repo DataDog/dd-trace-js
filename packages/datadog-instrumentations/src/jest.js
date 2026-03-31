@@ -99,7 +99,7 @@ const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
-const wrappedWorkers = new WeakSet()
+const wrappedWorkerChannels = new WeakMap()
 // New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
 // Populated in-process for runInBand, and via worker-report:trace for parallel mode.
 const newTestsWithDynamicNames = new Set()
@@ -1902,12 +1902,19 @@ function sendWrapper (send) {
   }
 }
 
+function wrapWorkerChannel (worker) {
+  const workerChannel = worker._child || worker._worker
+  if (!workerChannel) return
+
+  shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
+}
+
 function wrapWorker (worker) {
   // ChildProcessWorker uses _child (child_process), ExperimentalWorker uses _worker (worker_threads)
   const workerChannel = worker._child || worker._worker
   if (!workerChannel) return
 
-  shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
+  wrapWorkerChannel(worker)
   shimmer.wrap(worker, '_onMessage', onMessageWrapper)
   workerChannel.removeAllListeners('message')
   workerChannel.on('message', worker._onMessage.bind(worker))
@@ -1916,9 +1923,19 @@ function wrapWorker (worker) {
 function enqueueWrapper (enqueue) {
   return function () {
     shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
-      if (worker && !wrappedWorkers.has(worker)) {
-        wrapWorker(worker)
-        wrappedWorkers.add(worker)
+      if (worker) {
+        const currentChannel = worker._child || worker._worker
+        const previousChannel = wrappedWorkerChannels.get(worker)
+        if (currentChannel !== previousChannel) {
+          if (previousChannel) {
+            // Worker restarted — only re-wrap the new child's send/postMessage
+            wrapWorkerChannel(worker)
+          } else {
+            // First time seeing this worker — full setup
+            wrapWorker(worker)
+          }
+          wrappedWorkerChannels.set(worker, currentChannel)
+        }
       }
       return onStart.apply(this, arguments)
     })
