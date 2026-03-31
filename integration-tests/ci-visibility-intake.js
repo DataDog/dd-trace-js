@@ -52,6 +52,7 @@ let correlationId = DEFAULT_CORRELATION_ID
 let knownTests = DEFAULT_KNOWN_TESTS
 let knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
 let waitingTime = 0
+let knownTestsPageIndex = 0
 let testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
 let testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
 
@@ -247,18 +248,34 @@ class FakeCiVisIntake extends FakeAgent {
     ], (req, res) => {
       // The endpoint returns compressed data if 'accept-encoding' is set to 'gzip'
       const isGzip = req.headers['accept-encoding'] === 'gzip'
-      const data = JSON.stringify({
-        data: {
-          attributes: {
-            tests: knownTests,
+
+      let responseData
+      if (Array.isArray(knownTests)) {
+        // Paginated mode: knownTests is an array of page responses
+        const page = knownTestsPageIndex < knownTests.length ? knownTests[knownTestsPageIndex] : null
+        knownTestsPageIndex++
+        if (page) {
+          responseData = JSON.stringify(page)
+        } else {
+          res.status(404).send('')
+          return
+        }
+      } else {
+        // Legacy single-response mode
+        responseData = JSON.stringify({
+          data: {
+            attributes: {
+              tests: knownTests,
+            },
           },
-        },
-      })
+        })
+      }
+
       res.setHeader('content-type', 'application/json')
       if (isGzip) {
         res.setHeader('content-encoding', 'gzip')
       }
-      res.status(knownTestsStatusCode).send(isGzip ? zlib.gzipSync(data) : data)
+      res.status(knownTestsStatusCode).send(isGzip ? zlib.gzipSync(responseData) : responseData)
       this.emit('message', {
         headers: req.headers,
         url: req.url,
@@ -320,12 +337,17 @@ class FakeCiVisIntake extends FakeAgent {
     })
   }
 
+  resetKnownTestsPageIndex () {
+    knownTestsPageIndex = 0
+  }
+
   stop () {
     settings = DEFAULT_SETTINGS
     settingsResponseStatusCode = 200
     suitesToSkip = DEFAULT_SUITES_TO_SKIP
     gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
     knownTestsStatusCode = DEFAULT_KNOWN_TESTS_RESPONSE_STATUS
+    knownTestsPageIndex = 0
     infoResponse = DEFAULT_INFO_RESPONSE
     testManagementResponseStatusCode = DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS
     testManagementResponse = DEFAULT_TEST_MANAGEMENT_TESTS
