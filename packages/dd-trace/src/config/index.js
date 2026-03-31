@@ -405,7 +405,6 @@ class Config {
       DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING,
       DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES,
       DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH,
-      DD_TRACING_ENABLED,
       DD_VERSION,
       DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE,
       DD_VERTEXAI_SPAN_CHAR_LIMIT,
@@ -607,7 +606,8 @@ class Config {
       target['experimental.flaggingProvider.initializationTimeoutMs'] =
         maybeInt(DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
     }
-    setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
+    setString(target, 'logLevel', source.DD_TRACE_LOG_LEVEL ?? source.OTEL_LOG_LEVEL)
+    setBoolean(target, 'tracing', DD_TRACE_ENABLED)
     setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     setString(target, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
     target['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
@@ -824,7 +824,6 @@ class Config {
     setBoolean(target, 'traceWebsocketMessagesEnabled', DD_TRACE_WEBSOCKET_MESSAGES_ENABLED)
     setBoolean(target, 'traceWebsocketMessagesInheritSampling', DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING)
     setBoolean(target, 'traceWebsocketMessagesSeparateTraces', DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES)
-    setBoolean(target, 'tracing', DD_TRACING_ENABLED)
     setString(target, 'version', DD_VERSION || tags.version)
     setBoolean(target, 'inferredProxyServicesEnabled', DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED)
     setBoolean(target, 'trace.aws.addSpanPointers', DD_TRACE_AWS_ADD_SPAN_POINTERS)
@@ -987,6 +986,7 @@ class Config {
     setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)
     setString(opts, 'llmobs.mlApp', options.llmobs?.mlApp)
     setBoolean(opts, 'logInjection', options.logInjection)
+    setString(opts, 'logLevel', options.logLevel)
     opts.lookup = options.lookup
     setBoolean(opts, 'middlewareTracingEnabled', options.middlewareTracingEnabled)
     setBoolean(opts, 'openAiLogsEnabled', options.openAiLogsEnabled)

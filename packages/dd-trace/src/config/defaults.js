@@ -36,6 +36,9 @@ function parseDefaultByType (raw, type) {
     case 'decimal': {
       return Number(raw)
     }
+    case 'json': {
+      return JSON.parse(raw)
+    }
     case 'array': {
       if (!raw || raw.length === 0) return []
       // TODO: Make the parsing a helper that is reused.
@@ -86,14 +89,12 @@ for (const entries of Object.values(supportedConfigurations)) {
     // The name of that method should be expressive for users.
     // TODO: Add handling for all environment variable names. They should not
     // need a configuration name for being listed with their default.
-    if (!Array.isArray(entry.configurationNames)) {
+    const defaultConfigurationName = entry.internalPropertyName ?? entry.configurationNames?.[0]
+    if (!defaultConfigurationName) {
       continue
     }
-
     const parsedValue = parseDefaultByType(entry.default, entry.type)
-    for (const configurationName of entry.configurationNames) {
-      metadataDefaults[configurationName] = entry.default === null ? undefined : parsedValue
-    }
+    metadataDefaults[defaultConfigurationName] = parsedValue
   }
 }
 
@@ -173,5 +174,18 @@ const defaults = {
   service,
   version: pkg.version,
 }
+
+// Keep legacy object defaults that the pre-runtime-refactor config merge still expects.
+defaults.sampler = {
+  sampleRate: defaults.sampleRate,
+  rateLimit: defaults.rateLimit,
+  rules: defaults.samplingRules,
+  spanSamplingRules: defaults.spanSamplingRules,
+}
+defaults['sampler.rateLimit'] = defaults.rateLimit
+defaults['sampler.rules'] = defaults.samplingRules
+defaults['sampler.spanSamplingRules'] = defaults.spanSamplingRules
+defaults['profiling.exporters'] = 'agent'
+defaults['profiling.sourceMap'] = true
 
 module.exports = defaults

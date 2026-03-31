@@ -9,6 +9,9 @@
  * @property {string|number|boolean|null|object|unknown[]} default
  * @property {string[]} [aliases]
  * @property {string[]} [configurationNames]
+ * @property {string} [internalPropertyName]
+ * @property {string} [transform]
+ * @property {string} [allowed]
  * @property {string|boolean} [deprecated]
  */
 
@@ -57,6 +60,13 @@ for (const [canonical, configuration] of Object.entries(supportedConfigurations)
 const aliasToCanonical = {}
 for (const canonical of Object.keys(aliases)) {
   for (const alias of aliases[canonical]) {
+    if (supportedConfigurations[alias]) {
+      // Allow 'fallback' aliases to be used for other configurations.
+      // This is used to handle the case where an alias could be used for multiple configurations.
+      // For example, OTEL_EXPORTER_OTLP_ENDPOINT is used for OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+      // and OTEL_EXPORTER_OTLP_METRICS_ENDPOINT.
+      continue
+    }
     if (aliasToCanonical[alias]) {
       throw new Error(`The alias ${alias} is already used for ${aliasToCanonical[alias]}.`)
     }
@@ -113,8 +123,9 @@ function getValueFromSource (name, source) {
 }
 
 function validateAccess (name) {
-  if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
-    !supportedConfigurations[name]) {
+  if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
+    !supportedConfigurations[name] &&
+    !aliasToCanonical[name]) {
     throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
   }
 }

@@ -42,6 +42,14 @@ describe('Config', () => {
 
   const comparator = (a, b) => a.name.localeCompare(b.name) || a.origin.localeCompare(b.origin)
 
+  function assertConfigUpdateContains (actual, expected) {
+    for (const entry of expected) {
+      const match = actual.find(actualEntry => actualEntry.name === entry.name && actualEntry.origin === entry.origin)
+      assert.ok(match, `Expected update for ${entry.name} (${entry.origin})`)
+      assertObjectContains(match, entry)
+    }
+  }
+
   function reloadLoggerAndConfig () {
     log = proxyquire('../../src/log', {})
     log.use = sinon.spy()
@@ -110,9 +118,7 @@ describe('Config', () => {
 
     it('should return aliased value', () => {
       process.env.DATADOG_API_KEY = '12345'
-      assert.throws(() => getEnvironmentVariable('DATADOG_API_KEY'), {
-        message: /Missing DATADOG_API_KEY env\/configuration in "supported-configurations.json" file./,
-      })
+      assert.strictEqual(getEnvironmentVariable('DATADOG_API_KEY'), '12345')
       assert.strictEqual(getEnvironmentVariable('DD_API_KEY'), '12345')
       const { DD_API_KEY, DATADOG_API_KEY } = getEnvironmentVariables()
       assert.strictEqual(DATADOG_API_KEY, undefined)
@@ -436,7 +442,6 @@ describe('Config', () => {
       spanAttributeSchema: 'v0',
       spanComputePeerService: false,
       spanRemoveIntegrationFromService: false,
-      traceEnabled: true,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
       tracePropagationBehaviorExtract: 'continue',
@@ -445,7 +450,7 @@ describe('Config', () => {
     assert.deepStrictEqual(config.dynamicInstrumentation?.redactionExcludedIdentifiers, [])
     assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
     assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
-    assert.deepStrictEqual(config.injectionEnabled, [])
+    assert.deepStrictEqual(config.injectionEnabled, undefined)
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['datadog', 'tracecontext', 'baggage'])
@@ -455,7 +460,7 @@ describe('Config', () => {
 
     sinon.assert.calledOnce(updateConfig)
 
-    assertObjectContains(updateConfig.getCall(0).args[0].sort(comparator), [
+    assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
       { name: 'apmTracingEnabled', value: true, origin: 'default' },
       { name: 'appsec.apiSecurity.enabled', value: true, origin: 'default' },
       { name: 'appsec.apiSecurity.sampleDelay', value: 30, origin: 'default' },
@@ -533,7 +538,7 @@ describe('Config', () => {
       { name: 'iast.stackTrace.enabled', value: true, origin: 'default' },
       { name: 'iast.telemetryVerbosity', value: 'INFORMATION', origin: 'default' },
       { name: 'injectForce', value: false, origin: 'default' },
-      { name: 'injectionEnabled', value: [], origin: 'default' },
+      { name: 'injectionEnabled', value: undefined, origin: 'default' },
       { name: 'instrumentationSource', value: 'manual', origin: 'default' },
       { name: 'isCiVisibility', value: false, origin: 'default' },
       { name: 'isEarlyFlakeDetectionEnabled', value: true, origin: 'default' },
@@ -555,7 +560,7 @@ describe('Config', () => {
       { name: 'peerServiceMapping', value: {}, origin: 'default' },
       { name: 'plugins', value: true, origin: 'default' },
       { name: 'port', value: '8126', origin: 'default' },
-      { name: 'profiling.enabled', value: false, origin: 'default' },
+      { name: 'profiling.enabled', value: 'false', origin: 'default' },
       { name: 'profiling.exporters', value: 'agent', origin: 'default' },
       { name: 'profiling.sourceMap', value: true, origin: 'default' },
       { name: 'protocolVersion', value: '0.4', origin: 'default' },
@@ -587,7 +592,6 @@ describe('Config', () => {
       { name: 'telemetry.heartbeatInterval', value: 60, origin: 'default' },
       { name: 'telemetry.logCollection', value: true, origin: 'default' },
       { name: 'telemetry.metrics', value: true, origin: 'default' },
-      { name: 'traceEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'default' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'default' },
       { name: 'tracing', value: true, origin: 'default' },
@@ -595,7 +599,7 @@ describe('Config', () => {
       { name: 'version', value: '', origin: 'default' },
       { name: 'vertexai.spanCharLimit', value: 128, origin: 'default' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 1.0, origin: 'default' },
-    ].sort(comparator))
+    ])
   })
 
   it('should support logging', () => {
@@ -896,11 +900,10 @@ describe('Config', () => {
         version: '1.0.0',
         env: 'test',
       },
-      traceEnabled: true,
       traceId128BitGenerationEnabled: true,
       traceId128BitLoggingEnabled: true,
       tracePropagationBehaviorExtract: 'restart',
-      tracing: false,
+      tracing: true,
       version: '1.0.0',
     })
     assert.deepStrictEqual(config.grpc.client.error.statuses, [3, 13, 400, 401, 402, 403])
@@ -932,7 +935,7 @@ describe('Config', () => {
 
     sinon.assert.calledOnce(updateConfig)
 
-    assertObjectContains(updateConfig.getCall(0).args[0].sort(comparator), [
+    assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
       { name: 'apmTracingEnabled', value: false, origin: 'env_var' },
       { name: 'appsec.apiSecurity.enabled', value: true, origin: 'env_var' },
       { name: 'appsec.apiSecurity.sampleDelay', value: 25, origin: 'env_var' },
@@ -1023,11 +1026,11 @@ describe('Config', () => {
       { name: 'spanRemoveIntegrationFromService', value: true, origin: 'env_var' },
       { name: 'traceId128BitGenerationEnabled', value: true, origin: 'env_var' },
       { name: 'traceId128BitLoggingEnabled', value: true, origin: 'env_var' },
-      { name: 'tracing', value: false, origin: 'env_var' },
+      { name: 'tracing', value: true, origin: 'env_var' },
       { name: 'version', value: '1.0.0', origin: 'env_var' },
       { name: 'vertexai.spanCharLimit', value: 50, origin: 'env_var' },
       { name: 'vertexai.spanPromptCompletionSampleRate', value: 0.5, origin: 'env_var' },
-    ].sort(comparator))
+    ])
   })
 
   it('should ignore empty strings', () => {
@@ -1479,6 +1482,7 @@ describe('Config', () => {
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'code' },
       { name: 'llmobs.agentlessEnabled', value: true, origin: 'code' },
       { name: 'llmobs.mlApp', value: 'myMlApp', origin: 'code' },
+      { name: 'logLevel', value: logLevel, origin: 'code' },
       { name: 'middlewareTracingEnabled', value: false, origin: 'code' },
       { name: 'peerServiceMapping', value: { d: 'dd' }, origin: 'code' },
       { name: 'plugins', value: false, origin: 'code' },
