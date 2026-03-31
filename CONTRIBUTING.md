@@ -466,3 +466,244 @@ $ yarn bench
 ```
 
 [1]: https://docs.datadoghq.com/help
+
+## Working with Configurations
+
+`packages/dd-trace/src/config/supported-configurations.json` is the source of truth for tracer configuration metadata.
+
+When you add a new configuration here, the config system can usually derive:
+
+- default values
+- env var parsing
+- `tracer.init({...})` option mapping
+- generated config types
+- config telemetry
+
+## What A Developer Needs To Know
+
+Each entry defines:
+
+- the canonical env var name
+- the runtime type
+- the default value
+- the programmatic option path
+- optional aliases, validation, and transforms
+
+Minimal example:
+
+```json
+"DD_AGENT_HOST": [{
+  "implementation": "E",
+  "type": "string",
+  "configurationNames": ["hostname"],
+  "default": "127.0.0.1",
+  "aliases": ["DD_TRACE_AGENT_HOSTNAME"]
+}]
+```
+
+Important fields:
+
+- `type`: parser to use for environment variables. Common values are `string`, `boolean`, `integer`, `decimal`, `array`, `map`, `json`.
+- `default`: parsed into the runtime type. `null` means `undefined` at runtime.
+- `configurationNames`: programmatic option names. The first entry becomes the main internal property path.
+- `internalPropertyName`: use this instead of `configurationNames` when the runtime property path should differ from the public option name.
+- `transform`: extra conversion after parsing. This applies to both env vars and programmatic options.
+- `allowed`: whitelist of accepted values.
+- `aliases`: old or alternate env var names.
+- `deprecated`: emits a deprecation warning when used.
+- `description`: developer-facing note in the JSON.
+- `implementation`: metadata only in the current flow.
+
+## Runtime Flow
+
+```mermaid
+flowchart LR
+  A["supported-configurations.json"] --> B["defaults.js<br/>build defaults + lookup tables"]
+  A --> C["helper.js<br/>aliases + deprecations"]
+  A --> D["generate-config-types.js<br/>generated-config-types.d.ts"]
+  B --> E["config/index.js"]
+  C --> E
+  E --> F["Config singleton"]
+  E --> G["Config telemetry"]
+  H["remote_config.js"] --> E
+```
+
+Load order in `config/index.js`:
+
+1. defaults
+2. local stable config
+3. env vars
+4. fleet stable config
+5. `tracer.init({...})` options
+6. calculated values
+
+## Examples That Matter
+
+### Simple boolean
+
+```json
+"DD_RUNTIME_METRICS_ENABLED": [{
+  "type": "boolean",
+  "configurationNames": ["runtimeMetrics.enabled", "runtimeMetrics"],
+  "default": "false"
+}]
+```
+
+Both of these work:
+
+```js
+tracer.init({ runtimeMetrics: true })
+```
+
+```js
+tracer.init({
+  runtimeMetrics: {
+    enabled: true
+  }
+})
+```
+
+Result:
+
+```js
+config.runtimeMetrics.enabled === true
+```
+
+### Decimal with transform
+
+```json
+"DD_TRACE_SAMPLE_RATE": [{
+  "type": "decimal",
+  "configurationNames": ["sampleRate", "ingestion.sampleRate"],
+  "default": null,
+  "transform": "sampleRate"
+}]
+```
+
+The `sampleRate` transform validates and clamps the value to the supported `0..1` range.
+
+### Array with transform
+
+```json
+"DD_TRACE_HEADER_TAGS": [{
+  "type": "array",
+  "configurationNames": ["headerTags"],
+  "default": "",
+  "transform": "stripColonWhitespace"
+}]
+```
+
+This matters because the transform is reused for both input styles:
+
+```bash
+DD_TRACE_HEADER_TAGS="x-user-id : user.id, x-team : team"
+```
+
+```js
+tracer.init({
+  headerTags: ['x-user-id : user.id', 'x-team : team']
+})
+```
+
+Both become:
+
+```js
+config.headerTags
+// ['x-user-id:user.id', 'x-team:team']
+```
+
+### JSON with nested output
+
+```json
+"DD_TRACE_SAMPLING_RULES": [{
+  "type": "json",
+  "configurationNames": ["samplingRules"],
+  "default": "[]",
+  "transform": "toCamelCase"
+}]
+```
+
+```bash
+DD_TRACE_SAMPLING_RULES='[{"sample_rate":0.5,"service":"api"}]'
+```
+
+Result:
+
+```js
+config.samplingRules
+// [{ sampleRate: 0.5, service: 'api' }]
+```
+
+### Internal property path
+
+```json
+"DD_API_KEY": [{
+  "type": "string",
+  "default": null,
+  "internalPropertyName": "apiKey"
+}]
+```
+
+Result:
+
+```js
+config.apiKey
+```
+
+## Nested Properties
+
+Dot notation creates nested objects on the config singleton.
+
+```json
+"DD_API_SECURITY_ENABLED": [{
+  "type": "boolean",
+  "configurationNames": [
+    "appsec.apiSecurity.enabled",
+    "experimental.appsec.apiSecurity.enabled"
+  ],
+  "default": "true"
+}]
+```
+
+```js
+tracer.init({
+  appsec: {
+    apiSecurity: {
+      enabled: true
+    }
+  }
+})
+```
+
+Result:
+
+```js
+config.appsec.apiSecurity.enabled === true
+```
+
+## Telemetry And Remote Config
+
+Config telemetry is handled automatically by the standard config flow.
+
+If your config is defined in `supported-configurations.json` and goes through the normal parsing/application path, telemetry usually works without extra code. Telemetry records the canonical name, the normalized value, and the origin such as `default`, `env_var`, `code`, `remote_config`, or `calculated`.
+
+Remote config is not a separate system. `packages/dd-trace/src/config/remote_config.js` translates remote field names into local option names and then applies them through `config.setRemoteConfig(...)`. After that, the normal pipeline runs again: apply options, recompute calculated values, and update telemetry.
+
+## Adding A New Configuration
+
+Use this checklist:
+
+1. Add the new entry to `packages/dd-trace/src/config/supported-configurations.json`.
+2. Pick the correct `type` and `default`.
+3. Add `configurationNames` if the setting should be exposed via `tracer.init({...})`. Add the documentation to `index.d.ts`.
+4. Use `internalPropertyName` if the runtime property path should differ.
+5. Add `transform` or `allowed` only if the raw parsed value is not enough.
+6. Add `aliases` or `deprecated` only for compatibility.
+7. Regenerate types if needed.
+8. Add tests for env vars, programmatic options, and edge cases.
+
+## Mental Model
+
+Think of `supported-configurations.json` as the schema for one config singleton.
+
+You describe the input shape once, and the runtime uses that to build defaults, parse env vars, map programmatic options, generate types, and emit telemetry.
