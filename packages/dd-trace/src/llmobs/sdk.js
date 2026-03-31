@@ -8,6 +8,25 @@ const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
 const PublicSpan = require('../opentracing/public/span')
+
+/**
+ * Checks whether a value is a Span or PublicSpan instance.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isSpan (value) {
+  return value instanceof Span || value instanceof PublicSpan
+}
+
+/**
+ * Returns the underlying raw DatadogSpan, unwrapping a PublicSpan if needed.
+ * @param {import('../opentracing/span') | PublicSpan} span
+ * @returns {import('../opentracing/span')}
+ */
+function unwrapSpan (span) {
+  return span instanceof PublicSpan ? span._span : span
+}
+
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {
   getFunctionArguments,
@@ -214,7 +233,7 @@ class LLMObs extends NoopLLMObs {
       span = this._active()
     }
 
-    if ((span && !options) && !(span instanceof Span) && !(span instanceof PublicSpan)) {
+    if ((span && !options) && !isSpan(span)) {
       options = span
       span = this._active()
     }
@@ -235,8 +254,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_span_type'
         throw new Error('Span must be an LLMObs-generated span')
       }
-      const rawSpan = span instanceof PublicSpan ? span._span : span
-      if (rawSpan._duration !== undefined) {
+      if (unwrapSpan(span)._duration !== undefined) {
         err = 'invalid_finished_span'
         throw new Error('Cannot annotate a finished span')
       }
@@ -293,7 +311,7 @@ class LLMObs extends NoopLLMObs {
         err = 'no_active_span'
         throw new Error('No span provided and no active LLMObs-generated span found')
       }
-      if (!(span instanceof Span) && !(span instanceof PublicSpan)) {
+      if (!isSpan(span)) {
         err = 'invalid_span'
         throw new TypeError('Span must be a valid Span object.')
       }

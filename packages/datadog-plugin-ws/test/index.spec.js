@@ -653,6 +653,7 @@ describe('Plugin', () => {
             const pointerLink = spanLinks.find(link =>
               link.attributes && link.attributes['dd.kind'] === 'span-pointer'
             )
+            assert.ok(pointerLink, 'Should have a span pointer link')
 
             assertObjectContains(pointerLink, {
               attributes: {
@@ -697,7 +698,6 @@ describe('Plugin', () => {
             const pointerLink = spanLinks.find(link =>
               link.attributes && link.attributes['dd.kind'] === 'span-pointer'
             )
-            assert.ok(pointerLink, 'Should have a span pointer link')
 
             assertObjectContains(pointerLink, {
               attributes: {

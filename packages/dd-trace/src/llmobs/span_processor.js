@@ -40,8 +40,6 @@ const LLMObsTagger = require('./tagger')
  * Resolves the tagMap key for a raw span from the finish channel.
  * Plugin-instrumented spans are registered with raw Span instances,
  * while SDK spans are registered with PublicSpan wrappers.
- * @param {import('../opentracing/span')} span - raw span from the finish channel
- * @returns {import('../opentracing/span') | PublicSpan | undefined}
  */
 function resolveTagMapKey (span) {
   if (LLMObsTagger.tagMap.has(span)) return span
@@ -118,7 +116,6 @@ class LLMObsSpanProcessor {
   }
 
   format (span, tagMapKey) {
-    if (!tagMapKey) tagMapKey = resolveTagMapKey(span)
     const llmObsSpan = new LLMObservabilitySpan()
     let inputType, outputType
 
@@ -175,7 +172,7 @@ class LLMObsSpanProcessor {
 
     const name = mlObsTags[NAME] || span._name
 
-    const tags = this.#getTags(tagMapKey, mlApp, sessionId, error)
+    const tags = this.#getTags(span, tagMapKey, mlApp, sessionId, error)
     llmObsSpan._tags = tags
 
     const processedSpan = this.#runProcessor(llmObsSpan)
@@ -265,7 +262,7 @@ class LLMObsSpanProcessor {
     add(obj, carrier)
   }
 
-  #getTags (span, mlApp, sessionId, error) {
+  #getTags (span, tagMapKey, mlApp, sessionId, error) {
     let tags = {
       ...this.#config.parsedDdTags,
       version: this.#config.version,
@@ -283,10 +280,10 @@ class LLMObsSpanProcessor {
 
     if (sessionId) tags.session_id = sessionId
 
-    const integration = LLMObsTagger.tagMap.get(span)?.[INTEGRATION]
+    const integration = LLMObsTagger.tagMap.get(tagMapKey)?.[INTEGRATION]
     if (integration) tags.integration = integration
 
-    const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
+    const existingTags = LLMObsTagger.tagMap.get(tagMapKey)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
 
     return tags

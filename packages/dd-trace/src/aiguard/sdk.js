@@ -145,7 +145,7 @@ class AIGuard extends NoopAIGuard {
     }
     const { block = true } = opts ?? {}
     return this.#tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
-      const internalSpan = span?._span || span
+      span = span?._span || span
       const last = messages[messages.length - 1]
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(AI_GUARD_TARGET_TAG_KEY, target)
@@ -158,10 +158,10 @@ class AIGuard extends NoopAIGuard {
       const metaStruct = {
         messages: this.#buildMessagesForMetaStruct(messages),
       }
-      internalSpan.meta_struct = {
+      span.meta_struct = {
         [AI_GUARD_META_STRUCT_KEY]: metaStruct,
       }
-      const rootSpan = internalSpan.context()?._trace?.started?.[0]
+      const rootSpan = span.context()?._trace?.started?.[0]
       if (rootSpan) {
         // keepTrace must be called before executeRequest so the sampling decision
         // is propagated correctly to outgoing HTTP client calls.
