@@ -10,6 +10,7 @@ const {
   sandboxCwd,
   useSandbox,
   curlAndAssertMessage,
+  stopProc,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 
@@ -31,7 +32,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill('SIGINT')
+      await stopProc(proc, { signal: 'SIGINT' })
       await agent.stop()
     })
 
@@ -78,7 +79,7 @@ describe('esm', () => {
 
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
-    NODE_OPTIONS: `--loader=${hookFile} func start`,
+    NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
   }
   env = { ...env, ...additionalEnvArgs }

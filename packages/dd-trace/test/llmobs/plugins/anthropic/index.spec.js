@@ -32,6 +32,8 @@ function assertLLMObsSpan (apmSpans, llmobsSpans) {
       total_tokens: MOCK_NUMBER,
       cache_write_input_tokens: MOCK_NUMBER,
       cache_read_input_tokens: MOCK_NUMBER,
+      ephemeral_5m_input_tokens: MOCK_NUMBER,
+      ephemeral_1h_input_tokens: MOCK_NUMBER,
     },
     tags: { ml_app: 'test', integration: 'anthropic' },
   })

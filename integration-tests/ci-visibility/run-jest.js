@@ -21,6 +21,12 @@ if (process.env.RUN_IN_PARALLEL) {
   options.maxWorkers = 2
 }
 
+if (process.env.USE_WORKER_THREADS) {
+  delete options.runInBand
+  options.maxWorkers = 2
+  options.workerThreads = true
+}
+
 if (process.env.OLD_RUNNER) {
   options.testRunner = 'jest-jasmine2'
 }

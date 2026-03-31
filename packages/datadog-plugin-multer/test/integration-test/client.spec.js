@@ -3,8 +3,12 @@
 const assert = require('node:assert/strict')
 const axios = require('axios')
 const {
-  useSandbox, sandboxCwd, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc,
+  useSandbox,
+  sandboxCwd,
+  varySandbox,
+  FakeAgent,
+  spawnPluginIntegrationTestProc,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -24,7 +28,7 @@ withVersions('multer', 'multer', version => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

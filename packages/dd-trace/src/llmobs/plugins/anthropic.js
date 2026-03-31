@@ -253,6 +253,15 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
     if (cacheReadTokens != null) metrics.cacheReadTokens = cacheReadTokens
 
+    const cacheCreation = usage.cache_creation
+    if (cacheCreation) {
+      metrics.cacheWrite5mTokens = cacheCreation.ephemeral_5m_input_tokens ?? 0
+      metrics.cacheWrite1hTokens = cacheCreation.ephemeral_1h_input_tokens ?? 0
+    } else if (cacheWriteTokens != null) {
+      metrics.cacheWrite5mTokens = cacheWriteTokens
+      metrics.cacheWrite1hTokens = 0
+    }
+
     this._tagger.tagMetrics(span, metrics)
   }
 

@@ -29,6 +29,7 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_NAME,
@@ -994,6 +995,93 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+  })
+
+  context('when jest is using worker threads', () => {
+    onlyLatestIt('ignores non-array worker-thread messages', (done) => {
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-plugin-tests/jest-worker-message',
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      Promise.all([
+        once(childProcess, 'message'),
+        receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000),
+      ]).then(([, eventsRequests]) => {
+        const tests = eventsRequests.map(({ payload }) => payload)
+          .flatMap(({ events }) => events)
+          .filter(event => event.type === 'test')
+          .map(event => event.content)
+
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(
+          tests[0].meta[TEST_NAME],
+          'jest-worker-message passes after sending a non-array worker message'
+        )
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        assert.doesNotMatch(testOutput, /TypeError/)
+        done()
+      }).catch(done)
+    })
+
+    onlyLatestIt('reports tests when using agentless', (done) => {
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+
+      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
+        const events = eventsRequests.map(({ payload }) => payload)
+          .flatMap(({ events }) => events)
+        const eventTypes = events.map(event => event.type)
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.ok(tests.length >= 2)
+        tests.forEach(testEvent => {
+          assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
+        })
+
+        done()
+      }).catch(done)
+    })
+
+    onlyLatestIt('reports tests when using evp proxy', (done) => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+
+      receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
+        .then(eventsRequests => {
+          const eventTypes = eventsRequests.map(({ payload }) => payload)
+            .flatMap(({ events }) => events)
+            .map(event => event.type)
+
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+          done()
+        }).catch(done)
     })
   })
 
@@ -2877,7 +2965,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('retries flaky tests', (done) => {
+    it('retries flaky tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({ jest: {} })
@@ -2929,12 +3017,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         }
       )
-      childProcess.on('exit', () => {
-        // TODO: check exit code: if a new, retried test fails, the exit code should remain 0
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     it('does not retry new tests that are skipped', (done) => {
@@ -4056,6 +4144,89 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       )
 
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('tags new tests with dynamic names and logs a warning', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // No known tests, so both will be considered new
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 1 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Deduplicate by test name (EFD retries produce multiple spans per test)
+          const uniqueTests = new Map()
+          for (const test of tests) {
+            if (!uniqueTests.has(test.meta[TEST_NAME])) {
+              uniqueTests.set(test.meta[TEST_NAME], test)
+            }
+          }
+
+          const dynamicTests = [...uniqueTests.values()]
+            .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+          // 8 dynamic tests: timestamp, localhost port, uuid, iso datetime,
+          //   iso date-only, Math.random float, 127.0.0.1 port, 0.0.0.0 port
+          assert.strictEqual(dynamicTests.length, 8)
+
+          dynamicTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          })
+
+          // Verify each pattern type is detected
+          const dynamicNames = dynamicTests.map(test => test.meta[TEST_NAME])
+          assert.ok(dynamicNames.some(n => /can do stuff at \d+/.test(n)), 'timestamp test detected')
+          assert.ok(dynamicNames.some(n => /localhost:\d+/.test(n)), 'localhost port test detected')
+          assert.ok(dynamicNames.some(n => /user session [0-9a-f-]+/.test(n)), 'uuid test detected')
+          assert.ok(dynamicNames.some(n => /created at \d{4}-\d{2}-\d{2}T/.test(n)), 'iso datetime test detected')
+          assert.ok(dynamicNames.some(n => /event on \d{4}-\d{2}-\d{2}$/.test(n)), 'iso date-only test detected')
+          assert.ok(dynamicNames.some(n => /probability 0\.\d+/.test(n)), 'Math.random float test detected')
+          assert.ok(dynamicNames.some(n => /127\.0\.0\.1:\d+/.test(n)), '127.0.0.1 port test detected')
+          assert.ok(dynamicNames.some(n => /0\.0\.0\.0:\d+/.test(n)), '0.0.0.0 port test detected')
+
+          // The non-dynamic new tests should not have the tag
+          const nonDynamicNewTests = [...uniqueTests.values()].filter(
+            test => test.meta[TEST_IS_NEW] === 'true' && !test.meta[TEST_HAS_DYNAMIC_NAME]
+          )
+          nonDynamicNewTests.forEach(test => {
+            assert.ok(!(TEST_HAS_DYNAMIC_NAME in test.meta))
+          })
+        })
+
+      childProcess = fork(startupTestFile, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'test/(dynamic-name-test|ci-visibility-test-2)',
+        },
+        stdio: 'pipe',
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+      assert.match(testOutput, /detected as new but their names contain dynamic data/)
+      assert.match(testOutput, /can do stuff at/)
+      assert.match(testOutput, /connects to localhost:/)
+      assert.match(testOutput, /user session/)
+      assert.match(testOutput, /created at/)
+      assert.match(testOutput, /event on/)
+      assert.match(testOutput, /probability 0\./)
+      assert.match(testOutput, /server at 127\.0\.0\.1:/)
+      assert.match(testOutput, /bound to 0\.0\.0\.0:/)
     })
   })
 
@@ -6376,6 +6547,54 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: 'ci-visibility/test-custom-tags',
+          },
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
+
+    it('does detect custom tags on test suites from beforeAll and afterAll hooks', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
+
+          assertObjectContains(testSuite, {
+            meta: {
+              'suite.beforeAll': 'true',
+              'suite.afterAll': 'true',
+            },
+          })
+
+          const suiteSpanId = testSuite.test_suite_id.toString()
+          const sessionTraceId = testSuite.test_session_id.toString()
+
+          // Spans created in beforeAll/afterAll appear as 'span' events and are children of the test suite span
+          const spans = events.filter(event => event.type === 'span').map(event => event.content)
+          const beforeAllSpan = spans.find(span => span.resource === 'beforeAll.setup')
+          const afterAllSpan = spans.find(span => span.resource === 'afterAll.teardown')
+
+          assert.ok(beforeAllSpan)
+          assert.strictEqual(beforeAllSpan.parent_id.toString(), suiteSpanId)
+          assert.strictEqual(beforeAllSpan.trace_id.toString(), sessionTraceId)
+
+          assert.ok(afterAllSpan)
+          assert.strictEqual(afterAllSpan.parent_id.toString(), suiteSpanId)
+          assert.strictEqual(afterAllSpan.trace_id.toString(), sessionTraceId)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'ci-visibility/test-suite-custom-tags',
           },
         }
       )

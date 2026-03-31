@@ -2,7 +2,7 @@
 
 /* eslint-disable no-console */
 
-const tracer = require('dd-trace').init()
+require('dd-trace').init()
 const { Worker, isMainThread, threadId } = require('worker_threads')
 
 const nworkers = Number(process.argv[2] || 0)
@@ -43,8 +43,4 @@ function foo (size) {
   if (count < maxCount) { setTimeout(() => foo(size), sleepMs) }
 }
 
-tracer.profilerStarted().then(
-  () => {
-    setTimeout(() => foo(sizeQuantum), sleepMs)
-  }
-)
+setTimeout(() => foo(sizeQuantum), sleepMs)
