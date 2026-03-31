@@ -145,7 +145,7 @@
     "limitd-client": "2.14.1",
     "lodash": "4.17.21",
     "loopback": "3.28.0",
-    "mariadb": "3.4.5",
+    "mariadb": "3.5.2",
     "memcached": "2.2.2",
     "microgateway-core": "3.3.7",
     "middie": "7.1.0",
