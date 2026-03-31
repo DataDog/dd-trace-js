@@ -55,6 +55,15 @@ function traceAny (state, node, _parent, ancestry) {
 function traceFunction (state, node, program) {
   transforms.tracingChannelDeclaration(state, program)
 
+  // Arrow functions have no own `arguments` or `this` binding. Converting to
+  // a regular FunctionExpression gives the wrapper its own `arguments` (the
+  // actual call arguments) and a dynamic `this` (the receiver at call time).
+  // For method-style calls (e.g. `conn.query(sql)`) `this` is identical to
+  // what an arrow function would have captured from the constructor scope.
+  if (node.type === 'ArrowFunctionExpression') {
+    node.type = 'FunctionExpression'
+  }
+
   node.body = wrap(state, {
     type: 'FunctionExpression',
     params: node.params,
