@@ -5332,7 +5332,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const alwaysPassingTests = tests.filter(
               test => test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
             )
-            alwaysPassingTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+            alwaysPassingTests.sort((a, b) =>
+              (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
               if (index < alwaysPassingTests.length - 1) {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
               } else {
@@ -5344,7 +5345,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const alwaysFailingTests = tests.filter(
               test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-fails.js'
             )
-            alwaysFailingTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+            alwaysFailingTests.sort((a, b) =>
+              (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
               if (index < alwaysFailingTests.length - 1) {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta))
               } else {
@@ -5580,9 +5582,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           TESTS_TO_RUN: JSON.stringify(['./mocha-hooks/test-quarantine-with-failing-after-each.js']),
         },
       })
-
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
-
   })
 })
