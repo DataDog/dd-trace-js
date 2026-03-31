@@ -22,6 +22,17 @@ import eslintRequireExportExists from './eslint-rules/eslint-require-export-exis
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
+/**
+ * Optional peer dependencies of the published `dd-trace` package (see root `package.json`).
+ * They are not listed in `vendor/package.json` but are valid runtime requires when users install them.
+ */
+const peerOptionalAllowModules = [
+  '@opentelemetry/api',
+  '@opentelemetry/api-logs',
+]
+
+const allowedRequireModules = [...Object.keys(dependencies), ...peerOptionalAllowModules]
+
 const SRC_FILES = [
   '*.js',
   '*.mjs',
@@ -417,12 +428,15 @@ export default [
       'import/no-extraneous-dependencies': 'error',
       'n/hashbang': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-extraneous-require': ['error', {
-        allowModules: Object.keys(dependencies),
+        allowModules: allowedRequireModules,
+      }],
+      'n/no-missing-require': ['error', {
+        allowModules: allowedRequireModules,
       }],
       'n/no-process-exit': 'off', // TODO: Enable this rule once we have a plan to address it
       'n/no-restricted-require': ['error', GLOBAL_RESTRICTED_REQUIRES],
       'n/no-unpublished-require': ['error', {
-        allowModules: Object.keys(dependencies),
+        allowModules: allowedRequireModules,
       }],
       'n/no-unsupported-features/node-builtins': ['error', {
         ignores: [
@@ -643,7 +657,7 @@ export default [
       'n/handle-callback-err': 'off',
       'n/no-extraneous-require': ['error', {
         allowModules: [
-          ...Object.keys(dependencies),
+          ...allowedRequireModules,
           'mocha',
         ],
       }],
