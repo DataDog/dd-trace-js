@@ -5156,6 +5156,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               `Expected TEST_FINAL_STATUS to match TEST_STATUS for test "${test.meta[TEST_NAME]}"`
             )
           })
+
+          const skippedTest = tests.find(test => test.meta[TEST_NAME] === 'mocha-skips can report skipped tests')
+          assert.ok(skippedTest, 'Expected to find the skipped test')
+          assert.strictEqual(skippedTest.meta[TEST_FINAL_STATUS], 'skip')
         })
 
       childProcess = exec(runTestsCommand, {
@@ -5165,6 +5169,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           TESTS_TO_RUN: JSON.stringify([
             './test/ci-visibility-test.js',
             './test/fail-test.js',
+            './mocha-skips/skip-test.js',
           ]),
         },
       })
