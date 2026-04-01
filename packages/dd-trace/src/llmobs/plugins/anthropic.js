@@ -1,7 +1,7 @@
 'use strict'
 
-const LLMObsPlugin = require('./base')
 const { UNKNOWN_MODEL_PROVIDER } = require('../constants/tags')
+const LLMObsPlugin = require('./base')
 
 const ALLOWED_METADATA_KEYS = new Set([
   'max_tokens',
