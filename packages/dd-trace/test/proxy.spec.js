@@ -151,9 +151,8 @@ describe('TracerProxy', () => {
           enabled: true,
         },
       },
-      injectionEnabled: [],
+      injectionEnabled: undefined,
       logger: 'logger',
-      debug: true,
       profiling: {},
       apmTracingEnabled: false,
       appsec: {},
@@ -412,12 +411,12 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(appsec.enable)
         sinon.assert.notCalled(iast.enable)
 
-        let conf = { tracing_enabled: false }
+        let conf = { tracing: false }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
-        conf = { tracing_enabled: true }
+        conf = { tracing: true }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
@@ -439,7 +438,7 @@ describe('TracerProxy', () => {
         config.appsec.enabled = true
         config.iast.enabled = true
         config.setRemoteConfig = conf => {
-          config.tracing = conf.tracing_enabled
+          config.tracing = conf.tracing
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -448,12 +447,12 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(appsec.enable, config)
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
-        let conf = { tracing_enabled: false }
+        let conf = { tracing: false }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
-        conf = { tracing_enabled: true }
+        conf = { tracing: true }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)

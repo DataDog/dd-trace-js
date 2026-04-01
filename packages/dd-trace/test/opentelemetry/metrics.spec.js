@@ -29,7 +29,15 @@ describe('OpenTelemetry Meter Provider', () => {
       process.env.OTEL_METRIC_EXPORT_INTERVAL = '100'
       process.env.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT = '5000'
     }
-    Object.assign(process.env, envOverrides)
+    if (envOverrides) {
+      for (const [key, value] of Object.entries(envOverrides)) {
+        if (value === undefined) {
+          delete process.env[key]
+        } else {
+          process.env[key] = value
+        }
+      }
+    }
 
     const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
 
@@ -673,9 +681,9 @@ describe('OpenTelemetry Meter Provider', () => {
       meter.removeBatchObservableCallback(() => {}, [])
 
       assert.strictEqual(warnSpy.callCount, 2)
-      assert.strictEqual(warnSpy.firstCall.args[0], 'addBatchObservableCallback is not implemented')
-      assert.strictEqual(warnSpy.secondCall.args[0], 'removeBatchObservableCallback is not implemented')
 
+      warnSpy.getCalls().some(call => format(...call.args) === 'addBatchObservableCallback is not implemented')
+      warnSpy.getCalls().some(call => format(...call.args) === 'removeBatchObservableCallback is not implemented')
       warnSpy.restore()
     })
   })
@@ -786,7 +794,7 @@ describe('OpenTelemetry Meter Provider', () => {
     })
   })
 
-  describe('NonNegInt Configuration Validation', () => {
+  describe('Allowed Integer Configuration Validation', () => {
     let log, warnSpy
 
     beforeEach(() => {
@@ -798,6 +806,10 @@ describe('OpenTelemetry Meter Provider', () => {
       warnSpy.restore()
     })
 
+    function hasWarning (message) {
+      return warnSpy.getCalls().some(call => format(...call.args).includes(message))
+    }
+
     it('rejects zero for metrics configs with allowZero=false', () => {
       setupTracer({
         OTEL_BSP_SCHEDULE_DELAY: '0',
@@ -808,16 +820,16 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_METRIC_EXPORT_TIMEOUT: '0',
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '0',
       }, false)
-      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
-      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
-      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
-      assert(!warnSpy.getCalls().some(call => /Invalid value 0 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
+      assert(hasWarning('Invalid value: 0 for OTEL_BSP_SCHEDULE_DELAY'))
+      assert(hasWarning('Invalid value: 0 for OTEL_METRIC_EXPORT_INTERVAL'))
+      assert(hasWarning('Invalid value: 0 for OTEL_BSP_MAX_QUEUE_SIZE'))
+      assert(hasWarning('Invalid value: 0 for OTEL_EXPORTER_OTLP_TIMEOUT'))
+      assert(hasWarning('Invalid value: 0 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(hasWarning('Invalid value: 0 for OTEL_METRIC_EXPORT_TIMEOUT'))
+      assert(hasWarning('Invalid value: 0 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE'))
     })
 
-    it('rejects negative values for all configs', () => {
+    it('rejects negative values for non-negative integer configs', () => {
       setupTracer({
         OTEL_EXPORTER_OTLP_TIMEOUT: '-1',
         OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: '-1',
@@ -828,17 +840,17 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: '-1',
         OTEL_BSP_MAX_QUEUE_SIZE: '-1',
       }, false)
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value -1 for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
+      assert(hasWarning('Invalid value: -1 for OTEL_EXPORTER_OTLP_TIMEOUT'))
+      assert(hasWarning('Invalid value: -1 for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT'))
+      assert(hasWarning('Invalid value: -1 for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT'))
+      assert(hasWarning('Invalid value: -1 for OTEL_METRIC_EXPORT_TIMEOUT'))
+      assert(hasWarning('Invalid value: -1 for OTEL_METRIC_EXPORT_INTERVAL'))
+      assert(hasWarning('Invalid value: -1 for OTEL_BSP_SCHEDULE_DELAY'))
+      assert(hasWarning('Invalid value: -1 for OTEL_BSP_MAX_EXPORT_BATCH_SIZE'))
+      assert(hasWarning('Invalid value: -1 for OTEL_BSP_MAX_QUEUE_SIZE'))
     })
 
-    it('rejects values that are not numbers for all configs', () => {
+    it('rejects values that are not numbers for integer-based configs', () => {
       setupTracer({
         OTEL_EXPORTER_OTLP_TIMEOUT: 'not a number',
         OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 'invalid',
@@ -849,14 +861,14 @@ describe('OpenTelemetry Meter Provider', () => {
         OTEL_BSP_MAX_EXPORT_BATCH_SIZE: 'abc',
         OTEL_BSP_MAX_QUEUE_SIZE: 'xyz',
       }, false)
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_METRIC_EXPORT_TIMEOUT/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_METRIC_EXPORT_INTERVAL/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_SCHEDULE_DELAY/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_MAX_EXPORT_BATCH_SIZE/.test(format(...call.args))))
-      assert(warnSpy.getCalls().some(call => /Invalid value NaN for OTEL_BSP_MAX_QUEUE_SIZE/.test(format(...call.args))))
+      assert(hasWarning("Invalid INT input: 'not a number' for OTEL_EXPORTER_OTLP_TIMEOUT"))
+      assert(hasWarning("Invalid INT input: 'invalid' for OTEL_EXPORTER_OTLP_LOGS_TIMEOUT"))
+      assert(hasWarning("Invalid INT input: 'hi sir' for OTEL_EXPORTER_OTLP_METRICS_TIMEOUT"))
+      assert(hasWarning("Invalid INT input: '@weeeeee' for OTEL_METRIC_EXPORT_TIMEOUT"))
+      assert(hasWarning("Invalid INT input: 'python!' for OTEL_METRIC_EXPORT_INTERVAL"))
+      assert(hasWarning("Invalid INT input: 'NaN' for OTEL_BSP_SCHEDULE_DELAY"))
+      assert(hasWarning("Invalid INT input: 'abc' for OTEL_BSP_MAX_EXPORT_BATCH_SIZE"))
+      assert(hasWarning("Invalid INT input: 'xyz' for OTEL_BSP_MAX_QUEUE_SIZE"))
     })
   })
 

@@ -18,15 +18,17 @@ const sessionPropagation = require('./session-propagation')
  * @typedef {Record<string, unknown>} TelemetryPayloadObject
  */
 /**
- * @typedef {string | number | boolean | null | undefined | URL | Record<string, unknown> | unknown[]} ConfigValue
+ * @typedef {string | number | boolean | null | URL | Record<string, unknown> | unknown[] | Function} ConfigValue
+ */
+/**
+ * @typedef {{ [K in keyof processTags]: typeof processTags.tagsObject[K] }} ProcessTags
  */
 /**
  * @typedef {{
  *   name: string,
  *   enabled: boolean,
  *   auto_enabled: boolean,
- *   process_tags: typeof processTags.tagsObject
- * }} Integration
+ * } & Partial<ProcessTags>} Integration
  */
 /**
  * @typedef {{ _enabled: boolean }} Plugin
@@ -56,41 +58,11 @@ const sessionPropagation = require('./session-propagation')
  *   kernel_name?: string
  * }} TelemetryHost
  */
-/**
- * @typedef {{
- *   telemetry: {
- *     enabled: boolean,
- *     heartbeatInterval: number,
- *     debug?: boolean,
- *     dependencyCollection?: boolean,
- *     logCollection?: boolean
- *   },
- *   service: string | undefined,
- *   env: string | undefined,
- *   version: string | undefined,
- *   tags: Record<string, string>,
- *   url?: string | URL,
- *   hostname?: string,
- *   port?: string | number,
- *   site?: string,
- *   apiKey?: string,
- *   isCiVisibility?: boolean,
- *   spanAttributeSchema?: string,
- *   installSignature?: { id?: string, time?: string, type?: string },
- *   sca?: { enabled?: boolean },
- *   appsec: { enabled: boolean, apiSecurity?: {
- *     endpointCollectionEnabled?: boolean,
- *     endpointCollectionMessageLimit?: number
- *   } },
- *   profiling: { enabled: boolean | 'true' | 'false' | 'auto' }
- * }} TelemetryConfig
- */
 
 const telemetryStartChannel = dc.channel('datadog:telemetry:start')
-const telemetryStopChannel = dc.channel('datadog:telemetry:stop')
 const telemetryAppClosingChannel = dc.channel('datadog:telemetry:app-closing')
 
-/** @type {TelemetryConfig | undefined} */
+/** @type {import('../config/config-base') | undefined} */
 let config
 
 /** @type {PluginManager} */
@@ -102,17 +74,8 @@ let application
 /** @type {TelemetryHost} */
 const host = createHostObject()
 
-/** @type {ReturnType<typeof setInterval> | undefined} */
-let heartbeatInterval
-
-/** @type {ReturnType<typeof setInterval> | undefined} */
-let extendedInterval
-
 /** @type {Integration[]} */
 let integrations
-
-/** @type {Map<string, { name: string, value: ConfigValue, origin: string, seq_id: number }>} */
-const configWithOrigin = new Map()
 
 /**
  * Retry information that `telemetry.js` keeps in-memory to be merged into the next payload.
@@ -129,8 +92,6 @@ let heartbeatFailedIntegrations = []
 let heartbeatFailedDependencies = []
 
 const sentIntegrations = new Set()
-
-let seqId = 0
 
 function getRetryData () {
   return retryData
@@ -184,7 +145,7 @@ function getIntegrations () {
 }
 
 /**
- * @param {TelemetryConfig} config
+ * @param {import('../config/config-base')} config
  */
 function getProducts (config) {
   return {
@@ -199,7 +160,7 @@ function getProducts (config) {
 }
 
 /**
- * @param {TelemetryConfig} config
+ * @param {import('../config/config-base')} config
  */
 function getInstallSignature (config) {
   const { installSignature: sig } = config
@@ -212,13 +173,11 @@ function getInstallSignature (config) {
   }
 }
 
-/**
- * @param {TelemetryConfig} config
- */
+/** @param {import('../config/config-base')} config */
 function appStarted (config) {
   const app = {
     products: getProducts(config),
-    configuration: [...configWithOrigin.values()],
+    configuration: latestConfiguration,
   }
   const installSignature = getInstallSignature(config)
   if (installSignature) {
@@ -245,7 +204,7 @@ function appClosing () {
 }
 
 /**
- * @param {TelemetryConfig} config
+ * @param {import('../config/config-base')} config
  * @returns {TelemetryApplication}
  */
 function createAppObject (config) {
@@ -320,11 +279,11 @@ function createPayload (currReqType, currPayload = {}) {
 }
 
 /**
- * @param {TelemetryConfig} config
+ * @param {import('../config/config-base')} config
  * @param {TelemetryApplication} application
  */
 function heartbeat (config, application) {
-  heartbeatInterval = setInterval(() => {
+  setInterval(() => {
     metricsManager.send(config, application, host)
     telemetryLogger.send(config, application, host)
 
@@ -333,11 +292,9 @@ function heartbeat (config, application) {
   }, config.telemetry.heartbeatInterval).unref()
 }
 
-/**
- * @param {TelemetryConfig} config
- */
+/** @param {import('../config/config-base')} config */
 function extendedHeartbeat (config) {
-  extendedInterval = setInterval(() => {
+  setInterval(() => {
     const appPayload = appStarted(config)
     if (heartbeatFailedIntegrations.length > 0) {
       appPayload.integrations = heartbeatFailedIntegrations
@@ -352,12 +309,12 @@ function extendedHeartbeat (config) {
 }
 
 /**
- * @param {TelemetryConfig} aConfig
+ * @param {import('../config/config-base')} aConfig
  * @param {PluginManager} thePluginManager
  */
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
-    if (aConfig.sca?.enabled) {
+    if (aConfig.appsec.sca.enabled) {
       logger.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
     }
 
@@ -376,8 +333,7 @@ function start (aConfig, thePluginManager) {
   sendData(config, application, host, 'app-started', appStarted(config))
 
   if (integrations.length > 0) {
-    sendData(config, application, host, 'app-integrations-change',
-      { integrations }, updateRetryData)
+    sendData(config, application, host, 'app-integrations-change', { integrations }, updateRetryData)
   }
 
   heartbeat(config, application)
@@ -386,21 +342,6 @@ function start (aConfig, thePluginManager) {
 
   globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(appClosing)
   telemetryStartChannel.publish(getTelemetryData())
-}
-
-function stop () {
-  if (!config) {
-    return
-  }
-  clearInterval(extendedInterval)
-  clearInterval(heartbeatInterval)
-  globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(appClosing)
-
-  telemetryStopChannel.publish(getTelemetryData())
-
-  endpoints.stop()
-  sessionPropagation.stop()
-  config = undefined
 }
 
 function updateIntegrations () {
@@ -417,121 +358,37 @@ function updateIntegrations () {
   sendData(config, application, host, reqType, payload, updateRetryData)
 }
 
-/**
- * @param {Record<string, string | number | boolean> | null | undefined} map
- */
-function formatMapForTelemetry (map) {
-  // format from an object to a string map in order for
-  // telemetry intake to accept the configuration
-  return map
-    ? Object.entries(map).map(([key, value]) => `${key}:${value}`).join(',')
-    : ''
-}
-
-const nameMapping = {
-  sampleRate: 'DD_TRACE_SAMPLE_RATE',
-  logInjection: 'DD_LOG_INJECTION',
-  headerTags: 'DD_TRACE_HEADER_TAGS',
-  tags: 'DD_TAGS',
-  'sampler.rules': 'DD_TRACE_SAMPLING_RULES',
-  traceEnabled: 'DD_TRACE_ENABLED',
-  url: 'DD_TRACE_AGENT_URL',
-  'sampler.rateLimit': 'DD_TRACE_RATE_LIMIT',
-  queryStringObfuscation: 'DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP',
-  version: 'DD_VERSION',
-  env: 'DD_ENV',
-  service: 'DD_SERVICE',
-  clientIpHeader: 'DD_TRACE_CLIENT_IP_HEADER',
-  'grpc.client.error.statuses': 'DD_GRPC_CLIENT_ERROR_STATUSES',
-  'grpc.server.error.statuses': 'DD_GRPC_SERVER_ERROR_STATUSES',
-  traceId128BitLoggingEnabled: 'DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED',
-  instrumentationSource: 'instrumentation_source',
-  injectionEnabled: 'ssi_injection_enabled',
-  injectForce: 'ssi_forced_injection_enabled',
-  'runtimeMetrics.enabled': 'runtimeMetrics',
-  otelLogsEnabled: 'DD_LOGS_OTEL_ENABLED',
-  otelUrl: 'OTEL_EXPORTER_OTLP_ENDPOINT',
-  otelEndpoint: 'OTEL_EXPORTER_OTLP_ENDPOINT',
-  otelHeaders: 'OTEL_EXPORTER_OTLP_HEADERS',
-  otelProtocol: 'OTEL_EXPORTER_OTLP_PROTOCOL',
-  otelTimeout: 'OTEL_EXPORTER_OTLP_TIMEOUT',
-  otelLogsHeaders: 'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
-  otelLogsProtocol: 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL',
-  otelLogsTimeout: 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT',
-  otelLogsUrl: 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT',
-  otelBatchTimeout: 'OTEL_BSP_SCHEDULE_DELAY',
-  otelMaxExportBatchSize: 'OTEL_BSP_MAX_EXPORT_BATCH_SIZE',
-  otelMaxQueueSize: 'OTEL_BSP_MAX_QUEUE_SIZE',
-  otelMetricsEnabled: 'DD_METRICS_OTEL_ENABLED',
-  otelMetricsHeaders: 'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
-  otelMetricsProtocol: 'OTEL_EXPORTER_OTLP_METRICS_PROTOCOL',
-  otelMetricsTimeout: 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT',
-  otelMetricsExportTimeout: 'OTEL_METRIC_EXPORT_TIMEOUT',
-  otelMetricsUrl: 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
-  otelMetricsExportInterval: 'OTEL_METRIC_EXPORT_INTERVAL',
-  otelMetricsTemporalityPreference: 'OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE',
-}
-
-const namesNeedFormatting = new Set(['DD_TAGS', 'peerServiceMapping', 'serviceMapping'])
+let latestConfiguration = []
 
 /**
- * @param {{ name: string, value: ConfigValue, origin: string }[]} changes
- * @param {TelemetryConfig} config
+ * @param {{ name: string, value: ConfigValue, origin: string, seq_id: number }[]} configuration
+ * @param {import('../config/config-base')} config
  */
-function updateConfig (changes, config) {
+function updateConfig (configuration, config) {
   if (!config.telemetry.enabled) return
-  if (changes.length === 0) return
 
-  logger.trace(changes)
+  logger.trace(configuration)
 
   const application = createAppObject(config)
 
-  const changed = configWithOrigin.size > 0
-
-  for (const change of changes) {
-    const name = nameMapping[change.name] || change.name
-    const { origin, value } = change
-    const entry = { name, value, origin, seq_id: seqId++ }
-
-    if (namesNeedFormatting.has(name)) {
-      // @ts-expect-error entry.value is known to be a map for these config names
-      entry.value = formatMapForTelemetry(value)
-    } else if (name === 'url') {
-      if (value) {
-        entry.value = value.toString()
-      }
-    } else if (name === 'DD_TRACE_SAMPLING_RULES') {
-      entry.value = JSON.stringify(value)
-    } else if (Array.isArray(value)) {
-      entry.value = value.join(',')
-    }
-
-    // Use composite key to support multiple origins for same config name
-    configWithOrigin.set(`${name}|${origin}`, entry)
-  }
-
-  if (changed) {
-    // update configWithOrigin to contain up-to-date full list of config values for app-extended-heartbeat
+  if (latestConfiguration.length) {
     const { reqType, payload } = createPayload('app-client-configuration-change', {
-      configuration: [...configWithOrigin.values()],
+      configuration,
     })
     sendData(config, application, host, reqType, payload, updateRetryData)
   }
+  latestConfiguration = configuration
 }
 
 /**
- * @param {TelemetryConfig['profiling']['enabled']} profilingEnabled
+ * @param {import('../config/config-base')['profiling']['enabled']} profilingEnabled
  */
 function profilingEnabledToBoolean (profilingEnabled) {
-  if (typeof profilingEnabled === 'boolean') {
-    return profilingEnabled
-  }
   return profilingEnabled === 'true' || profilingEnabled === 'auto'
 }
 
 module.exports = {
   start,
-  stop,
   updateIntegrations,
   updateConfig,
   appClosing,
