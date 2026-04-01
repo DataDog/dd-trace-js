@@ -1196,10 +1196,11 @@ class Config {
     calc['dogstatsd.hostname'] = this.#getHostname()
 
     // Compute OTLP logs and metrics URLs to send payloads to the active Datadog Agent
-    const agentHostname = this.#getHostname()
+    let agentHostname = this.#getHostname()
     calc.otelLogsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
     calc.otelMetricsUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`
     calc.otelUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}`
+    if (agentHostname === '127.0.0.1') agentHostname = 'localhost'
     calc.otelTracesUrl = `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/traces`
     calc['telemetry.heartbeatInterval'] = maybeInt(Math.floor(this.#defaults['telemetry.heartbeatInterval'] * 1000))
 

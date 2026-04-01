@@ -283,7 +283,7 @@ describe('Config', () => {
     delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
     delete process.env.DD_AGENT_HOST
     const config = getConfig()
-    assert.strictEqual(config.otelTracesUrl, 'http://127.0.0.1:4318/v1/traces')
+    assert.strictEqual(config.otelTracesUrl, 'http://localhost:4318/v1/traces')
   })
 
   it('should set otelTracesUrl using DD_AGENT_HOST', () => {
