@@ -7,7 +7,6 @@ const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
-const CLI_TOOLS = ['cypress']
 const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
 const EXPORTER_MAP = {
@@ -22,21 +21,6 @@ function isPackageManager () {
   return PACKAGE_MANAGERS.some(packageManager =>
     process.argv[1]?.includes(`bin/${packageManager}`)
   )
-}
-
-function isCliTool () {
-  // Skip CLI tools like Cypress that spawn child processes we don't want to instrument
-  if (CLI_TOOLS.some(tool =>
-    process.argv[1]?.endsWith(`bin/${tool}`) || process.argv[1]?.endsWith(`bin/${tool}.js`)
-  )) {
-    return true
-  }
-  // Skip Electron processes (e.g. Cypress binary) - the config child process
-  // uses the user's Node.js binary, so process.versions.electron won't be set there
-  if (process.versions.electron) {
-    return true
-  }
-  return false
 }
 
 function detectTestWorkerType () {
@@ -64,11 +48,6 @@ const isAgentlessEnabled = isTrue(getValueFromEnvSources('DD_CIVISIBILITY_AGENTL
 
 if (!isTestWorker && isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
-  shouldInit = false
-}
-
-if (!isTestWorker && isCliTool()) {
-  log.debug('dd-trace is not initialized in a CLI tool.')
   shouldInit = false
 }
 

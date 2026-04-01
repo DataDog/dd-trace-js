@@ -5,18 +5,8 @@ const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
 
-const { isTrue, isFalse } = require('../../dd-trace/src/util')
-const log = require('../../dd-trace/src/log')
-const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
-
 const DD_CONFIG_WRAPPED = Symbol('dd-trace.cypress.config.wrapped')
-const DD_CLI_CONFIG_WRAPPER_FILE = 'dd-cypress-config'
-const DEFAULT_FLUSH_INTERVAL = 5000
-const DD_TRACE_PRELOADS = {
-  'dd-trace/register.js': require.resolve('../../../register.js'),
-  'dd-trace/ci/init': require.resolve('../../../ci/init'),
-  'dd-trace/loader-hook.mjs': require.resolve('../../../loader-hook.mjs'),
-}
+const DD_CLI_CONFIG_WRAPPER_FILE = '.dd-cypress-config'
 
 const noopTask = {
   'dd:testSuiteStart': () => null,
@@ -81,13 +71,11 @@ function injectSupportFile (config) {
   }
 
   const ddSupportFile = require.resolve('../../../ci/cypress/support')
-  const ext = path.extname(originalSupportFile)
-  const wrapperFile = path.join(os.tmpdir(), `dd-cypress-support-${process.pid}${ext}`)
-  const isEsm = ext === '.mjs'
+  const wrapperFile = path.join(os.tmpdir(), `dd-cypress-support-${process.pid}.mjs`)
 
-  const wrapperContent = isEsm
-    ? `import ${JSON.stringify(ddSupportFile)}\nimport ${JSON.stringify(originalSupportFile)}\n`
-    : `require(${JSON.stringify(ddSupportFile)})\nrequire(${JSON.stringify(originalSupportFile)})\n`
+  // Always use ESM: it can import both CJS and ESM support files.
+  const wrapperContent =
+    `import ${JSON.stringify(ddSupportFile)}\nimport ${JSON.stringify(originalSupportFile)}\n`
 
   try {
     fs.writeFileSync(wrapperFile, wrapperContent)
@@ -96,54 +84,6 @@ function injectSupportFile (config) {
   } catch {
     // Can't write wrapper - skip injection
   }
-}
-
-/**
- * Initializes CI Visibility for the Cypress config/plugin process when Cypress
- * strips NODE_OPTIONS before loading an ESM config file in Electron.
- *
- * This cannot just reuse ci/init directly because ci/init intentionally skips
- * CLI tools and Electron processes, and this fallback exists specifically for
- * Cypress's config/plugin process after NODE_OPTIONS is removed from that path.
- *
- * @returns {object|undefined} tracer singleton
- */
-function ensureCiVisibilityTracer () {
-  const tracer = global._ddtrace || require('../../../packages/dd-trace')
-
-  if (tracer?._initialized) {
-    return tracer
-  }
-
-  if (isFalse(getValueFromEnvSources('DD_CIVISIBILITY_ENABLED'))) {
-    return tracer
-  }
-
-  const isAgentlessEnabled = isTrue(getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
-  const options = {
-    startupLogs: false,
-    isCiVisibility: true,
-    flushInterval: DEFAULT_FLUSH_INTERVAL,
-  }
-
-  if (isAgentlessEnabled) {
-    if (getValueFromEnvSources('DD_API_KEY')) {
-      options.experimental = { exporter: 'datadog' }
-    } else {
-      log.warn(
-        'DD_CIVISIBILITY_AGENTLESS_ENABLED is set, but DD_API_KEY is undefined, so Cypress CI Visibility is disabled.'
-      )
-      return tracer
-    }
-  } else {
-    options.experimental = { exporter: 'agent_proxy' }
-  }
-
-  tracer.init(options)
-  tracer.use('fs', false)
-  tracer.use('child_process', false)
-
-  return tracer
 }
 
 /**
@@ -166,7 +106,7 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
     }
   }
 
-  const tracer = ensureCiVisibilityTracer()
+  const tracer = global._ddtrace
 
   const registerAfterRunWithCleanup = () => {
     on('after:run', (results) => {
@@ -291,76 +231,65 @@ function wrapConfig (config) {
 }
 
 /**
+ * @param {string} originalConfigFile absolute path to the original config file
+ * @returns {string} path to the generated wrapper file
+ */
+function createConfigWrapper (originalConfigFile) {
+  const wrapperFile = path.join(
+    path.dirname(originalConfigFile),
+    `${DD_CLI_CONFIG_WRAPPER_FILE}-${process.pid}.mjs`
+  )
+
+  const wrapConfigPath = require.resolve('../../../ci/cypress/wrap-config')
+
+  // Always use ESM: it can import both CJS and ESM configs, so it works
+  // regardless of the original file's extension or "type": "module" in package.json.
+  const wrapperContent = [
+    `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
+    `import wrapConfig from ${JSON.stringify(pathToFileURL(wrapConfigPath).href)}`,
+    '',
+    'export default wrapConfig(originalConfig)',
+    '',
+  ].join('\n')
+
+  fs.writeFileSync(wrapperFile, wrapperContent)
+
+  return wrapperFile
+}
+
+/**
+ * Wraps the Cypress config file for a CLI start() call. When an explicit
+ * configFile is provided, creates a temp wrapper that imports the original
+ * and passes it through wrapConfig. This handles ESM configs (.mjs) and
+ * plain-object configs (without defineConfig) that can't be intercepted
+ * via the defineConfig shimmer.
+ *
  * @param {object|undefined} options
  * @returns {{ options: object|undefined, cleanup: Function }}
  */
 function wrapCliConfigFileOptions (options) {
-  if (typeof options?.configFile !== 'string' || path.extname(options.configFile) !== '.mjs') {
-    return { options, cleanup: () => {} }
-  }
+  const noop = { options, cleanup: () => {} }
+
+  if (!options || typeof options.configFile !== 'string') return noop
 
   const projectRoot = typeof options.project === 'string' ? options.project : process.cwd()
-  const originalConfigFile = path.isAbsolute(options.configFile)
+  const configFilePath = path.isAbsolute(options.configFile)
     ? options.configFile
     : path.resolve(projectRoot, options.configFile)
-  const wrapConfigFile = require.resolve('../../../ci/cypress/wrap-config')
-  const wrapperFile = path.join(
-    os.tmpdir(),
-    `${DD_CLI_CONFIG_WRAPPER_FILE}-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.mjs`
-  )
 
-  fs.writeFileSync(wrapperFile, [
-    `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
-    `import wrapConfig from ${JSON.stringify(pathToFileURL(wrapConfigFile).href)}`,
-    '',
-    'export default wrapConfig(originalConfig)',
-    '',
-  ].join('\n'))
+  if (!fs.existsSync(configFilePath)) return noop
+
+  const wrapperFile = createConfigWrapper(configFilePath)
 
   return {
-    options: {
-      ...options,
-      configFile: wrapperFile,
-    },
+    options: { ...options, configFile: wrapperFile },
     cleanup: () => {
       try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
     },
   }
 }
 
-/**
- * Rewrite dd-trace preloads to absolute paths so Cypress child processes can
- * resolve them even when their cwd is not the project root.
- *
- * @returns {Function}
- */
-function rewriteCliNodeOptions () {
-  const originalNodeOptions = getEnvironmentVariable('NODE_OPTIONS')
-
-  if (!originalNodeOptions) {
-    return () => {}
-  }
-
-  const rewrittenNodeOptions = originalNodeOptions
-    .split(/\s+/)
-    .map(part => DD_TRACE_PRELOADS[part] || part)
-    .join(' ')
-
-  if (rewrittenNodeOptions === originalNodeOptions) {
-    return () => {}
-  }
-
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  process.env.NODE_OPTIONS = rewrittenNodeOptions
-
-  return () => {
-    // eslint-disable-next-line eslint-rules/eslint-process-env
-    process.env.NODE_OPTIONS = originalNodeOptions
-  }
-}
-
 module.exports = {
-  rewriteCliNodeOptions,
   wrapCliConfigFileOptions,
   wrapConfig,
 }

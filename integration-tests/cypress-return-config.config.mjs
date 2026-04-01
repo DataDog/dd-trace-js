@@ -1,8 +1,6 @@
-'use strict'
+import { defineConfig } from 'cypress'
 
-const { defineConfig } = require('cypress')
-
-module.exports = defineConfig({
+export default defineConfig({
   defaultCommandTimeout: 1000,
   e2e: {
     async setupNodeEvents () {

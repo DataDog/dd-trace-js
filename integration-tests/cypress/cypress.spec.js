@@ -67,7 +67,7 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
-const { DD_MAJOR, NODE_MAJOR, NODE_MINOR } = require('../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 const { resolveSourceLineForTest } = require('../../packages/datadog-plugin-cypress/src/source-map-utils')
 
 const RECEIVER_STOP_TIMEOUT = 20000
@@ -75,8 +75,6 @@ const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
 const CYPRESS_PRECOMPILED_SPEC_DIST_DIR = 'cypress/e2e/dist'
-const REGISTER_SUPPORTS_IMPORT = NODE_MAJOR > 20 || (NODE_MAJOR === 20 && NODE_MINOR >= 6)
-
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 
 const moduleTypes = [
@@ -315,14 +313,9 @@ moduleTypes.forEach(({
       ])
     })
 
-    // cypress-legacy-plugin.config.js uses defineConfig which only exists in Cypress >=10
-    const legacyPluginIt = (version !== '6.7.0') ? it : it.skip
-    const autoInjectedSupportIt = (version !== '6.7.0') ? it : it.skip
-    const esmConfigFileIt = (version !== '6.7.0' && type === 'commonJS' && REGISTER_SUPPORTS_IMPORT) ? it : it.skip
-    const programmaticDoubleRunIt = (version !== '6.7.0' && type === 'commonJS') ? it : it.skip
-    const plainObjectManualConfigIt = (version !== '6.7.0' && type === 'commonJS') ? it : it.skip
-    const returnedConfigIt = (version !== '6.7.0' && type === 'commonJS') ? it : it.skip
-    legacyPluginIt('is backwards compatible with the old manual plugin approach', async () => {
+    // These tests require Cypress >=10 features (defineConfig, setupNodeEvents)
+    const over10It = (version !== '6.7.0') ? it : it.skip
+    over10It('is backwards compatible with the old manual plugin approach', async () => {
       receiver.setInfoResponse({ endpoints: [] })
 
       const receiverPromise = receiver
@@ -345,8 +338,12 @@ moduleTypes.forEach(({
 
       const envVars = getCiVisEvpProxyConfig(receiver.port)
 
+      const legacyConfigFile = type === 'esm'
+        ? 'cypress-legacy-plugin.config.mjs'
+        : 'cypress-legacy-plugin.config.js'
+
       childProcess = exec(
-        './node_modules/.bin/cypress run --config-file cypress-legacy-plugin.config.js',
+        `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
         {
           cwd,
           env: {
@@ -363,7 +360,7 @@ moduleTypes.forEach(({
       ])
     })
 
-    esmConfigFileIt('reports tests when using cypress.config.mjs with NODE_OPTIONS', async () => {
+    over10It('reports tests when using cypress.config.mjs with NODE_OPTIONS', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads
@@ -390,7 +387,7 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            NODE_OPTIONS: '-r dd-trace/ci/init',
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },
@@ -407,7 +404,7 @@ moduleTypes.forEach(({
       assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
     })
 
-    programmaticDoubleRunIt('reports tests when cypress.run is called twice in the same process', async () => {
+    over10It('reports tests when cypress.run is called twice in the same process', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const passedTests = payloads
@@ -428,8 +425,12 @@ moduleTypes.forEach(({
 
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
+      const doubleRunScript = type === 'esm'
+        ? 'node ./cypress-double-run.mjs'
+        : 'node ./cypress-double-run.js'
+
       childProcess = exec(
-        'node ./cypress-double-run.js',
+        doubleRunScript,
         {
           cwd,
           env: {
@@ -448,7 +449,7 @@ moduleTypes.forEach(({
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
-    plainObjectManualConfigIt(
+    over10It(
       'reports tests with a plain-object config when dd-trace is manually configured',
       async () => {
         const receiverPromise = receiver
@@ -470,8 +471,12 @@ moduleTypes.forEach(({
 
         const envVars = getCiVisAgentlessConfig(receiver.port)
 
+        const plainObjectConfigFile = type === 'esm'
+          ? 'cypress-plain-object-manual.config.mjs'
+          : 'cypress-plain-object-manual.config.js'
+
         childProcess = exec(
-          './node_modules/.bin/cypress run --config-file cypress-plain-object-manual.config.js',
+          `./node_modules/.bin/cypress run --config-file ${plainObjectConfigFile}`,
           {
             cwd,
             env: {
@@ -491,7 +496,7 @@ moduleTypes.forEach(({
       }
     )
 
-    autoInjectedSupportIt('does not modify the user support file and cleans up the injected wrapper', async () => {
+    over10It('does not modify the user support file and cleans up the injected wrapper', async () => {
       const supportFilePath = path.join(cwd, 'cypress/support/e2e.js')
       const originalSupportContent = fs.readFileSync(supportFilePath, 'utf8')
       const supportContentWithoutDdTrace = originalSupportContent
@@ -549,7 +554,7 @@ moduleTypes.forEach(({
       }
     })
 
-    returnedConfigIt('preserves config returned from setupNodeEvents', async () => {
+    over10It('preserves config returned from setupNodeEvents', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads
@@ -570,8 +575,12 @@ moduleTypes.forEach(({
 
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
+      const returnConfigFile = type === 'esm'
+        ? 'cypress-return-config.config.mjs'
+        : 'cypress-return-config.config.js'
+
       childProcess = exec(
-        './node_modules/.bin/cypress run --config-file cypress-return-config.config.js',
+        `./node_modules/.bin/cypress run --config-file ${returnConfigFile}`,
         {
           cwd,
           env: envVars,
@@ -606,8 +615,12 @@ moduleTypes.forEach(({
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
       let testOutput = ''
+      const customHooksConfigFile = type === 'esm'
+        ? 'cypress-custom-after-hooks.config.mjs'
+        : 'cypress-custom-after-hooks.config.js'
+
       childProcess = exec(
-        './node_modules/.bin/cypress run --config-file cypress-custom-after-hooks.config.js',
+        `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
         {
           cwd,
           env: {
