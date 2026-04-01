@@ -4997,7 +4997,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
     // Regression test: without the fix, _ddKnownTests is not injected after worker restart,
     // so tests that should be detected as new are not marked as such.
-    onlyLatestIt('detects new tests after worker restart', async () => {
+    it('detects new tests after worker restart', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       receiver.setKnownTests({
         jest: {
@@ -5984,7 +5984,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       // Regression test: with workerIdleMemoryLimit=0, jest restarts the worker after every suite.
       // Before the fix, sendWrapper was only applied to the original child process. After restart,
       // the new child process was not wrapped, so _ddTestManagementTests was never injected.
-      onlyLatestIt('can disable in parallel mode after worker restart', async () => {
+      it('can disable in parallel mode after worker restart', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
         receiver.setTestManagementTests({
@@ -7016,7 +7016,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       // Regression test: without the fix, _ddModifiedFiles is not injected after worker restart,
       // so tests that should be detected as impacted are not marked as such.
-      onlyLatestIt('should be detected as impacted after worker restart', async () => {
+      it('should be detected as impacted after worker restart', async () => {
         receiver.setSettings({ impacted_tests_enabled: true })
 
         // Modify the impacted file in test-management/ and commit so git diff picks it up
