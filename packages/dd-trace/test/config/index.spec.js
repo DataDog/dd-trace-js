@@ -999,7 +999,7 @@ describe('Config', () => {
       { name: 'iast.stackTrace.enabled', value: false, origin: 'env_var' },
       { name: 'iast.telemetryVerbosity', value: 'DEBUG', origin: 'env_var' },
       { name: 'injectForce', value: false, origin: 'env_var' },
-      { name: 'injectionEnabled', value: ['tracer'], origin: 'env_var' },
+      { name: 'injectionEnabled', value: 'tracer', origin: 'env_var' },
       { name: 'instrumentation_config_id', value: 'abcdef123', origin: 'env_var' },
       { name: 'instrumentationSource', value: 'ssi', origin: 'env_var' },
       { name: 'isGCPFunction', value: false, origin: 'env_var' },

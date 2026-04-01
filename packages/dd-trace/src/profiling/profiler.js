@@ -95,7 +95,7 @@ class Profiler extends EventEmitter {
       error (...args) { log.error(...args) },
     }
 
-    const libraryInjected = injectionEnabled.length > 0
+    const libraryInjected = !!injectionEnabled
     let activation
     if (enabled === 'auto') {
       activation = 'auto'
