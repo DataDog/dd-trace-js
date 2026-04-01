@@ -1,5 +1,5 @@
 import { defineConfig } from 'cypress'
-import ddTracePlugin from 'dd-trace/ci/cypress/plugin'
+import ddTracePlugin from 'dd-trace/ci/cypress/plugin.js'
 
 export default defineConfig({
   defaultCommandTimeout: 1000,

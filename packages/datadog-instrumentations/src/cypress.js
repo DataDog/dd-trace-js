@@ -40,7 +40,9 @@ function getCliStartWrapper (start) {
   }
 }
 
-for (const file of ['dist/exec/run.js', 'dist/exec/open.js']) {
+// Cypress 10-14 ships lib/exec/{run,open}.js, Cypress 15+ ships dist/exec/{run,open}.js.
+// Hook both so the CLI wrapper fires across all supported versions.
+for (const file of ['lib/exec/run.js', 'lib/exec/open.js', 'dist/exec/run.js', 'dist/exec/open.js']) {
   addHook({
     name: 'cypress',
     versions: ['>=10.2.0'],

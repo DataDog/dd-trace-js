@@ -496,6 +496,53 @@ moduleTypes.forEach(({
       }
     )
 
+    over10It(
+      'auto-instruments a plain-object config without defineConfig or manual plugin',
+      async () => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+            const passedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+            )
+
+            assertObjectContains(passedTest?.content, {
+              meta: {
+                [TEST_STATUS]: 'pass',
+                [TEST_FRAMEWORK]: 'cypress',
+              },
+            })
+          }, 20000)
+
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+
+        const plainObjectAutoConfigFile = type === 'esm'
+          ? 'cypress-plain-object-auto.config.mjs'
+          : 'cypress-plain-object-auto.config.js'
+
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --config-file ${plainObjectAutoConfigFile}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      }
+    )
+
     over10It('does not modify the user support file and cleans up the injected wrapper', async () => {
       const supportFilePath = path.join(cwd, 'cypress/support/e2e.js')
       const originalSupportContent = fs.readFileSync(supportFilePath, 'utf8')

@@ -119,6 +119,8 @@
 /integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-legacy-plugin.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-legacy-plugin.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-auto.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-auto.config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-plain-object-manual.config.js @DataDog/ci-app-libraries
 /integration-tests/cypress-plain-object-manual.config.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-return-config.config.js @DataDog/ci-app-libraries

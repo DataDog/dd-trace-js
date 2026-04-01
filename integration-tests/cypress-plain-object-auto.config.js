@@ -1,11 +1,10 @@
-import ddTracePlugin from 'dd-trace/ci/cypress/plugin.js'
+'use strict'
 
-export default {
+// Plain object config without defineConfig and without manual plugin.
+// Relies solely on the CLI wrapper to inject setupNodeEvents.
+module.exports = {
   defaultCommandTimeout: 1000,
   e2e: {
-    setupNodeEvents (on, config) {
-      return ddTracePlugin(on, config)
-    },
     specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
     supportFile: 'cypress/support/e2e.js',
   },
