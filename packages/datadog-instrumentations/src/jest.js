@@ -15,6 +15,8 @@ const {
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   getTestEndLine,
   isModifiedTest,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -98,6 +100,9 @@ const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
 const wrappedWorkers = new WeakSet()
+// New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
+// Populated in-process for runInBand, and via worker-report:trace for parallel mode.
+const newTestsWithDynamicNames = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
 // Per-test: how many EFD retries were determined after the first execution.
@@ -154,25 +159,60 @@ function getTestStats (testStatuses) {
  * @param {string[]} quarantineNames
  * @param {number} totalCount
  */
-function logIgnoredFailuresSummary (efdNames, quarantineNames, totalCount) {
-  const names = []
-  for (const n of efdNames) {
-    names.push({ name: n, reason: 'Early Flake Detection' })
-  }
-  for (const n of quarantineNames) {
-    names.push({ name: n, reason: 'Quarantine' })
-  }
-  const shown = names.slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = names.length - shown.length
+/**
+ * Renders a truncated bullet list from an array of items.
+ *
+ * @param {Array<{ text: string, suffix?: string }>} items
+ * @returns {string}
+ */
+function formatList (items) {
+  const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const list = shown.map(({ name, reason }) => `  • ${name} (${reason})`).join('\n')
+  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+}
+
+/**
+ * Logs a single "Datadog Test Optimization" summary at session end,
+ * combining all relevant sections (ignored failures, dynamic names).
+ *
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ */
+function logSessionSummary (ignoredFailures) {
+  const sections = []
+
+  if (ignoredFailures) {
+    const items = []
+    for (const n of ignoredFailures.efdNames) {
+      items.push({ text: n, suffix: 'Early Flake Detection' })
+    }
+    for (const n of ignoredFailures.quarantineNames) {
+      items.push({ text: n, suffix: 'Quarantine' })
+    }
+    sections.push(
+      `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
+      formatList(items)
+    )
+  }
+
+  if (newTestsWithDynamicNames.size > 0) {
+    const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
+    sections.push(
+      `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+      'dynamic data (timestamps, UUIDs, etc.).\n' +
+      'Tests with changing names are always treated as new on every run, ' +
+      'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
+      'Consider using stable, deterministic test names.\n\n' +
+      formatList(items)
+    )
+    newTestsWithDynamicNames.clear()
+  }
+
+  if (sections.length === 0) return
+
   const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing message when exit code is flipped
-  console.warn(
-    `\n${line}\nDatadog Test Optimization\n${line}\n` +
-    `${totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
-    `${list}${moreSuffix}\n`
-  )
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -457,6 +497,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         const isJestRetry = event.test?.invocations > 1
+        const hasDynamicName = isNewTest && DYNAMIC_NAME_RE.test(testName)
         const ctx = {
           name: testName,
           suite: this.testSuite,
@@ -472,6 +513,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isDisabled,
           isQuarantined,
           isModified,
+          hasDynamicName,
           testSuiteAbsolutePath: this.testSuiteAbsolutePath,
         }
         testContexts.set(event.test, ctx)
@@ -564,6 +606,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (!isAttemptToFix && this.isKnownTestsEnabled) {
           const isNew = !this.knownTestsForThisSuite.includes(testFullName)
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
+            if (DYNAMIC_NAME_RE.test(testFullName)) {
+              // Populated directly for runInBand; for parallel workers the main process
+              // collects these from the TEST_HAS_DYNAMIC_NAME span tag via worker-report:trace.
+              newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
+            }
             retriedTestsToNumAttempts.set(testFullName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
               testsToBeRetried.add(testFullName)
@@ -1333,13 +1380,7 @@ function getCliWrapper (isNewJestVersion) {
         })
       }
 
-      if (ignoredFailuresSummary) {
-        logIgnoredFailuresSummary(
-          ignoredFailuresSummary.efdNames,
-          ignoredFailuresSummary.quarantineNames,
-          ignoredFailuresSummary.totalCount
-        )
-      }
+      logSessionSummary(ignoredFailuresSummary)
 
       numSkippedSuites = 0
 
@@ -1793,8 +1834,14 @@ addHook({
 
 function onMessageWrapper (onMessage) {
   return function () {
-    const [code, data] = arguments[0]
+    const response = arguments[0]
+    if (!Array.isArray(response)) {
+      return onMessage.apply(this, arguments)
+    }
+
+    const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
+      collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
       workerReportTraceCh.publish(data)
       return
     }
@@ -1855,14 +1902,22 @@ function sendWrapper (send) {
   }
 }
 
+function wrapWorker (worker) {
+  // ChildProcessWorker uses _child (child_process), ExperimentalWorker uses _worker (worker_threads)
+  const workerChannel = worker._child || worker._worker
+  if (!workerChannel) return
+
+  shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
+  shimmer.wrap(worker, '_onMessage', onMessageWrapper)
+  workerChannel.removeAllListeners('message')
+  workerChannel.on('message', worker._onMessage.bind(worker))
+}
+
 function enqueueWrapper (enqueue) {
   return function () {
     shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
       if (worker && !wrappedWorkers.has(worker)) {
-        shimmer.wrap(worker._child, 'send', sendWrapper)
-        shimmer.wrap(worker, '_onMessage', onMessageWrapper)
-        worker._child.removeAllListeners('message')
-        worker._child.on('message', worker._onMessage.bind(worker))
+        wrapWorker(worker)
         wrappedWorkers.add(worker)
       }
       return onStart.apply(this, arguments)
@@ -1890,6 +1945,21 @@ addHook({
     shimmer.wrap(ChildProcessWorker.prototype, 'onMessage', onMessageWrapper)
   }
   return childProcessWorker
+})
+
+addHook({
+  name: 'jest-worker',
+  versions: ['>=24.9.0 <30.0.0'],
+  file: 'build/workers/NodeThreadsWorker.js',
+}, (nodeThreadsWorker) => {
+  const ExperimentalWorker = nodeThreadsWorker.default
+  shimmer.wrap(ExperimentalWorker.prototype, 'send', sendWrapper)
+  if (ExperimentalWorker.prototype._onMessage) {
+    shimmer.wrap(ExperimentalWorker.prototype, '_onMessage', onMessageWrapper)
+  } else if (ExperimentalWorker.prototype.onMessage) {
+    shimmer.wrap(ExperimentalWorker.prototype, 'onMessage', onMessageWrapper)
+  }
+  return nodeThreadsWorker
 })
 
 addHook({

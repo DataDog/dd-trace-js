@@ -33,6 +33,7 @@ const {
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
   TEST_FINAL_STATUS,
+  TEST_HAS_DYNAMIC_NAME,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -427,6 +428,7 @@ class MochaPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      hasDynamicName,
     } = testInfo
 
     const extraTags = {}
@@ -476,6 +478,10 @@ class MochaPlugin extends CiPlugin {
         extraTags[TEST_IS_RETRY] = 'true'
         extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
       }
+    }
+
+    if (hasDynamicName) {
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
