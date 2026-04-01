@@ -434,7 +434,7 @@ describe('Config', () => {
       },
       debug: false,
       dogstatsd: {
-        hostname: 'localhost',
+        hostname: '127.0.0.1',
         port: 8125,
       },
       dynamicInstrumentation: {
@@ -591,7 +591,7 @@ describe('Config', () => {
       { name: 'DD_TRACE_PARTIAL_FLUSH_MIN_SPANS', value: 1000, origin: 'default' },
       { name: 'DD_TRACE_GIT_METADATA_ENABLED', value: true, origin: 'default' },
       { name: 'DD_TRACE_HEADER_TAGS', value: '', origin: 'default' },
-      { name: 'DD_AGENT_HOST', value: 'localhost', origin: 'default' },
+      { name: 'DD_AGENT_HOST', value: '127.0.0.1', origin: 'default' },
       { name: 'DD_IAST_DB_ROWS_TO_TAINT', value: 1, origin: 'default' },
       { name: 'DD_IAST_DEDUPLICATION_ENABLED', value: true, origin: 'default' },
       { name: 'DD_IAST_ENABLED', value: false, origin: 'default' },
