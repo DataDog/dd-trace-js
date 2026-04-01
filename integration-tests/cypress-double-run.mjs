@@ -1,3 +1,7 @@
+// Tests that cypress.run() works twice in the same process (resetRunState).
+// Instrumentation works via the default cypress.config.js in the project
+// (which uses defineConfig), NOT via the inline config below — Cypress
+// does not call setupNodeEvents from inline config objects.
 import cypress from 'cypress'
 
 const runOptions = {

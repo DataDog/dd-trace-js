@@ -404,7 +404,7 @@ moduleTypes.forEach(({
       assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
     })
 
-    over10It('reports tests when cypress.run is called twice in the same process', async () => {
+    over10It('reports tests when cypress.run is called twice (multi-run state reset)', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const passedTests = payloads
@@ -542,6 +542,101 @@ moduleTypes.forEach(({
         assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
       }
     )
+
+    over10It(
+      'auto-instruments a plain-object default config (no --config-file)',
+      async () => {
+        const originalConfig = path.join(cwd, 'cypress.config.js')
+        const backupConfig = path.join(cwd, 'cypress.config.js.bak')
+        const plainObjectConfig = path.join(cwd, 'cypress-plain-object-auto.config.js')
+
+        // Replace default cypress.config.js with the plain-object config
+        fs.renameSync(originalConfig, backupConfig)
+        fs.copyFileSync(plainObjectConfig, originalConfig)
+
+        try {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+              const passedTest = events.find(event =>
+                event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+              )
+
+              assertObjectContains(passedTest?.content, {
+                meta: {
+                  [TEST_STATUS]: 'pass',
+                  [TEST_FRAMEWORK]: 'cypress',
+                },
+              })
+            }, 20000)
+
+          const envVars = getCiVisAgentlessConfig(receiver.port)
+
+          childProcess = exec(
+            './node_modules/.bin/cypress run',
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+              },
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+        } finally {
+          fs.renameSync(backupConfig, originalConfig)
+        }
+      }
+    )
+
+    over10It('reports tests with a TypeScript config file', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+          const passedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 20000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        './node_modules/.bin/cypress run --config-file cypress-typescript.config.ts',
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
 
     over10It('does not modify the user support file and cleans up the injected wrapper', async () => {
       const supportFilePath = path.join(cwd, 'cypress/support/e2e.js')

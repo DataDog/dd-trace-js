@@ -1,3 +1,7 @@
+// Programmatic ESM entry point for the 'esm' module type tests.
+// Instrumentation works via the default cypress.config.js in the project
+// (which uses defineConfig), NOT via the inline setupNodeEvents below —
+// Cypress does not call setupNodeEvents from inline config objects.
 import cypress from 'cypress'
 
 async function runCypress () {

@@ -270,14 +270,33 @@ function createConfigWrapper (originalConfigFile) {
 function wrapCliConfigFileOptions (options) {
   const noop = { options, cleanup: () => {} }
 
-  if (!options || typeof options.configFile !== 'string') return noop
+  if (!options) return noop
 
   const projectRoot = typeof options.project === 'string' ? options.project : process.cwd()
-  const configFilePath = path.isAbsolute(options.configFile)
-    ? options.configFile
-    : path.resolve(projectRoot, options.configFile)
+  let configFilePath
 
-  if (!fs.existsSync(configFilePath)) return noop
+  if (options.configFile === false) {
+    // configFile: false means "no config file" — respect Cypress's semantics
+    return noop
+  } else if (typeof options.configFile === 'string') {
+    configFilePath = path.isAbsolute(options.configFile)
+      ? options.configFile
+      : path.resolve(projectRoot, options.configFile)
+  } else {
+    // No explicit --config-file: resolve the default cypress.config.{js,ts,cjs,mjs}
+    for (const ext of ['.js', '.ts', '.cjs', '.mjs']) {
+      const candidate = path.join(projectRoot, `cypress.config${ext}`)
+      if (fs.existsSync(candidate)) {
+        configFilePath = candidate
+        break
+      }
+    }
+  }
+
+  // Skip .ts files — Cypress transpiles them internally via its own loader.
+  // The ESM wrapper can't import .ts directly. The defineConfig shimmer
+  // handles .ts configs since they're transpiled to CJS by Cypress.
+  if (!configFilePath || !fs.existsSync(configFilePath) || path.extname(configFilePath) === '.ts') return noop
 
   const wrapperFile = createConfigWrapper(configFilePath)
 
