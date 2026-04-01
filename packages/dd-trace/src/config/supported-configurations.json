@@ -2308,7 +2308,7 @@
     ],
     "DD_TRACE_CLOUD_REQUEST_PAYLOAD_TAGGING": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "configurationNames": [
           "cloudPayloadTagging.request"
@@ -3964,7 +3964,7 @@
     ],
     "OTEL_EXPORTER_OTLP_TIMEOUT": [
       {
-        "implementation": "Z",
+        "implementation": "A",
         "type": "int",
         "allowed": "[1-9]\\d*",
         "internalPropertyName": "otelTimeout",
