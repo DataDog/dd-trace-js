@@ -303,10 +303,55 @@ class CypressPlugin {
     }
   }
 
+  /**
+   * Resets state that is scoped to a single Cypress run so the singleton plugin
+   * can be reused safely across multiple programmatic cypress.run() calls.
+   *
+   * @returns {void}
+   */
+  resetRunState () {
+    this._isInit = false
+    this.finishedTestsByFile = {}
+    this.testStatuses = {}
+    this.isTestsSkipped = false
+    this.isSuitesSkippingEnabled = false
+    this.isCodeCoverageEnabled = false
+    this.isFlakyTestRetriesEnabled = false
+    this.flakyTestRetriesCount = 0
+    this.isEarlyFlakeDetectionEnabled = false
+    this.isKnownTestsEnabled = false
+    this.earlyFlakeDetectionNumRetries = 0
+    this.testsToSkip = []
+    this.skippedTests = []
+    this.hasForcedToRunSuites = false
+    this.hasUnskippableSuites = false
+    this.unskippableSuites = []
+    this.knownTests = []
+    this.knownTestsByTestSuite = undefined
+    this.isTestManagementTestsEnabled = false
+    this.testManagementAttemptToFixRetries = 0
+    this.testManagementTests = undefined
+    this.isImpactedTestsEnabled = false
+    this.modifiedFiles = []
+    this.activeTestSpan = null
+    this.testSuiteSpan = null
+    this.testModuleSpan = null
+    this.testSessionSpan = null
+    this.command = undefined
+    this.frameworkVersion = undefined
+    this.rootDir = undefined
+    this.itrCorrelationId = undefined
+    this.isTestIsolationEnabled = undefined
+    this.rumFlushWaitMillis = undefined
+    this._pendingRequestErrorTags = []
+    this.libraryConfigurationPromise = undefined
+  }
+
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
   init (tracer, cypressConfig) {
+    this.resetRunState()
     this._isInit = true
     this.tracer = tracer
     this.cypressConfig = cypressConfig
@@ -688,20 +733,27 @@ class CypressPlugin {
     }
 
     return new Promise(resolve => {
+      const finishAfterRun = () => {
+        this._isInit = false
+        appClosingTelemetry()
+        resolve(null)
+      }
+
       const exporter = this.tracer._tracer._exporter
       if (!exporter) {
-        return resolve(null)
+        finishAfterRun()
+        return
       }
       if (exporter.flush) {
         exporter.flush(() => {
-          appClosingTelemetry()
-          resolve(null)
+          finishAfterRun()
         })
       } else if (exporter._writer) {
         exporter._writer.flush(() => {
-          appClosingTelemetry()
-          resolve(null)
+          finishAfterRun()
         })
+      } else {
+        finishAfterRun()
       }
     })
   }
