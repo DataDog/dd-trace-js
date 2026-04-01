@@ -17,8 +17,9 @@ describe('esm', () => {
   let proc
   let variants
 
-  // test against later versions because server.mjs uses newer package syntax
-  withVersions('mariadb', 'mariadb', '>=3.0.0', version => {
+  // test against later CJS versions; >=3.5.1 is pure ESM with no default export,
+  // so iitm cannot intercept it — covered by ritm hooks in index.spec.js instead.
+  withVersions('mariadb', 'mariadb', '>=3.0.0 <3.5.1', version => {
     useSandbox([`'mariadb@${version}'`], false, [
       './packages/datadog-plugin-mariadb/test/integration-test/*'])
 

@@ -14,7 +14,9 @@ const { ANY_STRING, assertObjectContains } = require('../../../integration-tests
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 // https://github.com/mariadb-corporation/mariadb-connector-nodejs/commit/0a90b71ab20ab4e8b6a86a77ba291bba8ba6a34e
-const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1' : '>=2'
+// mariadb >=3.5.1 is pure ESM; require() does not trigger the ESM loader hooks needed
+// to instrument internal files like lib/pool.js. ESM usage is covered by integration tests.
+const range = semver.gte(process.version, '15.0.0') ? '>=2.5.1 <3.5.1' : '>=2 <3.5.1'
 
 describe('Plugin', () => {
   describe('mariadb', () => {

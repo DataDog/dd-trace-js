@@ -37,19 +37,21 @@ function wrapCommandStart(start, ctx) {
 }
 
 function wrapCommand(Command) {
-  return class extends Command {
-    constructor(...args) {
-      super(...args)
+  if (!Command.prototype.start) return Command
 
-      if (!this.start) return
+  shimmer.wrap(Command.prototype, 'start', function (start) {
+    return function wrappedStart () {
+      if (!startCh.hasSubscribers) return start.apply(this, arguments)
 
       const ctx = { sql: this.sql, conf: this.opts }
 
       commandAddCh.publish(ctx)
 
-      this.start = wrapCommandStart(this.start, ctx)
+      return wrapCommandStart(start, ctx).apply(this, arguments)
     }
-  }
+  })
+
+  return Command
 }
 
 function createWrapQuery(options) {
@@ -190,4 +192,55 @@ addHook({ name, file: 'lib/connection.js', versions: ['>=2.0.4 <=2.5.1'] }, (Con
 
 addHook({ name, file: 'lib/pool-base.js', versions: ['>=2.0.4 <3'] }, (PoolBase) => {
   return shimmer.wrapFunction(PoolBase, wrapPoolBase)
+})
+
+// mariadb >= 3.5.1 migrated to pure ESM. require(esm) in Node.js does not trigger
+// module.register() hooks, so iitm cannot intercept internal ESM files.
+// Instead, hook the public entry points (callback.js / promise.js) via ritm and wrap
+// query/execute methods on connection and pool instances directly.
+addHook({ name, file: 'callback.js', versions: ['>=3.5.1'] }, (mariadbCallback) => {
+  const wrapped = {}
+  for (const key of Object.keys(mariadbCallback)) {
+    wrapped[key] = mariadbCallback[key]
+  }
+
+  wrapped.createConnection = function (opts) {
+    const conn = mariadbCallback.createConnection(opts)
+    shimmer.wrap(conn, 'query', createWrapQueryCallback(opts))
+    shimmer.wrap(conn, 'execute', createWrapQueryCallback(opts))
+    return conn
+  }
+
+  wrapped.createPool = function (opts) {
+    const pool = mariadbCallback.createPool(opts)
+    shimmer.wrap(pool, 'query', createWrapQueryCallback(opts))
+    shimmer.wrap(pool, 'execute', createWrapQueryCallback(opts))
+    return pool
+  }
+
+  return wrapped
+})
+
+addHook({ name, versions: ['>=3.5.1'] }, (mariadbPromise) => {
+  const wrapped = {}
+  for (const key of Object.keys(mariadbPromise)) {
+    wrapped[key] = mariadbPromise[key]
+  }
+
+  wrapped.createConnection = function (opts) {
+    return mariadbPromise.createConnection(opts).then(function (conn) {
+      shimmer.wrap(conn, 'query', createWrapQuery(opts))
+      shimmer.wrap(conn, 'execute', createWrapQuery(opts))
+      return conn
+    })
+  }
+
+  wrapped.createPool = function (opts) {
+    const pool = mariadbPromise.createPool(opts)
+    shimmer.wrap(pool, 'query', createWrapQuery(opts))
+    shimmer.wrap(pool, 'execute', createWrapQuery(opts))
+    return pool
+  }
+
+  return wrapped
 })
