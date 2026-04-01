@@ -12,7 +12,7 @@ module.exports = { getAgentUrl }
 
 /**
  * Gets the agent URL from config, constructing it from hostname/port if needed
- * @param {import('../config/config-base')} config - Tracer configuration object
+ * @param {Partial<import('../config/config-base')>} config - Tracer configuration object
  * @returns {URL} The agent URL
  */
 function getAgentUrl (config) {

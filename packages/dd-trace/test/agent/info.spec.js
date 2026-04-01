@@ -8,10 +8,10 @@ const sinon = require('sinon')
 
 require('../setup/core')
 const { fetchAgentInfo, clearCache } = require('../../src/agent/info')
+const { defaults: { hostname, port } } = require('../../src/config/defaults')
 
 describe('agent/info', () => {
-  const port = 8126
-  const url = `http://127.0.0.1:${port}`
+  const url = `http://${hostname}:${port}`
 
   describe('fetchAgentInfo', () => {
     afterEach(() => {
@@ -130,7 +130,7 @@ describe('agent/info', () => {
       })
 
       it('should clear cache when URL changes', (done) => {
-        const url2 = `http://127.0.0.1:${port + 1}`
+        const url2 = `http://${hostname}:${port + 1}`
         const agentInfo1 = { endpoints: ['/evp_proxy/v2'] }
         const agentInfo2 = { endpoints: ['/evp_proxy/v3'] }
 

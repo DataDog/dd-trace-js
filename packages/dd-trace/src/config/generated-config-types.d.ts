@@ -519,7 +519,7 @@ export interface GeneratedConfig {
     pollInterval: number;
   };
   reportHostname: boolean;
-  resourceRenamingEnabled: boolean | undefined;
+  resourceRenamingEnabled: boolean;
   runtimeMetrics: {
     enabled: boolean;
     eventLoop: boolean;
