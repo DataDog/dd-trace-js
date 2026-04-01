@@ -33,8 +33,11 @@ const TELEMETRY_COUNTERS = new Map([
   ['otel.env.invalid', {}],
 ])
 const OTEL_DD_ENV_MAPPING = new Map([
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
   ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL'],
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
   ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE'],
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
   ['OTEL_SERVICE_NAME', 'DD_SERVICE'],
   ['OTEL_TRACES_SAMPLER', 'DD_TRACE_SAMPLE_RATE'],
   ['OTEL_TRACES_SAMPLER_ARG', 'DD_TRACE_SAMPLE_RATE'],
@@ -461,6 +464,7 @@ class Config {
     setString(target, 'otelLogsHeaders', OTEL_EXPORTER_OTLP_LOGS_HEADERS || target.otelHeaders)
     setString(target, 'otelProtocol', OTEL_EXPORTER_OTLP_PROTOCOL)
     setString(target, 'otelLogsProtocol', OTEL_EXPORTER_OTLP_LOGS_PROTOCOL || target.otelProtocol)
+    // eslint-disable-next-line eslint-rules/eslint-env-aliases
     const otelTimeout = nonNegInt(OTEL_EXPORTER_OTLP_TIMEOUT, 'OTEL_EXPORTER_OTLP_TIMEOUT')
     if (otelTimeout !== undefined) {
       target.otelTimeout = otelTimeout
@@ -810,6 +814,7 @@ class Config {
         for (const style of otelStyles || []) {
           if (!VALID_PROPAGATION_STYLES.has(style)) {
             log.warn('unexpected value %s for OTEL_PROPAGATORS environment variable', style)
+            // eslint-disable-next-line eslint-rules/eslint-env-aliases
             getCounter('otel.env.invalid', 'DD_TRACE_PROPAGATION_STYLE', 'OTEL_PROPAGATORS').inc()
           }
         }
@@ -1365,12 +1370,16 @@ function isInvalidOtelEnvironmentVariable (envVar, value) {
   // Skip validation if the value is undefined (it was not set as environment variable)
   if (value === undefined) return false
 
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
+  if (envVar === 'OTEL_PROPAGATORS' || envVar === 'OTEL_SERVICE_NAME') {
+    return typeof value !== 'string'
+  }
+
   switch (envVar) {
+    // eslint-disable-next-line eslint-rules/eslint-env-aliases
     case 'OTEL_LOG_LEVEL':
       return !VALID_LOG_LEVELS.has(value)
-    case 'OTEL_PROPAGATORS':
     case 'OTEL_RESOURCE_ATTRIBUTES':
-    case 'OTEL_SERVICE_NAME':
       return typeof value !== 'string'
     case 'OTEL_TRACES_SAMPLER':
       return getFromOtelSamplerMap(value, getEnv('OTEL_TRACES_SAMPLER_ARG')) === undefined

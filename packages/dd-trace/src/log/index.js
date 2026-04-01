@@ -110,6 +110,7 @@ const log = {
     return isTrue(
       fleetStableConfigValue ??
       getValueFromEnvSources('DD_TRACE_DEBUG') ??
+      // eslint-disable-next-line eslint-rules/eslint-env-aliases
       (getValueFromEnvSources('OTEL_LOG_LEVEL') === 'debug' || undefined) ??
       localStableConfigValue ??
       config.enabled
@@ -124,6 +125,7 @@ const log = {
     return optionsValue ??
       fleetStableConfigValue ??
       getValueFromEnvSources('DD_TRACE_LOG_LEVEL') ??
+      // eslint-disable-next-line eslint-rules/eslint-env-aliases
       getValueFromEnvSources('OTEL_LOG_LEVEL') ??
       localStableConfigValue ??
       config.logLevel

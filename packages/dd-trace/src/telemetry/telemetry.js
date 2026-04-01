@@ -450,10 +450,15 @@ const nameMapping = {
   injectForce: 'ssi_forced_injection_enabled',
   'runtimeMetrics.enabled': 'runtimeMetrics',
   otelLogsEnabled: 'DD_LOGS_OTEL_ENABLED',
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
   otelUrl: 'OTEL_EXPORTER_OTLP_ENDPOINT',
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
   otelEndpoint: 'OTEL_EXPORTER_OTLP_ENDPOINT',
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
   otelHeaders: 'OTEL_EXPORTER_OTLP_HEADERS',
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
   otelProtocol: 'OTEL_EXPORTER_OTLP_PROTOCOL',
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
   otelTimeout: 'OTEL_EXPORTER_OTLP_TIMEOUT',
   otelLogsHeaders: 'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
   otelLogsProtocol: 'OTEL_EXPORTER_OTLP_LOGS_PROTOCOL',
