@@ -338,6 +338,20 @@ describe('Plugin', () => {
           }
         )
 
+        it('should not crash on prototype pollution attempt', done => {
+          agent
+            .assertSomeTraces(() => {})
+            .catch(done)
+          graphql.graphql({ schema, source: '{ __proto__: hello }' })
+            .then((result) => {
+              assert.ok(!result.errors || result.errors.length === 0)
+              // eslint-disable-next-line no-proto
+              assert.strictEqual(result.data.__proto__, null)
+              done()
+            })
+            .catch(done)
+        })
+
         it('should instrument parsing', done => {
           const source = 'query MyQuery { hello(name: "world") }'
           const variableValues = { who: 'world' }

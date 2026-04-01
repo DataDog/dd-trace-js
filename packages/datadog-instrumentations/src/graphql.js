@@ -171,7 +171,7 @@ function wrapExecute (execute) {
         args,
         docSource: documentSources.get(document),
         source,
-        fields: {},
+        fields: Object.create(null),
         abortController: new AbortController(),
       }
 
@@ -260,7 +260,9 @@ function pathToArray (path) {
   const flattened = []
   let curr = path
   while (curr) {
-    flattened.push(curr.key)
+    if (typeof curr.key === 'string' || typeof curr.key === 'number') {
+      flattened.push(curr.key)
+    }
     curr = curr.prev
   }
   return flattened.reverse()
