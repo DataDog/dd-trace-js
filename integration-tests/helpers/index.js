@@ -265,21 +265,25 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
 /**
  * Stop a process and wait for it to fully exit.
  *
- * Sends `SIGTERM` first, waits up to `timeoutMs`, and escalates to `SIGKILL` if needed.
+ * Sends `signal` first, waits up to `timeoutMs`, and escalates to `SIGKILL` if needed.
  *
  * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
  * @param {object} [options] - Stop options.
+ * @param {NodeJS.Signals} [options.signal='SIGTERM'] - Signal to send before escalating.
  * @param {number} [options.timeoutMs=defaultStopProcTimeoutMs] - Max wait per signal in milliseconds.
  * @returns {Promise<void>}
  */
-async function stopProc (proc, { timeoutMs = defaultStopProcTimeoutMs } = {}) {
+async function stopProc (proc, options = {}) {
   if (!proc) return
   if (proc.exitCode !== null || proc.signalCode !== null) return
 
-  proc.kill()
+  const signal = options.signal ?? 'SIGTERM'
+  const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
 
-  const exitedAfterSigterm = await waitForProcExit(proc, timeoutMs)
-  if (exitedAfterSigterm) return
+  proc.kill(signal)
+
+  const exitedAfterInitialSignal = await waitForProcExit(proc, timeoutMs)
+  if (exitedAfterInitialSignal) return
 
   proc.kill('SIGKILL')
   const exitedAfterSigkill = await waitForProcExit(proc, timeoutMs)
@@ -387,7 +391,7 @@ function execHelper (command, options) {
  * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
  */
 function packTarball (tarballPath, env) {
-  execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
+  execHelper(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
   log('Tarball packed successfully:', tarballPath)
 }
 

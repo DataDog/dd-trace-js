@@ -33,6 +33,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-macos
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -55,6 +56,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ubuntu
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -73,6 +75,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -104,6 +107,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ldapjs
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -133,6 +137,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-postgres
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -162,6 +167,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mysql
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -182,6 +188,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-express
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -202,6 +209,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-fastify
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -222,6 +230,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-graphql
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -248,6 +257,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -274,6 +284,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongoose
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -297,6 +308,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-sourcing
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -357,6 +369,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -377,6 +390,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-lodash
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -414,6 +428,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-passport
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -433,6 +448,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-template
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -453,6 +469,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-node-serialize
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -462,7 +479,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       kafka:
-        image: apache/kafka-native:3.9.1
+        image: apache/kafka:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
@@ -491,6 +508,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-kafka
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -507,7 +525,10 @@ jobs:
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      - uses: ./.github/actions/coverage
+        with:
+          flags: appsec-stripe
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

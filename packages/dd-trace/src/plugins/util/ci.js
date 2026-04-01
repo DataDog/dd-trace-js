@@ -1,6 +1,7 @@
 'use strict'
 
-const { readFileSync } = require('fs')
+const { readFileSync, readdirSync, existsSync } = require('fs')
+const path = require('path')
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
 const {
   GIT_BRANCH,
@@ -102,8 +103,92 @@ function getGitHubEventPayload () {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
+function getJobIDFromDiagFile (runnerTemp) {
+  if (!runnerTemp || !existsSync(runnerTemp)) { return null }
+
+  // RUNNER_TEMP usually looks like:
+  // Linux/mac hosted:   /home/runner/work/_temp
+  // Windows hosted:     C:\actions-runner\_work\_temp
+  // Self-hosted (unix): /opt/actions-runner/_work/_temp
+
+  const workDir = path.dirname(runnerTemp) // .../work or .../_work
+  const runnerRoot = path.dirname(workDir) // /home/runner/ (runner root)
+
+  const dirs = [
+    path.join(runnerRoot, 'cached', '_diag'),
+    path.join(runnerRoot, '_diag'),
+    path.join(runnerRoot, 'actions-runner', 'cached', '_diag'),
+    path.join(runnerRoot, 'actions-runner', '_diag'),
+  ]
+
+  const isWin = process.platform === 'win32'
+
+  // Hardcoded fallbacks
+  if (isWin) {
+    dirs.push(
+      'C:/actions-runner/cached/_diag',
+      'C:/actions-runner/_diag',
+    )
+  } else {
+    dirs.push(
+      '/home/runner/actions-runner/cached/_diag',
+      '/home/runner/actions-runner/_diag',
+      '/opt/actions-runner/_diag',
+    )
+  }
+
+  // Remove duplicates
+  const possibleDiagsPaths = [...new Set(dirs)]
+
+  // This will hold the names of the worker log files that (potentially) contain the Job ID
+  let workerLogFiles = []
+
+  // This will hold the chosen diagnostics path (between the ones that are contemplated in possibleDiagsPath)
+  let chosenDiagPath = ''
+
+  for (const diagPath of possibleDiagsPaths) {
+    try {
+      // Obtain a list of fs.Dirent objects of the files in diagPath
+      const files = readdirSync(diagPath, { withFileTypes: true })
+
+      // Check if there are valid potential log files
+      const potentialLogs = files
+        .filter((file) => file.isFile() && file.name.startsWith('Worker_'))
+        .map((file) => file.name)
+
+      if (potentialLogs.length > 0) {
+        chosenDiagPath = diagPath
+        workerLogFiles = potentialLogs
+        break // No need to keep looking for more log files
+      }
+    } catch (error) {
+      // If the directory was not found, just look in the next one
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        continue
+      }
+
+      // Any other kind of error must force a return
+      return null
+    }
+  }
+
+  // Get the job ID via regex
+  for (const logFile of workerLogFiles) {
+    const filePath = path.posix.join(chosenDiagPath, logFile)
+    const content = readFileSync(filePath, 'utf8')
+
+    const match = content.match(/"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
+
+    // match[1] is the captured group with the display name
+    if (match && match[1]) { return match[1] }
+  }
+
+  return null
+}
+
 module.exports = {
   normalizeRef,
+  getJobIDFromDiagFile,
   getCIMetadata () {
     const env = getEnvironmentVariables()
 
@@ -281,6 +366,8 @@ module.exports = {
         GITHUB_RUN_ATTEMPT,
         GITHUB_JOB,
         GITHUB_BASE_REF,
+        RUNNER_TEMP,
+        JOB_CHECK_RUN_ID,
       } = env
 
       const repositoryURL = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git`
@@ -290,7 +377,12 @@ module.exports = {
         pipelineURL = `${pipelineURL}/attempts/${GITHUB_RUN_ATTEMPT}`
       }
 
-      const jobUrl = `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
+      // Build the job url extracting the job ID. If extraction fails, job url is constructed as a generalized url
+      const GITHUB_JOB_ID = JOB_CHECK_RUN_ID ?? getJobIDFromDiagFile(RUNNER_TEMP)
+      const jobUrl =
+        GITHUB_JOB_ID === null
+          ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
+          : `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/job/${GITHUB_JOB_ID}`
 
       const ref = GITHUB_HEAD_REF || GITHUB_REF || ''
       const refKey = ref.includes('tags/') ? GIT_TAG : GIT_BRANCH
@@ -315,7 +407,7 @@ module.exports = {
           GITHUB_RUN_ID,
           GITHUB_RUN_ATTEMPT,
         }),
-        [CI_JOB_ID]: GITHUB_JOB,
+        [CI_JOB_ID]: GITHUB_JOB_ID ?? GITHUB_JOB,
       }
       if (GITHUB_BASE_REF) { // `pull_request` or `pull_request_target` event
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = GITHUB_BASE_REF

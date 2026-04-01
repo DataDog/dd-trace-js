@@ -15,6 +15,7 @@ jobs:
   all-green:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       checks: read
       contents: read
     steps:
@@ -34,7 +35,7 @@ jobs:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ github.token }}
           POLLING_INTERVAL: 1
-          RETRIES: 15
+          RETRIES: 30
       - name: Require vendor validation when vendor/ changes
         if: github.event_name == 'pull_request'
         env:

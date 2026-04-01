@@ -6,6 +6,9 @@ const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
+  logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -20,6 +23,7 @@ const isAttemptToFixCh = channel('ci:vitest:test:is-attempt-to-fix')
 const isDisabledCh = channel('ci:vitest:test:is-disabled')
 const isQuarantinedCh = channel('ci:vitest:test:is-quarantined')
 const isModifiedCh = channel('ci:vitest:test:is-modified')
+const testFnCh = channel('ci:vitest:test:fn')
 
 // test suite hooks
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -41,7 +45,10 @@ const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
+const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
+const dynamicNameTasks = new WeakSet()
+const newTestsWithDynamicNames = new Set()
 const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
@@ -58,6 +65,9 @@ let isEarlyFlakeDetectionFaulty = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
+let vitestGetFn = null
+let vitestSetFn = null
+let vitestGetHooks = null
 let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
@@ -146,8 +156,23 @@ function isReporterPackageNewest (vitestPackage) {
   return vitestPackage.h?.name === 'BaseSequencer'
 }
 
-function isBaseSequencer (vitestPackage) {
-  return vitestPackage.b?.name === 'BaseSequencer'
+/**
+ * Finds an export by its `.name` property in a minified vitest chunk.
+ * Minified export keys change across versions, so we search by function/class name.
+ * @param {object} pkg - The module exports object
+ * @param {string} name - The `.name` value to look for
+ * @returns {{ key: string, value: Function } | undefined}
+ */
+function findExportByName (pkg, name) {
+  for (const [key, value] of Object.entries(pkg)) {
+    if (value?.name === name) {
+      return { key, value }
+    }
+  }
+}
+
+function getBaseSequencerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'BaseSequencer')
 }
 
 function getChannelPromise (channelToPublishTo, frameworkVersion) {
@@ -157,19 +182,19 @@ function getChannelPromise (channelToPublishTo, frameworkVersion) {
 }
 
 function isCliApiPackage (vitestPackage) {
-  return vitestPackage.s?.name === 'startVitest'
+  return !!findExportByName(vitestPackage, 'startVitest')
 }
 
-function isTestPackage (testPackage) {
-  return testPackage.V?.name === 'VitestTestRunner'
+function getTestRunnerExport (testPackage) {
+  return findExportByName(testPackage, 'VitestTestRunner') || findExportByName(testPackage, 'TestRunner')
 }
 
-function hasForksPoolWorker (vitestPackage) {
-  return vitestPackage.f?.name === 'ForksPoolWorker'
+function getForksPoolWorkerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'ForksPoolWorker')
 }
 
-function hasThreadsPoolWorker (vitestPackage) {
-  return vitestPackage.T?.name === 'ThreadsPoolWorker'
+function getThreadsPoolWorkerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'ThreadsPoolWorker')
 }
 
 function getSessionStatus (state) {
@@ -224,6 +249,37 @@ function getTestName (task) {
   }
 
   return testName
+}
+
+/**
+ * Wraps a function so it runs inside the current test span context.
+ * @param {object} task
+ * @param {Function} fn
+ * @returns {Function}
+ */
+function wrapTestScopedFn (task, fn) {
+  return shimmer.wrapFunction(fn, fn => function () {
+    return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+  })
+}
+
+/**
+ * Wraps a `beforeEach` cleanup callback so it inherits the test span context.
+ * Vitest allows `beforeEach` to return a cleanup function, including via a promise.
+ * @param {object} task
+ * @param {unknown} result
+ * @returns {unknown}
+ */
+function wrapBeforeEachCleanupResult (task, result) {
+  if (typeof result === 'function') {
+    return wrapTestScopedFn(task, result)
+  }
+
+  if (result && typeof result.then === 'function') {
+    return result.then(cleanupFn => wrapBeforeEachCleanupResult(task, cleanupFn))
+  }
+
+  return result
 }
 
 function getSortWrapper (sort, frameworkVersion) {
@@ -420,6 +476,8 @@ function getFinishWrapper (exitOrClose) {
       onFinish,
     })
 
+    logDynamicNamesWarning(newTestsWithDynamicNames)
+
     await flushPromise
 
     // If coverage was generated, publish coverage report channel for upload
@@ -447,7 +505,11 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
-  shimmer.wrap(vitestPackage, 'c', getCliOrStartVitestWrapper(frameworkVersion))
+  const createCliExport = findExportByName(vitestPackage, 'createCLI')
+  if (!createCliExport) {
+    return vitestPackage
+  }
+  shimmer.wrap(vitestPackage, createCliExport.key, getCliOrStartVitestWrapper(frameworkVersion))
 
   return vitestPackage
 }
@@ -476,6 +538,7 @@ function threadHandler (thread) {
   workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
       if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+        collectDynamicNamesFromTraces(message.data, newTestsWithDynamicNames)
         workerReportTraceCh.publish(message.data)
       } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
         workerReportLogsCh.publish(message.data)
@@ -517,6 +580,7 @@ function getWrappedOn (on) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
         if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+          collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
           workerReportTraceCh.publish(data)
         } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
           workerReportLogsCh.publish(data)
@@ -534,27 +598,30 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   if (!isCliApiPackage(cliApiPackage)) {
     return cliApiPackage
   }
-  shimmer.wrap(cliApiPackage, 's', getCliOrStartVitestWrapper(frameworkVersion))
+  const startVitestExport = findExportByName(cliApiPackage, 'startVitest')
+  shimmer.wrap(cliApiPackage, startVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
 
-  if (hasForksPoolWorker(cliApiPackage)) {
+  const forksPoolWorker = getForksPoolWorkerExport(cliApiPackage)
+  if (forksPoolWorker) {
     // function is async
-    shimmer.wrap(cliApiPackage.f.prototype, 'start', start => function () {
+    shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function () {
       vitestPool = 'child_process'
       this.env.DD_VITEST_WORKER = '1'
 
       return start.apply(this, arguments)
     })
-    shimmer.wrap(cliApiPackage.f.prototype, 'on', getWrappedOn)
+    shimmer.wrap(forksPoolWorker.value.prototype, 'on', getWrappedOn)
   }
 
-  if (hasThreadsPoolWorker(cliApiPackage)) {
+  const threadsPoolWorker = getThreadsPoolWorkerExport(cliApiPackage)
+  if (threadsPoolWorker) {
     // function is async
-    shimmer.wrap(cliApiPackage.T.prototype, 'start', start => function () {
+    shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function () {
       vitestPool = 'worker_threads'
       this.env.DD_VITEST_WORKER = '1'
       return start.apply(this, arguments)
     })
-    shimmer.wrap(cliApiPackage.T.prototype, 'on', getWrappedOn)
+    shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
   }
   return cliApiPackage
 }
@@ -637,6 +704,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
             }
             newTasks.add(task)
             taskToStatuses.set(task, [])
+            if (DYNAMIC_NAME_RE.test(testName)) {
+              dynamicNameTasks.add(task)
+            }
           }
         },
       })
@@ -661,6 +731,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
         task.result.state = 'pass'
       } else if (isQuarantined) {
+        if (task.result.state === 'fail') {
+          switchedStatuses.add(task)
+        }
         task.result.state = 'pass'
       }
     }
@@ -744,7 +817,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const lastExecutionStatus = task.result.state
-    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || attemptToFixTasks.has(task)
+    const isAtf = attemptToFixTasks.has(task)
+    const isQuarantinedOrDisabledAtf = isAtf && (quarantinedTasks.has(task) || disabledTasks.has(task))
+    const shouldTrackStatuses = isEarlyFlakeDetectionEnabled || isAtf
+    const shouldFlipStatus = isEarlyFlakeDetectionEnabled || isQuarantinedOrDisabledAtf
     const statuses = taskToStatuses.get(task)
 
     // These clauses handle task.repeats, whether EFD is enabled or not
@@ -762,8 +838,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
         }
-        if (shouldFlipStatus) {
+        if (shouldTrackStatuses) {
           statuses.push(lastExecutionStatus)
+        }
+        if (shouldFlipStatus) {
           // If we don't "reset" the result.state to "pass", once a repetition fails,
           // vitest will always consider the test as failed, so we can't read the actual status
           // This means that we change vitest's behavior:
@@ -773,7 +851,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         }
       }
     } else if (numRepetition === task.repeats) {
-      if (shouldFlipStatus) {
+      if (shouldTrackStatuses) {
         statuses.push(lastExecutionStatus)
       }
 
@@ -798,6 +876,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isRetryReasonEfd,
       isRetryReasonAttemptToFix: isRetryReasonAttemptToFix && numRepetition > 0,
       isNew,
+      hasDynamicName: dynamicNameTasks.has(task),
       mightHitProbe: isDiEnabled && numAttempt > 0,
       isAttemptToFix: attemptToFixTasks.has(task),
       isDisabled: disabledTasks.has(task),
@@ -808,6 +887,47 @@ function wrapVitestTestRunner (VitestTestRunner) {
     taskToCtx.set(task, ctx)
 
     testStartCh.runStores(ctx, () => {})
+
+    // Wrap the test function so it runs inside the test span context.
+    // Without this, HTTP requests during test execution become orphaned root spans.
+    if (vitestGetFn && vitestSetFn) {
+      const originalFn = vitestGetFn(task)
+      if (originalFn && !originalFn.__ddTraceWrapped) {
+        const wrappedFn = wrapTestScopedFn(task, originalFn)
+        wrappedFn.__ddTraceWrapped = true
+        vitestSetFn(task, wrappedFn)
+      }
+    }
+
+    // Wrap beforeEach/afterEach hooks so they also run inside the test span context.
+    // In vitest 4+, hooks are in a WeakMap accessed via getHooks(). In older versions, they're on suite.hooks.
+    let currentSuite = task.suite
+    while (currentSuite) {
+      const hooks = vitestGetHooks ? vitestGetHooks(currentSuite) : currentSuite.hooks
+      if (hooks) {
+        for (const hookType of ['beforeEach', 'afterEach']) {
+          const hookArray = hooks[hookType]
+          if (!hookArray) continue
+          for (let i = 0; i < hookArray.length; i++) {
+            const currentFn = hookArray[i]
+            const originalFn = originalHookFns.get(currentFn) || currentFn
+            const wrappedFn = shimmer.wrapFunction(originalFn, fn => function () {
+              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+
+              if (hookType === 'beforeEach') {
+                return wrapBeforeEachCleanupResult(task, result)
+              }
+
+              return result
+            })
+            originalHookFns.set(wrappedFn, originalFn)
+            hookArray[i] = wrappedFn
+          }
+        }
+      }
+      currentSuite = currentSuite.suite
+    }
+
     return onBeforeTryTask.apply(this, arguments)
   })
 
@@ -856,18 +976,48 @@ function wrapVitestTestRunner (VitestTestRunner) {
     })
 }
 
+function captureRunnerFunctions (pkg) {
+  if (vitestGetFn) return
+  const getFnExport = findExportByName(pkg, 'getFn')
+  const setFnExport = findExportByName(pkg, 'setFn')
+  if (getFnExport && setFnExport) {
+    vitestGetFn = getFnExport.value
+    vitestSetFn = setFnExport.value
+  }
+  const getHooksExport = findExportByName(pkg, 'getHooks')
+  if (getHooksExport) {
+    vitestGetHooks = getHooksExport.value
+  }
+}
+
 addHook({
   name: 'vitest',
   versions: ['>=4.0.0'],
   filePattern: 'dist/chunks/test.*',
 }, (testPackage) => {
-  if (!isTestPackage(testPackage)) {
+  const testRunner = getTestRunnerExport(testPackage)
+  if (!testRunner) {
     return testPackage
   }
 
-  wrapVitestTestRunner(testPackage.V)
+  captureRunnerFunctions(testPackage)
+  wrapVitestTestRunner(testRunner.value)
 
   return testPackage
+})
+
+addHook({
+  name: '@vitest/runner',
+  versions: ['>=1.6.0'],
+}, (runnerModule) => {
+  if (!vitestGetFn && runnerModule.getFn && runnerModule.setFn) {
+    vitestGetFn = runnerModule.getFn
+    vitestSetFn = runnerModule.setFn
+  }
+  if (!vitestGetHooks && runnerModule.getHooks) {
+    vitestGetHooks = runnerModule.getHooks
+  }
+  return runnerModule
 })
 
 addHook({
@@ -934,8 +1084,9 @@ addHook({
   versions: ['>=3.0.9'],
   filePattern: 'dist/chunks/coverage.*',
 }, (coveragePackage) => {
-  if (isBaseSequencer(coveragePackage)) {
-    shimmer.wrap(coveragePackage.b.prototype, 'sort', getSortWrapper)
+  const baseSequencer = getBaseSequencerExport(coveragePackage)
+  if (baseSequencer) {
+    shimmer.wrap(baseSequencer.value.prototype, 'sort', getSortWrapper)
   }
   return coveragePackage
 })

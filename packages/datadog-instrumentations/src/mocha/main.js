@@ -14,6 +14,8 @@ const {
   mergeCoverage,
   resetCoverage,
   getIsFaultyEarlyFlakeDetection,
+  collectDynamicNamesFromTraces,
+  logDynamicNamesWarning,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -34,6 +36,7 @@ const {
   getRunTestsWrapper,
   testsAttemptToFix,
   testsStatuses,
+  newTestsWithDynamicNames,
 } = require('./utils')
 
 require('./common')
@@ -101,12 +104,12 @@ function getFilteredSuites (originalSuites) {
   }, { suitesToRun: [], skippedSuites: new Set() })
 }
 
-function getOnStartHandler (isParallel, frameworkVersion) {
+function getOnStartHandler (frameworkVersion) {
   return function () {
     const processArgv = process.argv.slice(2).join(' ')
     const command = `mocha ${processArgv}`
     testSessionStartCh.publish({ command, frameworkVersion })
-    if (!isParallel && skippedSuites.length) {
+    if (skippedSuites.length) {
       itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
     }
   }
@@ -207,6 +210,8 @@ function getOnEndHandler (isParallel) {
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
     })
+
+    logDynamicNamesWarning(newTestsWithDynamicNames)
   }
 }
 
@@ -315,10 +320,9 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
     config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
     config.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
-    // ITR and auto test retries are not supported in parallel mode yet
-    config.isSuitesSkippingEnabled = !isParallel && libraryConfig.isSuitesSkippingEnabled
-    config.isFlakyTestRetriesEnabled = !isParallel && libraryConfig.isFlakyTestRetriesEnabled
-    config.flakyTestRetriesCount = !isParallel && libraryConfig.flakyTestRetriesCount
+    config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+    config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+    config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
 
     if (config.isKnownTestsEnabled) {
       ctx.onDone = onReceivedKnownTests
@@ -452,7 +456,7 @@ addHook({
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
 
-    this.once('start', getOnStartHandler(false, frameworkVersion))
+    this.once('start', getOnStartHandler(frameworkVersion))
 
     this.once('end', getOnEndHandler(false))
 
@@ -553,6 +557,7 @@ function onMessage (message) {
   if (Array.isArray(message)) {
     const [messageCode, payload] = message
     if (messageCode === MOCHA_WORKER_TRACE_PAYLOAD_CODE) {
+      collectDynamicNamesFromTraces(payload, newTestsWithDynamicNames)
       workerReportTraceCh.publish(payload)
     }
   }
@@ -623,8 +628,15 @@ addHook({
       return run.apply(this, arguments)
     }
 
-    this.once('start', getOnStartHandler(true, frameworkVersion))
+    this.once('start', getOnStartHandler(frameworkVersion))
     this.once('end', getOnEndHandler(true))
+
+    // Populate unskippable suites before config is fetched (matches serial mode at Mocha.prototype.run)
+    for (const filePath of files) {
+      if (isMarkedAsUnskippable({ path: filePath })) {
+        unskippableSuites.push(filePath)
+      }
+    }
 
     getExecutionConfiguration(this, true, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
@@ -640,7 +652,25 @@ addHook({
           config.isEarlyFlakeDetectionFaulty = true
         }
       }
-      run.apply(this, arguments)
+      if (config.isSuitesSkippingEnabled && suitesToSkip.length) {
+        const filteredFiles = []
+        const skippedFiles = []
+        for (const file of files) {
+          const testPath = getTestSuitePath(file, process.cwd())
+          const shouldSkip = suitesToSkip.includes(testPath)
+          const isUnskippable = unskippableSuites.includes(file)
+          if (shouldSkip && !isUnskippable) {
+            skippedFiles.push(testPath)
+          } else {
+            filteredFiles.push(file)
+          }
+        }
+        isSuitesSkipped = skippedFiles.length > 0
+        skippedSuites = skippedFiles
+        run.apply(this, [cb, { files: filteredFiles }])
+      } else {
+        run.apply(this, arguments)
+      }
     })
 
     return this
@@ -663,7 +693,8 @@ addHook({
     if (!testFinishCh.hasSubscribers ||
         (!config.isKnownTestsEnabled &&
          !config.isTestManagementTestsEnabled &&
-         !config.isImpactedTestsEnabled)) {
+         !config.isImpactedTestsEnabled &&
+         !config.isFlakyTestRetriesEnabled)) {
       return run.apply(this, arguments)
     }
 
@@ -693,8 +724,7 @@ addHook({
     if (config.isTestManagementTestsEnabled) {
       const testSuiteTestManagementTests = config.testManagementTests?.mocha?.suites?.[testPath] || {}
       newWorkerArgs._ddIsTestManagementTestsEnabled = true
-      // TODO: attempt to fix does not work in parallel mode yet
-      // newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
+      newWorkerArgs._ddTestManagementAttemptToFixRetries = config.testManagementAttemptToFixRetries
       newWorkerArgs._ddTestManagementTests = {
         mocha: {
           suites: {
@@ -707,6 +737,11 @@ addHook({
     if (config.isImpactedTestsEnabled) {
       newWorkerArgs._ddIsImpactedTestsEnabled = true
       newWorkerArgs._ddModifiedFiles = config.modifiedFiles || {}
+    }
+
+    if (config.isFlakyTestRetriesEnabled) {
+      newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
+      newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
     }
 
     // We pass the known tests for the test file to the worker

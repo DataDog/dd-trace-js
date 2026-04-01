@@ -38,6 +38,8 @@ const {
   TEST_STATUS,
   TEST_SUITE_ID,
   TEST_SUITE,
+  TEST_HAS_DYNAMIC_NAME,
+  DYNAMIC_NAME_RE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -114,11 +116,14 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addBind('ci:playwright:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath } = ctx
+      const { testSuiteAbsolutePath, testSourceFileAbsolutePath } = ctx
 
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const testSourceFile = getTestSuitePath(
+        testSourceFileAbsolutePath || testSuiteAbsolutePath,
+        this.repositoryRoot
+      )
 
       const testSuiteMetadata = {
         ...getTestSuiteCommonTags(
@@ -218,6 +223,9 @@ class PlaywrightPlugin extends CiPlugin {
             trace_id: id(span.trace_id),
             parent_id: id(span.parent_id),
           }
+          if (span.meta[TEST_IS_NEW] === 'true' && DYNAMIC_NAME_RE.test(span.meta[TEST_NAME] || '')) {
+            formattedSpan.meta[TEST_HAS_DYNAMIC_NAME] = 'true'
+          }
           if (span.name === 'playwright.test') {
             // TODO: remove this comment
             // TODO: Let's pass rootDir, repositoryRoot, command, session id and module id as env vars
@@ -238,12 +246,15 @@ class PlaywrightPlugin extends CiPlugin {
             // test_suite_absolute_path is just a hack because in the worker we don't have rootDir and repositoryRoot
             // but if we pass those the same way we pass `DD_PLAYWRIGHT_WORKER` this is not necessary
             const testSuitePath = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.rootDir)
-            const testSourceFile = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.repositoryRoot)
+            const testSourceAbsolutePath = formattedSpan.meta.test_source_absolute_path ||
+              formattedSpan.meta.test_suite_absolute_path
+            const testSourceFile = getTestSuitePath(testSourceAbsolutePath, this.repositoryRoot)
             // we need to rewrite this because this.rootDir and this.repositoryRoot are not available in the worker
             formattedSpan.meta[TEST_SUITE] = testSuitePath
             formattedSpan.meta[TEST_SOURCE_FILE] = testSourceFile
             formattedSpan.resource = `${testSuitePath}.${formattedSpan.meta[TEST_NAME]}`
             delete formattedSpan.meta.test_suite_absolute_path
+            delete formattedSpan.meta.test_source_absolute_path
           }
           formattedTrace.push(formattedSpan)
         }
@@ -259,20 +270,25 @@ class PlaywrightPlugin extends CiPlugin {
       const {
         testName,
         testSuiteAbsolutePath,
+        testSourceFileAbsolutePath,
         testSourceLine,
         browserName,
         isDisabled,
       } = ctx
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const testSourceFile = getTestSuitePath(
+        testSourceFileAbsolutePath || testSuiteAbsolutePath,
+        this.repositoryRoot
+      )
       const span = this.startTestSpan(
         testName,
         testSuiteAbsolutePath,
         testSuite,
         testSourceFile,
         testSourceLine,
-        browserName
+        browserName,
+        testSourceFileAbsolutePath
       )
 
       if (isDisabled) {
@@ -292,6 +308,7 @@ class PlaywrightPlugin extends CiPlugin {
       error,
       extraTags,
       isNew,
+      hasDynamicName,
       isEfdRetry,
       isRetry,
       isAttemptToFix,
@@ -323,6 +340,9 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_IS_RETRY, 'true')
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
+      }
+      if (hasDynamicName) {
+        span.setTag(TEST_HAS_DYNAMIC_NAME, 'true')
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
@@ -408,6 +428,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test:skip', ({
       testName,
       testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
       testSourceLine,
       browserName,
       isNew,
@@ -416,14 +437,18 @@ class PlaywrightPlugin extends CiPlugin {
       isQuarantined,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const testSourceFile = getTestSuitePath(
+        testSourceFileAbsolutePath || testSuiteAbsolutePath,
+        this.repositoryRoot
+      )
       const span = this.startTestSpan(
         testName,
         testSuiteAbsolutePath,
         testSuite,
         testSourceFile,
         testSourceLine,
-        browserName
+        browserName,
+        testSourceFileAbsolutePath
       )
 
       span.setTag(TEST_STATUS, 'skip')
@@ -446,7 +471,15 @@ class PlaywrightPlugin extends CiPlugin {
   }
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)
-  startTestSpan (testName, testSuiteAbsolutePath, testSuite, testSourceFile, testSourceLine, browserName) {
+  startTestSpan (
+    testName,
+    testSuiteAbsolutePath,
+    testSuite,
+    testSourceFile,
+    testSourceLine,
+    browserName,
+    testSourceFileAbsolutePath
+  ) {
     const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
 
     const extraTags = {
@@ -462,6 +495,9 @@ class PlaywrightPlugin extends CiPlugin {
     }
 
     extraTags.test_suite_absolute_path = testSuiteAbsolutePath
+    if (testSourceFileAbsolutePath) {
+      extraTags.test_source_absolute_path = testSourceFileAbsolutePath
+    }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
   }

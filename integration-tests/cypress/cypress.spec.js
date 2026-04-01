@@ -62,6 +62,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_RETRY_REASON_TYPES,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_IS_MODIFIED,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -369,7 +370,7 @@ moduleTypes.forEach(({
               testTestEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${testTestEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         // Run Cypress with the pre-compiled JS spec (compiled from spec-source-line.cy.ts).
         // Cypress bundles the compiled JS via its own preprocessor; the plugin resolves
@@ -459,7 +460,7 @@ moduleTypes.forEach(({
               fallbackEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-fallback.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${fallbackEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(testCommand, {
           cwd,
@@ -507,7 +508,7 @@ moduleTypes.forEach(({
               noMatchEvent.content.meta[TEST_SOURCE_FILE].endsWith('spec-source-line-no-match.cy.ts'),
               `TEST_SOURCE_FILE should point to TypeScript source, got: ${noMatchEvent.content.meta[TEST_SOURCE_FILE]}`
             )
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(testCommand, {
           cwd,
@@ -540,7 +541,7 @@ moduleTypes.forEach(({
           assert.ok(jsInvocationDetailsEvent, 'plain-js invocationDetails test event should exist')
           assert.strictEqual(
             jsInvocationDetailsEvent.content.metrics[TEST_SOURCE_START],
-            246,
+            244,
             'should keep invocationDetails line directly for plain JS specs without source maps'
           )
           assert.ok(
@@ -549,7 +550,7 @@ moduleTypes.forEach(({
               jsInvocationDetailsEvent.content.meta[TEST_SOURCE_FILE]
             }`
           )
-        }, 120000)
+        }, 60000)
 
       childProcess = exec(testCommand, {
         cwd,
@@ -751,11 +752,107 @@ moduleTypes.forEach(({
       }
     })
 
-    it('catches errors in hooks', async () => {
+    it('can run and report tests', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            }
+          })
           const events = payloads.flatMap(({ payload }) => payload.events)
 
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
+          const testEvents = events.filter(event => event.type === 'test')
+
+          const { content: testSessionEventContent } = testSessionEvent
+          const { content: testModuleEventContent } = testModuleEvent
+
+          assert.ok(testSessionEventContent.test_session_id)
+          assert.ok(testSessionEventContent.meta[TEST_COMMAND])
+          assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN])
+          assert.strictEqual(testSessionEventContent.resource.startsWith('test_session.'), true)
+          assert.strictEqual(testSessionEventContent.meta[TEST_STATUS], 'fail')
+
+          assert.ok(testModuleEventContent.test_session_id)
+          assert.ok(testModuleEventContent.test_module_id)
+          assert.ok(testModuleEventContent.meta[TEST_COMMAND])
+          assert.ok(testModuleEventContent.meta[TEST_MODULE])
+          assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
+          assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(
+            testModuleEventContent.test_session_id.toString(10),
+            testSessionEventContent.test_session_id.toString(10)
+          )
+          assert.ok(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
+
+          assert.deepStrictEqual(
+            testSuiteEvents.map(suite => suite.content.resource).sort(),
+            [
+              'test_suite.cypress/e2e/hook-describe-error.cy.js',
+              'test_suite.cypress/e2e/hook-test-error.cy.js',
+              'test_suite.cypress/e2e/other.cy.js',
+              'test_suite.cypress/e2e/spec.cy.js',
+            ]
+          )
+
+          assertObjectContains(
+            testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]).sort(),
+            ['fail', 'fail', 'fail', 'pass']
+          )
+
+          testSuiteEvents.forEach(({
+            content: {
+              meta,
+              metrics,
+              test_suite_id: testSuiteId,
+              test_module_id: testModuleId,
+              test_session_id: testSessionId,
+            },
+          }) => {
+            assert.ok(meta[TEST_COMMAND])
+            assert.ok(meta[TEST_MODULE])
+            assert.ok(testSuiteId)
+            assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+            assert.strictEqual(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            assert.strictEqual(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
+            assert.strictEqual(metrics[TEST_SOURCE_START], 1)
+            assert.ok(metrics[DD_HOST_CPU_COUNT])
+          })
+
+          assertObjectContains(testEvents.map(test => test.content.resource).sort(), [
+            'cypress/e2e/other.cy.js.context passes',
+            'cypress/e2e/spec.cy.js.context passes',
+            'cypress/e2e/spec.cy.js.other context fails',
+          ])
+
+          testEvents.forEach(({
+            content: {
+              meta,
+              metrics,
+              test_suite_id: testSuiteId,
+              test_module_id: testModuleId,
+              test_session_id: testSessionId,
+            },
+          }) => {
+            assert.ok(meta[TEST_COMMAND])
+            assert.ok(meta[TEST_MODULE])
+            assert.ok(testSuiteId)
+            assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
+            assert.strictEqual(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
+            assert.strictEqual(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
+            // Can read DD_TAGS
+            assert.strictEqual(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
+            assert.strictEqual(meta['test.customtag'], 'customvalue')
+            assert.strictEqual(meta['test.customtag2'], 'customvalue2')
+            assert.ok(metrics[DD_HOST_CPU_COUNT])
+          })
+
+          // Verify hook errors are caught correctly
           // test level hooks
           const testHookSuite = events.find(
             event => event.content.resource === 'test_suite.cypress/e2e/hook-test-error.cy.js'
@@ -811,133 +908,10 @@ moduleTypes.forEach(({
           env: {
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-          },
-        }
-      )
-
-      await Promise.all([
-        once(childProcess, 'exit'),
-        receiverPromise,
-      ])
-    })
-
-    it('can run and report tests', async () => {
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
-
-          metadataDicts.forEach(metadata => {
-            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-              assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-            }
-          })
-          const events = payloads.flatMap(({ payload }) => payload.events)
-
-          const testSessionEvent = events.find(event => event.type === 'test_session_end')
-          const testModuleEvent = events.find(event => event.type === 'test_module_end')
-          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-          const testEvents = events.filter(event => event.type === 'test')
-
-          const { content: testSessionEventContent } = testSessionEvent
-          const { content: testModuleEventContent } = testModuleEvent
-
-          assert.ok(testSessionEventContent.test_session_id)
-          assert.ok(testSessionEventContent.meta[TEST_COMMAND])
-          assert.ok(testSessionEventContent.meta[TEST_TOOLCHAIN])
-          assert.strictEqual(testSessionEventContent.resource.startsWith('test_session.'), true)
-          assert.strictEqual(testSessionEventContent.meta[TEST_STATUS], 'fail')
-
-          assert.ok(testModuleEventContent.test_session_id)
-          assert.ok(testModuleEventContent.test_module_id)
-          assert.ok(testModuleEventContent.meta[TEST_COMMAND])
-          assert.ok(testModuleEventContent.meta[TEST_MODULE])
-          assert.strictEqual(testModuleEventContent.resource.startsWith('test_module.'), true)
-          assert.strictEqual(testModuleEventContent.meta[TEST_STATUS], 'fail')
-          assert.strictEqual(
-            testModuleEventContent.test_session_id.toString(10),
-            testSessionEventContent.test_session_id.toString(10)
-          )
-          assert.ok(testModuleEventContent.meta[TEST_FRAMEWORK_VERSION])
-
-          assertObjectContains(testSuiteEvents.map(suite => suite.content.resource), [
-            'test_suite.cypress/e2e/other.cy.js',
-            'test_suite.cypress/e2e/spec.cy.js',
-          ])
-
-          assertObjectContains(testSuiteEvents.map(suite => suite.content.meta[TEST_STATUS]), [
-            'pass',
-            'fail',
-          ])
-
-          testSuiteEvents.forEach(({
-            content: {
-              meta,
-              metrics,
-              test_suite_id: testSuiteId,
-              test_module_id: testModuleId,
-              test_session_id: testSessionId,
-            },
-          }) => {
-            assert.ok(meta[TEST_COMMAND])
-            assert.ok(meta[TEST_MODULE])
-            assert.ok(testSuiteId)
-            assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
-            assert.strictEqual(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-            assert.strictEqual(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
-            assert.strictEqual(metrics[TEST_SOURCE_START], 1)
-            assert.ok(metrics[DD_HOST_CPU_COUNT])
-          })
-
-          assertObjectContains(testEvents.map(test => test.content.resource), [
-            'cypress/e2e/other.cy.js.context passes',
-            'cypress/e2e/spec.cy.js.context passes',
-            'cypress/e2e/spec.cy.js.other context fails',
-          ])
-
-          assertObjectContains(testEvents.map(test => test.content.meta[TEST_STATUS]), [
-            'pass',
-            'pass',
-            'fail',
-          ])
-
-          testEvents.forEach(({
-            content: {
-              meta,
-              metrics,
-              test_suite_id: testSuiteId,
-              test_module_id: testModuleId,
-              test_session_id: testSessionId,
-            },
-          }) => {
-            assert.ok(meta[TEST_COMMAND])
-            assert.ok(meta[TEST_MODULE])
-            assert.ok(testSuiteId)
-            assert.strictEqual(testModuleId.toString(10), testModuleEventContent.test_module_id.toString(10))
-            assert.strictEqual(testSessionId.toString(10), testSessionEventContent.test_session_id.toString(10))
-            assert.strictEqual(meta[TEST_SOURCE_FILE].startsWith('cypress/e2e/'), true)
-            // Can read DD_TAGS
-            assert.strictEqual(meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
-            assert.strictEqual(meta['test.customtag'], 'customvalue')
-            assert.strictEqual(meta['test.customtag2'], 'customvalue2')
-            assert.ok(metrics[DD_HOST_CPU_COUNT])
-          })
-        }, 25000)
-
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
-
-      childProcess = exec(
-        testCommand,
-        {
-          cwd,
-          env: {
-            ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
             DD_TEST_SESSION_NAME: 'my-test-session',
             DD_SERVICE: undefined,
+            SPEC_PATTERN: 'cypress/e2e/{spec,other,hook-describe-error,hook-test-error}.cy.js',
           },
         }
       )
@@ -1547,7 +1521,7 @@ moduleTypes.forEach(({
       ])
     })
 
-    it('works if after:run is explicitly used', async () => {
+    it('works if after:run and after:spec are explicitly used', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1574,43 +1548,6 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
-            SPEC_PATTERN: 'cypress/e2e/{spec,other,hook-describe-error,hook-test-error}.cy.js',
-          },
-        }
-      )
-
-      await Promise.all([
-        once(childProcess, 'exit'),
-        receiverPromise,
-      ])
-    })
-
-    it('works if after:spec is explicitly used', async () => {
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSessionEvent = events.find(event => event.type === 'test_session_end')
-          assert.ok(testSessionEvent)
-          const testModuleEvent = events.find(event => event.type === 'test_module_end')
-          assert.ok(testModuleEvent)
-          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-          assert.strictEqual(testSuiteEvents.length, 4)
-          const testEvents = events.filter(event => event.type === 'test')
-          assert.strictEqual(testEvents.length, 9)
-        }, 30000)
-
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
-
-      childProcess = exec(
-        testCommand,
-        {
-          cwd,
-          env: {
-            ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
             SPEC_PATTERN: 'cypress/e2e/{spec,other,hook-describe-error,hook-test-error}.cy.js',
           },
@@ -1850,7 +1787,7 @@ moduleTypes.forEach(({
 
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
             assert.strictEqual(newTests.length, 0)
-          }, 120000)
+          }, 60000)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -2116,6 +2053,23 @@ moduleTypes.forEach(({
               { name: 'other context fails', isRetry: true, isNew: true },
             ])
 
+            // Verify TEST_HAS_FAILED_ALL_RETRIES is set correctly
+            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+            assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
+
+            const testsWithFailedAllRetries = newTests.filter(
+              test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+            )
+            assert.strictEqual(
+              testsWithFailedAllRetries.length,
+              1,
+              'Exactly one test should have TEST_HAS_FAILED_ALL_RETRIES set'
+            )
+            assert.strictEqual(newTests[newTests.length - 1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+            for (let i = 0; i < newTests.length - 1; i++) {
+              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
+            }
+
             const testSession = events.find(event => event.type === 'test_session_end').content
             assertObjectContains(testSession.meta, {
               [TEST_EARLY_FLAKE_ENABLED]: 'true',
@@ -2155,85 +2109,6 @@ moduleTypes.forEach(({
           receiverPromise,
         ])
         assert.match(testOutput, /Retrying "other context fails" to detect flakes because it is new/)
-      })
-
-      it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
-            },
-          },
-          known_tests_enabled: true,
-        })
-
-        receiver.setKnownTests({
-          cypress: {
-            'cypress/e2e/spec.cy.js': [
-              'context passes', // known test that passes
-              // 'other context fails' is new and will fail all attempts
-            ],
-          },
-        })
-
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            // 1 known test + 1 new test with retries: 1 + (1 + 3) = 5 tests
-            assert.strictEqual(tests.length, 5)
-
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
-
-            // Check that TEST_HAS_FAILED_ALL_RETRIES is only set on the last attempt
-            const testsWithFailedAllRetries = newTests.filter(
-              test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
-            )
-            assert.strictEqual(
-              testsWithFailedAllRetries.length,
-              1,
-              'Exactly one test should have TEST_HAS_FAILED_ALL_RETRIES set'
-            )
-
-            // Check that it's set on the last attempt
-            const lastAttempt = newTests[newTests.length - 1]
-            assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-
-            // Check that earlier attempts don't have the flag
-            for (let i = 0; i < newTests.length - 1; i++) {
-              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
-            }
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
-          }, 25000)
-
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
-
-        const specToRun = 'cypress/e2e/spec.cy.js'
-
-        childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-          {
-            cwd,
-            env: {
-              ...restEnvVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun,
-            },
-          }
-        )
-
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
       })
     })
 
@@ -2296,6 +2171,28 @@ moduleTypes.forEach(({
             assert.strictEqual(neverPassingTest.filter(
               test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
             ).length, 5)
+
+            // Verify execution order: retries happen right after the original test
+            const testExecutionOrder = tests.map(test => ({
+              name: test.meta[TEST_NAME],
+              isRetry: test.meta[TEST_IS_RETRY] === 'true',
+            }))
+
+            // Verify order for "flaky test retry eventually passes" (first 3)
+            for (let i = 0; i < 3; i++) {
+              assert.equal(testExecutionOrder[i].name, 'flaky test retry eventually passes')
+              assert.equal(testExecutionOrder[i].isRetry, i > 0)
+            }
+
+            // Verify order for "flaky test retry never passes" (next 6)
+            for (let i = 3; i < 9; i++) {
+              assert.equal(testExecutionOrder[i].name, 'flaky test retry never passes')
+              assert.equal(testExecutionOrder[i].isRetry, i > 3)
+            }
+
+            // Verify "flaky test retry always passes" comes last
+            assert.equal(testExecutionOrder[9].name, 'flaky test retry always passes')
+            assert.equal(testExecutionOrder[9].isRetry, false)
           }, 30000)
 
         const {
@@ -2546,80 +2443,6 @@ moduleTypes.forEach(({
           receiverPromise,
         ])
       })
-
-      it('retries flaky tests in the correct order (right after original test)', async () => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
-
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.equal(tests.length, 10)
-
-            // Extract test execution order with names
-            const testExecutionOrder = tests.map(test => ({
-              name: test.meta[TEST_NAME],
-              isRetry: test.meta[TEST_IS_RETRY] === 'true',
-            }))
-
-            // Expected order (with native Cypress retries):
-            // 1. "flaky test retry eventually passes" (original - fails)
-            // 2. "flaky test retry eventually passes" (retry 1 - fails)
-            // 3. "flaky test retry eventually passes" (retry 2 - passes)
-            // 4. "flaky test retry never passes" (original - fails)
-            // 5. "flaky test retry never passes" (retry 1 - fails)
-            // 6. "flaky test retry never passes" (retry 2 - fails)
-            // 7. "flaky test retry never passes" (retry 3 - fails)
-            // 8. "flaky test retry never passes" (retry 4 - fails)
-            // 9. "flaky test retry never passes" (retry 5 - fails)
-            // 10. "flaky test retry always passes" (original - passes, no retries)
-
-            // Verify order for "flaky test retry eventually passes" (first 3)
-            for (let i = 0; i < 3; i++) {
-              assert.equal(testExecutionOrder[i].name, 'flaky test retry eventually passes')
-              assert.equal(testExecutionOrder[i].isRetry, i > 0) // First is original, rest are retries
-            }
-
-            // Verify order for "flaky test retry never passes" (next 6)
-            for (let i = 3; i < 9; i++) {
-              assert.equal(testExecutionOrder[i].name, 'flaky test retry never passes')
-              assert.equal(testExecutionOrder[i].isRetry, i > 3) // First is original, rest are retries
-            }
-
-            // Verify "flaky test retry always passes" comes last
-            assert.equal(testExecutionOrder[9].name, 'flaky test retry always passes')
-            assert.equal(testExecutionOrder[9].isRetry, false) // No retries needed
-          }, 30000)
-
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
-
-        const specToRun = 'cypress/e2e/flaky-test-retries.js'
-
-        childProcess = exec(
-          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-          {
-            cwd,
-            env: {
-              ...restEnvVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-              SPEC_PATTERN: specToRun,
-            },
-          }
-        )
-
-        await Promise.all([once(childProcess, 'exit'), receiverPromise])
-      })
     })
 
     it('correctly calculates test code owners when working directory is not repository root', async () => {
@@ -2666,6 +2489,73 @@ moduleTypes.forEach(({
         once(childProcess, 'exit'),
         eventsPromise,
       ])
+    })
+
+    it('tags new tests with dynamic names and logs a warning', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 1 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({
+        cypress: {
+          'cypress/e2e/dynamic-name-test.cy.js': [],
+        },
+      })
+
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const uniqueTests = new Map()
+          for (const test of tests) {
+            if (!uniqueTests.has(test.meta[TEST_NAME])) {
+              uniqueTests.set(test.meta[TEST_NAME], test)
+            }
+          }
+
+          const dynamicTests = [...uniqueTests.values()]
+            .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+          assert.strictEqual(dynamicTests.length, 8)
+
+          dynamicTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          })
+        },
+        25000
+      )
+
+      const {
+        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
+        ...restEnvVars
+      } = getCiVisEvpProxyConfig(receiver.port)
+
+      const specToRun = 'cypress/e2e/dynamic-name-test.cy.js'
+
+      childProcess = exec(
+        version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+        {
+          cwd,
+          env: {
+            ...restEnvVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: specToRun,
+          },
+        }
+      )
+
+      let testOutput = ''
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+      assert.match(testOutput, /detected as new but their names contain dynamic data/)
     })
 
     context('known tests without early flake detection', () => {
@@ -2809,6 +2699,7 @@ moduleTypes.forEach(({
             ...restEnvVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_SERVICE: 'my-service',
+            SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
         }
       )
@@ -2975,11 +2866,9 @@ moduleTypes.forEach(({
             testAssertionsPromise,
           ])
 
-          if (shouldAlwaysPass) {
+          if (shouldAlwaysPass || isQuarantined || isDisabled) {
             assert.strictEqual(exitCode, 0)
           } else {
-            // TODO: we need to figure out how to trick cypress into returning exit code 0
-            // even if there are failed tests
             assert.strictEqual(exitCode, 1)
           }
         }
@@ -3018,9 +2907,6 @@ moduleTypes.forEach(({
          * TODO:
          * The spec says that quarantined tests that are not attempted to fix should be run and their result ignored.
          * Cypress will skip the test instead.
-         *
-         * When a test is quarantined and attempted to fix, the spec is to run the test and ignore its result.
-         * Cypress will run the test, but it won't ignore its result.
          */
         it('can mark tests as quarantined and tests are not skipped', async () => {
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
@@ -3290,7 +3176,7 @@ moduleTypes.forEach(({
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             // it is not retried
             assert.strictEqual(tests.length, 1)
-          }, 120000)
+          }, 60000)
 
         const {
           NODE_OPTIONS,
