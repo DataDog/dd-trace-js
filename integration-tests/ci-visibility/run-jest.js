@@ -18,7 +18,7 @@ const options = {
 
 if (process.env.RUN_IN_PARALLEL) {
   delete options.runInBand
-  options.maxWorkers = 2
+  options.maxWorkers = Number(process.env.MAX_WORKERS) || 2
 }
 
 if (process.env.USE_WORKER_THREADS) {
@@ -53,6 +53,10 @@ if (process.env.DO_NOT_INJECT_GLOBALS) {
 
 if (process.env.WAIT_FOR_UNHANDLED_REJECTIONS) {
   options.waitForUnhandledRejections = true
+}
+
+if (process.env.WORKER_IDLE_MEMORY_LIMIT) {
+  options.workerIdleMemoryLimit = Number(process.env.WORKER_IDLE_MEMORY_LIMIT)
 }
 
 jest.runCLI(
