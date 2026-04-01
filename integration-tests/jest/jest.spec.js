@@ -7013,6 +7013,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           RUN_IN_PARALLEL: 'true',
         })
       })
+
+      // Regression test: without the fix, _ddModifiedFiles is not injected after worker restart,
+      // so tests that should be detected as impacted are not marked as such.
+      onlyLatestIt('should be detected as impacted after worker restart', async () => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+
+        // Modify the impacted file in test-management/ and commit so git diff picks it up
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/test-management/test-worker-restart-z-impacted.js'),
+          `const assert = require('assert')
+           describe('worker restart impacted tests', () => {
+             it('can pass normally', () => {
+               assert.strictEqual(1 + 2, 3)
+             })
+           })`
+        )
+        execSync('git add ci-visibility/test-management/test-worker-restart-z-impacted.js', { cwd, stdio: 'ignore' })
+        execSync('git commit --amend --no-edit', { cwd, stdio: 'ignore' })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const impactedTest = tests.find(test =>
+              test.meta[TEST_NAME] === 'worker restart impacted tests can pass normally'
+            )
+
+            assert.ok(impactedTest, 'impacted test not found in payloads')
+            assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              // 3 suites in test-management/ with workerIdleMemoryLimit=0:
+              // test-worker-restart-known-tests-spacer, test-worker-restart-spacer,
+              // then test-worker-restart-z-impacted (sorts last). The worker restarts
+              // after each suite, and the impacted test runs on a replaced child process.
+              TESTS_TO_RUN: 'test-management/test-worker-restart-(spacer|known-tests-spacer|z-impacted)',
+              RUN_IN_PARALLEL: 'true',
+              MAX_WORKERS: '1',
+              WORKER_IDLE_MEMORY_LIMIT: '0',
+              GITHUB_BASE_REF: '',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
     })
 
     context('test is new', () => {
