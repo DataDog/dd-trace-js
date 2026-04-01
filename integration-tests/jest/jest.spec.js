@@ -2535,7 +2535,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(tests.length, 3)
 
             // Only the last execution (the one with status 'pass') should have TEST_FINAL_STATUS tag
-            tests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, idx) => {
+            tests.sort((a, b) => a.meta.start - b.meta.start).forEach((test, idx) => {
               if (idx < tests.length - 1) {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta),
                   'TEST_FINAL_STATUS should not be set on previous runs'
@@ -2602,7 +2602,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const newTests = tests.filter(test =>
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
           )
-          newTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+          newTests.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
             if (index < newTests.length - 1) {
               assert.ok(!(TEST_FINAL_STATUS in test.meta))
             } else {
@@ -4259,8 +4259,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test => test.resource ===
             'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests'
           )
-          eventuallyPassingTest.sort((a, b) =>
-            (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+          eventuallyPassingTest.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
             if (index < eventuallyPassingTest.length - 1) {
               assert.ok(!(TEST_FINAL_STATUS in test.meta))
             } else {
@@ -4273,8 +4272,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test => test.resource ===
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
           )
-          neverPassingTest.sort((a, b) =>
-            (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+          neverPassingTest.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
             if (index < neverPassingTest.length - 1) {
               assert.ok(!(TEST_FINAL_STATUS in test.meta))
             } else {
