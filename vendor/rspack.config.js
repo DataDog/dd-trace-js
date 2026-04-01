@@ -37,6 +37,12 @@ module.exports = {
   // have the same filename as the source files this doesn't matter anyway.
   devtool: 'hidden-source-map',
   context: join(__dirname, 'node_modules'),
+  resolve: {
+    // Node.js does not use the `module` field, so prefer `main` (CJS) to avoid
+    // ESM-only default exports being wrapped in a namespace by rspack's interop,
+    // which would break patterns like `require('esquery').parse`.
+    mainFields: ['main', 'module'],
+  },
   optimization: {
     // Here we used `named` instead of the default of `deterministic` since the
     // default is only deterministic with the same dependencies, but when a
