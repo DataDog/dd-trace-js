@@ -56,7 +56,7 @@ describe('pino test', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          lOG_INJECTION: 'true',
+          TEST_PROGRAMMATIC_DD_LOGS_INJECTION: 'true',
         },
         stdio: 'pipe',
       })
@@ -75,7 +75,7 @@ describe('pino test', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          lOG_INJECTION: 'false',
+          TEST_PROGRAMMATIC_DD_LOGS_INJECTION: 'false',
         },
         stdio: 'pipe',
       })
