@@ -3,7 +3,7 @@
 const tracer = require('dd-trace').init()
 
 const rootSpan = tracer.startSpan('web.request', {
-  tags: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': '/api/test' },
+  tags: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': '/api/test', 'resource.name': 'GET /api/test' },
 })
 
 const childSpan = tracer.startSpan('db.query', {

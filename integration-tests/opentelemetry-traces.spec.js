@@ -113,7 +113,7 @@ describe('OTLP Trace Export', () => {
     assert.deepStrictEqual(errSpan.parentSpanId, webSpan.spanId, 'error span should reference parent')
 
     // Validate span names
-    assert.strictEqual(webSpan.name, 'web.request')
+    assert.strictEqual(webSpan.name, 'GET /api/test')
     assert.strictEqual(dbSpan.name, 'db.query')
     assert.strictEqual(errSpan.name, 'error.operation')
 
@@ -141,7 +141,7 @@ describe('OTLP Trace Export', () => {
     )
     assert.deepStrictEqual(webAttrs['service.name'], { stringValue: 'otlp-test-service' })
     assert.deepStrictEqual(webAttrs['operation.name'], { stringValue: 'web.request' })
-    assert.deepStrictEqual(webAttrs['resource.name'], { stringValue: 'web.request' })
+    assert.deepStrictEqual(webAttrs['resource.name'], { stringValue: 'GET /api/test' })
 
     // Validate custom tags appear as attributes
     assert.deepStrictEqual(webAttrs['http.method'], { stringValue: 'GET' })
