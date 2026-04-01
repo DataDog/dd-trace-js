@@ -578,7 +578,7 @@ describe('Config', () => {
       { name: 'spanAttributeSchema', value: 'v0', origin: 'default' },
       { name: 'spanComputePeerService', value: false, origin: 'calculated' },
       { name: 'spanRemoveIntegrationFromService', value: false, origin: 'default' },
-      { name: 'startupLogs', value: false, origin: 'default' },
+      { name: 'startupLogs', value: DD_MAJOR >= 6, origin: 'default' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
@@ -2580,6 +2580,14 @@ describe('Config', () => {
 
         assert.strictEqual(config.url, '')
       })
+
+      it('should not be used when DD_CIVISIBILITY_AGENTLESS_ENABLED provided', () => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.url, '')
+      })
     })
   })
 
@@ -2985,7 +2993,7 @@ describe('Config', () => {
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
 
-      ;({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: 7 } }))
+      ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: 7 } }))
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 7,
         requestsEnabled: true,
@@ -3003,7 +3011,7 @@ describe('Config', () => {
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
 
-      ;({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: NaN } }))
+      ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: NaN } }))
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 10,
       })
@@ -3861,11 +3869,59 @@ rules:
       assert.deepStrictEqual(config.sampler.rules, [])
     })
 
+    it('should disable 128-bit trace ID generation when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.traceId128BitGenerationEnabled, false)
+    })
+
+    it('should allow env var to override agentless 128-bit disable', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
+      const config = getConfig()
+      // Env var has higher priority than calculated; encoder truncation is the safety net
+      assert.strictEqual(config.traceId128BitGenerationEnabled, true)
+    })
+
     it('should not affect other config when agentless is disabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'false'
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+  })
+
+  describe('should detect when service name is inferred', () => {
+    it('should set isServiceNameInferred to false when DD_SERVICE is defined ', () => {
+      process.env.DD_SERVICE = 'test-service'
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service')
+    })
+
+    it('should set isServiceNameInferred to false when options.service is defined', () => {
+      const config = getConfig({ service: 'test-service-option' })
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-option')
+    })
+
+    it('should set isServiceNameInferred to false when OTEL_SERVICE_NAME is defined', () => {
+      process.env.OTEL_SERVICE_NAME = 'test-service-otel'
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-otel')
+    })
+
+    it('should set isServiceNameInferred to false when tags.service is defined', () => {
+      const config = getConfig({ tags: { service: 'test-service-tags' } })
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-tags')
+    })
+
+    it('should set isServiceNameInfered to true when no name is given', () => {
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, true)
+      assert.strictEqual(config.service, 'node')
     })
   })
 })

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const path = require('path')
 const Axios = require('axios')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../../../../../integration-tests/helpers')
 
 describe('IAST - code_injection - integration', () => {
   let axios, cwd, agent, proc
@@ -24,7 +24,7 @@ describe('IAST - code_injection - integration', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 

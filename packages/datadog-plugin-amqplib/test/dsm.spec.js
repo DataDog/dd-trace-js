@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
+const propagationHash = require('../../dd-trace/src/propagation-hash')
 const id = require('../../dd-trace/src/id')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -59,12 +60,13 @@ describe('Plugin', () => {
         })
 
         beforeEach(() => {
+          const phash = propagationHash.getHash()
           const producerHashWithTopic = computePathwayHash('test', 'tester', [
             'direction:out',
             'has_routing_key:true',
             `topic:${queue}`,
             'type:rabbitmq',
-          ], ENTRY_PARENT_HASH)
+          ], ENTRY_PARENT_HASH, phash)
 
           expectedProducerHashWithTopic = producerHashWithTopic.readBigUInt64LE(0).toString()
 
@@ -73,13 +75,13 @@ describe('Plugin', () => {
             'exchange:namedExchange',
             'has_routing_key:true',
             'type:rabbitmq',
-          ], ENTRY_PARENT_HASH).readBigUInt64LE(0).toString()
+          ], ENTRY_PARENT_HASH, phash).readBigUInt64LE(0).toString()
 
           expectedConsumerHash = computePathwayHash('test', 'tester', [
             'direction:in',
             `topic:${queue}`,
             'type:rabbitmq',
-          ], producerHashWithTopic).readBigUInt64LE(0).toString()
+          ], producerHashWithTopic, phash).readBigUInt64LE(0).toString()
         })
 
         it('Should emit DSM stats to the agent when sending a message on an unnamed exchange', done => {

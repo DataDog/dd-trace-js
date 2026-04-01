@@ -2,7 +2,9 @@
 
 const dns = require('node:dns')
 
-require('dd-trace').init().profilerStarted().then(() => {
+require('dd-trace').init()
+
+setImmediate(() => {
   dns.lookupService('13.224.103.60', 80, () => {})
   dns.lookup('example.org', () => {})
   dns.lookup('example.com', () => {})

@@ -6,9 +6,12 @@ const { after, afterEach, before, describe, it } = require('mocha')
 const sinon = require('sinon')
 const semver = require('semver')
 
-const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
+const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { setup } = require('./spec_helpers')
 
 describe('Sns', function () {
@@ -71,8 +74,8 @@ describe('Sns', function () {
     }
 
     describe('Data Streams Monitoring', () => {
-      const expectedProducerHash = '15386798273908484982'
-      const expectedConsumerHash = '15162998336469814920'
+      let expectedProducerHash
+      let expectedConsumerHash
       let nowStub
 
       before(() => {
@@ -84,7 +87,28 @@ describe('Sns', function () {
         tracer = require('../../dd-trace')
         tracer.use('aws-sdk', { sns: { dsmEnabled: true }, sqs: { dsmEnabled: true } })
 
-        createResources('TestQueueDSM', 'TestTopicDSM', done)
+        createResources('TestQueueDSM', 'TestTopicDSM', (err) => {
+          if (err) return done(err)
+
+          const phash = propagationHash.getHash()
+          const producerHash = computePathwayHash(
+            'test', 'tester',
+            ['direction:out', `topic:${TopicArn}`, 'type:sns'],
+            ENTRY_PARENT_HASH,
+            phash
+          )
+          expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
+
+          const queueName = QueueUrl.split('/').pop()
+          expectedConsumerHash = computePathwayHash(
+            'test', 'tester',
+            ['direction:in', `topic:${queueName}`, 'type:sqs'],
+            producerHash,
+            phash
+          ).readBigUInt64LE(0).toString()
+
+          done()
+        })
       })
 
       after(done => {
