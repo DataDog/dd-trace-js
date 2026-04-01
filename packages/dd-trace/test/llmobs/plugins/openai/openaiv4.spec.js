@@ -591,8 +591,8 @@ describe('integrations', () => {
             temperature: 0.5,
             max_tokens: 100,
           })
-        } catch (e) {
-          // expected error — no server at localhost:8000
+        } catch {
+          // expected error — no server is running
         }
 
         const { llmobsSpans } = await getEvents()
