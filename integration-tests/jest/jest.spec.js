@@ -4994,6 +4994,72 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }).catch(done)
       })
     })
+
+    // Regression test: without the fix, _ddKnownTests is not injected after worker restart,
+    // so tests that should be detected as new are not marked as such.
+    onlyLatestIt('detects new tests after worker restart', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: false,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const oldTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          oldTests.forEach(test => {
+            assert.ok(!(TEST_IS_NEW in test.meta))
+          })
+          assert.strictEqual(oldTests.length, 1)
+
+          // Tests from ci-visibility-test-2.js must still be detected as new
+          // even when running on a restarted worker
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+          newTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          })
+          assert.strictEqual(newTests.length, 1)
+
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            // 4 suites: 2 spacers from test-management/ (sort first), then ci-visibility-test-2
+            // and ci-visibility-test. The new test (ci-visibility-test-2) is the 3rd suite,
+            // running on a child process that has been replaced twice by workerIdleMemoryLimit.
+            TESTS_TO_RUN: '(test/ci-visibility-test|test-management/test-worker-restart-(spacer|known-tests-spacer))',
+            RUN_IN_PARALLEL: 'true',
+            MAX_WORKERS: '1',
+            WORKER_IDLE_MEMORY_LIMIT: '0',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+    })
   })
 
   it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
