@@ -183,6 +183,7 @@ function waitForCache (cacheKey, fetchFn, done) {
     }
     if (Date.now() > deadline || isLockStale(cacheKey)) {
       log.debug('Known tests cache wait timed out, fetching directly')
+      releaseLock(cacheKey)
       return fetchFn(done)
     }
     setTimeout(poll, CACHE_LOCK_POLL_MS)

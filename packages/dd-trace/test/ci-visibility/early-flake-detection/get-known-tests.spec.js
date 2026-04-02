@@ -179,8 +179,13 @@ describe('get-known-tests', () => {
     })
   })
 
-  it('should handle API errors without caching', (done) => {
+  it('should handle API errors without caching', function (done) {
+    this.timeout(15_000)
+
+    // The request module retries 5xx once, so we need two replies
     nock(BASE_URL)
+      .post('/api/v2/ci/libraries/tests')
+      .reply(500, 'Internal Server Error')
       .post('/api/v2/ci/libraries/tests')
       .reply(500, 'Internal Server Error')
 
@@ -253,8 +258,13 @@ describe('get-known-tests', () => {
     })
   })
 
-  it('should clean up lock after failed fetch', (done) => {
+  it('should clean up lock after failed fetch', function (done) {
+    this.timeout(15_000)
+
+    // The request module retries 5xx once, so we need two replies
     nock(BASE_URL)
+      .post('/api/v2/ci/libraries/tests')
+      .reply(500, 'error')
       .post('/api/v2/ci/libraries/tests')
       .reply(500, 'error')
 
