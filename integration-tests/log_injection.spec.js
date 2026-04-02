@@ -43,7 +43,7 @@ describe('Log Injection', () => {
     it('should correctly apply rule based sampling when log injection is enabled', async () => {
       env = {
         AGENT_PORT: agent.port,
-        lOG_INJECTION: 'true',
+        TEST_PROGRAMMATIC_DD_LOGS_INJECTION: 'true',
       }
       proc = await spawnProc(app, { cwd, env, execArgv: [] })
       const url = proc.url + '/sampled'
@@ -58,7 +58,7 @@ describe('Log Injection', () => {
     it('should correctly apply rule based sampling when log injection is disabled', async () => {
       env = {
         AGENT_PORT: agent.port,
-        lOG_INJECTION: 'false',
+        TEST_PROGRAMMATIC_DD_LOGS_INJECTION: 'false',
       }
       proc = await spawnProc(app, { cwd, env, execArgv: [] })
       const url = proc.url + '/sampled'
