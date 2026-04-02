@@ -6,10 +6,9 @@ variables:
   UNCONFIDENCE_THRESHOLD: "5.0"
   MD_REPORT_ONLY_CHANGES: "1"
 
-
 .benchmarks:
   stage: benchmarks
-  needs: []
+  needs: [ ]
   tags: ["runner:apm-k8s-m7i-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
   rules:
@@ -103,7 +102,7 @@ benchmark:
       - MAJOR_VERSION: 24
         GROUP: 4
   variables:
-    SPLITS: 4 
+    SPLITS: 4
 
 benchmark-serverless:
   stage: benchmarks
