@@ -18,19 +18,32 @@ describe('Electron integration', function () {
   let child
 
   // Create a sandbox with electron and @electron/packager installed alongside dd-trace.
-  // The app source files are copied in; dd-trace is loaded at runtime via DD_TRACER_PATH
-  // so it does not need to be bundled inside the binary.
+  // The app source files are copied in; dd-trace is then installed into the app directory
+  // from the pre-packed sandbox tgz so electron-packager bundles it inside the binary.
   useSandbox(['electron', '@electron/packager'], false, [path.join(__dirname, 'app')])
 
   before(async function () {
     const sandboxFolder = sandboxCwd()
     const appDir = path.join(sandboxFolder, 'app')
 
-    // electron-packager requires a package.json in the app directory
+    // createSandbox packs dd-trace into a .tgz one level above the sandbox folder.
+    // We reference it with a file: URL so npm installs the exact local build.
+    const ddTraceTgz = path.join(path.dirname(sandboxFolder), 'dd-trace.tgz')
+
+    // Write the app's package.json with dd-trace as a bundled dependency so that
+    // electron-packager includes it inside the binary together with the app source.
     fs.writeFileSync(
       path.join(appDir, 'package.json'),
-      JSON.stringify({ name: 'ElectronTest', version: '1.0.0', main: 'main.js' })
+      JSON.stringify({
+        name: 'ElectronTest',
+        version: '1.0.0',
+        main: 'main.js',
+        dependencies: { 'dd-trace': `file:${ddTraceTgz}` }
+      })
     )
+
+    // Install dd-trace and its transitive dependencies into the app directory.
+    execFileSync('npm', ['install'], { cwd: appDir, stdio: 'pipe' })
 
     // Use the electron version already installed in the sandbox so that
     // electron-packager finds the cached binary and does not re-download it.
@@ -90,14 +103,10 @@ describe('Electron integration', function () {
   })
 
   beforeEach(done => {
-    const sandboxFolder = sandboxCwd()
     child = spawn(binaryPath, [], {
       env: {
         ...process.env,
-        // The binary's main.js reads DD_TRACER_PATH to locate dd-trace at runtime.
-        // This avoids NODE_OPTIONS (unsupported in packaged Electron) while keeping
-        // the init code inside the binary.
-        DD_TRACER_PATH: path.join(sandboxFolder, 'node_modules', 'dd-trace'),
+        // dd-trace is bundled inside the binary; only the agent port is injected.
         DD_TRACE_AGENT_PORT: String(agent.port)
       },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
