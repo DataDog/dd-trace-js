@@ -790,6 +790,41 @@ moduleTypes.forEach(({
       assert.match(testOutput, /\[custom:after:run:resolved\]/)
     })
 
+    // Tests the old manual API: dd-trace/ci/cypress/after-run and after-spec
+    // used alongside the manual plugin, without NODE_OPTIONS auto-instrumentation.
+    over10It('works if after:run and after:spec are explicitly used with the manual plugin', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEvent)
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.ok(testEvents.length > 0)
+        }, 30000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
+            CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
+            CYPRESS_ENABLE_MANUAL_PLUGIN: '1',
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
     over12It('reports correct source file and line for pre-compiled typescript test files', async function () {
       const envVars = getCiVisAgentlessConfig(receiver.port)
 

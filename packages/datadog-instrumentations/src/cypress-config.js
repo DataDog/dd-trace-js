@@ -240,15 +240,16 @@ function createConfigWrapper (originalConfigFile) {
     `${DD_CLI_CONFIG_WRAPPER_FILE}-${process.pid}.mjs`
   )
 
-  const wrapConfigPath = require.resolve('../../../ci/cypress/wrap-config')
+  const cypressConfigPath = require.resolve('./cypress-config')
 
   // Always use ESM: it can import both CJS and ESM configs, so it works
   // regardless of the original file's extension or "type": "module" in package.json.
+  // Import cypress-config.js directly (CJS default = module.exports object).
   const wrapperContent = [
     `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
-    `import wrapConfig from ${JSON.stringify(pathToFileURL(wrapConfigPath).href)}`,
+    `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
     '',
-    'export default wrapConfig(originalConfig)',
+    'export default cypressConfig.wrapConfig(originalConfig)',
     '',
   ].join('\n')
 
