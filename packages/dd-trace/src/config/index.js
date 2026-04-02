@@ -982,6 +982,7 @@ class Config {
     }
     setBoolean(opts, 'iast.stackTrace.enabled', options.iast?.stackTrace?.enabled)
     setString(opts, 'iast.telemetryVerbosity', options.iast && options.iast.telemetryVerbosity)
+    setString(opts, 'ciVisibilityTestSessionName', options.ciVisibilityTestSessionName)
     setBoolean(opts, 'isCiVisibility', options.isCiVisibility)
     setBoolean(opts, 'legacyBaggageEnabled', options.legacyBaggageEnabled)
     setBoolean(opts, 'llmobs.agentlessEnabled', options.llmobs?.agentlessEnabled)

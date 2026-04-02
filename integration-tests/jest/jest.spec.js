@@ -5064,6 +5064,69 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  context('lage', () => {
+    it('sends Lage package configuration with known tests requests and uses it as the test session name', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: false,
+        },
+        known_tests_enabled: true,
+      })
+
+      const allRequests = []
+      const onMessage = (message) => {
+        allRequests.push(message)
+      }
+      receiver.on('message', onMessage)
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-lage-package')
+            }
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME: 'true',
+            LAGE_PACKAGE_NAME: 'my-lage-package',
+            TESTS_TO_RUN: 'test/ci-visibility-test',
+          },
+        }
+      )
+
+      try {
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        const knownTestsRequest = allRequests.find(({ url }) => url.endsWith('/api/v2/ci/libraries/tests'))
+
+        assert.strictEqual(exitCode, 0)
+        assert.ok(knownTestsRequest, 'expected a known tests request')
+        assert.deepStrictEqual(
+          knownTestsRequest.payload.data.attributes.configurations.custom,
+          { lage_package_name: 'my-lage-package' }
+        )
+      } finally {
+        receiver.off('message', onMessage)
+      }
+    })
+  })
+
   it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {

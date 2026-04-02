@@ -245,7 +245,7 @@ class FakeCiVisIntake extends FakeAgent {
     app.post([
       '/api/v2/ci/libraries/tests',
       '/evp_proxy/:version/api/v2/ci/libraries/tests',
-    ], (req, res) => {
+    ], express.json(), (req, res) => {
       // The endpoint returns compressed data if 'accept-encoding' is set to 'gzip'
       const isGzip = req.headers['accept-encoding'] === 'gzip'
 
@@ -278,6 +278,7 @@ class FakeCiVisIntake extends FakeAgent {
       res.status(knownTestsStatusCode).send(isGzip ? zlib.gzipSync(responseData) : responseData)
       this.emit('message', {
         headers: req.headers,
+        payload: req.body,
         url: req.url,
       })
     })

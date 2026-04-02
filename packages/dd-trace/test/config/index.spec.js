@@ -2591,7 +2591,7 @@ describe('Config', () => {
     })
   })
 
-  context('ci visibility config', () => {
+  context('test optimization config', () => {
     let options = {}
     beforeEach(() => {
       delete process.env.DD_CIVISIBILITY_ITR_ENABLED
@@ -2606,7 +2606,7 @@ describe('Config', () => {
       delete process.env.DD_AGENTLESS_LOG_SUBMISSION_ENABLED
       options = {}
     })
-    context('ci visibility mode is enabled', () => {
+    context('test optimization mode is enabled', () => {
       beforeEach(() => {
         options = { isCiVisibility: true }
       })
@@ -2692,6 +2692,14 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.ciVisibilityTestSessionName, 'my-test-session')
       })
+      it('should set the session name if ciVisibilityTestSessionName is set in options', () => {
+        const config = getConfig({
+          ...options,
+          ciVisibilityTestSessionName: 'my-test-session-from-options',
+        })
+
+        assert.strictEqual(config.ciVisibilityTestSessionName, 'my-test-session-from-options')
+      })
       it('should not enable agentless log submission by default', () => {
         const config = getConfig(options)
         assert.strictEqual(config.ciVisAgentlessLogSubmissionEnabled, false)
@@ -2712,7 +2720,7 @@ describe('Config', () => {
           assert.strictEqual(config.isTestDynamicInstrumentationEnabled, false)
         })
     })
-    context('ci visibility mode is not enabled', () => {
+    context('test optimization mode is not enabled', () => {
       it('should not activate intelligent test runner or git metadata upload', () => {
         process.env.DD_CIVISIBILITY_ITR_ENABLED = 'true'
         process.env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED = 'true'
