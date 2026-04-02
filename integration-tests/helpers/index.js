@@ -42,12 +42,12 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
-    let out = Buffer.alloc(0)
+    const out = []
     proc.stdout.on('data', data => {
-      out = Buffer.concat([out, data])
+      out.push(data)
     })
     proc.stderr.pipe(process.stdout)
-    proc.once('exit', () => resolve(out.toString('utf8')))
+    proc.once('exit', () => resolve(Buffer.concat(out).toString('utf8')))
     if (shouldKill) {
       setTimeout(() => {
         if (proc.exitCode === null) proc.kill()
@@ -265,21 +265,25 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
 /**
  * Stop a process and wait for it to fully exit.
  *
- * Sends `SIGTERM` first, waits up to `timeoutMs`, and escalates to `SIGKILL` if needed.
+ * Sends `signal` first, waits up to `timeoutMs`, and escalates to `SIGKILL` if needed.
  *
  * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
  * @param {object} [options] - Stop options.
+ * @param {NodeJS.Signals} [options.signal='SIGTERM'] - Signal to send before escalating.
  * @param {number} [options.timeoutMs=defaultStopProcTimeoutMs] - Max wait per signal in milliseconds.
  * @returns {Promise<void>}
  */
-async function stopProc (proc, { timeoutMs = defaultStopProcTimeoutMs } = {}) {
+async function stopProc (proc, options = {}) {
   if (!proc) return
   if (proc.exitCode !== null || proc.signalCode !== null) return
 
-  proc.kill()
+  const signal = options.signal ?? 'SIGTERM'
+  const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
 
-  const exitedAfterSigterm = await waitForProcExit(proc, timeoutMs)
-  if (exitedAfterSigterm) return
+  proc.kill(signal)
+
+  const exitedAfterInitialSignal = await waitForProcExit(proc, timeoutMs)
+  if (exitedAfterInitialSignal) return
 
   proc.kill('SIGKILL')
   const exitedAfterSigkill = await waitForProcExit(proc, timeoutMs)
@@ -950,6 +954,8 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
     return
   }
 
+  assert.ok(typeof actual === 'object' && actual !== null, msg)
+
   for (const [key, val] of Object.entries(expected)) {
     assert.ok(Object.hasOwn(actual, key), msg)
     if (useMatchers && val === ANY_STRING) {
@@ -961,7 +967,6 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
     } else if (val !== null && typeof val === 'object') {
       assertObjectContainsImpl(actual[key], val, msg, useMatchers)
     } else {
-      assert.ok(actual, msg)
       assert.strictEqual(actual[key], expected[key], msg)
     }
   }
@@ -976,11 +981,11 @@ const assertObjectContains = function assertObjectContains (actual, expected, ms
 
   try {
     assertionFn(actual, expected, msg)
-  } catch {
+  } catch (error) {
     // First attempt failed, retry with matcher support
     try {
       assertObjectContainsImpl(actual, expected, msg, true)
-    } catch (error) {
+    } catch {
       // eslint-disable-next-line no-console
       console.error(error)
 

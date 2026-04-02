@@ -2,8 +2,13 @@
 
 const assert = require('node:assert/strict')
 const {
-  useSandbox, sandboxCwd, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc, curl,
+  useSandbox,
+  sandboxCwd,
+  varySandbox,
+  FakeAgent,
+  spawnPluginIntegrationTestProc,
+  curl,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
@@ -23,7 +28,7 @@ withVersions('node-serialize', 'node-serialize', version => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

@@ -3,13 +3,27 @@
 const { readFileSync } = require('fs')
 const { join } = require('path')
 const log = require('../../../../dd-trace/src/log')
+const { create } = require('../../../../../vendor/dist/@apm-js-collab/code-transformer')
+const { traceAsyncIterator, traceIterator } = require('./transforms')
 const instrumentations = require('./instrumentations')
-const { create } = require('./orchestrion')
+
+let dcPolyfill
+
+try {
+  dcPolyfill = require.resolve('dc-polyfill').replaceAll('\\', '/')
+} catch {
+  // The `dc-polyfill` module is unavailable for some reason (like bundling).
+  // Let's just keep the default of using `diagnostics-channel` as a fallback
+  // which works for most Node versions.
+}
 
 /** @type {Record<string, string>} map of module base name to version */
 const moduleVersions = {}
 const disabled = new Set()
-const matcher = create(instrumentations, 'dc-polyfill')
+const matcher = create(instrumentations, dcPolyfill)
+
+matcher.addTransform('traceIterator', traceIterator)
+matcher.addTransform('traceAsyncIterator', traceAsyncIterator)
 
 function rewrite (content, filename, format) {
   if (!content) return content
