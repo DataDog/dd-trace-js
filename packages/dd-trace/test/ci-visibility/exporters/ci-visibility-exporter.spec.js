@@ -849,6 +849,160 @@ describe('CI Visibility Exporter', () => {
           done()
         })
       })
+
+      it('should handle paginated responses and merge tests across pages', (done) => {
+        const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: {
+                  jest: {
+                    suite1: ['test1'],
+                  },
+                },
+                page_info: {
+                  cursor: 'cursor_page2',
+                  has_next: true,
+                  size: 1,
+                },
+              },
+            },
+          }))
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: {
+                  jest: {
+                    suite1: ['test2'],
+                    suite2: ['test3'],
+                  },
+                },
+                page_info: {
+                  cursor: '',
+                  has_next: false,
+                  size: 2,
+                },
+              },
+            },
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(knownTests, {
+            jest: {
+              suite1: ['test1', 'test2'],
+              suite2: ['test3'],
+            },
+          })
+          assert.strictEqual(scope.isDone(), true)
+          done()
+        })
+      })
+
+      it('should handle backward-compatible response without page_info', (done) => {
+        const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: {
+                  jest: {
+                    suite1: ['test1'],
+                  },
+                },
+              },
+            },
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+          assert.strictEqual(err, null)
+          assert.deepStrictEqual(knownTests, {
+            jest: {
+              suite1: ['test1'],
+            },
+          })
+          assert.strictEqual(scope.isDone(), true)
+          done()
+        })
+      })
+
+      it('should send page_info in request payload', (done) => {
+        let firstRequestBody
+        let secondRequestBody
+        const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests', (body) => {
+            firstRequestBody = body
+            return true
+          })
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: { jest: { suite1: ['test1'] } },
+                page_info: { cursor: 'abc123', has_next: true, size: 1 },
+              },
+            },
+          }))
+          .post('/api/v2/ci/libraries/tests', (body) => {
+            secondRequestBody = body
+            return true
+          })
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: { jest: { suite2: ['test2'] } },
+                page_info: { cursor: '', has_next: false, size: 1 },
+              },
+            },
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err) => {
+          assert.strictEqual(err, null)
+          assert.strictEqual(scope.isDone(), true)
+          // First request should have empty page_info
+          assert.deepStrictEqual(firstRequestBody.data.attributes.page_info, {})
+          // Second request should have page_state from cursor
+          assert.deepStrictEqual(secondRequestBody.data.attributes.page_info, { page_state: 'abc123' })
+          done()
+        })
+      })
+
+      it('should return error when has_next is true but cursor is missing', (done) => {
+        const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(200, JSON.stringify({
+            data: {
+              attributes: {
+                tests: { jest: { suite1: ['test1'] } },
+                page_info: { has_next: true, size: 1 },
+              },
+            },
+          }))
+
+        const ciVisibilityExporter = new CiVisibilityExporter({ port })
+
+        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+        ciVisibilityExporter.getKnownTests({}, (err) => {
+          assert.notStrictEqual(err, null)
+          assert.match(err.message, /has_next=true but no cursor/)
+          assert.strictEqual(scope.isDone(), true)
+          done()
+        })
+      })
     })
   })
 

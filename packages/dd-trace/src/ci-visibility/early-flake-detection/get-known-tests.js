@@ -26,6 +26,8 @@ const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 const CACHE_LOCK_POLL_MS = 500
 const CACHE_LOCK_TIMEOUT_MS = 120_000 // 2 minutes
 
+const MAX_KNOWN_TESTS_PAGES = 10_000
+
 /**
  * Builds a deterministic cache key from the request parameters that identify
  * a unique known-tests response.
@@ -140,7 +142,7 @@ function tryAcquireLock (cacheKey) {
 }
 
 /**
- * Releases the lock file. Also releases stale locks older than the lock timeout.
+ * Releases the lock file.
  *
  * @param {string} cacheKey
  */
@@ -186,6 +188,38 @@ function waitForCache (cacheKey, fetchFn, done) {
     setTimeout(poll, CACHE_LOCK_POLL_MS)
   }
   poll()
+}
+
+/**
+ * Deep-merges page tests into aggregate.
+ * Structure: { module: { suite: [testName, ...] } }
+ *
+ * @param {object | null} aggregate
+ * @param {object | null} page
+ * @returns {object | null}
+ */
+function mergeKnownTests (aggregate, page) {
+  if (!page) return aggregate
+  if (!aggregate) return page
+
+  for (const [moduleName, suites] of Object.entries(page)) {
+    if (!suites) continue
+
+    if (!aggregate[moduleName]) {
+      aggregate[moduleName] = suites
+      continue
+    }
+
+    for (const [suiteName, tests] of Object.entries(suites)) {
+      if (!tests || tests.length === 0) continue
+
+      aggregate[moduleName][suiteName] = aggregate[moduleName][suiteName]
+        ? [...aggregate[moduleName][suiteName], ...tests]
+        : tests
+    }
+  }
+
+  return aggregate
 }
 
 function getKnownTests ({
@@ -273,7 +307,8 @@ function getKnownTests ({
 }
 
 /**
- * Fetches known tests from the API and writes the result to cache on success.
+ * Fetches known tests from the API with cursor-based pagination and writes the
+ * result to cache on success.
  *
  * @param {object} params
  * @param {string} params.url
@@ -336,55 +371,96 @@ function fetchFromApi ({
     options.headers['dd-api-key'] = apiKey
   }
 
-  const data = JSON.stringify({
-    data: {
-      id: id().toString(10),
-      type: 'ci_app_libraries_tests_request',
-      attributes: {
-        configurations: {
-          'os.platform': osPlatform,
-          'os.version': osVersion,
-          'os.architecture': osArchitecture,
-          'runtime.name': runtimeName,
-          'runtime.version': runtimeVersion,
-          custom,
-        },
-        service,
-        env,
-        repository_url: repositoryUrl,
-        sha,
-      },
-    },
-  })
+  const configurations = {
+    'os.platform': osPlatform,
+    'os.version': osVersion,
+    'os.architecture': osArchitecture,
+    'runtime.name': runtimeName,
+    'runtime.version': runtimeVersion,
+    custom,
+  }
 
   incrementCountMetric(TELEMETRY_KNOWN_TESTS)
 
   const startTime = Date.now()
+  let aggregateTests = null
+  let totalResponseBytes = 0
+  let pageNumber = 0
 
-  request(data, options, (err, res, statusCode) => {
-    distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
-    if (err) {
-      incrementCountMetric(TELEMETRY_KNOWN_TESTS_ERRORS, { statusCode })
-      done(err)
-    } else {
+  function fetchPage (pageState) {
+    pageNumber++
+
+    if (pageNumber > MAX_KNOWN_TESTS_PAGES) {
+      log.error('Known tests pagination exceeded maximum of %d pages. Aborting.', MAX_KNOWN_TESTS_PAGES)
+      distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+      return done(new Error(`Known tests pagination exceeded maximum of ${MAX_KNOWN_TESTS_PAGES} pages`))
+    }
+
+    const pageInfo = pageState ? { page_state: pageState } : {}
+
+    const data = JSON.stringify({
+      data: {
+        id: id().toString(10),
+        type: 'ci_app_libraries_tests_request',
+        attributes: {
+          configurations,
+          service,
+          env,
+          repository_url: repositoryUrl,
+          sha,
+          page_info: pageInfo,
+        },
+      },
+    })
+
+    request(data, options, (err, res, statusCode) => {
+      if (err) {
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+        incrementCountMetric(TELEMETRY_KNOWN_TESTS_ERRORS, { statusCode })
+        return done(err)
+      }
+
       try {
-        const { data: { attributes: { tests: knownTests } } } = JSON.parse(res)
+        totalResponseBytes += res.length
 
-        const numTests = getNumFromKnownTests(knownTests)
+        const { data: { attributes } } = JSON.parse(res)
+        const { tests: pageTests, page_info: responsePageInfo } = attributes
+
+        aggregateTests = mergeKnownTests(aggregateTests, pageTests)
+
+        // Check if there are more pages
+        if (responsePageInfo && responsePageInfo.has_next) {
+          if (!responsePageInfo.cursor) {
+            log.error(
+              'Known tests response has has_next=true but no cursor on page %d. Aborting pagination.', pageNumber
+            )
+            distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+            return done(new Error('Known tests pagination: has_next=true but no cursor'))
+          }
+          return fetchPage(responsePageInfo.cursor)
+        }
+
+        // Done — no more pages
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
+
+        const numTests = getNumFromKnownTests(aggregateTests)
 
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
-        distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, res.length)
+        distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, totalResponseBytes)
 
         log.debug('Number of received known tests: %d', numTests)
 
-        writeToCache(cacheKey, knownTests)
+        writeToCache(cacheKey, aggregateTests)
 
-        done(null, knownTests)
+        done(null, aggregateTests)
       } catch (err) {
+        distributionMetric(TELEMETRY_KNOWN_TESTS_MS, {}, Date.now() - startTime)
         done(err)
       }
-    }
-  })
+    })
+  }
+
+  fetchPage(null)
 }
 
-module.exports = { getKnownTests }
+module.exports = { getKnownTests, mergeKnownTests }
