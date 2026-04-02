@@ -128,13 +128,39 @@ module.exports = {
         })
         : null
 
+      const eventLoopDelayP90 = trackEventLoop
+        ? meter.createObservableGauge('nodejs.eventloop.delay.p90', {
+          unit: 'ns',
+          description: 'Event loop 90th percentile delay.',
+        })
+        : null
+
+      const eventLoopDelayP99 = trackEventLoop
+        ? meter.createObservableGauge('nodejs.eventloop.delay.p99', {
+          unit: 'ns',
+          description: 'Event loop 99th percentile delay.',
+        })
+        : null
+
+      // nodejs.eventloop.utilization — the one that IS mapped in semantic-core
+      const eventLoopUtilization = trackEventLoop && performance.eventLoopUtilization
+        ? meter.createObservableGauge('nodejs.eventloop.utilization', {
+          unit: '1',
+          description: 'Event loop utilization ratio.',
+        })
+        : null
+
       // Register batch callback for all observable instruments
       const observables = [
         heapUsed, heapLimit, heapSpaceAvailable, heapSpacePhysical,
         memoryUsage, cpuUtilization,
       ]
       if (trackEventLoop) {
-        observables.push(eventLoopDelayMin, eventLoopDelayMax, eventLoopDelayMean, eventLoopDelayP50)
+        observables.push(
+          eventLoopDelayMin, eventLoopDelayMax, eventLoopDelayMean,
+          eventLoopDelayP50, eventLoopDelayP90, eventLoopDelayP99,
+        )
+        if (eventLoopUtilization) observables.push(eventLoopUtilization)
       }
 
       observableRegistration = meter.addBatchObservableCallback((observer) => {
@@ -177,7 +203,15 @@ module.exports = {
           observer.observe(eventLoopDelayMax, eventLoopHistogram.max * 1e6)
           observer.observe(eventLoopDelayMean, eventLoopHistogram.mean * 1e6)
           observer.observe(eventLoopDelayP50, eventLoopHistogram.percentile(50) * 1e6)
+          observer.observe(eventLoopDelayP90, eventLoopHistogram.percentile(90) * 1e6)
+          observer.observe(eventLoopDelayP99, eventLoopHistogram.percentile(99) * 1e6)
           eventLoopHistogram.reset()
+        }
+
+        // Event loop utilization (the one mapped in semantic-core)
+        if (eventLoopUtilization && performance.eventLoopUtilization) {
+          const elu = performance.eventLoopUtilization()
+          observer.observe(eventLoopUtilization, elu.utilization)
         }
       }, observables)
 
