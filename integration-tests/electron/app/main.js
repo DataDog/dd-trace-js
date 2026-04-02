@@ -1,15 +1,12 @@
 'use strict'
 
-// Initialize dd-trace before any Electron module is loaded.
-// DD_TRACER_PATH points to dd-trace inside the sandbox so the binary does not
-// need dd-trace bundled; the path is the only thing that comes from outside.
-if (process.env.DD_TRACER_PATH) {
-  require(process.env.DD_TRACER_PATH).init({
-    service: 'electron-integration-test',
-    flushInterval: 0,
-    plugins: false
-  }).use('electron', true)
-}
+// dd-trace is bundled inside the binary alongside the app source.
+// No external path or NODE_OPTIONS injection needed.
+require('dd-trace').init({
+  service: 'electron-integration-test',
+  flushInterval: 0,
+  plugins: false
+}).use('electron', true)
 
 const { app, BrowserWindow, net } = require('electron/main')
 const path = require('path')
