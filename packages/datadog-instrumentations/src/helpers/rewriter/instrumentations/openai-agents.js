@@ -6,7 +6,8 @@
 // The equivalent here would be hooking Span.prototype.start / Span.prototype.end via
 // orchestrion. Requires team sign-off before implementation.
 
-const entries = [
+module.exports = [
+  // @openai/agents-core — CJS
   {
     module: {
       name: '@openai/agents-core',
@@ -18,45 +19,6 @@ const entries = [
       kind: 'Async',
     },
     channelName: 'run',
-  },
-  {
-    module: {
-      name: '@openai/agents-openai',
-      versionRange: '>=0.7.0',
-      filePath: 'dist/openaiResponsesModel.js',
-    },
-    functionQuery: {
-      methodName: 'getResponse',
-      className: 'OpenAIResponsesModel',
-      kind: 'Async',
-    },
-    channelName: 'getResponse',
-  },
-  {
-    module: {
-      name: '@openai/agents-openai',
-      versionRange: '>=0.7.0',
-      filePath: 'dist/openaiResponsesModel.js',
-    },
-    functionQuery: {
-      methodName: 'getStreamedResponse',
-      className: 'OpenAIResponsesModel',
-      kind: 'Async',
-    },
-    channelName: 'getStreamedResponse',
-  },
-  {
-    module: {
-      name: '@openai/agents-openai',
-      versionRange: '>=0.7.0',
-      filePath: 'dist/openaiChatCompletionsModel.js',
-    },
-    functionQuery: {
-      methodName: 'getResponse',
-      className: 'OpenAIChatCompletionsModel',
-      kind: 'Async',
-    },
-    channelName: 'getResponse',
   },
   {
     module: {
@@ -106,18 +68,148 @@ const entries = [
     },
     channelName: 'runToolOutputGuardrails',
   },
-]
 
-// Produce a .mjs twin for every entry so ESM apps get instrumented too.
-// The orchestrion rewriter matches file paths exactly — dual-format packages ship
-// both dist/*.js (CJS) and dist/*.mjs (ESM), so both need entries.
-module.exports = entries.flatMap(entry => [
-  entry,
+  // @openai/agents-core — ESM
   {
-    ...entry,
     module: {
-      ...entry.module,
-      filePath: entry.module.filePath.replace(/\.js$/, '.mjs'),
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/run.mjs',
     },
+    functionQuery: {
+      functionName: 'run',
+      kind: 'Async',
+    },
+    channelName: 'run',
   },
-])
+  {
+    module: {
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/tool.mjs',
+    },
+    functionQuery: {
+      functionName: 'invokeFunctionTool',
+      kind: 'Async',
+    },
+    channelName: 'invokeFunctionTool',
+  },
+  {
+    module: {
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/handoff.mjs',
+    },
+    functionQuery: {
+      functionName: 'onInvokeHandoff',
+      kind: 'Async',
+    },
+    channelName: 'onInvokeHandoff',
+  },
+  {
+    module: {
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/utils/toolGuardrails.mjs',
+    },
+    functionQuery: {
+      functionName: 'runToolInputGuardrails',
+      kind: 'Async',
+    },
+    channelName: 'runToolInputGuardrails',
+  },
+  {
+    module: {
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/utils/toolGuardrails.mjs',
+    },
+    functionQuery: {
+      functionName: 'runToolOutputGuardrails',
+      kind: 'Async',
+    },
+    channelName: 'runToolOutputGuardrails',
+  },
+
+  // @openai/agents-openai — CJS
+  {
+    module: {
+      name: '@openai/agents-openai',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/openaiResponsesModel.js',
+    },
+    functionQuery: {
+      methodName: 'getResponse',
+      className: 'OpenAIResponsesModel',
+      kind: 'Async',
+    },
+    channelName: 'getResponse',
+  },
+  {
+    module: {
+      name: '@openai/agents-openai',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/openaiResponsesModel.js',
+    },
+    functionQuery: {
+      methodName: 'getStreamedResponse',
+      className: 'OpenAIResponsesModel',
+      kind: 'Async',
+    },
+    channelName: 'getStreamedResponse',
+  },
+  {
+    module: {
+      name: '@openai/agents-openai',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/openaiChatCompletionsModel.js',
+    },
+    functionQuery: {
+      methodName: 'getResponse',
+      className: 'OpenAIChatCompletionsModel',
+      kind: 'Async',
+    },
+    channelName: 'getResponse',
+  },
+
+  // @openai/agents-openai — ESM
+  {
+    module: {
+      name: '@openai/agents-openai',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/openaiResponsesModel.mjs',
+    },
+    functionQuery: {
+      methodName: 'getResponse',
+      className: 'OpenAIResponsesModel',
+      kind: 'Async',
+    },
+    channelName: 'getResponse',
+  },
+  {
+    module: {
+      name: '@openai/agents-openai',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/openaiResponsesModel.mjs',
+    },
+    functionQuery: {
+      methodName: 'getStreamedResponse',
+      className: 'OpenAIResponsesModel',
+      kind: 'Async',
+    },
+    channelName: 'getStreamedResponse',
+  },
+  {
+    module: {
+      name: '@openai/agents-openai',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/openaiChatCompletionsModel.mjs',
+    },
+    functionQuery: {
+      methodName: 'getResponse',
+      className: 'OpenAIChatCompletionsModel',
+      kind: 'Async',
+    },
+    channelName: 'getResponse',
+  },
+]
