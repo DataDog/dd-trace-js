@@ -136,7 +136,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
-          name: 'openai-agents.getResponse',
+          name: 'gpt-4 (LLM)',
           modelName: 'gpt-4',
           modelProvider: 'openai',
           inputMessages: [
@@ -173,7 +173,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
-          name: 'openai-agents.getResponse',
+          name: 'gpt-4 (LLM)',
           modelName: 'gpt-4',
           modelProvider: 'openai',
           inputMessages: [
@@ -213,7 +213,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
-          name: 'openai-agents.getResponse',
+          name: 'gpt-4 (LLM)',
           modelName: 'gpt-4',
           modelProvider: 'openai',
           inputMessages: [
@@ -254,7 +254,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
-          name: 'openai-agents.getResponse',
+          name: 'gpt-4 (LLM)',
           modelName: 'gpt-4',
           modelProvider: 'openai',
           inputMessages: [
@@ -269,7 +269,7 @@ describe('integrations', () => {
             output_tokens: MOCK_NOT_NULLISH,
             total_tokens: MOCK_NOT_NULLISH,
           },
-          metadata: { temperature: 0.5, maxTokens: 100 },
+          metadata: { temperature: 0.5, max_tokens: 100 },
           tags: { ml_app: 'test', integration: 'openai-agents' },
         })
       })
@@ -300,7 +300,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
-          name: 'openai-agents.getStreamedResponse',
+          name: 'gpt-4 (LLM)',
           modelName: 'gpt-4',
           modelProvider: 'openai',
           inputMessages: [
@@ -339,7 +339,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'llm',
-          name: 'openai-agents.getStreamedResponse',
+          name: 'gpt-4 (LLM)',
           modelName: 'gpt-4',
           modelProvider: 'openai',
           inputMessages: [
@@ -365,7 +365,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'workflow',
-          name: 'openai-agents.run',
+          name: 'Agent workflow',
           inputValue: 'hello',
           outputValue: MOCK_STRING,
           tags: { ml_app: 'test', integration: 'openai-agents' },
@@ -384,7 +384,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'workflow',
-          name: 'openai-agents.run',
+          name: 'Agent workflow',
           inputValue: 'hello',
           error: {
             type: 'Error',
@@ -450,7 +450,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'agent',
-          name: 'openai-agents.onInvokeHandoff',
+          name: 'transfer_to_target_agent',
           inputValue: '{}',
           outputValue: MOCK_STRING,
           tags: { ml_app: 'test', integration: 'openai-agents' },
@@ -480,7 +480,7 @@ describe('integrations', () => {
         assertLlmObsSpanEvent(llmobsSpans[0], {
           span: apmSpans[0],
           spanKind: 'agent',
-          name: 'openai-agents.onInvokeHandoff',
+          name: 'transfer_to_target_agent',
           inputValue: 'not-valid-json',
           error: true,
           tags: { ml_app: 'test', integration: 'openai-agents' },

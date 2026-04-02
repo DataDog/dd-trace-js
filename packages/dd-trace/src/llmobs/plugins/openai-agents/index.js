@@ -2,12 +2,15 @@
 
 const LLMObsPlugin = require('../base')
 
-const ALLOWED_SETTINGS_KEYS = new Set([
-  'temperature',
-  'maxTokens',
-  'topP',
-  'stream',
-])
+// Maps JS camelCase modelSettings keys to the snake_case keys used in metadata (Python parity).
+const SETTINGS_KEY_MAP = {
+  temperature: 'temperature',
+  maxTokens: 'max_tokens',
+  topP: 'top_p',
+  toolChoice: 'tool_choice',
+  text: 'text',
+  truncation: 'truncation',
+}
 
 // ── Orchestration plugins (workflow / agent / tool / task span kinds) ─────────
 
@@ -25,9 +28,10 @@ class RunLLMObsPlugin extends LLMObsPlugin {
    * @returns {{ kind: string, name: string }}
    */
   getLLMObsSpanRegisterOptions (ctx) {
+    const workflowName = ctx.arguments?.[2]?.workflowName ?? 'Agent workflow'
     return {
       kind: 'workflow',
-      name: 'openai-agents.run',
+      name: workflowName,
     }
   }
 
@@ -37,6 +41,12 @@ class RunLLMObsPlugin extends LLMObsPlugin {
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
+
+    const agent = ctx.arguments?.[0]
+    const manifest = extractAgentManifest(agent)
+    if (manifest) {
+      this._tagger.tagMetadata(span, { _dd: { agent_manifest: manifest } })
+    }
 
     const input = ctx.arguments?.[1]
     const inputValue = input === undefined ? '' : String(input)
@@ -98,7 +108,7 @@ class InvokeFunctionToolLLMObsPlugin extends LLMObsPlugin {
 
 /**
  * LLMObs plugin for agent-to-agent handoff operations.
- * Emits an `agent` span capturing the handoff input and result.
+ * Emits an `agent` span named `transfer_to_{agentName}` (Python parity).
  */
 class OnInvokeHandoffLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_openai_agents_on_invoke_handoff'
@@ -106,13 +116,17 @@ class OnInvokeHandoffLLMObsPlugin extends LLMObsPlugin {
   static prefix = 'tracing:orchestrion:@openai/agents-core:onInvokeHandoff'
 
   /**
-   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
+   * @param {{ currentStore?: { span: object }, self?: { agentName?: string }, arguments?: Array<unknown> }} ctx
    * @returns {{ kind: string, name: string }}
    */
   getLLMObsSpanRegisterOptions (ctx) {
+    const agentName = ctx.self?.agentName
+    const spanName = agentName
+      ? `transfer_to_${toFunctionToolName(agentName)}`
+      : 'openai-agents.onInvokeHandoff'
     return {
       kind: 'agent',
-      name: 'openai-agents.onInvokeHandoff',
+      name: spanName,
     }
   }
 
@@ -232,6 +246,7 @@ class BaseOpenaiAgentsLLMObsPlugin extends LLMObsPlugin {
 
   /**
    * Returns span registration options for the LLMObs span.
+   * Span name follows Python parity: `{modelName} (LLM)` when model name is known.
    *
    * @param {{ self?: { _model?: string, _client?: { baseURL?: string } } }} ctx - Orchestrion context
    * @returns {{ modelProvider: string, modelName: string, kind: string, name: string }}
@@ -245,7 +260,7 @@ class BaseOpenaiAgentsLLMObsPlugin extends LLMObsPlugin {
       modelProvider,
       modelName,
       kind: 'llm',
-      name: `openai-agents.${this.constructor.operation}`,
+      name: modelName ? `${modelName} (LLM)` : 'openai-agents.llm',
     }
   }
 
@@ -284,13 +299,11 @@ class BaseOpenaiAgentsLLMObsPlugin extends LLMObsPlugin {
 class GetResponseLLMObsPlugin extends BaseOpenaiAgentsLLMObsPlugin {
   static id = 'llmobs_openai_agents_get_response'
   static prefix = 'tracing:orchestrion:@openai/agents-openai:getResponse'
-  static operation = 'getResponse'
 }
 
 class GetStreamedResponseLLMObsPlugin extends BaseOpenaiAgentsLLMObsPlugin {
   static id = 'llmobs_openai_agents_get_streamed_response'
   static prefix = 'tracing:orchestrion:@openai/agents-openai:getStreamedResponse'
-  static operation = 'getStreamedResponse'
 
   /**
    * For streaming, the span finishes before stream iteration begins.
@@ -324,6 +337,65 @@ function getModelProvider (baseURL) {
   if (baseURL.includes('azure')) return 'azure_openai'
   if (baseURL.includes('deepseek')) return 'deepseek'
   return 'openai'
+}
+
+/**
+ * Converts an agent name to a function tool name (Python parity).
+ * Replaces all non-alphanumeric characters with underscores.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function toFunctionToolName (name) {
+  return name.replaceAll(/[^a-zA-Z0-9]/g, '_')
+}
+
+/**
+ * Extracts agent manifest metadata from the starting agent (Python parity).
+ * Captures name, instructions, model, model_settings, tools, handoffs, and guardrails.
+ *
+ * @param {object} agent - The Agent instance passed as run()'s first argument
+ * @returns {object|null}
+ */
+function extractAgentManifest (agent) {
+  if (!agent) return null
+
+  const manifest = {
+    framework: 'openai-agents',
+    name: agent.name,
+  }
+
+  if (typeof agent.instructions === 'string') {
+    manifest.instructions = agent.instructions
+  }
+  if (agent.handoffDescription) manifest.handoff_description = agent.handoffDescription
+  if (agent.model) manifest.model = agent.model
+
+  if (agent.modelSettings) {
+    const settings = {}
+    for (const [key, value] of Object.entries(agent.modelSettings)) {
+      const mappedKey = SETTINGS_KEY_MAP[key]
+      if (mappedKey && value !== undefined) {
+        settings[mappedKey] = value
+      }
+    }
+    if (Object.keys(settings).length > 0) manifest.model_settings = settings
+  }
+
+  if (agent.tools?.length) {
+    manifest.tools = agent.tools.map(t => t.name).filter(Boolean)
+  }
+  if (agent.handoffs?.length) {
+    manifest.handoffs = agent.handoffs.map(h => h.agentName ?? h.name).filter(Boolean)
+  }
+  if (agent.inputGuardrails?.length || agent.outputGuardrails?.length) {
+    manifest.guardrails = {
+      input: (agent.inputGuardrails ?? []).map(g => g.name).filter(Boolean),
+      output: (agent.outputGuardrails ?? []).map(g => g.name).filter(Boolean),
+    }
+  }
+
+  return manifest
 }
 
 /**
@@ -452,8 +524,9 @@ function extractOutputMessages (result) {
 /**
  * Extracts token usage metrics from the model response.
  *
- * @param {{ usage?: { inputTokens?: number, outputTokens?: number, totalTokens?: number } }} result
- * @returns {{ inputTokens?: number, outputTokens?: number, totalTokens?: number }}
+ * @param {{ usage?: { inputTokens?: number, outputTokens?: number, totalTokens?: number,
+ *   outputTokensDetails?: { reasoningTokens?: number } } }} result
+ * @returns {{ inputTokens?: number, outputTokens?: number, totalTokens?: number, reasoningTokens?: number }}
  */
 function extractMetrics (result) {
   const metrics = {}
@@ -463,9 +536,12 @@ function extractMetrics (result) {
   const inputTokens = usage.inputTokens ?? usage.input_tokens
   const outputTokens = usage.outputTokens ?? usage.output_tokens
   const totalTokens = usage.totalTokens ?? usage.total_tokens
+  const reasoningTokens = usage.outputTokensDetails?.reasoningTokens ??
+    usage.output_tokens_details?.reasoning_tokens
 
   if (inputTokens !== undefined) metrics.inputTokens = inputTokens
   if (outputTokens !== undefined) metrics.outputTokens = outputTokens
+  if (reasoningTokens !== undefined) metrics.reasoningTokens = reasoningTokens
 
   if (totalTokens !== undefined) {
     metrics.totalTokens = totalTokens
@@ -478,19 +554,27 @@ function extractMetrics (result) {
 
 /**
  * Extracts metadata from the model request settings.
+ * Keys are mapped to snake_case for Python parity.
+ * Includes tools list when present.
  *
- * @param {{ modelSettings?: object }} request
+ * @param {{ modelSettings?: object, tools?: Array<{ name?: string }> }} request
  * @returns {object}
  */
 function extractMetadata (request) {
   const metadata = {}
   const settings = request?.modelSettings
-  if (!settings) return metadata
 
-  for (const [key, value] of Object.entries(settings)) {
-    if (ALLOWED_SETTINGS_KEYS.has(key) && value !== undefined) {
-      metadata[key] = value
+  if (settings) {
+    for (const [key, value] of Object.entries(settings)) {
+      const mappedKey = SETTINGS_KEY_MAP[key]
+      if (mappedKey && value !== undefined) {
+        metadata[mappedKey] = value
+      }
     }
+  }
+
+  if (request?.tools?.length) {
+    metadata.tools = request.tools.map(t => t.name || t.type || '').filter(Boolean)
   }
 
   return metadata
