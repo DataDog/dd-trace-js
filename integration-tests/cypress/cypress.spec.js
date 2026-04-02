@@ -2845,11 +2845,6 @@ moduleTypes.forEach(({
         25000
       )
 
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
-
       const specToRun = 'cypress/e2e/dynamic-name-test.cy.js'
 
       childProcess = exec(
@@ -2857,7 +2852,7 @@ moduleTypes.forEach(({
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...getCiVisEvpProxyConfig(receiver.port),
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: specToRun,
           },
