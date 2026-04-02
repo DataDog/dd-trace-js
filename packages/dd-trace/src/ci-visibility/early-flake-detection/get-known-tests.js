@@ -25,6 +25,7 @@ const { getNumFromKnownTests } = require('../../plugins/util/test')
 const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 const CACHE_LOCK_POLL_MS = 500
 const CACHE_LOCK_TIMEOUT_MS = 120_000 // 2 minutes
+const CACHE_LOCK_HEARTBEAT_MS = 30_000 // 30 seconds
 
 const MAX_KNOWN_TESTS_PAGES = 10_000
 
@@ -142,12 +143,37 @@ function tryAcquireLock (cacheKey) {
 }
 
 /**
- * Releases the lock file.
+ * Removes the lock file.
  *
  * @param {string} cacheKey
  */
 function releaseLock (cacheKey) {
   try { fs.unlinkSync(getLockPath(cacheKey)) } catch { /* ignore */ }
+}
+
+/**
+ * Updates the lock file timestamp so waiters know the owner is still alive.
+ *
+ * @param {string} cacheKey
+ */
+function touchLock (cacheKey) {
+  try { fs.writeFileSync(getLockPath(cacheKey), String(Date.now())) } catch { /* ignore */ }
+}
+
+/**
+ * Starts a periodic heartbeat that touches the lock file.
+ * Returns a function that stops the heartbeat and releases the lock.
+ *
+ * @param {string} cacheKey
+ * @returns {Function} cleanup function that stops heartbeat and removes lock
+ */
+function startLockHeartbeat (cacheKey) {
+  const interval = setInterval(() => touchLock(cacheKey), CACHE_LOCK_HEARTBEAT_MS)
+  interval.unref()
+  return () => {
+    clearInterval(interval)
+    try { fs.unlinkSync(getLockPath(cacheKey)) } catch { /* ignore */ }
+  }
 }
 
 /**
@@ -284,7 +310,9 @@ function getKnownTests ({
     }, cb), done)
   }
 
-  // This process owns the lock — fetch and populate cache
+  // This process owns the lock — start heartbeat and fetch
+  const stopHeartbeat = startLockHeartbeat(cacheKey)
+
   fetchFromApi({
     url,
     isEvpProxy,
@@ -302,7 +330,7 @@ function getKnownTests ({
     custom,
     cacheKey,
   }, (err, knownTests) => {
-    releaseLock(cacheKey)
+    stopHeartbeat()
     done(err, knownTests)
   })
 }
