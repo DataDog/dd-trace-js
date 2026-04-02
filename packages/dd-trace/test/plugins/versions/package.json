@@ -31,6 +31,7 @@
     "@datadog/openfeature-node-server": "0.3.1",
     "@elastic/elasticsearch": "9.3.2",
     "@elastic/transport": "9.3.3",
+    "@electron/packager": "19.1.0",
     "@fast-check/jest": "2.1.1",
     "@fastify/cookie": "11.0.2",
     "@fastify/multipart": "9.4.0",
