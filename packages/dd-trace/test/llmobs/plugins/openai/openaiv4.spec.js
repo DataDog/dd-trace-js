@@ -575,6 +575,31 @@ describe('integrations', () => {
         assert.equal(llmobsSpans[0].meta.model_provider, 'deepseek', 'Model provider does not match')
       })
 
+      it('sets model_provider to unknown for unrecognized base URLs', async () => {
+        const OpenAI = require(moduleRequirePath).get()
+        const customClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'http://localhost:8000',
+        })
+
+        try {
+          await customClient.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'user', content: 'Hello, OpenAI!' },
+            ],
+            temperature: 0.5,
+            max_tokens: 100,
+          })
+        } catch {
+          // expected error — no server is running
+        }
+
+        const { llmobsSpans } = await getEvents()
+
+        assert.equal(llmobsSpans[0].meta.model_provider, 'unknown', 'Model provider does not match')
+      })
+
       it('submits a chat completion span with cached token metrics', async () => {
         const baseMessages = [{ role: 'system', content: 'You are an expert software engineer '.repeat(200) }]
 
