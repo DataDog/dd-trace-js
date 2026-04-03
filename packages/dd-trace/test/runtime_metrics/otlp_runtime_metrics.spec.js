@@ -76,6 +76,12 @@ describe('otlp_runtime_metrics', () => {
     assert.ok(createdGauges['nodejs.eventloop.delay.max'], 'nodejs.eventloop.delay.max should be created')
     assert.ok(createdGauges['nodejs.eventloop.delay.mean'], 'nodejs.eventloop.delay.mean should be created')
     assert.ok(createdGauges['nodejs.eventloop.delay.p50'], 'nodejs.eventloop.delay.p50 should be created')
+    assert.ok(createdGauges['nodejs.eventloop.delay.p90'], 'nodejs.eventloop.delay.p90 should be created')
+    assert.ok(createdGauges['nodejs.eventloop.delay.p99'], 'nodejs.eventloop.delay.p99 should be created')
+    assert.ok(
+      createdGauges['nodejs.eventloop.utilization'],
+      'nodejs.eventloop.utilization should be created'
+    )
   })
 
   it('should use correct units on instruments', () => {
@@ -158,6 +164,9 @@ describe('otlp_runtime_metrics', () => {
 
     assert.ok(!createdGauges['nodejs.eventloop.delay.min'], 'event loop min should not be created')
     assert.ok(!createdGauges['nodejs.eventloop.delay.max'], 'event loop max should not be created')
+    assert.ok(!createdGauges['nodejs.eventloop.delay.p90'], 'event loop p90 should not be created')
+    assert.ok(!createdGauges['nodejs.eventloop.delay.p99'], 'event loop p99 should not be created')
+    assert.ok(!createdGauges['nodejs.eventloop.utilization'], 'event loop utilization should not be created')
   })
 
   it('should clean up on stop', () => {
