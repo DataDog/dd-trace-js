@@ -22,24 +22,17 @@ env:
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
-  get-credentials:
+  lambda:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-    outputs:
-      api_key: ${{ steps.dd-sts.outputs.api_key }}
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Get Datadog credentials
         id: dd-sts
         uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
         with:
           policy: dd-trace-js
-
-  lambda:
-    runs-on: ubuntu-latest
-    needs: [get-credentials]
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -57,11 +50,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   aws-sdk:
     strategy:
@@ -83,6 +76,8 @@ jobs:
           - stepfunctions
           - util
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       localstack:
         image: localstack/localstack:3.0.2
@@ -119,9 +114,13 @@ jobs:
       SPEC: ${{ matrix.spec }}
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -135,14 +134,16 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-event-hubs:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       azurite:
         image: mcr.microsoft.com/azure-storage/azurite:3.35.0
@@ -162,12 +163,16 @@ jobs:
     env:
       PLUGINS: azure-event-hubs
       SERVICES: azurite,azureeventhubsemulator
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/plugins/test
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-functions:
     strategy:
@@ -178,6 +183,8 @@ jobs:
           - client
           - servicebus
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       azurite:
         image: mcr.microsoft.com/azure-storage/azurite:3.34.0
@@ -214,9 +221,13 @@ jobs:
       PLUGINS: azure-functions
       SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
       SPEC: ${{ matrix.spec }}
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
 
       - name: Copy emulator config files
         run: |
@@ -239,14 +250,16 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-service-bus:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       azureservicebusemulator:
         image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
@@ -273,17 +286,23 @@ jobs:
     env:
       PLUGINS: azure-service-bus
       SERVICES: azureservicebusemulator,azuresqledge
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
       - uses: ./.github/actions/plugins/test
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-durable-functions:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       azurite:
         image: mcr.microsoft.com/azure-storage/azurite:3.34.0
@@ -295,15 +314,21 @@ jobs:
       PLUGINS: azure-durable-functions
       SERVICES: azurite
 
-    needs: [get-credentials]
     steps:
      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+     - name: Get Datadog credentials
+       id: dd-sts
+       uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+       with:
+         policy: dd-trace-js
      - uses: ./.github/actions/plugins/test
        with:
-        dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       pubsub:
         image: ghcr.io/ridedott/pubsub-emulator
@@ -312,9 +337,13 @@ jobs:
     env:
       PLUGINS: google-cloud-pubsub
       SERVICES: gpubsub
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/plugins/test
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

@@ -22,41 +22,40 @@ env:
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
-  get-credentials:
-    runs-on: ubuntu-latest
+  tracing-macos:
+    runs-on: macos-latest
     permissions:
       id-token: write
-    outputs:
-      api_key: ${{ steps.dd-sts.outputs.api_key }}
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Get Datadog credentials
         id: dd-sts
         uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
         with:
           policy: dd-trace-js
-
-  tracing-macos:
-    runs-on: macos-latest
-    needs: [get-credentials]
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-macos
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   tracing-ubuntu:
     runs-on: ubuntu-latest
-    needs: [get-credentials]
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:trace:core:ci
@@ -69,17 +68,23 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-ubuntu
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   tracing-windows:
     runs-on: windows-latest
-    needs: [get-credentials]
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
@@ -88,8 +93,8 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-capabilities-tracing-windows
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

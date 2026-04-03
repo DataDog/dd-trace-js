@@ -22,43 +22,42 @@ env:
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 jobs:
-  get-credentials:
-    runs-on: ubuntu-latest
+  macos:
+    name: ${{ github.workflow }} / macos
+    runs-on: macos-latest
     permissions:
       id-token: write
-    outputs:
-      api_key: ${{ steps.dd-sts.outputs.api_key }}
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Get Datadog credentials
         id: dd-sts
         uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
         with:
           policy: dd-trace-js
-
-  macos:
-    name: ${{ github.workflow }} / macos
-    runs-on: macos-latest
-    needs: [get-credentials]
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-macos
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
-    needs: [get-credentials]
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
@@ -71,18 +70,24 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ubuntu
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   windows:
     name: ${{ github.workflow }} / windows
     runs-on: windows-latest
-    needs: [get-credentials]
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
@@ -91,15 +96,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   ldapjs:
     name: ${{ github.workflow }} / ldapjs
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: ldapjs
     services:
@@ -113,9 +120,13 @@ jobs:
           LDAP_ADMIN_PASSWORD: "adminpassword"
           LDAP_USERS: "user01,user02"
           LDAP_PASSWORDS: "password1,password2"
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -124,15 +135,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ldapjs
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   postgres:
     name: ${{ github.workflow }} / postgres
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       postgres:
         image: postgres:9.5
@@ -144,9 +157,13 @@ jobs:
       PG_TEST_NATIVE: "true"
       PLUGINS: pg|knex
       SERVICES: postgres
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -155,15 +172,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-postgres
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   mysql:
     name: ${{ github.workflow }} / mysql
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mysql:
         image: mariadb:10.4
@@ -175,9 +194,13 @@ jobs:
     env:
       PLUGINS: mysql|mysql2|sequelize
       SERVICES: mysql
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -186,20 +209,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mysql
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   express:
     name: ${{ github.workflow }} / express
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: express|body-parser|cookie-parser|multer
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -208,20 +237,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-express
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   fastify:
     name: ${{ github.workflow }} / fastify
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: fastify
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -230,20 +265,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-fastify
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   graphql:
     name: ${{ github.workflow }} / graphql
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: apollo-server|apollo-server-express|apollo-server-fastify|apollo-server-core
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -252,15 +293,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-graphql
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   mongodb-core:
     name: ${{ github.workflow }} / mongodb-core
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
         image: circleci/mongo
@@ -269,9 +312,13 @@ jobs:
     env:
       PLUGINS: express-mongo-sanitize|mquery
       SERVICES: mongo
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -280,15 +327,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   mongoose:
     name: ${{ github.workflow }} / mongoose
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
         image: circleci/mongo
@@ -297,9 +346,13 @@ jobs:
     env:
       PLUGINS: mongoose
       SERVICES: mongo
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -308,19 +361,25 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongoose
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   sourcing:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: cookie
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -333,11 +392,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-sourcing
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   next:
     strategy:
@@ -376,12 +435,18 @@ jobs:
             range_clean: gte.15.0.0
     name: ${{ github.workflow }} / next (node-${{ matrix.version }}, ${{ matrix.range_clean }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -395,20 +460,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   lodash:
     name: ${{ github.workflow }} / lodash
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: lodash
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -417,11 +488,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-lodash
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration:
     strategy:
@@ -429,9 +500,15 @@ jobs:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
-    needs: [get-credentials]
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -440,15 +517,21 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   passport:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: passport-local|passport-http
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -457,19 +540,25 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-passport
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   template:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: handlebars|pug
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -478,20 +567,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-template
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   node-serialize:
     name: ${{ github.workflow }} / node-serialize
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: node-serialize
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -500,14 +595,16 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-node-serialize
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   kafka:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       kafka:
         image: apache/kafka:3.9.1
@@ -529,9 +626,13 @@ jobs:
     env:
       PLUGINS: kafkajs
       SERVICES: kafka
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -540,19 +641,25 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-kafka
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   stripe:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: stripe
-    needs: [get-credentials]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -561,8 +668,8 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-stripe
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
