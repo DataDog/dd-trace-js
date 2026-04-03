@@ -318,6 +318,71 @@ describe('Plugin', () => {
           })
         })
       })
+
+      it('should not crash when a handled socket error occurs', done => {
+        // When an app attaches an 'error' listener, the process must not crash.
+        // Verifies dd-trace net instrumentation does not interfere with normal
+        // error propagation on sockets.
+        const server = new net.Server(serverSocket => {
+          serverSocket.destroy()
+        })
+
+        server.listen(0, () => {
+          const serverPort = server.address().port
+
+          tracer.scope().activate(parent, () => {
+            const socket = new net.Socket()
+
+            socket.on('error', (err) => {
+              assert.ok(err, 'error event should provide an error object')
+              assert.ok(
+                err.code === 'ECONNRESET' || err.code === 'EPIPE',
+                `expected ECONNRESET or EPIPE, got ${err.code}`,
+              )
+              socket.destroy()
+              server.close()
+              done()
+            })
+
+            socket.connect(serverPort, 'localhost', () => {
+              setImmediate(() => {
+                socket.write('trigger socket error')
+              })
+            })
+          })
+        })
+      }).timeout(5000)
+
+      it('should deliver the original error object through the wrapped emit', done => {
+        // Ensures the error emitted through dd-trace's wrapped Socket.emit
+        // is the same error Node.js would emit without instrumentation.
+        const server = new net.Server(serverSocket => {
+          serverSocket.destroy()
+        })
+
+        server.listen(0, () => {
+          const serverPort = server.address().port
+
+          tracer.scope().activate(parent, () => {
+            const socket = new net.Socket()
+
+            socket.on('error', (err) => {
+              assert.ok(err instanceof Error, 'error should be an Error instance')
+              assert.ok(typeof err.code === 'string', 'error should have a code')
+              assert.ok(typeof err.syscall === 'string', 'error should have a syscall')
+              socket.destroy()
+              server.close()
+              done()
+            })
+
+            socket.connect(serverPort, 'localhost', () => {
+              setImmediate(() => {
+                socket.write('trigger socket error')
+              })
+            })
+          })
+        })
+      }).timeout(5000)
     })
   })
 })
