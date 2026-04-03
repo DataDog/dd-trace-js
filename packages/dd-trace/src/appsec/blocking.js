@@ -6,9 +6,27 @@ const { updateBlockFailureMetric } = require('./telemetry')
 
 const detectedSpecificEndpoints = {}
 
-let templateHtml = blockedTemplates.html
-let templateJson = blockedTemplates.json
-let templateGraphqlJson = blockedTemplates.graphqlJson
+const templateKeyword = '[security_response_id]'
+
+const templates = {
+  html: {
+    body: null,
+    idIndex: -1,
+    contentType: 'text/html; charset=utf-8'
+  },
+  json: {
+    body: null,
+    idIndex: -1,
+    contentType: 'application/json'
+  },
+  graphqlJson: {
+    body: null,
+    idIndex: -1,
+    contentType: 'application/json'
+  }
+}
+
+setTemplates()
 
 let defaultBlockingActionParameters
 
@@ -17,7 +35,7 @@ const responseBlockedSet = new WeakSet()
 const blockDelegations = new WeakMap()
 
 const specificBlockingTypes = {
-  GRAPHQL: 'graphql'
+  GRAPHQL: 'graphqlJson'
 }
 
 function getSpecificKey (method, url) {
@@ -33,21 +51,14 @@ function getBlockWithRedirectData (actionParameters) {
   if (!statusCode || statusCode < 300 || statusCode >= 400) {
     statusCode = 303
   }
-  const headers = {
-    Location: actionParameters.location
+
+  const headers = { Location: actionParameters.location }
+
+  if (headers.Location && actionParameters?.security_response_id) {
+    headers.Location.replace(templateKeyword, actionParameters.security_response_id)
   }
 
   return { headers, statusCode }
-}
-
-function getSpecificBlockingData (type) {
-  switch (type) {
-    case specificBlockingTypes.GRAPHQL:
-      return {
-        type: 'application/json',
-        body: templateGraphqlJson
-      }
-  }
 }
 
 function getBlockWithContentData (req, specificType, actionParameters) {
@@ -56,7 +67,7 @@ function getBlockWithContentData (req, specificType, actionParameters) {
 
   const specificBlockingType = specificType || detectedSpecificEndpoints[getSpecificKey(req.method, req.url)]
   if (specificBlockingType) {
-    const specificBlockingContent = getSpecificBlockingData(specificBlockingType)
+    const specificBlockingContent = getTemplate(specificBlockingTypes[specificBlockingType], actionParameters)
     type = specificBlockingContent?.type
     body = specificBlockingContent?.body
   }
@@ -65,23 +76,17 @@ function getBlockWithContentData (req, specificType, actionParameters) {
     // parse the Accept header, ex: Accept: text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8
     const accept = req.headers.accept?.split(',').map((str) => str.split(';', 1)[0].trim())
 
+    let templateName = 'json'
+
     if (!actionParameters || actionParameters.type === 'auto') {
       if (accept?.includes('text/html') && !accept.includes('application/json')) {
-        type = 'text/html; charset=utf-8'
-        body = templateHtml
-      } else {
-        type = 'application/json'
-        body = templateJson
+        templateName = 'html'
       }
-    } else {
-      if (actionParameters.type === 'html') {
-        type = 'text/html; charset=utf-8'
-        body = templateHtml
-      } else {
-        type = 'application/json'
-        body = templateJson
-      }
+    } else if (actionParameters.type === 'html') {
+      templateName = 'html'
     }
+
+    ({ type, body } = getTemplate(templateName, actionParameters))
   }
 
   const statusCode = actionParameters?.status_code || 403
@@ -165,11 +170,34 @@ function getBlockingAction (actions) {
 }
 
 function setTemplates (config) {
-  templateHtml = config.appsec.blockedTemplateHtml || blockedTemplates.html
+  templates.html.body = config?.appsec?.blockedTemplateHtml
+  templates.json.body = config?.appsec?.blockedTemplateJson
+  templates.graphqlJson.body = config?.appsec?.blockedTemplateGraphql
 
-  templateJson = config.appsec.blockedTemplateJson || blockedTemplates.json
+  for (const type of Object.keys(templates)) {
+    const template = templates[type]
 
-  templateGraphqlJson = config.appsec.blockedTemplateGraphql || blockedTemplates.graphqlJson
+    // set default template if not set by config
+    if (!template.body) template.body = blockedTemplates[type]
+
+    template.idIndex = template.body.indexOf(templateKeyword)
+
+    if (template.idIndex !== -1) {
+      template.body = [
+        template.body.slice(0, template.idIndex),
+        template.body.slice(template.idIndex + templateKeyword.length)
+      ]
+    }
+  }
+}
+
+function getTemplate (type, actionParameters) {
+  const template = templates[type]
+  if (template.idIndex === -1) return template
+
+  const body = template.body[0] + actionParameters?.security_response_id + template.body[1]
+
+  return { body, type: template.contentType }
 }
 
 function isBlocked (res) {
@@ -194,3 +222,7 @@ module.exports = {
   isBlocked,
   setDefaultBlockingActionParameters
 }
+
+
+/// test works with custom template
+// test not work with sdk
