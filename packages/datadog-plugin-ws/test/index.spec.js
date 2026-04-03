@@ -43,6 +43,82 @@ describe('Plugin', () => {
           assert.strictEqual(error?.[0]?.message, 'WebSocket was closed before the connection was established')
         })
 
+        it('should not crash when sending to a client whose socket has been destroyed', (done) => {
+          const server = new WebSocket.Server({ port: 0 }, () => {
+            const port = server.address().port
+
+            server.on('connection', (ws) => {
+              // Destroy the underlying socket to simulate abrupt disconnect
+              ws._socket.destroy()
+
+              setImmediate(() => {
+                // Attempt to send after socket destruction — should not crash the process
+                try {
+                  ws.send('message after disconnect')
+                } catch {
+                  // Synchronous throw is acceptable
+                }
+
+                setTimeout(() => {
+                  server.close()
+                  done()
+                }, 500)
+              })
+            })
+
+            const client = new WebSocket(`ws://localhost:${port}`)
+            client.on('error', () => {})
+          })
+        }).timeout(5000)
+
+        it('should not crash under burst sends when clients disconnect abruptly', (done) => {
+          const server = new WebSocket.Server({ port: 0 }, () => {
+            const port = server.address().port
+
+            server.on('connection', (ws) => {
+              const interval = setInterval(() => {
+                if (ws.readyState !== WebSocket.OPEN) {
+                  clearInterval(interval)
+                  return
+                }
+                try {
+                  ws.send(Buffer.alloc(4096, 'x').toString())
+                } catch {
+                  clearInterval(interval)
+                }
+              }, 1)
+
+              ws.on('close', () => clearInterval(interval))
+              ws.on('error', () => clearInterval(interval))
+            })
+
+            const clients = []
+            for (let i = 0; i < 5; i++) {
+              const client = new WebSocket(`ws://localhost:${port}`)
+              clients.push(client)
+
+              client.on('open', () => {
+                // Abruptly destroy the socket after some messages arrive
+                setTimeout(() => {
+                  if (client._socket) {
+                    client._socket.destroy()
+                  }
+                }, 50 + Math.random() * 100)
+              })
+
+              client.on('error', () => {})
+            }
+
+            setTimeout(() => {
+              for (const c of clients) {
+                try { c.terminate() } catch {}
+              }
+              server.close()
+              done()
+            }, 2000)
+          })
+        }).timeout(10000)
+
         after(async () => {
           agent.close({ ritmReset: false, wipe: true })
         })
