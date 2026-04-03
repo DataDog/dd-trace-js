@@ -155,7 +155,9 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
       fieldDef.resolve = function (source, args, contextValue, resolveInfo) {
         fieldDef.resolve = originalResolve
-        iastResolveCh.publish({ rootCtx: capturedRootCtx, args, info: capturedInfo, path: capturedPath, pathString: capturedPathString })
+        iastResolveCh.publish({
+          rootCtx: capturedRootCtx, args, info: capturedInfo, path: capturedPath, pathString: capturedPathString,
+        })
         return originalResolve.call(this, source, args, contextValue, resolveInfo)
       }
     }
@@ -250,7 +252,7 @@ function getFieldDef (schema, parentType, fieldNode) {
   const fieldName = fieldNode.name.value
 
   if (fieldName === '__schema' || fieldName === '__type' || fieldName === '__typename') {
-    return undefined
+    return
   }
 
   const fields = parentType.getFields?.()
@@ -293,7 +295,7 @@ function withCollapse (responsePathAsArray) {
 }
 
 function getResolverArgs (fieldDef, fieldNode, variableValues) {
-  if (!fieldNode.arguments || fieldNode.arguments.length === 0) return undefined
+  if (!fieldNode.arguments || fieldNode.arguments.length === 0) return
 
   const args = {}
   for (const arg of fieldNode.arguments) {
@@ -367,7 +369,6 @@ function getParentField (parentCtx, path, collapse) {
 function getErrorsArray (exeContext) {
   if (exeContext.errors) return exeContext.errors
   if (exeContext.collectedErrors?._errors) return exeContext.collectedErrors._errors
-  return undefined
 }
 
 function getErrorCount (exeContext) {

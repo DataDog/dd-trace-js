@@ -20,7 +20,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
   // prefix because the module name differs. Subscribe to both so Yoga execution
   // produces graphql.execute spans.
   static extraPrefixes = [
-    'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execute'
+    'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execute',
   ]
 
   addTraceSubs () {
