@@ -140,7 +140,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const resolverArgs = getResolverArgs(fieldDef, fieldNode, exeContext.variableValues)
 
     if (this.resolverStartCh.hasSubscribers) {
-      this.resolverStartCh.publish({ ctx: rootCtx, resolverInfo: getResolverInfo(info, resolverArgs) })
+      const abortController = new AbortController()
+      this.resolverStartCh.publish({ abortController, resolverInfo: getResolverInfo(info, resolverArgs) })
     }
 
     return ctx.currentStore
@@ -200,6 +201,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
       }
       field.finishTime = span._getTime ? span._getTime() : 0
     }
+
+    this.config.hooks.resolve(span, {
+      fieldName: ctx._ddInfo.fieldName,
+      path: ctx._ddComputedPathString,
+      error: resolverError || null,
+      result: ctx.result instanceof Promise ? undefined : ctx.result,
+    })
 
     // Defer span.finish() to execute plugin's asyncEnd so all spans
     // are flushed in the same trace payload.

@@ -2507,6 +2507,18 @@ declare namespace tracer {
      typeResolver?: any,
     }
 
+    /** Context object passed to the `hooks.resolve` callback for each instrumented field. */
+    interface FieldContext {
+      /** The field name being resolved */
+      fieldName: string;
+      /** The dot-separated field path (e.g. `'user.address.city'`) */
+      path: string;
+      /** The error from the resolver, or `null` if it succeeded */
+      error: Error | null;
+      /** The value returned by the resolver (sync resolvers only; `undefined` for async) */
+      result: unknown;
+    }
+
     /**
      * This plugin automatically instruments the
      * [graphql](https://github.com/graphql/graphql-js) module.
@@ -2585,6 +2597,7 @@ declare namespace tracer {
         execute?: (span?: Span, args?: ExecutionArgs, res?: any) => void;
         validate?: (span?: Span, document?: any, errors?: any) => void;
         parse?: (span?: Span, source?: any, document?: any) => void;
+        resolve?: (span?: Span, field?: FieldContext) => void;
       }
     }
 

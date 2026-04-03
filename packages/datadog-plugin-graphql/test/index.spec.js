@@ -1763,6 +1763,7 @@ describe('Plugin', () => {
             execute: sinon.spy((span, context, res) => {}),
             parse: sinon.spy((span, document, operation) => {}),
             validate: sinon.spy((span, document, error) => {}),
+            resolve: sinon.spy((span, field) => {}),
           },
         }
 
@@ -1900,6 +1901,32 @@ describe('Plugin', () => {
             .then(res => {
               document = res
             })
+        })
+
+        it('should run the resolve hook before graphql.resolve span is finished', done => {
+          const resolveSource = '{ hello(name: "world") }'
+
+          agent
+            .assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assert.strictEqual(spans.length, 2)
+              assert.strictEqual(spans[1].name, 'graphql.resolve')
+              sinon.assert.calledOnce(config.hooks.resolve)
+
+              const span = config.hooks.resolve.firstCall.args[0]
+              const field = config.hooks.resolve.firstCall.args[1]
+
+              assert.strictEqual(span.context()._name, 'graphql.resolve')
+              assert.strictEqual(field.fieldName, 'hello')
+              assert.strictEqual(field.path, 'hello')
+              assert.strictEqual(field.error, null)
+              assert.strictEqual(field.result, 'world')
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql({ schema, source: resolveSource }).catch(done)
         })
       })
 
