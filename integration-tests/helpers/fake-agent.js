@@ -52,10 +52,14 @@ module.exports = class FakeAgent extends EventEmitter {
     }
   }
 
+  /**
+   * Start the fake agent.
+   * @returns {Promise<FakeAgent>} A promise that resolves when the agent has started up.
+   */
   start () {
     return new Promise((resolve, reject) => {
       const timeoutObj = setTimeout(() => {
-        reject(new Error('agent timed out starting up'))
+        reject(new Error('Agent timed out starting up'))
       }, 10_000)
       this.server = http.createServer(buildExpressServer(this))
       this.server.on('error', reject)
@@ -262,10 +266,14 @@ module.exports = class FakeAgent extends EventEmitter {
         if (resolveAtFirstSuccess || msgCount === expectedMessageCount) {
           resultResolve()
         }
+
+        if (resolveAtFirstSuccess) {
+          this.removeListener('telemetry', messageHandler)
+        }
       } catch (e) {
         errors.push(e)
       }
-      if (msgCount === expectedMessageCount) {
+      if (!resolveAtFirstSuccess && msgCount === expectedMessageCount) {
         this.removeListener('telemetry', messageHandler)
       }
     }

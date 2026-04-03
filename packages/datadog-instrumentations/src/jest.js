@@ -15,12 +15,15 @@ const {
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   getTestEndLine,
   isModifiedTest,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
   getFormattedJestTestParameters,
   getJestTestName,
   getJestSuitesToRun,
+  getEfdRetryCount,
 } = require('../../datadog-plugin-jest/src/util')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -46,6 +49,7 @@ const testSkippedCh = channel('ci:jest:test:skip')
 const testFinishCh = channel('ci:jest:test:finish')
 const testErrCh = channel('ci:jest:test:err')
 const testFnCh = channel('ci:jest:test:fn')
+const testSuiteHookFnCh = channel('ci:jest:test-suite:hook:fn')
 
 const skippableSuitesCh = channel('ci:jest:test-suite:skippable')
 const libraryConfigurationCh = channel('ci:jest:library-configuration')
@@ -68,7 +72,9 @@ const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 let skippableSuites = []
 let knownTests = {}
 let isCodeCoverageEnabled = false
+let isCodeCoverageEnabledBecauseOfUs = false
 let isSuitesSkippingEnabled = false
+let isKeepingCoverageConfiguration = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -76,6 +82,7 @@ let hasUnskippableSuites = false
 let hasForcedToRunSuites = false
 let isEarlyFlakeDetectionEnabled = false
 let earlyFlakeDetectionNumRetries = 0
+let earlyFlakeDetectionSlowTestRetries = {}
 let earlyFlakeDetectionFaultyThreshold = 30
 let isEarlyFlakeDetectionFaulty = false
 let hasFilteredSkippableSuites = false
@@ -92,9 +99,18 @@ const originalHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
-const wrappedWorkers = new WeakSet()
+const wrappedWorkerChannels = new WeakMap()
+// New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
+// Populated in-process for runInBand, and via worker-report:trace for parallel mode.
+const newTestsWithDynamicNames = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
+// Per-test: how many EFD retries were determined after the first execution.
+const efdDeterminedRetries = new Map()
+// Tests whose first run exceeded the 5-min threshold — tagged "slow".
+const efdSlowAbortedTests = new Set()
+// Tests added as EFD new-test candidates (not ATF, not impacted).
+const efdNewTestCandidates = new Set()
 const testSuiteAbsolutePathsWithFastCheck = new Set()
 const testSuiteJestObjects = new Map()
 
@@ -143,25 +159,60 @@ function getTestStats (testStatuses) {
  * @param {string[]} quarantineNames
  * @param {number} totalCount
  */
-function logIgnoredFailuresSummary (efdNames, quarantineNames, totalCount) {
-  const names = []
-  for (const n of efdNames) {
-    names.push({ name: n, reason: 'Early Flake Detection' })
-  }
-  for (const n of quarantineNames) {
-    names.push({ name: n, reason: 'Quarantine' })
-  }
-  const shown = names.slice(0, MAX_IGNORED_TEST_NAMES)
-  const more = names.length - shown.length
+/**
+ * Renders a truncated bullet list from an array of items.
+ *
+ * @param {Array<{ text: string, suffix?: string }>} items
+ * @returns {string}
+ */
+function formatList (items) {
+  const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
+  const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const list = shown.map(({ name, reason }) => `  • ${name} (${reason})`).join('\n')
+  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+}
+
+/**
+ * Logs a single "Datadog Test Optimization" summary at session end,
+ * combining all relevant sections (ignored failures, dynamic names).
+ *
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ */
+function logSessionSummary (ignoredFailures) {
+  const sections = []
+
+  if (ignoredFailures) {
+    const items = []
+    for (const n of ignoredFailures.efdNames) {
+      items.push({ text: n, suffix: 'Early Flake Detection' })
+    }
+    for (const n of ignoredFailures.quarantineNames) {
+      items.push({ text: n, suffix: 'Quarantine' })
+    }
+    sections.push(
+      `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
+      formatList(items)
+    )
+  }
+
+  if (newTestsWithDynamicNames.size > 0) {
+    const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
+    sections.push(
+      `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+      'dynamic data (timestamps, UUIDs, etc.).\n' +
+      'Tests with changing names are always treated as new on every run, ' +
+      'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
+      'Consider using stable, deterministic test names.\n\n' +
+      formatList(items)
+    )
+    newTestsWithDynamicNames.clear()
+  }
+
+  if (sections.length === 0) return
+
   const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing message when exit code is flipped
-  console.warn(
-    `\n${line}\nDatadog Test Optimization\n${line}\n` +
-    `${totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
-    `${list}${moreSuffix}\n`
-  )
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -197,7 +248,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
 
       if (this.isKnownTestsEnabled) {
-        earlyFlakeDetectionNumRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionNumRetries
+        earlyFlakeDetectionSlowTestRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionSlowTestRetries ?? {}
         try {
           this.knownTestsForThisSuite = this.getKnownTestsForSuite(this.testEnvironmentOptions._ddKnownTests)
 
@@ -446,6 +497,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         const isJestRetry = event.test?.invocations > 1
+        const hasDynamicName = isNewTest && DYNAMIC_NAME_RE.test(testName)
         const ctx = {
           name: testName,
           suite: this.testSuite,
@@ -461,12 +513,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isDisabled,
           isQuarantined,
           isModified,
+          hasDynamicName,
           testSuiteAbsolutePath: this.testSuiteAbsolutePath,
         }
         testContexts.set(event.test, ctx)
 
         testStartCh.runStores(ctx, () => {
-          for (const hook of event.test.parent.hooks) {
+          let p = event.test.parent
+          const hooks = []
+          while (p != null) {
+            hooks.push(...p.hooks)
+            p = p.parent
+          }
+          for (const hook of hooks) {
             let hookFn = hook.fn
             if (originalHookFns.has(hook)) {
               hookFn = originalHookFns.get(hook)
@@ -486,6 +545,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           })
 
           event.test.fn = newFn
+        })
+      }
+
+      if (event.name === 'hook_start' && (event.hook.type === 'beforeAll' || event.hook.type === 'afterAll')) {
+        const ctx = { testSuiteAbsolutePath: this.testSuiteAbsolutePath }
+        let hookFn = event.hook.fn
+        if (originalHookFns.has(event.hook)) {
+          hookFn = originalHookFns.get(event.hook)
+        } else {
+          originalHookFns.set(event.hook, hookFn)
+        }
+        event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function () {
+          return testSuiteHookFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
         })
       }
 
@@ -534,14 +606,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (!isAttemptToFix && this.isKnownTestsEnabled) {
           const isNew = !this.knownTestsForThisSuite.includes(testFullName)
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
+            if (DYNAMIC_NAME_RE.test(testFullName)) {
+              // Populated directly for runInBand; for parallel workers the main process
+              // collects these from the TEST_HAS_DYNAMIC_NAME span tag via worker-report:trace.
+              newTestsWithDynamicNames.add(`${this.testSuite} › ${testFullName}`)
+            }
             retriedTestsToNumAttempts.set(testFullName, 0)
             if (this.isEarlyFlakeDetectionEnabled) {
               testsToBeRetried.add(testFullName)
-              this.retryTest({
-                jestEvent: event,
-                retryCount: earlyFlakeDetectionNumRetries,
-                retryType: 'Early flake detection',
-              })
+              efdNewTestCandidates.add(testFullName)
+              // Cloning is deferred to test_done after the first execution,
+              // when we know the duration and can choose the right retry count.
             }
           }
         }
@@ -566,8 +641,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let attemptToFixFailed = false
         let failedAllTests = false
         let isAttemptToFix = false
+        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         if (this.isTestManagementTestsEnabled) {
-          const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
           isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testName)
           if (isAttemptToFix) {
             if (attemptToFixRetriedTestsStatuses.has(testName)) {
@@ -592,9 +667,53 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        // EFD dynamic cloning: on first execution of a new EFD candidate,
+        // determine the retry count from the test's duration.
+        if (
+          this.isEarlyFlakeDetectionEnabled &&
+          this.isKnownTestsEnabled &&
+          efdNewTestCandidates.has(testName) &&
+          event.test.invocations === 1 &&
+          !efdDeterminedRetries.has(testName)
+        ) {
+          const durationMs = event.test.duration ?? 0
+          const retryCount = getEfdRetryCount(durationMs, earlyFlakeDetectionSlowTestRetries)
+          efdDeterminedRetries.set(testName, retryCount)
+          if (retryCount > 0) {
+            // Temporarily adjust jest-circus state so that retry tests are registered
+            // into the correct describe block and bypass the "tests have started" guard.
+            //
+            // Problem 1 (jest-circus ≤24): currentDescribeBlock points to ROOT during
+            // execution, and ROOT's tests loop already finished before children ran.
+            //
+            // Problem 2 (jest-circus ≥27): `hasStarted = true` causes `test()` to throw
+            // "Cannot add a test after tests have started running".
+            //
+            // Fix: temporarily point currentDescribeBlock to the test's parent (so retries
+            // land in the still-iterating children array) and set hasStarted = false (so the
+            // guard is bypassed). Both are restored immediately after scheduling the retries.
+            const originalDescribeBlock = state.currentDescribeBlock
+            const originalHasStarted = state.hasStarted
+            state.currentDescribeBlock = event.test.parent ?? originalDescribeBlock
+            state.hasStarted = false
+            this.retryTest({
+              jestEvent: {
+                testName: event.test.name,
+                fn: event.test.fn,
+                timeout: event.test.timeout,
+              },
+              retryCount,
+              retryType: 'Early flake detection',
+            })
+            state.currentDescribeBlock = originalDescribeBlock
+            state.hasStarted = originalHasStarted
+          } else {
+            efdSlowAbortedTests.add(testName)
+          }
+        }
+
         let isEfdRetry = false
         // We'll store the test statuses of the retries
-        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
         if (this.isKnownTestsEnabled) {
           const isNewTest = retriedTestsToNumAttempts.has(testName)
           if (isNewTest) {
@@ -607,10 +726,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             const testStatuses = newTestsTestStatuses.get(testName)
             // Check if this is the last EFD retry.
             // If it is, we'll set the failedAllTests flag to true if all the tests failed
-            if (testStatuses.length === earlyFlakeDetectionNumRetries + 1 &&
+            const efdRetryCount = efdDeterminedRetries.get(testName) ?? 0
+            if (efdRetryCount > 0 && testStatuses.length === efdRetryCount + 1 &&
               testStatuses.every(status => status === 'fail')) {
               failedAllTests = true
             }
+          }
+        }
+
+        // ATR: set failedAllTests when all auto test retries were exhausted and every attempt failed
+        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry) {
+          const maxRetries = Number(this.global[RETRY_TIMES]) || 0
+          if (event.test?.invocations === maxRetries + 1 && status === 'fail') {
+            failedAllTests = true
           }
         }
 
@@ -621,11 +749,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
         const ctx = testContexts.get(event.test)
+        if (!ctx) {
+          log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
+          return
+        }
 
         const finalStatus = this.getFinalStatus(testName,
           status,
-          !!ctx?.isNew,
-          !!ctx?.isModified,
+          !!ctx.isNew,
+          !!ctx.isModified,
           isEfdRetry,
           isAttemptToFix,
           numTestExecutions)
@@ -637,7 +769,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             error: formatJestError(originalError),
             shouldSetProbe,
             promises,
-            finalStatus,
           })
         }
 
@@ -665,6 +796,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           attemptToFixFailed,
           isAtrRetry,
           finalStatus,
+          earlyFlakeAbortReason: efdSlowAbortedTests.has(testName) ? 'slow' : undefined,
         })
 
         if (promises.isProbeReady) {
@@ -676,6 +808,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           test.errors = errors
         }
         atrSuppressedErrors.clear()
+        efdDeterminedRetries.clear()
+        efdSlowAbortedTests.clear()
+        efdNewTestCandidates.clear()
+        retriedTestsToNumAttempts.clear()
+        attemptToFixRetriedTestsStatuses.clear()
+        testsToBeRetried.clear()
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
@@ -696,7 +834,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     getEfdResult ({ testName, isNewTest, isModifiedTest, isEfdRetry, numberOfExecutedRetries }) {
       const isEfdEnabled = this.isEarlyFlakeDetectionEnabled
       const isEfdActive = isEfdEnabled && (isNewTest || isModifiedTest)
-      const isLastEfdRetry = isEfdRetry && numberOfExecutedRetries >= (earlyFlakeDetectionNumRetries + 1)
+      const retryCount = efdDeterminedRetries.get(testName) ?? 0
+      const isSlowAbort = efdSlowAbortedTests.has(testName)
+      const isLastEfdRetry = (isEfdRetry && numberOfExecutedRetries >= (retryCount + 1)) || isSlowAbort
       const isFinalEfdTestExecution = isEfdActive && isLastEfdRetry
 
       let finalStatus
@@ -931,8 +1071,11 @@ function getCliWrapper (isNewJestVersion) {
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
           isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+          isKeepingCoverageConfiguration =
+            libraryConfig.isKeepingCoverageConfiguration ?? isKeepingCoverageConfiguration
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+          earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
           earlyFlakeDetectionFaultyThreshold = libraryConfig.earlyFlakeDetectionFaultyThreshold
           isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
           isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
@@ -1236,13 +1379,7 @@ function getCliWrapper (isNewJestVersion) {
         })
       }
 
-      if (ignoredFailuresSummary) {
-        logIgnoredFailuresSummary(
-          ignoredFailuresSummary.efdNames,
-          ignoredFailuresSummary.quarantineNames,
-          ignoredFailuresSummary.totalCount
-        )
-      }
+      logSessionSummary(ignoredFailuresSummary)
 
       numSkippedSuites = 0
 
@@ -1263,9 +1400,10 @@ function coverageReporterWrapper (coverageReporter) {
    */
   // `_addUntestedFiles` is an async function
   shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
-    // If the user has added coverage manually, they're willing to pay the price of this execution, so
-    // we will not skip it.
-    if (isSuitesSkippingEnabled && !isUserCodeCoverageEnabled) {
+    if (isKeepingCoverageConfiguration) {
+      return addUntestedFiles.apply(this, arguments)
+    }
+    if (isCodeCoverageEnabledBecauseOfUs) {
       return Promise.resolve()
     }
     return addUntestedFiles.apply(this, arguments)
@@ -1445,12 +1583,13 @@ function configureTestEnvironment (readConfigsResult) {
   }
 
   isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
+  isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
 
   if (readConfigsResult.globalConfig.forceExit) {
     log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
 
-  if (isCodeCoverageEnabled) {
+  if (isCodeCoverageEnabledBecauseOfUs) {
     const globalConfig = {
       ...readConfigsResult.globalConfig,
       collectCoverage: true,
@@ -1458,13 +1597,17 @@ function configureTestEnvironment (readConfigsResult) {
     readConfigsResult.globalConfig = globalConfig
   }
   if (isSuitesSkippingEnabled) {
-    // If suite skipping is enabled, the code coverage results are not going to be relevant,
-    // so we do not show them.
-    // Also, we might skip every test, so we need to pass `passWithNoTests`
+    // If suite skipping is enabled, we pass `passWithNoTests` in case every test gets skipped.
     const globalConfig = {
       ...readConfigsResult.globalConfig,
-      coverageReporters: ['none'],
       passWithNoTests: true,
+    }
+    if (isCodeCoverageEnabledBecauseOfUs && !isKeepingCoverageConfiguration) {
+      globalConfig.coverageReporters = ['none']
+      readConfigsResult.configs = configs.map(config => ({
+        ...config,
+        coverageReporters: ['none'],
+      }))
     }
     readConfigsResult.globalConfig = globalConfig
   }
@@ -1488,47 +1631,95 @@ function jestConfigSyncWrapper (jestConfig) {
   })
 }
 
-addHook({
-  name: '@jest/transform',
-  versions: ['>=24.8.0'],
-  file: 'build/ScriptTransformer.js',
-}, transformPackage => {
-  const originalCreateScriptTransformer = transformPackage.createScriptTransformer
+const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
+  '_ddTestModuleId',
+  '_ddTestSessionId',
+  '_ddTestCommand',
+  '_ddTestSessionName',
+  '_ddForcedToRun',
+  '_ddUnskippable',
+  '_ddItrCorrelationId',
+  '_ddKnownTests',
+  '_ddIsEarlyFlakeDetectionEnabled',
+  '_ddEarlyFlakeDetectionSlowTestRetries',
+  '_ddRepositoryRoot',
+  '_ddIsFlakyTestRetriesEnabled',
+  '_ddFlakyTestRetriesCount',
+  '_ddIsDiEnabled',
+  '_ddIsKnownTestsEnabled',
+  '_ddIsTestManagementTestsEnabled',
+  '_ddTestManagementTests',
+  '_ddTestManagementAttemptToFixRetries',
+  '_ddModifiedFiles',
+]
 
-  // `createScriptTransformer` is an async function
-  transformPackage.createScriptTransformer = function (config) {
-    const { testEnvironmentOptions, ...restOfConfig } = config
-    const {
-      _ddTestModuleId,
-      _ddTestSessionId,
-      _ddTestCommand,
-      _ddTestSessionName,
-      _ddForcedToRun,
-      _ddUnskippable,
-      _ddItrCorrelationId,
-      _ddKnownTests,
-      _ddIsEarlyFlakeDetectionEnabled,
-      _ddEarlyFlakeDetectionNumRetries,
-      _ddRepositoryRoot,
-      _ddIsFlakyTestRetriesEnabled,
-      _ddFlakyTestRetriesCount,
-      _ddIsDiEnabled,
-      _ddIsKnownTestsEnabled,
-      _ddIsTestManagementTestsEnabled,
-      _ddTestManagementTests,
-      _ddTestManagementAttemptToFixRetries,
-      _ddModifiedFiles,
-      ...restOfTestEnvironmentOptions
-    } = testEnvironmentOptions
+function removeDatadogTestEnvironmentOptions (testEnvironmentOptions) {
+  const removedEntries = []
 
-    restOfConfig.testEnvironmentOptions = restOfTestEnvironmentOptions
+  for (const key of DD_TEST_ENVIRONMENT_OPTION_KEYS) {
+    if (!Object.hasOwn(testEnvironmentOptions, key)) {
+      continue
+    }
 
-    arguments[0] = restOfConfig
-
-    return originalCreateScriptTransformer.apply(this, arguments)
+    removedEntries.push([key, testEnvironmentOptions[key]])
+    delete testEnvironmentOptions[key]
   }
 
+  return function restoreDatadogTestEnvironmentOptions () {
+    for (const [key, value] of removedEntries) {
+      testEnvironmentOptions[key] = value
+    }
+  }
+}
+
+/**
+ * Wrap `createScriptTransformer` to temporarily hide Datadog-specific
+ * `testEnvironmentOptions` keys while Jest builds its transform config.
+ *
+ * @param {Function} createScriptTransformer
+ * @returns {Function}
+ */
+function wrapCreateScriptTransformer (createScriptTransformer) {
+  return function (config) {
+    const testEnvironmentOptions = config?.testEnvironmentOptions
+
+    if (!testEnvironmentOptions) {
+      return createScriptTransformer.apply(this, arguments)
+    }
+
+    const restoreTestEnvironmentOptions = removeDatadogTestEnvironmentOptions(testEnvironmentOptions)
+
+    try {
+      const result = createScriptTransformer.apply(this, arguments)
+
+      if (result?.then) {
+        return result.finally(restoreTestEnvironmentOptions)
+      }
+
+      restoreTestEnvironmentOptions()
+      return result
+    } catch (e) {
+      restoreTestEnvironmentOptions()
+      throw e
+    }
+  }
+}
+
+addHook({
+  name: '@jest/transform',
+  versions: ['>=24.8.0 <30.0.0'],
+  file: 'build/ScriptTransformer.js',
+}, transformPackage => {
+  transformPackage.createScriptTransformer = wrapCreateScriptTransformer(transformPackage.createScriptTransformer)
+
   return transformPackage
+})
+
+addHook({
+  name: '@jest/transform',
+  versions: ['>=30.0.0'],
+}, transformPackage => {
+  return shimmer.wrap(transformPackage, 'createScriptTransformer', wrapCreateScriptTransformer, { replaceGetter: true })
 })
 
 /**
@@ -1642,8 +1833,14 @@ addHook({
 
 function onMessageWrapper (onMessage) {
   return function () {
-    const [code, data] = arguments[0]
+    const response = arguments[0]
+    if (!Array.isArray(response)) {
+      return onMessage.apply(this, arguments)
+    }
+
+    const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
+      collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
       workerReportTraceCh.publish(data)
       return
     }
@@ -1704,15 +1901,40 @@ function sendWrapper (send) {
   }
 }
 
+function wrapWorkerChannel (worker) {
+  const workerChannel = worker._child || worker._worker
+  if (!workerChannel) return
+
+  shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
+}
+
+function wrapWorker (worker) {
+  // ChildProcessWorker uses _child (child_process), ExperimentalWorker uses _worker (worker_threads)
+  const workerChannel = worker._child || worker._worker
+  if (!workerChannel) return
+
+  wrapWorkerChannel(worker)
+  shimmer.wrap(worker, '_onMessage', onMessageWrapper)
+  workerChannel.removeAllListeners('message')
+  workerChannel.on('message', worker._onMessage.bind(worker))
+}
+
 function enqueueWrapper (enqueue) {
   return function () {
     shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
-      if (worker && !wrappedWorkers.has(worker)) {
-        shimmer.wrap(worker._child, 'send', sendWrapper)
-        shimmer.wrap(worker, '_onMessage', onMessageWrapper)
-        worker._child.removeAllListeners('message')
-        worker._child.on('message', worker._onMessage.bind(worker))
-        wrappedWorkers.add(worker)
+      if (worker) {
+        const currentChannel = worker._child || worker._worker
+        const previousChannel = wrappedWorkerChannels.get(worker)
+        if (currentChannel !== previousChannel) {
+          if (previousChannel) {
+            // Worker restarted — only re-wrap the new child's send/postMessage
+            wrapWorkerChannel(worker)
+          } else {
+            // First time seeing this worker — full setup
+            wrapWorker(worker)
+          }
+          wrappedWorkerChannels.set(worker, currentChannel)
+        }
       }
       return onStart.apply(this, arguments)
     })
@@ -1739,6 +1961,21 @@ addHook({
     shimmer.wrap(ChildProcessWorker.prototype, 'onMessage', onMessageWrapper)
   }
   return childProcessWorker
+})
+
+addHook({
+  name: 'jest-worker',
+  versions: ['>=24.9.0 <30.0.0'],
+  file: 'build/workers/NodeThreadsWorker.js',
+}, (nodeThreadsWorker) => {
+  const ExperimentalWorker = nodeThreadsWorker.default
+  shimmer.wrap(ExperimentalWorker.prototype, 'send', sendWrapper)
+  if (ExperimentalWorker.prototype._onMessage) {
+    shimmer.wrap(ExperimentalWorker.prototype, '_onMessage', onMessageWrapper)
+  } else if (ExperimentalWorker.prototype.onMessage) {
+    shimmer.wrap(ExperimentalWorker.prototype, 'onMessage', onMessageWrapper)
+  }
+  return nodeThreadsWorker
 })
 
 addHook({

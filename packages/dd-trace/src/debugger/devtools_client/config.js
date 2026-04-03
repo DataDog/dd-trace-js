@@ -2,7 +2,10 @@
 
 const { workerData: { config: parentConfig, parentThreadId, configPort } } = require('node:worker_threads')
 const { getAgentUrl } = require('../../agent/url')
+const processTags = require('../../process-tags')
 const log = require('./log')
+
+processTags.initialize()
 
 const config = module.exports = {
   ...parentConfig,

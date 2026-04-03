@@ -12,6 +12,7 @@ const sinon = require('sinon')
 
 require('./setup/core')
 const { DogStatsDClient } = require('../src/dogstatsd')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -35,6 +36,10 @@ function createGarbage (count = 50) {
       let runtimeMetrics
       let proxy
       let config
+
+      before(() => {
+        require('../src/process-tags').initialize()
+      })
 
       beforeEach(() => {
         config = {
@@ -252,6 +257,28 @@ function createGarbage (count = 50) {
           })
         })
 
+        it('should include process tags when propagateProcessTags is enabled', function () {
+          config.propagateProcessTags = { enabled: true }
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(tags.some(tag => tag.startsWith('entrypoint.type:')), 'expected entrypoint.type tag')
+        })
+
+        it('should not include process tags when propagateProcessTags is disabled', function () {
+          config.propagateProcessTags = { enabled: false }
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
+        })
+
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
@@ -291,6 +318,9 @@ function createGarbage (count = 50) {
           })
           const isGC95Percentile = sinon.match((value) => {
             return value >= 1e5 && value < 1e8 // In Nanoseconds. 0.1ms to 100ms.
+          })
+          const isHeapSpace = sinon.match((metricName) => {
+            return /^heap_space:[a-z_]+$/.test(metricName)
           })
 
           // These return percentages as strings and are tested later.
@@ -349,10 +379,15 @@ function createGarbage (count = 50) {
             })
           )
 
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.used_size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.available_size.by.space', isFiniteNumber)
-          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.physical_size.by.space', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.size.by.space', isFiniteNumber, isHeapSpace)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.used_size.by.space', isFiniteNumber, isHeapSpace)
+          sinon.assert.calledWith(
+            client.gauge,
+            'runtime.node.heap.available_size.by.space',
+            isFiniteNumber,
+            isHeapSpace
+          )
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.physical_size.by.space', isFiniteNumber, isHeapSpace)
 
           sinon.assert.called(client.flush)
         })
@@ -651,12 +686,14 @@ function createGarbage (count = 50) {
             return acc
           }, {})
 
-          assert.strictEqual(metrics['runtime.node.mem.heap_total'], stats.heapTotal)
-          assert.strictEqual(metrics['runtime.node.mem.heap_used'], stats.heapUsed)
-          assert.strictEqual(metrics['runtime.node.mem.rss'], stats.rss)
-          assert.strictEqual(metrics['runtime.node.mem.total'], totalmem)
-          assert.strictEqual(metrics['runtime.node.mem.free'], freemem)
-          assert.strictEqual(metrics['runtime.node.mem.external'], stats.external)
+          assertObjectContains(metrics, {
+            'runtime.node.mem.heap_total': stats.heapTotal,
+            'runtime.node.mem.heap_used': stats.heapUsed,
+            'runtime.node.mem.rss': stats.rss,
+            'runtime.node.mem.total': totalmem,
+            'runtime.node.mem.free': freemem,
+            'runtime.node.mem.external': stats.external,
+          })
         })
       })
 

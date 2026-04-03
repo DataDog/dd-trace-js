@@ -18,6 +18,7 @@ const {
   SAMPLING_MECHANISM_REMOTE_DYNAMIC,
   DECISION_MAKER_KEY,
   SAMPLING_MECHANISM_APPSEC,
+  SAMPLING_KNUTH_RATE,
 } = require('../src/constants')
 const { ASM } = require('../src/standalone/product')
 
@@ -369,10 +370,106 @@ describe('PrioritySampler', () => {
       assert.strictEqual(context._trace['_dd.limit_psr'], 1)
     })
 
-    it('should ignore empty span', () => {
-      assert.doesNotThrow(() => {
-        prioritySampler.sample()
+    it('should not set _dd.p.ksr tag for default sampling mechanism', () => {
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], undefined)
+    })
+
+    it('should set _dd.p.ksr tag for agent sampling with explicit rates', () => {
+      prioritySampler.update({
+        'service:test,env:test': 0.5,
       })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.5')
+    })
+
+    it('should set _dd.p.ksr tag for rule-based sampling', () => {
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.5,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.5')
+    })
+
+    it('should set _dd.p.ksr tag for rule-based sampling with rate 0', () => {
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0')
+    })
+
+    it('should set _dd.p.ksr tag for rate 1.0 as "1"', () => {
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 1.0,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '1')
+    })
+
+    it('should set _dd.p.ksr tag as a string type', () => {
+      prioritySampler.update({
+        'service:test,env:test': 0.5,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(typeof context._trace.tags[SAMPLING_KNUTH_RATE], 'string')
+    })
+
+    it('should format _dd.p.ksr with decimal notation for very small rates', () => {
+      Sampler.withArgs(0.000001).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.000001),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.000001,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.000001')
+    })
+
+    it('should round _dd.p.ksr to zero when rate is below 6 decimal precision', () => {
+      Sampler.withArgs(0.0000001).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.0000001),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.0000001,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0')
+    })
+
+    it('should round _dd.p.ksr up to 0.000001 when rate rounds up', () => {
+      Sampler.withArgs(0.00000051).returns({
+        isSampled: sinon.stub().returns(true),
+        rate: sinon.stub().returns(0.00000051),
+      })
+      prioritySampler = new PrioritySampler('test', {
+        sampleRate: 0.00000051,
+      })
+      prioritySampler.sample(span)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], '0.000001')
+    })
+
+    it('should not set _dd.p.ksr tag for manual sampling', () => {
+      context._tags[MANUAL_KEEP] = undefined
+
+      prioritySampler.sample(context)
+
+      assert.strictEqual(context._trace.tags[SAMPLING_KNUTH_RATE], undefined)
+    })
+
+    it('should ignore empty span', () => {
+      prioritySampler.sample()
       prioritySampler.sample()
     })
 
@@ -519,9 +616,7 @@ describe('PrioritySampler', () => {
 
   describe('keepTrace', () => {
     it('should not fail if no _prioritySampler', () => {
-      assert.doesNotThrow(() => {
-        PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
-      })
+      PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
     })
 
     it('should call setPriority with span USER_KEEP and mechanism', () => {

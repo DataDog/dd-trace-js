@@ -449,7 +449,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(counter.sum.dataPoints[0].asInt, 5)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'DELTA' })
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'delta' })
       const meter = metrics.getMeter('app')
       meter.createCounter('test').add(5)
 
@@ -477,7 +477,7 @@ describe('OpenTelemetry Meter Provider', () => {
         assert.strictEqual(counter.sum.dataPoints[0].asInt, 10)
       })
 
-      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'LOWMEMORY' })
+      setupTracer({ OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: 'lowmemory' })
       const meter = metrics.getMeter('app')
       const obs = meter.createObservableCounter('obs')
       obs.addCallback((result) => result.observe(10))

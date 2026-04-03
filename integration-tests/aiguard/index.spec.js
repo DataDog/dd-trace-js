@@ -5,7 +5,7 @@ const path = require('path')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { assertObjectContains } = require('../helpers')
 const startApiMock = require('./api-mock')
 const { executeRequest } = require('./util')
@@ -44,7 +44,7 @@ describe('AIGuard SDK integration tests', () => {
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
@@ -56,6 +56,18 @@ describe('AIGuard SDK integration tests', () => {
     { ...r, blocking: true },
     { ...r, blocking: false },
   ])
+
+  it('test default options honors remote blocking', async () => {
+    const response = await executeRequest(`${url}/deny-default-options`, 'GET')
+    assert.strictEqual(response.status, 403)
+    assertObjectContains(response.body, 'I am feeling suspicious today')
+    await agent.assertMessageReceived(({ headers, payload }) => {
+      const span = payload[0].find(span => span.name === 'ai_guard')
+      assert.notStrictEqual(span, null)
+      assert.strictEqual(span.meta['ai_guard.action'], 'DENY')
+      assert.strictEqual(span.meta['ai_guard.blocked'], 'true')
+    })
+  })
 
   for (const { endpoint, action, reason, blocking } of testSuite) {
     it(`test evaluate with ${action} response (blocking ${blocking})`, async () => {

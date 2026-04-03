@@ -32,6 +32,8 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
+  TEST_FINAL_STATUS,
+  TEST_HAS_DYNAMIC_NAME,
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -93,12 +95,15 @@ class MochaPlugin extends CiPlugin {
         return
       }
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.sourceRoot)
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'mocha'
-      )
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'mocha'
+        ),
+        ...this.getSessionRequestErrorTags(),
+      }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
@@ -210,9 +215,13 @@ class MochaPlugin extends CiPlugin {
       attemptToFixFailed,
       isAttemptToFixRetry,
       isAtrRetry,
+      finalStatus,
     }) => {
       if (span) {
         span.setTag(TEST_STATUS, status)
+        if (finalStatus) {
+          span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {
@@ -419,6 +428,7 @@ class MochaPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      hasDynamicName,
     } = testInfo
 
     const extraTags = {}
@@ -468,6 +478,10 @@ class MochaPlugin extends CiPlugin {
         extraTags[TEST_IS_RETRY] = 'true'
         extraTags[TEST_RETRY_REASON] = TEST_RETRY_REASON_TYPES.efd
       }
+    }
+
+    if (hasDynamicName) {
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)

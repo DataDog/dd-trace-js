@@ -11,6 +11,7 @@ const log = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 
 const { NODE_MAJOR } = require('../../../../version')
+const processTags = require('../process-tags')
 // TODO: This environment variable may not be changed, since the agent expects a flush every ten seconds.
 // It is only a variable for testing. Think about alternatives.
 const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getValueFromEnvSources('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
@@ -37,6 +38,12 @@ module.exports = {
   start (config) {
     this.stop()
     const clientConfig = DogStatsDClient.generateClientConfig(config)
+
+    if (config.propagateProcessTags?.enabled) {
+      for (const tag of processTags.tagsArray) {
+        clientConfig.tags.push(tag)
+      }
+    }
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
@@ -238,7 +245,7 @@ function captureHeapSpace () {
   const stats = v8.getHeapSpaceStatistics()
 
   for (let i = 0, l = stats.length; i < l; i++) {
-    const tags = [`space:${stats[i].space_name}`]
+    const tags = [`heap_space:${stats[i].space_name}`]
 
     client.gauge('runtime.node.heap.size.by.space', stats[i].space_size, tags)
     client.gauge('runtime.node.heap.used_size.by.space', stats[i].space_used_size, tags)

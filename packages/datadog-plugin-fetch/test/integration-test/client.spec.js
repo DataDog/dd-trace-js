@@ -7,6 +7,7 @@ const {
   sandboxCwd,
   useSandbox,
   spawnPluginIntegrationTestProcAndExpectExit,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const describe = globalThis.fetch ? globalThis.describe : globalThis.describe.skip
 
@@ -22,7 +23,7 @@ describe('esm', () => {
   })
 
   afterEach(async () => {
-    proc && proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 

@@ -10,14 +10,14 @@ const { promisify } = require('util')
 const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 const exec = promisify(childProcess.exec)
 const retry = async fn => {
   try {
     await fn()
   } catch {
-    await setTimeout(60_000)
+    await setTimeout(5_000)
     await fn()
   }
 }
@@ -38,7 +38,7 @@ describe('esbuild support for IAST', () => {
     await exec('npm init -y', { cwd: craftedNodeModulesDir })
     await retry(() => exec('npm install @datadog/wasm-js-rewriter @datadog/native-iast-taint-tracking', {
       cwd: craftedNodeModulesDir,
-      timeout: 3e3,
+      timeout: 60_000,
     }))
   })
 
@@ -109,7 +109,7 @@ describe('esbuild support for IAST', () => {
       })
 
       afterEach(async () => {
-        contextVars.proc.kill()
+        await stopProc(contextVars.proc)
         await contextVars.agent.stop()
       })
     }
@@ -118,7 +118,9 @@ describe('esbuild support for IAST', () => {
   describe('cjs', () => {
     const context = { proc: null, agent: null, axios: null, applicationDir: null, bundledApplicationDir: null }
 
-    before(async () => {
+    before(async function () {
+      this.timeout(120_000)
+
       const setup = await setupApplication('iast-esbuild-cjs')
       context.applicationDir = setup.applicationDir
       context.bundledApplicationDir = setup.bundledApplicationDir

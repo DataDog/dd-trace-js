@@ -3,9 +3,10 @@
 const assert = require('node:assert/strict')
 
 const path = require('path')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { UNACKNOWLEDGED, ACKNOWLEDGED } = require('../../packages/dd-trace/src/remote_config/apply_states')
 const ufcPayloads = require('./fixtures/ufc-payloads')
+
 const RC_PRODUCT = 'FFE_FLAGS'
 
 // Helper function to check exposure event structure
@@ -64,7 +65,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -75,11 +76,14 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
 
         // Listen for exposure events
         agent.on('exposures', ({ payload, headers }) => {
-          assert.ok(Object.hasOwn(payload, 'context'))
           assert.ok(Object.hasOwn(payload, 'exposures'))
-          assert.strictEqual(payload.context.service, 'ffe-test-service')
-          assert.strictEqual(payload.context.version, '1.2.3')
-          assert.strictEqual(payload.context.env, 'test')
+          assertObjectContains(payload, {
+            context: {
+              service: 'ffe-test-service',
+              version: '1.2.3',
+              env: 'test',
+            },
+          })
 
           exposureEvents.push(...payload.exposures)
 
@@ -160,7 +164,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -169,11 +173,14 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
         const exposureEvents = []
 
         agent.on('exposures', ({ payload }) => {
-          assert.ok(Object.hasOwn(payload, 'context'))
           assert.ok(Object.hasOwn(payload, 'exposures'))
-          assert.strictEqual(payload.context.service, 'ffe-test-service')
-          assert.strictEqual(payload.context.version, '1.2.3')
-          assert.strictEqual(payload.context.env, 'test')
+          assertObjectContains(payload, {
+            context: {
+              service: 'ffe-test-service',
+              version: '1.2.3',
+              env: 'test',
+            },
+          })
 
           exposureEvents.push(...payload.exposures)
 
@@ -240,7 +247,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -301,7 +308,7 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -310,9 +317,13 @@ describe('OpenFeature Remote Config and Exposure Events Integration', () => {
       assert.strictEqual(response.status, 200)
       const data = await response.json()
       // When provider is disabled, it uses noop provider which returns default values
-      assert.strictEqual(data.results.boolean, false)
-      assert.strictEqual(data.results.string, 'default')
-      assert.strictEqual(data.evaluationsCompleted, 2)
+      assertObjectContains(data, {
+        results: {
+          boolean: false,
+          string: 'default',
+        },
+        evaluationsCompleted: 2,
+      })
     })
   })
 })

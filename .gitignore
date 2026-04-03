@@ -47,11 +47,10 @@ lib-cov
 
 # Coverage directory used by tools like istanbul
 coverage/
-coverage-node-*/
+*.lcov
 
 # nyc test coverage
 .nyc_output
-.nyc_output-node-*
 
 # Grunt intermediate storage (http://gruntjs.com/creating-plugins#storing-task-files)
 .grunt
@@ -90,6 +89,9 @@ typings/
 # Output of tap
 .tap/*
 
+# JUnit artifacts emitted by local/agent CI-style Mocha runs
+node-*-junit.xml
+
 
 ### VSCode ###
 .vscode/*
@@ -98,7 +100,6 @@ typings/
 !.vscode/launch.json
 !.vscode/extensions.json
 .history
-.cursor/skills
 
 # IntelliJ
 .idea
@@ -131,7 +132,7 @@ packages/dd-trace/test/plugins/versions/node_modules
 packages/dd-trace/test/plugins/versions/yarn.lock
 !packages/dd-trace/**/telemetry/logs
 packages/datadog-plugin-azure-functions/test/integration-test/fixtures/node_modules
-!vendor/dist
+!vendor/package-lock.json
 vendor.patch
 __azurite_db_queue__.json
 __azurite_db_queue_extent__.json
@@ -142,7 +143,8 @@ __queuestorage__/AzuriteConfig
 .analysis/
 
 # ignore claude settings
-.claude/
+.claude/*
+!.claude/skills/
 
 # Husky generates a helper dir under .husky/_ (including husky.sh). Don't commit it.
 .husky/_/

@@ -46,7 +46,12 @@ const {
   TEST_RETRY_REASON_TYPES,
   getPullRequestDiff,
   getModifiedFilesFromDiff,
+  getSessionRequestErrorTags,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_IS_MODIFIED,
+  TEST_HAS_DYNAMIC_NAME,
+  DYNAMIC_NAME_RE,
+  logDynamicNamesWarning,
   getPullRequestBaseBranch,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
@@ -89,6 +94,11 @@ const {
   RUNTIME_VERSION,
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
+const {
+  resolveOriginalSourcePosition,
+  resolveSourceLineForTest,
+  shouldTrustInvocationDetailsLine,
+} = require('./source-map-utils')
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
@@ -236,11 +246,11 @@ class CypressPlugin {
 
   finishedTestsByFile = {}
   testStatuses = {}
-
   isTestsSkipped = false
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
   isFlakyTestRetriesEnabled = false
+  flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
   isKnownTestsEnabled = false
   earlyFlakeDetectionNumRetries = 0
@@ -254,6 +264,7 @@ class CypressPlugin {
   testManagementAttemptToFixRetries = 0
   isImpactedTestsEnabled = false
   modifiedFiles = []
+  newTestsWithDynamicNames = new Set()
 
   constructor () {
     const {
@@ -306,6 +317,9 @@ class CypressPlugin {
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
+    const envFlushWait = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS'))
+    this.rumFlushWaitMillis = Number.isFinite(envFlushWait) ? envFlushWait : undefined
+
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
     }
@@ -314,10 +328,15 @@ class CypressPlugin {
     this.testEnvironmentMetadata[DD_TEST_IS_USER_PROVIDED_SERVICE] =
       tracer._tracer._config.isServiceUserProvided ? 'true' : 'false'
 
+    this._pendingRequestErrorTags = []
     this.libraryConfigurationPromise = getLibraryConfiguration(this.tracer, this.testConfiguration)
       .then((libraryConfigurationResponse) => {
         if (libraryConfigurationResponse.err) {
           log.error('Cypress plugin library config response error', libraryConfigurationResponse.err)
+          this._pendingRequestErrorTags.push({
+            tag: DD_CI_LIBRARY_CONFIGURATION_ERROR,
+            value: 'true',
+          })
         } else {
           const {
             libraryConfig: {
@@ -340,7 +359,10 @@ class CypressPlugin {
           this.isKnownTestsEnabled = isKnownTestsEnabled
           if (isFlakyTestRetriesEnabled && this.isTestIsolationEnabled) {
             this.isFlakyTestRetriesEnabled = true
-            this.cypressConfig.retries.runMode = flakyTestRetriesCount
+            this.flakyTestRetriesCount = flakyTestRetriesCount ?? 0
+            this.cypressConfig.retries.runMode = this.flakyTestRetriesCount
+          } else {
+            this.flakyTestRetriesCount = 0
           }
           this.isTestManagementTestsEnabled = isTestManagementEnabled
           this.testManagementAttemptToFixRetries = testManagementAttemptToFixRetries
@@ -381,7 +403,9 @@ class CypressPlugin {
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
 
     if (testSuiteAbsolutePath) {
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const resolvedSuitePosition = resolveOriginalSourcePosition(testSuiteAbsolutePath, 1)
+      const resolvedSuiteAbsolutePath = resolvedSuitePosition ? resolvedSuitePosition.sourceFile : testSuiteAbsolutePath
+      const testSourceFile = getTestSuitePath(resolvedSuiteAbsolutePath, this.repositoryRoot)
       testSuiteSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
       testSuiteSpanMetadata[TEST_SOURCE_START] = 1
       const codeOwners = this.getTestCodeOwners({ testSuite, testSourceFile })
@@ -412,6 +436,7 @@ class CypressPlugin {
     if (this.testSessionSpan && this.testModuleSpan) {
       testSuiteTags[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
       testSuiteTags[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
+      Object.assign(testSuiteTags, this.getSessionRequestErrorTags())
       // If testSuiteSpan couldn't be created, we'll use the testModuleSpan as the parent
       if (!this.testSuiteSpan) {
         testSuiteTags[TEST_SUITE_ID] = this.testModuleSpan.context().toSpanId()
@@ -466,6 +491,14 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+  }
+
+  /**
+   * Returns request error tags from the test session span for propagation to test spans.
+   * @returns {Record<string, string>}
+   */
+  getSessionRequestErrorTags () {
+    return getSessionRequestErrorTags(this.testSessionSpan)
   }
 
   ciVisEvent (name, testLevel, tags = {}) {
@@ -578,7 +611,7 @@ class CypressPlugin {
           [TEST_SESSION_NAME]: testSessionName,
         }
       }
-      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, false, this.frameworkVersion)
+      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, this.frameworkVersion)
       metadataTags.test = {
         ...metadataTags.test,
         ...libraryCapabilitiesTags,
@@ -596,14 +629,20 @@ class CypressPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+    for (const { tag, value } of this._pendingRequestErrorTags) {
+      this.testSessionSpan.setTag(tag, value)
+    }
+    this._pendingRequestErrorTags = []
     this.ciVisEvent(TELEMETRY_EVENT_CREATED, 'session')
 
+    const sessionRequestErrorTags = getSessionRequestErrorTags(this.testSessionSpan)
     this.testModuleSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_module`, {
       childOf: this.testSessionSpan,
       tags: {
         [COMPONENT]: TEST_FRAMEWORK_NAME,
         ...this.testEnvironmentMetadata,
         ...testModuleSpanMetadata,
+        ...sessionRequestErrorTags,
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
@@ -639,6 +678,8 @@ class CypressPlugin {
       if (this.isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
+
+      logDynamicNamesWarning(this.newTestsWithDynamicNames)
 
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -779,8 +820,10 @@ class CypressPlugin {
         if (this.itrCorrelationId) {
           finishedTest.testSpan.setTag(ITR_CORRELATION_ID, this.itrCorrelationId)
         }
-        const testSourceFile = spec.absolute && this.repositoryRoot
-          ? getTestSuitePath(spec.absolute, this.repositoryRoot)
+        const resolvedSpecPosition = spec.absolute ? resolveOriginalSourcePosition(spec.absolute, 1) : null
+        const resolvedSpecAbsolutePath = resolvedSpecPosition ? resolvedSpecPosition.sourceFile : spec.absolute
+        const testSourceFile = resolvedSpecAbsolutePath && this.repositoryRoot
+          ? getTestSuitePath(resolvedSpecAbsolutePath, this.repositoryRoot)
           : spec.relative
         if (testSourceFile) {
           finishedTest.testSpan.setTag(TEST_SOURCE_FILE, testSourceFile)
@@ -823,6 +866,7 @@ class CypressPlugin {
           isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
+          rumFlushWaitMillis: this.rumFlushWaitMillis,
         }
 
         if (this.testSuiteSpan) {
@@ -876,9 +920,11 @@ class CypressPlugin {
           error,
           isRUMActive,
           testSourceLine,
+          testSourceStack,
           testSuite,
           testSuiteAbsolutePath,
           testName,
+          testItTitle,
           isNew,
           isEfdRetry,
           isAttemptToFix,
@@ -920,14 +966,41 @@ class CypressPlugin {
         if (isRUMActive) {
           this.activeTestSpan.setTag(TEST_IS_RUM_ACTIVE, 'true')
         }
+        // Source-line resolution strategy:
+        // 1. If plain JS and no source map, trust invocationDetails.line directly.
+        // 2. Otherwise, try invocationDetails.stack line mapped through source map.
+        // 3. If that fails, scan generated file for it/test/specify declaration by test name.
+        // 4. If declaration found:
+        //    - .ts file: use declaration line directly.
+        //    - .js file: map declaration line through source map.
+        // 5. If all fail, keep original invocationDetails.line.
         if (testSourceLine) {
-          this.activeTestSpan.setTag(TEST_SOURCE_START, testSourceLine)
+          let resolvedLine = testSourceLine
+          if (testSuiteAbsolutePath && testItTitle) {
+            // Use invocationDetails directly only for plain JS specs without source maps.
+            // Otherwise, resolve from the test declaration in the spec and map via source map.
+            const shouldTrustInvocationDetails = shouldTrustInvocationDetailsLine(testSuiteAbsolutePath, testSourceLine)
+            if (!shouldTrustInvocationDetails) {
+              resolvedLine = resolveSourceLineForTest(
+                testSuiteAbsolutePath,
+                testItTitle,
+                testSourceStack
+              ) ?? testSourceLine
+            }
+          }
+          this.activeTestSpan.setTag(TEST_SOURCE_START, resolvedLine)
         }
         if (isNew) {
           this.activeTestSpan.setTag(TEST_IS_NEW, 'true')
           if (isEfdRetry) {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
             this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+          }
+          if (DYNAMIC_NAME_RE.test(testName)) {
+            this.activeTestSpan.setTag(TEST_HAS_DYNAMIC_NAME, 'true')
+            if (testStatuses.length === 1) {
+              this.newTestsWithDynamicNames.add(`${testSuite} › ${testName}`)
+            }
           }
         }
         if (isModified) {
@@ -961,6 +1034,12 @@ class CypressPlugin {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
             }
           }
+        }
+        // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
+        if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
+          this.flakyTestRetriesCount > 0 && testStatuses.length === this.flakyTestRetriesCount + 1 &&
+          testStatuses.every(status => status === 'fail')) {
+          this.activeTestSpan.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
         }
 
         // Ensure quarantined tests reported from support.js are tagged

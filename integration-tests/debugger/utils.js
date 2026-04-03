@@ -9,7 +9,7 @@ const { randomUUID } = require('crypto')
 const Axios = require('axios')
 
 const { assertObjectContains, assertUUID } = require('../helpers')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 const { version } = require('../../package.json')
 
@@ -222,7 +222,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   })
 
   afterEach(async function () {
-    t.proc?.kill()
+    await stopProc(t.proc)
     await t.agent?.stop()
   })
 
@@ -416,7 +416,9 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
   const topFrame = data.debugger.snapshot.stack[0]
   // path seems to be prefixed with `/private` on Mac
   assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
-  assert.strictEqual(topFrame.function, 'fooHandler')
-  assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)
-  assert.strictEqual(topFrame.columnNumber, 3)
+  assertObjectContains(topFrame, {
+    function: 'fooHandler',
+    lineNumber: t.breakpoint.line,
+    columnNumber: 3,
+  })
 }

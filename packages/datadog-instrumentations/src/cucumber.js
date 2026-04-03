@@ -55,6 +55,8 @@ const originalCoverageMap = createCoverageMap()
 const patched = new WeakSet()
 
 const lastStatusByPickleId = new Map()
+/** For ATR: statuses keyed by stable scenario id (uri:name) so retries accumulate correctly */
+const atrStatusesByScenarioKey = new Map()
 const numRetriesByPickleId = new Map()
 const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
@@ -164,9 +166,9 @@ function getErrorFromCucumberResult (cucumberResult) {
   return error
 }
 
-function getChannelPromise (channelToPublishTo, isParallel = false, frameworkVersion = null) {
+function getChannelPromise (channelToPublishTo, frameworkVersion = null) {
   return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve, isParallel, frameworkVersion })
+    channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
   })
 }
 
@@ -275,6 +277,17 @@ function wrapRun (pl, isLatestVersion, version) {
             const isFirstAttempt = numAttempt++ === 0
             const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
 
+            // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
+            if (isFlakyTestRetriesEnabled && isAtrRetry === false) {
+              const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
+              const atrKey = `${this.pickle.uri}:${nameForKey}`
+              if (atrStatusesByScenarioKey.has(atrKey)) {
+                atrStatusesByScenarioKey.get(atrKey).push('fail')
+              } else {
+                atrStatusesByScenarioKey.set(atrKey, ['fail'])
+              }
+            }
+
             if (promises.hitBreakpointPromise) {
               await promises.hitBreakpointPromise
             }
@@ -364,6 +377,25 @@ function wrapRun (pl, isLatestVersion, version) {
             if (fail === earlyFlakeDetectionNumRetries + 1) {
               hasFailedAllRetries = true
             }
+          }
+        }
+
+        // ATR: accumulate statuses by stable scenario key (uri:name) so retries are grouped.
+        // Cucumber appends " (attempt N)" or " (attempt N, retried)" to the scenario name; normalize for keying.
+        if (isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0) {
+          const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
+          const atrKey = `${this.pickle.uri}:${nameForKey}`
+          if (atrStatusesByScenarioKey.has(atrKey)) {
+            atrStatusesByScenarioKey.get(atrKey).push(status)
+          } else {
+            atrStatusesByScenarioKey.set(atrKey, [status])
+          }
+          const atrStatuses = atrStatusesByScenarioKey.get(atrKey)
+          const pickleStatuses = lastStatusByPickleId.get(this.pickle.id)
+          const statusesToCheck = atrStatuses?.length >= (numTestRetries + 1) ? atrStatuses : pickleStatuses
+          if (statusesToCheck && statusesToCheck.length === numTestRetries + 1 &&
+            statusesToCheck.every(s => s === 'fail')) {
+            hasFailedAllRetries = true
           }
         }
 
@@ -473,14 +505,15 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     }
     let errorSkippableRequest
 
-    const configurationResponse = await getChannelPromise(libraryConfigurationCh, isParallel, frameworkVersion)
+    const configurationResponse = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
 
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
     earlyFlakeDetectionFaultyThreshold = configurationResponse.libraryConfig?.earlyFlakeDetectionFaultyThreshold
     isSuitesSkippingEnabled = configurationResponse.libraryConfig?.isSuitesSkippingEnabled
     isFlakyTestRetriesEnabled = configurationResponse.libraryConfig?.isFlakyTestRetriesEnabled
-    numTestRetries = configurationResponse.libraryConfig?.flakyTestRetriesCount
+    const configRetryCount = configurationResponse.libraryConfig?.flakyTestRetriesCount
+    numTestRetries = (typeof configRetryCount === 'number' && configRetryCount > 0) ? configRetryCount : 0
     isKnownTestsEnabled = configurationResponse.libraryConfig?.isKnownTestsEnabled
     isTestManagementTestsEnabled = configurationResponse.libraryConfig?.isTestManagementEnabled
     testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
@@ -563,6 +596,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       options.retry = numTestRetries
     }
 
+    atrStatusesByScenarioKey.clear()
     sessionStartCh.publish({ command, frameworkVersion })
 
     if (!errorSkippableRequest && skippedSuites.length) {
@@ -647,6 +681,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     let isQuarantined = false
     let isModified = false
 
+    const originalDryRun = this.options.dryRun
     if (isTestManagementTestsEnabled) {
       const testProperties = getTestProperties(testSuitePath, pickle.name)
       isAttemptToFix = testProperties.attemptToFix
@@ -684,6 +719,9 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     }
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
+
+    // Restore dryRun so it doesn't affect subsequent tests in the same worker
+    this.options.dryRun = originalDryRun
 
     const testStatuses = lastStatusByPickleId.get(pickle.id)
     const lastTestStatus = testStatuses.at(-1)
@@ -1016,6 +1054,15 @@ addHook({
       this.options.worldParameters._ddModifiedFiles = modifiedFiles
     }
 
+    this.options.worldParameters._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
+    this.options.worldParameters._ddNumTestRetries = numTestRetries
+
+    if (isTestManagementTestsEnabled) {
+      this.options.worldParameters._ddIsTestManagementTestsEnabled = true
+      this.options.worldParameters._ddTestManagementTests = testManagementTests
+      this.options.worldParameters._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
+    }
+
     return startWorker.apply(this, arguments)
   })
   return adapterPackage
@@ -1050,6 +1097,13 @@ addHook({
       isImpactedTestsEnabled = !!this.options.worldParameters._ddImpactedTestsEnabled
       if (isImpactedTestsEnabled) {
         modifiedFiles = this.options.worldParameters._ddModifiedFiles
+      }
+      isFlakyTestRetriesEnabled = !!this.options.worldParameters._ddIsFlakyTestRetriesEnabled
+      numTestRetries = this.options.worldParameters._ddNumTestRetries ?? 0
+      isTestManagementTestsEnabled = !!this.options.worldParameters._ddIsTestManagementTestsEnabled
+      if (isTestManagementTestsEnabled) {
+        testManagementTests = this.options.worldParameters._ddTestManagementTests
+        testManagementAttemptToFixRetries = this.options.worldParameters._ddTestManagementAttemptToFixRetries
       }
     }
   )

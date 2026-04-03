@@ -72,6 +72,7 @@ const {
   TEST_FRAMEWORK_VERSION,
   CI_APP_ORIGIN,
   TEST_SKIP_REASON,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
@@ -326,6 +327,22 @@ describe(`cucumber@${version} commonJS`, () => {
         envVars = isAgentless ? getCiVisAgentlessConfig(receiver.port) : getCiVisEvpProxyConfig(receiver.port)
         logsEndpoint = isAgentless ? '/api/v2/logs' : '/debugger/v1/input'
       })
+
+      it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
+        receiver.setSettingsResponseCode(404)
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+            const testEvent = events.find(event => event.type === 'test')
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR], 'true')
+          })
+        childProcess = exec(runTestsCommand, { cwd, env: envVars })
+        await Promise.all([eventsPromise, once(childProcess, 'exit')])
+      })
+
       const runModes = ['serial']
 
       if (version !== '7.0.0') { // only on latest or 9 if node is old
@@ -668,9 +685,11 @@ describe(`cucumber@${version} commonJS`, () => {
                 assert.ok(!('dd-api-key' in coverageRequest.headers))
                 assert.ok(!('dd-api-key' in eventsRequest.headers))
               }
-              assert.strictEqual(coveragePayload.name, 'coverage1')
-              assert.strictEqual(coveragePayload.filename, 'coverage1.msgpack')
-              assert.strictEqual(coveragePayload.type, 'application/msgpack')
+              assertObjectContains(coveragePayload, {
+                name: 'coverage1',
+                filename: 'coverage1.msgpack',
+                type: 'application/msgpack',
+              })
 
               const eventTypes = eventsRequest.payload.events.map(event => event.type)
 
@@ -1069,6 +1088,61 @@ describe(`cucumber@${version} commonJS`, () => {
             }).catch(done)
           })
         })
+
+        onlyLatestIt('can skip suites in parallel mode', async () => {
+          receiver.setSuitesToSkip([{
+            type: 'suite',
+            attributes: {
+              suite: `${featuresPath}farewell.feature`,
+            },
+          }])
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+              assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+              const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+              assert.strictEqual(suites.length, 2)
+
+              const skippedSuite = suites.find(s =>
+                s.resource === `test_suite.${featuresPath}farewell.feature`
+              )
+              assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+              // greetings.feature ran (not skipped)
+              const runningSuite = suites.find(s =>
+                s.resource === `test_suite.${featuresPath}greetings.feature`
+              )
+              assert.ok(runningSuite)
+              assert.ok(!(TEST_SKIPPED_BY_ITR in runningSuite.meta))
+
+              // Only tests from the non-skipped suite ran
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.ok(tests.length > 0)
+              tests.forEach(test => {
+                assert.ok(!test.meta[TEST_SUITE].includes('farewell'))
+              })
+            })
+
+          childProcess = exec(
+            parallelModeCommand,
+            {
+              cwd,
+              env: getCiVisAgentlessConfig(receiver.port),
+            }
+          )
+          await Promise.all([
+            eventsPromise,
+            once(childProcess, 'exit'),
+          ])
+        })
       })
 
       context('early flake detection', () => {
@@ -1303,11 +1377,14 @@ describe(`cucumber@${version} commonJS`, () => {
           receiver.setKnownTests({
             cucumber: {},
           })
+          // Request module waits before retrying — need longer gather timeout
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
 
-              const testSession = events.find(event => event.type === 'test_session_end').content
+              const testSessionEnd = events.find(event => event.type === 'test_session_end')
+              assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+              const testSession = testSessionEnd.content
               assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
@@ -1316,7 +1393,7 @@ describe(`cucumber@${version} commonJS`, () => {
                 test.meta[TEST_IS_NEW] === 'true'
               )
               assert.strictEqual(newTests.length, 0)
-            })
+            }, 60000)
 
           childProcess = exec(
             runTestsCommand,
@@ -1855,6 +1932,45 @@ describe(`cucumber@${version} commonJS`, () => {
               done()
             }).catch(done)
           })
+        })
+
+        onlyLatestIt('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            flaky_test_retries_count: 1,
+            early_flake_detection: {
+              enabled: false,
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              assert.strictEqual(tests.length, 2, 'initial + 1 ATR retry')
+              const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+              assert.strictEqual(failedTests.length, 2)
+              const lastFailed = failedTests[failedTests.length - 1]
+              assert.strictEqual(lastFailed.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/cucumber-js ci-visibility/features-retry/*.feature',
+            {
+              cwd,
+              env: {
+                ...envVars,
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
       })
       // Dynamic instrumentation only supported from >=8.0.0
@@ -2733,15 +2849,18 @@ describe(`cucumber@${version} commonJS`, () => {
       })
       receiver.setTestManagementTestsResponseCode(500)
 
+      // Request module waits before retrying — need longer gather timeout
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSession = events.find(event => event.type === 'test_session_end').content
+          const testSessionEnd = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+          const testSession = testSessionEnd.content
           assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
           // it is not retried
           assert.strictEqual(tests.length, 1)
-        })
+        }, 60000)
 
       childProcess = exec(
         './node_modules/.bin/cucumber-js ci-visibility/features-test-management/attempt-to-fix.feature',
@@ -2769,6 +2888,119 @@ describe(`cucumber@${version} commonJS`, () => {
       ])
       assert.match(testOutput, /Test management tests could not be fetched/)
     })
+
+    onlyLatestIt('can disable tests in parallel mode', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        cucumber: {
+          suites: {
+            'ci-visibility/features-test-management-parallel/disabled.feature': {
+              tests: {
+                'Say disabled parallel': {
+                  properties: { disabled: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 2)
+
+          const disabledTest = tests.find(t => t.meta[TEST_NAME] === 'Say disabled parallel')
+          assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+
+          const passingTest = tests.find(t => t.meta[TEST_NAME] === 'Say passing parallel')
+          assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+        })
+
+      let exitCode
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js' +
+        ' ci-visibility/features-test-management-parallel/disabled.feature' +
+        ' ci-visibility/features-test-management-parallel/passing.feature' +
+        ' --parallel 2',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      childProcess.on('exit', (code) => { exitCode = code })
+
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    onlyLatestIt('can quarantine tests in parallel mode', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        cucumber: {
+          suites: {
+            'ci-visibility/features-test-management-parallel/quarantine.feature': {
+              tests: {
+                'Say quarantine parallel': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      let exitCode
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[CUCUMBER_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 2)
+
+          const quarantinedTest = tests.find(t => t.meta[TEST_NAME] === 'Say quarantine parallel')
+          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+          const passingTest = tests.find(t => t.meta[TEST_NAME] === 'Say passing parallel')
+          assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js ci-visibility/features-test-management-parallel/quarantine.feature' +
+        ' ci-visibility/features-test-management-parallel/passing.feature --parallel 2',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      childProcess.on('exit', (code) => { exitCode = code })
+
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+
+      // Quarantined test fails but exit code should be 0
+      assert.strictEqual(exitCode, 0)
+    })
   })
 
   context('libraries capabilities', () => {
@@ -2788,11 +3020,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
             assert.ok(metadataDicts.length > 0)
             metadataDicts.forEach(metadata => {
-              if (runMode === 'parallel') {
-                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-              } else {
-                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-              }
+              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
               assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')

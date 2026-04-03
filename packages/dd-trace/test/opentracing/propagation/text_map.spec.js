@@ -121,10 +121,12 @@ describe('TextMapPropagator', () => {
 
       propagator.inject(spanContext, carrier)
 
-      assert.strictEqual(carrier['ot-baggage-number'], '1.23')
-      assert.strictEqual(carrier['ot-baggage-bool'], 'true')
-      assert.strictEqual(carrier['ot-baggage-array'], 'foo,bar')
-      assert.strictEqual(carrier['ot-baggage-object'], '[object Object]')
+      assertObjectContains(carrier, {
+        'ot-baggage-number': '1.23',
+        'ot-baggage-bool': 'true',
+        'ot-baggage-array': 'foo,bar',
+        'ot-baggage-object': '[object Object]',
+      })
       assert.strictEqual(carrier.baggage, undefined)
     })
 
@@ -746,6 +748,37 @@ describe('TextMapPropagator', () => {
       assert.strictEqual(spanContext, null)
       assert.strictEqual(getBaggageItem('foo'), 'bar')
       assert.deepStrictEqual(getAllBaggageItems(), { foo: 'bar' })
+    })
+
+    it('should clear pre-existing baggage items before extracting new ones', () => {
+      removeAllBaggageItems()
+      setBaggageItem('stale', 'leftover')
+      setBaggageItem('foo', 'old-value')
+      assert.deepStrictEqual(getAllBaggageItems(), { stale: 'leftover', foo: 'old-value' })
+
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+        baggage: 'foo=new-value,fresh=added',
+      }
+      propagator.extract(carrier)
+
+      assert.deepStrictEqual(getAllBaggageItems(), { foo: 'new-value', fresh: 'added' })
+      assert.strictEqual(getBaggageItem('stale'), undefined)
+    })
+
+    it('should clear pre-existing baggage items when carrier has no baggage header', () => {
+      removeAllBaggageItems()
+      setBaggageItem('stale', 'leftover')
+      assert.deepStrictEqual(getAllBaggageItems(), { stale: 'leftover' })
+
+      const carrier = {
+        'x-datadog-trace-id': '123',
+        'x-datadog-parent-id': '456',
+      }
+      propagator.extract(carrier)
+
+      assert.deepStrictEqual(getAllBaggageItems(), {})
     })
 
     it('should convert signed IDs to unsigned', () => {
