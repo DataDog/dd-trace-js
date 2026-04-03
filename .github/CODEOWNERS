@@ -183,6 +183,8 @@
 /packages/dd-trace/test/tagger.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/tracer.spec.js @DataDog/apm-sdk-capabilities-js
 
+/scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
+
 # Feature Flagging
 /integration-tests/openfeature/ @DataDog/feature-flagging
 /packages/dd-trace/src/openfeature/ @DataDog/feature-flagging
