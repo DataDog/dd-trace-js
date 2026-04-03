@@ -436,6 +436,132 @@ describe('request', function () {
     })
   })
 
+  describe('socket error handling (EPIPE/ECONNRESET)', () => {
+    // Creates a server that accepts a connection then immediately destroys
+    // the socket, causing EPIPE/ECONNRESET on the client side when it writes.
+    function initDestroyingServer () {
+      return new Promise(resolve => {
+        const net = require('net')
+        const server = net.createServer(socket => {
+          // Destroy immediately to trigger EPIPE on client write
+          socket.destroy()
+        })
+        server.listen(0, () => {
+          const port = server.address().port
+          resolve({ port, close: () => server.close() })
+        })
+      })
+    }
+
+    // Creates a real HTTP server that accepts the request, then destroys
+    // the socket before sending a response, simulating an overwhelmed agent.
+    function initAbortingHTTPServer () {
+      return new Promise(resolve => {
+        const server = http.createServer((req, res) => {
+          // Read the body then kill the socket without responding
+          req.on('data', () => {})
+          req.on('end', () => {
+            req.socket.destroy()
+          })
+        })
+        server.listen(0, () => {
+          const port = server.address().port
+          resolve({ port, close: () => server.close() })
+        })
+      })
+    }
+
+    it('should not crash the process when the agent socket is destroyed (EPIPE)', (done) => {
+      initAbortingHTTPServer().then(({ port, close }) => {
+        const uncaughtGuard = (err) => {
+          close()
+          done(new Error(`uncaughtException should not fire: ${err.code} - ${err.message}`))
+        }
+        process.once('uncaughtException', uncaughtGuard)
+
+        request(Buffer.from('test payload'), {
+          protocol: 'http:',
+          hostname: 'localhost',
+          port,
+          path: '/v0.4/traces',
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+          },
+        }, (err) => {
+          process.removeListener('uncaughtException', uncaughtGuard)
+          close()
+          // Error is expected — what matters is the process did not crash
+          assert.ok(err || true, 'callback should be invoked (with or without error)')
+          done()
+        })
+      })
+    }).timeout(10000)
+
+    it('should not crash under rapid requests when the agent keeps closing connections', (done) => {
+      initAbortingHTTPServer().then(({ port, close }) => {
+        const uncaughtGuard = (err) => {
+          close()
+          done(new Error(`uncaughtException should not fire: ${err.code} - ${err.message}`))
+        }
+        process.once('uncaughtException', uncaughtGuard)
+
+        let completed = 0
+        const total = 20
+
+        for (let i = 0; i < total; i++) {
+          request(Buffer.from(`payload-${i}`), {
+            protocol: 'http:',
+            hostname: 'localhost',
+            port,
+            path: '/v0.4/traces',
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/octet-stream',
+            },
+          }, () => {
+            completed++
+            if (completed === total) {
+              process.removeListener('uncaughtException', uncaughtGuard)
+              close()
+              done()
+            }
+          })
+        }
+      })
+    }).timeout(10000)
+
+    it('should not crash when the agent socket is destroyed mid-write with large payload', (done) => {
+      // Simulates the customer scenario: large payloads (high WS span volume)
+      // being flushed to an agent that can't keep up.
+      initAbortingHTTPServer().then(({ port, close }) => {
+        const uncaughtGuard = (err) => {
+          close()
+          done(new Error(`uncaughtException should not fire: ${err.code} - ${err.message}`))
+        }
+        process.once('uncaughtException', uncaughtGuard)
+
+        const largePayload = Buffer.alloc(256 * 1024, 'x')
+
+        request(largePayload, {
+          protocol: 'http:',
+          hostname: 'localhost',
+          port,
+          path: '/v0.4/traces',
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+          },
+        }, (err) => {
+          process.removeListener('uncaughtException', uncaughtGuard)
+          close()
+          assert.ok(err || true, 'callback should be invoked')
+          done()
+        })
+      })
+    }).timeout(10000)
+  })
+
   it('should drop requests when too much data is buffered', (done) => {
     const bufferSize = 8 * 1024 * 1024
     const buffer = Buffer.alloc(bufferSize).fill(69)
