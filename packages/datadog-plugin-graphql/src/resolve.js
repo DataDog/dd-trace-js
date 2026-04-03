@@ -145,8 +145,19 @@ class GraphQLResolvePlugin extends TracingPlugin {
       this.resolverStartCh.publish({ abortController, resolverInfo: getResolverInfo(info, resolverArgs) })
     }
 
-    if (this.iastResolveCh.hasSubscribers) {
-      this.iastResolveCh.publish({ rootCtx, args: resolverArgs, info, path: computedPath, pathString: computedPathString })
+    if (this.iastResolveCh.hasSubscribers && fieldDef.resolve) {
+      const iastResolveCh = this.iastResolveCh
+      const capturedRootCtx = rootCtx
+      const capturedPath = computedPath
+      const capturedPathString = computedPathString
+      const capturedInfo = info
+      const originalResolve = fieldDef.resolve
+
+      fieldDef.resolve = function (source, args, contextValue, resolveInfo) {
+        fieldDef.resolve = originalResolve
+        iastResolveCh.publish({ rootCtx: capturedRootCtx, args, info: capturedInfo, path: capturedPath, pathString: capturedPathString })
+        return originalResolve.call(this, source, args, contextValue, resolveInfo)
+      }
     }
 
     return ctx.currentStore
