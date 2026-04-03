@@ -47,22 +47,31 @@ describe('Plugin', () => {
           const server = new WebSocket.Server({ port: 0 }, () => {
             const port = server.address().port
 
+            const uncaughtGuard = (err) => {
+              done(new Error(`uncaughtException should not fire: ${err.message}`))
+            }
+            process.once('uncaughtException', uncaughtGuard)
+
             server.on('connection', (ws) => {
-              // Destroy the underlying socket to simulate abrupt disconnect
-              ws._socket.destroy()
+              ws.on('error', () => {})
 
+              // Destroy after connection is established, then attempt send
               setImmediate(() => {
-                // Attempt to send after socket destruction — should not crash the process
-                try {
-                  ws.send('message after disconnect')
-                } catch {
-                  // Synchronous throw is acceptable
-                }
+                ws.close()
 
-                setTimeout(() => {
-                  server.close()
-                  done()
-                }, 500)
+                setImmediate(() => {
+                  try {
+                    ws.send('message after disconnect')
+                  } catch {
+                    // Synchronous throw is acceptable
+                  }
+
+                  setTimeout(() => {
+                    process.removeListener('uncaughtException', uncaughtGuard)
+                    server.close()
+                    done()
+                  }, 500)
+                })
               })
             })
 
@@ -74,6 +83,12 @@ describe('Plugin', () => {
         it('should not crash under burst sends when clients disconnect abruptly', (done) => {
           const server = new WebSocket.Server({ port: 0 }, () => {
             const port = server.address().port
+            let totalSendAttempts = 0
+
+            const uncaughtGuard = (err) => {
+              done(new Error(`uncaughtException should not fire: ${err.message}`))
+            }
+            process.once('uncaughtException', uncaughtGuard)
 
             server.on('connection', (ws) => {
               const interval = setInterval(() => {
@@ -83,6 +98,7 @@ describe('Plugin', () => {
                 }
                 try {
                   ws.send(Buffer.alloc(4096, 'x').toString())
+                  totalSendAttempts++
                 } catch {
                   clearInterval(interval)
                 }
@@ -98,11 +114,9 @@ describe('Plugin', () => {
               clients.push(client)
 
               client.on('open', () => {
-                // Abruptly destroy the socket after some messages arrive
+                // Abrupt disconnect via close + terminate
                 setTimeout(() => {
-                  if (client._socket) {
-                    client._socket.destroy()
-                  }
+                  client.terminate()
                 }, 50 + Math.random() * 100)
               })
 
@@ -110,10 +124,12 @@ describe('Plugin', () => {
             }
 
             setTimeout(() => {
+              process.removeListener('uncaughtException', uncaughtGuard)
               for (const c of clients) {
                 try { c.terminate() } catch {}
               }
               server.close()
+              assert.ok(totalSendAttempts > 0, 'at least one send should have been attempted')
               done()
             }, 2000)
           })

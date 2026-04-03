@@ -324,16 +324,34 @@ describe('Plugin', () => {
         // Verifies dd-trace net instrumentation does not interfere with normal
         // error propagation on sockets.
         const server = new net.Server(serverSocket => {
-          serverSocket.destroy()
+          setImmediate(() => serverSocket.destroy())
         })
 
         server.listen(0, () => {
           const serverPort = server.address().port
+          let errorHandled = false
+
+          // Fail the test if an unhandled exception escapes — this is the
+          // exact symptom from APMS-18805 (pod crash).
+          const uncaughtGuard = (err) => {
+            done(new Error(`uncaughtException should not fire with an error listener: ${err.message}`))
+          }
+          process.once('uncaughtException', uncaughtGuard)
+
+          const failTimer = setTimeout(() => {
+            process.removeListener('uncaughtException', uncaughtGuard)
+            server.close()
+            done(new Error('socket error was not emitted within timeout'))
+          }, 4000)
 
           tracer.scope().activate(parent, () => {
             const socket = new net.Socket()
 
-            socket.on('error', (err) => {
+            socket.once('error', (err) => {
+              errorHandled = true
+              clearTimeout(failTimer)
+              process.removeListener('uncaughtException', uncaughtGuard)
+
               assert.ok(err, 'error event should provide an error object')
               assert.ok(
                 err.code === 'ECONNRESET' || err.code === 'EPIPE',
@@ -353,23 +371,34 @@ describe('Plugin', () => {
         })
       }).timeout(5000)
 
-      it('should deliver the original error object through the wrapped emit', done => {
-        // Ensures the error emitted through dd-trace's wrapped Socket.emit
-        // is the same error Node.js would emit without instrumentation.
+      it('should preserve the native error shape through the wrapped emit', done => {
+        // The error emitted through dd-trace's wrapped Socket.emit must be an
+        // unmodified Node.js system error (no custom wrapper, same fields).
         const server = new net.Server(serverSocket => {
-          serverSocket.destroy()
+          setImmediate(() => serverSocket.destroy())
         })
 
         server.listen(0, () => {
           const serverPort = server.address().port
 
+          const failTimer = setTimeout(() => {
+            server.close()
+            done(new Error('socket error was not emitted within timeout'))
+          }, 4000)
+
           tracer.scope().activate(parent, () => {
             const socket = new net.Socket()
 
-            socket.on('error', (err) => {
+            socket.once('error', (err) => {
+              clearTimeout(failTimer)
+
+              // Must be a native Error — not wrapped or replaced by dd-trace
               assert.ok(err instanceof Error, 'error should be an Error instance')
-              assert.ok(typeof err.code === 'string', 'error should have a code')
-              assert.ok(typeof err.syscall === 'string', 'error should have a syscall')
+              assert.strictEqual(typeof err.code, 'string', 'error should have a string code')
+              assert.strictEqual(typeof err.syscall, 'string', 'error should have a string syscall')
+              assert.strictEqual(typeof err.errno, 'number', 'error should have a numeric errno')
+              assert.strictEqual(err.constructor.name, 'Error', 'error should not be a custom wrapper type')
+
               socket.destroy()
               server.close()
               done()
