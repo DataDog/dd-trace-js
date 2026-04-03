@@ -10,6 +10,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  get-credentials:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    outputs:
+      api_key: ${{ steps.dd-sts.outputs.api_key }}
+      app_key: ${{ steps.dd-sts.outputs.app_key }}
+    steps:
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
+
   actionlint:
     runs-on: ubuntu-latest
     steps:
@@ -88,25 +102,18 @@ jobs:
 
   static-analysis:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     name: Datadog Static Analyzer
     if: github.actor != 'dependabot[bot]' && github.event_name != 'pull_request'
+    needs: [get-credentials]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Get Datadog credentials
-        id: dd-sts
-        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
-        with:
-          policy: dd-trace-js
       - name: Check code meets quality and security standards
         id: datadog-static-analysis
         uses: DataDog/datadog-static-analyzer-github-action@8340f18875fcefca86844b5f947ce2431387e552 # v3.0.0
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-          dd_app_key: ${{ steps.dd-sts.outputs.app_key }}
+          dd_api_key: ${{ needs.get-credentials.outputs.api_key }}
+          dd_app_key: ${{ needs.get-credentials.outputs.app_key }}
           dd_site: datadoghq.com
           cpu_count: 2
 
@@ -208,7 +215,7 @@ jobs:
     # that follow-up run.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.yarn-dedupe.outputs.has_changes == 'true' && github.actor != 'dd-octo-sts[bot]'
     runs-on: ubuntu-latest
-    needs: yarn-dedupe
+    needs: [yarn-dedupe]
     # Security: this job has an STS-minted token, but never runs installs/builds.
     # It only updates yarn.lock via the GitHub API.
     permissions:
