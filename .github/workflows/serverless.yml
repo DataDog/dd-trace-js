@@ -13,6 +13,10 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
@@ -26,6 +30,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -43,11 +52,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   aws-sdk:
     strategy:
@@ -107,6 +116,11 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -120,11 +134,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-event-hubs:
     runs-on: ubuntu-latest
@@ -149,9 +163,14 @@ jobs:
       SERVICES: azurite,azureeventhubsemulator
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/plugins/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-functions:
     strategy:
@@ -200,6 +219,11 @@ jobs:
       SPEC: ${{ matrix.spec }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
 
       - name: Copy emulator config files
         run: |
@@ -222,11 +246,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-service-bus:
     runs-on: ubuntu-latest
@@ -258,11 +282,16 @@ jobs:
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
       - uses: ./.github/actions/plugins/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-durable-functions:
     runs-on: ubuntu-latest
@@ -279,9 +308,14 @@ jobs:
 
     steps:
      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+     - name: Get Datadog credentials
+       id: dd-sts
+       uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+       with:
+         policy: dd-trace-js
      - uses: ./.github/actions/plugins/test
        with:
-        dd_api_key: ${{ secrets.DD_API_KEY }}
+        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
@@ -295,6 +329,11 @@ jobs:
       SERVICES: gpubsub
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/plugins/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

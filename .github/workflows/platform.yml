@@ -13,6 +13,10 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
@@ -67,19 +71,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:bun
       - uses: DataDog/junit-upload-github-action@293a1d0af2a269c6300930eb13d3bf0ddec21863  # v2.2.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
+          api_key: ${{ steps.dd-sts.outputs.api_key }}
           service: dd-trace-js-tests
 
   core:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:core:ci
@@ -88,11 +102,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-core
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   dd-trace-api:
     runs-on: ubuntu-latest
@@ -100,14 +114,24 @@ jobs:
       PLUGINS: dd-trace-api
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/plugins/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   esbuild:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:esbuild:ci
@@ -116,12 +140,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   webpack:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:webpack:ci
@@ -130,7 +159,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-webpack
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-bluebird:
     runs-on: ubuntu-latest
@@ -138,9 +167,14 @@ jobs:
       PLUGINS: bluebird
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-body-parser:
     runs-on: ubuntu-latest
@@ -148,9 +182,14 @@ jobs:
       PLUGINS: body-parser
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-child_process:
     runs-on: ubuntu-latest
@@ -158,9 +197,14 @@ jobs:
       PLUGINS: child_process
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-cookie-parser:
     runs-on: ubuntu-latest
@@ -168,9 +212,14 @@ jobs:
       PLUGINS: cookie-parser
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -184,9 +233,14 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-express-session:
     runs-on: ubuntu-latest
@@ -194,9 +248,14 @@ jobs:
       PLUGINS: express-session
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-express:
     runs-on: ubuntu-latest
@@ -204,9 +263,14 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-fs:
     runs-on: ubuntu-latest
@@ -214,9 +278,14 @@ jobs:
       PLUGINS: fs
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-generic-pool:
     runs-on: ubuntu-latest
@@ -224,9 +293,14 @@ jobs:
       PLUGINS: generic-pool
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
   # ./.github/actions/instrumentations/test once fixed upstream.
@@ -236,6 +310,11 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - name: Run instrumentation tests (oldest-maintenance, with retries)
@@ -256,11 +335,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-${{ github.job }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-knex:
     runs-on: ubuntu-latest
@@ -268,9 +347,14 @@ jobs:
       PLUGINS: knex
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-mongoose:
     runs-on: ubuntu-latest
@@ -284,9 +368,14 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-multer:
     runs-on: ubuntu-latest
@@ -294,9 +383,14 @@ jobs:
       PLUGINS: multer
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-mysql2:
     runs-on: ubuntu-latest
@@ -313,9 +407,14 @@ jobs:
       SERVICES: mysql2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-passport:
     runs-on: ubuntu-latest
@@ -323,9 +422,14 @@ jobs:
       PLUGINS: passport
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-passport-http:
     runs-on: ubuntu-latest
@@ -333,9 +437,14 @@ jobs:
       PLUGINS: passport-http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-passport-local:
     runs-on: ubuntu-latest
@@ -343,9 +452,14 @@ jobs:
       PLUGINS: passport-local
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-pg:
     runs-on: ubuntu-latest
@@ -362,9 +476,14 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-promise-js:
     runs-on: ubuntu-latest
@@ -372,9 +491,14 @@ jobs:
       PLUGINS: promise-js
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-promise:
     runs-on: ubuntu-latest
@@ -382,9 +506,14 @@ jobs:
       PLUGINS: promise
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-q:
     runs-on: ubuntu-latest
@@ -392,9 +521,14 @@ jobs:
       PLUGINS: q
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-url:
     runs-on: ubuntu-latest
@@ -402,9 +536,14 @@ jobs:
       PLUGINS: url
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-when:
     runs-on: ubuntu-latest
@@ -412,14 +551,24 @@ jobs:
       PLUGINS: when
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/instrumentations/test
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentations-misc:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -437,7 +586,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-instrumentations-misc
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -445,7 +594,7 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # TODO: Split this up as it runs tests for multiple different teams.
   integration:
@@ -459,6 +608,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -472,23 +626,28 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   unit-guardrails:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
       - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
@@ -499,6 +658,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
@@ -510,7 +674,7 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-guardrails-unsupported:
     strategy:
@@ -535,6 +699,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:shimmer:ci
@@ -543,8 +712,8 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

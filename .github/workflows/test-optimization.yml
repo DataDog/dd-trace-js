@@ -7,6 +7,10 @@ on:
   schedule:
     - cron: 0 4 * * *
 
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
@@ -72,11 +76,15 @@ jobs:
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -103,6 +111,7 @@ jobs:
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: "-r ./ci/init"
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-mocha:
     strategy:
@@ -113,9 +122,13 @@ jobs:
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -124,6 +137,7 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-jest:
     strategy:
@@ -134,9 +148,13 @@ jobs:
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -145,6 +163,7 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cucumber:
     strategy:
@@ -155,9 +174,13 @@ jobs:
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -166,6 +189,7 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-selenium:
     strategy:
@@ -175,10 +199,14 @@ jobs:
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -203,6 +231,7 @@ jobs:
       - run: yarn test:integration:selenium
         env:
           NODE_OPTIONS: "-r ./ci/init"
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cypress:
     strategy:
@@ -218,9 +247,13 @@ jobs:
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -240,6 +273,7 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:
     runs-on: ubuntu-latest
@@ -249,10 +283,14 @@ jobs:
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -260,3 +298,4 @@ jobs:
       - run: yarn test:integration:vitest
         env:
           NODE_OPTIONS: "-r ./ci/init"
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}

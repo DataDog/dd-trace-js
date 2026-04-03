@@ -31,13 +31,27 @@ jobs:
           name: system_tests_binaries
           path: ./binaries/**/*
 
+  get-credentials:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    outputs:
+      api_key: ${{ steps.dd-sts.outputs.api_key }}
+    steps:
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
+
   main:
     needs:
       - build-artifacts
+      - get-credentials
     uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
     secrets:
-      TEST_OPTIMIZATION_API_KEY: ${{ secrets.DD_API_KEY }}
-      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      TEST_OPTIMIZATION_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
+      DD_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
     permissions:
       contents: read
       id-token: write

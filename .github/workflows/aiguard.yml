@@ -7,6 +7,10 @@ on:
   schedule:
     - cron: 0 4 * * *
 
+permissions:
+  contents: read
+  id-token: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
@@ -20,23 +24,33 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:aiguard:ci
       - uses: ./.github/actions/coverage
         with:
           flags: aiguard-macos
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:aiguard:ci
@@ -49,17 +63,22 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: aiguard-ubuntu
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   windows:
     name: ${{ github.workflow }} / windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
@@ -68,11 +87,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: aiguard-windows
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration:
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
@@ -82,6 +101,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Get Datadog credentials
+        id: dd-sts
+        uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+        with:
+          policy: dd-trace-js
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -90,4 +114,4 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
