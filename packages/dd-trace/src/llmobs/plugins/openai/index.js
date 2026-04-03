@@ -5,6 +5,7 @@ const {
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO,
+  UNKNOWN_MODEL_PROVIDER,
 } = require('../../constants/tags')
 const {
   extractChatTemplateFromInstructions,
@@ -90,10 +91,12 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
   _getModelProviderAndClient (baseUrl = '') {
     if (baseUrl.includes('azure')) {
       return { modelProvider: 'azure_openai', client: 'AzureOpenAI' }
+    } else if (baseUrl.includes('openai')) {
+      return { modelProvider: 'openai', client: 'OpenAI' }
     } else if (baseUrl.includes('deepseek')) {
       return { modelProvider: 'deepseek', client: 'DeepSeek' }
     }
-    return { modelProvider: 'openai', client: 'OpenAI' }
+    return { modelProvider: UNKNOWN_MODEL_PROVIDER, client: 'OpenAI' }
   }
 
   _extractMetrics (response) {
