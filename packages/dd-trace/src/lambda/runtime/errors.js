@@ -16,5 +16,5 @@ class ImpendingTimeout extends ExtendedError {}
 ImpendingTimeout.prototype.name = 'Impending Timeout'
 
 module.exports = {
-  ImpendingTimeout
+  ImpendingTimeout,
 }

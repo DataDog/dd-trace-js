@@ -1,24 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
+const fs = require('node:fs')
+const path = require('node:path')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
 
 const { withVersions } = require('../../../setup/mocha')
 const {
-  expectedLLMObsLLMSpanEvent,
-  deepEqualWithMockValues,
-  useLlmObs
+  assertLlmObsSpanEvent,
+  useLlmObs,
 } = require('../../util')
-const chai = require('chai')
-
-const fs = require('node:fs')
-const path = require('node:path')
-
-chai.Assertion.addMethod('deepEqualWithMockValues', deepEqualWithMockValues)
 
 /**
- * @google-cloud/vertexai uses `fetch` to call against their API, which cannot
+ * `@google-cloud/vertexai` uses `fetch` to call against their API, which cannot
  * be stubbed with `nock`. This function allows us to stub the `fetch` function
  * to return a specific response for a given scenario.
  *
@@ -52,8 +46,8 @@ function useScenario ({ scenario, statusCode = 200, stream = false }) {
       return new Response(body, {
         status: statusCode,
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
     }
   })
@@ -69,7 +63,7 @@ describe('integrations', () => {
 
   function getInputMessages (content) {
     const messages = [
-      { role: 'user', content }
+      { role: 'user', content },
     ]
 
     if (model.systemInstruction) {
@@ -81,7 +75,7 @@ describe('integrations', () => {
   }
 
   describe('vertexai', () => {
-    const getEvents = useLlmObs({ plugin: 'google-cloud-vertexai' })
+    const { getEvents } = useLlmObs({ plugin: 'google-cloud-vertexai' })
 
     withVersions('google-cloud-vertexai', '@google-cloud/vertexai', '>=1', version => {
       before(() => {
@@ -94,7 +88,7 @@ describe('integrations', () => {
 
         const client = new VertexAI({
           project: 'datadog-sandbox',
-          location: 'us-central1'
+          location: 'us-central1',
         })
 
         model = client.getGenerativeModel({
@@ -102,8 +96,8 @@ describe('integrations', () => {
           systemInstruction: 'Please provide an answer',
           generationConfig: {
             maxOutputTokens: 50,
-            temperature: 1.0
-          }
+            temperature: 1.0,
+          },
         })
       })
 
@@ -116,11 +110,11 @@ describe('integrations', () => {
 
         it('makes a successful call', async () => {
           await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }]
+            contents: [{ role: 'user', parts: [{ text: 'Hello, how are you?' }] }],
           })
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             modelName: 'gemini-1.5-flash-002',
@@ -130,18 +124,16 @@ describe('integrations', () => {
             outputMessages: [
               {
                 role: 'model',
-                content: 'Hello! How can I assist you today?'
-              }
+                content: 'Hello! How can I assist you today?',
+              },
             ],
             metadata: {
               temperature: 1,
-              max_output_tokens: 50
+              max_output_tokens: 50,
             },
-            tokenMetrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+            metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
+            tags: { ml_app: 'test', integration: 'vertexai' },
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
       })
 
@@ -150,11 +142,11 @@ describe('integrations', () => {
 
         it('makes a successful call', async () => {
           await model.generateContent({
-            contents: [{ role: 'user', parts: [{ text: 'what is 2 + 2?' }] }]
+            contents: [{ role: 'user', parts: [{ text: 'what is 2 + 2?' }] }],
           })
 
           const { apmSpans, llmobsSpans } = await getEvents()
-          const expected = expectedLLMObsLLMSpanEvent({
+          assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
             modelName: 'gemini-1.5-flash-002',
@@ -170,21 +162,19 @@ describe('integrations', () => {
                     name: 'add',
                     arguments: {
                       a: 2,
-                      b: 2
-                    }
-                  }
-                ]
-              }
+                      b: 2,
+                    },
+                  },
+                ],
+              },
             ],
             metadata: {
               temperature: 1,
-              max_output_tokens: 50
+              max_output_tokens: 50,
             },
-            tokenMetrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
-            tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+            metrics: { input_tokens: 20, output_tokens: 3, total_tokens: 23 },
+            tags: { ml_app: 'test', integration: 'vertexai' },
           })
-
-          expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
         })
       })
 
@@ -196,8 +186,8 @@ describe('integrations', () => {
             const chat = model.startChat({
               history: [
                 { role: 'user', parts: [{ text: 'Foobar?' }] },
-                { role: 'model', parts: [{ text: 'Foobar!' }] }
-              ]
+                { role: 'model', parts: [{ text: 'Foobar!' }] },
+              ],
             })
 
             await chat.sendMessage([{ text: 'Hello, how are you?' }])
@@ -212,9 +202,9 @@ describe('integrations', () => {
 
             inputMessages.push({ role: 'user', content: 'Foobar?' })
             inputMessages.push({ role: 'model', content: 'Foobar!' })
-            inputMessages.push({ content: 'Hello, how are you?' })
+            inputMessages.push({ content: 'Hello, how are you?', role: '' })
 
-            const expected = expectedLLMObsLLMSpanEvent({
+            assertLlmObsSpanEvent(llmobsSpans[0], {
               span: apmSpans[0],
               spanKind: 'llm',
               modelName: 'gemini-1.5-flash-002',
@@ -224,18 +214,16 @@ describe('integrations', () => {
               outputMessages: [
                 {
                   role: 'model',
-                  content: 'Hello! How can I assist you today?'
-                }
+                  content: 'Hello! How can I assist you today?',
+                },
               ],
               metadata: {
                 temperature: 1,
-                max_output_tokens: 50
+                max_output_tokens: 50,
               },
-              tokenMetrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
-              tags: { ml_app: 'test', language: 'javascript', integration: 'vertexai' }
+              metrics: { input_tokens: 35, output_tokens: 2, total_tokens: 37 },
+              tags: { ml_app: 'test', integration: 'vertexai' },
             })
-
-            expect(llmobsSpans[0]).to.deepEqualWithMockValues(expected)
           })
         })
       })

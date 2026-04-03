@@ -15,15 +15,17 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    * @param {import('../config')} config - Tracer configuration object
    */
   constructor (tracer, config) {
-    // Call parent constructor with required options
+    // Call parent constructor with required options and timeout
     super({
-      exposureChannel: channel(EXPOSURE_CHANNEL)
+      exposureChannel: channel(EXPOSURE_CHANNEL),
+      initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
     })
 
     this._tracer = tracer
     this._config = config
 
-    log.debug(this.constructor.name + ' created')
+    log.debug('%s created with timeout: %dms', this.constructor.name,
+      config.experimental.flaggingProvider.initializationTimeoutMs)
   }
 
   /**
@@ -38,7 +40,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     if (typeof this.setConfiguration === 'function') {
       this.setConfiguration(ufc)
     }
-    log.debug(this.constructor.name + ' provider configuration updated')
+    log.debug('%s provider configuration updated', this.constructor.name)
   }
 }
 

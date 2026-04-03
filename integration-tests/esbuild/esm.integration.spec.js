@@ -6,7 +6,7 @@ const { execSync } = require('node:child_process')
 
 const axios = require('axios')
 
-const { FakeAgent, spawnProc, createSandbox } = require('../helpers')
+const { FakeAgent, spawnProc, sandboxCwd, useSandbox } = require('../helpers')
 
 const esbuildVersions = ['latest', '0.16.12']
 
@@ -23,19 +23,16 @@ function findWebSpan (payload) {
 
 esbuildVersions.forEach((version) => {
   describe('ESM is built and runs as expected in a sandbox', () => {
-    let sandbox, agent, cwd
+    let agent, cwd
 
-    before(async () => {
-      sandbox = await createSandbox([`esbuild@${version}`, 'hono', '@hono/node-server'], false, [__dirname])
-      cwd = sandbox.folder
+    useSandbox([`esbuild@${version}`, 'hono', '@hono/node-server'], false, [__dirname])
+
+    before(() => {
+      cwd = sandboxCwd()
     })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
-    })
-
-    after(() => {
-      sandbox.remove()
     })
 
     afterEach(() => {
@@ -50,7 +47,7 @@ esbuildVersions.forEach((version) => {
       const proc = await spawnProc(appFile, {
         cwd,
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         },
         stdio: 'pipe',
       })
@@ -61,7 +58,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'web.request')
         }, 2_500),
-        axios.get(proc.url)
+        axios.get(proc.url),
       ])
     })
 
@@ -73,7 +70,7 @@ esbuildVersions.forEach((version) => {
       const proc = await spawnProc(appFile, {
         cwd,
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         },
         stdio: 'pipe',
       })
@@ -84,7 +81,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'web.request')
         }, 2_500),
-        axios.get(proc.url)
+        axios.get(proc.url),
       ])
     })
 
@@ -96,7 +93,7 @@ esbuildVersions.forEach((version) => {
       const proc = await spawnProc(appFile, {
         cwd,
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         },
         stdio: 'pipe',
       })
@@ -107,7 +104,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'hono.request')
         }, 2_500),
-        axios.get(proc.url)
+        axios.get(proc.url),
       ])
     })
 
@@ -119,7 +116,7 @@ esbuildVersions.forEach((version) => {
       const proc = await spawnProc(appFile, {
         cwd,
         env: {
-          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+          DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
         },
         stdio: 'pipe',
       })
@@ -130,7 +127,7 @@ esbuildVersions.forEach((version) => {
           const webSpan = findWebSpan(payload)
           assert.strictEqual(webSpan.name, 'hono.request')
         }, 2_500),
-        axios.get(proc.url)
+        axios.get(proc.url),
       ])
     })
   })

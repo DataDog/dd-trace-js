@@ -13,7 +13,7 @@ function customRandom () {
   const Math = {
     random: function () {
       return 4 // chosen by fair dice roll - guaranteed to be random
-    }
+    },
   }
 
   return Math.random()
@@ -22,5 +22,5 @@ function customRandom () {
 module.exports = {
   weakRandom,
   safeRandom,
-  customRandom
+  customRandom,
 }

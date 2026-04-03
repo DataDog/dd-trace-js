@@ -1,10 +1,10 @@
 'use strict'
 
-const {
-  addHook
-} = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
 const dc = require('dc-polyfill')
+const shimmer = require('../../datadog-shimmer')
+const {
+  addHook,
+} = require('./helpers/instrument')
 
 const azureFunctionsChannel = dc.tracingChannel('datadog:azure:functions:invoke')
 

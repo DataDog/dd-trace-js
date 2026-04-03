@@ -2,7 +2,7 @@
 
 const tracer = require('dd-trace')
 tracer.init({
-  flushInterval: 0
+  flushInterval: 0,
 })
 
 const express = require('express')
@@ -122,6 +122,6 @@ app.use('/invalid', invalidRouter)
 invalidRouter.get('nested', (_, res) => res.send('ok'))
 
 const server = app.listen(0, '127.0.0.1', () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

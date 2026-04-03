@@ -1,6 +1,6 @@
 'use strict'
 
-const limiter = require('limiter')
+const limiter = require('../../../vendor/dist/limiter')
 
 class RateLimiter {
   /**
@@ -8,7 +8,8 @@ class RateLimiter {
    * @param {'second'|'minute'|'hour'|'day'} [interval='second'] - Time window for the limiter.
    */
   constructor (rateLimit, interval = 'second') {
-    this._rateLimit = Number.parseInt(String(rateLimit))
+    // TODO: Change rateLimit to integers. Right now these are sometimes strings, sometimes numbers.
+    this._rateLimit = Math.trunc(rateLimit)
     // The limiter constructor accepts a token count number and an interval string
     this._limiter = new limiter.RateLimiter(this._rateLimit, interval)
     this._tokensRequested = 0

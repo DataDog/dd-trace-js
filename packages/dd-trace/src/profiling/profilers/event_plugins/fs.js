@@ -15,7 +15,7 @@ const allowedParams = new Set([
   'newPath', 'offset', 'oldPath',
   'operation', 'options', 'path',
   'position', 'prefix', 'src',
-  'target', 'type', 'uid'
+  'target', 'type', 'uid',
 ])
 
 class FilesystemPlugin extends EventPlugin {
@@ -32,11 +32,11 @@ class FilesystemPlugin extends EventPlugin {
 
   extendEvent (event, detail) {
     const d = { ...detail }
-    Object.entries(d).forEach(([k, v]) => {
+    for (const [k, v] of Object.entries(d)) {
       if (!(allowedParams.has(k) && (typeof v === 'string' || typeof v === 'number'))) {
         delete d[k]
       }
-    })
+    }
     event.detail = d
 
     return event

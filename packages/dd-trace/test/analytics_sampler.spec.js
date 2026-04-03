@@ -1,7 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 require('./setup/core')
@@ -16,9 +15,9 @@ describe('analyticsSampler', () => {
     sampler = require('../src/analytics_sampler')
     span = {
       context: sinon.stub().returns({
-        _name: 'web.request'
+        _name: 'web.request',
       }),
-      setTag: sinon.spy()
+      setTag: sinon.spy(),
     }
   })
 
@@ -26,27 +25,27 @@ describe('analyticsSampler', () => {
     it('should sample a span', () => {
       sampler.sample(span, true)
 
-      expect(span.setTag).to.have.been.calledWith(MEASURED, true)
+      sinon.assert.calledWith(span.setTag, MEASURED, true)
     })
 
     it('should sample a span by span name', () => {
       sampler.sample(span, {
-        'web.request': 1
+        'web.request': 1,
       })
 
-      expect(span.setTag).to.have.been.calledWith(MEASURED, true)
+      sinon.assert.calledWith(span.setTag, MEASURED, true)
     })
 
     it('should not sample by default', () => {
       sampler.sample(span, undefined)
 
-      expect(span.setTag).to.not.have.been.called
+      sinon.assert.notCalled(span.setTag)
     })
 
     it('should sample if `measuredByDefault` is true', () => {
       sampler.sample(span, undefined, true)
 
-      expect(span.setTag).to.have.been.calledWith(MEASURED, true)
+      sinon.assert.calledWith(span.setTag, MEASURED, true)
     })
   })
 })

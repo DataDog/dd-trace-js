@@ -1,48 +1,50 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   curlAndAssertMessage,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-  withVersions('koa', 'koa', version => {
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'koa@${version}'`], false,
-        ['./packages/datadog-plugin-koa/test/integration-test/*'])
-    })
+  let variants
 
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
-    })
+  withVersions('koa', 'koa', version => {
+    useSandbox([`'koa@${version}'`], false,
+      ['./packages/datadog-plugin-koa/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+    before(async function () {
+      variants = varySandbox('server.mjs', 'Koa', undefined, 'koa')
+    })
 
-      return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'koa.request'), true)
-      })
-    }).timeout(50000)
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
+
+        return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'koa.request'), true)
+        })
+      }).timeout(50000)
+    }
   })
 })

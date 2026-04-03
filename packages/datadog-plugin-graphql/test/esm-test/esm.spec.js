@@ -1,54 +1,48 @@
 'use strict'
 
-const {
-  FakeAgent,
-  createSandbox,
-  checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
-} = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const assert = require('node:assert/strict')
+
 const axios = require('axios')
 const semver = require('semver')
+const {
+  FakeAgent,
+  sandboxCwd,
+  useSandbox,
+  checkSpansForServiceName,
+  spawnPluginIntegrationTestProc,
+  stopProc,
+} = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('Plugin (ESM)', () => {
   describe('graphql (ESM)', () => {
     let agent
     let proc
-    let sandbox
 
     withVersions('graphql', ['graphql'], (version, moduleName, resolvedVersion) => {
-      before(async function () {
-        this.timeout(50000)
-        sandbox = await createSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
-          './packages/datadog-plugin-graphql/test/esm-test/*'])
-      })
-
-      after(async function () {
-        await sandbox.remove()
-      })
+      useSandbox([`'graphql@${resolvedVersion}'`, "'graphql-yoga@3.6.0'"], false, [
+        './packages/datadog-plugin-graphql/test/esm-test/*'])
 
       beforeEach(async () => {
         agent = await new FakeAgent().start()
       })
 
       afterEach(async () => {
-        proc && proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
       it('should instrument GraphQL execution with ESM', async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
         })
 
         proc = await spawnPluginIntegrationTestProc(
-          sandbox.folder,
+          sandboxCwd(),
           'esm-graphql-server.mjs',
           agent.port,
-          undefined,
           { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
         )
 
@@ -61,7 +55,7 @@ describe('Plugin (ESM)', () => {
 
         try {
           await axios.post(`${proc.url}/graphql`, {
-            query
+            query,
           })
         } catch (error) {
           // Server might not respond correctly, but we care about tracing
@@ -78,16 +72,15 @@ describe('Plugin (ESM)', () => {
       if (coercedVersion && semver.gte(coercedVersion, '15.0.0')) {
         it('should instrument GraphQL Yoga execution with ESM', async () => {
           const res = agent.assertMessageReceived(({ headers, payload }) => {
-            assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-            assert.isArray(payload)
+            assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+            assert.ok(Array.isArray(payload))
             assert.strictEqual(checkSpansForServiceName(payload, 'graphql.execute'), true)
           })
 
           proc = await spawnPluginIntegrationTestProc(
-            sandbox.folder,
+            sandboxCwd(),
             'esm-graphql-yoga-server.mjs',
             agent.port,
-            undefined,
             { NODE_OPTIONS: '--no-warnings --loader=dd-trace/loader-hook.mjs' }
           )
 
@@ -100,7 +93,7 @@ describe('Plugin (ESM)', () => {
 
           try {
             await axios.post(`${proc.url}/graphql`, {
-              query
+              query,
             })
           } catch (error) {
             // Server might not respond correctly, but we care about tracing

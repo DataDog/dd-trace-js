@@ -1,9 +1,9 @@
 'use strict'
 
+const URL = require('url').URL
+
 const { storage } = require('../../datadog-core')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-
-const URL = require('url').URL
 const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
@@ -49,11 +49,11 @@ class Http2ClientPlugin extends ClientPlugin {
         'span.type': 'http',
         'http.method': method,
         'http.url': uri,
-        'out.host': sessionDetails.host
+        'out.host': sessionDetails.host,
       },
       metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port)
-      }
+        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port),
+      },
     }, false)
 
     // TODO: Figure out a better way to do this for any span.
@@ -162,13 +162,17 @@ function hasAmazonSignature (headers, path) {
   return false
 }
 
+function is400ErrorCode (code) {
+  return code < 400 || code >= 500
+}
+
 function getStatusValidator (config) {
   if (typeof config.validateStatus === 'function') {
     return config.validateStatus
   } else if (config.hasOwnProperty('validateStatus')) {
     log.error('Expected `validateStatus` to be a function.')
   }
-  return code => code < 400 || code >= 500
+  return is400ErrorCode
 }
 
 function normalizeConfig (config) {
@@ -180,7 +184,7 @@ function normalizeConfig (config) {
     ...config,
     validateStatus,
     filter,
-    headers
+    headers,
   }
 }
 
@@ -193,13 +197,13 @@ function getFilter (config) {
 function addHeaderTags (span, headers, prefix, config) {
   if (!headers) return
 
-  config.headers.forEach(key => {
+  for (const key of config.headers) {
     const value = headers[key]
 
     if (value) {
       span.setTag(`${prefix}.${key}`, value)
     }
-  })
+  }
 }
 
 function getHeaders (config) {

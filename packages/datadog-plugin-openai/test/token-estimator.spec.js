@@ -1,6 +1,7 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { describe, it } = require('mocha')
 
 const { estimateTokens } = require('../src/token-estimator')
@@ -9,7 +10,7 @@ describe('Plugin', () => {
   describe('openai token estimation', () => {
     function testEstimation (input, expected) {
       const tokens = estimateTokens(input)
-      expect(tokens).to.equal(expected)
+      assert.strictEqual(tokens, expected)
     }
 
     it('should compute the number of tokens in a string', () => {

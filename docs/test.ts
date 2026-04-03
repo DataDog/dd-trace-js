@@ -25,7 +25,7 @@ import {
   SPAN_TYPE,
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
-import * as opentracing from 'opentracing';
+import * as opentracing from '../vendor/dist/opentracing';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
@@ -53,7 +53,6 @@ tracer.init({
   experimental: {
     iast: true,
     b3: true,
-    runtimeId: true,
     exporter: 'log'
   },
   hostname: 'agent',
@@ -141,7 +140,6 @@ tracer.init({
   },
   iast: {
     enabled: true,
-    cookieFilterPattern: '.*',
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
@@ -161,7 +159,6 @@ tracer.init({
   experimental: {
     iast: {
       enabled: true,
-      cookieFilterPattern: '.*',
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
@@ -311,6 +308,7 @@ tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
+tracer.use('bullmq');
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
@@ -333,6 +331,7 @@ tracer.use('fetch', httpClientOptions);
 tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
+tracer.use('google-genai');
 tracer.use('graphql');
 tracer.use('graphql', graphqlOptions);
 tracer.use('graphql', { variables: ['foo', 'bar'] });
@@ -376,6 +375,7 @@ tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
+tracer.use('langgraph');
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
@@ -433,6 +433,8 @@ span = tracer.startSpan('test', {
     foo: 'bar'
   }
 });
+span = tracer.startSpan('test', { childOf: null })
+span = tracer.startSpan('test', { integrationName: 'testIntegration' })
 
 tracer.trace('test', () => {})
 tracer.trace('test', { tags: { foo: 'bar' } }, () => {})
@@ -662,6 +664,12 @@ llmobs.trace({ kind: 'llm', name: 'myLLM' }, (span) => {
     tags: {},
     timestampMs: Date.now()
   })
+
+  llmobs.submitEvaluation(llmobsSpanCtx, {
+    label: 'toxicity',
+    metricType: 'boolean',
+    value: 'true'
+  })
 })
 
 // annotate a span
@@ -674,7 +682,12 @@ llmobs.annotate({
     outputTokens: 5,
     totalTokens: 15
   },
-  tags: {}
+  tags: {},
+  prompt: {
+    id: '123',
+    version: '1.0.0',
+    template: 'this is a {message}',
+  }
 })
 llmobs.annotate(span, {
   inputData: 'input',
@@ -709,7 +722,7 @@ const aiguard = tracer.aiguard
 aiguard.evaluate([
   { role: 'user', content: 'What is 2 + 2' },
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })
 
 aiguard.evaluate([
@@ -723,11 +736,11 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
-  result.action && result.reason
+  result.action && result.reason && result.tags
 })

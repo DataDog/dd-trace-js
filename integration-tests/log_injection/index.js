@@ -6,17 +6,17 @@ const options = {
   samplingRules: [
     {
       resource: 'GET /sampled',
-      sampleRate: 1.0
-    }
-  ]
+      sampleRate: 1.0,
+    },
+  ],
 }
 
 if (process.env.AGENT_PORT) {
   options.port = process.env.AGENT_PORT
 }
 
-if (process.env.lOG_INJECTION) {
-  options.logInjection = process.env.lOG_INJECTION
+if (process.env.TEST_PROGRAMMATIC_DD_LOGS_INJECTION) {
+  options.logInjection = process.env.TEST_PROGRAMMATIC_DD_LOGS_INJECTION === 'true'
 }
 
 const tracer = require('dd-trace')
@@ -32,8 +32,8 @@ const logger = winston.createLogger({
   level: 'info',
   format: winston.format.json(),
   transports: [
-    new winston.transports.Console({ silent: true })
-  ]
+    new winston.transports.Console({ silent: true }),
+  ],
 })
 
 // Route WITH logging (demonstrates the bug)
@@ -45,6 +45,6 @@ app.get('/sampled', (req, res) => {
 })
 
 const server = app.listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

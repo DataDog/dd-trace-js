@@ -1,0 +1,122 @@
+interactions:
+- request:
+    body: '{"model":"gpt-4o-mini","input":[{"role":"system","content":"You are a helpful
+      assistant"},{"role":"user","content":[{"type":"input_text","text":"What is the
+      weather in Tokyo?"}]},{"type":"function_call","call_id":"call_b4NUuswsekH4heYzWQjvPTKA","name":"weather","arguments":"{\"location\":\"Tokyo\"}","id":"fc_00e3d91b9c7429a20169667c6a3a9481979abfbe38e42f0711"},{"type":"function_call_output","call_id":"call_b4NUuswsekH4heYzWQjvPTKA","output":"{\"location\":\"Tokyo\",\"temperature\":72}"}],"store":false,"tools":[{"type":"function","name":"weather","description":"Get
+      the weather in a given location","parameters":{"type":"object","properties":{"location":{"type":"string","description":"The
+      location to get the weather for"}},"required":["location"]}}],"tool_choice":"auto"}'
+    headers:
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept
+      : - '*/*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Encoding
+      : - gzip, deflate
+      ? !!python/object/apply:multidict._multidict.istr
+      - Accept-Language
+      : - '*'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Connection
+      : - keep-alive
+      Content-Length:
+      - '778'
+      ? !!python/object/apply:multidict._multidict.istr
+      - Content-Type
+      : - application/json
+      ? !!python/object/apply:multidict._multidict.istr
+      - User-Agent
+      : - ai/6.0.26 ai-sdk/provider-utils/4.0.4 runtime/node.js/22
+      ? !!python/object/apply:multidict._multidict.istr
+      - sec-fetch-mode
+      : - cors
+    method: POST
+    uri: https://api.openai.com/v1/responses
+  response:
+    body:
+      string: "{\n  \"id\": \"resp_00e3d91b9c7429a20169667c6ab2608197a7df27992deb7418\",\n
+        \ \"object\": \"response\",\n  \"created_at\": 1768324202,\n  \"status\":
+        \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\":
+        \"developer\"\n  },\n  \"completed_at\": 1768324204,\n  \"error\": null,\n
+        \ \"frequency_penalty\": 0.0,\n  \"incomplete_details\": null,\n  \"instructions\":
+        null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\": null,\n  \"model\":
+        \"gpt-4o-mini-2024-07-18\",\n  \"output\": [\n    {\n      \"id\": \"msg_00e3d91b9c7429a20169667c6b6cc881979a4e2cbf0fe2e13e\",\n
+        \     \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\":
+        [\n        {\n          \"type\": \"output_text\",\n          \"annotations\":
+        [],\n          \"logprobs\": [],\n          \"text\": \"The current temperature
+        in Tokyo is 72\\u00b0F. If you need more detailed weather information, just
+        let me know!\"\n        }\n      ],\n      \"role\": \"assistant\"\n    }\n
+        \ ],\n  \"parallel_tool_calls\": true,\n  \"presence_penalty\": 0.0,\n  \"previous_response_id\":
+        null,\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": null,\n
+        \ \"reasoning\": {\n    \"effort\": null,\n    \"summary\": null\n  },\n  \"safety_identifier\":
+        null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\":
+        1.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n
+        \   \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\":
+        [\n    {\n      \"type\": \"function\",\n      \"description\": \"Get the
+        weather in a given location\",\n      \"name\": \"weather\",\n      \"parameters\":
+        {\n        \"type\": \"object\",\n        \"properties\": {\n          \"location\":
+        {\n            \"type\": \"string\",\n            \"description\": \"The location
+        to get the weather for\"\n          }\n        },\n        \"required\": [\n
+        \         \"location\"\n        ],\n        \"additionalProperties\": false\n
+        \     },\n      \"strict\": true\n    }\n  ],\n  \"top_logprobs\": 0,\n  \"top_p\":
+        1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\":
+        90,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n
+        \   \"output_tokens\": 25,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\":
+        0\n    },\n    \"total_tokens\": 115\n  },\n  \"user\": null,\n  \"metadata\":
+        {}\n}"
+    headers:
+      CF-RAY:
+      - 9bd681392ce2c93c-IAD
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Tue, 13 Jan 2026 17:10:04 GMT
+      Server:
+      - cloudflare
+      Set-Cookie:
+      - __cf_bm=0zKmG3a4WgGlCwe2muk4XY0VnjK6ScXAG0_ybBTXZhQ-1768324204-1.0.1.1-UFFKkFSdFwoFmE7JkYhUTImRwDCrOjWMpn.3gBYJ0dTEhnI8VpS2okC.mdu5nZ0v3D6KHAXKkd4YKsZa59974BnxEHbqLyRfzN1KytNbCrE;
+        path=/; expires=Tue, 13-Jan-26 17:40:04 GMT; domain=.api.openai.com; HttpOnly;
+        Secure; SameSite=None
+      - _cfuvid=imRgMOqNnohahGrzRyJ.VQrsPt.EUZWmgE05yGDBYdU-1768324204233-0.0.1.1-604800000;
+        path=/; domain=.api.openai.com; HttpOnly; Secure; SameSite=None
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      alt-svc:
+      - h3=":443"; ma=86400
+      cf-cache-status:
+      - DYNAMIC
+      openai-organization:
+      - datadog-staging
+      openai-processing-ms:
+      - '1704'
+      openai-project:
+      - proj_gt6TQZPRbZfoY2J9AQlEJMpd
+      openai-version:
+      - '2020-10-01'
+      x-envoy-upstream-service-time:
+      - '1737'
+      x-ratelimit-limit-requests:
+      - '30000'
+      x-ratelimit-limit-tokens:
+      - '150000000'
+      x-ratelimit-remaining-requests:
+      - '29999'
+      x-ratelimit-remaining-tokens:
+      - '149999692'
+      x-ratelimit-reset-requests:
+      - 2ms
+      x-ratelimit-reset-tokens:
+      - 0s
+      x-request-id:
+      - req_33099c5148654126a4460d0461afbd4f
+    status:
+      code: 200
+      message: OK
+version: 1

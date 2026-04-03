@@ -3,15 +3,17 @@
 const os = require('os')
 const pkg = require('../../../../package.json')
 
-const { LogCollapsingLowestDenseDDSketch } = require('@datadog/sketches-js')
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../vendor/dist/@datadog/sketches-js')
+const { PATHWAY_HASH, DSM_TRANSACTION_ID, DSM_TRANSACTION_CHECKPOINT } = require('../../../../ext/tags')
+const log = require('../log')
+const processTags = require('../process-tags')
+const propagationHash = require('../propagation-hash')
 const { DsmPathwayCodec } = require('./pathway')
 const { DataStreamsWriter } = require('./writer')
 const { computePathwayHash } = require('./pathway')
 const { getAmqpMessageSize, getHeadersSize, getMessageSize, getSizeOrZero } = require('./size')
-const { PATHWAY_HASH } = require('../../../../ext/tags')
 const { SchemaBuilder } = require('./schemas/schema_builder')
 const { SchemaSampler } = require('./schemas/schema_sampler')
-const log = require('../log')
 
 const ENTRY_PARENT_HASH = Buffer.from('0000000000000000', 'hex')
 
@@ -41,7 +43,7 @@ class StatsPoint {
       EdgeTags: this.edgeTags,
       EdgeLatency: this.edgeLatency.toProto(),
       PathwayLatency: this.pathwayLatency.toProto(),
-      PayloadSize: this.payloadSize.toProto()
+      PayloadSize: this.payloadSize.toProto(),
     }
   }
 }
@@ -62,8 +64,62 @@ class Backlog {
   encode () {
     return {
       Tags: this.tags,
-      Value: this.offset
+      Value: this.offset,
     }
+  }
+}
+
+/**
+ * Maps checkpoint name strings to single-byte IDs (1–254).
+ * ID 0 is reserved; 254 is the maximum number of unique names.
+ * Scope is per-processor so IDs are stable across bucket boundaries within a process lifetime.
+ */
+class CheckpointRegistry {
+  /** @type {Map<string, number>} */
+  #nameToId = new Map()
+  #nextId = 1
+  /** @type {Buffer[]} Pre-built [id uint8][nameLen uint8][name bytes] entries, one per registered name. */
+  #entryBuffers = []
+  /** @type {Buffer | null} Cached concat of #entryBuffers; reset when a new name is added. */
+  #encodedKeysCache = null
+
+  /**
+   * Returns the byte ID for the given checkpoint name, assigning one if not seen before.
+   * Returns undefined when registry is full (254 entries exhausted).
+   * @param {string} name
+   * @returns {number | undefined}
+   */
+  getId (name) {
+    const existing = this.#nameToId.get(name)
+    if (existing !== undefined) return existing
+    if (this.#nextId > 254) return
+    const id = this.#nextId++
+    this.#nameToId.set(name, id)
+    // Build the wire entry now with a bounded write so long names never materialise
+    // their full UTF-8 encoding — buf.write() stops at the supplied byte limit.
+    const nameBuf = Buffer.allocUnsafe(255)
+    const nameByteLen = nameBuf.write(name, 0, 255, 'utf8')
+    const entry = Buffer.allocUnsafe(2 + nameByteLen)
+    entry.writeUInt8(id, 0)
+    entry.writeUInt8(nameByteLen, 1)
+    nameBuf.copy(entry, 2, 0, nameByteLen)
+    this.#entryBuffers.push(entry)
+    this.#encodedKeysCache = null
+    return id
+  }
+
+  /**
+   * Returns a Buffer encoding all registered names as [id uint8][nameLen uint8][name bytes].
+   * Names are truncated to 255 UTF-8 bytes.
+   * Result is cached and only recomputed when new names are registered.
+   * @returns {Buffer}
+   */
+  get encodedKeys () {
+    if (this.#encodedKeysCache !== null) return this.#encodedKeysCache
+    this.#encodedKeysCache = this.#entryBuffers.length > 0
+      ? Buffer.concat(this.#entryBuffers)
+      : Buffer.alloc(0)
+    return this.#encodedKeysCache
   }
 }
 
@@ -71,6 +127,8 @@ class StatsBucket {
   constructor () {
     this._checkpoints = new Map()
     this._backlogs = new Map()
+    /** @type {Buffer[]} Accumulated transaction byte chunks, concatenated lazily. */
+    this._transactionChunks = []
   }
 
   get checkpoints () {
@@ -81,6 +139,16 @@ class StatsBucket {
     return this._backlogs
   }
 
+  /**
+   * Returns the concatenated transaction bytes, or null if no transactions have been added.
+   * Concatenation is deferred to read time to avoid O(N²) copies during accumulation.
+   * @returns {Buffer | null}
+   */
+  get transactions () {
+    if (this._transactionChunks.length === 0) return null
+    return Buffer.concat(this._transactionChunks)
+  }
+
   forCheckpoint ({ hash, parentHash, edgeTags }) {
     let checkpoint = this._checkpoints.get(hash)
     if (!checkpoint) {
@@ -89,6 +157,14 @@ class StatsBucket {
     }
 
     return checkpoint
+  }
+
+  /**
+   * Appends pre-encoded transaction bytes to this bucket.
+   * @param {Buffer} bytes
+   */
+  addTransaction (bytes) {
+    this._transactionChunks.push(bytes)
   }
 
   /**
@@ -133,12 +209,12 @@ class DataStreamsProcessor {
     tags,
     version,
     service,
-    flushInterval
+    flushInterval,
   } = {}) {
     this.writer = new DataStreamsWriter({
       hostname,
       port,
-      url
+      url,
     })
     this.bucketSizeNs = 1e10
     this.buckets = new TimeBuckets()
@@ -151,17 +227,19 @@ class DataStreamsProcessor {
     this.sequence = 0
     this.flushInterval = flushInterval
     this._schemaSamplers = {}
+    this._checkpointRegistry = new CheckpointRegistry()
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
       this.timer.unref()
     }
-    process.once('beforeExit', () => this.onInterval())
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
   }
 
   onInterval () {
     const { Stats } = this._serializeBuckets()
     if (Stats.length === 0) return
+
     const payload = {
       Env: this.env,
       Service: this.service,
@@ -169,8 +247,14 @@ class DataStreamsProcessor {
       TracerVersion: pkg.version,
       Version: this.version,
       Lang: 'javascript',
-      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`)
+      Tags: Object.entries(this.tags).map(([key, value]) => `${key}:${value}`),
     }
+
+    // Add ProcessTags only if feature is enabled and process tags exist
+    if (propagationHash.isEnabled() && processTags.serialized) {
+      payload.ProcessTags = processTags.serialized.split(',')
+    }
+
     this.writer.flush(payload)
   }
 
@@ -229,10 +313,16 @@ class DataStreamsProcessor {
         closestOppositeDirectionEdgeStart = edgeStartNs
       }
       log.debug(
-        () => `Setting DSM Checkpoint from extracted parent context with hash: ${parentHash} and edge tags: ${edgeTags}`
+        'Setting DSM Checkpoint from extracted parent context with hash: %s and edge tags: %s',
+        parentHash,
+        edgeTags
       )
     }
-    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash)
+
+    // Get propagation hash if enabled
+    const propagationHashValue = propagationHash.isEnabled() ? propagationHash.getHash() : null
+
+    const hash = computePathwayHash(this.service, this.env, edgeTags, parentHash, propagationHashValue)
     const edgeLatencyNs = nowNs - edgeStartNs
     const pathwayLatencyNs = nowNs - pathwayStartNs
     const dataStreamsContext = {
@@ -241,7 +331,7 @@ class DataStreamsProcessor {
       pathwayStartNs,
       previousDirection: direction,
       closestOppositeDirectionHash,
-      closestOppositeDirectionEdgeStart
+      closestOppositeDirectionEdgeStart,
     }
     if (direction === 'direction:out') {
       // Add the header for this now, as the callee doesn't have access to context when producing
@@ -257,7 +347,7 @@ class DataStreamsProcessor {
       edgeTags,
       edgeLatencyNs,
       pathwayLatencyNs,
-      payloadSize
+      payloadSize,
     }
     this.recordCheckpoint(checkpoint, span)
     return dataStreamsContext
@@ -274,14 +364,52 @@ class DataStreamsProcessor {
     const nowNs = Date.now() * 1e6
     const backlogData = {
       ...offsetObj,
-      timestamp: nowNs
+      timestamp: nowNs,
     }
     this.recordOffset(backlogData)
+  }
+
+  /**
+   * Records a transaction ID at a named checkpoint using the binary wire format shared with Go/Java tracers.
+   *
+   * Wire format per entry: [checkpointId uint8][timestamp int64 big-endian 8 bytes][idLen uint8][id bytes]
+   *
+   * @param {string} transactionId - Truncated to 255 UTF-8 bytes.
+   * @param {string} checkpointName - Mapped to a stable 1-byte ID; silently dropped if registry full.
+   * @param {import('../opentelemetry/span').Span|null} [span=null] - Active span to tag with DSM transaction metadata.
+   */
+  trackTransaction (transactionId, checkpointName, span = null) {
+    if (!this.enabled) {
+      log.warn('trackTransaction called but DD_DATA_STREAMS_ENABLED is not set. Transaction will not be tracked.')
+      return
+    }
+
+    const checkpointId = this._checkpointRegistry.getId(checkpointName)
+    if (checkpointId === undefined) return
+
+    const idBytes = Buffer.from(transactionId, 'utf8').subarray(0, 255)
+    // Multiply as BigInt to avoid precision loss past MAX_SAFE_INTEGER
+    const timestampNs = BigInt(Date.now()) * 1_000_000n
+
+    const entry = Buffer.alloc(1 + 8 + 1 + idBytes.length)
+    entry.writeUInt8(checkpointId, 0)
+    entry.writeBigInt64BE(timestampNs, 1)
+    entry.writeUInt8(idBytes.length, 9)
+    idBytes.copy(entry, 10)
+
+    // Number() cast is safe here: 10s bucket granularity tolerates ~0.5ns precision loss
+    this.bucketFromTimestamp(Number(timestampNs)).addTransaction(entry)
+
+    if (span) {
+      span.setTag(DSM_TRANSACTION_ID, transactionId)
+      span.setTag(DSM_TRANSACTION_CHECKPOINT, checkpointName)
+    }
   }
 
   _serializeBuckets () {
     // TimeBuckets
     const serializedBuckets = []
+    const registrySnapshot = this._checkpointRegistry.encodedKeys
 
     for (const [timeNs, bucket] of this.buckets.entries()) {
       const points = []
@@ -296,18 +424,27 @@ class DataStreamsProcessor {
       for (const backlog of bucket._backlogs.values()) {
         backlogs.push(backlog.encode())
       }
-      serializedBuckets.push({
+
+      const serializedBucket = {
         Start: BigInt(timeNs),
         Duration: BigInt(this.bucketSizeNs),
         Stats: points,
-        Backlogs: backlogs
-      })
+        Backlogs: backlogs,
+      }
+
+      const transactions = bucket.transactions
+      if (transactions !== null) {
+        serializedBucket.Transactions = transactions
+        serializedBucket.TransactionCheckpointIds = registrySnapshot
+      }
+
+      serializedBuckets.push(serializedBucket)
     }
 
     this.buckets.clear()
 
     return {
-      Stats: serializedBuckets
+      Stats: serializedBuckets,
     }
   }
 
@@ -343,6 +480,7 @@ class DataStreamsProcessor {
 }
 
 module.exports = {
+  CheckpointRegistry,
   DataStreamsProcessor,
   StatsPoint,
   StatsBucket,
@@ -352,5 +490,5 @@ module.exports = {
   getHeadersSize,
   getSizeOrZero,
   getAmqpMessageSize,
-  ENTRY_PARENT_HASH
+  ENTRY_PARENT_HASH,
 }

@@ -3,18 +3,18 @@ name: Profiling
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [master, mq-working-branch-master-*]
   schedule:
     - cron: 0 4 * * *
   workflow_dispatch:
     inputs:
       latest-version:
-        description: 'Node version to use'
+        description: "Node version to use"
         required: false
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}"
+  group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -23,24 +23,28 @@ env:
 
 jobs:
   macos:
+    name: ${{ github.workflow }} / macos
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          flags: profiling-macos
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ubuntu:
+    name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:profiler:ci
@@ -54,26 +58,31 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          flags: profiling-ubuntu
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   windows:
+    name: ${{ github.workflow }} / windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
-          cache: 'true'
+          cache: "true"
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler
-      - uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
-      - uses: DataDog/junit-upload-github-action@762867566348d59ac9bcf479ebb4ec040db8940a  # v2.0.0
-        if: always()
+      - uses: ./.github/actions/coverage
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          flags: profiling-windows
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}

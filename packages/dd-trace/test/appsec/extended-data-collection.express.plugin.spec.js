@@ -1,13 +1,15 @@
 'use strict'
 
-const Config = require('../../src/config')
-const path = require('path')
+const assert = require('node:assert')
+const path = require('node:path')
+
+const axios = require('axios')
+const msgpack = require('@msgpack/msgpack')
+
 const { withVersions } = require('../setup/mocha')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const axios = require('axios')
-const assert = require('assert')
-const msgpack = require('@msgpack/msgpack')
+const { getConfigFresh } = require('../helpers/config')
 const { createDeepObject } = require('./utils')
 
 describe('extended data collection', () => {
@@ -58,7 +60,7 @@ describe('extended data collection', () => {
       })
 
       server = app.listen(port, () => {
-        port = server.address().port
+        port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         done()
       })
     })
@@ -68,12 +70,12 @@ describe('extended data collection', () => {
     })
 
     beforeEach(() => {
-      appsec.enable(new Config(
+      appsec.enable(getConfigFresh(
         {
           appsec: {
             enabled: true,
-            rules: path.join(__dirname, './extended-data-collection.rules.json')
-          }
+            rules: path.join(__dirname, './extended-data-collection.rules.json'),
+          },
         }
       ))
     })
@@ -87,8 +89,8 @@ describe('extended data collection', () => {
         other: 'other',
         chained: {
           child: 'one',
-          child2: 2
-        }
+          child2: 2,
+        },
       }
       await axios.post(
         `http://localhost:${port}/`,
@@ -97,19 +99,17 @@ describe('extended data collection', () => {
           headers: {
             'custom-header-key-1': 'custom-header-value-1',
             'custom-header-key-2': 'custom-header-value-2',
-            'custom-header-key-3': 'custom-header-value-3'
-          }
+            'custom-header-key-3': 'custom-header-value-3',
+          },
         }
       )
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
         assert.strictEqual(span.type, 'web')
-
         assert.strictEqual(span.meta['http.request.headers.custom-request-header-1'], undefined)
         assert.strictEqual(span.meta['http.request.headers.custom-request-header-2'], undefined)
         assert.strictEqual(span.meta['http.request.headers.custom-request-header-3'], undefined)
-
         assert.strictEqual(span.meta['http.response.headers.custom-response-header-1'], undefined)
         assert.strictEqual(span.meta['http.response.headers.custom-response-header-2'], undefined)
         assert.strictEqual(span.meta['http.response.headers.custom-response-header-3'], undefined)
@@ -121,7 +121,7 @@ describe('extended data collection', () => {
 
     it('Should redact request/response headers', async () => {
       const requestBody = {
-        bodyParam: 'collect-standard'
+        bodyParam: 'collect-standard',
       }
       await axios.post(
         `http://localhost:${port}/redacted-headers`,
@@ -135,31 +135,31 @@ describe('extended data collection', () => {
             'authentication-info': 'header-value-5',
             'proxy-authentication-info': 'header-value-6',
             cookie: 'header-value-7',
-            'set-cookie': 'header-value-8'
-          }
+            'set-cookie': 'header-value-8',
+          },
         }
       )
 
-      await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.strictEqual(span.type, 'web')
-        assert.strictEqual(span.meta['http.request.headers.authorization'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.proxy-authorization'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.www-authenticate'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.proxy-authenticate'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.authentication-info'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.proxy-authentication-info'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.cookie'], '<redacted>')
-        assert.strictEqual(span.meta['http.request.headers.set-cookie'], '<redacted>')
-
-        assert.strictEqual(span.meta['http.response.headers.authorization'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.proxy-authorization'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.www-authenticate'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.proxy-authenticate'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.authentication-info'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.proxy-authentication-info'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.cookie'], '<redacted>')
-        assert.strictEqual(span.meta['http.response.headers.set-cookie'], '<redacted>')
+      await agent.assertFirstTraceSpan({
+        type: 'web',
+        meta: {
+          'http.request.headers.authorization': '<redacted>',
+          'http.request.headers.proxy-authorization': '<redacted>',
+          'http.request.headers.www-authenticate': '<redacted>',
+          'http.request.headers.proxy-authenticate': '<redacted>',
+          'http.request.headers.authentication-info': '<redacted>',
+          'http.request.headers.proxy-authentication-info': '<redacted>',
+          'http.request.headers.cookie': '<redacted>',
+          'http.request.headers.set-cookie': '<redacted>',
+          'http.response.headers.authorization': '<redacted>',
+          'http.response.headers.proxy-authorization': '<redacted>',
+          'http.response.headers.www-authenticate': '<redacted>',
+          'http.response.headers.proxy-authenticate': '<redacted>',
+          'http.response.headers.authentication-info': '<redacted>',
+          'http.response.headers.proxy-authentication-info': '<redacted>',
+          'http.response.headers.cookie': '<redacted>',
+          'http.response.headers.set-cookie': '<redacted>',
+        },
       })
     })
 
@@ -169,8 +169,8 @@ describe('extended data collection', () => {
         other: 'other',
         chained: {
           child: 'one',
-          child2: 2
-        }
+          child2: 2,
+        },
       }
       await axios.post(
         `http://localhost:${port}/`,
@@ -186,8 +186,8 @@ describe('extended data collection', () => {
             'custom-request-header-7': 'custom-request-header-value-7',
             'custom-request-header-8': 'custom-request-header-value-8',
             'custom-request-header-9': 'custom-request-header-value-9',
-            'custom-request-header-10': 'custom-request-header-value-10'
-          }
+            'custom-request-header-10': 'custom-request-header-value-10',
+          },
         }
       )
 
@@ -214,13 +214,13 @@ describe('extended data collection', () => {
 
       const requestBody = {
         bodyParam: 'collect-standard',
-        deepObject
+        deepObject,
       }
 
       const expectedDeepTruncatedObject = createDeepObject({ 's-19': 's-19' }, 1, 18)
       const expectedRequestBody = {
         bodyParam: 'collect-standard',
-        deepObject: expectedDeepTruncatedObject
+        deepObject: expectedDeepTruncatedObject,
       }
       await axios.post(`http://localhost:${port}/`, requestBody)
 
@@ -236,12 +236,12 @@ describe('extended data collection', () => {
     it('Should truncate the request body when string length is more than 4096 characters', async () => {
       const requestBody = {
         bodyParam: 'collect-standard',
-        longValue: Array(5000).fill('A').join('')
+        longValue: Array(5000).fill('A').join(''),
       }
 
       const expectedRequestBody = {
         bodyParam: 'collect-standard',
-        longValue: Array(4096).fill('A').join('')
+        longValue: Array(4096).fill('A').join(''),
       }
       await axios.post(`http://localhost:${port}/`, requestBody)
 
@@ -258,12 +258,12 @@ describe('extended data collection', () => {
       const children = Array(300).fill('item')
       const requestBody = {
         bodyParam: 'collect-standard',
-        children
+        children,
       }
 
       const expectedRequestBody = {
         bodyParam: 'collect-standard',
-        children: children.slice(0, 256)
+        children: children.slice(0, 256),
       }
       await axios.post(`http://localhost:${port}/`, requestBody)
 

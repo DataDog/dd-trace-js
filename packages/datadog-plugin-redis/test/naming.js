@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   outbound: {
     v0: {
       opName: 'redis.command',
-      serviceName: 'test-redis'
+      serviceName: 'test-redis',
     },
     v1: {
       opName: 'redis.command',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

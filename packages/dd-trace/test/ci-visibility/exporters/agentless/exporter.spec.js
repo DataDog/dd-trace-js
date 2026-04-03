@@ -1,13 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after, context } = require('tap').mocha
-const sinon = require('sinon')
-const nock = require('nock')
+const assert = require('node:assert/strict')
 const cp = require('node:child_process')
 
-require('../../../../../dd-trace/test/setup/core')
+const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const context = describe
+const sinon = require('sinon')
+const nock = require('nock')
 
+require('../../../../../dd-trace/test/setup/core')
 const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 
@@ -34,7 +35,7 @@ describe('CI Visibility Agentless Exporter', () => {
 
   it('can use CI Vis protocol right away', () => {
     const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
-    expect(agentlessExporter.canReportSessionTraces()).to.be.true
+    assert.strictEqual(agentlessExporter.canReportSessionTraces(), true)
   })
 
   describe('when ITR is enabled', () => {
@@ -46,20 +47,20 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         site: 'datadoge.c0m',
         isGitUploadEnabled: true,
         isIntelligentTestRunnerEnabled: true,
-        tags: {}
+        tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
-        expect(scope.isDone()).to.be.true
-        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
-        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
+        assert.strictEqual(scope.isDone(), true)
+        assert.strictEqual(agentlessExporter.canReportCodeCoverage(), true)
+        assert.strictEqual(agentlessExporter.shouldRequestSkippableSuites(), true)
         done()
       })
     })
@@ -72,25 +73,25 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
         .post('/api/v2/ci/tests/skippable')
         .reply(200, JSON.stringify({
-          data: []
+          data: [],
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         site: 'datadoge.c0m',
         isGitUploadEnabled: true,
         isIntelligentTestRunnerEnabled: true,
-        tags: {}
+        tags: {},
       })
       agentlessExporter._resolveGit()
       agentlessExporter.getLibraryConfiguration({}, () => {
         agentlessExporter.getSkippableSuites({}, () => {
-          expect(scope.isDone()).to.be.true
+          assert.strictEqual(scope.isDone(), true)
           done()
         })
       })
@@ -104,17 +105,17 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
-        expect(scope.isDone()).to.be.true
-        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
-        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.true
+        assert.strictEqual(scope.isDone(), true)
+        assert.strictEqual(agentlessExporter.canReportCodeCoverage(), true)
+        assert.strictEqual(agentlessExporter.shouldRequestSkippableSuites(), true)
         done()
       })
     })
@@ -127,16 +128,16 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
-        expect(scope.isDone()).to.be.true
-        expect(agentlessExporter.canReportCodeCoverage()).to.be.true
+        assert.strictEqual(scope.isDone(), true)
+        assert.strictEqual(agentlessExporter.canReportCodeCoverage(), true)
         done()
       })
     })
@@ -152,13 +153,13 @@ describe('CI Visibility Agentless Exporter', () => {
             attributes: {
               require_git: false,
               code_coverage: true,
-              tests_skipping: true
-            }
-          }
+              tests_skipping: true,
+            },
+          },
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {}
+        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.sendGitMetadata = () => {
         return new Promise(resolve => {
@@ -168,11 +169,13 @@ describe('CI Visibility Agentless Exporter', () => {
       }
 
       agentlessExporter.getLibraryConfiguration({}, (err) => {
-        expect(scope.isDone()).not.to.be.true
-        expect(err.message).to.contain(
-          'Request to settings endpoint was not done because Datadog API key is not defined'
+        assert.notStrictEqual(scope.isDone(), true)
+        assert.ok(
+          err.message.includes(
+            'Request to settings endpoint was not done because Datadog API key is not defined'
+          )
         )
-        expect(agentlessExporter.shouldRequestSkippableSuites()).to.be.false
+        assert.strictEqual(agentlessExporter.shouldRequestSkippableSuites(), false)
         process.env.DD_API_KEY = '1'
         done()
       })
@@ -183,26 +186,26 @@ describe('CI Visibility Agentless Exporter', () => {
     it('should initialise DynamicInstrumentationLogsWriter', async () => {
       const agentProxyCiVisibilityExporter = new AgentlessCiVisibilityExporter({
         tags: {},
-        isTestDynamicInstrumentationEnabled: true
+        isTestDynamicInstrumentationEnabled: true,
       })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
-      expect(agentProxyCiVisibilityExporter._logsWriter).to.be.instanceOf(DynamicInstrumentationLogsWriter)
+      assert.ok(agentProxyCiVisibilityExporter._logsWriter instanceof DynamicInstrumentationLogsWriter)
     })
 
     it('should process logs', async () => {
       const mockWriter = {
         append: sinon.spy(),
-        flush: sinon.spy()
+        flush: sinon.spy(),
       }
       const agentProxyCiVisibilityExporter = new AgentlessCiVisibilityExporter({
         tags: {},
-        isTestDynamicInstrumentationEnabled: true
+        isTestDynamicInstrumentationEnabled: true,
       })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._logsWriter = mockWriter
       const log = { message: 'hello' }
       agentProxyCiVisibilityExporter.exportDiLogs({}, log)
-      expect(mockWriter.append).to.have.been.calledWith(sinon.match(log))
+      sinon.assert.calledWith(mockWriter.append, sinon.match(log))
     })
   })
 
@@ -210,8 +213,8 @@ describe('CI Visibility Agentless Exporter', () => {
     it('sets the default if URL param is not specified', () => {
       const site = 'd4tad0g.com'
       const agentlessExporter = new AgentlessCiVisibilityExporter({ site, tags: {} })
-      expect(agentlessExporter._url.href).to.equal(`https://citestcycle-intake.${site}/`)
-      expect(agentlessExporter._coverageUrl.href).to.equal(`https://citestcov-intake.${site}/`)
+      assert.strictEqual(agentlessExporter._url.href, `https://citestcycle-intake.${site}/`)
+      assert.strictEqual(agentlessExporter._coverageUrl.href, `https://citestcov-intake.${site}/`)
     })
   })
 })

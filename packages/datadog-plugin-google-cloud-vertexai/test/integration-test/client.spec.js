@@ -1,53 +1,56 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  let variants
 
   withVersions('google-cloud-vertexai', '@google-cloud/vertexai', '>=1', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([
-        `@google-cloud/vertexai@${version}`,
-        'sinon'
-      ], false, [
-        './packages/datadog-plugin-google-cloud-vertexai/test/integration-test/*'
-      ])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([
+      `@google-cloud/vertexai@${version}`,
+      'sinon',
+    ], false, [
+      './packages/datadog-plugin-google-cloud-vertexai/test/integration-test/*',
+    ])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
 
+    before(async function () {
+      variants = varySandbox('server.mjs', 'vertexLib', 'VertexAI', '@google-cloud/vertexai')
+    })
+
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'vertexai.request'), true)
-      })
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'vertexai.request'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })

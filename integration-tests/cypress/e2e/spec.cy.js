@@ -1,7 +1,7 @@
+/* eslint-disable */
 /**
  * @datadog {"unskippable": true}
  */
-/* eslint-disable */
 describe('context', () => {
   it('passes', () => {
     cy.visit('/')

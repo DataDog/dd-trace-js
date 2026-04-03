@@ -16,7 +16,7 @@ class IastContextPlugin extends IastPlugin {
     this._getAndRegisterSubscription({
       channelName,
       tag,
-      tagKey: TagKey.SOURCE_TYPE
+      tagKey: TagKey.SOURCE_TYPE,
     })
   }
 
@@ -39,7 +39,7 @@ class IastContextPlugin extends IastPlugin {
   addIastEnabledTag (isRequestAcquired, rootSpan) {
     if (rootSpan?.addTags) {
       rootSpan.addTags({
-        [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0
+        [IAST_ENABLED_TAG_KEY]: isRequestAcquired ? 1 : 0,
       })
     }
   }
@@ -64,7 +64,7 @@ class IastContextPlugin extends IastPlugin {
     return {
       isRequestAcquired,
       iastContext,
-      store
+      store,
     }
   }
 

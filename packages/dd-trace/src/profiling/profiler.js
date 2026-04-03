@@ -1,25 +1,16 @@
 'use strict'
 
 const { EventEmitter } = require('events')
+const dc = require('dc-polyfill')
+const crashtracker = require('../crashtracking')
+const log = require('../log')
 const { Config } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
-const dc = require('dc-polyfill')
-const crashtracker = require('../crashtracking')
-
-const { promisify } = require('util')
-const zlib = require('zlib')
 
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
-
-function maybeSourceMap (sourceMap, SourceMapper, debug) {
-  if (!sourceMap) return
-  return SourceMapper.create([
-    process.cwd()
-  ], debug)
-}
 
 function logError (logger, ...args) {
   if (logger) {
@@ -41,6 +32,14 @@ function findWebSpan (startedSpans, spanId) {
   return false
 }
 
+const MISSING_SOURCE_MAPS_TOKEN = 'dd:has-missing-map-files'
+
+function profileHasMissingSourceMaps (profile) {
+  const strings = profile?.stringTable?.strings
+  if (!strings) return false
+  return profile.comment?.some(idx => strings[idx] === MISSING_SOURCE_MAPS_TOKEN) ?? false
+}
+
 function processInfo (infos, info, type) {
   if (Object.keys(info).length > 0) {
     infos[type] = info
@@ -49,6 +48,7 @@ function processInfo (infos, info, type) {
 
 class Profiler extends EventEmitter {
   #compressionFn
+  #compressionFnInitialized = false
   #compressionOptions
   #config
   #enabled = false
@@ -64,16 +64,71 @@ class Profiler extends EventEmitter {
     this._timeoutInterval = undefined
   }
 
+  get serverless () { return false }
+
   get flushInterval () {
     return this.#config?.flushInterval
   }
 
-  start (options) {
-    return this._start(options).catch((err) => {
-      logError(options.logger, 'Error starting profiler. For troubleshooting tips, see ' +
+  start (config) {
+    const {
+      service,
+      version,
+      env,
+      url,
+      hostname,
+      port,
+      tags,
+      repositoryUrl,
+      commitSHA,
+      injectionEnabled,
+      reportHostname,
+    } = config
+    const { enabled, sourceMap, exporters } = config.profiling
+    const { heartbeatInterval } = config.telemetry
+
+    // TODO: Unify with main logger and rewrite template strings to use printf formatting.
+    const logger = {
+      debug (message) { log.debug(message) },
+      info (message) { log.info(message) },
+      warn (message) { log.warn(message) },
+      error (...args) { log.error(...args) },
+    }
+
+    const libraryInjected = injectionEnabled.length > 0
+    let activation
+    if (enabled === 'auto') {
+      activation = 'auto'
+    } else if (enabled === 'true') {
+      activation = 'manual'
+    } // else activation = undefined
+
+    const options = {
+      service,
+      version,
+      env,
+      logger,
+      sourceMap,
+      exporters,
+      url,
+      hostname,
+      port,
+      tags,
+      repositoryUrl,
+      commitSHA,
+      libraryInjected,
+      activation,
+      heartbeatInterval,
+      reportHostname,
+    }
+
+    try {
+      return this._start(options)
+    } catch (err) {
+      logError(logger, 'Error starting profiler. For troubleshooting tips, see ' +
         '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
       return false
-    })
+    }
   }
 
   get enabled () {
@@ -84,7 +139,50 @@ class Profiler extends EventEmitter {
     logError(this.#logger, err)
   }
 
-  async _start (options) {
+  #getCompressionFn () {
+    if (!this.#compressionFnInitialized) {
+      this.#compressionFnInitialized = true
+      try {
+        const { promisify } = require('util')
+        const zlib = require('zlib')
+        const { method, level: clevel } = this.#config.uploadCompression
+        switch (method) {
+          case 'gzip':
+            this.#compressionFn = promisify(zlib.gzip)
+            if (clevel !== undefined) {
+              this.#compressionOptions = {
+                level: clevel,
+              }
+            }
+            break
+          case 'zstd':
+            // eslint-disable-next-line n/no-unsupported-features/node-builtins
+            if (typeof zlib.zstdCompress === 'function') {
+              // eslint-disable-next-line n/no-unsupported-features/node-builtins
+              this.#compressionFn = promisify(zlib.zstdCompress)
+              if (clevel !== undefined) {
+                this.#compressionOptions = {
+                  params: {
+                    // eslint-disable-next-line n/no-unsupported-features/node-builtins
+                    [zlib.constants.ZSTD_c_compressionLevel]: clevel,
+                  },
+                }
+              }
+            } else {
+              const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+              const level = clevel ?? 0 // 0 is zstd default compression level
+              this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
+            }
+            break
+        }
+      } catch (err) {
+        this.#logError(err)
+      }
+    }
+    return this.#compressionFn
+  }
+
+  _start (options) {
     if (this.enabled) return true
 
     const config = this.#config = new Config(options)
@@ -100,43 +198,22 @@ class Profiler extends EventEmitter {
       const { setLogger, SourceMapper } = require('@datadog/pprof')
       setLogger(config.logger)
 
-      mapper = await maybeSourceMap(config.sourceMap, SourceMapper, config.debugSourceMaps)
-      if (config.sourceMap && config.debugSourceMaps) {
-        this.#logger.debug(() => {
-          return mapper.infoMap.size === 0
-            ? 'Found no source maps'
-            : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
-        })
-      }
-
-      const clevel = config.uploadCompression.level
-      switch (config.uploadCompression.method) {
-        case 'gzip':
-          this.#compressionFn = promisify(zlib.gzip)
-          if (clevel !== undefined) {
-            this.#compressionOptions = {
-              level: clevel
+      if (config.sourceMap) {
+        mapper = new SourceMapper(config.debugSourceMaps)
+        mapper.loadDirectory(process.cwd())
+          .then(() => {
+            if (config.debugSourceMaps) {
+              const count = mapper.infoMap.size
+              this.#logger.debug(() => {
+                return count === 0
+                  ? 'Found no source maps'
+                  : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+              })
             }
-          }
-          break
-        case 'zstd':
-          if (typeof zlib.zstdCompress === 'function') { // eslint-disable-line n/no-unsupported-features/node-builtins
-            // eslint-disable-next-line n/no-unsupported-features/node-builtins
-            this.#compressionFn = promisify(zlib.zstdCompress)
-            if (clevel !== undefined) {
-              this.#compressionOptions = {
-                params: {
-                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                  [zlib.constants.ZSTD_c_compressionLevel]: clevel
-                }
-              }
-            }
-          } else {
-            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
-            const level = clevel ?? 0 // 0 is zstd default compression level
-            this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
-          }
-          break
+          })
+          .catch((err) => {
+            this.#logError(err)
+          })
       }
     } catch (err) {
       this.#logError(err)
@@ -149,7 +226,7 @@ class Profiler extends EventEmitter {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({
           mapper,
-          nearOOMCallback
+          nearOOMCallback,
         })
         this.#logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
       }
@@ -174,7 +251,7 @@ class Profiler extends EventEmitter {
     const infos = this.#createInitialInfos()
     processInfo(infos, info, profileType)
     this.#submit({
-      [profileType]: encodedProfile
+      [profileType]: encodedProfile,
     }, infos, start, end, snapshotKinds.ON_OUT_OF_MEMORY)
   }
 
@@ -243,7 +320,9 @@ class Profiler extends EventEmitter {
 
   #createInitialInfos () {
     return {
-      settings: this.#config.systemInfoReport
+      serverless: this.serverless,
+      settings: this.#config.systemInfoReport,
+      hasMissingSourceMaps: false,
     }
   }
 
@@ -280,15 +359,19 @@ class Profiler extends EventEmitter {
 
       const encodedProfiles = {}
       const infos = this.#createInitialInfos()
+      const compressionFn = this.#getCompressionFn()
 
       // encode and export asynchronously
       await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
         try {
           const encoded = await profiler.encode(profile)
-          const compressed = encoded instanceof Buffer && this.#compressionFn !== undefined
-            ? await this.#compressionFn(encoded, this.#compressionOptions)
+          const compressed = encoded instanceof Buffer && compressionFn !== undefined
+            ? await compressionFn(encoded, this.#compressionOptions)
             : encoded
           encodedProfiles[profiler.type] = compressed
+          if (profileHasMissingSourceMaps(profile)) {
+            infos.hasMissingSourceMaps = true
+          }
           processInfo(infos, info, profiler.type)
           this.#logger.debug(() => {
             const profileJson = JSON.stringify(profile, (_, value) => {
@@ -351,6 +434,8 @@ class ServerlessProfiler extends Profiler {
     this.#interval = 1
     this.#flushAfterIntervals = undefined
   }
+
+  get serverless () { return true }
 
   get profiledIntervals () {
     return this.#profiledIntervals

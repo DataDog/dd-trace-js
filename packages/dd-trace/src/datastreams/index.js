@@ -4,7 +4,7 @@ const {
   getAmqpMessageSize,
   getHeadersSize,
   getMessageSize,
-  getSizeOrZero
+  getSizeOrZero,
 } = require('./size')
 
 // This is only needed because DSM code is spread across existing tracing
@@ -13,7 +13,7 @@ const {
 //
 // TODO: Remove this when DSM has been moved to dedicated plugins.
 /**
- * @template T extends new (...args: any[]) => any
+ * @template T extends new (...args: unknown[]) => unknown
  * @param {() => T} classGetter
  * @param {string[]} methods
  * @param {string[]} staticMethods
@@ -62,7 +62,7 @@ function lazyClass (classGetter, methods = [], staticMethods = []) {
  */
 const DsmPathwayCodec = lazyClass(() => require('./pathway').DsmPathwayCodec, [], [
   'encode',
-  'decode'
+  'decode',
 ])
 
 /**
@@ -70,7 +70,8 @@ const DsmPathwayCodec = lazyClass(() => require('./pathway').DsmPathwayCodec, []
  */
 const DataStreamsCheckpointer = lazyClass(() => require('./checkpointer').DataStreamsCheckpointer, [
   'setProduceCheckpoint',
-  'setConsumeCheckpoint'
+  'setConsumeCheckpoint',
+  'trackTransaction',
 ])
 
 /**
@@ -78,7 +79,8 @@ const DataStreamsCheckpointer = lazyClass(() => require('./checkpointer').DataSt
  */
 const DataStreamsManager = lazyClass(() => require('./manager').DataStreamsManager, [
   'setCheckpoint',
-  'decodeDataStreamsContext'
+  'decodeDataStreamsContext',
+  'trackTransaction',
 ])
 
 // TODO: Are all those methods actually public?
@@ -92,10 +94,11 @@ const DataStreamsProcessor = lazyClass(() => require('./processor').DataStreamsP
   'setCheckpoint',
   'recordOffset',
   'setOffset',
+  'trackTransaction',
   'setUrl',
   'trySampleSchema',
   'canSampleSchema',
-  'getSchema'
+  'getSchema',
 ])
 
 /**
@@ -104,11 +107,11 @@ const DataStreamsProcessor = lazyClass(() => require('./processor').DataStreamsP
 const SchemaBuilder = lazyClass(() => require('./schemas/schema_builder').SchemaBuilder, [
   'build',
   'addProperty',
-  'shouldExtractSchema'
+  'shouldExtractSchema',
 ], [
   'getCache',
   'getSchemaDefinition',
-  'getSchema'
+  'getSchema',
 ])
 
 module.exports = {
@@ -122,5 +125,5 @@ module.exports = {
   getAmqpMessageSize,
   getHeadersSize,
   getMessageSize,
-  getSizeOrZero
+  getSizeOrZero,
 }

@@ -1,30 +1,59 @@
 'use strict'
 
 const path = require('path')
+
 const axios = require('axios')
+
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const Config = require('../../src/config')
+const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../setup/mocha')
 
 describe('sequelize', () => {
   withVersions('sequelize', 'sequelize', sequelizeVersion => {
+    let sequelize, User
+
+    // init database
+    before(async () => {
+      const { Sequelize, DataTypes } = require(`../../../../versions/sequelize@${sequelizeVersion}`).get()
+
+      sequelize = new Sequelize('db', 'root', '', {
+        host: '127.0.0.1',
+        dialect: 'mysql',
+      })
+      User = sequelize.define('User', {
+        username: DataTypes.STRING,
+        birthday: DataTypes.DATE,
+      })
+
+      await sequelize.sync({ force: true })
+      await User.create({
+        username: 'janedoe',
+        birthday: new Date(1980, 6, 20),
+      })
+    })
+
+    // clean database
+    after(async () => {
+      await User.drop()
+    })
+
     withVersions('mysql2', 'mysql2', () => {
-      withVersions('sequelize', 'express', (expressVersion) => {
-        let sequelize, User, server, port
+      withVersions('sequelize', ['express', 'mysql2'], (expressVersion) => {
+        let server, port
 
         // init tracer
         before(async () => {
           await agent.load(['express', 'http'], { client: false }, { flushInterval: 1 })
-          appsec.enable(new Config({
+          appsec.enable(getConfigFresh({
             appsec: {
               enabled: true,
               rules: path.join(__dirname, 'rules-example.json'),
               apiSecurity: {
                 enabled: true,
-                sampleDelay: 10
-              }
-            }
+                sampleDelay: 10,
+              },
+            },
           }))
         })
 
@@ -32,31 +61,6 @@ describe('sequelize', () => {
         after(() => {
           appsec.disable()
           return agent.close({ ritmReset: false })
-        })
-
-        // init database
-        before(async () => {
-          const { Sequelize, DataTypes } = require(`../../../../versions/sequelize@${sequelizeVersion}`).get()
-
-          sequelize = new Sequelize('db', 'root', '', {
-            host: '127.0.0.1',
-            dialect: 'mysql'
-          })
-          User = sequelize.define('User', {
-            username: DataTypes.STRING,
-            birthday: DataTypes.DATE
-          })
-
-          await sequelize.sync({ force: true })
-          await User.create({
-            username: 'janedoe',
-            birthday: new Date(1980, 6, 20)
-          })
-        })
-
-        // clean database
-        after(async () => {
-          await User.drop()
         })
 
         // init express
@@ -70,7 +74,7 @@ describe('sequelize', () => {
           })
 
           server = app.listen(0, () => {
-            port = server.address().port
+            port = (/** @type {import('net').AddressInfo} */ (server.address())).port
             done()
           })
         })

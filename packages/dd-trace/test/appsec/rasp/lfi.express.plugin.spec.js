@@ -1,16 +1,19 @@
 'use strict'
 
-const { NODE_MAJOR } = require('../../../../../version')
-const semver = require('semver')
+const assert = require('node:assert/strict')
+
+const os = require('node:os')
+const fs = require('node:fs')
+const path = require('node:path')
+
 const Axios = require('axios')
-const os = require('os')
-const fs = require('fs')
+const semver = require('semver')
+
+const { NODE_MAJOR } = require('../../../../../version')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const { assert } = require('chai')
+const { getConfigFresh } = require('../../helpers/config')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - lfi', () => {
@@ -58,18 +61,18 @@ describe('RASP - lfi', () => {
           app(req, res)
         })
 
-        appsec.enable(new Config({
+        appsec.enable(getConfigFresh({
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
-            rasp: { enabled: true }
-          }
+            rasp: { enabled: true },
+          },
         }))
 
         server = expressApp.listen(0, () => {
-          const port = server.address().port
+          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           axios = Axios.create({
-            baseURL: `http://localhost:${port}`
+            baseURL: `http://localhost:${port}`,
           })
           done()
         })
@@ -111,7 +114,7 @@ describe('RASP - lfi', () => {
         }
 
         function runFsMethodTest (description, options, fn, ...args) {
-          const { vulnerableIndex = 0, ruleEvalCount } = options
+          const { vulnerableIndex = 0, ruleEvalCount, secureFile = '/test.file' } = options
 
           describe(description, () => {
             const getAppFn = options.getAppFn ?? getApp
@@ -129,7 +132,7 @@ describe('RASP - lfi', () => {
             it('should not block if param not found in the request', async () => {
               app = getAppFn(fn, args, options)
 
-              await axios.get('/?file=/test.file')
+              await axios.get(`/?file=${secureFile}`)
 
               return checkRaspExecutedAndNotThreat(agent, false)
             })
@@ -263,7 +266,7 @@ describe('RASP - lfi', () => {
               } catch (e) {
                 // some ops are blocked
               }
-            }
+            },
           }, dirname)
         })
 
@@ -276,7 +279,7 @@ describe('RASP - lfi', () => {
                 fs.close(fd, () => {
                 })
               }
-            }
+            },
           }, __filename, 'r')
         })
 
@@ -293,7 +296,7 @@ describe('RASP - lfi', () => {
           runFsMethodTestThreeWay('opendir', {
             onfinish: (dir) => {
               dir.close()
-            }
+            },
           }, dirname)
         })
 
@@ -433,21 +436,20 @@ describe('RASP - lfi', () => {
           function getAppFn (fn, args, options) {
             return (req, res) => {
               try {
-                const result = fn(args)
+                const result = fn(req, res, args)
                 options.onfinish?.(result)
               } catch (e) {
                 if (e.message === 'DatadogRaspAbortError') {
                   res.status(418)
+                  res.end('end')
                 }
               }
-              res.render('template')
             }
           }
 
-          runFsMethodTest('rule is eval only once and rendering file accesses are ignored',
-            { getAppFn, ruleEvalCount: 1 }, (args) => {
-              const fs = require('fs')
-              return fs.readFileSync(...args)
+          runFsMethodTest('res.render',
+            { getAppFn, ruleEvalCount: 1, secureFile: 'template' }, (req, res) => {
+              return res.render(req.query.file)
             }, __filename)
         })
       })
@@ -471,18 +473,18 @@ describe('RASP - lfi', () => {
         }
       })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'lfi_rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
 
         done()
@@ -511,8 +513,8 @@ describe('RASP - lfi', () => {
 
       return testBlockingRequest('/', {
         headers: {
-          file: '/test.file'
-        }
+          file: '/test.file',
+        },
       })
     })
   })

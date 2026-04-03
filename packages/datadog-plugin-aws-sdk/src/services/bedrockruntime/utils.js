@@ -10,7 +10,7 @@ const MODEL_TYPE_IDENTIFIERS = [
   'prompt/',
   'endpoint/',
   'inference-profile/',
-  'default-prompt-router/'
+  'default-prompt-router/',
 ]
 
 const PROVIDER = {
@@ -20,15 +20,16 @@ const PROVIDER = {
   COHERE: 'COHERE',
   META: 'META',
   STABILITY: 'STABILITY',
-  MISTRAL: 'MISTRAL'
+  MISTRAL: 'MISTRAL',
 }
 
 /**
  * Coerce the chunks into a single response body.
  *
  * @param {Array<{ chunk: { bytes: Buffer } }>} chunks
- * @param {string} provider
- * @returns {Object}
+ * @param {string} modelProvider
+ * @param {string} modelName
+ * @returns {Generation | Record<never, never>}
  */
 function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelName) {
   const modelProviderUpper = modelProvider.toUpperCase()
@@ -116,7 +117,7 @@ function extractTextAndResponseReasonFromStream (chunks, modelProvider, modelNam
     inputTokens,
     outputTokens,
     cacheReadTokens,
-    cacheWriteTokens
+    cacheWriteTokens,
   })
 }
 
@@ -129,7 +130,7 @@ class Generation {
     inputTokens,
     outputTokens,
     cacheReadTokens,
-    cacheWriteTokens
+    cacheWriteTokens,
   } = {}) {
     // stringify message as it could be a single generated message as well as a list of embeddings
     this.message = typeof message === 'string' ? message : JSON.stringify(message) || ''
@@ -140,7 +141,7 @@ class Generation {
       inputTokens,
       outputTokens,
       cacheReadTokens,
-      cacheWriteTokens
+      cacheWriteTokens,
     }
   }
 }
@@ -156,7 +157,7 @@ class RequestParams {
     inputType = '',
     truncate = '',
     stream = '',
-    n
+    n,
   } = {}) {
     this.prompt = prompt
     this.temperature = temperature
@@ -232,7 +233,7 @@ function extractRequestParams (params, provider) {
         temperature: requestBody.temperature,
         topP: requestBody.top_p,
         maxTokens: requestBody.max_tokens,
-        stopSequences: requestBody.stop_sequences
+        stopSequences: requestBody.stop_sequences,
       })
     }
     case PROVIDER.AMAZON: {
@@ -246,7 +247,7 @@ function extractRequestParams (params, provider) {
           temperature: textGenerationConfig.temperature,
           topP: textGenerationConfig.topP,
           maxTokens: textGenerationConfig.maxTokenCount,
-          stopSequences: textGenerationConfig.stopSequences
+          stopSequences: textGenerationConfig.stopSequences,
         })
       } else if (Array.isArray(requestBody.messages)) {
         const inferenceConfig = requestBody.inferenceConfig || {}
@@ -255,7 +256,7 @@ function extractRequestParams (params, provider) {
           for (const sysMsg of requestBody.system) {
             messages.push({
               content: sysMsg.text,
-              role: 'system'
+              role: 'system',
             })
           }
         }
@@ -264,7 +265,7 @@ function extractRequestParams (params, provider) {
           if (textBlocks.length > 0) {
             messages.push({
               content: textBlocks.map(block => block.text).join(''),
-              role: message.role
+              role: message.role,
             })
           }
         }
@@ -273,7 +274,7 @@ function extractRequestParams (params, provider) {
           temperature: inferenceConfig.temperature,
           topP: inferenceConfig.topP,
           maxTokens: inferenceConfig.maxTokens,
-          stopSequences: inferenceConfig.stopSequences
+          stopSequences: inferenceConfig.stopSequences,
         })
       }
 
@@ -298,7 +299,7 @@ function extractRequestParams (params, provider) {
         temperature: requestBody.temperature,
         topP: requestBody.top_p,
         maxTokens: requestBody.max_tokens_to_sample ?? requestBody.max_tokens,
-        stopSequences: requestBody.stop_sequences
+        stopSequences: requestBody.stop_sequences,
       })
     }
     case PROVIDER.COHERE: {
@@ -306,7 +307,7 @@ function extractRequestParams (params, provider) {
         return new RequestParams({
           prompt: requestBody.texts,
           inputType: requestBody.input_type,
-          truncate: requestBody.truncate
+          truncate: requestBody.truncate,
         })
       }
       return new RequestParams({
@@ -316,7 +317,7 @@ function extractRequestParams (params, provider) {
         maxTokens: requestBody.max_tokens,
         stopSequences: requestBody.stop_sequences,
         stream: requestBody.stream,
-        n: requestBody.num_generations
+        n: requestBody.num_generations,
       })
     }
     case PROVIDER.META: {
@@ -324,7 +325,7 @@ function extractRequestParams (params, provider) {
         prompt: requestBody.prompt,
         temperature: requestBody.temperature,
         topP: requestBody.top_p,
-        maxTokens: requestBody.max_gen_len
+        maxTokens: requestBody.max_gen_len,
       })
     }
     case PROVIDER.MISTRAL: {
@@ -334,7 +335,7 @@ function extractRequestParams (params, provider) {
         topP: requestBody.top_p,
         maxTokens: requestBody.max_tokens,
         stopSequences: requestBody.stop,
-        topK: requestBody.top_k
+        topK: requestBody.top_k,
       })
     }
     case PROVIDER.STABILITY: {
@@ -362,7 +363,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
               choiceId: shouldSetChoiceIds ? generation.id : undefined,
               role: generation.message.role,
               inputTokens: body.usage?.prompt_tokens,
-              outputTokens: body.usage?.completion_tokens
+              outputTokens: body.usage?.completion_tokens,
             })
           }
         }
@@ -374,7 +375,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
             finishReason: completion?.finishReason,
             choiceId: shouldSetChoiceIds ? completion?.id : undefined,
             inputTokens: body.usage?.prompt_tokens,
-            outputTokens: body.usage?.completion_tokens
+            outputTokens: body.usage?.completion_tokens,
           })
         }
         return new Generation()
@@ -391,7 +392,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
               message: result.outputText,
               finishReason: result.completionReason,
               inputTokens: body.inputTextTokenCount,
-              outputTokens: result.tokenCount
+              outputTokens: result.tokenCount,
             })
           }
         } else if (body.output) {
@@ -403,7 +404,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
             inputTokens: body.usage?.inputTokens,
             outputTokens: body.usage?.outputTokens,
             cacheReadInputTokenCount: body.usage?.cacheReadInputTokenCount,
-            cacheWriteInputTokenCount: body.usage?.cacheWriteInputTokenCount
+            cacheWriteInputTokenCount: body.usage?.cacheWriteInputTokenCount,
           })
         }
         break
@@ -429,7 +430,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
           return new Generation({
             message: body.text,
             finishReason: body.finish_reason,
-            choiceId: shouldSetChoiceIds ? body.response_id : undefined
+            choiceId: shouldSetChoiceIds ? body.response_id : undefined,
           })
         }
 
@@ -439,7 +440,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
           return new Generation({
             message: generation.text,
             finishReason: generation.finish_reason,
-            choiceId: shouldSetChoiceIds ? generation.id : undefined
+            choiceId: shouldSetChoiceIds ? generation.id : undefined,
           })
         }
         break
@@ -449,7 +450,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
           message: body.generation,
           finishReason: body.stop_reason,
           inputTokens: body.prompt_token_count,
-          outputTokens: body.generation_token_count
+          outputTokens: body.generation_token_count,
         })
       }
       case PROVIDER.MISTRAL: {
@@ -482,5 +483,5 @@ module.exports = {
   parseModelId,
   extractRequestParams,
   extractTextAndResponseReason,
-  PROVIDER
+  PROVIDER,
 }

@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert')
+const { MessageChannel } = require('node:worker_threads')
+
 const { describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
-
-const assert = require('node:assert')
 
 require('../../setup/mocha')
 
@@ -12,15 +13,15 @@ describe('worker thread logger', function () {
     const logChannel = new MessageChannel()
     const log = proxyquire('../../../src/debugger/devtools_client/log', {
       'node:worker_threads': {
-        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } }
-      }
+        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } },
+      },
     })
 
     const expected = [
       { level: 'error', args: ['test1'] },
       { level: 'warn', args: ['test2'] },
       { level: 'info', args: ['test3'] },
-      { level: 'debug', args: ['test4'] }
+      { level: 'debug', args: ['test4'] },
     ]
 
     logChannel.port2.on('message', (message) => {
@@ -38,8 +39,8 @@ describe('worker thread logger', function () {
     const logChannel = new MessageChannel()
     const log = proxyquire('../../../src/debugger/devtools_client/log', {
       'node:worker_threads': {
-        workerData: { logPort: logChannel.port1, config: { debug: false, logLevel: 'debug' } }
-      }
+        workerData: { logPort: logChannel.port1, config: { debug: false, logLevel: 'debug' } },
+      },
     })
 
     logChannel.port2.on('message', () => {
@@ -58,8 +59,8 @@ describe('worker thread logger', function () {
     const logChannel = new MessageChannel()
     const log = proxyquire('../../../src/debugger/devtools_client/log', {
       'node:worker_threads': {
-        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } }
-      }
+        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: 'debug' } },
+      },
     })
 
     logChannel.port2.on('message', (message) => {
@@ -87,8 +88,8 @@ function checkLogLevel (level, expectedLevels) {
     const logChannel = new MessageChannel()
     const log = proxyquire('../../../src/debugger/devtools_client/log', {
       'node:worker_threads': {
-        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: level } }
-      }
+        workerData: { logPort: logChannel.port1, config: { debug: true, logLevel: level } },
+      },
     })
 
     const expected = expectedLevels.map((level) => ({ level, args: ['logged'] }))

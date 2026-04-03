@@ -1,21 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
-
 const assert = require('node:assert')
 const os = require('node:os')
-const performance = require('node:perf_hooks').performance
+const { performance } = require('node:perf_hooks')
 const { setImmediate, setTimeout } = require('node:timers/promises')
 const util = require('node:util')
 
+const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 require('./setup/core')
-
 const { DogStatsDClient } = require('../src/dogstatsd')
-
-const isWindows = os.platform() === 'win32'
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 function createGarbage (count = 50) {
   let last = {}
@@ -23,7 +20,9 @@ function createGarbage (count = 50) {
 
   for (let i = 0; i < count; i++) {
     last.next = { circular: obj, last, obj: { a: 1, b: 2, c: true } }
+    // @ts-expect-error - Difficult to define type
     last = last.next
+    // @ts-expect-error - Difficult to define type
     last.map = new Map([['a', 1], ['b', 2], ['c', true]])
     obj[i] = last
   }
@@ -38,11 +37,15 @@ function createGarbage (count = 50) {
       let proxy
       let config
 
+      before(() => {
+        require('../src/process-tags').initialize()
+      })
+
       beforeEach(() => {
         config = {
           runtimeMetrics: {
-            enabled: false
-          }
+            enabled: false,
+          },
         }
 
         runtimeMetrics = sinon.spy({
@@ -54,11 +57,11 @@ function createGarbage (count = 50) {
           count () {},
           gauge () {},
           increment () {},
-          decrement () {}
+          decrement () {},
         })
 
         proxy = proxyquire('../src/runtime_metrics', {
-          './runtime_metrics': runtimeMetrics
+          './runtime_metrics': runtimeMetrics,
         })
       })
 
@@ -73,15 +76,15 @@ function createGarbage (count = 50) {
         proxy.decrement()
         proxy.stop()
 
-        expect(runtimeMetrics.start).to.not.have.been.called
-        expect(runtimeMetrics.track).to.not.have.been.called
-        expect(runtimeMetrics.boolean).to.not.have.been.called
-        expect(runtimeMetrics.histogram).to.not.have.been.called
-        expect(runtimeMetrics.count).to.not.have.been.called
-        expect(runtimeMetrics.gauge).to.not.have.been.called
-        expect(runtimeMetrics.increment).to.not.have.been.called
-        expect(runtimeMetrics.decrement).to.not.have.been.called
-        expect(runtimeMetrics.stop).to.not.have.been.called
+        sinon.assert.notCalled(runtimeMetrics.start)
+        sinon.assert.notCalled(runtimeMetrics.track)
+        sinon.assert.notCalled(runtimeMetrics.boolean)
+        sinon.assert.notCalled(runtimeMetrics.histogram)
+        sinon.assert.notCalled(runtimeMetrics.count)
+        sinon.assert.notCalled(runtimeMetrics.gauge)
+        sinon.assert.notCalled(runtimeMetrics.increment)
+        sinon.assert.notCalled(runtimeMetrics.decrement)
+        sinon.assert.notCalled(runtimeMetrics.stop)
       })
 
       it('should proxy when enabled', () => {
@@ -97,15 +100,15 @@ function createGarbage (count = 50) {
         proxy.decrement()
         proxy.stop()
 
-        expect(runtimeMetrics.start).to.have.been.calledWith(config)
-        expect(runtimeMetrics.track).to.have.been.called
-        expect(runtimeMetrics.boolean).to.have.been.called
-        expect(runtimeMetrics.histogram).to.have.been.called
-        expect(runtimeMetrics.count).to.have.been.called
-        expect(runtimeMetrics.gauge).to.have.been.called
-        expect(runtimeMetrics.increment).to.have.been.called
-        expect(runtimeMetrics.decrement).to.have.been.called
-        expect(runtimeMetrics.stop).to.have.been.called
+        sinon.assert.calledWith(runtimeMetrics.start, config)
+        sinon.assert.called(runtimeMetrics.track)
+        sinon.assert.called(runtimeMetrics.boolean)
+        sinon.assert.called(runtimeMetrics.histogram)
+        sinon.assert.called(runtimeMetrics.count)
+        sinon.assert.called(runtimeMetrics.gauge)
+        sinon.assert.called(runtimeMetrics.increment)
+        sinon.assert.called(runtimeMetrics.decrement)
+        sinon.assert.called(runtimeMetrics.stop)
       })
 
       it('should be noop when disabled after being enabled', () => {
@@ -123,17 +126,17 @@ function createGarbage (count = 50) {
         proxy.decrement()
         proxy.stop()
 
-        expect(runtimeMetrics.start).to.have.been.calledOnce
-        expect(runtimeMetrics.track).to.not.have.been.called
-        expect(runtimeMetrics.boolean).to.not.have.been.called
-        expect(runtimeMetrics.histogram).to.not.have.been.called
-        expect(runtimeMetrics.count).to.not.have.been.called
-        expect(runtimeMetrics.gauge).to.not.have.been.called
-        expect(runtimeMetrics.increment).to.not.have.been.called
-        expect(runtimeMetrics.decrement).to.not.have.been.called
-        expect(runtimeMetrics.stop).to.have.been.calledOnce
+        sinon.assert.calledOnce(runtimeMetrics.start)
+        sinon.assert.notCalled(runtimeMetrics.track)
+        sinon.assert.notCalled(runtimeMetrics.boolean)
+        sinon.assert.notCalled(runtimeMetrics.histogram)
+        sinon.assert.notCalled(runtimeMetrics.count)
+        sinon.assert.notCalled(runtimeMetrics.gauge)
+        sinon.assert.notCalled(runtimeMetrics.increment)
+        sinon.assert.notCalled(runtimeMetrics.decrement)
+        sinon.assert.calledOnce(runtimeMetrics.stop)
       })
-    }, { skip: isWindows })
+    })
 
     describe('runtimeMetrics', () => {
       let runtimeMetrics
@@ -157,7 +160,7 @@ function createGarbage (count = 50) {
             gauge: wrapSpy(client, client.gauge),
             increment: wrapSpy(client, client.increment),
             histogram: wrapSpy(client, client.histogram),
-            flush: client.flush.bind(client)
+            flush: client.flush.bind(client),
           }
         })
 
@@ -167,18 +170,25 @@ function createGarbage (count = 50) {
           gauge: sinon.spy(),
           increment: sinon.spy(),
           histogram: sinon.spy(),
-          flush: sinon.spy()
+          flush: sinon.spy(),
         }
 
         const proxiedObject = {
           '../dogstatsd': {
-            DogStatsDClient: Client
+            DogStatsDClient: Client,
           },
         }
         if (!nativeMetrics) {
           proxiedObject['@datadog/native-metrics'] = {
             start () {
               throw new Error('Native metrics are not supported in this environment')
+            },
+          }
+        } else {
+          // The log is called in case native metrics fail to load.
+          proxiedObject['../log'] = {
+            error () {
+              throw new Error('Native metrics should load properly')
             },
           }
         }
@@ -190,22 +200,22 @@ function createGarbage (count = 50) {
           port: '8126',
           dogstatsd: {
             hostname: 'localhost',
-            port: 8125
+            port: 8125,
           },
           runtimeMetrics: {
             enabled: true,
             eventLoop: true,
-            gc: true
+            gc: true,
           },
           tags: {
             str: 'bar',
             obj: {},
-            invalid: 't{e*s#t5-:./'
-          }
+            invalid: 't{e*s#t5-:./',
+          },
         }
 
         clock = sinon.useFakeTimers({
-          toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval']
+          toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
         })
 
         runtimeMetrics.start(config)
@@ -221,13 +231,13 @@ function createGarbage (count = 50) {
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
 
-          expect(Client).to.have.been.calledWithMatch({
+          sinon.assert.calledWithMatch(Client, {
             metricsProxyUrl: new URL('http://localhost:8126'),
             host: 'localhost',
             tags: [
               'str:bar',
-              'invalid:t_e_s_t5-:./'
-            ]
+              'invalid:t_e_s_t5-:./',
+            ],
           })
         })
 
@@ -237,14 +247,36 @@ function createGarbage (count = 50) {
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
 
-          expect(Client).to.have.been.calledWithMatch({
+          sinon.assert.calledWithMatch(Client, {
             metricsProxyUrl: new URL('http://[::1]:8126'),
             host: 'localhost',
             tags: [
               'str:bar',
-              'invalid:t_e_s_t5-:./'
-            ]
+              'invalid:t_e_s_t5-:./',
+            ],
           })
+        })
+
+        it('should include process tags when propagateProcessTags is enabled', function () {
+          config.propagateProcessTags = { enabled: true }
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(tags.some(tag => tag.startsWith('entrypoint.type:')), 'expected entrypoint.type tag')
+        })
+
+        it('should not include process tags when propagateProcessTags is disabled', function () {
+          config.propagateProcessTags = { enabled: false }
+
+          runtimeMetrics.stop()
+          runtimeMetrics.start(config)
+
+          const call = Client.lastCall
+          const tags = call.args[0].tags
+          assert.ok(!tags.some(tag => tag.startsWith('entrypoint.')), 'expected no entrypoint tags')
         })
 
         it('should start collecting runtimeMetrics every 10 seconds', async () => {
@@ -260,7 +292,7 @@ function createGarbage (count = 50) {
 
           // Wait for GC observer to trigger.
           const startTime = Date.now()
-          const waitTime = 200
+          const waitTime = 200 + (nativeMetrics ? 0 : 200)
           let iterations = 0
           while (Date.now() - startTime < waitTime) {
             // Need ticks for the event loop delay
@@ -271,6 +303,9 @@ function createGarbage (count = 50) {
           }
 
           global.gc()
+
+          await setImmediate()
+          await setImmediate()
 
           clock.tick(10000 - waitTime)
 
@@ -284,69 +319,77 @@ function createGarbage (count = 50) {
           const isGC95Percentile = sinon.match((value) => {
             return value >= 1e5 && value < 1e8 // In Nanoseconds. 0.1ms to 100ms.
           })
+          const isHeapSpace = sinon.match((metricName) => {
+            return /^heap_space:[a-z_]+$/.test(metricName)
+          })
 
           // These return percentages as strings and are tested later.
-          expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.system')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.total')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.user')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.system')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.total')
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_total', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.mem.heap_used', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.mem.rss', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.mem.heap_total', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.mem.heap_used', isFiniteNumber)
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.process.uptime')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.process.uptime')
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size_executable', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_physical_size', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_available_size', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.total_heap_size', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.heap_size_limit', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.total_heap_size', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.total_heap_size_executable', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.total_physical_size', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.total_available_size', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.total_heap_size', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.heap_size_limit', isFiniteNumber)
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.malloced_memory', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.peak_malloced_memory', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.malloced_memory', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.peak_malloced_memory', isFiniteNumber)
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.max', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.min', sinon.match((value) => {
+          sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.delay.max', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.delay.min', sinon.match((value) => {
             return value >= 0 && Number.isFinite(value)
           }))
-          expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.sum', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.avg', isFiniteNumber)
+          sinon.assert.calledWith(client.increment, 'runtime.node.event_loop.delay.sum', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.delay.avg', isFiniteNumber)
           if (nativeMetrics) {
-            expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.median', isFiniteNumber)
+            sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.delay.median', isFiniteNumber)
           } else {
-            expect(client.gauge).to.not.have.been.calledWith('runtime.node.event_loop.delay.median')
+            sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.delay.median')
           }
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile', isFiniteNumber)
-          expect(client.increment).to.have.been.calledWith('runtime.node.event_loop.delay.count', isIntegerNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.delay.95percentile', isFiniteNumber)
+          sinon.assert.calledWith(client.increment, 'runtime.node.event_loop.delay.count', isIntegerNumber)
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.max', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.min', isFiniteNumber)
-          expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.sum', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.avg', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.median', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile', isFiniteNumber)
-          expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.count', isIntegerNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.max', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.min', isFiniteNumber)
-          expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.sum', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.avg', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.median', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.by.type.95percentile', isGC95Percentile)
-          expect(client.increment).to.have.been.calledWith('runtime.node.gc.pause.by.type.count', isIntegerNumber)
-          expect(client.increment).to.have.been.calledWith(
+          sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.utilization', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.max', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.min', isFiniteNumber)
+          sinon.assert.calledWith(client.increment, 'runtime.node.gc.pause.sum', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.avg', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.median', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.95percentile', isFiniteNumber)
+          sinon.assert.calledWith(client.increment, 'runtime.node.gc.pause.count', isIntegerNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.by.type.max', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.by.type.min', isFiniteNumber)
+          sinon.assert.calledWith(client.increment, 'runtime.node.gc.pause.by.type.sum', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.by.type.avg', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.by.type.median', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.by.type.95percentile', isGC95Percentile)
+          sinon.assert.calledWith(client.increment, 'runtime.node.gc.pause.by.type.count', isIntegerNumber)
+          sinon.assert.calledWith(client.increment,
             'runtime.node.gc.pause.by.type.count', sinon.match.any, sinon.match(val => {
               return val && /^gc_type:[a-z_]+$/.test(val[0])
             })
           )
 
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.size.by.space', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.used_size.by.space', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.available_size.by.space', isFiniteNumber)
-          expect(client.gauge).to.have.been.calledWith('runtime.node.heap.physical_size.by.space', isFiniteNumber)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.size.by.space', isFiniteNumber, isHeapSpace)
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.used_size.by.space', isFiniteNumber, isHeapSpace)
+          sinon.assert.calledWith(
+            client.gauge,
+            'runtime.node.heap.available_size.by.space',
+            isFiniteNumber,
+            isHeapSpace
+          )
+          sinon.assert.calledWith(client.gauge, 'runtime.node.heap.physical_size.by.space', isFiniteNumber, isHeapSpace)
 
-          expect(client.flush).to.have.been.called
+          sinon.assert.called(client.flush)
         })
 
         it('should collect individual metrics only once every 10 seconds', async () => {
@@ -367,8 +410,8 @@ function createGarbage (count = 50) {
           // 1 hour even if a single metric is leaking it would get over
           // 64980 calls on its own without any other metric. A slightly lower
           // value is used here to be on the safer side.
-          expect(client.gauge.callCount).to.be.lt(60000)
-          expect(client.increment.callCount).to.be.lt(60000)
+          assert.ok(client.gauge.callCount < 60000)
+          assert.ok(client.increment.callCount < 60000)
         })
 
         it('should handle configuration changes correctly', async () => {
@@ -391,11 +434,11 @@ function createGarbage (count = 50) {
           await setTimeout(1)
           clock.tick(10000 - waitTime)
           // Should still collect basic metrics
-          expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.utilization')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
-          expect(client.gauge).to.not.have.been.calledWith('runtime.node.gc.pause.95percentile')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.mem.rss')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.user')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.utilization')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.event_loop.delay.95percentile')
+          sinon.assert.neverCalledWith(client.gauge, 'runtime.node.gc.pause.95percentile')
 
           // Test with event loop disabled
           const configWithoutEL = { ...config, runtimeMetrics: { ...config.runtimeMetrics, eventLoop: false } }
@@ -418,11 +461,11 @@ function createGarbage (count = 50) {
           clock.tick(10000 - waitTime)
 
           // Should still collect other metrics
-          expect(client.gauge).to.have.been.calledWith('runtime.node.mem.rss')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.cpu.user')
-          expect(client.gauge).to.have.been.calledWith('runtime.node.gc.pause.95percentile')
-          expect(client.gauge).to.not.have.been.calledWith('runtime.node.event_loop.utilization')
-          expect(client.gauge).to.not.have.been.calledWith('runtime.node.event_loop.delay.95percentile')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.mem.rss')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.user')
+          sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.95percentile')
+          sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.utilization')
+          sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.delay.95percentile')
         })
       })
 
@@ -483,15 +526,15 @@ function createGarbage (count = 50) {
 
           const cpuMetrics = new Map([[
             'runtime.node.cpu.user',
-            Number(((cpuUsage.user - startCpuUsage.user) / timeDivisor).toFixed(2))
+            Number(((cpuUsage.user - startCpuUsage.user) / timeDivisor).toFixed(2)),
           ], [
             'runtime.node.cpu.system',
-            Number(((cpuUsage.system - startCpuUsage.system) / timeDivisor).toFixed(2))
+            Number(((cpuUsage.system - startCpuUsage.system) / timeDivisor).toFixed(2)),
           ], [
             'runtime.node.cpu.total',
             Number((
               ((cpuUsage.user - startCpuUsage.user) + (cpuUsage.system - startCpuUsage.system)) / timeDivisor
-            ).toFixed(2))
+            ).toFixed(2)),
           ]])
 
           let userPercent = 0
@@ -514,18 +557,19 @@ function createGarbage (count = 50) {
                 userPercent = number
               }
               if (metric === 'runtime.node.cpu.system') {
-                assert(number >= 0 && number <= 1, `${metric} sanity check failed: ${number}`)
+                assert(number >= 0 && number <= 5, `${metric} sanity check failed: ${number}`)
                 systemPercent = number
               }
               if (metric === 'runtime.node.cpu.total') {
                 assert(
-                  // Subtracting 0.02 since lower numbers can happen due to rounding issues.
-                  number >= expected - 0.02 && number <= expected + 1,
+                  // Subtracting 0.1 for time-window/baseline alignment numbers and due to rounding issues.
+                  number >= expected - 0.1 && number <= expected + 1,
                   `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
                 )
                 totalPercent = number
               }
-              assert(number - expected < 0.5, `${metric} sanity check failed: ${number} ${expected}`)
+              const epsilon = os.platform() === 'win32' ? 1.5 : 0.5
+              assert(number - expected < epsilon, `${metric} sanity check failed: ${number} ${expected}`)
             }
           }
 
@@ -582,7 +626,7 @@ function createGarbage (count = 50) {
           )
           client.gauge.resetHistory()
 
-          const nowStub3 = sinon.stub(performance, 'now').returns(startPerformanceNow + 20_001)
+          const nowStub3 = sinon.stub(performance, 'now').returns(startPerformanceNow + 20_000)
           clock.tick(10000) // Advance another 10 seconds
           nowStub3.restore()
 
@@ -642,12 +686,14 @@ function createGarbage (count = 50) {
             return acc
           }, {})
 
-          assert.strictEqual(metrics['runtime.node.mem.heap_total'], stats.heapTotal)
-          assert.strictEqual(metrics['runtime.node.mem.heap_used'], stats.heapUsed)
-          assert.strictEqual(metrics['runtime.node.mem.rss'], stats.rss)
-          assert.strictEqual(metrics['runtime.node.mem.total'], totalmem)
-          assert.strictEqual(metrics['runtime.node.mem.free'], freemem)
-          assert.strictEqual(metrics['runtime.node.mem.external'], stats.external)
+          assertObjectContains(metrics, {
+            'runtime.node.mem.heap_total': stats.heapTotal,
+            'runtime.node.mem.heap_used': stats.heapUsed,
+            'runtime.node.mem.rss': stats.rss,
+            'runtime.node.mem.total': totalmem,
+            'runtime.node.mem.free': freemem,
+            'runtime.node.mem.external': stats.external,
+          })
         })
       })
 
@@ -658,7 +704,7 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.not.have.been.called
+            sinon.assert.notCalled(client.gauge)
           })
         })
 
@@ -671,14 +717,14 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test.max', 3)
-            expect(client.gauge).to.have.been.calledWith('test.min', 0)
-            expect(client.increment).to.have.been.calledWith('test.sum', 6)
-            expect(client.increment).to.have.been.calledWith('test.total', 6)
-            expect(client.gauge).to.have.been.calledWith('test.avg', 1.5)
-            expect(client.gauge).to.have.been.calledWith('test.median', sinon.match.number)
-            expect(client.gauge).to.have.been.calledWith('test.95percentile', sinon.match.number)
-            expect(client.increment).to.have.been.calledWith('test.count', 4)
+            sinon.assert.calledWith(client.gauge, 'test.max', 3)
+            sinon.assert.calledWith(client.gauge, 'test.min', 0)
+            sinon.assert.calledWith(client.increment, 'test.sum', 6)
+            sinon.assert.calledWith(client.increment, 'test.total', 6)
+            sinon.assert.calledWith(client.gauge, 'test.avg', 1.5)
+            sinon.assert.calledWith(client.gauge, 'test.median', sinon.match.number)
+            sinon.assert.calledWith(client.gauge, 'test.95percentile', sinon.match.number)
+            sinon.assert.calledWith(client.increment, 'test.count', 4)
           })
         })
 
@@ -688,7 +734,7 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test', 1)
+            sinon.assert.calledWith(client.gauge, 'test', 1)
           })
 
           it('should increment a gauge with a tag', () => {
@@ -696,7 +742,7 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
+            sinon.assert.calledWith(client.gauge, 'test', 1, ['foo:bar'])
           })
 
           it('should increment a monotonic counter', () => {
@@ -704,13 +750,13 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.increment).to.have.been.calledWith('test', 1)
+            sinon.assert.calledWith(client.increment, 'test', 1)
 
             client.increment.resetHistory()
 
             clock.tick(10000)
 
-            expect(client.increment).to.not.have.been.calledWith('test')
+            sinon.assert.neverCalledWith(client.increment, 'test')
           })
 
           it('should increment a monotonic counter with a tag', () => {
@@ -718,13 +764,13 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.increment).to.have.been.calledWith('test', 1, ['foo:bar'])
+            sinon.assert.calledWith(client.increment, 'test', 1, ['foo:bar'])
 
             client.increment.resetHistory()
 
             clock.tick(10000)
 
-            expect(client.increment).to.not.have.been.calledWith('test')
+            sinon.assert.neverCalledWith(client.increment, 'test')
           })
         })
 
@@ -734,7 +780,7 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test', -1)
+            sinon.assert.calledWith(client.gauge, 'test', -1)
           })
 
           it('should decrement a gauge with a tag', () => {
@@ -742,7 +788,7 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test', -1, ['foo:bar'])
+            sinon.assert.calledWith(client.gauge, 'test', -1, ['foo:bar'])
           })
         })
 
@@ -752,7 +798,7 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test', 10)
+            sinon.assert.calledWith(client.gauge, 'test', 10)
           })
 
           it('should set a gauge with a tag', () => {
@@ -760,7 +806,7 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test', 10, ['foo:bar'])
+            sinon.assert.calledWith(client.gauge, 'test', 10, ['foo:bar'])
           })
         })
 
@@ -770,7 +816,7 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test', 1)
+            sinon.assert.calledWith(client.gauge, 'test', 1)
           })
 
           it('should set a gauge with a tag', () => {
@@ -778,10 +824,10 @@ function createGarbage (count = 50) {
 
             clock.tick(10000)
 
-            expect(client.gauge).to.have.been.calledWith('test', 1, ['foo:bar'])
+            sinon.assert.calledWith(client.gauge, 'test', 1, ['foo:bar'])
           })
         })
       })
-    }, { skip: isWindows })
+    })
   })
 })

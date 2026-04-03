@@ -1,26 +1,25 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const path = require('path')
 const Axios = require('axios')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   FakeAgent,
-  spawnProc
+  spawnProc,
+  stopProc,
 } = require('../helpers')
 
 describe('Headers collection - Fastify', () => {
-  let axios, sandbox, cwd, appFile, agent, proc
+  let axios, cwd, appFile, agent, proc
 
-  before(async () => {
-    sandbox = await createSandbox(['fastify'])
-    cwd = sandbox.folder
+  useSandbox(['fastify'])
+
+  before(() => {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'appsec/data-collection/fastify.js')
-  })
-
-  after(async () => {
-    await sandbox.remove()
   })
 
   beforeEach(async () => {
@@ -28,15 +27,15 @@ describe('Headers collection - Fastify', () => {
 
     const env = {
       DD_TRACE_AGENT_PORT: agent.port,
-      DD_APPSEC_ENABLED: true,
-      DD_APPSEC_RULES: path.join(cwd, 'appsec/data-collection/data-collection-rules.json')
+      DD_APPSEC_ENABLED: 'true',
+      DD_APPSEC_RULES: path.join(cwd, 'appsec/data-collection/data-collection-rules.json'),
     }
     proc = await spawnProc(appFile, { cwd, env, execArgv: [] })
     axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
@@ -46,17 +45,17 @@ describe('Headers collection - Fastify', () => {
       'user-agent',
       'accept',
       'host',
-      'accept-encoding'
+      'accept-encoding',
     ]
 
     const responseHeaders = [
       'content-type',
       'content-language',
-      'content-length'
+      'content-length',
     ]
 
     await axios.get('/', {
-      headers: { 'User-Agent': 'Arachni/v1' }
+      headers: { 'User-Agent': 'Arachni/v1' },
     })
 
     await agent.assertMessageReceived(({ headers, payload }) => {
@@ -70,7 +69,7 @@ describe('Headers collection - Fastify', () => {
         requestHeaders.length
       )
       requestHeaders.forEach((headerName) => {
-        assert.property(payload[0][0].meta, `http.request.headers.${headerName}`)
+        assert.ok(Object.hasOwn(payload[0][0].meta, `http.request.headers.${headerName}`))
       })
 
       // Response headers
@@ -79,10 +78,10 @@ describe('Headers collection - Fastify', () => {
         responseHeaders.length
       )
       responseHeaders.forEach((headerName) => {
-        assert.property(payload[0][0].meta, `http.response.headers.${headerName}`)
+        assert.ok(Object.hasOwn(payload[0][0].meta, `http.response.headers.${headerName}`))
       })
     }, 30000, 10, true)
 
-    assert.isTrue(fastifyRequestReceived)
+    assert.strictEqual(fastifyRequestReceived, true)
   })
 })

@@ -17,5 +17,5 @@ function extractSystemInstructions (instance) {
 
 module.exports = {
   extractModel,
-  extractSystemInstructions
+  extractSystemInstructions,
 }

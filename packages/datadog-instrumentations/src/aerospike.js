@@ -1,11 +1,12 @@
 'use strict'
 
-const {
-  addHook
-} = require('./helpers/instrument')
-const shimmer = require('../../datadog-shimmer')
-
 const tracingChannel = require('dc-polyfill').tracingChannel
+
+const shimmer = require('../../datadog-shimmer')
+const {
+  addHook,
+} = require('./helpers/instrument')
+
 const ch = tracingChannel('apm:aerospike:command')
 
 function wrapCreateCommand (createCommand) {
@@ -30,7 +31,7 @@ function wrapProcess (process) {
     const ctx = {
       commandName: this.constructor.name,
       commandArgs: this.args,
-      clientConfig: this.client.config
+      clientConfig: this.client.config,
     }
 
     return ch.traceCallback(process, -1, ctx, this, ...args)
@@ -40,7 +41,7 @@ function wrapProcess (process) {
 addHook({
   name: 'aerospike',
   file: 'lib/commands/command.js',
-  versions: ['4', '5', '6']
+  versions: ['4', '5', '6'],
 },
 commandFactory => {
   return shimmer.wrapFunction(commandFactory, f => wrapCreateCommand(f))

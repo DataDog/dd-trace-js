@@ -3,12 +3,16 @@
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
-  channel
+  channel,
 } = require('./helpers/instrument')
 
 const routeChannel = channel('apm:hono:request:route')
 const handleChannel = channel('apm:hono:request:handle')
 const errorChannel = channel('apm:hono:request:error')
+const nextChannel = channel('apm:hono:middleware:next')
+const enterChannel = channel('apm:hono:middleware:enter')
+const exitChannel = channel('apm:hono:middleware:exit')
+const finishChannel = channel('apm:hono:middleware:finish')
 
 function wrapFetch (fetch) {
   return function (request, env, executionCtx) {
@@ -34,25 +38,66 @@ function wrapCompose (compose) {
 
     const instrumentedMiddlewares = middlewares.map(h => {
       const [[fn, meta], params] = h
-
-      const instrumentedFn = (...args) => {
-        const context = args[0]
-        routeChannel.publish({
-          req: context.env.incoming,
-          route: meta?.path
-        })
-        return fn(...args)
-      }
-      return [[instrumentedFn, meta], params]
+      return [[wrapMiddleware(fn, meta?.path), meta], params]
     })
     return compose.call(this, instrumentedMiddlewares, instrumentedOnError, onNotFound)
   }
 }
 
+function wrapNext (req, route, next) {
+  return shimmer.wrapFunction(
+    next,
+    (next) =>
+      function () {
+        nextChannel.publish({ req, route })
+
+        return next.apply(this, arguments)
+      }
+  )
+}
+
+function wrapMiddleware (middleware, route) {
+  const name = middleware.name
+  return shimmer.wrapFunction(
+    middleware,
+    (middleware) =>
+      function (context, next) {
+        const req = context.env.incoming
+        routeChannel.publish({ req, route })
+        enterChannel.publish({ req, name, route })
+        if (typeof next === 'function') {
+          arguments[1] = wrapNext(req, route, next)
+        }
+        try {
+          const result = middleware.apply(this, arguments)
+          if (result && typeof result.then === 'function') {
+            return result.then(
+              (result) => {
+                finishChannel.publish({ req })
+                return result
+              },
+              (error) => {
+                errorChannel.publish({ req, error })
+                throw error
+              }
+            )
+          }
+          finishChannel.publish({ req })
+          return result
+        } catch (error) {
+          errorChannel.publish({ req, error })
+          throw error
+        } finally {
+          exitChannel.publish({ req, route })
+        }
+      }
+  )
+}
+
 addHook({
   name: 'hono',
   versions: ['>=4'],
-  file: 'dist/hono.js'
+  file: 'dist/hono.js',
 }, hono => {
   class Hono extends hono.Hono {
     constructor (...args) {
@@ -69,7 +114,7 @@ addHook({
 addHook({
   name: 'hono',
   versions: ['>=4'],
-  file: 'dist/cjs/hono.js'
+  file: 'dist/cjs/hono.js',
 }, hono => {
   class Hono extends hono.Hono {
     constructor (...args) {
@@ -84,14 +129,14 @@ addHook({
         return Hono
       },
       enumerable: true,
-    }
+    },
   })
 })
 
 addHook({
   name: 'hono',
   versions: ['>=4'],
-  file: 'dist/cjs/compose.js'
+  file: 'dist/cjs/compose.js',
 }, Compose => {
   return shimmer.wrap(Compose, 'compose', wrapCompose, { replaceGetter: true })
 })
@@ -99,7 +144,7 @@ addHook({
 addHook({
   name: 'hono',
   versions: ['>=4'],
-  file: 'dist/compose.js'
+  file: 'dist/compose.js',
 }, Compose => {
   return shimmer.wrap(Compose, 'compose', wrapCompose)
 })

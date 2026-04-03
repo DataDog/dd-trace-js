@@ -1,16 +1,15 @@
 'use strict'
 
-const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const semver = require('semver')
-
+const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
 
+const axios = require('axios')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
+
+const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
   ? '<17 || >18'
   : ''
@@ -54,7 +53,7 @@ describe('Plugin', () => {
         beforeEach(() => {
           server = Hapi.server({
             address: 'localhost',
-            port: 0
+            port: 0,
           })
           return server.start().then(() => {
             port = server.listener.address().port
@@ -94,22 +93,25 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler
+          handler,
         })
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'hapi.request')
-            expect(traces[0][0]).to.have.property('service', 'test')
-            expect(traces[0][0]).to.have.property('type', 'web')
-            expect(traces[0][0]).to.have.property('resource', 'GET /user/{id}')
-            expect(traces[0][0].meta).to.have.property('span.kind', 'server')
-            expect(traces[0][0].meta).to.have.property('http.url', `http://localhost:${port}/user/123`)
-            expect(traces[0][0].meta).to.have.property('http.method', 'GET')
-            expect(traces[0][0].meta).to.have.property('http.status_code')
-            expect(traces[0][0].meta).to.have.property('component', 'hapi')
-            expect(traces[0][0].meta).to.have.property('_dd.integration', 'hapi')
-            expect(Number(traces[0][0].meta['http.status_code'])).to.be.within(200, 299)
+            assert.strictEqual(traces[0][0].name, 'hapi.request')
+            assert.strictEqual(traces[0][0].service, 'test')
+            assert.strictEqual(traces[0][0].type, 'web')
+            assert.strictEqual(traces[0][0].resource, 'GET /user/{id}')
+            assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
+            assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
+            assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
+            assert.ok(Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+            assert.strictEqual(traces[0][0].meta.component, 'hapi')
+            assert.strictEqual(traces[0][0].meta['_dd.integration'], 'hapi')
+            assert.ok(
+              Number(traces[0][0].meta['http.status_code']) >= 200 &&
+              Number(traces[0][0].meta['http.status_code']) <= 299
+            )
           })
           .then(done)
           .catch(done)
@@ -124,10 +126,10 @@ describe('Plugin', () => {
           method: 'GET',
           path: '/user/{id}',
           handler: (request, h) => {
-            expect(tracer.scope().active()).to.not.be.null
+            assert.notStrictEqual(tracer.scope().active(), null)
             done()
             return handler(request, h)
-          }
+          },
         })
 
         axios
@@ -143,14 +145,14 @@ describe('Plugin', () => {
             path: '/user/{id}',
             handler: (request, h) => {
               try {
-                expect(tracer.scope().active()).to.not.be.null
+                assert.notStrictEqual(tracer.scope().active(), null)
                 done()
               } catch (e) {
                 done(e)
               }
 
               return handler(request, h)
-            }
+            },
           })
 
           axios
@@ -166,13 +168,13 @@ describe('Plugin', () => {
           config: {
             pre: [
               (request, h) => {
-                expect(tracer.scope().active()).to.not.be.null
+                assert.notStrictEqual(tracer.scope().active(), null)
                 done()
                 return handler(request, h)
-              }
+              },
             ],
-            handler
-          }
+            handler,
+          },
         })
 
         axios
@@ -185,8 +187,8 @@ describe('Plugin', () => {
           method: 'GET',
           path: '/user/{id}',
           config: {
-            handler
-          }
+            handler,
+          },
         })
 
         server.ext('onPostAuth', (request, h) => {
@@ -194,7 +196,7 @@ describe('Plugin', () => {
         })
 
         server.ext('onPreHandler', (request, h) => {
-          expect(tracer.scope().active()).to.not.be.null
+          assert.notStrictEqual(tracer.scope().active(), null)
           done()
 
           return reply(request, h)
@@ -211,25 +213,25 @@ describe('Plugin', () => {
             method: 'GET',
             path: '/user/{id}',
             config: {
-              handler
-            }
+              handler,
+            },
           })
 
           server.ext({
             type: 'onPostAuth',
             method: (request, h) => {
               return tracer.scope().activate(null, reply(request, h))
-            }
+            },
           })
 
           server.ext({
             type: 'onPreHandler',
             method: (request, h) => {
-              expect(tracer.scope().active()).to.not.be.null
+              assert.notStrictEqual(tracer.scope().active(), null)
               done()
 
               return reply(request, h)
-            }
+            },
           })
 
           axios
@@ -242,11 +244,11 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler
+          handler,
         })
 
         server.ext('onRequest', (request, h) => {
-          expect(tracer.scope().active()).to.not.be.null
+          assert.notStrictEqual(tracer.scope().active(), null)
           done()
 
           return reply(request, h)
@@ -261,13 +263,13 @@ describe('Plugin', () => {
         server.route({
           method: 'GET',
           path: '/user/{id}',
-          handler
+          handler,
         })
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0].trace_id.toString()).to.equal('1234')
-            expect(traces[0][0].parent_id.toString()).to.equal('5678')
+            assert.strictEqual(traces[0][0].trace_id.toString(), '1234')
+            assert.strictEqual(traces[0][0].parent_id.toString(), '5678')
           })
           .then(done)
           .catch(done)
@@ -277,8 +279,8 @@ describe('Plugin', () => {
             headers: {
               'x-datadog-trace-id': '1234',
               'x-datadog-parent-id': '5678',
-              'ot-baggage-foo': 'bar'
-            }
+              'ot-baggage-foo': 'bar',
+            },
           })
           .catch(done)
       })
@@ -286,7 +288,7 @@ describe('Plugin', () => {
       it('should instrument the default route handler', done => {
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('name', 'hapi.request')
+            assert.strictEqual(traces[0][0].name, 'hapi.request')
           })
           .then(done)
           .catch(done)
@@ -308,16 +310,16 @@ describe('Plugin', () => {
             } else {
               throw error
             }
-          }
+          },
         })
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('error', 1)
-            expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-            expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-            expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-            expect(traces[0][0].meta).to.have.property('component', 'hapi')
+            assert.strictEqual(traces[0][0].error, 1)
+            assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(traces[0][0].meta.component, 'hapi')
           })
           .then(done)
           .catch(done)
@@ -340,13 +342,13 @@ describe('Plugin', () => {
             } else {
               throw error
             }
-          }
+          },
         })
 
         agent
           .assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('error', 0)
-            expect(traces[0][0].meta).to.have.property('component', 'hapi')
+            assert.strictEqual(traces[0][0].error, 0)
+            assert.strictEqual(traces[0][0].meta.component, 'hapi')
           })
           .then(done)
           .catch(done)
@@ -369,10 +371,10 @@ describe('Plugin', () => {
           method: 'GET',
           path,
           handler: async (request, h) => {
-            expect(storage.getStore()).to.deep.equal({ path })
+            assert.deepStrictEqual(storage.getStore(), { path })
             done()
             return h.response ? h.response() : h()
-          }
+          },
         })
 
         axios

@@ -57,5 +57,5 @@ function strategyHook (Strategy) {
 }
 
 module.exports = {
-  strategyHook
+  strategyHook,
 }

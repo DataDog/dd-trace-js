@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it } = require('mocha')
 
 require('../setup/core')
-
 const SpanContext = require('../../src/opentelemetry/span_context')
 const DDSpanContext = require('../../src/opentracing/span_context')
 const id = require('../../src/id')
@@ -14,47 +14,47 @@ const TraceState = require('../../src/opentracing/propagation/tracestate')
 describe('OTel Span Context', () => {
   it('should create new dd context if none given', () => {
     const context = new SpanContext()
-    expect(context._ddContext).to.be.instanceOf(DDSpanContext)
+    assert.ok(context._ddContext instanceof DDSpanContext)
   })
 
   it('should accept given dd context as-is', () => {
     const spanId = id()
     const ddContext = new DDSpanContext({
       traceId: spanId,
-      spanId
+      spanId,
     })
     const context = new SpanContext(ddContext)
-    expect(context._ddContext).to.equal(ddContext)
+    assert.strictEqual(context._ddContext, ddContext)
   })
 
   it('should accept object to build new dd context', () => {
     const spanId = id()
     const context = new SpanContext({
       traceId: spanId,
-      spanId
+      spanId,
     })
     const ddContext = context._ddContext
-    expect(ddContext).to.be.instanceOf(DDSpanContext)
-    expect(ddContext._traceId).to.equal(spanId)
-    expect(ddContext._spanId).to.equal(spanId)
+    assert.ok(ddContext instanceof DDSpanContext)
+    assert.strictEqual(ddContext._traceId, spanId)
+    assert.strictEqual(ddContext._spanId, spanId)
   })
 
   it('should get trace id as hex', () => {
     const traceId = id()
     const context = new SpanContext({
-      traceId
+      traceId,
     })
     // normalize to 128 bit since that is what otel expects
     const normalizedTraceId = traceId.toString(16).padStart(32, '0')
-    expect(context.traceId).to.equal(normalizedTraceId)
+    assert.strictEqual(context.traceId, normalizedTraceId)
   })
 
   it('should get span id as hex', () => {
     const spanId = id()
     const context = new SpanContext({
-      spanId
+      spanId,
     })
-    expect(context.spanId).to.equal(spanId.toString(16))
+    assert.strictEqual(context.spanId, spanId.toString(16))
   })
 
   it('should map sampling priority to trace flags', () => {
@@ -62,7 +62,7 @@ describe('OTel Span Context', () => {
       [USER_REJECT, 0],
       [AUTO_REJECT, 0],
       [AUTO_KEEP, 1],
-      [USER_KEEP, 1]
+      [USER_KEEP, 1],
     ]
 
     for (const [priority, traceFlags] of checks) {
@@ -71,10 +71,10 @@ describe('OTel Span Context', () => {
         traceId: spanId,
         spanId,
         sampling: {
-          priority
-        }
+          priority,
+        },
       })
-      expect(context.traceFlags).to.equal(traceFlags)
+      assert.strictEqual(context.traceFlags, traceFlags)
     }
   })
 
@@ -85,9 +85,9 @@ describe('OTel Span Context', () => {
     })
 
     const context = new SpanContext({
-      tracestate
+      tracestate,
     })
 
-    expect(context.traceState.serialize()).to.equal('dd=foo:bar')
+    assert.strictEqual(context.traceState.serialize(), 'dd=foo:bar')
   })
 })

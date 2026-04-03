@@ -1,27 +1,24 @@
 'use strict'
 
-const { createSandbox, spawnProc, FakeAgent } = require('../helpers')
+const assert = require('node:assert/strict')
+
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
+const { sandboxCwd, useSandbox, spawnProc, FakeAgent, stopProc } = require('../helpers')
 describe('ESM', () => {
-  let axios, sandbox, cwd, appFile, agent, proc
+  let axios, cwd, appFile, agent, proc
 
-  before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
-    sandbox = await createSandbox(['express'])
-    cwd = sandbox.folder
+  useSandbox(['express'])
+
+  before(function () {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'appsec', 'esm-app', 'index.mjs')
-  })
-
-  after(async function () {
-    await sandbox.remove()
   })
 
   const nodeOptionsList = [
     '--import dd-trace/initialize.mjs',
-    '--require dd-trace/init.js --loader dd-trace/loader-hook.mjs'
+    '--require dd-trace/init.js --loader dd-trace/loader-hook.mjs',
+    '--import dd-trace/register.js --require dd-trace/init',
   ]
 
   nodeOptionsList.forEach(nodeOptions => {
@@ -35,15 +32,15 @@ describe('ESM', () => {
             DD_TRACE_AGENT_PORT: agent.port,
             DD_IAST_ENABLED: 'true',
             DD_IAST_REQUEST_SAMPLING: '100',
-            NODE_OPTIONS: nodeOptions
-          }
+            NODE_OPTIONS: nodeOptions,
+          },
         })
 
         axios = Axios.create({ baseURL: proc.url })
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -68,8 +65,8 @@ describe('ESM', () => {
 
         await agent.assertMessageReceived(({ payload }) => {
           verifySpan(payload, span => {
-            assert.property(span.meta, '_dd.iast.json')
-            assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.match(span.meta['_dd.iast.json'], /"COMMAND_INJECTION"/)
           })
         }, null, 1, true)
       })
@@ -79,8 +76,8 @@ describe('ESM', () => {
 
         await agent.assertMessageReceived(({ payload }) => {
           verifySpan(payload, span => {
-            assert.property(span.meta, '_dd.iast.json')
-            assert.include(span.meta['_dd.iast.json'], '"COMMAND_INJECTION"')
+            assert.ok(Object.hasOwn(span.meta, '_dd.iast.json'))
+            assert.match(span.meta['_dd.iast.json'], /"COMMAND_INJECTION"/)
           })
         }, null, 1, true)
       })

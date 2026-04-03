@@ -10,7 +10,8 @@ const {
   getOnHookEndHandler,
   getOnFailHandler,
   getOnPendingHandler,
-  getRunTestsWrapper
+  getOnTestRetryHandler,
+  getRunTestsWrapper,
 } = require('./utils')
 require('./common')
 
@@ -21,7 +22,7 @@ const config = {}
 addHook({
   name: 'mocha',
   versions: ['>=8.0.0'],
-  file: 'lib/mocha.js'
+  file: 'lib/mocha.js',
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     if (this.options._ddIsKnownTestsEnabled) {
@@ -42,11 +43,17 @@ addHook({
     }
     if (this.options._ddIsTestManagementTestsEnabled) {
       config.isTestManagementTestsEnabled = true
-      // TODO: attempt to fix does not work in parallel mode yet
-      // config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
+      config.testManagementAttemptToFixRetries = this.options._ddTestManagementAttemptToFixRetries
       config.testManagementTests = this.options._ddTestManagementTests
       delete this.options._ddIsTestManagementTestsEnabled
+      delete this.options._ddTestManagementAttemptToFixRetries
       delete this.options._ddTestManagementTests
+    }
+    if (this.options._ddIsFlakyTestRetriesEnabled) {
+      config.isFlakyTestRetriesEnabled = true
+      config.flakyTestRetriesCount = this.options._ddFlakyTestRetriesCount
+      delete this.options._ddIsFlakyTestRetriesEnabled
+      delete this.options._ddFlakyTestRetriesCount
     }
     return run.apply(this, arguments)
   })
@@ -58,7 +65,7 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/runner.js'
+  file: 'lib/runner.js',
 }, function (Runner) {
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
@@ -67,12 +74,14 @@ addHook({
       return run.apply(this, arguments)
     }
     // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
-    this.on('end', () => {
+    this.once('end', () => {
       workerFinishCh.publish()
     })
     this.on('test', getOnTestHandler(false))
 
     this.on('test end', getOnTestEndHandler(config))
+
+    this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
     this.on('hook end', getOnHookEndHandler())
@@ -91,6 +100,5 @@ addHook({
 addHook({
   name: 'mocha',
   versions: ['>=5.2.0'],
-  file: 'lib/runnable.js'
-}, runnableWrapper)
-// TODO: parallel mode does not support flaky test retries, so no library config is passed.
+  file: 'lib/runnable.js',
+}, (runnablePackage) => runnableWrapper(runnablePackage, config))

@@ -1,16 +1,16 @@
 'use strict'
 
-const path = require('node:path')
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const path = require('node:path')
 
-const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+
 const { storage } = require('../../../../../datadog-core')
 const iastContextFunctions = require('../../../../src/appsec/iast/iast-context')
 const { newTaintedString, isTainted } = require('../../../../src/appsec/iast/taint-tracking/operations')
 const { clearCache } = require('../../../../src/appsec/iast/vulnerability-reporter')
-
+const { prepareTestServerForIast, copyFileToTmp } = require('../utils')
 const commands = [
   '  ls -la  ',
   '  ls -la',
@@ -20,7 +20,7 @@ const commands = [
   ' ls -la  𠆢𠆢𠆢 ',
   ' ls -ls �',
   ' w ',
-  'w'
+  'w',
 ]
 
 const propagationLodashFns = [
@@ -30,7 +30,7 @@ const propagationLodashFns = [
   'trimStartLodash',
   'trimEndLodash',
   'arrayJoinLodashWithoutSeparator',
-  'arrayJoinLodashWithSeparator'
+  'arrayJoinLodashWithSeparator',
 ]
 
 const propagationLodashFunctionsFile = path.join(__dirname, 'resources/propagationLodashFunctions.js')
@@ -63,10 +63,10 @@ describe('TaintTracking lodash', () => {
               const propFnOriginal = propagationLodashFunctions[propFn]
 
               const commandResult = propFnInstrumented(_, commandTainted)
-              expect(isTainted(iastContext, commandResult)).to.be.true
+              assert.strictEqual(isTainted(iastContext, commandResult), true)
 
               const commandResultOrig = propFnOriginal(_, commandTainted)
-              expect(commandResult).eq(commandResultOrig)
+              assert.strictEqual(commandResult, commandResultOrig)
 
               try {
                 const childProcess = require('child_process')
@@ -93,8 +93,8 @@ describe('TaintTracking lodash', () => {
 
       const originalResult = propFnOriginal(_, taintedValue)
       const instrumentedResult = propFnInstrumented(_, taintedValue)
-      expect(instrumentedResult).to.be.equal(originalResult)
-      expect(isTainted(iastContext, instrumentedResult)).to.be.false
+      assert.strictEqual(instrumentedResult, originalResult)
+      assert.strictEqual(isTainted(iastContext, instrumentedResult), false)
     })
   })
 })

@@ -1,29 +1,22 @@
 'use strict'
 
-const { createSandbox, FakeAgent, spawnProc } = require('./helpers')
+const assert = require('node:assert/strict')
+
 const path = require('path')
 const Axios = require('axios')
-const { assert } = require('chai')
-
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('./helpers')
 describe('Remote config client id', () => {
-  let axios, sandbox, cwd, appFile
+  let axios, cwd, appFile
 
-  before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+  useSandbox(
+    ['express'],
+    false,
+    [path.join(__dirname, 'remote_config')]
+  )
 
-    sandbox = await createSandbox(
-      ['express'],
-      false,
-      [path.join(__dirname, 'remote_config')]
-    )
-
-    cwd = sandbox.folder
+  before(function () {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'remote_config', 'index.js')
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
   })
 
   describe('enabled', () => {
@@ -35,13 +28,13 @@ describe('Remote config client id', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-        }
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -49,8 +42,43 @@ describe('Remote config client id', () => {
       await axios.get('/')
 
       return agent.assertMessageReceived(({ payload }) => {
-        assert.exists(payload[0][0].meta['_dd.rc.client_id'])
+        assert.ok(payload[0][0].meta['_dd.rc.client_id'])
       })
+    })
+
+    it('should include process tags in remote config requests', (done) => {
+      const handleRemoteConfigRequest = (payload) => {
+        try {
+          const { client } = payload
+          assert.ok(client, 'client should exist in remote config request')
+          assert.ok(client.client_tracer, 'client_tracer should exist')
+          assert.ok(client.client_tracer.process_tags, 'process_tags should exist')
+
+          const processTags = client.client_tracer.process_tags
+
+          // Verify process_tags is an array of strings
+          assert.ok(Array.isArray(processTags), 'process_tags should be an array')
+
+          // Verify required process tags are present
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.basedir:')))
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.name:')))
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.type:')))
+          assert.ok(processTags.some(tag => tag.startsWith('entrypoint.workdir:')))
+
+          // Verify entrypoint.type has the expected value
+          assert.ok(processTags.some(tag => tag === 'entrypoint.type:script'))
+          done()
+        } catch (err) {
+          done(err)
+        } finally {
+          agent.removeListener('remote-config-request', handleRemoteConfigRequest)
+        }
+      }
+
+      agent.on('remote-config-request', handleRemoteConfigRequest)
+
+      // Trigger a request to ensure remote config is polled
+      axios.get('/').catch(() => {})
     })
   })
 
@@ -63,14 +91,14 @@ describe('Remote config client id', () => {
         cwd,
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
-          DD_REMOTE_CONFIGURATION_ENABLED: false
-        }
+          DD_REMOTE_CONFIGURATION_ENABLED: 'false',
+        },
       })
       axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -78,7 +106,7 @@ describe('Remote config client id', () => {
       await axios.get('/')
 
       return agent.assertMessageReceived(({ payload }) => {
-        assert.notExists(payload[0][0].meta['_dd.rc.client_id'])
+        assert.ok(payload[0][0].meta['_dd.rc.client_id'] == null)
       })
     })
   })

@@ -3,36 +3,39 @@
 // TODO (new internal tracer): use DC events for lifecycle metrics and test them
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
-const dateNow = Date.now
-const SpanContext = require('./span_context')
+const util = require('util')
+const { channel } = require('dc-polyfill')
 const id = require('../id')
 const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../telemetry/metrics')
-const { channel } = require('dc-polyfill')
-const util = require('util')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getValueFromEnvSources } = require('../config/helper')
+const { isTrue } = require('../util')
+const SpanContext = require('./span_context')
+
+const dateNow = Date.now
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
-const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_STATE_TRACKING')
-const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = getEnvironmentVariable('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS')
+const DD_TRACE_EXPERIMENTAL_STATE_TRACKING = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_STATE_TRACKING'))
+const DD_TRACE_EXPERIMENTAL_SPAN_COUNTS = isTrue(getValueFromEnvSources('DD_TRACE_EXPERIMENTAL_SPAN_COUNTS'))
 
 const unfinishedRegistry = createRegistry('unfinished')
 const finishedRegistry = createRegistry('finished')
 
-const OTEL_ENABLED = !!getEnvironmentVariable('DD_TRACE_OTEL_ENABLED')
+const OTEL_ENABLED = !!getValueFromEnvSources('DD_TRACE_OTEL_ENABLED')
 const ALLOWED = new Set(['string', 'number', 'boolean'])
 
 const integrationCounters = {
   spans_created: {},
-  spans_finished: {}
+  spans_finished: {},
 }
 
 const startCh = channel('dd-trace:span:start')
 const finishCh = channel('dd-trace:span:finish')
+const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
 function getIntegrationCounter (event, integration) {
   const counters = integrationCounters[event]
@@ -43,7 +46,7 @@ function getIntegrationCounter (event, integration) {
 
   const counter = tracerMetrics.count(event, [
     `integration_name:${integration.toLowerCase()}`,
-    `otel_enabled:${OTEL_ENABLED}`
+    `otel_enabled:${OTEL_ENABLED}`,
   ])
 
   integrationCounters[event][integration] = counter
@@ -88,7 +91,7 @@ class DatadogSpan {
 
     this._links = fields.links?.map(link => ({
       context: link.context._ddContext ?? link.context,
-      attributes: this._sanitizeAttributes(link.attributes)
+      attributes: this._sanitizeAttributes(link.attributes),
     })) ?? []
 
     if (DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
@@ -123,7 +126,7 @@ class DatadogSpan {
       ...this,
       _parentTracer: `[${this._parentTracer.constructor.name}]`,
       _prioritySampler: `[${this._prioritySampler.constructor.name}]`,
-      _processor: `[${this._processor.constructor.name}]`
+      _processor: `[${this._processor.constructor.name}]`,
     }
   }
 
@@ -139,7 +142,7 @@ class DatadogSpan {
       parentId: spanContext._parentId,
       service: spanContext._tags['service.name'],
       name: spanContext._name,
-      resource
+      resource,
     })
 
     return `Span${json}`
@@ -208,25 +211,27 @@ class DatadogSpan {
 
     this._links.push({
       context: context._ddContext ?? context,
-      attributes: this._sanitizeAttributes(attributes)
+      attributes: this._sanitizeAttributes(attributes),
     })
   }
 
   addLinks (links) {
-    links.forEach(link => this.addLink(link))
+    for (const link of links) {
+      this.addLink(link)
+    }
     return this
   }
 
   addSpanPointer (ptrKind, ptrDir, ptrHash) {
     const zeroContext = new SpanContext({
       traceId: id('0'),
-      spanId: id('0')
+      spanId: id('0'),
     })
     const attributes = {
       'ptr.kind': ptrKind,
       'ptr.dir': ptrDir,
       'ptr.hash': ptrHash,
-      'link.kind': 'span-pointer'
+      'link.kind': 'span-pointer',
     }
     this.addLink({ context: zeroContext, attributes })
   }
@@ -234,7 +239,7 @@ class DatadogSpan {
   addEvent (name, attributesOrStartTime, startTime) {
     const event = { name }
     if (attributesOrStartTime) {
-      if (typeof attributesOrStartTime === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
+      if (typeof attributesOrStartTime === 'object') {
         event.attributes = this._sanitizeEventAttributes(attributesOrStartTime)
       } else {
         startTime = attributesOrStartTime
@@ -249,7 +254,7 @@ class DatadogSpan {
       return
     }
 
-    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING === 'true' && !this._spanContext._tags['service.name']) {
+    if (DD_TRACE_EXPERIMENTAL_STATE_TRACKING && !this._spanContext._tags['service.name']) {
       log.error('Finishing invalid span: %s', this)
     }
 
@@ -297,23 +302,21 @@ class DatadogSpan {
       }
     }
 
-    Object.entries(attributes).forEach(entry => {
-      const [key, value] = entry
+    for (const [key, value] of Object.entries(attributes)) {
       addArrayOrScalarAttributes(key, value)
-    })
+    }
     return sanitizedAttributes
   }
 
   _sanitizeEventAttributes (attributes = {}) {
     const sanitizedAttributes = {}
 
-    for (const key in attributes) {
-      const value = attributes[key]
+    for (const [key, value] of Object.entries(attributes)) {
       if (Array.isArray(value)) {
         const newArray = []
-        for (const subkey in value) {
-          if (ALLOWED.has(typeof value[subkey])) {
-            newArray.push(value[subkey])
+        for (const subvalue of Object.values(value)) {
+          if (ALLOWED.has(typeof subvalue)) {
+            newArray.push(subvalue)
           } else {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }
@@ -351,7 +354,7 @@ class DatadogSpan {
         sampling: parent._sampling,
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
-        tracestate: parent._tracestate
+        tracestate: parent._tracestate,
       })
 
       if (!spanContext._trace.startTime) {
@@ -362,7 +365,7 @@ class DatadogSpan {
       startTime = dateNow()
       spanContext = new SpanContext({
         traceId: spanId,
-        spanId
+        spanId,
       })
       spanContext._trace.startTime = startTime
 
@@ -397,6 +400,10 @@ class DatadogSpan {
     tagger.add(this._spanContext._tags, keyValuePairs)
 
     this._prioritySampler.sample(this, false)
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
   }
 }
 

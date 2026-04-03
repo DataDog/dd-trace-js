@@ -1,20 +1,20 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
-const waf = require('../../src/appsec/waf')
-const web = require('../../src/plugins/util/web')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
-
+const waf = require('../../src/appsec/waf')
+const web = require('../../src/plugins/util/web')
 const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,
   apolloChannel,
-  apolloServerCoreChannel
+  apolloServerCoreChannel,
 } = require('../../src/appsec/channels')
 
 describe('GraphQL', () => {
@@ -25,22 +25,22 @@ describe('GraphQL', () => {
     blocking = {
       getBlockingData,
       setTemplates: sinon.stub(),
-      block: sinon.stub()
+      block: sinon.stub(),
     }
 
     getBlockingData.returns({
       headers: { 'Content-type': 'application/json' },
       body: '{ "message": "blocked" }',
-      statusCode: 403
+      statusCode: 403,
     })
 
     telemetry = {
-      updateBlockFailureMetric: sinon.stub()
+      updateBlockFailureMetric: sinon.stub(),
     }
 
     graphql = proxyquire('../../src/appsec/graphql', {
       './blocking': blocking,
-      './telemetry': telemetry
+      './telemetry': telemetry,
     })
   })
 
@@ -58,21 +58,21 @@ describe('GraphQL', () => {
     })
 
     it('Should subscribe to all channels', () => {
-      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
-      expect(apolloChannel.start.hasSubscribers).to.be.false
-      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
-      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
-      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.false
-      expect(startGraphqlResolve.hasSubscribers).to.be.false
+      assert.strictEqual(graphqlMiddlewareChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, false)
+      assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, false)
+      assert.strictEqual(startGraphqlResolve.hasSubscribers, false)
 
       graphql.enable()
 
-      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
-      expect(apolloChannel.start.hasSubscribers).to.be.true
-      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
-      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
-      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.true
-      expect(startGraphqlResolve.hasSubscribers).to.be.true
+      assert.strictEqual(graphqlMiddlewareChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, true)
+      assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, true)
+      assert.strictEqual(startGraphqlResolve.hasSubscribers, true)
     })
   })
 
@@ -80,21 +80,21 @@ describe('GraphQL', () => {
     it('Should unsubscribe from all channels', () => {
       graphql.enable()
 
-      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.true
-      expect(apolloChannel.start.hasSubscribers).to.be.true
-      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.true
-      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.true
-      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.true
-      expect(startGraphqlResolve.hasSubscribers).to.be.true
+      assert.strictEqual(graphqlMiddlewareChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, true)
+      assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, true)
+      assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, true)
+      assert.strictEqual(startGraphqlResolve.hasSubscribers, true)
 
       graphql.disable()
 
-      expect(graphqlMiddlewareChannel.start.hasSubscribers).to.be.false
-      expect(apolloChannel.start.hasSubscribers).to.be.false
-      expect(apolloChannel.asyncEnd.hasSubscribers).to.be.false
-      expect(apolloServerCoreChannel.start.hasSubscribers).to.be.false
-      expect(apolloServerCoreChannel.asyncEnd.hasSubscribers).to.be.false
-      expect(startGraphqlResolve.hasSubscribers).to.be.false
+      assert.strictEqual(graphqlMiddlewareChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloChannel.asyncEnd.hasSubscribers, false)
+      assert.strictEqual(apolloServerCoreChannel.start.hasSubscribers, false)
+      assert.strictEqual(apolloServerCoreChannel.asyncEnd.hasSubscribers, false)
+      assert.strictEqual(startGraphqlResolve.hasSubscribers, false)
     })
   })
 
@@ -113,50 +113,50 @@ describe('GraphQL', () => {
 
     it('Should not call waf if resolvers is undefined', () => {
       const context = {
-        resolver: undefined
+        resolver: undefined,
       }
 
       startGraphqlResolve.publish({ context })
 
-      expect(waf.run).not.to.have.been.called
+      sinon.assert.notCalled(waf.run)
     })
 
     it('Should not call waf if resolvers is not an object', () => {
       const context = {
-        resolver: ''
+        resolver: '',
       }
 
       startGraphqlResolve.publish({ context })
 
-      expect(waf.run).not.to.have.been.called
+      sinon.assert.notCalled(waf.run)
     })
 
     it('Should not call waf if req is unavailable', () => {
       const context = {}
       const resolverInfo = {
-        user: [{ id: '1234' }]
+        user: [{ id: '1234' }],
       }
 
       storage('legacy').getStore().req = undefined
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).not.to.have.been.called
+      sinon.assert.notCalled(waf.run)
     })
 
     it('Should call waf if resolvers is well formatted', () => {
       const context = {}
 
       const resolverInfo = {
-        user: [{ id: '1234' }]
+        user: [{ id: '1234' }],
       }
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        }
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
+        },
       }, {})
     })
   })
@@ -165,12 +165,12 @@ describe('GraphQL', () => {
     const req = {}
     const res = {}
     const resolverInfo = {
-      user: [{ id: '1234' }]
+      user: [{ id: '1234' }],
     }
     const blockParameters = {
       status_code: 401,
       type: 'auto',
-      grpc_status_code: 10
+      grpc_status_code: 10,
     }
 
     let context, rootSpan
@@ -183,8 +183,8 @@ describe('GraphQL', () => {
       apolloChannel.start.publish()
       context = {
         abortController: {
-          abort: sinon.stub()
-        }
+          abort: sinon.stub(),
+        },
       }
       rootSpan = { setTag: sinon.stub() }
     })
@@ -201,17 +201,17 @@ describe('GraphQL', () => {
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        }
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
+        },
       }, {})
 
-      expect(context.abortController.abort).not.to.have.been.called
+      sinon.assert.notCalled(context.abortController.abort)
 
       apolloChannel.asyncEnd.publish({ abortController })
 
-      expect(blocking.getBlockingData).not.to.have.been.called
+      sinon.assert.notCalled(blocking.getBlockingData)
     })
 
     it('Should call abort', () => {
@@ -219,29 +219,29 @@ describe('GraphQL', () => {
 
       sinon.stub(waf, 'run').returns({
         actions: {
-          block_request: blockParameters
-        }
+          block_request: blockParameters,
+        },
       })
 
       sinon.stub(web, 'root').returns(rootSpan)
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        }
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
+        },
       }, {})
 
-      expect(context.abortController.abort).to.have.been.called
+      sinon.assert.called(context.abortController.abort)
 
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
 
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('appsec.blocked', 'true')
-      expect(telemetry.updateBlockFailureMetric).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+      sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
     })
 
     it('Should catch error when block fails', () => {
@@ -251,29 +251,29 @@ describe('GraphQL', () => {
 
       sinon.stub(waf, 'run').returns({
         actions: {
-          block_request: blockParameters
-        }
+          block_request: blockParameters,
+        },
       })
 
       sinon.stub(web, 'root').returns(rootSpan)
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         ephemeral: {
-          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo
-        }
+          [addresses.HTTP_INCOMING_GRAPHQL_RESOLVER]: resolverInfo,
+        },
       }, {})
 
-      expect(abortController.abort).to.have.been.calledOnce
+      sinon.assert.calledOnce(abortController.abort)
 
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      expect(blocking.getBlockingData).to.have.been.calledOnceWithExactly(req, 'graphql', blockParameters)
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
 
-      expect(rootSpan.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.block.failed', 1)
-      expect(telemetry.updateBlockFailureMetric).to.be.calledOnceWithExactly(req)
+      sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
+      sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
     })
   })
 })

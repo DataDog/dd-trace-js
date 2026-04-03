@@ -17,7 +17,7 @@ test.describe('playwright', () => {
     expect(sum(1, 2)).toEqual(3)
 
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

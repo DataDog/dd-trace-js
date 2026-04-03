@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
-
 const id = require('../src/id')
 
 describe('span sampler', () => {
@@ -24,7 +24,7 @@ describe('span sampler', () => {
     }
 
     SpanSampler = proxyquire('../src/span_sampler', {
-      './sampling_rule': SamplingRule
+      './sampling_rule': SamplingRule,
     })
   })
 
@@ -34,25 +34,25 @@ describe('span sampler', () => {
     const spanContext = {
       _spanId: id('1234567812345678'),
       _sampling: {
-        priority: 2
+        priority: 2,
       },
       _trace: {
-        started: []
+        started: [],
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     try {
       const ingested = sampler.sample(spanContext)
-      expect(ingested).to.be.undefined
+      assert.strictEqual(ingested, undefined)
       done()
     } catch (err) { done(err) }
   })
@@ -64,38 +64,38 @@ describe('span sampler', () => {
           service: 'test',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 5
-        }
-      ]
+          maxPerSecond: 5,
+        },
+      ],
     })
 
     const spanContext = {
       _spanId: id('1234567812345678'),
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     sampler.sample(spanContext)
 
-    expect(spies.match).to.be.called
-    expect(spies.sample).to.be.called
-    expect(spies.sampleRate.get).to.be.called
-    expect(spies.maxPerSecond.get).to.be.called
+    sinon.assert.called(spies.match)
+    sinon.assert.called(spies.sample)
+    sinon.assert.called(spies.sampleRate.get)
+    sinon.assert.called(spies.maxPerSecond.get)
 
-    expect(spanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(spanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
   })
 
@@ -106,50 +106,50 @@ describe('span sampler', () => {
           service: 'does-not-match',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 3
+          maxPerSecond: 3,
         },
         {
           service: 'test',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 5
+          maxPerSecond: 5,
         },
         {
           service: 'test',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 10
-        }
-      ]
+          maxPerSecond: 10,
+        },
+      ],
     })
 
     const spanContext = {
       _spanId: id('1234567812345678'),
       _sampling: {},
       _trace: {
-        started: []
+        started: [],
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     spanContext._trace.started.push({
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     sampler.sample(spanContext)
 
-    expect(spies.match).to.be.called
-    expect(spies.sample).to.be.called
-    expect(spies.sampleRate.get).to.be.called
-    expect(spies.maxPerSecond.get).to.be.called
+    sinon.assert.called(spies.match)
+    sinon.assert.called(spies.sample)
+    sinon.assert.called(spies.sampleRate.get)
+    sinon.assert.called(spies.maxPerSecond.get)
 
-    expect(spanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(spanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
   })
 
@@ -160,9 +160,9 @@ describe('span sampler', () => {
           service: 'test',
           name: '*operation',
           sampleRate: 1.0,
-          maxPerSecond: 5
-        }
-      ]
+          maxPerSecond: 5,
+        },
+      ],
     })
 
     // Create two span contexts
@@ -171,47 +171,47 @@ describe('span sampler', () => {
       _spanId: id('1234567812345678'),
       _sampling: {},
       _trace: {
-        started
+        started,
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     const secondSpanContext = {
       ...firstSpanContext,
       _spanId: id('1234567812345679'),
-      _name: 'second operation'
+      _name: 'second operation',
     }
 
     // Add spans for both to the context
     started.push({
       context: sinon.stub().returns(firstSpanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
     started.push({
       context: sinon.stub().returns(secondSpanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     sampler.sample(firstSpanContext)
 
-    expect(spies.match).to.be.called
-    expect(spies.sample).to.be.called
-    expect(spies.sampleRate.get).to.be.called
-    expect(spies.maxPerSecond.get).to.be.called
+    sinon.assert.called(spies.match)
+    sinon.assert.called(spies.sample)
+    sinon.assert.called(spies.sampleRate.get)
+    sinon.assert.called(spies.maxPerSecond.get)
 
-    expect(firstSpanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(firstSpanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
-    expect(secondSpanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(secondSpanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
   })
 
@@ -222,15 +222,15 @@ describe('span sampler', () => {
           service: 'test',
           name: 'operation',
           sampleRate: 1.0,
-          maxPerSecond: 5
+          maxPerSecond: 5,
         },
         {
           service: 'test',
           name: 'second*',
           sampleRate: 1.0,
-          maxPerSecond: 3
-        }
-      ]
+          maxPerSecond: 3,
+        },
+      ],
     })
 
     // Create two span contexts
@@ -239,47 +239,47 @@ describe('span sampler', () => {
       _spanId: id('1234567812345678'),
       _sampling: {},
       _trace: {
-        started
+        started,
       },
       _name: 'operation',
-      _tags: {}
+      _tags: {},
     }
     const secondSpanContext = {
       ...firstSpanContext,
       _spanId: id('1234567812345679'),
-      _name: 'second operation'
+      _name: 'second operation',
     }
 
     // Add spans for both to the context
     started.push({
       context: sinon.stub().returns(firstSpanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
     started.push({
       context: sinon.stub().returns(secondSpanContext),
       tracer: sinon.stub().returns({
-        _service: 'test'
+        _service: 'test',
       }),
-      _name: 'operation'
+      _name: 'operation',
     })
 
     sampler.sample(firstSpanContext)
 
-    expect(spies.match).to.be.called
-    expect(spies.sample).to.be.called
-    expect(spies.sampleRate.get).to.be.called
-    expect(spies.maxPerSecond.get).to.be.called
+    sinon.assert.called(spies.match)
+    sinon.assert.called(spies.sample)
+    sinon.assert.called(spies.sampleRate.get)
+    sinon.assert.called(spies.maxPerSecond.get)
 
-    expect(firstSpanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(firstSpanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 5
+      maxPerSecond: 5,
     })
-    expect(secondSpanContext._spanSampling).to.eql({
+    assert.deepStrictEqual(secondSpanContext._spanSampling, {
       sampleRate: 1.0,
-      maxPerSecond: 3
+      maxPerSecond: 3,
     })
   })
 })

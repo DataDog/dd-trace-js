@@ -5,11 +5,11 @@ const fs = require('fs')
 const path = require('path')
 
 const IGNORE_TESTS = new Set([
-  'profiler'
+  'profiler',
 ])
 
 const IGNORE_STATS = [
-  'system.time'
+  'system.time',
 ]
 
 const lines = fs

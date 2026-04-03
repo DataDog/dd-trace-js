@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 // This is normally taken care of by using NODE_OPTIONS, but we can't set
 // flushInterval through an env var
 tracer.init({
-  flushInterval: 0
+  flushInterval: 0,
 })
 
 tracer.trace('sum.test', { resource: 'sum.test.js' }, () => {

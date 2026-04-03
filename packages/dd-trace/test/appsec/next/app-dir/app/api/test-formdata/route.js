@@ -4,15 +4,15 @@ export async function POST (request) {
 
   if (!body.entries) {
     return NextResponse.json({
-      message: 'Instrumentation modified form data'
+      message: 'Instrumentation modified form data',
     }, {
-      status: 500
+      status: 500,
     })
   }
 
   return NextResponse.json({
     now: Date.now(),
     cache: 'no-store',
-    data: body
+    data: body,
   })
 }

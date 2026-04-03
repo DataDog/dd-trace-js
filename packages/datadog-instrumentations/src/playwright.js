@@ -1,17 +1,22 @@
 'use strict'
 
-const satisfies = require('semifies')
+const satisfies = require('../../../vendor/dist/semifies')
 
-const { addHook, channel } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 const {
   parseAnnotations,
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
-  getIsFaultyEarlyFlakeDetection
+  getIsFaultyEarlyFlakeDetection,
+  DYNAMIC_NAME_RE,
+  logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const {
+  getValueFromEnvSources,
+} = require('../../dd-trace/src/config/helper')
 const { DD_MAJOR } = require('../../../version')
+const { addHook, channel } = require('./helpers/instrument')
 
 const testStartCh = channel('ci:playwright:test:start')
 const testFinishCh = channel('ci:playwright:test:finish')
@@ -38,7 +43,7 @@ const testSuiteToTestStatuses = new Map()
 const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
-const RUM_FLUSH_WAIT_TIME = 1000
+const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
 
 let applyRepeatEachIndex = null
 
@@ -48,7 +53,7 @@ const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
   failed: 'fail',
   timedOut: 'fail',
-  skipped: 'skip'
+  skipped: 'skip',
 }
 
 let remainingTestsByFile = {}
@@ -67,7 +72,10 @@ let isImpactedTestsEnabled = false
 let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
+const newTestsWithDynamicNames = new Set()
 let rootDir = ''
+let sessionProjects = []
+
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
 function isValidKnownTests (receivedKnownTests) {
@@ -115,13 +123,13 @@ function deepCloneSuite (suite, filterTest, tags = []) {
     } else {
       if (filterTest(entry)) {
         const copiedTest = entry._clone()
-        tags.forEach(tag => {
+        for (const tag of tags) {
           const resolvedTag = typeof tag === 'function' ? tag(entry) : tag
 
           if (resolvedTag) {
             copiedTest[resolvedTag] = true
           }
-        })
+        }
         copy._addTest(copiedTest)
       }
     }
@@ -297,9 +305,10 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   const {
     _requireFile: testSuiteAbsolutePath,
     location: {
-      line: testSourceLine
+      file: testSourceFileAbsolutePath,
+      line: testSourceLine,
     },
-    _type
+    _type,
   } = test
 
   if (_type === 'beforeAll' || _type === 'afterAll') {
@@ -314,7 +323,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
 
   if (isNewTestSuite) {
     startedSuites.push(testSuiteAbsolutePath)
-    const testSuiteCtx = { testSuiteAbsolutePath }
+    const testSuiteCtx = { testSuiteAbsolutePath, testSourceFileAbsolutePath }
     testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
@@ -330,9 +339,10 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
     const testCtx = {
       testName,
       testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
       testSourceLine,
       browserName,
-      isDisabled: test._ddIsDisabled
+      isDisabled: test._ddIsDisabled,
     }
     testToCtx.set(test, testCtx)
 
@@ -347,7 +357,7 @@ function testEndHandler ({
   error,
   isTimeout,
   shouldCreateTestSpan,
-  projects
+  projects,
 }) {
   const {
     _requireFile: testSuiteAbsolutePath,
@@ -374,6 +384,9 @@ function testEndHandler ({
 
   if (testStatuses.length === 0) {
     testsToTestStatuses.set(testFqn, [testStatus])
+    if (test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test))) {
+      newTestsWithDynamicNames.add(`${getTestSuitePath(test._requireFile, rootDir)} › ${getTestFullname(test)}`)
+    }
   } else {
     testStatuses.push(testStatus)
   }
@@ -389,6 +402,23 @@ function testEndHandler ({
     } else if (testStatuses.every(status => status === 'pass')) {
       test._ddHasPassedAttemptToFixRetries = true
     }
+  }
+
+  // Check if all EFD retries failed
+  if (testStatuses.length === earlyFlakeDetectionNumRetries + 1 &&
+    (test._ddIsNew || test._ddIsModified) &&
+    test._ddIsEfdRetry &&
+    testStatuses.every(status => status === 'fail')) {
+    test._ddHasFailedAllRetries = true
+  }
+
+  // ATR: set _ddHasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
+    !(test._ddIsNew || test._ddIsModified) &&
+    flakyTestRetriesCount != null && flakyTestRetriesCount > 0 &&
+    testStatuses.length === flakyTestRetriesCount + 1 &&
+    testStatuses.every(status => status === 'fail')) {
+    test._ddHasFailedAllRetries = true
   }
 
   // this handles tests that do not go through the worker process (because they're skipped)
@@ -408,6 +438,7 @@ function testEndHandler ({
         error,
         extraTags: annotationTags,
         isNew: test._ddIsNew,
+        hasDynamicName: test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test)),
         isAttemptToFix: test._ddIsAttemptToFix,
         isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
         isQuarantined: test._ddIsQuarantined,
@@ -417,7 +448,7 @@ function testEndHandler ({
         hasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
         isAtrRetry,
         isModified: test._ddIsModified,
-        ...testCtx.currentStore
+        ...testCtx.currentStore,
       })
     }
   }
@@ -446,12 +477,13 @@ function testEndHandler ({
       testSkipCh.publish({
         testName: getTestFullname(test),
         testSuiteAbsolutePath,
+        testSourceFileAbsolutePath: test.location.file,
         testSourceLine: test.location.line,
         browserName,
         isNew: test._ddIsNew,
         isDisabled: test._ddIsDisabled,
         isModified: test._ddIsModified,
-        isQuarantined: test._ddIsQuarantined
+        isQuarantined: test._ddIsQuarantined,
       })
     }
     remainingTestsByFile[testSuiteAbsolutePath] = []
@@ -479,6 +511,16 @@ function dispatcherRunWrapper (run) {
 
 function dispatcherRunWrapperNew (run) {
   return function (testGroups) {
+    // Filter out disabled tests from testGroups before they get scheduled,
+    // unless they have attemptToFix (in which case they should still run and be retried)
+    if (isTestManagementTestsEnabled) {
+      for (const group of testGroups) {
+        group.tests = group.tests.filter(test => !test._ddIsDisabled || test._ddIsAttemptToFix)
+      }
+      // Remove empty groups
+      testGroups = testGroups.filter(group => group.tests.length > 0)
+    }
+
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
@@ -495,6 +537,7 @@ function dispatcherHook (dispatcherExport) {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
+    sessionProjects = projects
 
     // for older versions of playwright, `shouldCreateTestSpan` should always be true,
     // since the `_runTest` function wrapper is not available for older versions
@@ -518,7 +561,7 @@ function dispatcherHook (dispatcherExport) {
             error: testResult.error,
             isTimeout,
             shouldCreateTestSpan: true,
-            projects
+            projects,
           }
         )
       }
@@ -535,6 +578,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
     const dispatcher = this
     const worker = createWorker.apply(this, arguments)
     const projects = getProjectsFromDispatcher(dispatcher)
+    sessionProjects = projects
 
     worker.on('testBegin', ({ testId }) => {
       const test = getTestByTestId(dispatcher, testId)
@@ -555,7 +599,7 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           error: errors && errors[0],
           isTimeout,
           shouldCreateTestSpan,
-          projects
+          projects,
         }
       )
       const testResult = test.results.at(-1)
@@ -578,8 +622,8 @@ function dispatcherHookNew (dispatcherExport, runWrapper) {
           _ddHasPassedAttemptToFixRetries: test._ddHasPassedAttemptToFixRetries,
           _ddHasFailedAttemptToFixRetries: test._ddHasFailedAttemptToFixRetries,
           _ddIsAtrRetry: isAtrRetry,
-          _ddIsModified: test._ddIsModified
-        }
+          _ddIsModified: test._ddIsModified,
+        },
       })
     })
 
@@ -674,15 +718,16 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
     const projects = getProjectsFromRunner(this, config)
 
-    const shouldSetRetries = isFlakyTestRetriesEnabled &&
-      flakyTestRetriesCount > 0 &&
-      !isTestManagementTestsEnabled
-    if (shouldSetRetries) {
-      projects.forEach(project => {
+    // ATR and `--retries` are now compatible with Test Management.
+    // Test Management tests have their retries set to 0 at the test level,
+    // preventing them from being retried by ATR or `--retries`.
+    const shouldSetATRRetries = isFlakyTestRetriesEnabled && flakyTestRetriesCount > 0
+    if (shouldSetATRRetries) {
+      for (const project of projects) {
         if (project.retries === 0) { // Only if it hasn't been set by the user
           project.retries = flakyTestRetriesCount
         }
-      })
+      }
     }
 
     let runAllTestsReturn = await runAllTests.apply(this, arguments)
@@ -690,11 +735,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     // Tests that have only skipped tests may reach this point
     // Skipped tests may or may not go through `testBegin` or `testEnd`
     // depending on the playwright configuration
-    Object.values(remainingTestsByFile).forEach(tests => {
+    for (const tests of Object.values(remainingTestsByFile)) {
       // `tests` should normally be empty, but if it isn't,
       // there were tests that did not go through `testBegin` or `testEnd`,
       // because they were skipped
-      tests.forEach(test => {
+      for (const test of tests) {
         const browser = getBrowserNameFromProjects(projects, test)
         testBeginHandler(test, browser, true)
         testEndHandler({
@@ -704,10 +749,12 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
           error: null,
           isTimeout: false,
           shouldCreateTestSpan: true,
-          projects
+          projects,
         })
-      })
-    })
+      }
+    }
+
+    let preventedToFail = false
 
     const sessionStatus = runAllTestsReturn.status || runAllTestsReturn
 
@@ -717,35 +764,44 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       let totalPureQuarantinedFailedTestCount = 0
 
       for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
-        const failedCount = testStatuses.filter(status => status === 'fail').length
-        totalFailedTestCount += failedCount
-        if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
-          totalPureQuarantinedFailedTestCount += failedCount
+        // Only count as failed if the final status (after retries) is 'fail'
+        const lastStatus = testStatuses[testStatuses.length - 1]
+        if (lastStatus === 'fail') {
+          totalFailedTestCount += 1
+          if (quarantinedButNotAttemptToFixFqns.has(fqn)) {
+            totalPureQuarantinedFailedTestCount += 1
+          }
         }
       }
 
       for (const test of quarantinedOrDisabledTestsAttemptToFix) {
         const testFqn = getTestFullyQualifiedName(test)
         const testStatuses = testsToTestStatuses.get(testFqn)
-        totalAttemptToFixFailedTestCount += testStatuses.filter(status => status === 'fail').length
+        // Only count as failed if the final status (after retries) is 'fail'
+        if (testStatuses && testStatuses[testStatuses.length - 1] === 'fail') {
+          totalAttemptToFixFailedTestCount += 1
+        }
       }
 
       const totalIgnorableFailures = totalAttemptToFixFailedTestCount + totalPureQuarantinedFailedTestCount
 
       if (totalFailedTestCount > 0 && totalFailedTestCount === totalIgnorableFailures) {
         runAllTestsReturn = 'passed'
+        preventedToFail = true
       }
     }
+
+    logDynamicNamesWarning(newTestsWithDynamicNames)
 
     const flushWait = new Promise(resolve => {
       onDone = resolve
     })
     testSessionFinishCh.publish({
-      status: STATUS_TO_TEST_STATUS[sessionStatus],
+      status: preventedToFail ? 'pass' : STATUS_TO_TEST_STATUS[sessionStatus],
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      onDone
+      onDone,
     })
     await flushWait
 
@@ -782,56 +838,56 @@ if (DD_MAJOR < 6) { // <1.38.0 is only supported up to version 5
   addHook({
     name: '@playwright/test',
     file: 'lib/runner.js',
-    versions: ['>=1.18.0 <=1.30.0']
+    versions: ['>=1.18.0 <=1.30.0'],
   }, runnerHook)
 
   addHook({
     name: '@playwright/test',
     file: 'lib/dispatcher.js',
-    versions: ['>=1.18.0 <1.30.0']
+    versions: ['>=1.18.0 <1.30.0'],
   }, dispatcherHook)
 
   addHook({
     name: '@playwright/test',
     file: 'lib/dispatcher.js',
-    versions: ['>=1.30.0 <1.31.0']
+    versions: ['>=1.30.0 <1.31.0'],
   }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapper))
 
   addHook({
     name: '@playwright/test',
     file: 'lib/runner/dispatcher.js',
-    versions: ['>=1.31.0 <1.38.0']
+    versions: ['>=1.31.0 <1.38.0'],
   }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
   addHook({
     name: '@playwright/test',
     file: 'lib/runner/runner.js',
-    versions: ['>=1.31.0 <1.38.0']
+    versions: ['>=1.31.0 <1.38.0'],
   }, runnerHook)
 }
 
 addHook({
   name: 'playwright',
   file: 'lib/runner/runner.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, runnerHook)
 
 addHook({
   name: 'playwright',
   file: 'lib/runner/testRunner.js',
-  versions: ['>=1.55.0']
+  versions: ['>=1.55.0'],
 }, runnerHookNew)
 
 addHook({
   name: 'playwright',
   file: 'lib/runner/dispatcher.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (dispatcher) => dispatcherHookNew(dispatcher, dispatcherRunWrapperNew))
 
 addHook({
   name: 'playwright',
   file: 'lib/common/suiteUtils.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, suiteUtilsPackage => {
   // We grab `applyRepeatEachIndex` to use it later
   // `applyRepeatEachIndex` needs to be applied to a cloned suite
@@ -866,7 +922,7 @@ function applyRetriesToTests (fileSuitesWithTestsToRetry, filterTest, tagsToAppl
 addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (loadUtilsPackage) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
@@ -885,11 +941,16 @@ addHook({
       const fileSuitesWithManagedTestsToProjects = new Map()
       for (const test of allTests) {
         const testProperties = getTestProperties(test)
-        // Disabled tests are skipped and not retried
+        // Disabled tests are skipped unless they have attemptToFix
         if (testProperties.disabled) {
           test._ddIsDisabled = true
-          test.expectedStatus = 'skipped'
-          continue
+          if (!testProperties.attemptToFix) {
+            test.expectedStatus = 'skipped'
+            // setting test.expectedStatus to 'skipped' does not work for every case,
+            // so we need to filter out disabled tests in dispatcherRunWrapperNew,
+            // so they don't get to the workers
+            continue
+          }
         }
         if (testProperties.quarantined) {
           test._ddIsQuarantined = true
@@ -901,6 +962,8 @@ addHook({
         }
         if (testProperties.attemptToFix) {
           test._ddIsAttemptToFix = true
+          // Prevent ATR or `--retries` from retrying attemptToFix tests
+          test.retries = 0
           const fileSuite = getSuiteType(test, 'file')
 
           if (!fileSuitesWithManagedTestsToProjects.has(fileSuite)) {
@@ -916,8 +979,9 @@ addHook({
         (test) => test._ddIsAttemptToFix,
         [
           (test) => test._ddIsQuarantined && '_ddIsQuarantined',
+          (test) => test._ddIsDisabled && '_ddIsDisabled',
           '_ddIsAttemptToFix',
-          '_ddIsAttemptToFixRetry'
+          '_ddIsAttemptToFixRetry',
         ],
         testManagementAttemptToFixRetries
       )
@@ -929,13 +993,13 @@ addHook({
         isModifiedCh.publish({
           filePath: test._requireFile,
           modifiedFiles,
-          onDone: (isModified) => { isImpacted = isModified }
+          onDone: (isModified) => { isImpacted = isModified },
         })
         return isImpacted
       })
 
       const fileSuitesWithImpactedTestsToProjects = new Map()
-      impactedTests.forEach(impactedTest => {
+      for (const impactedTest of impactedTests) {
         impactedTest._ddIsModified = true
         if (isEarlyFlakeDetectionEnabled && impactedTest.expectedStatus !== 'skipped') {
           const fileSuite = getSuiteType(impactedTest, 'file')
@@ -943,7 +1007,7 @@ addHook({
             fileSuitesWithImpactedTestsToProjects.set(fileSuite, getSuiteType(impactedTest, 'project'))
           }
         }
-      })
+      }
       // If something change in the file, all tests in the file are impacted, hence the () => true filter
       applyRetriesToTests(
         fileSuitesWithImpactedTestsToProjects,
@@ -951,7 +1015,7 @@ addHook({
         [
           '_ddIsModified',
           '_ddIsEfdRetry',
-          (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null)
+          (test) => (isKnownTestsEnabled && isNewTest(test) ? '_ddIsNew' : null),
         ],
         earlyFlakeDetectionNumRetries
       )
@@ -972,15 +1036,17 @@ addHook({
         isEarlyFlakeDetectionFaulty = true
       } else {
         const fileSuitesWithNewTestsToProjects = new Map()
-        newTests.forEach(newTest => {
+        for (const newTest of newTests) {
           newTest._ddIsNew = true
           if (isEarlyFlakeDetectionEnabled && newTest.expectedStatus !== 'skipped' && !newTest._ddIsModified) {
+            // Prevent ATR or `--retries` from retrying new tests if EFD is enabled
+            newTest.retries = 0
             const fileSuite = getSuiteType(newTest, 'file')
             if (!fileSuitesWithNewTestsToProjects.has(fileSuite)) {
               fileSuitesWithNewTestsToProjects.set(fileSuite, getSuiteType(newTest, 'project'))
             }
           }
-        })
+        }
 
         applyRetriesToTests(
           fileSuitesWithNewTestsToProjects,
@@ -1001,7 +1067,7 @@ addHook({
         return newCreateRootSuite
       }
       return target[prop]
-    }
+    },
   })
 
   return proxy
@@ -1011,13 +1077,13 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/runner/processHost.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (processHostPackage) => {
   shimmer.wrap(processHostPackage.ProcessHost.prototype, 'startRunner', startRunner => async function () {
     this._extraEnv = {
       ...this._extraEnv,
       // Used to detect that we're in a playwright worker
-      DD_PLAYWRIGHT_WORKER: '1'
+      DD_PLAYWRIGHT_WORKER: '1',
     }
 
     const res = await startRunner.apply(this, arguments)
@@ -1039,7 +1105,7 @@ addHook({
 addHook({
   name: 'playwright-core',
   file: 'lib/client/page.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (pagePackage) => {
   shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
     const response = await goto.apply(this, arguments)
@@ -1048,19 +1114,30 @@ addHook({
 
     try {
       if (page) {
-        const isRumActive = await page.evaluate(() => {
-          return window.DD_RUM && window.DD_RUM.getInternalContext ? !!window.DD_RUM.getInternalContext() : false
+        const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(() => {
+          const isRumInstrumented = !!window.DD_RUM
+          const isRumActive = window.DD_RUM && window.DD_RUM.getInternalContext
+            ? !!window.DD_RUM.getInternalContext()
+            : false
+          const rumSamplingRate = window.DD_RUM && window.DD_RUM.getInitConfiguration
+            ? window.DD_RUM.getInitConfiguration().sessionSampleRate
+            : null
+          return { isRumInstrumented, isRumActive, rumSamplingRate }
         })
+        if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
+          log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
+        }
 
         if (isRumActive) {
           testPageGotoCh.publish({
             isRumActive,
-            page
+            page,
           })
         }
       }
-    } catch {
+    } catch (e) {
       // ignore errors such as redirects, context destroyed, etc
+      log.error('goto hook error', e)
     }
 
     return response
@@ -1073,7 +1150,7 @@ addHook({
 addHook({
   name: 'playwright',
   file: 'lib/worker/workerMain.js',
-  versions: ['>=1.38.0']
+  versions: ['>=1.38.0'],
 }, (workerPackage) => {
   // we assume there's only a test running at a time
   let steps = []
@@ -1088,8 +1165,9 @@ addHook({
     const {
       _requireFile: testSuiteAbsolutePath,
       location: {
-        line: testSourceLine
-      }
+        file: testSourceFileAbsolutePath,
+        line: testSourceLine,
+      },
     } = test
     let res
 
@@ -1103,8 +1181,9 @@ addHook({
     const testCtx = {
       testName,
       testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
       testSourceLine,
-      browserName
+      browserName,
     }
     testToCtx.set(test, testCtx)
     // TODO - In the future we may need to implement a mechanism to send test properties
@@ -1145,19 +1224,20 @@ addHook({
                       name: 'datadog-ci-visibility-test-execution-id',
                       value: '',
                       domain,
-                      path: '/'
+                      path: '/',
                     }])
                   } else {
                     log.error('RUM is active but page.url() is not available')
                   }
                 }
               }
-            } catch {
+            } catch (e) {
               // ignore errors
+              log.error('afterEach hook error', e)
             }
           },
           title: 'afterEach hook',
-          _ddHook: true
+          _ddHook: true,
         })
       }
 
@@ -1210,6 +1290,7 @@ addHook({
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,
+      hasDynamicName: test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test)),
       isRetry: retry > 0,
       isEfdRetry: test._ddIsEfdRetry,
       isAttemptToFix: test._ddIsAttemptToFix,
@@ -1222,7 +1303,7 @@ addHook({
       isAtrRetry: test._ddIsAtrRetry,
       isModified: test._ddIsModified,
       onDone,
-      ...testCtx.currentStore
+      ...testCtx.currentStore,
     })
 
     await flushPromise
@@ -1237,7 +1318,7 @@ addHook({
       stepInfoByStepId[payload.stepId] = {
         startTime: payload.wallTime,
         title: payload.title,
-        testId: payload.testId
+        testId: payload.testId,
       }
     } else if (event === 'stepEnd') {
       const stepInfo = stepInfoByStepId[payload.stepId]
@@ -1247,11 +1328,66 @@ addHook({
         startTime: new Date(stepInfo.startTime),
         title: stepInfo.title,
         duration: payload.wallTime - stepInfo.startTime,
-        error: payload.error
+        error: payload.error,
       })
     }
     return dispatchEvent.apply(this, arguments)
   })
 
   return workerPackage
+})
+
+function generateSummaryWrapper (generateSummary) {
+  return function () {
+    for (const test of this.suite.allTests()) {
+      // https://github.com/microsoft/playwright/blob/bf92ffecff6f30a292b53430dbaee0207e0c61ad/packages/playwright/src/reporters/base.ts#L279
+      const didNotRun = test.outcome() === 'skipped' &&
+        (!test.results.length || test.expectedStatus !== 'skipped')
+      if (didNotRun) {
+        const {
+          _requireFile: testSuiteAbsolutePath,
+          location: {
+            file: testSourceFileAbsolutePath,
+            line: testSourceLine,
+          },
+          _ddIsNew: isNew,
+          _ddIsDisabled: isDisabled,
+          _ddIsModified: isModified,
+          _ddIsQuarantined: isQuarantined,
+        } = test
+        const browserName = getBrowserNameFromProjects(sessionProjects, test)
+
+        testSkipCh.publish({
+          testName: getTestFullname(test),
+          testSuiteAbsolutePath,
+          testSourceFileAbsolutePath,
+          testSourceLine,
+          browserName,
+          isNew,
+          isDisabled,
+          isModified,
+          isQuarantined,
+        })
+      }
+    }
+    return generateSummary.apply(this, arguments)
+  }
+}
+
+// If a playwright project B has a dependency on project A,
+// and project A fails, the tests in project B will not run.
+// This hook is used to report tests that did not run as skipped.
+// Note: this is different from tests skipped via test.skip() or test.fixme()
+addHook({
+  name: 'playwright',
+  file: 'lib/reporters/base.js',
+  versions: ['>=1.38.0'],
+}, (reportersPackage) => {
+  // v1.50.0 changed the name of the base reporter from BaseReporter to TerminalReporter
+  if (reportersPackage.TerminalReporter) {
+    shimmer.wrap(reportersPackage.TerminalReporter.prototype, 'generateSummary', generateSummaryWrapper)
+  } else if (reportersPackage.BaseReporter) {
+    shimmer.wrap(reportersPackage.BaseReporter.prototype, 'generateSummary', generateSummaryWrapper)
+  }
+  return reportersPackage
 })

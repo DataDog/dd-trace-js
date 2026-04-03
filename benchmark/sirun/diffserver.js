@@ -1,15 +1,15 @@
 'use strict'
 
-const express = require('express')
 const path = require('path')
 const fs = require('fs')
+const express = require('express')
 const diffRecent = require('./diff-recent')
 const {
   getBuildNumsFromGithub,
   get,
   artifactsUrl,
   circleHeaders,
-  getResults
+  getResults,
 } = require('./get-results')
 
 const app = express()
@@ -61,10 +61,10 @@ function subtractBaselines (summary) {
           nodeVersion: metrics.nodeVersion,
           summary: Object.keys(metrics.summary).reduce((acc, metric) => {
             acc[metric] = {
-              mean: metrics.summary[metric].mean - baselineMetrics.summary[metric].mean
+              mean: metrics.summary[metric].mean - baselineMetrics.summary[metric].mean,
             }
             return acc
-          }, {})
+          }, {}),
         }
         delete variants[variant]
         baselines.push(baseline)

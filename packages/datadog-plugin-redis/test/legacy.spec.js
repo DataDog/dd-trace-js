@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Legacy Plugin', () => {
@@ -56,17 +56,17 @@ describe('Legacy Plugin', () => {
           client.on('error', done)
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', expectedSchema.outbound.serviceName)
-              expect(traces[0][0]).to.have.property('resource', 'get')
-              expect(traces[0][0]).to.have.property('type', 'redis')
-              expect(traces[0][0].meta).to.have.property('db.name', '0')
-              expect(traces[0][0].meta).to.have.property('db.type', 'redis')
-              expect(traces[0][0].meta).to.have.property('span.kind', 'client')
-              expect(traces[0][0].meta).to.have.property('out.host', '127.0.0.1')
-              expect(traces[0][0].meta).to.have.property('redis.raw_command', 'GET foo')
-              expect(traces[0][0].meta).to.have.property('component', 'redis')
-              expect(traces[0][0].meta).to.have.property('_dd.integration', 'redis')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
+              assert.strictEqual(traces[0][0].resource, 'get')
+              assert.strictEqual(traces[0][0].type, 'redis')
+              assert.strictEqual(traces[0][0].meta['db.name'], '0')
+              assert.strictEqual(traces[0][0].meta['db.type'], 'redis')
+              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
+              assert.strictEqual(traces[0][0].meta['out.host'], '127.0.0.1')
+              assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'GET foo')
+              assert.strictEqual(traces[0][0].meta.component, 'redis')
+              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'redis')
             })
             .then(done)
             .catch(done)
@@ -89,7 +89,7 @@ describe('Legacy Plugin', () => {
           client.on('error', done)
 
           client.get('foo', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
         })
@@ -98,7 +98,7 @@ describe('Legacy Plugin', () => {
           client.on('error', done)
 
           client.on('ready', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
         })
@@ -107,7 +107,7 @@ describe('Legacy Plugin', () => {
           client.on('error', done)
 
           client.stream.on('close', () => {
-            expect(tracer.scope().active()).to.be.null
+            assert.strictEqual(tracer.scope().active(), null)
             done()
           })
 
@@ -123,11 +123,11 @@ describe('Legacy Plugin', () => {
             if (!error || !span) return
 
             try {
-              expect(span.meta).to.have.property(ERROR_TYPE, error.name)
-              expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
-              expect(span.meta).to.have.property(ERROR_STACK, error.stack)
-              expect(span.meta).to.have.property('component', 'redis')
-              expect(span.metrics).to.have.property('network.destination.port', 6379)
+              assert.strictEqual(span.meta[ERROR_TYPE], error.name)
+              assert.strictEqual(span.meta[ERROR_MESSAGE], error.message)
+              assert.strictEqual(span.meta[ERROR_STACK], error.stack)
+              assert.strictEqual(span.meta.component, 'redis')
+              assert.strictEqual(span.metrics['network.destination.port'], 6379)
               done()
             } catch (e) {
               done(e)
@@ -138,7 +138,7 @@ describe('Legacy Plugin', () => {
           let span
 
           agent.assertSomeTraces(traces => {
-            expect(traces[0][0]).to.have.property('resource', 'set')
+            assert.strictEqual(traces[0][0].resource, 'set')
             span = traces[0][0]
             assertError()
           })
@@ -161,7 +161,7 @@ describe('Legacy Plugin', () => {
         before(() => {
           return agent.load('redis', {
             service: 'custom',
-            allowlist: ['get']
+            allowlist: ['get'],
           })
         })
 
@@ -177,7 +177,7 @@ describe('Legacy Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              assert.strictEqual(traces[0][0].service, 'custom')
             })
             .then(done)
             .catch(done)
@@ -190,7 +190,7 @@ describe('Legacy Plugin', () => {
           agent.assertSomeTraces(() => {}) // wait for initial command
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'get')
+              assert.strictEqual(traces[0][0].resource, 'get')
             })
             .then(done)
             .catch(done)
@@ -203,12 +203,12 @@ describe('Legacy Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'redis.command',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -216,7 +216,7 @@ describe('Legacy Plugin', () => {
       describe('with legacy configuration', () => {
         before(() => {
           return agent.load('redis', {
-            whitelist: ['get']
+            whitelist: ['get'],
           })
         })
 
@@ -233,7 +233,7 @@ describe('Legacy Plugin', () => {
           agent.assertSomeTraces(() => {}) // wait for initial command
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('resource', 'get')
+              assert.strictEqual(traces[0][0].resource, 'get')
             })
             .then(done)
             .catch(done)

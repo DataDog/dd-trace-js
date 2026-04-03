@@ -1,13 +1,14 @@
 'use strict'
 
-const { expect } = require('chai')
-const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 
-const log = require('../../../../src/log')
+const dc = require('dc-polyfill')
+const { afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
+const log = require('../../../../src/log')
 const { SQL_INJECTION_MARK, COMMAND_INJECTION_MARK } =
  require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
@@ -24,9 +25,9 @@ describe('sql-injection-analyzer', () => {
       iinfo: {
         parameterName: 'param',
         parameterValue: string,
-        type: HTTP_REQUEST_PARAMETER
+        type: HTTP_REQUEST_PARAMETER,
       },
-      secureMarks
+      secureMarks,
     }
 
     return [range]
@@ -47,17 +48,17 @@ describe('sql-injection-analyzer', () => {
         default:
           return []
       }
-    }
+    },
   }
 
   const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
-    '../taint-tracking/operations': TaintTrackingMock
+    '../taint-tracking/operations': TaintTrackingMock,
   })
   const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
-    './injection-analyzer': InjectionAnalyzer
+    './injection-analyzer': InjectionAnalyzer,
   })
   const sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
-    './stored-injection-analyzer': StoredInjectionAnalyzer
+    './stored-injection-analyzer': StoredInjectionAnalyzer,
   })
 
   afterEach(() => {
@@ -67,46 +68,46 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    expect(sqlInjectionAnalyzer._subscriptions).to.have.lengthOf(7)
-    expect(sqlInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('apm:mysql:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[1]._channel.name).to.equals('datadog:mysql2:outerquery:start')
-    expect(sqlInjectionAnalyzer._subscriptions[2]._channel.name).to.equals('apm:pg:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[3]._channel.name).to.equals('datadog:sequelize:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[4]._channel.name).to.equals('datadog:pg:pool:query:finish')
-    expect(sqlInjectionAnalyzer._subscriptions[5]._channel.name).to.equals('datadog:mysql:pool:query:start')
-    expect(sqlInjectionAnalyzer._subscriptions[6]._channel.name).to.equals('datadog:mysql:pool:query:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions.length, 7)
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[0]._channel.name, 'apm:mysql:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[1]._channel.name, 'datadog:mysql2:outerquery:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[2]._channel.name, 'apm:pg:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[3]._channel.name, 'datadog:sequelize:query:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[4]._channel.name, 'datadog:pg:pool:query:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[5]._channel.name, 'datadog:mysql:pool:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[6]._channel.name, 'datadog:mysql:pool:query:finish')
 
-    expect(sqlInjectionAnalyzer._bindings).to.have.lengthOf(5)
-    expect(sqlInjectionAnalyzer._bindings[0]._channel.name).to.equals('datadog:sequelize:query:start')
-    expect(sqlInjectionAnalyzer._bindings[1]._channel.name).to.equals('datadog:pg:pool:query:start')
-    expect(sqlInjectionAnalyzer._bindings[2]._channel.name).to.equals('datadog:knex:raw:start')
-    expect(sqlInjectionAnalyzer._bindings[3]._channel.name).to.equals('datadog:knex:raw:subscribes')
-    expect(sqlInjectionAnalyzer._bindings[4]._channel.name).to.equals('datadog:knex:raw:finish')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings.length, 5)
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[0]._channel.name, 'datadog:sequelize:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[1]._channel.name, 'datadog:pg:pool:query:start')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[2]._channel.name, 'datadog:knex:raw:start')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[3]._channel.name, 'datadog:knex:raw:subscribes')
+    assert.strictEqual(sqlInjectionAnalyzer._bindings[4]._channel.name, 'datadog:knex:raw:finish')
   })
 
   it('should not detect vulnerability when no query', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable()
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should not detect vulnerability when no vulnerable query', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(NOT_TAINTED_QUERY)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should detect vulnerability when vulnerable query', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_QUERY)
-    expect(isVulnerable).to.be.true
+    assert.strictEqual(isVulnerable, true)
   })
 
   it('should not detect vulnerability when vulnerable query with sqli secure mark', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_SQLI_SECURED)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should detect vulnerability when vulnerable query with cmdi secure mark', () => {
     const isVulnerable = sqlInjectionAnalyzer._isVulnerable(TAINTED_CMDI_SECURED)
-    expect(isVulnerable).to.be.true
+    assert.strictEqual(isVulnerable, true)
   })
 
   it('should report "SQL_INJECTION" vulnerability', () => {
@@ -118,27 +119,27 @@ describe('sql-injection-analyzer', () => {
           return {
             toSpanId () {
               return '123'
-            }
+            },
           }
-        }
-      }
+        },
+      },
     }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
-        getIastContext: () => iastContext
+        getIastContext: () => iastContext,
       },
-      '../overhead-controller': { hasQuota: () => true }
+      '../overhead-controller': { hasQuota: () => true },
     })
     sinon.stub(ProxyAnalyzer.prototype, '_reportEvidence')
     const reportEvidence = ProxyAnalyzer.prototype._reportEvidence
 
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
-      './vulnerability-analyzer': ProxyAnalyzer
+      './vulnerability-analyzer': ProxyAnalyzer,
     })
 
     const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
-      './injection-analyzer': InjectionAnalyzer
+      './injection-analyzer': InjectionAnalyzer,
     })
 
     const proxiedSqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer',
@@ -146,15 +147,15 @@ describe('sql-injection-analyzer', () => {
         './stored-injection-analyzer': StoredInjectionAnalyzer,
         '../taint-tracking/operations': TaintTrackingMock,
         '../iast-context': {
-          getIastContext: () => iastContext
+          getIastContext: () => iastContext,
         },
-        '../vulnerability-reporter': { addVulnerability }
+        '../vulnerability-reporter': { addVulnerability },
       })
     proxiedSqlInjectionAnalyzer.analyze(TAINTED_QUERY, undefined, dialect)
-    expect(reportEvidence).to.have.been.calledOnce
-    expect(reportEvidence).to.have.been.calledWithMatch(TAINTED_QUERY, {}, {
+    sinon.assert.calledOnce(reportEvidence)
+    sinon.assert.calledWithMatch(reportEvidence, TAINTED_QUERY, {}, {
       value: TAINTED_QUERY,
-      dialect
+      dialect,
     })
   })
 
@@ -163,7 +164,7 @@ describe('sql-injection-analyzer', () => {
     sqlInjectionAnalyzer.configure(true)
     dc.channel('datadog:sequelize:query:finish').publish()
     sqlInjectionAnalyzer.configure(false)
-    expect(log.error).not.to.be.called
+    sinon.assert.notCalled(log.error)
   })
 
   describe('analyze', () => {
@@ -179,27 +180,27 @@ describe('sql-injection-analyzer', () => {
       const datadogCore = {
         storage: () => {
           return {
-            getStore
+            getStore,
           }
-        }
+        },
       }
 
       const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
         '../../../../datadog-core': datadogCore,
-        './iast-context': { getIastContext }
+        './iast-context': { getIastContext },
       })
 
       const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
         '../iast-plugin': iastPlugin,
-        '../overhead-controller': { hasQuota: () => true }
+        '../overhead-controller': { hasQuota: () => true },
       })
       const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
         '../taint-tracking/operations': TaintTrackingMock,
-        './vulnerability-analyzer': ProxyAnalyzer
+        './vulnerability-analyzer': ProxyAnalyzer,
       })
 
       sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
-        './injection-analyzer': InjectionAnalyzer
+        './injection-analyzer': InjectionAnalyzer,
       })
       analyze = sinon.stub(sqlInjectionAnalyzer, 'analyze')
       sqlInjectionAnalyzer.configure(true)
@@ -212,7 +213,7 @@ describe('sql-injection-analyzer', () => {
 
       onMysqlQueryStart({ sql: 'SELECT 1' })
 
-      expect(analyze).to.be.calledOnceWith('SELECT 1')
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
     })
 
     it('should call analyze on apm:mysql2:query:start', () => {
@@ -220,7 +221,7 @@ describe('sql-injection-analyzer', () => {
 
       onMysql2QueryStart({ sql: 'SELECT 1' })
 
-      expect(analyze).to.be.calledOnceWith('SELECT 1')
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
     })
 
     it('should call analyze on apm:pg:query:start', () => {
@@ -228,7 +229,7 @@ describe('sql-injection-analyzer', () => {
 
       onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
-      expect(analyze).to.be.calledOnceWith('SELECT 1')
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
     })
   })
 
@@ -241,19 +242,19 @@ describe('sql-injection-analyzer', () => {
       mysql: 'MYSQL',
       redshift: 'REDSHIFT',
       postgresql: 'POSTGRES',
-      sqlite3: 'SQLITE'
+      sqlite3: 'SQLITE',
     }
 
     Object.keys(knexDialects).forEach((knexDialect) => {
       it(`should normalize knex dialect ${knexDialect} to uppercase`, () => {
         const normalizedDialect = sqlInjectionAnalyzer.normalizeKnexDialect(knexDialect)
-        expect(normalizedDialect).to.equals(knexDialects[knexDialect])
+        assert.strictEqual(normalizedDialect, knexDialects[knexDialect])
       })
     })
 
     it('should not fail when normalizing a non string knex dialect', () => {
       const normalizedDialect = sqlInjectionAnalyzer.normalizeKnexDialect()
-      expect(normalizedDialect).to.be.undefined
+      assert.strictEqual(normalizedDialect, undefined)
     })
   })
 })

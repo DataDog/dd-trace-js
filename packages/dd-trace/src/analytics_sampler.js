@@ -11,5 +11,5 @@ module.exports = {
     } else if (measuredByDefault) {
       span.setTag(MEASURED, true)
     }
-  }
+  },
 }

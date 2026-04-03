@@ -1,34 +1,39 @@
 'use strict'
 
 class JSONBuffer {
+  #maxSize
+  #timeout
+  #onFlush
+  #timer
+  #partialJson
+
   constructor ({ size, timeout, onFlush }) {
-    this._maxSize = size
-    this._timeout = timeout
-    this._onFlush = onFlush
-    this._reset()
+    this.#maxSize = size
+    this.#timeout = timeout
+    this.#onFlush = onFlush
   }
 
-  _reset () {
-    clearTimeout(this._timer)
-    this._timer = null
-    this._partialJson = null
-  }
-
-  _flush () {
-    const json = `${this._partialJson}]`
-    this._reset()
-    this._onFlush(json)
+  #flush () {
+    const json = `${this.#partialJson}]`
+    this.#partialJson = undefined
+    this.#onFlush(json)
   }
 
   write (str, size = Buffer.byteLength(str)) {
-    if (this._timer === null) {
-      this._partialJson = `[${str}`
-      this._timer = setTimeout(() => this._flush(), this._timeout)
-    } else if (Buffer.byteLength(this._partialJson) + size + 2 > this._maxSize) {
-      this._flush()
+    if (this.#partialJson === undefined) {
+      this.#partialJson = `[${str}`
+      if (this.#timer === undefined) {
+        this.#timer = setTimeout(() => this.#flush(), this.#timeout)
+      } else {
+        this.#timer.refresh()
+      }
+    } else if (Buffer.byteLength(this.#partialJson) + size + 2 > this.#maxSize) {
+      clearTimeout(this.#timer)
+      this.#timer = undefined
+      this.#flush()
       this.write(str, size)
     } else {
-      this._partialJson += `,${str}`
+      this.#partialJson += `,${str}`
     }
   }
 }

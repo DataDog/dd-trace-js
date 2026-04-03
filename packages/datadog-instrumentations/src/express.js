@@ -1,7 +1,7 @@
 'use strict'
 
-const { createWrapRouterMethod } = require('./router')
 const shimmer = require('../../datadog-shimmer')
+const { createWrapRouterMethod } = require('./router')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const {
   setRouterMountPath,
@@ -10,7 +10,7 @@ const {
   wrapRouteMethodsAndPublish,
   extractMountPaths,
   hasRouterCycle,
-  collectRoutesFromRouter
+  collectRoutesFromRouter,
 } = require('./helpers/router-helper')
 
 const handleChannel = channel('apm:express:request:handle')
@@ -53,12 +53,21 @@ function wrapResponseRender (render) {
       return render.apply(this, arguments)
     }
 
+    const abortController = new AbortController()
     return responseRenderChannel.traceSync(
-      render,
+      function () {
+        if (abortController.signal.aborted) {
+          const error = abortController.signal.reason || new Error('Aborted')
+          throw error
+        }
+
+        return render.apply(this, arguments)
+      },
       {
         req: this.req,
         view,
-        options
+        options,
+        abortController,
       },
       this,
       ...arguments
@@ -67,26 +76,28 @@ function wrapResponseRender (render) {
 }
 
 function wrapAppAll (all) {
-  return function wrappedAll (path, ...otherArgs) {
-    if (!routeAddedChannel.hasSubscribers) return all.call(this, path, ...otherArgs)
+  return function wrappedAll (...args) {
+    if (!routeAddedChannel.hasSubscribers) return all.apply(this, args)
 
+    const path = args[0]
     const paths = normalizeRoutePaths(path)
 
     for (const p of paths) {
       routeAddedChannel.publish({ method: '*', path: p })
     }
 
-    return all.call(this, path, ...otherArgs)
+    return all.apply(this, args)
   }
 }
 
 // Wrap app.route() to instrument Route object
 function wrapAppRoute (route) {
-  return function wrappedRoute (path, ...otherArgs) {
-    const routeObj = route.call(this, path, ...otherArgs)
+  return function wrappedRoute (...args) {
+    const routeObj = route.apply(this, args)
 
     if (!routeAddedChannel.hasSubscribers) return routeObj
 
+    const path = args[0]
     const paths = normalizeRoutePaths(path)
 
     if (!paths.length) return routeObj
@@ -178,7 +189,7 @@ function publishQueryParsedAndNext (req, res, next) {
 addHook({
   name: 'express',
   versions: ['4'],
-  file: 'lib/middleware/query.js'
+  file: 'lib/middleware/query.js',
 }, query => {
   return shimmer.wrapFunction(query, query => function () {
     const queryMiddleware = query.apply(this, arguments)
@@ -202,7 +213,7 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
           req,
           res: req?.res,
           abortController,
-          params: req?.params
+          params: req?.params,
         })
 
         if (abortController.signal.aborted) return

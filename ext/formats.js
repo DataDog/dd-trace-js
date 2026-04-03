@@ -5,5 +5,5 @@ module.exports = {
   HTTP_HEADERS: 'http_headers',
   BINARY: 'binary',
   LOG: 'log',
-  TEXT_MAP_DSM: 'text_map_dsm'
+  TEXT_MAP_DSM: 'text_map_dsm',
 }

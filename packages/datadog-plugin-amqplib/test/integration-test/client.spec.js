@@ -1,32 +1,29 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
-  varySandbox
+  spawnPluginIntegrationTestProcAndExpectExit,
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('amqplib', 'amqplib', '>=0.10.0', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'amqplib@${version}'`], false,
-        ['./packages/datadog-plugin-amqplib/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'amqplib', 'connect')
-    })
+    useSandbox([`'amqplib@${version}'`], false,
+      ['./packages/datadog-plugin-amqplib/test/integration-test/*'])
 
-    after(async () => {
-      await sandbox.remove()
+    before(async function () {
+      variants = varySandbox('server.mjs', 'amqplib', 'connect')
     })
 
     beforeEach(async () => {
@@ -34,19 +31,19 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(checkSpansForServiceName(payload, 'amqp.command'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

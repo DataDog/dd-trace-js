@@ -3,13 +3,9 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const telemetryMetrics = require('../../dd-trace/src/telemetry/metrics')
 const apiMetrics = telemetryMetrics.manager.namespace('tracers')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 // api ==> here
 const objectMap = new WeakMap()
-
-const injectionEnabledTag =
-  `injection_enabled:${getEnvironmentVariable('DD_INJECTION_ENABLED') ? 'yes' : 'no'}`
 
 module.exports = class DdTraceApiPlugin extends Plugin {
   static id = 'dd-trace-api'
@@ -18,6 +14,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
     super(...args)
 
     const tracer = this._tracer
+    const injectionEnabledTag = `injection_enabled:${this._tracerConfig.injectionEnabled ? 'yes' : 'no'}`
 
     this.addSub('datadog-api:v1:tracerinit', ({ proxy }) => {
       const proxyVal = proxy()
@@ -30,7 +27,7 @@ module.exports = class DdTraceApiPlugin extends Plugin {
       const counter = apiMetrics.count('public_api.called', [
         `name:${name.replaceAll(':', '.')}`,
         'api_version:v1',
-        injectionEnabledTag
+        injectionEnabledTag,
       ])
 
       // For v1, APIs are 1:1 with their internal equivalents, so we can just

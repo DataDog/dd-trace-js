@@ -15,7 +15,7 @@ class DNSPlugin extends CompositePlugin {
       lookup: DNSLookupPlugin,
       lookup_service: DNSLookupServicePlugin,
       resolve: DNSResolvePlugin,
-      reverse: DNSReversePlugin
+      reverse: DNSReversePlugin,
     }
   }
 }

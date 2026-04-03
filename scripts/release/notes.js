@@ -3,8 +3,8 @@
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
-const { capture, run } = require('./helpers/terminal')
 const pkg = require('../../package.json')
+const { capture, run } = require('./helpers/terminal')
 
 const version = pkg.version
 const tag = `v${version}`

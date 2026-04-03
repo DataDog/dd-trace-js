@@ -1,7 +1,9 @@
 'use strict'
 
-const { channel, addHook } = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
+const { channel, addHook } = require('./helpers/instrument')
+
+const patchedClientConfigProtocols = new WeakSet()
 
 function wrapRequest (send) {
   return function wrappedRequest (cb) {
@@ -18,7 +20,7 @@ function wrapRequest (send) {
       awsRegion: this.service.config && this.service.config.region,
       awsService: this.service.api && this.service.api.className,
       request: this,
-      cbExists: typeof cb === 'function'
+      cbExists: typeof cb === 'function',
     }
 
     this.on('complete', response => {
@@ -34,10 +36,11 @@ function wrapRequest (send) {
   }
 }
 
-function wrapDeserialize (deserialize, channelSuffix) {
+function wrapDeserialize (deserialize, channelSuffix, responseIndex = 0) {
   const headersCh = channel(`apm:aws:response:deserialize:${channelSuffix}`)
 
-  return function (response) {
+  return function () {
+    const response = arguments[responseIndex]
     if (headersCh.hasSubscribers) {
       headersCh.publish({ headers: response.headers })
     }
@@ -56,7 +59,7 @@ function wrapSmithySend (send) {
     const operation = `${commandName[0].toLowerCase()}${commandName.slice(1).replace(/Command$/, '')}`
     const request = {
       operation,
-      params: command.input
+      params: command.input,
     }
 
     const startCh = channel(`apm:aws:request:start:${channelSuffix}`)
@@ -66,13 +69,21 @@ function wrapSmithySend (send) {
 
     if (typeof command.deserialize === 'function') {
       shimmer.wrap(command, 'deserialize', deserialize => wrapDeserialize(deserialize, channelSuffix))
+    } else if (this.config?.protocol?.deserializeResponse && !patchedClientConfigProtocols.has(this.config.protocol)) {
+      shimmer.wrap(
+        this.config.protocol,
+        'deserializeResponse',
+        deserializeResponse => wrapDeserialize(deserializeResponse, channelSuffix, 2)
+      )
+
+      patchedClientConfigProtocols.add(this.config.protocol)
     }
 
     const ctx = {
       serviceIdentifier,
       operation,
       awsService: clientName,
-      request
+      request,
     }
 
     return startCh.runStores(ctx, () => {
@@ -213,7 +224,7 @@ function getChannelSuffix (name) {
     'sqs',
     'states',
     'stepfunctions',
-    'bedrockruntime'
+    'bedrockruntime',
   ].includes(name)
     ? name
     : 'default'

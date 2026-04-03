@@ -2,8 +2,7 @@
 
 /* eslint-disable no-console */
 
-const tracer = require('dd-trace').init()
-
+require('dd-trace').init()
 const { Worker, isMainThread, threadId } = require('worker_threads')
 
 const nworkers = Number(process.argv[2] || 0)
@@ -21,7 +20,7 @@ if (isMainThread) {
     const worker = new Worker(__filename,
       {
         argv: [0, ...process.argv.slice(3)],
-        ...(workerMaxOldGenerationSizeMb ? { resourceLimits: { maxOldGenerationSizeMb: 50 } } : {})
+        ...(workerMaxOldGenerationSizeMb ? { resourceLimits: { maxOldGenerationSizeMb: 50 } } : {}),
       })
     const threadId = worker.threadId
     worker
@@ -44,8 +43,4 @@ function foo (size) {
   if (count < maxCount) { setTimeout(() => foo(size), sleepMs) }
 }
 
-tracer.profilerStarted().then(
-  () => {
-    setTimeout(() => foo(sizeQuantum), sleepMs)
-  }
-)
+setTimeout(() => foo(sizeQuantum), sleepMs)

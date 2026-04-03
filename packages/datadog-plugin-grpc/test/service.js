@@ -54,7 +54,7 @@ module.exports = grpc => {
       requestSerialize: serialize,
       responseSerialize: serialize,
       requestDeserialize: deserialize,
-      responseDeserialize: deserialize
+      responseDeserialize: deserialize,
     },
 
     getBidi: {
@@ -64,7 +64,7 @@ module.exports = grpc => {
       requestSerialize: serialize,
       responseSerialize: serialize,
       requestDeserialize: deserialize,
-      responseDeserialize: deserialize
+      responseDeserialize: deserialize,
     },
 
     getClientStream: {
@@ -74,7 +74,7 @@ module.exports = grpc => {
       requestSerialize: serialize,
       responseSerialize: serialize,
       requestDeserialize: deserialize,
-      responseDeserialize: deserialize
+      responseDeserialize: deserialize,
     },
 
     getServerStream: {
@@ -84,8 +84,8 @@ module.exports = grpc => {
       requestSerialize: serialize,
       responseSerialize: serialize,
       requestDeserialize: deserialize,
-      responseDeserialize: deserialize
-    }
+      responseDeserialize: deserialize,
+    },
   }
 
   return TestService

@@ -1,31 +1,31 @@
 'use strict'
-const Axios = require('axios')
-const { assert } = require('chai')
-const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
+
+const assert = require('node:assert/strict')
 
 const path = require('node:path')
+const Axios = require('axios')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
-const { createSandbox, FakeAgent, spawnProc } = require('../../../../../integration-tests/helpers')
+const {
+  sandboxCwd,
+  useSandbox,
+  FakeAgent,
+  spawnProc,
+  stopProc,
+} = require('../../../../../integration-tests/helpers')
 
 describe('RASP - command_injection - integration', () => {
-  let axios, sandbox, cwd, appFile, agent, proc
+  let axios, cwd, appFile, agent, proc
 
-  before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+  useSandbox(
+    ['express'],
+    false,
+    [path.join(__dirname, 'resources')]
+  )
 
-    sandbox = await createSandbox(
-      ['express'],
-      false,
-      [path.join(__dirname, 'resources')]
-    )
-
-    cwd = sandbox.folder
+  before(function () {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'resources', 'shi-app', 'index.js')
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
   })
 
   beforeEach(async () => {
@@ -38,14 +38,14 @@ describe('RASP - command_injection - integration', () => {
         DD_APPSEC_ENABLED: 'true',
         DD_APPSEC_RASP_ENABLED: 'true',
         DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-        DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json')
-      }
+        DD_APPSEC_RULES: path.join(cwd, 'resources', 'rasp_rules.json'),
+      },
     })
     axios = Axios.create({ baseURL: proc.url })
   })
 
   afterEach(async () => {
-    proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
@@ -62,9 +62,9 @@ describe('RASP - command_injection - integration', () => {
       let appsecTelemetryReceived = false
 
       const checkMessages = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.property(payload[0][0].meta, '_dd.appsec.json')
-        assert.include(payload[0][0].meta['_dd.appsec.json'], `"rasp-command_injection-rule-id-${ruleId}"`)
-      })
+        assert.ok(Object.hasOwn(payload[0][0].meta, '_dd.appsec.json'))
+        assert.match(payload[0][0].meta['_dd.appsec.json'], new RegExp(`"rasp-command_injection-rule-id-${ruleId}"`))
+      }, 4_000)
 
       const checkTelemetry = agent.assertTelemetryReceived(({ headers, payload }) => {
         const namespace = payload.payload.namespace
@@ -76,21 +76,23 @@ describe('RASP - command_injection - integration', () => {
           const evalSerie = series.find(s => s.metric === 'rasp.rule.eval')
           const matchSerie = series.find(s => s.metric === 'rasp.rule.match')
 
-          assert.exists(evalSerie, 'eval serie should exist')
-          assert.include(evalSerie.tags, 'rule_type:command_injection')
-          assert.include(evalSerie.tags, `rule_variant:${variant}`)
+          assert.ok(evalSerie)
+          assert.ok(evalSerie.tags.includes('rule_type:command_injection'))
+          assert.ok(evalSerie.tags.includes(`rule_variant:${variant}`))
           assert.strictEqual(evalSerie.type, 'count')
 
-          assert.exists(matchSerie, 'match serie should exist')
-          assert.include(matchSerie.tags, 'rule_type:command_injection')
-          assert.include(matchSerie.tags, `rule_variant:${variant}`)
+          assert.ok(matchSerie)
+          assert.ok(matchSerie.tags.includes('rule_type:command_injection'))
+          assert.ok(matchSerie.tags.includes(`rule_variant:${variant}`))
           assert.strictEqual(matchSerie.type, 'count')
+        } else {
+          assert.fail('namespace should be appsec')
         }
-      }, 'generate-metrics', 30_000, 2)
+      }, 'generate-metrics', 4_000, 1, true)
 
       await Promise.all([checkMessages, checkTelemetry])
 
-      assert.equal(appsecTelemetryReceived, true)
+      assert.strictEqual(appsecTelemetryReceived, true)
       return
     }
 

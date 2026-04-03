@@ -21,8 +21,8 @@ function startApiMock () {
                   status: '400',
                   title: 'Invalid data',
                   detail: 'Requests is missing messages and/or payload',
-                }
-              ]
+                },
+              ],
             })
         }
         const messages = attributes.messages
@@ -46,8 +46,8 @@ function startApiMock () {
                 action,
                 reason,
                 is_blocking_enabled: blocking,
-              }
-            }
+              },
+            },
           })
       })
       const server = app.listen(() => {

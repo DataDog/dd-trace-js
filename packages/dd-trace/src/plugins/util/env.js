@@ -16,7 +16,7 @@ function getRuntimeAndOSMetadata () {
     [OS_PLATFORM]: process.platform,
     [RUNTIME_NAME]: 'node',
     [OS_VERSION]: os.release(),
-    [DD_HOST_CPU_COUNT]: os.cpus().length
+    [DD_HOST_CPU_COUNT]: os.cpus().length,
   }
 }
 
@@ -27,5 +27,5 @@ module.exports = {
   OS_ARCHITECTURE,
   RUNTIME_NAME,
   RUNTIME_VERSION,
-  DD_HOST_CPU_COUNT
+  DD_HOST_CPU_COUNT,
 }

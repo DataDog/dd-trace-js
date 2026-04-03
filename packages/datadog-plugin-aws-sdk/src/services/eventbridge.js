@@ -12,14 +12,14 @@ class EventBridge extends BaseAwsSdkPlugin {
     return {
       'resource.name': operation ? `${operation} ${params.source}` : params.source,
       'aws.eventbridge.source': `${params.source}`,
-      rulename: `${rulename}`
+      rulename: `${rulename}`,
     }
   }
 
   /**
    * requestInject
-   * @param {*} span
-   * @param {*} request
+   * @param {import('../../../..').Span} span
+   * @param {object} request
    *
    * Docs: https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_PutEventsRequestEntry.html
    * We cannot use the traceHeader field as that's reserved for X-Ray.

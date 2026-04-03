@@ -28,8 +28,8 @@ class GoogleCloudVertexAITracingPlugin extends TracingPlugin {
       kind: 'client',
       meta: {
         [MEASURED]: 1,
-        'vertexai.request.model': extractModel(instance)
-      }
+        'vertexai.request.model': extractModel(instance),
+      },
     }, false)
 
     const store = storage('legacy').getStore() || {}

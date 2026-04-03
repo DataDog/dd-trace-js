@@ -1,5 +1,19 @@
 'use strict'
 
+const {
+  tags: {
+    MANUAL_KEEP,
+    MANUAL_DROP,
+    SAMPLING_PRIORITY,
+    SERVICE_NAME,
+  },
+  priority: {
+    AUTO_REJECT,
+    AUTO_KEEP,
+    USER_REJECT,
+    USER_KEEP,
+  },
+} = require('../../../ext')
 const log = require('./log')
 const RateLimiter = require('./rate_limiter')
 const Sampler = require('./sampler')
@@ -16,25 +30,24 @@ const {
   SAMPLING_RULE_DECISION,
   SAMPLING_LIMIT_DECISION,
   SAMPLING_AGENT_DECISION,
-  DECISION_MAKER_KEY
+  DECISION_MAKER_KEY,
+  SAMPLING_KNUTH_RATE,
 } = require('./constants')
 
-const {
-  tags: {
-    MANUAL_KEEP,
-    MANUAL_DROP,
-    SAMPLING_PRIORITY,
-    SERVICE_NAME
-  },
-  priority: {
-    AUTO_REJECT,
-    AUTO_KEEP,
-    USER_REJECT,
-    USER_KEEP
-  }
-} = require('../../../ext')
-
 const DEFAULT_KEY = 'service:,env:'
+
+/**
+ * Formats a sampling rate as a string with up to 6 decimal digits and no trailing zeros.
+ *
+ * @param {number} rate
+ */
+function formatKnuthRate (rate) {
+  const string = Number(rate).toFixed(6)
+  for (let i = string.length - 1; i > 0; i--) {
+    if (string[i] === '0') continue
+    return string.slice(0, i + (string[i] === '.' ? 0 : 1))
+  }
+}
 
 const defaultSampler = new Sampler(AUTO_KEEP)
 
@@ -54,7 +67,7 @@ class PrioritySampler {
   /**
    * Creates an instance of PrioritySampler.
    *
-   * @typedef {Object} SamplingConfig
+   * @typedef {object} SamplingConfig
    * @property {number} [sampleRate] - The default sample rate for traces.
    * @property {string} [provenance] - Optional rule provenance ("customer" or "dynamic").
    * @property {number} [rateLimit=100] - The maximum number of traces to sample per second.
@@ -236,7 +249,7 @@ class PrioritySampler {
     }
     const rawPriority = tags[SAMPLING_PRIORITY]
     if (rawPriority !== undefined) {
-      const priority = Number.parseInt(String(rawPriority), 10)
+      const priority = Math.trunc(rawPriority)
 
       if (priority === 1 || priority === 2) {
         return USER_KEEP
@@ -255,6 +268,7 @@ class PrioritySampler {
    */
   #getPriorityByRule (context, rule) {
     context._trace[SAMPLING_RULE_DECISION] = rule.sampleRate
+    context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rule.sampleRate)
     context._sampling.mechanism = SAMPLING_MECHANISM_RULE
     if (rule.provenance === 'customer') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_USER
     if (rule.provenance === 'dynamic') context._sampling.mechanism = SAMPLING_MECHANISM_REMOTE_DYNAMIC
@@ -291,9 +305,15 @@ class PrioritySampler {
     // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
-    context._trace[SAMPLING_AGENT_DECISION] = sampler.rate()
+    const rate = sampler.rate()
+    context._trace[SAMPLING_AGENT_DECISION] = rate
 
-    context._sampling.mechanism = sampler === defaultSampler ? SAMPLING_MECHANISM_DEFAULT : SAMPLING_MECHANISM_AGENT
+    if (sampler === defaultSampler) {
+      context._sampling.mechanism = SAMPLING_MECHANISM_DEFAULT
+    } else {
+      context._trace.tags[SAMPLING_KNUTH_RATE] = formatKnuthRate(rate)
+      context._sampling.mechanism = SAMPLING_MECHANISM_AGENT
+    }
 
     return sampler.isSampled(context) ? AUTO_KEEP : AUTO_REJECT
   }

@@ -6,7 +6,7 @@ esmHook(['express', 'os'], (exports, name, baseDir) => {
       return {
         typeofExportsDefault: typeof exports.default,
         name,
-        baseDir
+        baseDir,
       }
     }
   }
@@ -23,6 +23,6 @@ esmHook(['express', 'os'], (exports, name, baseDir) => {
   // eslint-disable-next-line no-console
   console.log(JSON.stringify({
     express,
-    freemem: freemem()
+    freemem: freemem(),
   }))
 })()

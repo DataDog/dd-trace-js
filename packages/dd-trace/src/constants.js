@@ -17,11 +17,13 @@ module.exports = {
   SAMPLING_MECHANISM_SPAN: 8,
   SAMPLING_MECHANISM_REMOTE_USER: 11,
   SAMPLING_MECHANISM_REMOTE_DYNAMIC: 12,
+  SAMPLING_MECHANISM_AI_GUARD: 13,
   SPAN_SAMPLING_MECHANISM: '_dd.span_sampling.mechanism',
   SPAN_SAMPLING_RULE_RATE: '_dd.span_sampling.rule_rate',
   SPAN_SAMPLING_MAX_PER_SECOND: '_dd.span_sampling.max_per_second',
   DATADOG_LAMBDA_EXTENSION_PATH: '/opt/extensions/datadog-agent',
   DECISION_MAKER_KEY: '_dd.p.dm',
+  SAMPLING_KNUTH_RATE: '_dd.p.ksr',
   PROCESS_ID: 'process_id',
   ERROR_TYPE: 'error.type',
   ERROR_MESSAGE: 'error.message',
@@ -46,12 +48,15 @@ module.exports = {
   SCHEMA_TOPIC: 'schema.topic',
   SCHEMA_OPERATION: 'schema.operation',
   SCHEMA_NAME: 'schema.name',
-  GRPC_CLIENT_ERROR_STATUSES: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-  GRPC_SERVER_ERROR_STATUSES: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
   DYNAMODB_PTR_KIND: 'aws.dynamodb.item',
   S3_PTR_KIND: 'aws.s3.object',
+  WEBSOCKET_PTR_KIND: 'websocket',
   SPAN_POINTER_DIRECTION: Object.freeze({
     UPSTREAM: 'u',
-    DOWNSTREAM: 'd'
-  })
+    DOWNSTREAM: 'd',
+  }),
+  SPAN_POINTER_DIRECTION_NAME: Object.freeze({
+    UPSTREAM: 'span-pointer-up',
+    DOWNSTREAM: 'span-pointer-down',
+  }),
 }

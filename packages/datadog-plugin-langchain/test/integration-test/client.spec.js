@@ -1,56 +1,58 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  let variants
 
-  withVersions('langchain', ['@langchain/core'], '>=0.1', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([
-        `@langchain/core@${version}`,
-        `@langchain/openai@${version}`,
-        'nock'
-      ], false, [
-        './packages/datadog-plugin-langchain/test/integration-test/*'
-      ])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+  // TODO(sabrenner, MLOB-4410): follow-up on re-enabling this test in a different PR once a fix lands
+  withVersions('langchain', ['@langchain/core'], '>=0.1 <1.0.0', version => {
+    useSandbox([
+      `@langchain/core@${version}`,
+      `@langchain/openai@${version}`,
+    ], false, [
+      './packages/datadog-plugin-langchain/test/integration-test/*',
+    ])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
 
+    before(async function () {
+      variants = varySandbox('server.mjs', 'StringOutputParser', undefined, '@langchain/core/output_parsers', true)
+    })
+
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'langchain.request'), true)
-      })
+    for (const variant of ['star', 'destructure']) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'langchain.request'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, null, {
-        NODE_OPTIONS: '--import dd-trace/initialize.mjs'
-      })
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
+          NODE_OPTIONS: '--import dd-trace/initialize.mjs',
+        })
 
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })

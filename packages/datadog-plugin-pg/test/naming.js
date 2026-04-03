@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   outbound: {
     v0: {
       opName: 'pg.query',
-      serviceName: 'test-postgres'
+      serviceName: 'test-postgres',
     },
     v1: {
       opName: 'postgresql.query',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

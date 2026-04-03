@@ -1,20 +1,21 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { describe, it } = require('mocha')
 
-const { prepareTestServerForIast } = require('../utils')
-const { NO_HTTPONLY_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
 const CookieAnalyzer = require('../../../../src/appsec/iast/analyzers/cookie-analyzer')
 const noHttponlyCookieAnalyzer = require('../../../../src/appsec/iast/analyzers/no-httponly-cookie-analyzer')
+const { NO_HTTPONLY_COOKIE } = require('../../../../src/appsec/iast/vulnerabilities')
+const { prepareTestServerForIast } = require('../utils')
 
 describe('no HttpOnly cookie analyzer', () => {
   it('Expected vulnerability identifier', () => {
-    expect(NO_HTTPONLY_COOKIE).to.be.equals('NO_HTTPONLY_COOKIE')
+    assert.strictEqual(NO_HTTPONLY_COOKIE, 'NO_HTTPONLY_COOKIE')
   })
 
   it('NoHttponlyCookieAnalyzer extends CookieAnalyzer', () => {
-    expect(CookieAnalyzer.isPrototypeOf(noHttponlyCookieAnalyzer.constructor)).to.be.true
+    assert.strictEqual(CookieAnalyzer.isPrototypeOf(noHttponlyCookieAnalyzer.constructor), true)
   })
 
   // In these test, even when we are having multiple vulnerabilities, all the vulnerabilities
@@ -23,7 +24,7 @@ describe('no HttpOnly cookie analyzer', () => {
     enabled: true,
     requestSampling: 100,
     maxConcurrentRequests: 1,
-    maxContextOperations: 1
+    maxContextOperations: 1,
   }
 
   prepareTestServerForIast('no HttpOnly cookie analyzer',
@@ -31,7 +32,7 @@ describe('no HttpOnly cookie analyzer', () => {
       testThatRequestHasVulnerability((req, res) => {
         res.setHeader('set-cookie', 'key=value')
       }, NO_HTTPONLY_COOKIE, 1, function (vulnerabilities) {
-        expect(vulnerabilities[0].evidence.value).to.be.equals('key')
+        assert.strictEqual(vulnerabilities[0].evidence.value, 'key')
       })
 
       testThatRequestHasVulnerability((req, res) => {

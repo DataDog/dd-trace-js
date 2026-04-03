@@ -3,48 +3,50 @@
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
-  TEST_STATUS,
   finishAllTraceSpans,
-  getTestSuitePath,
   getTestSuiteCommonTags,
-  TEST_SOURCE_START,
+  getTestSuitePath,
+  isModifiedTest,
+  TEST_BROWSER_NAME,
+  TEST_BROWSER_VERSION,
   TEST_CODE_OWNERS,
-  TEST_SOURCE_FILE,
-  TEST_PARAMETERS,
+  TEST_COMMAND,
+  TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  TEST_EARLY_FLAKE_ENABLED,
-  TEST_EARLY_FLAKE_ABORT_REASON,
-  TELEMETRY_TEST_SESSION,
-  TEST_RETRY_REASON,
-  TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_ENABLED,
-  TEST_BROWSER_NAME,
-  TEST_MANAGEMENT_IS_DISABLED,
-  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
-  TEST_HAS_FAILED_ALL_RETRIES,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_SESSION_ID,
-  TEST_MODULE_ID,
-  TEST_COMMAND,
-  TEST_MODULE,
-  TEST_SUITE,
-  TEST_SUITE_ID,
-  TEST_NAME,
   TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_VERSION,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
+  TEST_MODULE_ID,
+  TEST_MODULE,
+  TEST_NAME,
+  TEST_PARAMETERS,
   TEST_RETRY_REASON_TYPES,
-  TEST_IS_MODIFIED,
-  isModifiedTest
+  TEST_RETRY_REASON,
+  TEST_SESSION_ID,
+  TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
+  TEST_STATUS,
+  TEST_SUITE_ID,
+  TEST_SUITE,
+  TEST_HAS_DYNAMIC_NAME,
+  DYNAMIC_NAME_RE,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TELEMETRY_EVENT_CREATED,
-  TELEMETRY_EVENT_FINISHED
+  TELEMETRY_EVENT_FINISHED,
+  TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
@@ -62,7 +64,7 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test:is-modified', ({
       filePath,
       modifiedFiles,
-      onDone
+      onDone,
     }) => {
       const testSuite = getTestSuitePath(filePath, this.repositoryRoot)
       const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
@@ -74,7 +76,7 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      onDone
+      onDone,
     }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
       this.testSessionSpan.setTag(TEST_STATUS, status)
@@ -106,7 +108,7 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
@@ -114,18 +116,24 @@ class PlaywrightPlugin extends CiPlugin {
     })
 
     this.addBind('ci:playwright:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath } = ctx
+      const { testSuiteAbsolutePath, testSourceFileAbsolutePath } = ctx
 
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuite,
-        'playwright'
+      const testSourceFile = getTestSuitePath(
+        testSourceFileAbsolutePath || testSuiteAbsolutePath,
+        this.repositoryRoot
       )
+
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuite,
+          'playwright'
+        ),
+        ...this.getSessionRequestErrorTags(),
+      }
       if (testSourceFile) {
         testSuiteMetadata[TEST_SOURCE_FILE] = testSourceFile
         testSuiteMetadata[TEST_SOURCE_START] = 1
@@ -140,8 +148,8 @@ class PlaywrightPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata
-        }
+          ...testSuiteMetadata,
+        },
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       ctx.parentStore = store
@@ -171,7 +179,7 @@ class PlaywrightPlugin extends CiPlugin {
 
     this.addSub('ci:playwright:test:page-goto', ({
       isRumActive,
-      page
+      page,
     }) => {
       const store = storage('legacy').getStore()
       const span = store && store.span
@@ -196,7 +204,7 @@ class PlaywrightPlugin extends CiPlugin {
             name: 'datadog-ci-visibility-test-execution-id',
             value: span.context().toTraceId(),
             domain,
-            path: '/'
+            path: '/',
           }])
         }
       }
@@ -213,7 +221,10 @@ class PlaywrightPlugin extends CiPlugin {
             ...span,
             span_id: id(span.span_id),
             trace_id: id(span.trace_id),
-            parent_id: id(span.parent_id)
+            parent_id: id(span.parent_id),
+          }
+          if (span.meta[TEST_IS_NEW] === 'true' && DYNAMIC_NAME_RE.test(span.meta[TEST_NAME] || '')) {
+            formattedSpan.meta[TEST_HAS_DYNAMIC_NAME] = 'true'
           }
           if (span.name === 'playwright.test') {
             // TODO: remove this comment
@@ -222,6 +233,7 @@ class PlaywrightPlugin extends CiPlugin {
             // for a test session. They can be passed the same way `DD_PLAYWRIGHT_WORKER` is passed.
             formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
             formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
+            Object.assign(formattedSpan.meta, this.getSessionRequestErrorTags())
             formattedSpan.meta[TEST_COMMAND] = this.command
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
@@ -234,41 +246,49 @@ class PlaywrightPlugin extends CiPlugin {
             // test_suite_absolute_path is just a hack because in the worker we don't have rootDir and repositoryRoot
             // but if we pass those the same way we pass `DD_PLAYWRIGHT_WORKER` this is not necessary
             const testSuitePath = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.rootDir)
-            const testSourceFile = getTestSuitePath(formattedSpan.meta.test_suite_absolute_path, this.repositoryRoot)
+            const testSourceAbsolutePath = formattedSpan.meta.test_source_absolute_path ||
+              formattedSpan.meta.test_suite_absolute_path
+            const testSourceFile = getTestSuitePath(testSourceAbsolutePath, this.repositoryRoot)
             // we need to rewrite this because this.rootDir and this.repositoryRoot are not available in the worker
             formattedSpan.meta[TEST_SUITE] = testSuitePath
             formattedSpan.meta[TEST_SOURCE_FILE] = testSourceFile
             formattedSpan.resource = `${testSuitePath}.${formattedSpan.meta[TEST_NAME]}`
             delete formattedSpan.meta.test_suite_absolute_path
+            delete formattedSpan.meta.test_source_absolute_path
           }
           formattedTrace.push(formattedSpan)
         }
         formattedTraces.push(formattedTrace)
       }
 
-      formattedTraces.forEach(trace => {
+      for (const trace of formattedTraces) {
         this.tracer._exporter.export(trace)
-      })
+      }
     })
 
     this.addBind('ci:playwright:test:start', (ctx) => {
       const {
         testName,
         testSuiteAbsolutePath,
+        testSourceFileAbsolutePath,
         testSourceLine,
         browserName,
-        isDisabled
+        isDisabled,
       } = ctx
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const testSourceFile = getTestSuitePath(
+        testSourceFileAbsolutePath || testSuiteAbsolutePath,
+        this.repositoryRoot
+      )
       const span = this.startTestSpan(
         testName,
         testSuiteAbsolutePath,
         testSuite,
         testSourceFile,
         testSourceLine,
-        browserName
+        browserName,
+        testSourceFileAbsolutePath
       )
 
       if (isDisabled) {
@@ -288,6 +308,7 @@ class PlaywrightPlugin extends CiPlugin {
       error,
       extraTags,
       isNew,
+      hasDynamicName,
       isEfdRetry,
       isRetry,
       isAttemptToFix,
@@ -299,7 +320,7 @@ class PlaywrightPlugin extends CiPlugin {
       hasFailedAttemptToFixRetries,
       isAtrRetry,
       isModified,
-      onDone
+      onDone,
     }) => {
       if (!span) return
 
@@ -319,6 +340,9 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_IS_RETRY, 'true')
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
+      }
+      if (hasDynamicName) {
+        span.setTag(TEST_HAS_DYNAMIC_NAME, 'true')
       }
       if (isRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
@@ -356,7 +380,7 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
-      steps.forEach(step => {
+      for (const step of steps) {
         const stepStartTime = step.startTime.getTime()
         const stepSpan = this.tracer.startSpan('playwright.step', {
           childOf: span,
@@ -364,8 +388,8 @@ class PlaywrightPlugin extends CiPlugin {
           tags: {
             [COMPONENT]: this.constructor.id,
             'playwright.step': step.title,
-            [RESOURCE_NAME]: step.title
-          }
+            [RESOURCE_NAME]: step.title,
+          },
         })
         if (step.error) {
           stepSpan.setTag('error', step.error)
@@ -375,7 +399,7 @@ class PlaywrightPlugin extends CiPlugin {
           stepDuration = 0
         }
         stepSpan.finish(stepStartTime + stepDuration)
-      })
+      }
       if (testStatus === 'fail') {
         this.numFailedTests++
       }
@@ -387,13 +411,16 @@ class PlaywrightPlugin extends CiPlugin {
           hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
           isNew,
           isRum: isRUMActive,
-          browserDriver: 'playwright'
+          browserDriver: 'playwright',
+          isQuarantined,
+          isDisabled,
+          isModified,
         }
       )
       span.finish()
 
       finishAllTraceSpans(span)
-      if (getEnvironmentVariable('DD_PLAYWRIGHT_WORKER')) {
+      if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
         this.tracer._exporter.flush(onDone)
       }
     })
@@ -401,22 +428,27 @@ class PlaywrightPlugin extends CiPlugin {
     this.addSub('ci:playwright:test:skip', ({
       testName,
       testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
       testSourceLine,
       browserName,
       isNew,
       isDisabled,
       isModified,
-      isQuarantined
+      isQuarantined,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.rootDir)
-      const testSourceFile = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+      const testSourceFile = getTestSuitePath(
+        testSourceFileAbsolutePath || testSuiteAbsolutePath,
+        this.repositoryRoot
+      )
       const span = this.startTestSpan(
         testName,
         testSuiteAbsolutePath,
         testSuite,
         testSourceFile,
         testSourceLine,
-        browserName
+        browserName,
+        testSourceFileAbsolutePath
       )
 
       span.setTag(TEST_STATUS, 'skip')
@@ -439,11 +471,19 @@ class PlaywrightPlugin extends CiPlugin {
   }
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)
-  startTestSpan (testName, testSuiteAbsolutePath, testSuite, testSourceFile, testSourceLine, browserName) {
+  startTestSpan (
+    testName,
+    testSuiteAbsolutePath,
+    testSuite,
+    testSourceFile,
+    testSourceLine,
+    browserName,
+    testSourceFileAbsolutePath
+  ) {
     const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
 
     const extraTags = {
-      [TEST_SOURCE_START]: testSourceLine
+      [TEST_SOURCE_START]: testSourceLine,
     }
     if (testSourceFile) {
       extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
@@ -455,6 +495,9 @@ class PlaywrightPlugin extends CiPlugin {
     }
 
     extraTags.test_suite_absolute_path = testSuiteAbsolutePath
+    if (testSourceFileAbsolutePath) {
+      extraTags.test_source_absolute_path = testSourceFileAbsolutePath
+    }
 
     return super.startTestSpan(testName, testSuite, testSuiteSpan, extraTags)
   }

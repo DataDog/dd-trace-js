@@ -15,7 +15,7 @@ const trace = [
     meta: {},
     metrics: {},
     start: 1500000000000123600,
-    duration: 100000000
+    duration: 100000000,
   },
   {
     trace_id: id('123456789abcdef0'),
@@ -29,8 +29,8 @@ const trace = [
     meta: {},
     metrics: {},
     start: 1500000000000123600,
-    duration: 80000000
-  }
+    duration: 80000000,
+  },
 ]
 
 module.exports = trace

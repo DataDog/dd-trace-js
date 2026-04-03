@@ -4,17 +4,18 @@ const path = require('path')
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { storage } = require('../../datadog-core')
-const services = require('./services')
 const Sampler = require('../../dd-trace/src/sampler')
 const { MEASURED } = require('../../../ext/tags')
 
+const { DD_MAJOR } = require('../../../version')
 const {
   convertBuffersToObjects,
   constructCompletionResponseFromStreamedChunks,
-  constructChatCompletionResponseFromStreamedChunks
+  constructChatCompletionResponseFromStreamedChunks,
+  constructResponseResponseFromStreamedChunks,
 } = require('./stream-helpers')
 
-const { DD_MAJOR } = require('../../../version')
+const services = require('./services')
 
 class OpenAiTracingPlugin extends TracingPlugin {
   static id = 'openai'
@@ -59,6 +60,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
         response = constructCompletionResponseFromStreamedChunks(chunks, n)
       } else if (methodName === 'createChatCompletion') {
         response = constructChatCompletionResponseFromStreamedChunks(chunks, n)
+      } else if (methodName === 'createResponse') {
+        response = constructResponseResponseFromStreamedChunks(chunks)
       }
 
       ctx.result = { data: response }
@@ -94,8 +97,8 @@ class OpenAiTracingPlugin extends TracingPlugin {
       meta: {
         [MEASURED]: 1,
         // Only model is added to all requests
-        'openai.request.model': payload.model
-      }
+        'openai.request.model': payload.model,
+      },
     }, false)
 
     const openaiStore = Object.create(null)
@@ -133,6 +136,10 @@ class OpenAiTracingPlugin extends TracingPlugin {
 
       case 'createEdit':
         createEditRequestExtraction(tags, payload, openaiStore)
+        break
+
+      case 'createResponse':
+        createResponseRequestExtraction(tags, payload, openaiStore)
         break
     }
 
@@ -193,7 +200,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
           // The OpenAI API appears to use both created and created_at in different places
           // Here we're conciously choosing to surface this inconsistency instead of normalizing
           'openai.response.created': body.created,
-          'openai.response.created_at': body.created_at
+          'openai.response.created_at': body.created_at,
         }
 
     responseDataExtractionByMethod(normalizedMethodName, tags, body, openaiStore)
@@ -284,7 +291,7 @@ class OpenAiTracingPlugin extends TracingPlugin {
     const log = {
       status: error ? 'error' : 'info',
       message: `sampled ${methodName}`,
-      ...openaiStore
+      ...openaiStore,
     }
 
     this.logger.log(log, span, tags)
@@ -312,6 +319,10 @@ function normalizeMethodName (methodName) {
     // embeddings
     case 'embeddings.create':
       return 'createEmbedding'
+
+    // responses
+    case 'responses.create':
+      return 'createResponse'
 
     // files
     case 'files.create':
@@ -376,6 +387,16 @@ function createEditRequestExtraction (tags, payload, openaiStore) {
   openaiStore.instruction = instruction
 }
 
+function createResponseRequestExtraction (tags, payload, openaiStore) {
+  // Extract model information
+  if (payload.model) {
+    tags['openai.request.model'] = payload.model
+  }
+
+  // Store the full payload for response extraction
+  openaiStore.responseData = payload
+}
+
 function retrieveModelRequestExtraction (tags, payload) {
   tags['openai.request.id'] = payload.id
 }
@@ -408,6 +429,10 @@ function responseDataExtractionByMethod (methodName, tags, body, openaiStore) {
     case 'createChatCompletion':
     case 'createEdit':
       commonCreateResponseExtraction(tags, body, openaiStore, methodName)
+      break
+
+    case 'createResponse':
+      createResponseResponseExtraction(tags, body, openaiStore)
       break
 
     case 'listFiles':
@@ -513,6 +538,26 @@ function commonCreateResponseExtraction (tags, body, openaiStore, methodName) {
   openaiStore.choices = body.choices
 }
 
+function createResponseResponseExtraction (tags, body, openaiStore) {
+  // Extract response ID if available
+  if (body.id) {
+    tags['openai.response.id'] = body.id
+  }
+
+  // Extract status if available
+  if (body.status) {
+    tags['openai.response.status'] = body.status
+  }
+
+  // Extract model from response if available
+  if (body.model) {
+    tags['openai.response.model'] = body.model
+  }
+
+  // Store the full response for potential future use
+  openaiStore.response = body
+}
+
 // The server almost always responds with JSON
 function coerceResponseBody (body, methodName) {
   switch (methodName) {
@@ -600,7 +645,7 @@ function normalizeRequestPayload (methodName, args) {
     case 'createFile':
       return {
         file: args[0],
-        purpose: args[1]
+        purpose: args[1],
       }
 
     case 'deleteFile':
@@ -618,7 +663,7 @@ function normalizeRequestPayload (methodName, args) {
     case 'fine-tune.listEvents':
       return {
         fine_tune_id: args[0],
-        stream: args[1] // undocumented
+        stream: args[1], // undocumented
       }
 
     case 'retrieveFineTune':
@@ -640,7 +685,7 @@ function normalizeRequestPayload (methodName, args) {
         n: args[3],
         size: args[4],
         response_format: args[5],
-        user: args[6]
+        user: args[6],
       }
 
     case 'createImageVariation':
@@ -649,7 +694,7 @@ function normalizeRequestPayload (methodName, args) {
         n: args[1],
         size: args[2],
         response_format: args[3],
-        user: args[4]
+        user: args[4],
       }
 
     case 'createTranscription':
@@ -660,7 +705,7 @@ function normalizeRequestPayload (methodName, args) {
         prompt: args[2],
         response_format: args[3],
         temperature: args[4],
-        language: args[5] // only used for createTranscription
+        language: args[5], // only used for createTranscription
       }
   }
 

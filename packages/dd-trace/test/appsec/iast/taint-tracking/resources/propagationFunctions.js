@@ -123,5 +123,5 @@ module.exports = {
   trimEndStr,
   trimProtoStr,
   trimStartStr,
-  trimStr
+  trimStr,
 }

@@ -1,11 +1,10 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
 const BaseLLMObsPlugin = require('../base')
 const { getModelProvider } = require('../../../../../datadog-plugin-ai/src/utils')
 
-const { channel } = require('dc-polyfill')
-
-const toolCreationCh = channel('dd-trace:vercel-ai:tool')
+const toolCreationCh = channel('tracing:orchestrion:ai:tool:start')
 const setAttributesCh = channel('dd-trace:vercel-ai:span:setAttributes')
 
 const { MODEL_NAME, MODEL_PROVIDER, NAME } = require('../../constants/tags')
@@ -18,8 +17,40 @@ const {
   getGenerationMetadata,
   getToolNameFromTags,
   getToolCallResultContent,
-  getLlmObsSpanName
+  getLlmObsSpanName,
 } = require('./util')
+
+/**
+ * @typedef {Record<string, unknown> & { description?: string, id?: string }} AvailableToolArgs
+ */
+
+/**
+ * @typedef {string | number | boolean | null | undefined | string[] | number[] | boolean[]} TagValue
+ * @typedef {Record<string, TagValue>} SpanTags
+ *
+ * @typedef {{ name?: string, description?: string }} ToolForModel
+ *
+ * @typedef {{ type: 'text' | 'reasoning' | 'redacted-reasoning', text?: string, data?: string }} TextPart
+ * @typedef {{ type: 'tool-call', toolName: string, toolCallId: string, args?: unknown, input?: unknown }} ToolCallPart
+ * @typedef {(
+ *   { type: 'tool-result', toolCallId: string, output?: { type: string, value?: unknown }, result?: unknown } &
+ *   Record<string, unknown>
+ * )} ToolResultPart
+ *
+ * @typedef {{
+ *   role: 'system',
+ *   content: string
+ * } | {
+ *   role: 'user',
+ *   content: TextPart[]
+ * } | {
+ *   role: 'assistant',
+ *   content: Array<TextPart | ToolCallPart>
+ * } | {
+ *   role: 'tool',
+ *   content: ToolResultPart[]
+ * }} AiSdkMessage
+ */
 
 const SPAN_NAME_TO_KIND_MAPPING = {
   // embeddings
@@ -36,7 +67,7 @@ const SPAN_NAME_TO_KIND_MAPPING = {
   doGenerate: 'llm',
   doStream: 'llm',
   // tools
-  toolCall: 'tool'
+  toolCall: 'tool',
 }
 
 class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
@@ -47,7 +78,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
   /**
    * The available tools within the runtime scope of this integration.
    * This essentially acts as a global registry for all tools made through the Vercel AI SDK.
-   * @type {Set<Record<string, any>>}
+   * @type {Set<AvailableToolArgs>}
    */
   #availableTools
 
@@ -63,8 +94,10 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this.#toolCallIdsToName = {}
     this.#availableTools = new Set()
-    toolCreationCh.subscribe(toolArgs => {
-      this.#availableTools.add(toolArgs)
+    toolCreationCh.subscribe(ctx => {
+      const toolArgs = ctx.arguments
+      const tool = toolArgs[0] ?? {}
+      this.#availableTools.add(tool)
     })
 
     setAttributesCh.subscribe(({ ctx, attributes }) => {
@@ -79,10 +112,13 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
    *
    * We use the tool description as the next best identifier for a tool.
    *
-   * @param {string} toolDescription
+   * @param {string} toolName
+   * @param {string | undefined} toolDescription
    * @returns {string | undefined}
    */
-  findToolName (toolDescription) {
+  findToolName (toolName, toolDescription) {
+    if (Number.isNaN(Number.parseInt(toolName))) return toolName
+
     for (const availableTool of this.#availableTools) {
       const description = availableTool.description
       if (description === toolDescription && availableTool.id) {
@@ -183,7 +219,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const usage = tags['ai.usage.tokens']
     this._tagger.tagMetrics(span, {
       inputTokens: usage,
-      totalTokens: usage
+      totalTokens: usage,
     })
   }
 
@@ -220,7 +256,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
   /**
    * @param {import('../../../opentracing/span')} span
-   * @param {Record<string, unknown>} tags
+   * @param {SpanTags} tags
    */
   setLLMOperationTags (span, tags) {
     const toolsForModel = tags['ai.prompt.tools']?.map(getJsonStringValue)
@@ -260,23 +296,24 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     const formattedToolCalls = []
     for (const toolCall of outputMessageToolCalls) {
-      const toolCallArgs = getJsonStringValue(toolCall.args, {})
+      const toolArgs = toolCall.args ?? toolCall.input
+      const toolCallArgs = typeof toolArgs === 'string' ? getJsonStringValue(toolArgs, {}) : toolArgs
       const toolDescription = toolsForModel?.find(tool => toolCall.toolName === tool.name)?.description
-      const name = this.findToolName(toolDescription)
+      const name = this.findToolName(toolCall.toolName, toolDescription)
       this.#toolCallIdsToName[toolCall.toolCallId] = name
 
       formattedToolCalls.push({
         arguments: toolCallArgs,
         name,
         toolId: toolCall.toolCallId,
-        type: 'function'
+        type: toolCall.toolCallType ?? 'function',
       })
     }
 
     return {
       role: 'assistant',
       content: outputMessageText,
-      toolCalls: formattedToolCalls
+      toolCalls: formattedToolCalls,
     }
   }
 
@@ -286,8 +323,8 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
    * it is possible to have multiple tool call results in a single message that we
    * need to split into multiple messages.
    *
-   * @param {*} message
-   * @param {*} toolsForModel
+   * @param {AiSdkMessage} message
+   * @param {ToolForModel[] | null | undefined} toolsForModel
    * @returns {Array<{role: string, content: string, toolId?: string,
    *   toolCalls?: Array<{arguments: string, name: string, toolId: string, type: string}>}>}
    */
@@ -317,20 +354,20 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
           finalContent += part.text ?? part.data
         } else if (type === 'tool-call') {
           const toolDescription = toolsForModel?.find(tool => part.toolName === tool.name)?.description
-          const name = this.findToolName(toolDescription)
+          const name = this.findToolName(part.toolName, toolDescription)
 
           toolCalls.push({
-            arguments: part.args,
+            arguments: part.args ?? part.input,
             name,
             toolId: part.toolCallId,
-            type: 'function'
+            type: 'function',
           })
         }
       }
 
       const finalMessage = {
         role,
-        content: finalContent
+        content: finalContent,
       }
 
       if (toolCalls.length) {
@@ -347,7 +384,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
           finalMessages.push({
             role,
             content: safeResult,
-            toolId: part.toolCallId
+            toolId: part.toolCallId,
           })
         }
       }

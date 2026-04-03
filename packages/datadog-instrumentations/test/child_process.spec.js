@@ -1,13 +1,18 @@
 'use strict'
 
-const { expect } = require('chai')
-const dc = require('dc-polyfill')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
-const sinon = require('sinon')
-
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { promisify } = require('node:util')
 
+const dc = require('dc-polyfill')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
+
 const agent = require('../../dd-trace/test/plugins/agent')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 
 describe('child process', () => {
   const modules = ['child_process', 'node:child_process']
@@ -40,7 +45,7 @@ describe('child process', () => {
           start,
           end: finish,
           asyncEnd: asyncFinish,
-          error
+          error,
         })
 
         childProcess = require(childProcessModuleName)
@@ -51,7 +56,7 @@ describe('child process', () => {
           start,
           end: finish,
           asyncEnd: asyncFinish,
-          error
+          error,
         })
       })
 
@@ -63,21 +68,21 @@ describe('child process', () => {
                 const childEmitter = childProcess[methodName]('ls')
 
                 childEmitter.once('close', () => {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'ls',
                     file: 'ls',
                     shell: false,
-                    abortController: sinon.match.instanceOf(AbortController)
+                    abortController: sinon.match.instanceOf(AbortController),
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'ls',
                     file: 'ls',
                     shell: false,
-                    result: 0
+                    result: 0,
                   })
-                  expect(error).not.to.have.been.called
+                  sinon.assert.notCalled(error)
                   done()
                 })
               })
@@ -86,21 +91,21 @@ describe('child process', () => {
                 const childEmitter = childProcess[methodName]('ls', ['-la'])
 
                 childEmitter.once('close', () => {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'ls -la',
                     file: 'ls',
                     fileArgs: ['-la'],
                     shell: false,
-                    abortController: sinon.match.instanceOf(AbortController)
+                    abortController: sinon.match.instanceOf(AbortController),
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'ls -la',
                     file: 'ls',
                     shell: false,
                     fileArgs: ['-la'],
-                    result: 0
+                    result: 0,
                   })
 
                   done()
@@ -110,26 +115,26 @@ describe('child process', () => {
               it('should execute error callback', (done) => {
                 const childEmitter = childProcess[methodName]('invalid_command_test')
 
-                expect(childEmitter.listenerCount('error')).to.equal(methodName.includes('spawn') ? 0 : 1)
+                assert.strictEqual(childEmitter.listenerCount('error'), methodName.includes('spawn') ? 0 : 1)
 
                 childEmitter.once('error', () => {})
 
                 childEmitter.once('close', () => {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'invalid_command_test',
                     file: 'invalid_command_test',
                     shell: false,
-                    abortController: sinon.match.instanceOf(AbortController)
+                    abortController: sinon.match.instanceOf(AbortController),
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'invalid_command_test',
                     file: 'invalid_command_test',
                     shell: false,
-                    result: -2
+                    result: -2,
                   })
-                  expect(error).to.have.been.calledOnce
+                  sinon.assert.calledOnce(error)
                   done()
                 })
               })
@@ -138,21 +143,21 @@ describe('child process', () => {
                 const childEmitter = childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
 
                 childEmitter.once('close', () => {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'node -e "process.exit(1)"',
                     file: 'node -e "process.exit(1)"',
                     abortController: sinon.match.instanceOf(AbortController),
-                    shell: true
+                    shell: true,
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'node -e "process.exit(1)"',
                     file: 'node -e "process.exit(1)"',
                     shell: true,
-                    result: 1
+                    result: 1,
                   })
-                  expect(error).to.have.been.calledOnce
+                  sinon.assert.calledOnce(error)
 
                   done()
                 })
@@ -164,44 +169,47 @@ describe('child process', () => {
                 it('should execute success callbacks', async () => {
                   await promisify(childProcess[methodName])('echo')
 
-                  expect(start.firstCall.firstArg).to.include({
+                  assertObjectContains(start.firstCall.firstArg, {
                     command: 'echo',
                     file: 'echo',
-                    shell: false
+                    shell: false,
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'echo',
                     file: 'echo',
                     shell: false,
                     result: {
                       stdout: '\n',
-                      stderr: ''
-                    }
+                      stderr: '',
+                    },
                   })
-                  expect(error).not.to.have.been.called
+                  sinon.assert.notCalled(error)
                 })
 
                 it('should execute error callback', async () => {
                   try {
                     await promisify(childProcess[methodName])('invalid_command_test')
                   } catch (e) {
-                    expect(start).to.have.been.calledOnce
-                    expect(start.firstCall.firstArg).to.include({ command: 'invalid_command_test', shell: false })
+                    sinon.assert.calledOnce(start)
+                    assertObjectContains(start.firstCall.firstArg, { command: 'invalid_command_test', shell: false })
 
                     const errStub = new Error('spawn invalid_command_test ENOENT')
                     errStub.code = 'ENOENT'
                     errStub.errno = -2
 
-                    expect(asyncFinish).to.have.been.calledOnce
-                    expect(asyncFinish.firstCall.firstArg).to.include({ command: 'invalid_command_test', shell: false })
-                    expect(asyncFinish.firstCall.firstArg).to.deep.include({
+                    sinon.assert.calledOnce(asyncFinish)
+                    assertObjectContains(asyncFinish.firstCall.firstArg, {
                       command: 'invalid_command_test',
                       shell: false,
-                      error: errStub
+                    })
+                    assertObjectContains(asyncFinish.firstCall.firstArg, {
+                      command: 'invalid_command_test',
+                      shell: false,
+                      error: errStub,
                     })
 
-                    expect(error).to.have.been.calledOnce
+                    sinon.assert.calledOnce(error)
                   }
                 })
 
@@ -213,21 +221,24 @@ describe('child process', () => {
                   try {
                     await promisify(childProcess[methodName])('node -e "process.exit(1)"', { shell: true })
                   } catch (e) {
-                    expect(start).to.have.been.calledOnce
-                    expect(start.firstCall.firstArg).to.include({ command: 'node -e "process.exit(1)"', shell: true })
-
-                    expect(asyncFinish).to.have.been.calledOnce
-                    expect(asyncFinish.firstCall.firstArg).to.include({
-                      command: 'node -e "process.exit(1)"',
-                      shell: true
-                    })
-                    expect(asyncFinish.firstCall.firstArg).to.deep.include({
+                    sinon.assert.calledOnce(start)
+                    assertObjectContains(start.firstCall.firstArg, {
                       command: 'node -e "process.exit(1)"',
                       shell: true,
-                      error: errStub
                     })
 
-                    expect(error).to.have.been.calledOnce
+                    sinon.assert.calledOnce(asyncFinish)
+                    assertObjectContains(asyncFinish.firstCall.firstArg, {
+                      command: 'node -e "process.exit(1)"',
+                      shell: true,
+                    })
+                    assertObjectContains(asyncFinish.firstCall.firstArg, {
+                      command: 'node -e "process.exit(1)"',
+                      shell: true,
+                      error: errStub,
+                    })
+
+                    sinon.assert.calledOnce(error)
                   }
                 })
               })
@@ -242,21 +253,21 @@ describe('child process', () => {
                 const res = childProcess[methodName]('ls')
 
                 res.once('close', () => {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'ls',
                     file: 'ls',
                     shell: true,
-                    abortController: sinon.match.instanceOf(AbortController)
+                    abortController: sinon.match.instanceOf(AbortController),
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'ls',
                     file: 'ls',
                     shell: true,
-                    result: 0
+                    result: 0,
                   })
-                  expect(error).not.to.have.been.called
+                  sinon.assert.notCalled(error)
                   done()
                 })
               })
@@ -265,21 +276,21 @@ describe('child process', () => {
                 const res = childProcess[methodName]('node -e "process.exit(1)"')
 
                 res.once('close', () => {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'node -e "process.exit(1)"',
                     file: 'node -e "process.exit(1)"',
                     abortController: sinon.match.instanceOf(AbortController),
-                    shell: true
+                    shell: true,
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'node -e "process.exit(1)"',
                     file: 'node -e "process.exit(1)"',
                     shell: true,
-                    result: 1
+                    result: 1,
                   })
-                  expect(error).to.have.been.called
+                  sinon.assert.called(error)
                   done()
                 })
               })
@@ -288,20 +299,20 @@ describe('child process', () => {
                 const res = childProcess[methodName]('invalid_command_test')
 
                 res.once('close', () => {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'invalid_command_test',
                     file: 'invalid_command_test',
                     abortController: sinon.match.instanceOf(AbortController),
-                    shell: true
+                    shell: true,
                   })
-                  expect(error).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(error)
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'invalid_command_test',
                     file: 'invalid_command_test',
                     shell: true,
-                    result: 127
+                    result: 127,
                   })
                   done()
                 })
@@ -311,21 +322,20 @@ describe('child process', () => {
             describe(`method ${methodName} with promisify`, () => {
               it('should execute success callbacks', async () => {
                 await promisify(childProcess[methodName])('echo')
-                expect(start).to.have.been.calledOnce
-                expect(start).to.have.been.calledWithMatch({
+                sinon.assert.calledOnce(start)
+                sinon.assert.calledWithMatch(start, {
                   command: 'echo',
                   file: 'echo',
                   abortController: sinon.match.instanceOf(AbortController),
-                  shell: true
+                  shell: true,
                 })
-                expect(start).to.have.been.calledOnce
-                expect(asyncFinish).to.have.been.calledWithMatch({
+                sinon.assert.calledWithMatch(asyncFinish, {
                   command: 'echo',
                   file: 'echo',
                   shell: true,
-                  result: 0
+                  result: 0,
                 })
-                expect(error).not.to.have.been.called
+                sinon.assert.notCalled(error)
               })
 
               it('should execute error callback', async () => {
@@ -333,15 +343,15 @@ describe('child process', () => {
                   await promisify(childProcess[methodName])('invalid_command_test')
                   return Promise.reject(new Error('Command expected to fail'))
                 } catch (e) {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'invalid_command_test',
                     file: 'invalid_command_test',
                     abortController: sinon.match.instanceOf(AbortController),
-                    shell: true
+                    shell: true,
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(error).to.have.been.calledOnce
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledOnce(error)
                 }
               })
 
@@ -350,21 +360,21 @@ describe('child process', () => {
                   await promisify(childProcess[methodName])('node -e "process.exit(1)"')
                   return Promise.reject(new Error('Command expected to fail'))
                 } catch (e) {
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     command: 'node -e "process.exit(1)"',
                     file: 'node -e "process.exit(1)"',
                     abortController: sinon.match.instanceOf(AbortController),
-                    shell: true
+                    shell: true,
                   })
-                  expect(asyncFinish).to.have.been.calledOnce
-                  expect(asyncFinish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(asyncFinish)
+                  sinon.assert.calledWithMatch(asyncFinish, {
                     command: 'node -e "process.exit(1)"',
                     file: 'node -e "process.exit(1)"',
                     shell: true,
-                    result: 1
+                    result: 1,
                   })
-                  expect(error).to.have.been.calledOnce
+                  sinon.assert.calledOnce(error)
                 }
               })
             })
@@ -389,7 +399,7 @@ describe('child process', () => {
             describe(`method ${methodName}`, () => {
               it('should execute callback with the error', (done) => {
                 childProcess[methodName]('aborted_command', (error) => {
-                  expect(error).to.be.equal(abortError)
+                  assert.strictEqual(error, abortError)
 
                   done()
                 })
@@ -401,7 +411,7 @@ describe('child process', () => {
 
                 cp.on('error', errorCallback)
                 cp.on('close', () => {
-                  expect(errorCallback).to.have.been.calledWithExactly(abortError)
+                  sinon.assert.calledWithExactly(errorCallback, abortError)
                   done()
                 })
               })
@@ -413,8 +423,8 @@ describe('child process', () => {
 
                 cp.on('error', errorCallback)
                 cp.on('close', () => {
-                  expect(callback).to.have.been.calledWithExactly(abortError)
-                  expect(errorCallback).to.have.been.calledWithExactly(abortError)
+                  sinon.assert.calledWithExactly(callback, abortError)
+                  sinon.assert.calledWithExactly(errorCallback, abortError)
 
                   done()
                 })
@@ -431,45 +441,45 @@ describe('child process', () => {
               it('should execute success callbacks', () => {
                 const result = childProcess[methodName]('ls')
 
-                expect(start).to.have.been.calledOnce
-                expect(start).to.have.been.calledWithMatch({
+                sinon.assert.calledOnce(start)
+                sinon.assert.calledWithMatch(start, {
                   command: 'ls',
                   file: 'ls',
                   shell: false,
-                  abortController: sinon.match.instanceOf(AbortController)
+                  abortController: sinon.match.instanceOf(AbortController),
                 },
                 'tracing:datadog:child_process:execution:start')
 
-                expect(finish).to.have.been.calledOnce
-                expect(finish).to.have.been.calledWithMatch({
+                sinon.assert.calledOnce(finish)
+                sinon.assert.calledWithMatch(finish, {
                   command: 'ls',
                   file: 'ls',
                   shell: false,
-                  result
+                  result,
                 },
                 'tracing:datadog:child_process:execution:end')
 
-                expect(error).not.to.have.been.called
+                sinon.assert.notCalled(error)
               })
 
               it('should publish arguments', () => {
                 const result = childProcess[methodName]('ls', ['-la'])
 
-                expect(start).to.have.been.calledOnce
-                expect(start).to.have.been.calledWithMatch({
+                sinon.assert.calledOnce(start)
+                sinon.assert.calledWithMatch(start, {
                   command: 'ls -la',
                   file: 'ls',
                   shell: false,
                   fileArgs: ['-la'],
-                  abortController: sinon.match.instanceOf(AbortController)
+                  abortController: sinon.match.instanceOf(AbortController),
                 })
-                expect(finish).to.have.been.calledOnce
-                expect(finish).to.have.been.calledWithMatch({
+                sinon.assert.calledOnce(finish)
+                sinon.assert.calledWithMatch(finish, {
                   command: 'ls -la',
                   file: 'ls',
                   shell: false,
                   fileArgs: ['-la'],
-                  result
+                  result,
                 })
               })
 
@@ -487,21 +497,21 @@ describe('child process', () => {
                     const expectedContext = {
                       command: 'invalid_command_test',
                       file: 'invalid_command_test',
-                      shell: false
+                      shell: false,
                     }
-                    expect(start).to.have.been.calledOnce
-                    expect(start).to.have.been.calledWithMatch({
+                    sinon.assert.calledOnce(start)
+                    sinon.assert.calledWithMatch(start, {
                       ...expectedContext,
-                      abortController: sinon.match.instanceOf(AbortController)
+                      abortController: sinon.match.instanceOf(AbortController),
                     })
-                    expect(finish).to.have.been.calledOnce
-                    expect(finish).to.have.been.calledWithMatch({
+                    sinon.assert.calledOnce(finish)
+                    sinon.assert.calledWithMatch(finish, {
                       ...expectedContext,
-                      error: childError
+                      error: childError,
                     })
-                    expect(error).to.have.been.calledWithMatch({
+                    sinon.assert.calledWithMatch(error, {
                       ...expectedContext,
-                      error: childError
+                      error: childError,
                     })
                   }
                 })
@@ -516,22 +526,26 @@ describe('child process', () => {
                     const expectedContext = {
                       command: 'node -e "process.exit(1)"',
                       file: 'node -e "process.exit(1)"',
-                      shell: false
+                      shell: false,
                     }
-                    expect(start).to.have.been.calledOnce
-                    expect(start).to.have.been.calledWithMatch({
+                    sinon.assert.calledOnce(start)
+                    sinon.assert.calledWithMatch(start, {
                       ...expectedContext,
-                      abortController: sinon.match.instanceOf(AbortController)
+                      abortController: sinon.match.instanceOf(AbortController),
                     })
-                    expect(finish).to.have.been.calledOnce
-                    expect(finish).to.have.been.calledWithMatch({
+                    sinon.assert.calledOnce(finish)
+                    sinon.assert.calledWithMatch(finish, {
                       ...expectedContext,
-                      error: childError
+                      error: childError,
                     })
                   }
                 })
 
                 it('should execute error callback with `exit 1` command with shell: true', () => {
+                  temporaryWarningExceptions.add(
+                    'Passing args to a child process with shell option true can lead to security vulnerabilities, ' +
+                      'as the arguments are not escaped, only concatenated.'
+                  )
                   let childError
                   try {
                     childProcess[methodName]('node -e "process.exit(1)"', { shell: true })
@@ -541,17 +555,17 @@ describe('child process', () => {
                     const expectedContext = {
                       command: 'node -e "process.exit(1)"',
                       file: 'node -e "process.exit(1)"',
-                      shell: true
+                      shell: true,
                     }
-                    expect(start).to.have.been.calledOnce
-                    expect(start).to.have.been.calledWithMatch({
+                    sinon.assert.calledOnce(start)
+                    sinon.assert.calledWithMatch(start, {
                       ...expectedContext,
-                      abortController: sinon.match.instanceOf(AbortController)
+                      abortController: sinon.match.instanceOf(AbortController),
                     })
-                    expect(finish).to.have.been.calledOnce
-                    expect(finish).to.have.been.calledWithMatch({
+                    sinon.assert.calledOnce(finish)
+                    sinon.assert.calledWithMatch(finish, {
                       ...expectedContext,
-                      error: childError
+                      error: childError,
                     })
                   }
                 })
@@ -569,19 +583,19 @@ describe('child process', () => {
                 const expectedContext = {
                   command: 'ls',
                   file: 'ls',
-                  shell: true
+                  shell: true,
                 }
-                expect(start).to.have.been.calledOnce
-                expect(start).to.have.been.calledWithMatch({
+                sinon.assert.calledOnce(start)
+                sinon.assert.calledWithMatch(start, {
                   ...expectedContext,
-                  abortController: sinon.match.instanceOf(AbortController)
+                  abortController: sinon.match.instanceOf(AbortController),
                 })
-                expect(finish).to.have.been.calledOnce
-                expect(finish).to.have.been.calledWithMatch({
+                sinon.assert.calledOnce(finish)
+                sinon.assert.calledWithMatch(finish, {
                   ...expectedContext,
-                  result
+                  result,
                 })
-                expect(error).not.to.have.been.called
+                sinon.assert.notCalled(error)
               })
 
               it('should execute error callback', () => {
@@ -594,22 +608,22 @@ describe('child process', () => {
                   const expectedContext = {
                     command: 'invalid_command_test',
                     file: 'invalid_command_test',
-                    shell: true
+                    shell: true,
                   }
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     ...expectedContext,
-                    abortController: sinon.match.instanceOf(AbortController)
+                    abortController: sinon.match.instanceOf(AbortController),
                   })
-                  expect(finish).to.have.been.calledOnce
-                  expect(finish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(finish)
+                  sinon.assert.calledWithMatch(finish, {
                     ...expectedContext,
-                    error: childError
+                    error: childError,
                   })
-                  expect(error).to.have.been.calledOnce
-                  expect(error).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(error)
+                  sinon.assert.calledWithMatch(error, {
                     ...expectedContext,
-                    error: childError
+                    error: childError,
                   })
                 }
               })
@@ -624,17 +638,17 @@ describe('child process', () => {
                   const expectedContext = {
                     command: 'node -e "process.exit(1)"',
                     file: 'node -e "process.exit(1)"',
-                    shell: true
+                    shell: true,
                   }
-                  expect(start).to.have.been.calledOnce
-                  expect(start).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(start)
+                  sinon.assert.calledWithMatch(start, {
                     ...expectedContext,
-                    abortController: sinon.match.instanceOf(AbortController)
+                    abortController: sinon.match.instanceOf(AbortController),
                   })
-                  expect(finish).to.have.been.calledOnce
-                  expect(finish).to.have.been.calledWithMatch({
+                  sinon.assert.calledOnce(finish)
+                  sinon.assert.calledWithMatch(finish, {
                     ...expectedContext,
-                    error: childError
+                    error: childError,
                   })
                 }
               })
@@ -662,7 +676,7 @@ describe('child process', () => {
                 try {
                   childProcess[methodName]('aborted_command')
                 } catch (e) {
-                  expect(e).to.be.equal(abortError)
+                  assert.strictEqual(e, abortError)
 
                   return
                 }
@@ -676,17 +690,141 @@ describe('child process', () => {
             it('should return error field', () => {
               const result = childProcess.spawnSync('aborted_command')
 
-              expect(result).to.be.deep.equal({
+              assert.deepStrictEqual(result, {
                 error: abortError,
                 status: null,
                 signal: null,
                 output: null,
                 stdout: null,
                 stderr: null,
-                pid: 0
+                pid: 0,
               })
             })
           })
+        })
+      })
+
+      describe('fork', () => {
+        let tmpScript
+
+        before(() => {
+          tmpScript = path.join(os.tmpdir(), `dd-trace-test-fork-${Date.now()}.js`)
+          fs.writeFileSync(tmpScript, 'process.exit(0)')
+        })
+
+        after(() => {
+          try { fs.unlinkSync(tmpScript) } catch (e) { /* ignore */ }
+        })
+
+        it('should execute success callbacks', (done) => {
+          const child = childProcess.fork(tmpScript)
+
+          child.once('close', () => {
+            sinon.assert.calledOnce(start)
+            sinon.assert.calledWithMatch(start, {
+              command: tmpScript,
+              file: tmpScript,
+              shell: false,
+              abortController: sinon.match.instanceOf(AbortController),
+            })
+            sinon.assert.calledOnce(asyncFinish)
+            sinon.assert.calledWithMatch(asyncFinish, {
+              command: tmpScript,
+              file: tmpScript,
+              shell: false,
+              result: 0,
+            })
+            sinon.assert.notCalled(error)
+            done()
+          })
+        })
+
+        it('should publish arguments', (done) => {
+          const child = childProcess.fork(tmpScript, ['--flag'])
+
+          child.once('close', () => {
+            sinon.assert.calledOnce(start)
+            sinon.assert.calledWithMatch(start, {
+              command: `${tmpScript} --flag`,
+              file: tmpScript,
+              fileArgs: ['--flag'],
+              shell: false,
+              abortController: sinon.match.instanceOf(AbortController),
+            })
+            done()
+          })
+        })
+
+        it('should execute error callback for non-existent module', (done) => {
+          const child = childProcess.fork('non_existent_module_test.js')
+
+          child.once('error', () => {})
+
+          child.once('close', () => {
+            sinon.assert.calledOnce(start)
+            sinon.assert.calledWithMatch(start, {
+              command: 'non_existent_module_test.js',
+              file: 'non_existent_module_test.js',
+              shell: false,
+            })
+            sinon.assert.calledOnce(error)
+            done()
+          })
+        })
+      })
+
+      describe('callArgs on context', () => {
+        function injectTestEnv (context) {
+          if (!context.callArgs) return
+          const args = context.callArgs
+          const opts = args[2] != null && typeof args[2] === 'object' ? args[2] : {}
+          args[2] = { ...opts, env: { ...process.env, DD_TEST_VAR: 'injected' } }
+        }
+
+        it('should include callArgs for async methods', (done) => {
+          const child = childProcess.spawn('echo', ['hello'])
+
+          child.once('close', () => {
+            sinon.assert.calledOnce(start)
+            const context = start.firstCall.firstArg
+            assert.ok(Array.isArray(context.callArgs))
+            assert.strictEqual(context.callArgs[0], 'echo')
+            assert.deepStrictEqual(context.callArgs[1], ['hello'])
+            done()
+          })
+        })
+
+        it('should include callArgs for sync methods', () => {
+          childProcess.spawnSync('echo', ['hello'])
+
+          sinon.assert.calledOnce(start)
+          const context = start.firstCall.firstArg
+          assert.ok(Array.isArray(context.callArgs))
+          assert.strictEqual(context.callArgs[0], 'echo')
+          assert.deepStrictEqual(context.callArgs[1], ['hello'])
+        })
+
+        it('should allow subscribers to mutate callArgs for async methods', (done) => {
+          childProcessChannel.subscribe({ start: injectTestEnv })
+
+          const script = 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)'
+          const child = childProcess.spawn('node', ['-e', script])
+
+          child.once('close', (code) => {
+            childProcessChannel.unsubscribe({ start: injectTestEnv })
+            assert.strictEqual(code, 0)
+            done()
+          })
+        })
+
+        it('should allow subscribers to mutate callArgs for sync methods', () => {
+          childProcessChannel.subscribe({ start: injectTestEnv })
+
+          const script = 'process.exit(process.env.DD_TEST_VAR === "injected" ? 0 : 1)'
+          const result = childProcess.spawnSync('node', ['-e', script])
+
+          childProcessChannel.unsubscribe({ start: injectTestEnv })
+          assert.strictEqual(result.status, 0)
         })
       })
     })

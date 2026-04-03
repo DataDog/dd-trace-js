@@ -21,7 +21,7 @@ class CouchBasePlugin extends StoragePlugin {
       component: 'couchbase',
       'resource.name': `couchbase.${operation}`,
       'span.kind': this.constructor.kind,
-      'db.couchbase.seed.nodes': seedNodes
+      'db.couchbase.seed.nodes': seedNodes,
     }
 
     if (bucket) tags['couchbase.bucket.name'] = bucket.name
@@ -35,7 +35,7 @@ class CouchBasePlugin extends StoragePlugin {
       this.operationName({ operation }),
       {
         service: this.serviceName({ pluginConfig: this.config }),
-        meta: tags
+        meta: tags,
       },
       ctx
     )
@@ -52,7 +52,7 @@ class CouchBasePlugin extends StoragePlugin {
         {
           'span.type': 'sql',
           'resource.name': resource,
-          'span.kind': this.constructor.kind
+          'span.kind': this.constructor.kind,
         },
         { bucket, seedNodes },
         ctx

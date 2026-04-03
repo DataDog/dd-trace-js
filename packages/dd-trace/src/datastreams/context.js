@@ -16,5 +16,5 @@ function setDataStreamsContext (dataStreamsContext) {
 
 module.exports = {
   getDataStreamsContext,
-  setDataStreamsContext
+  setDataStreamsContext,
 }

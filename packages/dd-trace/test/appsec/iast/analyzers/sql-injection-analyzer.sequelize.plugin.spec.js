@@ -28,7 +28,7 @@ describe('sql-injection-analyzer with sequelize', () => {
             const Sequelize = require(`../../../../../../versions/sequelize@${sequelizeVersion}`).get()
             sequelize = new Sequelize('db', 'root', '', {
               host: '127.0.0.1',
-              dialect: 'mysql'
+              dialect: 'mysql',
             })
             vulnerabilityReporter.clearCache()
             return sequelize.authenticate()
@@ -81,8 +81,8 @@ module.exports = { main, doubleCall, doubleChainedCall }
             occurrences: 1,
             location: {
               path: 'test-sequelize-sqli.js',
-              line: 4
-            }
+              line: 4,
+            },
           })
 
           testThatRequestHasVulnerability(() => {
@@ -97,7 +97,7 @@ module.exports = { main, doubleCall, doubleChainedCall }
 
             return require(filepath).doubleCall(sequelize, sql)
           }, 'SQL_INJECTION', {
-            occurrences: 2
+            occurrences: 2,
           })
 
           testThatRequestHasVulnerability(() => {
@@ -112,7 +112,7 @@ module.exports = { main, doubleCall, doubleChainedCall }
 
             return require(filepath).doubleChainedCall(sequelize, sql)
           }, 'SQL_INJECTION', {
-            occurrences: 2
+            occurrences: 2,
           })
 
           testThatRequestHasNoVulnerability(() => {

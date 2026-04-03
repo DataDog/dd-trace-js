@@ -1,48 +1,52 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
-  withVersions('iovalkey', 'iovalkey', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'iovalkey@${version}'`], false, [
-        './packages/datadog-plugin-iovalkey/test/integration-test/*'])
-    })
+  let variants
 
-    after(async () => {
-      await sandbox.remove()
-    })
+  withVersions('iovalkey', 'iovalkey', version => {
+    useSandbox([`'iovalkey@${version}'`], false, [
+      './packages/datadog-plugin-iovalkey/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
 
+    before(async function () {
+      variants = varySandbox('server.mjs', 'Valkey', undefined, 'iovalkey')
+    })
+
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'valkey.command'), true)
-      })
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'valkey.command'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })

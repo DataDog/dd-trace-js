@@ -1,7 +1,8 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const ProducerPlugin = require('../../dd-trace/src/plugins/producer')
+const spanContexts = new WeakMap()
 
 class AzureServiceBusProducerPlugin extends ProducerPlugin {
   static get id () { return 'azure-service-bus' }
@@ -24,7 +25,7 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
         'messaging.operation': 'send',
         'messaging.system': 'servicebus',
         'network.destination.name': qualifiedSenderNamespace,
-      }
+      },
     }, ctx)
 
     if (ctx.functionName === 'tryAddMessage') {
@@ -36,7 +37,12 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
       }
 
       if (batchLinksAreEnabled()) {
-        ctx.batch._spanContexts.push(span.context())
+        const spanContext = spanContexts.get(ctx.batch)
+        if (spanContext) {
+          spanContext.push(span.context())
+        } else {
+          spanContexts.set(ctx.batch, [span.context()])
+        }
         injectTraceContext(this.tracer, span, ctx.msg)
       }
     }
@@ -47,15 +53,18 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
       if (isBatch) {
         span.setTag('messaging.batch.message_count', messages.count)
         if (batchLinksAreEnabled()) {
-          messages._spanContexts.forEach(spanContext => {
-            span.addLink(spanContext)
-          })
+          const contexts = spanContexts.get(messages)
+          if (contexts) {
+            for (const spanContext of contexts) {
+              span.addLink(spanContext)
+            }
+          }
         }
       } else if (Array.isArray(messages)) {
         span.setTag('messaging.batch.message_count', messages.length)
-        messages.forEach(event => {
+        for (const event of messages) {
           injectTraceContext(this.tracer, span, event)
-        })
+        }
       } else {
         injectTraceContext(this.tracer, span, messages)
       }
@@ -64,7 +73,11 @@ class AzureServiceBusProducerPlugin extends ProducerPlugin {
   }
 
   asyncEnd (ctx) {
-    super.finish()
+    super.finish(ctx)
+  }
+
+  end (ctx) {
+    super.finish(ctx)
   }
 }
 
@@ -77,7 +90,7 @@ function injectTraceContext (tracer, span, msg) {
 }
 
 function batchLinksAreEnabled () {
-  const sb = getEnvironmentVariable('DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED')
+  const sb = getValueFromEnvSources('DD_TRACE_AZURE_SERVICEBUS_BATCH_LINKS_ENABLED')
   return sb !== 'false'
 }
 

@@ -3,29 +3,44 @@
 const assert = require('node:assert')
 const { join, basename } = require('node:path')
 
-const session = require('./stub-session')
 const proxyquire = require('proxyquire')
+const {
+  DEFAULT_MAX_REFERENCE_DEPTH,
+  DEFAULT_MAX_COLLECTION_SIZE,
+  DEFAULT_MAX_FIELD_COUNT,
+  DEFAULT_MAX_LENGTH,
+} = require('../../../../src/debugger/devtools_client/snapshot/constants')
+const session = require('./stub-session')
 
 const collectorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/collector', {
-  '../session': session
+  '../session': session,
 })
 const redactionWithStub = proxyquire.noCallThru()('../../../../src/debugger/devtools_client/snapshot/redaction', {
   '../config': {
     dynamicInstrumentation: {
       redactedIdentifiers: [],
-      redactionExcludedIdentifiers: []
+      redactionExcludedIdentifiers: [],
     },
-  }
+  },
 })
 
 const processorWithStub = proxyquire('../../../../src/debugger/devtools_client/snapshot/processor', {
-  './redaction': redactionWithStub
+  './redaction': redactionWithStub,
 })
 
-const { getLocalStateForCallFrame } = proxyquire('../../../../src/debugger/devtools_client/snapshot', {
-  './collector': collectorWithStub,
-  './processor': processorWithStub
-})
+const { getLocalStateForCallFrame, evaluateCaptureExpressions } =
+  proxyquire('../../../../src/debugger/devtools_client/snapshot', {
+    './collector': collectorWithStub,
+    './processor': processorWithStub,
+    '../session': session,
+  })
+
+const DEFAULT_CAPTURE_LIMITS = {
+  maxReferenceDepth: DEFAULT_MAX_REFERENCE_DEPTH,
+  maxCollectionSize: DEFAULT_MAX_COLLECTION_SIZE,
+  maxFieldCount: DEFAULT_MAX_FIELD_COUNT,
+  maxLength: DEFAULT_MAX_LENGTH,
+}
 
 module.exports = {
   session,
@@ -34,7 +49,9 @@ module.exports = {
   teardown,
   setAndTriggerBreakpoint,
   assertOnBreakpoint,
-  getLocalStateForCallFrame
+  getLocalStateForCallFrame,
+  evaluateCaptureExpressions,
+  DEFAULT_CAPTURE_LIMITS,
 }
 
 /**
@@ -47,6 +64,10 @@ function getTargetCodePath (caller) {
 }
 
 /**
+ * @typedef {Promise<string> & { resolve: (value: string) => void }} PromiseWithResolve
+ */
+
+/**
  * @param {string} caller - The filename of the calling spec file (hint: `__filename`)
  */
 function enable (caller) {
@@ -56,11 +77,11 @@ function enable (caller) {
   return async () => {
     // The scriptIds are resolved asynchronously, so to ensure we have an easy way to get them for each script, we
     // store a promise on the script that will resolve to its id once it's emitted by Debugger.scriptParsed.
-    let pResolve = null
-    const p = new Promise((resolve) => {
+    let pResolve
+    const p = /** @type {PromiseWithResolve} */ (new Promise((resolve) => {
       pResolve = resolve
-    })
-    p.resolve = pResolve
+    }))
+    p.resolve = /** @type {(value: string) => void} */ (/** @type {unknown} */ (pResolve))
     require(path).scriptId = p
 
     session.on('Debugger.scriptParsed', ({ params }) => {
@@ -84,8 +105,8 @@ async function setAndTriggerBreakpoint (path, line) {
   await session.post('Debugger.setBreakpoint', {
     location: {
       scriptId: await scriptId,
-      lineNumber: line - 1 // Beware! lineNumber is zero-indexed
-    }
+      lineNumber: line - 1, // Beware! lineNumber is zero-indexed
+    },
   })
   run()
 }
@@ -93,14 +114,14 @@ async function setAndTriggerBreakpoint (path, line) {
 function assertOnBreakpoint (done, snapshotConfig, callback) {
   if (typeof snapshotConfig === 'function') {
     callback = snapshotConfig
-    snapshotConfig = undefined
+    snapshotConfig = DEFAULT_CAPTURE_LIMITS
   }
 
   session.once('Debugger.paused', ({ params }) => {
     assert.strictEqual(params.hitBreakpoints.length, 1)
 
-    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then((process) => {
-      callback(process())
+    getLocalStateForCallFrame(params.callFrames[0], snapshotConfig).then(({ processLocalState }) => {
+      callback(processLocalState())
       done()
     }).catch(done)
   })

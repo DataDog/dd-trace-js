@@ -24,109 +24,121 @@ tracer.use('pg', {
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
+<h5 id="aerospike"></h5>
+<h5 id="ai"></h5>
+<h5 id="amqp10"></h5>
+<h5 id="anthropic"></h5>
+<h5 id="apollo"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-sdk"></h5>
-<h5 id="aws-sdk-tags"></h5>
-<h5 id="aws-sdk-config"></h5>
+<h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
+<h5 id="azure-service-bus"></h5>
+<h5 id="azure-durable-functions"></h5>
+<h5 id="bullmq"></h5>
 <h5 id="bunyan"></h5>
+<h5 id="cassandra-driver"></h5>
+<h5 id="child_process"></h5>
 <h5 id="confluentinc-kafka-javascript"></h5>
+<h5 id="connect"></h5>
 <h5 id="couchbase"></h5>
 <h5 id="cucumber"></h5>
+<h5 id="cypress"></h5>
 <h5 id="dns"></h5>
 <h5 id="elasticsearch"></h5>
-<h5 id="elasticsearch-tags"></h5>
-<h5 id="elasticsearch-config"></h5>
 <h5 id="express"></h5>
-<h5 id="express-tags"></h5>
-<h5 id="express-config"></h5>
-<h5 id="generic-pool"></h5>
-<h5 id="google-cloud-pubsub"></h5>
 <h5 id="fastify"></h5>
 <h5 id="fetch"></h5>
+<h5 id="find-my-way"></h5>
+<h5 id="fs"></h5>
+<h5 id="generic-pool"></h5>
+<h5 id="google-cloud-pubsub"></h5>
+<h5 id="google-cloud-vertexai"></h5>
+<h5 id="google-genai"></h5>
 <h5 id="graphql"></h5>
-<h5 id="graphql-tags"></h5>
-<h5 id="graphql-config"></h5>
 <h5 id="grpc"></h5>
 <h5 id="hapi"></h5>
-<h5 id="hapi-tags"></h5>
-<h5 id="hapi-config"></h5>
+<h5 id="hono"></h5>
 <h5 id="http"></h5>
-<h5 id="http-tags"></h5>
-<h5 id="http-config"></h5>
+<h5 id="http2"></h5>
 <h5 id="ioredis"></h5>
-<h5 id="ioredis-tags"></h5>
-<h5 id="ioredis-config"></h5>
 <h5 id="iovalkey"></h5>
-<h5 id="iovalkey-tags"></h5>
-<h5 id="iovalkey-config"></h5>
 <h5 id="jest"></h5>
 <h5 id="kafkajs"></h5>
+<h5 id="knex"></h5>
 <h5 id="koa"></h5>
-<h5 id="koa-tags"></h5>
-<h5 id="koa-config"></h5>
-<h5 id="ldapjs"></h5>
+<h5 id="langchain"></h5>
+<h5 id="langgraph"></h5>
 <h5 id="mariadb"></h5>
 <h5 id="memcached"></h5>
-<h5 id="memcached-tags"></h5>
-<h5 id="memcached-config"></h5>
 <h5 id="microgateway-core"></h5>
 <h5 id="mocha"></h5>
 <h5 id="moleculer"></h5>
 <h5 id="mongodb-core"></h5>
-<h5 id="mongodb-core-tags"></h5>
-<h5 id="mongodb-core-config"></h5>
+<h5 id="mongoose"></h5>
 <h5 id="mysql"></h5>
-<h5 id="mysql-tags"></h5>
-<h5 id="mysql-config"></h5>
 <h5 id="mysql2"></h5>
-<h5 id="mysql2-tags"></h5>
-<h5 id="mysql2-config"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
+<h5 id="nyc"></h5>
+<h5 id="openai"></h5>
 <h5 id="opensearch"></h5>
 <h5 id="oracledb"></h5>
-<h5 id="pino"></h5>
 <h5 id="pg"></h5>
-<h5 id="pg-tags"></h5>
-<h5 id="pg-config"></h5>
+<h5 id="pino"></h5>
+<h5 id="playwright"></h5>
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
-<h5 id="redis-tags"></h5>
-<h5 id="redis-config"></h5>
 <h5 id="restify"></h5>
-<h5 id="restify-tags"></h5>
-<h5 id="restify-config"></h5>
+<h5 id="rhea"></h5>
+<h5 id="router"></h5>
+<h5 id="selenium"></h5>
+<h5 id="sharedb"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
-<h5 id="when"></h5>
+<h5 id="vitest"></h5>
+<h5 id="web"></h5>
 <h5 id="winston"></h5>
 <h5 id="ws"></h5>
 <h3 id="integrations-list">Available Plugins</h3>
 
+* [aerospike](./interfaces/export_.plugins.aerospike.html)
+* [ai](./interfaces/export_.plugins.ai.html)
 * [amqp10](./interfaces/export_.plugins.amqp10.html)
 * [amqplib](./interfaces/export_.plugins.amqplib.html)
+* [anthropic](./interfaces/export_.plugins.anthropic.html)
+* [apollo](./interfaces/export_.plugins.apollo.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
+* [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
-* [bluebird](./interfaces/export_.plugins.bluebird.html)
+* [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
+* [azure-durable-functions](./interfaces/export_.plugins.azure_durable_functions.html)
+* [bullmq](./interfaces/export_.plugins.bullmq.html)
+* [bunyan](./interfaces/export_.plugins.bunyan.html)
+* [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
+* [child_process](./interfaces/export_.plugins.child_process.html)
+* [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)
+* [connect](./interfaces/export_.plugins.connect.html)
 * [couchbase](./interfaces/export_.plugins.couchbase.html)
 * [cucumber](./interfaces/export_.plugins.cucumber.html)
-* [bunyan](./interfaces/export_.plugins.bunyan.html)
-* [confluentinc-kafka-javascript](./interfaces/export_.plugins.confluentinc_kafka_javascript.html)
-* [cassandra-driver](./interfaces/export_.plugins.cassandra_driver.html)
-* [connect](./interfaces/export_.plugins.connect.html)
+* [cypress](./interfaces/export_.plugins.cypress.html)
 * [dns](./interfaces/export_.plugins.dns.html)
 * [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
 * [express](./interfaces/export_.plugins.express.html)
 * [fastify](./interfaces/export_.plugins.fastify.html)
 * [fetch](./interfaces/export_.plugins.fetch.html)
+* [find-my-way](./interfaces/export_.plugins.find_my_way.html)
+* [fs](./interfaces/export_.plugins.fs.html)
 * [generic-pool](./interfaces/export_.plugins.generic_pool.html)
 * [google-cloud-pubsub](./interfaces/export_.plugins.google_cloud_pubsub.html)
+* [google-cloud-vertexai](./interfaces/export_.plugins.google_cloud_vertexai.html)
+* [google-genai](./interfaces/export_.plugins.google_genai.html)
 * [graphql](./interfaces/export_.plugins.graphql.html)
 * [grpc](./interfaces/export_.plugins.grpc.html)
 * [hapi](./interfaces/export_.plugins.hapi.html)
+* [hono](./interfaces/export_.plugins.hono.html)
 * [http](./interfaces/export_.plugins.http.html)
 * [http2](./interfaces/export_.plugins.http2.html)
 * [ioredis](./interfaces/export_.plugins.ioredis.html)
@@ -135,31 +147,38 @@ tracer.use('pg', {
 * [kafkajs](./interfaces/export_.plugins.kafkajs.html)
 * [knex](./interfaces/export_.plugins.knex.html)
 * [koa](./interfaces/export_.plugins.koa.html)
-* [ldapjs](./interfaces/export_.plugins.ldapjs.html)
+* [langchain](./interfaces/export_.plugins.langchain.html)
+* [langgraph](./interfaces/export_.plugins.langgraph.html)
 * [mariadb](./interfaces/export_.plugins.mariadb.html)
-* [microgateway--core](./interfaces/export_.plugins.microgateway_core.html)
+* [memcached](./interfaces/export_.plugins.memcached.html)
+* [microgateway-core](./interfaces/export_.plugins.microgateway_core.html)
 * [mocha](./interfaces/export_.plugins.mocha.html)
+* [moleculer](./interfaces/export_.plugins.moleculer.html)
 * [mongodb-core](./interfaces/export_.plugins.mongodb_core.html)
+* [mongoose](./interfaces/export_.plugins.mongoose.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
-* [opensearch](./interfaces/export_.plugins.opensearch.html)
+* [nyc](./interfaces/export_.plugins.nyc.html)
 * [openai](./interfaces/export_.plugins.openai.html)
+* [opensearch](./interfaces/export_.plugins.opensearch.html)
 * [oracledb](./interfaces/export_.plugins.oracledb.html)
-* [pino](./interfaces/export_.plugins.pino.html)
 * [pg](./interfaces/export_.plugins.pg.html)
+* [pino](./interfaces/export_.plugins.pino.html)
+* [playwright](./interfaces/export_.plugins.playwright.html)
 * [prisma](./interfaces/export_.plugins.prisma.html)
-* [promise](./interfaces/export_.plugins.promise.html)
-* [promise-js](./interfaces/export_.plugins.promise_js.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
-* [q](./interfaces/export_.plugins.q.html)
 * [redis](./interfaces/export_.plugins.redis.html)
 * [restify](./interfaces/export_.plugins.restify.html)
+* [rhea](./interfaces/export_.plugins.rhea.html)
 * [router](./interfaces/export_.plugins.router.html)
+* [selenium](./interfaces/export_.plugins.selenium.html)
+* [sharedb](./interfaces/export_.plugins.sharedb.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)
-* [when](./interfaces/export_.plugins.when.html)
+* [vitest](./interfaces/export_.plugins.vitest.html)
+* [web](./interfaces/export_.plugins.web.html)
 * [winston](./interfaces/export_.plugins.winston.html)
 * [ws](./interfaces/export_.plugins.ws.html)
 
@@ -408,14 +427,74 @@ app.listen(3000)
 The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
 
 - `DD_LOGS_OTEL_ENABLED` - Enable OpenTelemetry logs (default: `false`)
-- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL for logs (default: `http://localhost:4318`)
-- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers in JSON format for logs (default: `{}`)
-- `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs (default: `http/protobuf`)
-- `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` - Request timeout in milliseconds for logs (default: `10000`)
-- `OTEL_BSP_SCHEDULE_DELAY` - Batch timeout in milliseconds (default: `5000`)
+- `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` - OTLP endpoint URL for logs. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/logs` appended (default: `http://localhost:4318/v1/logs`)
+- `OTEL_EXPORTER_OTLP_LOGS_HEADERS` - Optional headers for logs in JSON format. Falls back to `OTEL_EXPORTER_OTLP_HEADERS` (default: `{}`)
+- `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` - OTLP protocol for logs. Options: `http/protobuf`, `http/json`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL` (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_LOGS_TIMEOUT` - Request timeout in milliseconds for logs. Falls back to `OTEL_EXPORTER_OTLP_TIMEOUT` (default: `10000`)
+- `OTEL_BSP_SCHEDULE_DELAY` - Batch export delay in milliseconds (default: `5000`)
 - `OTEL_BSP_MAX_EXPORT_BATCH_SIZE` - Maximum logs per batch (default: `512`)
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum logs to queue before dropping (default: `2048`)
 
-Logs are exported via OTLP over HTTP. The protocol can be configured using `OTEL_EXPORTER_OTLP_LOGS_PROTOCOL` or `OTEL_EXPORTER_OTLP_PROTOCOL` environment variables. Supported protocols are `http/protobuf` (default) and `http/json`. For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
+
+<h3 id="opentelemetry-metrics">OpenTelemetry Metrics</h3>
+
+dd-trace-js includes experimental support for OpenTelemetry metrics, designed as a drop-in replacement for the OpenTelemetry Metrics SDK. This lightweight implementation is fully compliant with the OpenTelemetry Metrics API and integrates with the existing OTLP export infrastructure. Enable it by setting `DD_METRICS_OTEL_ENABLED=true` and use the [OpenTelemetry Metrics API](https://open-telemetry.github.io/opentelemetry-js/modules/_opentelemetry_api.html) to record metric data:
+
+```javascript
+require('dd-trace').init()
+const { metrics } = require('@opentelemetry/api')
+
+const meter = metrics.getMeter('my-service', '1.0.0')
+
+// Counter - monotonically increasing values
+const requestCounter = meter.createCounter('http.requests', {
+  description: 'Total HTTP requests',
+  unit: 'requests'
+})
+requestCounter.add(1, { method: 'GET', status: 200 })
+
+// Histogram - distribution of values
+const durationHistogram = meter.createHistogram('http.duration', {
+  description: 'HTTP request duration',
+  unit: 'ms'
+})
+durationHistogram.record(145, { route: '/api/users' })
+
+// UpDownCounter - can increase and decrease
+const connectionCounter = meter.createUpDownCounter('active.connections', {
+  description: 'Active connections',
+  unit: 'connections'
+})
+connectionCounter.add(1)  // New connection
+connectionCounter.add(-1) // Connection closed
+
+// ObservableGauge - asynchronous observations
+const cpuGauge = meter.createObservableGauge('system.cpu.usage', {
+  description: 'CPU usage percentage',
+  unit: 'percent'
+})
+cpuGauge.addCallback((result) => {
+  const cpuUsage = process.cpuUsage()
+  result.observe(cpuUsage.system / 1000000, { core: '0' })
+})
+```
+
+#### Supported Configuration
+
+The Datadog SDK supports many of the configurations supported by the OpenTelemetry SDK. The following environment variables are supported:
+
+- `DD_METRICS_OTEL_ENABLED` - Enable OpenTelemetry metrics (default: `false`)
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` - OTLP endpoint URL for metrics. Falls back to `OTEL_EXPORTER_OTLP_ENDPOINT` with `/v1/metrics` appended (default: `http://localhost:4318/v1/metrics`)
+- `OTEL_EXPORTER_OTLP_METRICS_HEADERS` - Optional headers for metrics in JSON format. Falls back to `OTEL_EXPORTER_OTLP_HEADERS` (default: `{}`)
+- `OTEL_EXPORTER_OTLP_METRICS_PROTOCOL` - OTLP protocol for metrics. Options: `http/protobuf`, `http/json`. Falls back to `OTEL_EXPORTER_OTLP_PROTOCOL` (default: `http/protobuf`)
+- `OTEL_EXPORTER_OTLP_METRICS_TIMEOUT` - Request timeout in milliseconds for metrics. Falls back to `OTEL_EXPORTER_OTLP_TIMEOUT` (default: `10000`)
+- `OTEL_METRIC_EXPORT_INTERVAL` - Metric export interval in milliseconds (default: `10000`)
+- `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` - Aggregation temporality preference. Options: `CUMULATIVE`, `DELTA`, `LOWMEMORY` (default: `DELTA`). See [OpenTelemetry spec](https://opentelemetry.io/docs/specs/otel/metrics/sdk_exporters/otlp/#additional-environment-variable-configuration) for details
+- `OTEL_BSP_MAX_QUEUE_SIZE` - Maximum metrics to queue before dropping (default: `2048`)
+- `OTEL_METRIC_EXPORT_TIMEOUT` - [NOT YET SUPPORTED] Time to export metrics including retries
+
+For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Exporter documentation](https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/).
 
 <h2 id="advanced-configuration">Advanced Configuration</h2>
 

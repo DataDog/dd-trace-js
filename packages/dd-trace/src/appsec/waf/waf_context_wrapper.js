@@ -8,7 +8,7 @@ const { wafRunFinished } = require('../channels')
 
 // TODO: remove once ephemeral addresses are implemented
 const preventDuplicateAddresses = new Set([
-  addresses.HTTP_INCOMING_QUERY
+  addresses.HTTP_INCOMING_QUERY,
 ])
 
 class WAFContextWrapper {
@@ -22,7 +22,7 @@ class WAFContextWrapper {
     this.cachedUserIdResults = new Map()
   }
 
-  run ({ persistent, ephemeral }, raspRule) {
+  run ({ persistent, ephemeral }, raspRule, req) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
       if (raspRule) {
@@ -96,7 +96,7 @@ class WAFContextWrapper {
       errorCode: null,
       maxTruncatedString: null,
       maxTruncatedContainerSize: null,
-      maxTruncatedContainerDepth: null
+      maxTruncatedContainerDepth: null,
     }
 
     try {
@@ -141,10 +141,10 @@ class WAFContextWrapper {
       metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
-        Reporter.reportAttack(result)
+        Reporter.reportAttack(result, req)
       }
 
-      Reporter.reportAttributes(result.attributes)
+      Reporter.reportAttributes(result.attributes, req)
 
       return result
     } catch (err) {
@@ -156,7 +156,7 @@ class WAFContextWrapper {
         wafRunFinished.publish({ payload })
       }
 
-      Reporter.reportMetrics(metrics, raspRule)
+      Reporter.reportMetrics(metrics, raspRule, req)
     }
   }
 

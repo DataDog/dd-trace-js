@@ -22,12 +22,23 @@ const {
   ROOT_PARENT_ID,
   CACHE_READ_INPUT_TOKENS_METRIC_KEY,
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
+  REASONING_OUTPUT_TOKENS_METRIC_KEY,
   INTEGRATION,
   DECORATOR,
-  PROPAGATED_ML_APP_KEY
+  PROPAGATED_ML_APP_KEY,
+  DEFAULT_PROMPT_NAME,
+  INTERNAL_CONTEXT_VARIABLE_KEYS,
+  INTERNAL_QUERY_VARIABLE_KEYS,
+  INPUT_PROMPT,
+  ROUTING_API_KEY,
+  ROUTING_SITE,
+  PROMPT_TRACKING_INSTRUMENTATION_METHOD,
+  INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 
@@ -59,7 +70,7 @@ class LLMObsTagger {
     kind,
     name,
     integration,
-    _decorator
+    _decorator,
   } = {}) {
     if (!this._config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
@@ -85,7 +96,7 @@ class LLMObsTagger {
     if (name) this._setTag(span, NAME, name)
 
     this._setTag(span, SPAN_KIND, kind)
-    if (modelName) this._setTag(span, MODEL_NAME, modelName)
+    if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
     sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
@@ -109,6 +120,18 @@ class LLMObsTagger {
     // apply annotation context name
     const annotationContextName = annotationContext?.name
     if (annotationContextName) this._setTag(span, NAME, annotationContextName)
+
+    // apply annotation context prompt
+    const annotationContextPrompt = annotationContext?.prompt
+    if (annotationContextPrompt) this.tagPrompt(span, annotationContextPrompt)
+
+    const routing = storage.getStore()?.routingContext
+    if (routing) {
+      this._setTag(span, ROUTING_API_KEY, routing.apiKey)
+      if (routing.site) {
+        this._setTag(span, ROUTING_SITE, routing.site)
+      }
+    }
   }
 
   // TODO: similarly for the following `tag` methods,
@@ -164,6 +187,15 @@ class LLMObsTagger {
         case 'cacheWriteTokens':
           processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
           break
+        case 'cacheWrite5mTokens':
+          processedKey = CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'cacheWrite1hTokens':
+          processedKey = CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'reasoningOutputTokens':
+          processedKey = REASONING_OUTPUT_TOKENS_METRIC_KEY
+          break
       }
 
       if (typeof value === 'number') {
@@ -190,8 +222,166 @@ class LLMObsTagger {
     }
   }
 
+  /**
+   * Tags a prompt on an LLMObs span.
+   * @param {import('../opentracing/span')} span
+   * @param {string | Record<string, unknown>} prompt
+   * @param {boolean?} strictValidation
+   *   whether to validate the prompt against the strict schema, used for auto-instrumentation
+   */
+  tagPrompt (span, prompt, strictValidation = false) {
+    const spanKind = registry.get(span)?.[SPAN_KIND]
+    if (spanKind !== 'llm') {
+      log.warn('Dropping prompt on non-LLM span kind, annotating prompts is only supported for LLM span kinds.')
+      return
+    }
+
+    if (!prompt || typeof prompt !== 'object') {
+      this.#handleFailure('Prompt must be an object.', 'invalid_prompt')
+      return
+    }
+
+    const mlApp = registry.get(span)?.[ML_APP] // this should be defined at this point
+    const {
+      id,
+      version,
+      tags,
+      variables,
+      template,
+      contextVariables,
+      queryVariables,
+    } = prompt
+
+    if (strictValidation) {
+      if (id == null) {
+        this.#handleFailure('Prompt ID is required.', 'invalid_prompt')
+        return
+      }
+
+      if (template == null) {
+        this.#handleFailure('Prompt template is required.', 'invalid_prompt')
+        return
+      }
+    }
+
+    const finalPromptId = id ?? `${mlApp}_${DEFAULT_PROMPT_NAME}`
+    const finalCtxVariablesKeys = contextVariables ?? ['context']
+    const finalQueryVariablesKeys = queryVariables ?? ['question']
+
+    // validate prompt id
+    if (typeof finalPromptId !== 'string') {
+      this.#handleFailure('Prompt ID must be a string.', 'invalid_prompt')
+      return
+    }
+
+    // validate prompt context variables keys
+    if (Array.isArray(finalCtxVariablesKeys)) {
+      for (const key of finalCtxVariablesKeys) {
+        if (typeof key !== 'string') {
+          this.#handleFailure('Prompt context variables keys must be an array of strings.', 'invalid_prompt')
+          return
+        }
+      }
+    } else if (finalCtxVariablesKeys) {
+      this.#handleFailure('Prompt context variables keys must be an array.', 'invalid_prompt')
+      return
+    }
+
+    // validate prompt query variables keys
+    if (Array.isArray(finalQueryVariablesKeys)) {
+      for (const key of finalQueryVariablesKeys) {
+        if (typeof key !== 'string') {
+          this.#handleFailure('Prompt query variables keys must be an array of strings.', 'invalid_prompt')
+          return
+        }
+      }
+    } else if (finalQueryVariablesKeys) {
+      this.#handleFailure('Prompt query variables keys must be an array.', 'invalid_prompt')
+      return
+    }
+
+    // validate prompt version
+    if (version && typeof version !== 'string') {
+      this.#handleFailure('Prompt version must be a string.', 'invalid_prompt')
+      return
+    }
+
+    // validate prompt tags
+    if (tags && (typeof tags !== 'object' || tags instanceof Map)) {
+      this.#handleFailure('Prompt tags must be an non-Map object.', 'invalid_prompt')
+      return
+    } else if (tags) {
+      for (const [key, value] of Object.entries(tags)) {
+        if (typeof key !== 'string' || typeof value !== 'string') {
+          this.#handleFailure('Prompt tags must be an object of string key-value pairs.', 'invalid_prompt')
+          return
+        }
+      }
+    }
+
+    // validate prompt template is either string or list of messages
+    if (template && !(typeof template === 'string' || Array.isArray(template))) {
+      this.#handleFailure('Prompt template must be a string or an array of messages.', 'invalid_prompt')
+      return
+    }
+
+    if (Array.isArray(template)) {
+      for (const message of template) {
+        if (typeof message !== 'object' || !message.role || !message.content) {
+          this.#handleFailure(
+            'Prompt chat template must be an array of objects with role and content properties.', 'invalid_prompt'
+          )
+          return
+        }
+      }
+    }
+
+    // validate variables are a string-string mapping
+    if (variables && (typeof variables !== 'object' || variables instanceof Map)) {
+      this.#handleFailure('Prompt variables must be an non-Map object.', 'invalid_prompt')
+      return
+    } else if (variables) {
+      for (const [key, value] of Object.entries(variables)) {
+        if (typeof key !== 'string' || typeof value !== 'string') {
+          this.#handleFailure('Prompt variables must be an object of string key-value pairs.', 'invalid_prompt')
+          return
+        }
+      }
+    }
+
+    let finalTemplate, finalChatTemplate
+    if (typeof template === 'string') {
+      finalTemplate = template
+    } else if (Array.isArray(template)) {
+      finalChatTemplate = template.map(message => ({ role: message.role, content: message.content }))
+    }
+
+    const validatedPrompt = {}
+    if (finalPromptId) validatedPrompt.id = finalPromptId
+    if (version) validatedPrompt.version = version
+    if (variables) validatedPrompt.variables = variables
+    if (finalTemplate) validatedPrompt.template = finalTemplate
+    if (finalChatTemplate?.length) validatedPrompt.chat_template = finalChatTemplate
+    if (tags) validatedPrompt.tags = tags
+    if (finalCtxVariablesKeys) validatedPrompt[INTERNAL_CONTEXT_VARIABLE_KEYS] = finalCtxVariablesKeys
+    if (finalQueryVariablesKeys) validatedPrompt[INTERNAL_QUERY_VARIABLE_KEYS] = finalQueryVariablesKeys
+
+    const currentPrompt = registry.get(span)?.[INPUT_PROMPT]
+    if (currentPrompt) {
+      Object.assign(currentPrompt, validatedPrompt)
+    } else {
+      this._setTag(span, INPUT_PROMPT, validatedPrompt)
+    }
+
+    this.tagSpanTags(span, { [PROMPT_TRACKING_INSTRUMENTATION_METHOD]: INSTRUMENTATION_METHOD_ANNOTATED })
+  }
+
   changeKind (span, newKind) {
     this._setTag(span, SPAN_KIND, newKind)
+  }
+
+  tagModelName (span, modelName) {
+    this._setTag(span, MODEL_NAME, modelName)
   }
 
   #tagText (span, data, key) {
@@ -292,11 +482,17 @@ class LLMObsTagger {
         continue
       }
 
-      const { result, toolId, type } = toolResult
+      const { result, toolId, name = '', type } = toolResult
       const toolResultObj = {}
 
       const condition1 = this.#tagConditionalString(result, 'Tool result', toolResultObj, 'result')
       const condition2 = this.#tagConditionalString(toolId, 'Tool ID', toolResultObj, 'tool_id')
+      // name can be empty string, so always include it
+      if (typeof name === 'string') {
+        toolResultObj.name = name
+      } else {
+        this.#handleFailure(`[LLMObs] Expected tool result name to be a string, instead got "${typeof name}"`)
+      }
       const condition3 = this.#tagConditionalString(type, 'Tool type', toolResultObj, 'type')
 
       if (condition1 && condition2 && condition3) {
@@ -318,7 +514,7 @@ class LLMObsTagger {
 
     for (const message of data) {
       if (typeof message === 'string') {
-        messages.push({ content: message })
+        messages.push({ content: message, role: '' })
         continue
       }
       if (message == null || typeof message !== 'object') {
@@ -326,20 +522,30 @@ class LLMObsTagger {
         continue
       }
 
-      const { content = '', role } = message
-      const toolCalls = message.toolCalls
-      const toolResults = message.toolResults
-      const toolId = message.toolId
-      const messageObj = { content }
-
-      const valid = typeof content === 'string'
-      if (!valid) {
-        this.#handleFailure('Message content must be a string.', 'invalid_io_messages')
-      }
+      const {
+        role = '',
+        content,
+        toolCalls,
+        toolResults,
+        toolId,
+      } = message
+      const messageObj = {}
 
       let condition = this.#tagConditionalString(role, 'Message role', messageObj, 'role')
 
-      if (toolCalls) {
+      if (
+        content == null &&
+        toolCalls == null &&
+        toolResults == null
+      ) {
+        messageObj.content = ''
+      }
+
+      if (content != null) {
+        condition = this.#tagConditionalString(content, 'Message content', messageObj, 'content') && condition
+      }
+
+      if (toolCalls != null) {
         const filteredToolCalls = this.#filterToolCalls(toolCalls)
 
         if (filteredToolCalls.length) {
@@ -347,7 +553,7 @@ class LLMObsTagger {
         }
       }
 
-      if (toolResults) {
+      if (toolResults != null) {
         const filteredToolResults = this.#filterToolResults(toolResults)
 
         if (filteredToolResults.length) {
@@ -357,13 +563,13 @@ class LLMObsTagger {
 
       if (toolId) {
         if (role === 'tool') {
-          condition = this.#tagConditionalString(toolId, 'Tool ID', messageObj, 'tool_id')
+          condition = this.#tagConditionalString(toolId, 'Tool ID', messageObj, 'tool_id') && condition
         } else {
-          log.warn(`Tool ID for tool message not associated with a "tool" role, instead got "${role}"`)
+          log.warn('Tool ID for tool message not associated with a "tool" role, instead got "%s"', role)
         }
       }
 
-      if (valid && condition) {
+      if (condition) {
         messages.push(messageObj)
       }
     }
@@ -374,7 +580,7 @@ class LLMObsTagger {
   }
 
   #tagConditionalString (data, type, carrier, key) {
-    if (!data) return true
+    if (data == null) return true
     if (typeof data !== 'string') {
       this.#handleFailure(`"${type}" must be a string.`)
       return false
@@ -384,7 +590,7 @@ class LLMObsTagger {
   }
 
   #tagConditionalNumber (data, type, carrier, key) {
-    if (!data) return true
+    if (data == null) return true
     if (typeof data !== 'number') {
       this.#handleFailure(`"${type}" must be a number.`)
       return false
@@ -394,7 +600,7 @@ class LLMObsTagger {
   }
 
   #tagConditionalObject (data, type, carrier, key) {
-    if (!data) return true
+    if (data == null) return true
     if (typeof data !== 'object') {
       this.#handleFailure(`"${type}" must be an object.`)
       return false

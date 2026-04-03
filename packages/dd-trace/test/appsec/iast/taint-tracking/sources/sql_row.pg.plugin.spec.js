@@ -8,7 +8,7 @@ const connectionData = {
   user: 'postgres',
   password: 'postgres',
   database: 'postgres',
-  application_name: 'test'
+  application_name: 'test',
 }
 
 describe('db sources with pg', () => {

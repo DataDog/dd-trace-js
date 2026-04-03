@@ -19,15 +19,15 @@ module.exports = {
     if (frame.method) {
       assert.strictEqual(tags['_dd.code_origin.frames.0.method'], frame.method)
     } else {
-      assert.ok(!Object.hasOwn(tags, '_dd.code_origin.frames.0.method'))
+      assert.ok(!('_dd.code_origin.frames.0.method' in tags))
     }
     if (frame.type) {
       assert.strictEqual(tags['_dd.code_origin.frames.0.type'], frame.type)
     } else {
-      assert.ok(!Object.hasOwn(tags, '_dd.code_origin.frames.0.type'))
+      assert.ok(!('_dd.code_origin.frames.0.type' in tags))
     }
 
     // The second frame should not be present, because we only collect 1 frame for entry spans
-    assert.ok(!Object.hasOwn(tags, '_dd.code_origin.frames.1.file'))
-  }
+    assert.ok(!('_dd.code_origin.frames.1.file' in tags))
+  },
 }

@@ -3,19 +3,16 @@
 const assert = require('node:assert')
 const path = require('node:path')
 const Axios = require('axios')
-const { FakeAgent, spawnProc, createSandbox } = require('./helpers')
+const { assertObjectContains, FakeAgent, spawnProc, sandboxCwd, useSandbox } = require('./helpers')
 
 describe('Code Origin for Spans', function () {
-  let sandbox, cwd, appFile, agent, proc, axios
+  let cwd, appFile, agent, proc, axios
 
-  before(async () => {
-    sandbox = await createSandbox(['fastify'])
-    cwd = sandbox.folder
+  useSandbox(['fastify'])
+
+  before(() => {
+    cwd = sandboxCwd()
     appFile = path.join(cwd, 'code-origin', 'typescript.js')
-  })
-
-  after(async () => {
-    await sandbox?.remove()
   })
 
   beforeEach(async () => {
@@ -24,7 +21,7 @@ describe('Code Origin for Spans', function () {
       cwd,
       env: {
         NODE_OPTIONS: '--enable-source-maps',
-        DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`
+        DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
       },
       stdio: 'pipe',
     })
@@ -41,14 +38,18 @@ describe('Code Origin for Spans', function () {
       await Promise.all([
         agent.assertMessageReceived(({ payload }) => {
           const [span] = payload.flatMap(p => p.filter(span => span.name === 'fastify.request'))
-          assert.strictEqual(span.meta['_dd.code_origin.type'], 'entry')
           assert.ok(span.meta['_dd.code_origin.frames.0.file'].endsWith(`${cwd}/code-origin/typescript.ts`))
-          assert.strictEqual(span.meta['_dd.code_origin.frames.0.line'], '10')
-          assert.strictEqual(span.meta['_dd.code_origin.frames.0.column'], '5')
-          assert.strictEqual(span.meta['_dd.code_origin.frames.0.method'], '<anonymous>')
-          assert.strictEqual(span.meta['_dd.code_origin.frames.0.type'], 'Object')
+          assertObjectContains(span, {
+            meta: {
+              '_dd.code_origin.type': 'entry',
+              '_dd.code_origin.frames.0.line': '10',
+              '_dd.code_origin.frames.0.column': '5',
+              '_dd.code_origin.frames.0.method': '<anonymous>',
+              '_dd.code_origin.frames.0.type': 'Object',
+            },
+          })
         }, 2_500),
-        await axios.get('/')
+        await axios.get('/'),
       ])
     })
   })

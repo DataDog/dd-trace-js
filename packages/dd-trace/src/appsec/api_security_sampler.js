@@ -1,6 +1,6 @@
 'use strict'
 
-const TTLCache = require('@isaacs/ttlcache')
+const { TTLCache } = require('../../../../vendor/dist/@isaacs/ttlcache')
 const web = require('../plugins/util/web')
 const log = require('../log')
 const { AUTO_REJECT, USER_REJECT } = require('../../../../ext/priority')
@@ -70,8 +70,25 @@ function isSampled (key) {
   return sampledRequests.has(key)
 }
 
+function getRouteOrEndpoint (context, statusCode) {
+  // First try to get the route from the context paths
+  const route = context?.paths?.join('') || ''
+  if (route) {
+    return route
+  }
+
+  // If route is not available, fallback to http.endpoint
+  if (statusCode !== 404) {
+    const endpoint = context?.span?.context()?._tags?.['http.endpoint']
+    if (endpoint) {
+      return endpoint
+    }
+  }
+
+  return ''
+}
+
 function computeKey (req, res) {
-  const route = web.getContext(req)?.paths?.join('') || ''
   const method = req.method
   const status = res.statusCode
 
@@ -79,6 +96,10 @@ function computeKey (req, res) {
     log.warn('[ASM] Unsupported groupkey for API security')
     return null
   }
+
+  const context = web.getContext(req)
+  const route = getRouteOrEndpoint(context, status)
+
   return method + route + status
 }
 
@@ -92,5 +113,5 @@ module.exports = {
   disable,
   sampleRequest,
   isSampled,
-  computeKey
+  computeKey,
 }

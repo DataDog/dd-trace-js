@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('assert')
+
 it('works', () => {
-  expect(true).toBe(true)
+  assert.strictEqual(true, true)
 })

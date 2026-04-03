@@ -1,7 +1,7 @@
 'use strict'
 
-const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const dc = require('dc-polyfill')
+const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const collapsedPathSym = Symbol('collapsedPaths')
 
@@ -10,13 +10,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
   static operation = 'resolve'
 
   start (fieldCtx) {
-    const { info, rootCtx, args } = fieldCtx
+    const { info, rootCtx, args, path: pathAsArray, pathString } = fieldCtx
 
-    const path = getPath(info, this.config)
+    const path = getPath(this.config, pathAsArray)
 
     // we need to get the parent span to the field if it exists for correct span parenting
     // of nested fields
-    const parentField = getParentField(rootCtx, pathToArray(info && info.path))
+    const parentField = getParentField(rootCtx, pathString)
     const childOf = parentField?.ctx?.currentStore?.span
 
     fieldCtx.parent = parentField
@@ -50,19 +50,19 @@ class GraphQLResolvePlugin extends TracingPlugin {
         'graphql.field.name': info.fieldName,
         'graphql.field.path': computedPathString,
         'graphql.field.type': info.returnType.name,
-        'graphql.source': source
-      }
+        'graphql.source': source,
+      },
     }, fieldCtx)
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(info.variableValues)
 
-      fieldNode.arguments
-        .filter(arg => arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value])
-        .forEach(arg => {
+      for (const arg of fieldNode.arguments) {
+        if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
           const name = arg.value.name.value
           span.setTag(`graphql.variables.${name}`, variables[name])
-        })
+        }
+      }
     }
 
     if (this.resolverStartCh.hasSubscribers) {
@@ -76,9 +76,9 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super(...args)
 
     this.addTraceSub('updateField', (ctx) => {
-      const { field, info, error } = ctx
+      const { field, error, path: pathAsArray } = ctx
 
-      const path = getPath(info, this.config)
+      const path = getPath(this.config, pathAsArray)
 
       if (!shouldInstrument(this.config, path)) return
 
@@ -118,28 +118,14 @@ function shouldInstrument (config, path) {
   return config.depth < 0 || config.depth >= depth
 }
 
-function getPath (info, config) {
-  const responsePathAsArray = config.collapse
-    ? withCollapse(pathToArray)
-    : pathToArray
-  return responsePathAsArray(info && info.path)
+function getPath (config, pathAsArray) {
+  return config.collapse
+    ? withCollapse(pathAsArray)
+    : pathAsArray
 }
 
-function pathToArray (path) {
-  const flattened = []
-  let curr = path
-  while (curr) {
-    flattened.push(curr.key)
-    curr = curr.prev
-  }
-  return flattened.reverse()
-}
-
-function withCollapse (responsePathAsArray) {
-  return function () {
-    return responsePathAsArray.apply(this, arguments)
-      .map(segment => typeof segment === 'number' ? '*' : segment)
-  }
+function withCollapse (pathAsArray) {
+  return pathAsArray.map(segment => typeof segment === 'number' ? '*' : segment)
 }
 
 function getResolverInfo (info, args) {
@@ -173,19 +159,20 @@ function getResolverInfo (info, args) {
   return resolverInfo
 }
 
-function getParentField (parentCtx, path) {
-  for (let i = path.length - 1; i > 0; i--) {
-    const field = getField(parentCtx, path.slice(0, i))
-    if (field) {
-      return field
-    }
+function getParentField (parentCtx, pathToString) {
+  let current = pathToString
+
+  while (current) {
+    const lastJoin = current.lastIndexOf('.')
+    if (lastJoin === -1) break
+
+    current = current.slice(0, lastJoin)
+    const field = parentCtx.fields[current]
+
+    if (field) return field
   }
 
   return null
-}
-
-function getField (parentCtx, path) {
-  return parentCtx.fields[path.join('.')]
 }
 
 module.exports = GraphQLResolvePlugin

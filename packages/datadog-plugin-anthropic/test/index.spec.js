@@ -1,14 +1,14 @@
 'use strict'
 
+const assert = require('node:assert')
 const { describe, before, after, it } = require('mocha')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const assert = require('node:assert')
 const { useEnv } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   useEnv({
-    ANTHROPIC_API_KEY: '<not-a-real-key>'
+    ANTHROPIC_API_KEY: '<not-a-real-key>',
   })
 
   withVersions('anthropic', '@anthropic-ai/sdk', (version) => {
@@ -66,7 +66,7 @@ describe('Plugin', () => {
             messages: [{ role: 'user', content: 'Hello, world!' }],
             max_tokens: 100,
             temperature: 0.5,
-            stream: true
+            stream: true,
           })
 
           assert.ok(
@@ -101,7 +101,7 @@ describe('Plugin', () => {
           model: 'claude-3-7-sonnet-20250219',
           messages: [{ role: 'user', content: 'Hello, world!' }],
           max_tokens: 100,
-          temperature: 0.5
+          temperature: 0.5,
         })
 
         for await (const chunk of stream) {
@@ -125,7 +125,7 @@ describe('Plugin', () => {
             model: 'claude-3-7-sonnet-20250219',
             messages: [{ role: 'user', content: 'Hello, world!' }],
             max_tokens: 100,
-            temperature: 0.5
+            temperature: 0.5,
           }).on('text', text => {
             assert.ok(text)
           })
@@ -147,7 +147,7 @@ describe('Plugin', () => {
             messages: [{ role: 'user', content: 'Hello, world!' }],
             max_tokens: 100,
             temperature: 0.5,
-            stream: true
+            stream: true,
           })
 
           const message = await stream.finalMessage()

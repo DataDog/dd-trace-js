@@ -1,6 +1,6 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
 const { getVerbosity, getName, Verbosity, isDebugAllowed, isInfoAllowed } =
   require('../../../../src/appsec/iast/telemetry/verbosity')
 
@@ -12,38 +12,38 @@ describe('Telemetry Verbosity', () => {
     })
 
     it('should get verbosity regardless of capitalization', () => {
-      expect(getVerbosity('dEBug')).to.be.eq(Verbosity.DEBUG)
+      assert.strictEqual(getVerbosity('dEBug'), Verbosity.DEBUG)
     })
 
     it('should get verbosity default verbosity if invalid env var', () => {
-      expect(getVerbosity('Invalid')).to.be.eq(Verbosity.INFORMATION)
+      assert.strictEqual(getVerbosity('Invalid'), Verbosity.INFORMATION)
     })
 
     it('should get verbosity default verbosity if empty env var', () => {
-      expect(getVerbosity()).to.be.eq(Verbosity.INFORMATION)
+      assert.strictEqual(getVerbosity(), Verbosity.INFORMATION)
     })
   })
 
   describe('getName and others', () => {
     it('should obtain name from verbosity', () => {
-      expect(getName(Verbosity.DEBUG)).to.be.equal('DEBUG')
-      expect(getName(Verbosity.INFORMATION)).to.be.equal('INFORMATION')
-      expect(getName(Verbosity.MANDATORY)).to.be.equal('MANDATORY')
-      expect(getName(Verbosity.OFF)).to.be.equal('OFF')
+      assert.strictEqual(getName(Verbosity.DEBUG), 'DEBUG')
+      assert.strictEqual(getName(Verbosity.INFORMATION), 'INFORMATION')
+      assert.strictEqual(getName(Verbosity.MANDATORY), 'MANDATORY')
+      assert.strictEqual(getName(Verbosity.OFF), 'OFF')
     })
 
     it('should handle debug verbosity level', () => {
-      expect(isDebugAllowed(Verbosity.OFF)).to.be.false
-      expect(isDebugAllowed(Verbosity.MANDATORY)).to.be.false
-      expect(isDebugAllowed(Verbosity.INFORMATION)).to.be.false
-      expect(isDebugAllowed(Verbosity.DEBUG)).to.be.true
+      assert.strictEqual(isDebugAllowed(Verbosity.OFF), false)
+      assert.strictEqual(isDebugAllowed(Verbosity.MANDATORY), false)
+      assert.strictEqual(isDebugAllowed(Verbosity.INFORMATION), false)
+      assert.strictEqual(isDebugAllowed(Verbosity.DEBUG), true)
     })
 
     it('should handle info verbosity level', () => {
-      expect(isInfoAllowed(Verbosity.OFF)).to.be.false
-      expect(isInfoAllowed(Verbosity.MANDATORY)).to.be.false
-      expect(isInfoAllowed(Verbosity.INFORMATION)).to.be.true
-      expect(isInfoAllowed(Verbosity.DEBUG)).to.be.true
+      assert.strictEqual(isInfoAllowed(Verbosity.OFF), false)
+      assert.strictEqual(isInfoAllowed(Verbosity.MANDATORY), false)
+      assert.strictEqual(isInfoAllowed(Verbosity.INFORMATION), true)
+      assert.strictEqual(isInfoAllowed(Verbosity.DEBUG), true)
     })
   })
 })

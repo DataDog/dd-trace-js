@@ -15,5 +15,5 @@ function insecureWithResHeaderMethodWithArray (key, value, key2, value2, res) {
 module.exports = {
   insecureWithResCookieMethod,
   insecureWithResHeaderMethod,
-  insecureWithResHeaderMethodWithArray
+  insecureWithResHeaderMethodWithArray,
 }

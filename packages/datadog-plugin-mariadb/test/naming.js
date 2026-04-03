@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   outbound: {
     v0: {
       opName: 'mariadb.query',
-      serviceName: 'test-mariadb'
+      serviceName: 'test-mariadb',
     },
     v1: {
       opName: 'mariadb.query',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

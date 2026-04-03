@@ -13,5 +13,5 @@ module.exports = {
   priority,
   tags,
   types,
-  exporters
+  exporters,
 }

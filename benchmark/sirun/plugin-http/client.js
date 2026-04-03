@@ -4,9 +4,9 @@ if (Number(process.env.CLIENT_USE_TRACER)) {
   require('../../..').init()
 }
 
+const http = require('http')
 const { port, reqs } = require('./common')
 
-const http = require('http')
 let connectionsMade = 0
 
 function request (url) {

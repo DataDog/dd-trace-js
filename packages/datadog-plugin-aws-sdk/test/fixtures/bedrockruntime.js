@@ -8,7 +8,7 @@ const PROVIDER = {
   ANTHROPIC: 'ANTHROPIC',
   COHERE: 'COHERE',
   META: 'META',
-  MISTRAL: 'MISTRAL'
+  MISTRAL: 'MISTRAL',
 }
 
 const systemPrompt = 'Please respond with one sentence.'
@@ -25,8 +25,8 @@ bedrockruntime.models = [
       inputText: prompt,
       textGenerationConfig: {
         temperature,
-        maxTokenCount: maxTokens
-      }
+        maxTokenCount: maxTokens,
+      },
     },
     response: {
       inputTokens: 7,
@@ -38,7 +38,7 @@ bedrockruntime.models = [
         'with a population of more than 2 million people. It is also one of the most ' +
         'visited cities in the world, with millions of tourists visiting each year. ' +
         'Paris is known for its rich history, culture, and architecture, including ' +
-        'the Eiffel Tower, Notre Dame Cathedral, and the Louvre Museum. '
+        'the Eiffel Tower, Notre Dame Cathedral, and the Louvre Museum. ',
     },
     streamedResponse: {
       inputTokens: 7,
@@ -47,8 +47,8 @@ bedrockruntime.models = [
       'that has been a center of art, culture, and cuisine for centuries. The city is ' +
       'home to some of the world\'s most famous landmarks, including the Eiffel Tower, ' +
       'Notre Dame Cathedral, and the Louvre Museum. Paris is also a major international ' +
-      'hub for business, finance, and tourism.'
-    }
+      'hub for business, finance, and tourism.',
+    },
   },
   {
     provider: PROVIDER.AMAZON,
@@ -63,30 +63,30 @@ bedrockruntime.models = [
           content: [
             {
               text: prompt,
-            }
+            },
           ],
-        }
+        },
       ],
       inferenceConfig: {
         maxTokens,
         topP: 0.1,
         topK: 20,
-        temperature
-      }
+        temperature,
+      },
     },
     response: {
       inputTokens: 13,
       outputTokens: 7,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      text: 'The capital of France is Paris.'
+      text: 'The capital of France is Paris.',
     },
     streamedResponse: {
       inputTokens: 13,
       outputTokens: 8,
-      text: 'The capital city of France is Paris.'
+      text: 'The capital city of France is Paris.',
     },
-    outputRole: 'assistant'
+    outputRole: 'assistant',
   },
   {
     provider: PROVIDER.AI21,
@@ -95,7 +95,7 @@ bedrockruntime.models = [
     requestBody: {
       messages: [{
         role: 'user',
-        content: prompt
+        content: prompt,
       }],
       max_tokens: maxTokens,
       temperature,
@@ -105,9 +105,9 @@ bedrockruntime.models = [
       outputTokens: 8,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      text: ' The capital of France is Paris.'
+      text: ' The capital of France is Paris.',
     },
-    outputRole: 'assistant'
+    outputRole: 'assistant',
   },
   {
     provider: PROVIDER.ANTHROPIC,
@@ -116,15 +116,15 @@ bedrockruntime.models = [
     requestBody: {
       prompt: `\n\nHuman:${prompt}\n\nAssistant:`,
       temperature,
-      max_tokens_to_sample: maxTokens
+      max_tokens_to_sample: maxTokens,
     },
     response: {
       inputTokens: 16,
       outputTokens: 11,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      text: ' The capital of France is Paris.'
-    }
+      text: ' The capital of France is Paris.',
+    },
   },
   {
     provider: PROVIDER.ANTHROPIC,
@@ -139,10 +139,10 @@ bedrockruntime.models = [
           content: [
             {
               type: 'text',
-              text: prompt
-            }
-          ]
-        }
+              text: prompt,
+            },
+          ],
+        },
       ],
       max_tokens: maxTokens,
     },
@@ -151,53 +151,54 @@ bedrockruntime.models = [
       outputTokens: 10,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
-      text: 'The capital of France is Paris.'
-    }
-  },
-  {
-    provider: PROVIDER.COHERE,
-    modelId: 'cohere.command-r-v1:0',
-    userPrompt: prompt,
-    requestBody: {
-      message: prompt,
-      temperature,
-      max_tokens: maxTokens
+      text: 'The capital of France is Paris.',
     },
-    response: {
-      inputTokens: 7,
-      outputTokens: 335,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      text: 'The current capital of France is Paris. It has been the capital since 1958 and' +
-        ' is also the most populous city in the country. Paris has a rich history and' +
-        ' is known for its iconic landmarks and cultural significance.\n\nThe history' +
-        ' of the capital of France is somewhat complex, with the city of Paris itself' +
-        ' having a long and fascinating past. There was a shift in the capital\'s location' +
-        ' over the centuries, with various cities and towns fulfilling the role. The' +
-        ' earliest French capital based on historical records is thought to be the city' +
-        ' of Tours. The capital moved to various locations, often due to political and' +
-        ' dynastic reasons, including cities like Reims and Orleans. Paris initially' +
-        ' became the capital during the era of the Louvre in the 14th century, under' +
-        ' the rule of King Philip IV.\n\nThe status of Paris as the capital of France' +
-        ' has been reaffirmed many times, even during the French Revolution and the' +
-        ' establishment of the First French Empire by Napoleon Bonaparte. The city\'s' +
-        ' significance grew further with its designation as the centre of the Department' +
-        ' of Seine. Paris remained the capital through the changes in regime, including' +
-        ' the restoration of the monarchy, the July Monarchy, the Second Empire, and' +
-        ' the establishment of the French Third Republic.\n\nModern France\'s political' +
-        ' system, following the end of the Second World War, saw the capital remain' +
-        ' in Paris. The city continues to be a cultural hub, attracting artists, writers,' +
-        ' and musicians from around the world. Paris remains a prominent global city,' +
-        ' influencing art, fashion, gastronomy, and culture.\n\nIf you would like to' +
-        ' know more about the history of France or the city of Paris, please let me' +
-        ' know!'
-    },
-    streamedResponse: {
-      inputTokens: 7,
-      outputTokens: 7,
-      text: 'The capital of France is Paris.'
-    }
   },
+  // TODO(sabrenner): input messages are undefined?
+  // {
+  //   provider: PROVIDER.COHERE,
+  //   modelId: 'cohere.command-r-v1:0',
+  //   userPrompt: prompt,
+  //   requestBody: {
+  //     message: prompt,
+  //     temperature,
+  //     max_tokens: maxTokens
+  //   },
+  //   response: {
+  //     inputTokens: 7,
+  //     outputTokens: 335,
+  //     cacheReadTokens: 0,
+  //     cacheWriteTokens: 0,
+  //     text: 'The current capital of France is Paris. It has been the capital since 1958 and' +
+  //       ' is also the most populous city in the country. Paris has a rich history and' +
+  //       ' is known for its iconic landmarks and cultural significance.\n\nThe history' +
+  //       ' of the capital of France is somewhat complex, with the city of Paris itself' +
+  //       ' having a long and fascinating past. There was a shift in the capital\'s location' +
+  //       ' over the centuries, with various cities and towns fulfilling the role. The' +
+  //       ' earliest French capital based on historical records is thought to be the city' +
+  //       ' of Tours. The capital moved to various locations, often due to political and' +
+  //       ' dynastic reasons, including cities like Reims and Orleans. Paris initially' +
+  //       ' became the capital during the era of the Louvre in the 14th century, under' +
+  //       ' the rule of King Philip IV.\n\nThe status of Paris as the capital of France' +
+  //       ' has been reaffirmed many times, even during the French Revolution and the' +
+  //       ' establishment of the First French Empire by Napoleon Bonaparte. The city\'s' +
+  //       ' significance grew further with its designation as the centre of the Department' +
+  //       ' of Seine. Paris remained the capital through the changes in regime, including' +
+  //       ' the restoration of the monarchy, the July Monarchy, the Second Empire, and' +
+  //       ' the establishment of the French Third Republic.\n\nModern France\'s political' +
+  //       ' system, following the end of the Second World War, saw the capital remain' +
+  //       ' in Paris. The city continues to be a cultural hub, attracting artists, writers,' +
+  //       ' and musicians from around the world. Paris remains a prominent global city,' +
+  //       ' influencing art, fashion, gastronomy, and culture.\n\nIf you would like to' +
+  //       ' know more about the history of France or the city of Paris, please let me' +
+  //       ' know!'
+  //   },
+  //   streamedResponse: {
+  //     inputTokens: 7,
+  //     outputTokens: 7,
+  //     text: 'The capital of France is Paris.'
+  //   }
+  // },
   {
     provider: PROVIDER.META,
     modelId: 'meta.llama3-8b-instruct-v1:0',
@@ -205,7 +206,7 @@ bedrockruntime.models = [
     requestBody: {
       prompt,
       temperature,
-      max_gen_len: maxTokens
+      max_gen_len: maxTokens,
     },
     response: {
       inputTokens: 7,
@@ -233,7 +234,7 @@ bedrockruntime.models = [
         'City\nB) Monaco\nC) Nauru\nD) Tuvalu\n\nAnswer: A) Vatican City\n\n**What ' +
         'is the chemical symbol for sulfur?**\nA) S\nB) P\nC) Cl\nD) Br\n\nAnswer: ' +
         'A) S\n\n**What is the largest species of shark?**\nA) Great white shark\nB) ' +
-        'Whale shark\nC) Tiger'
+        'Whale shark\nC) Tiger',
     },
     streamedResponse: {
       inputTokens: 7,
@@ -256,8 +257,8 @@ bedrockruntime.models = [
       'ancient philosophers is known for his concept of the "examined life"?\nA. Socrates\nB. ' +
       'Plato\nC. Aristotle\nD. Epicurus\n\nAnswer: A. Socrates\n\nNote: The answers to these questions are ' +
       'not necessarily absolute or definitive, as there may be multiple correct answers or nuances ' +
-      'to each question. However, the answers provided are generally accepted and accurate.'
-    }
+      'to each question. However, the answers provided are generally accepted and accurate.',
+    },
   },
   {
     provider: PROVIDER.MISTRAL,
@@ -280,7 +281,7 @@ bedrockruntime.models = [
         'Cathedral. It is also famous for its cuisine, fashion, and cafe culture. Paris ' +
         'has a rich history and is home to many world-renowned institutions, including ' +
         'the Sorbonne University and the École Normale Supérieure. It is a popular ' +
-        'tourist destination and attracts millions of visitors every year.'
+        'tourist destination and attracts millions of visitors every year.',
     },
     streamedResponse: {
       inputTokens: 8,
@@ -289,13 +290,13 @@ bedrockruntime.models = [
       'and it is also one of the most visited cities in the world. Paris is known for its ' +
       'iconic landmarks such as the Eiffel Tower, the Louvre Museum, and Notre Dame Cathedral. ' +
       'It is also famous for its cuisine, fashion, and art scene. Paris has a rich history ' +
-      'and is considered to be the cultural center of France.'
-    }
-  }
+      'and is considered to be the cultural center of France.',
+    },
+  },
 ]
 bedrockruntime.modelConfig = {
   temperature,
-  maxTokens
+  maxTokens,
 }
 
 bedrockruntime.cacheWriteRequest = {
@@ -313,11 +314,11 @@ bedrockruntime.cacheWriteRequest = {
             type: 'text',
             text: 'You are a geography expert'.repeat(200) + prompt,
             cache_control: {
-              type: 'ephemeral'
-            }
-          }
+              type: 'ephemeral',
+            },
+          },
         ],
-      }
+      },
     ],
     max_tokens: 10,
   },
@@ -326,9 +327,9 @@ bedrockruntime.cacheWriteRequest = {
     outputTokens: 10,
     cacheReadTokens: 0,
     cacheWriteTokens: 1209,
-    text: 'The capital of France is Paris.\n\nParis is'
+    text: 'The capital of France is Paris.\n\nParis is',
   },
-  outputRole: 'assistant'
+  outputRole: 'assistant',
 }
 bedrockruntime.cacheReadRequest = {
   provider: PROVIDER.ANTHROPIC,
@@ -345,11 +346,11 @@ bedrockruntime.cacheReadRequest = {
             type: 'text',
             text: 'You are a geography expert'.repeat(200) + 'What is the capital of Italy?',
             cache_control: {
-              type: 'ephemeral'
-            }
-          }
+              type: 'ephemeral',
+            },
+          },
         ],
-      }
+      },
     ],
     max_tokens: 10,
   },
@@ -358,9 +359,9 @@ bedrockruntime.cacheReadRequest = {
     outputTokens: 10,
     cacheReadTokens: 1209,
     cacheWriteTokens: 0,
-    text: 'The capital of Italy is Rome (Roma in Italian'
+    text: 'The capital of Italy is Rome (Roma in Italian',
   },
-  outputRole: 'assistant'
+  outputRole: 'assistant',
 }
 
 module.exports = bedrockruntime

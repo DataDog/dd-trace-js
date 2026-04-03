@@ -1,14 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { ERROR_TYPE, ERROR_MESSAGE, ERROR_STACK } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   let cassandra
@@ -35,10 +37,11 @@ describe('Plugin', () => {
         beforeEach(done => {
           cassandra = require(`../../../versions/cassandra-driver@${version}`).get()
 
+          temporaryWarningExceptions.add('The `util.isArray` API is deprecated. Please use `Array.isArray()` instead.')
           client = new cassandra.Client({
             contactPoints: ['127.0.0.1'],
             localDataCenter: 'datacenter1',
-            keyspace: 'system'
+            keyspace: 'system',
           })
 
           client.connect(done)
@@ -72,8 +75,8 @@ describe('Plugin', () => {
                 'cassandra.keyspace': 'system',
                 component: 'cassandra-driver',
                 'network.destination.port': '9042',
-                'db.cassandra.contact.points': '127.0.0.1'
-              }
+                'db.cassandra.contact.points': '127.0.0.1',
+              },
             })
             .then(done)
             .catch(done)
@@ -85,12 +88,12 @@ describe('Plugin', () => {
           const id = '1234'
           const queries = [
             { query: 'INSERT INTO test.test (id) VALUES (?)', params: [id] },
-            `UPDATE test.test SET test='test' WHERE id='${id}';`
+            `UPDATE test.test SET test='test' WHERE id='${id}';`,
           ]
 
           agent
             .assertFirstTraceSpan({
-              resource: `${queries[0].query}; ${queries[1]}`
+              resource: `${queries[0].query}; ${queries[1]}`,
             })
             .then(done)
             .catch(done)
@@ -102,12 +105,12 @@ describe('Plugin', () => {
           const id = '1234'
           const queries = [
             { query: 'INSERT INTO test.test (id) VALUES (?)', params: [id] },
-            `UPDATE test.test SET test='test' WHERE id='${id}';`
+            `UPDATE test.test SET test='test' WHERE id='${id}';`,
           ]
 
           agent
             .assertFirstTraceSpan({
-              resource: `${queries[0].query}; ${queries[1]}`
+              resource: `${queries[0].query}; ${queries[1]}`,
             })
             .then(done)
             .catch(done)
@@ -129,8 +132,8 @@ describe('Plugin', () => {
                   [ERROR_TYPE]: error.name,
                   [ERROR_MESSAGE]: error.message,
                   [ERROR_STACK]: error.stack,
-                  component: 'cassandra-driver'
-                }
+                  component: 'cassandra-driver',
+                },
               })
             })
             .then(done)
@@ -147,7 +150,7 @@ describe('Plugin', () => {
 
           scope.activate(childOf, () => {
             client.execute('SELECT now() FROM local;', () => {
-              expect(tracer.scope().active()).to.equal(childOf)
+              assert.strictEqual(tracer.scope().active(), childOf)
               done()
             })
           })
@@ -159,7 +162,7 @@ describe('Plugin', () => {
 
           scope.activate(childOf, () => {
             client.batch(['UPDATE test.test SET test=\'test\' WHERE id=\'1234\';'], () => {
-              expect(tracer.scope().active()).to.equal(childOf)
+              assert.strictEqual(tracer.scope().active(), childOf)
               done()
             })
           })
@@ -188,7 +191,7 @@ describe('Plugin', () => {
           client = new cassandra.Client({
             contactPoints: ['127.0.0.1'],
             localDataCenter: 'datacenter1',
-            keyspace: 'system'
+            keyspace: 'system',
           })
 
           client.keyspace
@@ -202,7 +205,7 @@ describe('Plugin', () => {
 
         it('should be configured with the correct values', done => {
           agent.assertFirstTraceSpan({
-            service: 'custom'
+            service: 'custom',
           })
             .then(done)
             .catch(done)
@@ -215,12 +218,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'cassandra.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'cassandra.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -244,7 +247,7 @@ describe('Plugin', () => {
             client = new cassandra.Client({
               contactPoints: ['127.0.0.1'],
               localDataCenter: 'datacenter1',
-              keyspace: 'system'
+              keyspace: 'system',
             })
 
             client.keyspace
@@ -272,8 +275,8 @@ describe('Plugin', () => {
                   'cassandra.query': query,
                   'cassandra.keyspace': 'system',
                   component: 'cassandra-driver',
-                  'network.destination.port': '9042'
-                }
+                  'network.destination.port': '9042',
+                },
               })
               .then(done)
               .catch(done)
@@ -286,12 +289,12 @@ describe('Plugin', () => {
             const id = '1234'
             const queries = [
               { query: 'INSERT INTO test.test (id) VALUES (?)', params: [id] },
-              `UPDATE test.test SET test='test' WHERE id='${id}';`
+              `UPDATE test.test SET test='test' WHERE id='${id}';`,
             ]
 
             agent
               .assertFirstTraceSpan({
-                resource: `${queries[0].query}; ${queries[1]}`
+                resource: `${queries[0].query}; ${queries[1]}`,
               })
               .then(done)
               .catch(done)

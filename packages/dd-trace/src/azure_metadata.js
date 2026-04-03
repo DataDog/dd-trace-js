@@ -3,8 +3,11 @@
 // Modeled after https://github.com/DataDog/libdatadog/blob/f3994857a59bb5679a65967138c5a3aec418a65f/ddcommon/src/azure_app_services.rs
 
 const os = require('os')
+const {
+  getEnvironmentVariable,
+  getValueFromEnvSources,
+} = require('./config/helper')
 const { getIsAzureFunction } = require('./serverless')
-const { getEnvironmentVariable, getEnvironmentVariables } = require('../../dd-trace/src/config-helper')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
@@ -27,39 +30,52 @@ function buildResourceID (subscriptionID, siteName, resourceGroup) {
     .toLowerCase()
 }
 
+/**
+ * @param {Record<string | symbol, unknown>} obj
+ * @returns {Partial<Record<string | symbol, unknown>>}
+ */
 function trimObject (obj) {
-  Object.entries(obj)
-    .filter(([_, value]) => value === undefined)
-    .forEach(([key, _]) => { delete obj[key] })
-  return obj
+  const cleanedObj = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleanedObj[key] = value
+    }
+  }
+  return cleanedObj
 }
 
 function buildMetadata () {
-  const {
-    COMPUTERNAME,
-    DD_AAS_DOTNET_EXTENSION_VERSION,
-    FUNCTIONS_EXTENSION_VERSION,
-    FUNCTIONS_WORKER_RUNTIME,
-    FUNCTIONS_WORKER_RUNTIME_VERSION,
-    WEBSITE_INSTANCE_ID,
-    WEBSITE_OWNER_NAME,
-    WEBSITE_OS,
-    WEBSITE_RESOURCE_GROUP,
-    WEBSITE_SITE_NAME
-  } = getEnvironmentVariables()
+  const COMPUTERNAME = getEnvironmentVariable('COMPUTERNAME')
+  const FUNCTIONS_EXTENSION_VERSION = getEnvironmentVariable('FUNCTIONS_EXTENSION_VERSION')
+  const FUNCTIONS_WORKER_RUNTIME = getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME')
+  const FUNCTIONS_WORKER_RUNTIME_VERSION = getEnvironmentVariable('FUNCTIONS_WORKER_RUNTIME_VERSION')
+  const WEBSITE_INSTANCE_ID = getEnvironmentVariable('WEBSITE_INSTANCE_ID')
+  const WEBSITE_OWNER_NAME = getEnvironmentVariable('WEBSITE_OWNER_NAME')
+  const WEBSITE_OS = getEnvironmentVariable('WEBSITE_OS')
+  const WEBSITE_RESOURCE_GROUP = getEnvironmentVariable('WEBSITE_RESOURCE_GROUP')
+  const WEBSITE_SITE_NAME = getEnvironmentVariable('WEBSITE_SITE_NAME')
+  const WEBSITE_SKU = getEnvironmentVariable('WEBSITE_SKU')
+
+  const DD_AZURE_RESOURCE_GROUP = getValueFromEnvSources('DD_AZURE_RESOURCE_GROUP')
+  const isAzureFunction = FUNCTIONS_EXTENSION_VERSION !== undefined && FUNCTIONS_WORKER_RUNTIME !== undefined
+  const isFlexConsumptionAzureFunction = isAzureFunction && WEBSITE_SKU === 'FlexConsumption'
 
   const subscriptionID = extractSubscriptionID(WEBSITE_OWNER_NAME)
 
   const siteName = WEBSITE_SITE_NAME
 
-  const [siteKind, siteType] = getIsAzureFunction()
+  const [siteKind, siteType] = isAzureFunction
     ? ['functionapp', 'function']
     : ['app', 'app']
 
-  const resourceGroup = WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME)
+  // Azure Functions on Flex Consumption plans require the `DD_AZURE_RESOURCE_GROUP` env var.
+  // If this logic ever changes, update the logic in `libdatadog`, `serverless-components/src/datadog-trace-agent`,
+  // and the serverless compat layers accordingly.
+  const resourceGroup = isFlexConsumptionAzureFunction
+    ? (DD_AZURE_RESOURCE_GROUP ?? WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME))
+    : (WEBSITE_RESOURCE_GROUP ?? extractResourceGroup(WEBSITE_OWNER_NAME))
 
   return trimObject({
-    extensionVersion: DD_AAS_DOTNET_EXTENSION_VERSION,
     functionRuntimeVersion: FUNCTIONS_EXTENSION_VERSION,
     instanceID: WEBSITE_INSTANCE_ID,
     instanceName: COMPUTERNAME,
@@ -71,7 +87,7 @@ function buildMetadata () {
     siteKind,
     siteName,
     siteType,
-    subscriptionID
+    subscriptionID,
   })
 }
 
@@ -110,12 +126,12 @@ function getAzureTagsFromMetadata (metadata) {
     'aas.site.kind': metadata.siteKind,
     'aas.site.name': metadata.siteName,
     'aas.site.type': metadata.siteType,
-    'aas.subscription.id': metadata.subscriptionID
+    'aas.subscription.id': metadata.subscriptionID,
   })
 }
 
 module.exports = {
   getAzureAppMetadata,
   getAzureFunctionMetadata,
-  getAzureTagsFromMetadata
+  getAzureTagsFromMetadata,
 }

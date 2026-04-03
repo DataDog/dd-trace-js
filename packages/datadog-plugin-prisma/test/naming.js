@@ -6,26 +6,26 @@ const rawExpectedSchema = {
   client: {
     v0: {
       opName: 'prisma.client',
-      serviceName: 'test-prisma'
+      serviceName: 'test-prisma',
     },
     v1: {
       opName: 'prisma.client',
-      serviceName: 'test'
-    }
+      serviceName: 'test',
+    },
   },
   engine: {
     v0: {
       opName: 'prisma.engine',
-      serviceName: 'test-prisma'
+      serviceName: 'test-prisma',
     },
     v1: {
       opName: 'prisma.engine',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

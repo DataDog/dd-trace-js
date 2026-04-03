@@ -26,7 +26,7 @@ const urlFilter = {
     const blocklist = config.blocklist || config.blacklist || []
 
     return uri => applyFilter(allowlist, uri) && !applyFilter(blocklist, uri)
-  }
+  },
 }
 
 module.exports = urlFilter

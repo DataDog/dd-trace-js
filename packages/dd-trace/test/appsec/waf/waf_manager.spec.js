@@ -18,7 +18,7 @@ describe('WAFManager', () => {
     WAFContextWrapper = sinon.stub()
     WAFManager = proxyquire('../../../src/appsec/waf/waf_manager', {
       './waf_context_wrapper': WAFContextWrapper,
-      '@datadog/native-appsec': { DDWAF }
+      '@datadog/native-appsec': { DDWAF },
     })
   })
 

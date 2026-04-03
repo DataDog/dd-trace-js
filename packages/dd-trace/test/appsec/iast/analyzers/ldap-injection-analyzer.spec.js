@@ -1,9 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
+const assert = require('node:assert/strict')
+
 const { describe, it } = require('mocha')
-const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 const { HTTP_REQUEST_PARAMETER } = require('../../../../src/appsec/iast/taint-tracking/source-types')
 
@@ -21,41 +22,41 @@ describe('ldap-injection-analyzer', () => {
               iinfo: {
                 parameterName: 'param',
                 parameterValue: string,
-                type: HTTP_REQUEST_PARAMETER
-              }
-            }
+                type: HTTP_REQUEST_PARAMETER,
+              },
+            },
           ]
         : []
-    }
+    },
   }
 
   const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
-    '../taint-tracking/operations': TaintTrackingMock
+    '../taint-tracking/operations': TaintTrackingMock,
   })
   const ldapInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/ldap-injection-analyzer', {
-    './injection-analyzer': InjectionAnalyzer
+    './injection-analyzer': InjectionAnalyzer,
   })
 
   ldapInjectionAnalyzer.configure(true)
 
   it('should subscribe to ldapjs client search channel', () => {
-    expect(ldapInjectionAnalyzer._subscriptions).to.have.lengthOf(1)
-    expect(ldapInjectionAnalyzer._subscriptions[0]._channel.name).to.equals('datadog:ldapjs:client:search')
+    assert.strictEqual(ldapInjectionAnalyzer._subscriptions.length, 1)
+    assert.strictEqual(ldapInjectionAnalyzer._subscriptions[0]._channel.name, 'datadog:ldapjs:client:search')
   })
 
   it('should not detect vulnerability when no query', () => {
     const isVulnerable = ldapInjectionAnalyzer._isVulnerable()
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should not detect vulnerability when no vulnerable query', () => {
     const isVulnerable = ldapInjectionAnalyzer._isVulnerable(NOT_TAINTED_QUERY)
-    expect(isVulnerable).to.be.false
+    assert.strictEqual(isVulnerable, false)
   })
 
   it('should detect vulnerability when vulnerable query', () => {
     const isVulnerable = ldapInjectionAnalyzer._isVulnerable(TAINTED_QUERY)
-    expect(isVulnerable).to.be.true
+    assert.strictEqual(isVulnerable, true)
   })
 
   it('should report "LDAP_INJECTION" vulnerability', () => {
@@ -66,29 +67,29 @@ describe('ldap-injection-analyzer', () => {
           return {
             toSpanId () {
               return '123'
-            }
+            },
           }
-        }
-      }
+        },
+      },
     }
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-context': {
-        getIastContext: () => iastContext
+        getIastContext: () => iastContext,
       },
       '../overhead-controller': { hasQuota: () => true },
-      '../vulnerability-reporter': { addVulnerability }
+      '../vulnerability-reporter': { addVulnerability },
     })
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
-      './vulnerability-analyzer': ProxyAnalyzer
+      './vulnerability-analyzer': ProxyAnalyzer,
     })
     const proxiedLdapInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/ldap-injection-analyzer',
       {
-        './injection-analyzer': InjectionAnalyzer
+        './injection-analyzer': InjectionAnalyzer,
       })
     proxiedLdapInjectionAnalyzer.analyze(TAINTED_QUERY)
-    expect(addVulnerability).to.have.been.calledOnce
-    expect(addVulnerability).to.have.been.calledWithMatch({}, { type: 'LDAP_INJECTION' })
+    sinon.assert.calledOnce(addVulnerability)
+    sinon.assert.calledWithMatch(addVulnerability, {}, { type: 'LDAP_INJECTION' })
   })
 
   it('should call analyzeAll when datadog:ldapjs:client:search event is published', () => {
@@ -100,27 +101,27 @@ describe('ldap-injection-analyzer', () => {
     const datadogCore = {
       storage: () => {
         return {
-          getStore
+          getStore,
         }
-      }
+      },
     }
 
     const iastPlugin = proxyquire('../../../../src/appsec/iast/iast-plugin', {
       '../../../../datadog-core': datadogCore,
-      './iast-context': { getIastContext }
+      './iast-context': { getIastContext },
     })
 
     const ProxyAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/vulnerability-analyzer', {
       '../iast-plugin': iastPlugin,
-      '../overhead-controller': { hasQuota: () => true }
+      '../overhead-controller': { hasQuota: () => true },
     })
     const InjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/injection-analyzer', {
       '../taint-tracking/operations': TaintTrackingMock,
-      './vulnerability-analyzer': ProxyAnalyzer
+      './vulnerability-analyzer': ProxyAnalyzer,
     })
 
     const ldapInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/ldap-injection-analyzer', {
-      './injection-analyzer': InjectionAnalyzer
+      './injection-analyzer': InjectionAnalyzer,
     })
     const analyzeAll = sinon.stub(ldapInjectionAnalyzer, 'analyzeAll')
     ldapInjectionAnalyzer.configure(true)
@@ -129,6 +130,6 @@ describe('ldap-injection-analyzer', () => {
 
     onLdapClientSearch({ base: 'base', filter: 'filter', name: 'datadog:ldapjs:client:search' })
 
-    expect(analyzeAll.firstCall).to.be.calledWith('base', 'filter')
+    sinon.assert.calledWith(analyzeAll.firstCall, 'base', 'filter')
   })
 })

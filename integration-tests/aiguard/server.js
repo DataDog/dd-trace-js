@@ -1,14 +1,14 @@
 'use strict'
 
-const express = require('express')
 const tracer = require('dd-trace').init({ flushInterval: 0 })
+const express = require('express')
 
 const app = express()
 
 app.get('/allow', async (req, res) => {
   const evaluation = await tracer.aiguard.evaluate([
     { role: 'system', content: 'You are a beautiful AI' },
-    { role: 'user', content: 'I am harmless' }
+    { role: 'user', content: 'I am harmless' },
   ])
   res.status(200).json(evaluation)
 })
@@ -18,8 +18,24 @@ app.get('/deny', async (req, res) => {
   try {
     const evaluation = await tracer.aiguard.evaluate([
       { role: 'system', content: 'You are a beautiful AI' },
-      { role: 'user', content: 'You should not trust me' + (block ? ' [block]' : '') }
+      { role: 'user', content: 'You should not trust me' + (block ? ' [block]' : '') },
     ], { block })
+    res.status(200).json(evaluation)
+  } catch (error) {
+    if (error.name === 'AIGuardAbortError') {
+      res.status(403).send(error.reason)
+    } else {
+      res.status(500).send('Internal Server Error')
+    }
+  }
+})
+
+app.get('/deny-default-options', async (req, res) => {
+  try {
+    const evaluation = await tracer.aiguard.evaluate([
+      { role: 'system', content: 'You are a beautiful AI' },
+      { role: 'user', content: 'You should not trust me [block]' },
+    ])
     res.status(200).json(evaluation)
   } catch (error) {
     if (error.name === 'AIGuardAbortError') {
@@ -35,7 +51,7 @@ app.get('/abort', async (req, res) => {
   try {
     const evaluation = await tracer.aiguard.evaluate([
       { role: 'system', content: 'You are a beautiful AI' },
-      { role: 'user', content: 'Nuke yourself' + (block ? ' [block]' : '') }
+      { role: 'user', content: 'Nuke yourself' + (block ? ' [block]' : '') },
     ], { block })
     res.status(200).json(evaluation)
   } catch (error) {
@@ -48,6 +64,6 @@ app.get('/abort', async (req, res) => {
 })
 
 const server = app.listen(() => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

@@ -1,42 +1,41 @@
 'use strict'
 
-const { assert } = require('chai')
+const assert = require('node:assert/strict')
 const path = require('path')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   FakeAgent,
   spawnProc,
+  stopProc,
   curlAndAssertMessage,
-  curl
+  curl,
 } = require('../helpers')
 const { USER_KEEP, AUTO_REJECT, AUTO_KEEP } = require('../../ext/priority')
 
 describe('Standalone ASM', () => {
-  let sandbox, cwd, startupTestFile, agent, proc, env
+  let cwd, startupTestFile, agent, proc, env
 
-  before(async () => {
-    sandbox = await createSandbox(['express'])
-    cwd = sandbox.folder
+  useSandbox(['express'])
+
+  before(() => {
+    cwd = sandboxCwd()
     startupTestFile = path.join(cwd, 'standalone-asm/index.js')
   })
 
-  after(async () => {
-    await sandbox.remove()
-  })
-
   function assertKeep ({ meta, metrics }) {
-    assert.propertyVal(meta, '_dd.p.ts', '02')
+    assert.strictEqual(meta['_dd.p.ts'], '02')
 
-    assert.propertyVal(metrics, '_sampling_priority_v1', USER_KEEP)
-    assert.propertyVal(metrics, '_dd.apm.enabled', 0)
+    assert.strictEqual(metrics._sampling_priority_v1, USER_KEEP)
+    assert.strictEqual(metrics['_dd.apm.enabled'], 0)
   }
 
   function assertDrop ({ meta, metrics }) {
-    assert.notProperty(meta, '_dd.p.ts')
+    assert.ok(!('_dd.p.ts' in meta))
 
-    assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_REJECT)
-    assert.propertyVal(metrics, '_dd.apm.enabled', 0)
+    assert.strictEqual(metrics._sampling_priority_v1, AUTO_REJECT)
+    assert.strictEqual(metrics['_dd.apm.enabled'], 0)
   }
 
   async function doWarmupRequests (procOrUrl, number = 3) {
@@ -53,7 +52,7 @@ describe('Standalone ASM', () => {
         AGENT_PORT: agent.port,
         DD_APM_TRACING_ENABLED: 'false',
         DD_APPSEC_ENABLED: 'true',
-        DD_API_SECURITY_ENABLED: 'false'
+        DD_API_SECURITY_ENABLED: 'false',
       }
 
       const execArgv = []
@@ -62,17 +61,17 @@ describe('Standalone ASM', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     // first req initializes the waf and reports the first appsec event adding manual.keep tag
     it('should send correct headers and tags on first req', async () => {
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-        assert.isArray(payload)
+        assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
+        assert.ok(Array.isArray(payload[0]))
 
         // express.request + router.middleware x 2
         assert.strictEqual(payload[0].length, 3)
@@ -83,8 +82,8 @@ describe('Standalone ASM', () => {
 
     it('should keep fifth req because RateLimiter allows 1 req/min', async () => {
       const promise = curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-        assert.isArray(payload)
+        assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+        assert.ok(Array.isArray(payload))
         if (payload.length === 4) {
           assertKeep(payload[0][0])
           assertDrop(payload[1][0])
@@ -94,15 +93,15 @@ describe('Standalone ASM', () => {
           // req after a minute
         } else {
           const fifthReq = payload[0]
-          assert.isArray(fifthReq)
+          assert.ok(Array.isArray(fifthReq))
           assert.strictEqual(fifthReq.length, 3)
 
           const { meta, metrics } = fifthReq[0]
-          assert.notProperty(meta, 'manual.keep')
-          assert.notProperty(meta, '_dd.p.ts')
+          assert.ok(!('manual.keep' in meta))
+          assert.ok(!('_dd.p.ts' in meta))
 
-          assert.propertyVal(metrics, '_sampling_priority_v1', AUTO_KEEP)
-          assert.propertyVal(metrics, '_dd.apm.enabled', 0)
+          assert.strictEqual(metrics._sampling_priority_v1, AUTO_KEEP)
+          assert.strictEqual(metrics['_dd.apm.enabled'], 0)
         }
       }, 70000, 2)
 
@@ -123,8 +122,8 @@ describe('Standalone ASM', () => {
 
       const urlAttack = proc.url + '?query=1 or 1=1'
       return curlAndAssertMessage(agent, urlAttack, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-        assert.isArray(payload)
+        assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 4)
 
         assertKeep(payload[3][0])
@@ -136,8 +135,8 @@ describe('Standalone ASM', () => {
 
       const url = proc.url + '/login?user=test'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-        assert.isArray(payload)
+        assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 4)
 
         assertKeep(payload[3][0])
@@ -149,8 +148,8 @@ describe('Standalone ASM', () => {
 
       const url = proc.url + '/sdk'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-        assert.isArray(payload)
+        assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 4)
 
         assertKeep(payload[3][0])
@@ -162,14 +161,14 @@ describe('Standalone ASM', () => {
 
       const url = proc.url + '/vulnerableHash'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-        assert.isArray(payload)
+        assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 4)
 
         const expressReq4 = payload[3][0]
         assertKeep(expressReq4)
-        assert.property(expressReq4.meta, '_dd.iast.json')
-        assert.propertyVal(expressReq4.metrics, '_dd.iast.enabled', 1)
+        assert.ok(Object.hasOwn(expressReq4.meta, '_dd.iast.json'))
+        assert.strictEqual(expressReq4.metrics['_dd.iast.enabled'], 1)
       })
     })
 
@@ -186,7 +185,7 @@ describe('Standalone ASM', () => {
       })
 
       afterEach(async () => {
-        proc2.kill()
+        await stopProc(proc2)
       })
 
       // proc/drop-and-call-sdk:
@@ -197,8 +196,8 @@ describe('Standalone ASM', () => {
 
         const url = `${proc.url}/propagation-after-drop-and-call-sdk?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-          assert.isArray(payload)
+          assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+          assert.ok(Array.isArray(payload))
 
           const innerReq = payload.find(p => p[0].resource === 'GET /sdk')
           assert.notStrictEqual(innerReq, undefined)
@@ -214,8 +213,8 @@ describe('Standalone ASM', () => {
 
           const url = `${proc.url}/propagation-with-event?port=${port2}`
           return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-            assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-            assert.isArray(payload)
+            assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+            assert.ok(Array.isArray(payload))
 
             const innerReq = payload.find(p => p[0].resource === 'GET /down')
             assert.notStrictEqual(innerReq, undefined)
@@ -229,12 +228,12 @@ describe('Standalone ASM', () => {
 
         const url = `${proc.url}/propagation-without-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-          assert.isArray(payload)
+          assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+          assert.ok(Array.isArray(payload))
 
           const innerReq = payload.find(p => p[0].resource === 'GET /down')
           assert.notStrictEqual(innerReq, undefined)
-          assert.notProperty(innerReq[0].meta, '_dd.p.other')
+          assert.ok(!('_dd.p.other' in innerReq[0].meta))
         }, undefined, undefined, true)
       })
 
@@ -243,12 +242,12 @@ describe('Standalone ASM', () => {
 
         const url = `${proc.url}/propagation-with-event?port=${port2}`
         return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-          assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-          assert.isArray(payload)
+          assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+          assert.ok(Array.isArray(payload))
 
           const innerReq = payload.find(p => p[0].resource === 'GET /down')
           assert.notStrictEqual(innerReq, undefined)
-          assert.property(innerReq[0].meta, '_dd.p.other')
+          assert.ok(Object.hasOwn(innerReq[0].meta, '_dd.p.other'))
         }, undefined, undefined, true)
       })
     })
@@ -261,7 +260,7 @@ describe('Standalone ASM', () => {
       env = {
         AGENT_PORT: agent.port,
         DD_APM_TRACING_ENABLED: 'false',
-        DD_APPSEC_ENABLED: 'true'
+        DD_APPSEC_ENABLED: 'true',
       }
 
       const execArgv = []
@@ -270,14 +269,14 @@ describe('Standalone ASM', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     it('should keep fifth req because of api security sampler', async () => {
       const promise = curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'datadog-client-computed-stats', 'yes')
-        assert.isArray(payload)
+        assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+        assert.ok(Array.isArray(payload))
         if (payload.length === 4) {
           assertKeep(payload[0][0])
           assertDrop(payload[1][0])
@@ -287,7 +286,7 @@ describe('Standalone ASM', () => {
           // req after 30s
         } else {
           const fifthReq = payload[0]
-          assert.isArray(fifthReq)
+          assert.ok(Array.isArray(fifthReq))
           assert.strictEqual(fifthReq.length, 3)
           assertKeep(fifthReq[0])
         }
@@ -311,33 +310,33 @@ describe('Standalone ASM', () => {
       agent = await new FakeAgent().start()
 
       env = {
-        AGENT_PORT: agent.port
+        AGENT_PORT: agent.port,
       }
 
       proc = await spawnProc(startupTestFile, { cwd, env })
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     it('should not add standalone related tags in iast events', () => {
       const url = proc.url + '/vulnerableHash'
       return curlAndAssertMessage(agent, url, ({ headers, payload }) => {
-        assert.notProperty(headers, 'datadog-client-computed-stats')
-        assert.isArray(payload)
+        assert.ok(!('datadog-client-computed-stats' in headers))
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
+        assert.ok(Array.isArray(payload[0]))
 
         // express.request + router.middleware x 2
         assert.strictEqual(payload[0].length, 3)
 
         const { meta, metrics } = payload[0][0]
-        assert.property(meta, '_dd.iast.json') // WEAK_HASH and XCONTENTTYPE_HEADER_MISSING reported
+        assert.ok(Object.hasOwn(meta, '_dd.iast.json')) // WEAK_HASH and XCONTENTTYPE_HEADER_MISSING reported
 
-        assert.notProperty(meta, '_dd.p.ts')
-        assert.notProperty(metrics, '_dd.apm.enabled')
+        assert.ok(!('_dd.p.ts' in meta))
+        assert.ok(!('_dd.apm.enabled' in metrics))
       })
     })
 
@@ -345,19 +344,19 @@ describe('Standalone ASM', () => {
       const urlAttack = proc.url + '?query=1 or 1=1'
 
       return curlAndAssertMessage(agent, urlAttack, ({ headers, payload }) => {
-        assert.notProperty(headers, 'datadog-client-computed-stats')
-        assert.isArray(payload)
+        assert.ok(!('datadog-client-computed-stats' in headers))
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(payload.length, 1)
-        assert.isArray(payload[0])
+        assert.ok(Array.isArray(payload[0]))
 
         // express.request + router.middleware x 2
         assert.strictEqual(payload[0].length, 3)
 
         const { meta, metrics } = payload[0][0]
-        assert.property(meta, '_dd.appsec.json') // crs-942-100 triggered
+        assert.ok(Object.hasOwn(meta, '_dd.appsec.json')) // crs-942-100 triggered
 
-        assert.notProperty(meta, '_dd.p.ts')
-        assert.notProperty(metrics, '_dd.apm.enabled')
+        assert.ok(!('_dd.p.ts' in meta))
+        assert.ok(!('_dd.apm.enabled' in metrics))
       })
     })
   })

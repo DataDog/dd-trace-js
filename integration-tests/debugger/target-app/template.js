@@ -1,7 +1,9 @@
 'use strict'
 
+// @ts-expect-error This code is running in a sandbox where dd-trace is available
 require('dd-trace/init')
 const { inspect } = require('util')
+// @ts-expect-error This code is running in a sandbox where fastify is available
 const Fastify = require('fastify')
 
 const fastify = Fastify({ logger: { level: 'error' } })
@@ -27,7 +29,7 @@ fastify.get('/:name', function (request) {
       baz: 42,
       nil: null,
       undef: undefined,
-      deep: { nested: { obj: { that: { goes: { on: { forever: true } } } } } }
+      deep: { nested: { obj: { that: { goes: { on: { forever: true } } } } } },
     },
     bar: true,
     get baz () {
@@ -35,12 +37,12 @@ fastify.get('/:name', function (request) {
     },
     [inspect.custom] () {
       return 'This is a custom inspect!'
-    }
+    },
   }
   const proxy = new Proxy(obj, {
     get () {
       return 'This is a proxy!'
-    }
+    },
   })
   const circular = {}
   circular.circular = circular

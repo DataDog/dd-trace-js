@@ -1,22 +1,20 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
 const path = require('path')
-const satisfies = require('semifies')
-const Hook = require('./hook')
+const { channel } = require('dc-polyfill')
+const satisfies = require('../../../../vendor/dist/semifies')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 const log = require('../../../dd-trace/src/log')
-const checkRequireCache = require('./check-require-cache')
 const telemetry = require('../../../dd-trace/src/guardrails/telemetry')
-const { isInServerlessEnvironment } = require('../../../dd-trace/src/serverless')
-const { getEnvironmentVariables } = require('../../../dd-trace/src/config-helper')
+const { IS_SERVERLESS } = require('../../../dd-trace/src/serverless')
+const { getValueFromEnvSources } = require('../../../dd-trace/src/config/helper')
+const checkRequireCache = require('./check-require-cache')
+const Hook = require('./hook')
+const { isRelativeRequire } = require('./shared-utils')
+const rewriter = require('./rewriter')
 
-const envs = getEnvironmentVariables()
-
-const {
-  DD_TRACE_DISABLED_INSTRUMENTATIONS = '',
-  DD_TRACE_DEBUG = ''
-} = envs
+const DD_TRACE_DISABLED_INSTRUMENTATIONS = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS') || ''
+const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG') || ''
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -48,6 +46,10 @@ if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
 const seenCombo = new Set()
 const allInstrumentations = {}
 
+for (const inst of disabledInstrumentations) {
+  rewriter.disable(inst)
+}
+
 // TODO: make this more efficient
 for (const packageName of names) {
   if (disabledInstrumentations.has(packageName)) continue
@@ -57,7 +59,7 @@ for (const packageName of names) {
   let hook = hooks[packageName]
 
   if (hook !== null && typeof hook === 'object') {
-    if (hook.serverless === false && isInServerlessEnvironment()) continue
+    if (hook.serverless === false && IS_SERVERLESS) continue
 
     hookOptions.internals = hook.esmFirst
     hook = hook.fn
@@ -98,6 +100,8 @@ for (const packageName of names) {
       // Maybe it is also not important to know what name was actually used?
       hook[HOOK_SYMBOL] ??= new WeakSet()
       let matchesFile = moduleName === fullFilename
+
+      if (!matchesFile && isRelativeRequire(name)) matchesFile = true
 
       if (fullFilePattern) {
         // Some libraries include a hash in their filenames when installed,
@@ -152,11 +156,11 @@ for (const packageName of names) {
             telemetry('error', [
               `error_type:${e.constructor.name}`,
               `integration:${name}`,
-              `integration_version:${version}`
+              `integration_version:${version}`,
             ], {
               result: 'error',
               result_class: 'internal_error',
-              result_reason: `Error during instrumentation of ${name}@${version}: ${e.message}`
+              result_reason: `Error during instrumentation of ${name}@${version}: ${e.message}`,
             })
           }
           namesAndSuccesses[`${name}@${version}`] = true
@@ -170,11 +174,11 @@ for (const packageName of names) {
       if (!success && !seenCombo.has(nameVersion) && !allInstrumentations[instrumentationFileName]) {
         telemetry('abort.integration', [
           `integration:${name}`,
-          `integration_version:${version}`
+          `integration_version:${version}`,
         ], {
           result: 'abort',
           result_class: 'incompatible_library',
-          result_reason: `Incompatible integration version: ${name}@${version}`
+          result_reason: `Incompatible integration version: ${name}@${version}`,
         })
         log.info('Found incompatible integration version: %s', nameVersion)
         seenCombo.add(nameVersion)
@@ -214,7 +218,6 @@ function parseHookInstrumentationFileName (packageName) {
     hook = hook.fn
   }
   const hookString = hook.toString()
-
   const regex = /require\('([^']*)'\)/
   const match = hookString.match(regex)
 
@@ -235,5 +238,5 @@ module.exports = {
   filename,
   pathSepExpr,
   loadChannel,
-  matchVersion
+  matchVersion,
 }

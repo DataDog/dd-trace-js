@@ -1,10 +1,10 @@
 'use strict'
 
 const { childProcessExecutionTracingChannel } = require('../channels')
-const { RULE_TYPES, handleResult } = require('./utils')
 const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
 const waf = require('../waf')
+const { RULE_TYPES, handleResult } = require('./utils')
 
 let config
 
@@ -12,14 +12,14 @@ function enable (_config) {
   config = _config
 
   childProcessExecutionTracingChannel.subscribe({
-    start: analyzeCommandInjection
+    start: analyzeCommandInjection,
   })
 }
 
 function disable () {
   if (childProcessExecutionTracingChannel.start.hasSubscribers) {
     childProcessExecutionTracingChannel.unsubscribe({
-      start: analyzeCommandInjection
+      start: analyzeCommandInjection,
     })
   }
 }
@@ -52,5 +52,5 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
 
 module.exports = {
   enable,
-  disable
+  disable,
 }

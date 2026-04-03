@@ -42,7 +42,7 @@ names.forEach(name => {
         sinon.assert.calledOnceWithExactly(parseFinishedChannelCb, {
           input: 'https://www.datadoghq.com',
           parsed: result,
-          isURL: false
+          isURL: false,
         }, sinon.match.any)
       })
     })
@@ -56,7 +56,7 @@ names.forEach(name => {
             input: 'https://www.datadoghq.com',
             base: undefined,
             parsed: result,
-            isURL: true
+            isURL: true,
           }, sinon.match.any)
         })
 
@@ -67,7 +67,7 @@ names.forEach(name => {
             base: 'https://www.datadoghq.com',
             input: '/path',
             parsed: result,
-            isURL: true
+            isURL: true,
           }, sinon.match.any)
         })
 
@@ -87,7 +87,7 @@ names.forEach(name => {
             sinon.assert.calledWithExactly(urlGetterChannelCb, {
               urlObject,
               result,
-              property
+              property,
             }, sinon.match.any)
           })
         })
@@ -104,7 +104,7 @@ names.forEach(name => {
             input,
             parsed,
             base: undefined,
-            isURL: true
+            isURL: true,
           }, sinon.match.any)
         })
 
@@ -115,7 +115,7 @@ names.forEach(name => {
             base: 'https://www.datadoghq.com',
             input: '/path',
             parsed: result,
-            isURL: true
+            isURL: true,
           }, sinon.match.any)
         })
       })

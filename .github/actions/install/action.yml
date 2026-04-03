@@ -9,7 +9,7 @@ runs:
   using: composite
   steps:
     - id: yarn-cache
-      uses: actions/cache@v4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         key: yarn-cache-${{ github.workflow }}-${{ github.job }}-${{ hashFiles('yarn.lock') }}-v2
         path: node_modules.tar
@@ -19,7 +19,7 @@ runs:
       if: inputs.cache == 'true' && steps.yarn-cache.outputs.cache-hit == 'true'
       # Retry in case of server error from registry.
       # Wait 60 seconds to give the registry server time to heal.
-    - run: bun install --linker=hoisted --trust || sleep 60 && bun install --linker=hoisted --trust
+    - run: bun install --trust || sleep 60 && bun install --trust
       shell: bash
       env:
         _DD_IGNORE_ENGINES: 'true'

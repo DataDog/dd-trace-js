@@ -2,10 +2,12 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
+const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 
 const {
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   JEST_TEST_RUNNER,
   finishAllTraceSpans,
   getTestSuiteCommonTags,
@@ -21,11 +23,10 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
-  TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
   getFormattedError,
   TEST_RETRY_REASON,
   TEST_MANAGEMENT_ENABLED,
@@ -35,7 +36,7 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
-  TEST_IS_MODIFIED
+  TEST_IS_MODIFIED,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -48,7 +49,7 @@ const {
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
-  TELEMETRY_TEST_SESSION
+  TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 const log = require('../../dd-trace/src/log')
 
@@ -118,7 +119,7 @@ class JestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      onDone
+      onDone,
     }) => {
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -139,7 +140,7 @@ class JestPlugin extends CiPlugin {
           skippingType: 'suite',
           skippingCount: numSkippedSuites,
           hasUnskippableSuites,
-          hasForcedToRunSuites
+          hasForcedToRunSuites,
         }
       )
 
@@ -156,14 +157,17 @@ class JestPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
 
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
 
+      appClosingTelemetry()
       this.tracer._exporter.flush(() => {
         if (onDone) {
           onDone()
@@ -175,13 +179,14 @@ class JestPlugin extends CiPlugin {
     // This subscriber changes the configuration objects from jest to inject the trace id
     // of the test session to the processes that run the test suites, and other data.
     this.addSub('ci:jest:session:configuration', configs => {
-      configs.forEach(config => {
+      for (const config of configs) {
         config._ddTestSessionId = this.testSessionSpan.context().toTraceId()
         config._ddTestModuleId = this.testModuleSpan.context().toSpanId()
         config._ddTestCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+        config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
-        config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
+        config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
@@ -190,7 +195,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsDiEnabled = this.libraryConfig?.isDiEnabled ?? false
         config._ddIsKnownTestsEnabled = this.libraryConfig?.isKnownTestsEnabled ?? false
         config._ddIsImpactedTestsEnabled = this.libraryConfig?.isImpactedTestsEnabled ?? false
-      })
+      }
     })
 
     this.addSub('ci:jest:test-suite:start', ({
@@ -199,24 +204,29 @@ class JestPlugin extends CiPlugin {
       testEnvironmentOptions,
       frameworkVersion,
       displayName,
-      testSuiteAbsolutePath
+      testSuiteAbsolutePath,
     }) => {
       const {
         _ddTestSessionId: testSessionId,
         _ddTestCommand: testCommand,
         _ddTestModuleId: testModuleId,
+        _ddRequestErrorTags: requestErrorTags,
         _ddItrCorrelationId: itrCorrelationId,
         _ddForcedToRun,
         _ddUnskippable,
-        _ddTestCodeCoverageEnabled
+        _ddTestCodeCoverageEnabled,
       } = testEnvironmentOptions
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
         'x-datadog-trace-id': testSessionId,
-        'x-datadog-parent-id': testModuleId
+        'x-datadog-parent-id': testModuleId,
       })
 
-      const testSuiteMetadata = getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest')
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, 'jest'),
+        // requestErrorTags from test env options may be undefined
+        ...(requestErrorTags !== undefined && requestErrorTags !== null ? requestErrorTags : {}),
+      }
 
       if (_ddUnskippable) {
         const unskippableSuites = this.getUnskippableSuites(_ddUnskippable)
@@ -254,9 +264,9 @@ class JestPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata
+          ...testSuiteMetadata,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {
@@ -269,11 +279,28 @@ class JestPlugin extends CiPlugin {
       const formattedCoverages = JSON.parse(data).map(coverage => ({
         sessionId: id(coverage.sessionId),
         suiteId: id(coverage.suiteId),
-        files: coverage.files
+        files: coverage.files,
       }))
-      formattedCoverages.forEach(formattedCoverage => {
+      for (const formattedCoverage of formattedCoverages) {
         this.tracer._exporter.exportCoverage(formattedCoverage)
-      })
+      }
+    })
+
+    this.addSub('ci:jest:worker-report:telemetry', data => {
+      const telemetryEvents = JSON.parse(data)
+      for (const event of telemetryEvents) {
+        if (event.type === 'ciVisEvent') {
+          this.telemetry.ciVisEvent(event.name, event.testLevel, {
+            ...event.tags,
+            testFramework: event.testFramework,
+            isUnsupportedCIProvider: event.isUnsupportedCIProvider,
+          })
+        } else if (event.type === 'count') {
+          this.telemetry.count(event.name, event.tags, event.value)
+        } else if (event.type === 'distribution') {
+          this.telemetry.distribution(event.name, event.tags, event.measure)
+        }
+      }
     })
 
     this.addSub('ci:jest:test-suite:finish', ({ status, errorMessage, error, testSuiteAbsolutePath }) => {
@@ -282,11 +309,7 @@ class JestPlugin extends CiPlugin {
         log.warn('"ci:jest:test-suite:finish": no span found for test suite absolute path %s', testSuiteAbsolutePath)
         return
       }
-      const hasStatus = testSuiteSpan.context()._tags[TEST_STATUS]
-      if (!hasStatus) {
-        // The status may have been set in 'ci:jest:test-suite:error'
-        testSuiteSpan.setTag(TEST_STATUS, status)
-      }
+      testSuiteSpan.setTag(TEST_STATUS, status)
       if (error) {
         testSuiteSpan.setTag('error', error)
         testSuiteSpan.setTag(TEST_STATUS, 'fail')
@@ -323,7 +346,6 @@ class JestPlugin extends CiPlugin {
       } else if (errorMessage) {
         runningTestSuiteSpan.setTag('error', new Error(errorMessage))
       }
-      runningTestSuiteSpan.setTag(TEST_STATUS, 'fail')
     })
 
     /**
@@ -341,7 +363,7 @@ class JestPlugin extends CiPlugin {
       const formattedCoverage = {
         sessionId: _traceId,
         suiteId: _spanId,
-        files
+        files,
       }
 
       this.tracer._exporter.exportCoverage(formattedCoverage)
@@ -365,6 +387,12 @@ class JestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
+    this.addBind('ci:jest:test-suite:hook:fn', (ctx) => {
+      const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(ctx.testSuiteAbsolutePath)
+      const store = storage('legacy').getStore()
+      return { ...store, span: testSuiteSpan }
+    })
+
     this.addSub('ci:jest:test:finish', ({
       span,
       status,
@@ -372,9 +400,14 @@ class JestPlugin extends CiPlugin {
       attemptToFixPassed,
       failedAllTests,
       attemptToFixFailed,
-      isAtrRetry
+      isAtrRetry,
+      finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       span.setTag(TEST_STATUS, status)
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
       if (testStartLine) {
         span.setTag(TEST_SOURCE_START, testStartLine)
       }
@@ -390,17 +423,14 @@ class JestPlugin extends CiPlugin {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
       }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
+      }
 
-      const spanTags = span.context()._tags
       this.telemetry.ciVisEvent(
         TELEMETRY_EVENT_FINISHED,
         'test',
-        {
-          hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-          isNew: spanTags[TEST_IS_NEW] === 'true',
-          isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-          browserDriver: spanTags[TEST_BROWSER_DRIVER]
-        }
+        this.getTestTelemetryTags(span)
       )
 
       span.finish()
@@ -424,16 +454,34 @@ class JestPlugin extends CiPlugin {
 
     this.addSub('ci:jest:test:skip', ({
       test,
-      isDisabled
+      isDisabled,
     }) => {
       const span = this.startTestSpan(test)
       span.setTag(TEST_STATUS, 'skip')
-
+      span.setTag(TEST_FINAL_STATUS, 'skip')
       if (isDisabled) {
         span.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
       }
 
+      this.telemetry.ciVisEvent(
+        TELEMETRY_EVENT_FINISHED,
+        'test',
+        this.getTestTelemetryTags(span)
+      )
+
       span.finish()
+    })
+
+    this.addSub('ci:jest:coverage-report', ({ rootDir, onDone }) => {
+      if (!this.libraryConfig?.isCoverageReportUploadEnabled) {
+        onDone()
+        return
+      }
+      this.uploadCoverageReports({
+        rootDir,
+        testEnvironmentMetadata: this.testEnvironmentMetadata,
+        onDone,
+      })
     })
   }
 
@@ -454,13 +502,14 @@ class JestPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
-      testSuiteAbsolutePath
+      hasDynamicName,
+      testSuiteAbsolutePath,
     } = test
 
     const extraTags = {
       [JEST_TEST_RUNNER]: 'jest-circus',
       [TEST_PARAMETERS]: testParameters,
-      [TEST_FRAMEWORK_VERSION]: frameworkVersion
+      [TEST_FRAMEWORK_VERSION]: frameworkVersion,
     }
     if (testStartLine) {
       extraTags[TEST_SOURCE_START] = testStartLine
@@ -501,6 +550,10 @@ class JestPlugin extends CiPlugin {
 
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
+    }
+
+    if (hasDynamicName) {
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
 

@@ -19,7 +19,7 @@ process.stdin.on('end', () => {
         wallTime: summary['wall.time'].mean,
         userTime: summary['user.time'].mean,
         sysTime: summary['system.time'].mean,
-        maxResSize: summary['max.res.size'].mean
+        maxResSize: summary['max.res.size'].mean,
       }
     }
     const newResults = []

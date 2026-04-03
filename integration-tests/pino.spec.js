@@ -1,25 +1,22 @@
 'use strict'
 
-const { FakeAgent, spawnProc, createSandbox, curl, assertObjectContains } = require('./helpers')
+const assert = require('node:assert/strict')
+
 const path = require('path')
-const { assert } = require('chai')
 const { once } = require('events')
+const { FakeAgent, spawnProc, sandboxCwd, useSandbox, stopProc, curl, assertObjectContains } = require('./helpers')
 
 describe('pino test', () => {
   let agent
   let proc
-  let sandbox
   let cwd
   let startupTestFile
 
-  before(async () => {
-    sandbox = await createSandbox(['pino'])
-    cwd = sandbox.folder
-    startupTestFile = path.join(cwd, 'pino/index.js')
-  })
+  useSandbox(['pino'])
 
-  after(async () => {
-    await sandbox.remove()
+  before(() => {
+    cwd = sandboxCwd()
+    startupTestFile = path.join(cwd, 'pino/index.js')
   })
 
   context('Log injection', () => {
@@ -28,7 +25,7 @@ describe('pino test', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -36,7 +33,7 @@ describe('pino test', () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
         env: {
-          AGENT_PORT: agent.port
+          AGENT_PORT: agent.port,
         },
         stdio: 'pipe',
       })
@@ -45,12 +42,12 @@ describe('pino test', () => {
       assertObjectContains(stdoutData, {
         dd: {
           trace_id: stdoutData.custom.trace_id,
-          span_id: stdoutData.custom.span_id
+          span_id: stdoutData.custom.span_id,
         },
         custom: {
           trace_id: stdoutData.dd.trace_id,
-          span_id: stdoutData.dd.span_id
-        }
+          span_id: stdoutData.dd.span_id,
+        },
       })
     })
 
@@ -59,22 +56,18 @@ describe('pino test', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          lOG_INJECTION: true,
+          TEST_PROGRAMMATIC_DD_LOGS_INJECTION: 'true',
         },
         stdio: 'pipe',
       })
       const [data] = await Promise.all([once(proc.stdout, 'data'), curl(proc)])
       const stdoutData = JSON.parse(data.toString())
-      assert.containsAllKeys(stdoutData, ['dd'])
-      assert.containsAllKeys(stdoutData.dd, ['trace_id', 'span_id'])
-      assert.strictEqual(
-        stdoutData.dd.trace_id,
-        stdoutData.custom.trace_id
-      )
-      assert.strictEqual(
-        stdoutData.dd.span_id,
-        stdoutData.custom.span_id
-      )
+      assertObjectContains(stdoutData, {
+        dd: {
+          trace_id: stdoutData.custom.trace_id,
+          span_id: stdoutData.custom.span_id,
+        },
+      })
     })
 
     it('Log injection disabled', async () => {
@@ -82,13 +75,13 @@ describe('pino test', () => {
         cwd,
         env: {
           AGENT_PORT: agent.port,
-          lOG_INJECTION: 'false'
+          TEST_PROGRAMMATIC_DD_LOGS_INJECTION: 'false',
         },
         stdio: 'pipe',
       })
       const [data] = await Promise.all([once(proc.stdout, 'data'), curl(proc)])
       const stdoutData = JSON.parse(data.toString())
-      assert.doesNotHaveAnyKeys(stdoutData, ['dd'])
+      assert.ok(!('dd' in stdoutData))
     })
   })
 })

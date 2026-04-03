@@ -1,14 +1,16 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
 const axios = require('axios')
-const { rawExpectedSchema } = require('./s3-naming')
+const { after, before, describe, it } = require('mocha')
+
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { rawExpectedSchema } = require('./s3-naming')
+const { setup } = require('./spec_helpers')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -64,7 +66,7 @@ describe('Plugin', () => {
           (done) => s3.putObject({
             Bucket: bucketName,
             Key: 'test-key',
-            Body: 'test body'
+            Body: 'test body',
           }, done),
           bucketName, 'bucketname')
 
@@ -72,7 +74,7 @@ describe('Plugin', () => {
           (done) => s3.putObject({
             Bucket: bucketName,
             Key: 'test-key',
-            Body: 'test body'
+            Body: 'test body',
           }, (err) => err && done(err)),
           rawExpectedSchema.outbound
         )
@@ -84,12 +86,12 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
-                expect(links).to.have.lengthOf(1)
-                expect(links[0].attributes).to.deep.equal({
+                assert.strictEqual(links.length, 1)
+                assert.deepStrictEqual(links[0].attributes, {
                   'ptr.kind': S3_PTR_KIND,
                   'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                   'ptr.hash': '6d1a2fe194c6579187408f827f942be3',
-                  'link.kind': 'span-pointer'
+                  'link.kind': 'span-pointer',
                 })
                 done()
               } catch (error) {
@@ -100,7 +102,7 @@ describe('Plugin', () => {
             s3.putObject({
               Bucket: bucketName,
               Key: 'test-key',
-              Body: 'test body'
+              Body: 'test body',
             }, (err) => {
               if (err) {
                 done(err)
@@ -114,12 +116,12 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
-                expect(links).to.have.lengthOf(1)
-                expect(links[0].attributes).to.deep.equal({
+                assert.strictEqual(links.length, 1)
+                assert.deepStrictEqual(links[0].attributes, {
                   'ptr.kind': S3_PTR_KIND,
                   'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                   'ptr.hash': '1542053ce6d393c424b1374bac1fc0c5',
-                  'link.kind': 'span-pointer'
+                  'link.kind': 'span-pointer',
                 })
                 done()
               } catch (error) {
@@ -130,7 +132,7 @@ describe('Plugin', () => {
             s3.copyObject({
               Bucket: bucketName,
               Key: 'new-key',
-              CopySource: `${bucketName}/test-key`
+              CopySource: `${bucketName}/test-key`,
             }, (err) => {
               if (err) {
                 done(err)
@@ -147,7 +149,7 @@ describe('Plugin', () => {
             // Start the multipart upload process
             s3.createMultipartUpload({
               Bucket: bucketName,
-              Key: 'multipart-test'
+              Key: 'multipart-test',
             }, (err, multipartData) => {
               if (err) return done(err)
 
@@ -159,7 +161,7 @@ describe('Plugin', () => {
                     Key: 'multipart-test',
                     PartNumber: 1,
                     UploadId: multipartData.UploadId,
-                    Body: part1Data
+                    Body: part1Data,
                   }, (err, data) => err ? reject(err) : resolve({ PartNumber: 1, ETag: data.ETag }))
                 }),
                 new Promise((resolve, reject) => {
@@ -168,9 +170,9 @@ describe('Plugin', () => {
                     Key: 'multipart-test',
                     PartNumber: 2,
                     UploadId: multipartData.UploadId,
-                    Body: part2Data
+                    Body: part2Data,
                   }, (err, data) => err ? reject(err) : resolve({ PartNumber: 2, ETag: data.ETag }))
-                })
+                }),
               ]).then(parts => {
                 // Now complete the multipart upload
                 const completeParams = {
@@ -178,8 +180,8 @@ describe('Plugin', () => {
                   Key: 'multipart-test',
                   UploadId: multipartData.UploadId,
                   MultipartUpload: {
-                    Parts: parts
-                  }
+                    Parts: parts,
+                  },
                 }
 
                 s3.completeMultipartUpload(completeParams, (err) => {
@@ -190,12 +192,12 @@ describe('Plugin', () => {
                     if (operation === 'completeMultipartUpload') {
                       try {
                         const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
-                        expect(links).to.have.lengthOf(1)
-                        expect(links[0].attributes).to.deep.equal({
+                        assert.strictEqual(links.length, 1)
+                        assert.deepStrictEqual(links[0].attributes, {
                           'ptr.kind': S3_PTR_KIND,
                           'ptr.dir': SPAN_POINTER_DIRECTION.DOWNSTREAM,
                           'ptr.hash': '422412aa6b472a7194f3e24f4b12b4a6',
-                          'link.kind': 'span-pointer'
+                          'link.kind': 'span-pointer',
                         })
                         done()
                       } catch (error) {
@@ -214,15 +216,15 @@ describe('Plugin', () => {
 
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
-            expect(span).to.include({
+            assertObjectContains(span, {
               name: 'aws.request',
-              resource: `putObject ${bucketName}`
+              resource: `putObject ${bucketName}`,
             })
 
-            expect(span.meta).to.include({
+            assertObjectContains(span.meta, {
               bucketname: bucketName,
               aws_service: 'S3',
-              region: 'us-east-1'
+              region: 'us-east-1',
             })
 
             total++
@@ -231,13 +233,13 @@ describe('Plugin', () => {
           s3.putObject({
             Bucket: bucketName,
             Key: 'test-key',
-            Body: 'test body'
+            Body: 'test body',
           }, (err) => {
             if (err) return done(err)
 
             setTimeout(() => {
               try {
-                expect(total).to.equal(1)
+                assert.strictEqual(total, 1)
                 done()
               } catch (e) {
                 done(e)

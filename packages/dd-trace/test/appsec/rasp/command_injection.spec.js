@@ -13,21 +13,21 @@ describe('RASP - command_injection.js', () => {
 
   beforeEach(() => {
     legacyStorage = {
-      getStore: sinon.stub()
+      getStore: sinon.stub(),
     }
 
     waf = {
-      run: sinon.stub()
+      run: sinon.stub(),
     }
 
     utils = {
-      handleResult: sinon.stub()
+      handleResult: sinon.stub(),
     }
 
     commandInjection = proxyquire('../../../src/appsec/rasp/command_injection', {
       '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf,
-      './utils': utils
+      './utils': utils,
     })
 
     config = {
@@ -35,9 +35,9 @@ describe('RASP - command_injection.js', () => {
         stackTrace: {
           enabled: true,
           maxStackTraces: 2,
-          maxDepth: 42
-        }
-      }
+          maxDepth: 42,
+        },
+      },
     }
 
     commandInjection.enable(config)
@@ -52,7 +52,7 @@ describe('RASP - command_injection.js', () => {
     it('should not analyze command_injection if rasp is disabled', () => {
       commandInjection.disable()
       const ctx = {
-        file: 'cmd'
+        file: 'cmd',
       }
       const req = {}
       legacyStorage.getStore.returns({ req })
@@ -64,7 +64,7 @@ describe('RASP - command_injection.js', () => {
 
     it('should not analyze command_injection if no store', () => {
       const ctx = {
-        file: 'cmd'
+        file: 'cmd',
       }
       legacyStorage.getStore.returns(undefined)
 
@@ -75,7 +75,7 @@ describe('RASP - command_injection.js', () => {
 
     it('should not analyze command_injection if no req', () => {
       const ctx = {
-        file: 'cmd'
+        file: 'cmd',
       }
       legacyStorage.getStore.returns({})
 
@@ -86,7 +86,7 @@ describe('RASP - command_injection.js', () => {
 
     it('should not analyze command_injection if no file', () => {
       const ctx = {
-        fileArgs: ['arg0']
+        fileArgs: ['arg0'],
       }
       const req = {}
       legacyStorage.getStore.returns({ req })
@@ -100,7 +100,7 @@ describe('RASP - command_injection.js', () => {
       it('should analyze command_injection without arguments', () => {
         const ctx = {
           file: 'cmd',
-          shell: true
+          shell: true,
         }
         const req = {}
         legacyStorage.getStore.returns({ req })
@@ -117,7 +117,7 @@ describe('RASP - command_injection.js', () => {
         const ctx = {
           file: 'cmd',
           fileArgs: ['arg0', 'arg1'],
-          shell: true
+          shell: true,
         }
         const req = {}
         legacyStorage.getStore.returns({ req })
@@ -150,7 +150,7 @@ describe('RASP - command_injection.js', () => {
       it('should analyze command injection without arguments', () => {
         const ctx = {
           file: 'ls',
-          shell: false
+          shell: false,
         }
         const req = {}
         legacyStorage.getStore.returns({ req })
@@ -167,7 +167,7 @@ describe('RASP - command_injection.js', () => {
         const ctx = {
           file: 'ls',
           fileArgs: ['-la', '/tmp'],
-          shell: false
+          shell: false,
         }
         const req = {}
         legacyStorage.getStore.returns({ req })

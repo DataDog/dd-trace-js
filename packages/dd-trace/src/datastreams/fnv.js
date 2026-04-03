@@ -21,5 +21,5 @@ function fnv64 (data) {
 }
 
 module.exports = {
-  fnv64
+  fnv64,
 }

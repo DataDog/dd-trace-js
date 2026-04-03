@@ -1,12 +1,12 @@
 'use strict'
 
 const agent = require('../plugins/agent')
+const { withVersions } = require('../setup/mocha')
 const {
   schema,
   resolvers,
-  graphqlCommonTests
+  graphqlCommonTests,
 } = require('./graphql.test-utils')
-const { withVersions } = require('../setup/mocha')
 
 withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
   withVersions('apollo-server-core', 'apollo-server-fastify', apolloServerFastifyVersion => {
@@ -34,7 +34,7 @@ withVersions('apollo-server-core', 'fastify', '3', fastifyVersion => {
 
       server = new ApolloServer({
         typeDefs,
-        resolvers
+        resolvers,
       })
 
       await server.start()

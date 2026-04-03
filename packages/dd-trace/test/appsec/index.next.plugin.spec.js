@@ -16,18 +16,21 @@ describe('test suite', () => {
     }
 
     const realVersion = require(`../../../../versions/next@${version}`).version()
+    if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) {
+      return
+    }
 
     const tests = [
       {
         appName: 'pages-dir',
-        serverPath: 'server'
-      }
+        serverPath: 'server',
+      },
     ]
 
     if (satisfies(realVersion, '>=13.2') && (NODE_MAJOR < 24 || satisfies(realVersion, '!=13.2'))) {
       tests.push({
         appName: 'app-dir',
-        serverPath: '.next/standalone/server.js'
+        serverPath: '.next/standalone/server.js',
       })
     }
 
@@ -64,7 +67,7 @@ describe('test suite', () => {
           agent.subscribe(findBodyThreat)
           axios
             .post(`http://127.0.0.1:${serverData.port}/api/test`, {
-              key: 'testattack'
+              key: 'testattack',
             }).catch(e => { done(e) })
         })
 
@@ -77,7 +80,7 @@ describe('test suite', () => {
 
           axios
             .post(`http://127.0.0.1:${serverData.port}/api/test-formdata`, new URLSearchParams({
-              key: 'testattack'
+              key: 'testattack',
             })).catch(e => {
               done(e)
             })
@@ -91,7 +94,7 @@ describe('test suite', () => {
             agent.subscribe(findBodyThreat)
             axios
               .post(`http://127.0.0.1:${serverData.port}/api/test-text`, {
-                key: 'testattack'
+                key: 'testattack',
               }).catch(e => {
                 done(e)
               })

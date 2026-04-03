@@ -1,22 +1,22 @@
 'use strict'
 
 const { storage } = require('../../../datadog-core')
+const log = require('../log')
+const web = require('../plugins/util/web')
 const {
   addSpecificEndpoint,
   specificBlockingTypes,
   getBlockingData,
-  getBlockingAction
+  getBlockingAction,
 } = require('./blocking')
-const log = require('../log')
 const waf = require('./waf')
 const addresses = require('./addresses')
-const web = require('../plugins/util/web')
 const {
   startGraphqlResolve,
   graphqlMiddlewareChannel,
   apolloHttpServerChannel,
   apolloChannel,
-  apolloServerCoreChannel
+  apolloServerCoreChannel,
 } = require('./channels')
 const { updateBlockFailureMetric } = require('./telemetry')
 
@@ -56,7 +56,7 @@ function enterInApolloMiddleware (data) {
   if (!req) return
 
   graphqlRequestData.set(req, {
-    blocked: false
+    blocked: false,
   })
 }
 
@@ -66,7 +66,7 @@ function enterInApolloServerCoreRequest () {
 
   graphqlRequestData.set(req, {
     isInGraphqlRequest: true,
-    blocked: false
+    blocked: false,
   })
 }
 
@@ -114,41 +114,41 @@ function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {
 
 function enableApollo () {
   graphqlMiddlewareChannel.subscribe({
-    start: enterInApolloMiddleware
+    start: enterInApolloMiddleware,
   })
 
   apolloServerCoreChannel.subscribe({
     start: enterInApolloServerCoreRequest,
-    asyncEnd: beforeWriteApolloGraphqlResponse
+    asyncEnd: beforeWriteApolloGraphqlResponse,
   })
 
   apolloChannel.subscribe({
     start: enterInApolloRequest,
-    asyncEnd: beforeWriteApolloGraphqlResponse
+    asyncEnd: beforeWriteApolloGraphqlResponse,
   })
 
   apolloHttpServerChannel.subscribe({
-    start: enterInApolloMiddleware
+    start: enterInApolloMiddleware,
   })
 }
 
 function disableApollo () {
   graphqlMiddlewareChannel.unsubscribe({
-    start: enterInApolloMiddleware
+    start: enterInApolloMiddleware,
   })
 
   apolloServerCoreChannel.unsubscribe({
     start: enterInApolloServerCoreRequest,
-    asyncEnd: beforeWriteApolloGraphqlResponse
+    asyncEnd: beforeWriteApolloGraphqlResponse,
   })
 
   apolloChannel.unsubscribe({
     start: enterInApolloRequest,
-    asyncEnd: beforeWriteApolloGraphqlResponse
+    asyncEnd: beforeWriteApolloGraphqlResponse,
   })
 
   apolloHttpServerChannel.unsubscribe({
-    start: enterInApolloMiddleware
+    start: enterInApolloMiddleware,
   })
 }
 
@@ -162,5 +162,5 @@ function disableGraphql () {
 
 module.exports = {
   enable,
-  disable
+  disable,
 }

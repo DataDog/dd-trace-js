@@ -1,7 +1,7 @@
 'use strict'
 
-const { getEnvironmentVariable } = require('../config-helper')
 const os = require('node:os')
+const { getEnvironmentVariable } = require('../config/helper')
 
 function getLibuvThreadPoolSize (envVar) {
   if (envVar === undefined) {
@@ -45,5 +45,5 @@ module.exports = {
   libuvThreadPoolSize,
   // Only used for testing
   getLibuvThreadPoolSize,
-  getEffectiveLibuvThreadCount
+  getEffectiveLibuvThreadCount,
 }

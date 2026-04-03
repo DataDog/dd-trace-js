@@ -15,8 +15,8 @@ class GraphQLValidatePlugin extends TracingPlugin {
       service: this.config.service,
       type: 'graphql',
       meta: {
-        'graphql.source': source
-      }
+        'graphql.source': source,
+      },
     }, ctx)
 
     return ctx.currentStore

@@ -1,54 +1,54 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  let variants
 
   withVersions('aws-sdk', ['aws-sdk'], version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'aws-sdk@${version}'`], false, [
-        './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([`'aws-sdk@${version}'`], false, [
+      './packages/datadog-plugin-aws-sdk/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
 
+    before(async function () {
+      variants = varySandbox('server.mjs', 'AWS', undefined, 'aws-sdk')
+    })
+
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
-      })
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'aws.request'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port, undefined,
-        {
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           AWS_SECRET_ACCESS_KEY: '0000000000/00000000000000000000000000000',
-          AWS_ACCESS_KEY_ID: '00000000000000000000'
-        }
-      )
+          AWS_ACCESS_KEY_ID: '00000000000000000000',
+        })
 
-      await res
-    }).timeout(20000)
+        await res
+      }).timeout(20000)
+    }
   })
 })

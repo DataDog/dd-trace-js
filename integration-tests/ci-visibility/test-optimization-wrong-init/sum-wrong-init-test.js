@@ -1,7 +1,7 @@
 'use strict'
 
-const assert = require('node:assert')
 const tracer = require('dd-trace')
+const assert = require('node:assert')
 
 tracer.trace('sum.test', { resource: 'sum.test.js' }, () => {
   describe('sum', () => {

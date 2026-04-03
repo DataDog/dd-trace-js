@@ -1,29 +1,26 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
-  varySandbox
+  spawnPluginIntegrationTestProcAndExpectExit,
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
-
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
 
-  before(async function () {
-    this.timeout(60000)
-    sandbox = await createSandbox(['net'], false, [
-      './packages/datadog-plugin-net/test/integration-test/*'])
-    variants = varySandbox(sandbox, 'server.mjs', 'net', 'createConnection')
-  })
+  useSandbox(['net'], false, [
+    './packages/datadog-plugin-net/test/integration-test/*'])
 
-  after(async () => {
-    await sandbox.remove()
+  before(async function () {
+    variants = varySandbox('server.mjs', 'net', 'createConnection')
   })
 
   beforeEach(async () => {
@@ -31,7 +28,7 @@ describe('esm', () => {
   })
 
   afterEach(async () => {
-    proc && proc.kill()
+    await stopProc(proc)
     await agent.stop()
   })
 
@@ -39,14 +36,14 @@ describe('esm', () => {
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(checkSpansForServiceName(payload, 'tcp.connect'), true)
           const metaContainsNet = payload.some((span) => span.some((nestedSpan) => nestedSpan.meta.component === 'net'))
           assert.strictEqual(metaContainsNet, true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

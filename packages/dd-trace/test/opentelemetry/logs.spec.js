@@ -3,16 +3,20 @@
 // Increase max listeners to avoid warnings in tests
 process.setMaxListeners(50)
 
-require('../setup/core')
 const assert = require('assert')
 const os = require('os')
 const http = require('http')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
+
+require('../setup/core')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
+const { getConfigFresh } = require('../helpers/config')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('OpenTelemetry Logs', () => {
   let originalEnv
@@ -20,7 +24,16 @@ describe('OpenTelemetry Logs', () => {
   function setupTracer (enabled = true, maxExportBatchSize = '1') {
     process.env.DD_LOGS_OTEL_ENABLED = enabled ? 'true' : 'false'
     process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = maxExportBatchSize // Force immediate export
-    const tracer = require('../../')
+
+    const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
+      './config': getConfigFresh,
+    })
+    const TracerProxy = proxyquire.noPreserveCache()('../../src', {
+      './proxy': proxy,
+    })
+    const tracer = proxyquire.noPreserveCache()('../../', {
+      './src': TracerProxy,
+    })
     tracer._initialized = false
     tracer.init()
     return { tracer, logs, loggerProvider: logs.getLoggerProvider() }
@@ -45,9 +58,9 @@ describe('OpenTelemetry Logs', () => {
           },
           on: () => {},
           once: () => {},
-          setTimeout: () => {}
+          setTimeout: () => {},
         }
-        callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+        callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
         return mockReq
       }
 
@@ -57,9 +70,9 @@ describe('OpenTelemetry Logs', () => {
         end: () => {},
         on: () => {},
         once: () => {},
-        setTimeout: () => {}
+        setTimeout: () => {},
       }
-      callback({ statusCode: 200, on: () => {}, setTimeout: () => {} })
+      callback({ statusCode: 200, on: () => {}, once: () => {}, setTimeout: () => {} })
       return mockReq
     })
 
@@ -119,9 +132,13 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(log1.spanId.toString('hex'), '1234567890abcdef')
 
         const log2 = scope.logRecords[1]
-        assert.strictEqual(log2.severityText, 'ERROR')
-        assert.strictEqual(log2.severityNumber, 17)
-        assert.strictEqual(log2.body.stringValue, 'Test error message')
+        assertObjectContains(log2, {
+          severityText: 'ERROR',
+          severityNumber: 17,
+          body: {
+            stringValue: 'Test error message',
+          },
+        })
         assert.strictEqual(log2.traceId.toString('hex'), '1234567890abcdef1234567890abcdef')
         assert.strictEqual(log2.spanId.toString('hex'), '1234567890abcdef')
       })
@@ -138,14 +155,14 @@ describe('OpenTelemetry Logs', () => {
         logger.emit({
           severityText: 'INFO',
           body: 'Test message',
-          attributes: { 'test.key': 'test.value' }
+          attributes: { 'test.key': 'test.value' },
         })
         logger.emit({
           severityText: 'ERROR',
           severityNumber: 17,
           instrumentationScope: { name: 'test-logger', version: '1.0.0' },
           body: 'Test error message',
-          attributes: { 'error.array': [1, 2, 3] }
+          attributes: { 'error.array': [1, 2, 3] },
         })
       })
     })
@@ -211,7 +228,7 @@ describe('OpenTelemetry Logs', () => {
       const { logs } = setupTracer()
       logs.getLogger('test-logger').emit({
         body: 'Scope test',
-        instrumentationScope: { name: 'custom-scope', version: '2.0.0' }
+        instrumentationScope: { name: 'custom-scope', version: '2.0.0' },
       })
     })
 
@@ -240,15 +257,15 @@ describe('OpenTelemetry Logs', () => {
                 { key: 'deployment.environment', value: { stringValue: 'testenv' } },
                 { key: 'testtag', value: { stringValue: 'testvalue' } },
                 { key: 'runtime-id', value: { stringValue: runtimeId } },
-                { key: '_dd.rc.client_id', value: { stringValue: clientId } }
+                { key: '_dd.rc.client_id', value: { stringValue: clientId } },
               ],
-              droppedAttributesCount: 0
+              droppedAttributesCount: 0,
             },
             scopeLogs: [{
               scope: {
                 name: 'test-service',
                 version: '1.0.0',
-                droppedAttributesCount: 0
+                droppedAttributesCount: 0,
               },
               schemaUrl: '',
               logRecords: [{
@@ -260,10 +277,10 @@ describe('OpenTelemetry Logs', () => {
                 observedTimeUnixNano: actual.resourceLogs[0].scopeLogs[0].logRecords[0].observedTimeUnixNano,
                 flags: 1,
                 traceId: 'AAAAAAAAAAAAAAAAAAAAAQ==',
-                spanId: 'AAAAAAAAAAI='
-              }]
-            }]
-          }]
+                spanId: 'AAAAAAAAAAI=',
+              }],
+            }],
+          }],
         }
 
         assert.deepStrictEqual(actual, expected)
@@ -286,7 +303,7 @@ describe('OpenTelemetry Logs', () => {
         severityNumber: 17,
         body: 'HTTP test message',
         attributes: { 'test.attr': 'value' },
-        context: trace.setSpan(context.active(), trace.wrapSpanContext(spanContext))
+        context: trace.setSpan(context.active(), trace.wrapSpanContext(spanContext)),
       })
     })
 
@@ -329,13 +346,13 @@ describe('OpenTelemetry Logs', () => {
         logger1.emit({
           severityText: 'INFO',
           body: 'Message from logger1',
-          attributes: { logger: 'logger1' }
+          attributes: { logger: 'logger1' },
         })
 
         logger2.emit({
           severityText: 'ERROR',
           body: 'Message from logger2',
-          attributes: { logger: 'logger2' }
+          attributes: { logger: 'logger2' },
         })
       })
     })
@@ -353,8 +370,9 @@ describe('OpenTelemetry Logs', () => {
 
       // Emit with an invalid severity number (999)
       logger.emit({
+        // @ts-expect-error - check invalid severity number
         severityNumber: 999,
-        body: 'Test message with invalid severity'
+        body: 'Test message with invalid severity',
       })
     })
 
@@ -367,7 +385,7 @@ describe('OpenTelemetry Logs', () => {
 
         // Integer body (protobuf returns Long objects for int64)
         const intValue = logRecords[1].body.intValue
-        assert.strictEqual(typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
+        assert.strictEqual(intValue !== null && typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
 
         // Double/float body
         assert(logRecords[2].body.doubleValue !== undefined)
@@ -383,7 +401,7 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(logRecords[4].body.kvlistValue.values[0].value.stringValue, 'bar')
         assert.strictEqual(logRecords[4].body.kvlistValue.values[1].key, 'baz')
         const bazValue = logRecords[4].body.kvlistValue.values[1].value.intValue
-        assert.strictEqual(typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
+        assert.strictEqual(bazValue !== null && typeof bazValue === 'object' ? bazValue.toNumber() : bazValue, 123)
 
         // Default case (symbol) - should convert to string
         assert.strictEqual(logRecords[5].body.stringValue, 'Symbol(test)')
@@ -428,10 +446,12 @@ describe('OpenTelemetry Logs', () => {
         const resourceAttrs = {}
         resource.attributes.forEach(attr => { resourceAttrs[attr.key] = attr.value.stringValue })
 
-        assert.strictEqual(resourceAttrs['service.name'], 'my-service')
-        assert.strictEqual(resourceAttrs['service.version'], 'v1.2.3')
-        assert.strictEqual(resourceAttrs['deployment.environment'], 'production')
-        assert.strictEqual(resourceAttrs['host.name'], os.hostname())
+        assertObjectContains(resourceAttrs, {
+          'service.name': 'my-service',
+          'service.version': 'v1.2.3',
+          'deployment.environment': 'production',
+          'host.name': os.hostname(),
+        })
         done()
       })
 
@@ -485,7 +505,7 @@ describe('OpenTelemetry Logs', () => {
 
       const { loggerProvider } = setupTracer()
       assert.strictEqual(loggerProvider.processor.exporter.transformer.protocol, 'http/protobuf')
-      assert(logMock.getMessage().includes('OTLP gRPC protocol is not supported'))
+      assert.match(logMock.getMessage(), /OTLP gRPC protocol is not supported/)
 
       logMock.restore()
     })
@@ -573,12 +593,12 @@ describe('OpenTelemetry Logs', () => {
     it('tracks telemetry metrics for exported logs', () => {
       setupTracer()
       const telemetryMetrics = {
-        manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) }
+        manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) },
       }
       const MockedExporter = proxyquire('../../src/opentelemetry/logs/otlp_http_log_exporter', {
         '../otlp/otlp_http_exporter_base': proxyquire('../../src/opentelemetry/otlp/otlp_http_exporter_base', {
-          '../../telemetry/metrics': telemetryMetrics
-        })
+          '../../telemetry/metrics': telemetryMetrics,
+        }),
       })
 
       const exporter = new MockedExporter('http://localhost:4318/v1/logs', '', 1000, 'http/protobuf', {})

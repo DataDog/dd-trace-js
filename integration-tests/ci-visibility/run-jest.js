@@ -5,17 +5,26 @@ const jest = require('jest')
 const options = {
   projects: [__dirname],
   testPathIgnorePatterns: ['/node_modules/'],
+  modulePathIgnorePatterns: ['<rootDir>/\\.bun/'],
   cache: false,
   testRegex: process.env.TESTS_TO_RUN ? new RegExp(process.env.TESTS_TO_RUN) : /test\/ci-visibility-test/,
   coverage: !!process.env.ENABLE_CODE_COVERAGE,
   runInBand: true,
   shard: process.env.TEST_SHARD || undefined,
-  setupFilesAfterEnv: process.env.SETUP_FILES_AFTER_ENV ? process.env.SETUP_FILES_AFTER_ENV.split(',') : []
+  setupFilesAfterEnv: process.env.SETUP_FILES_AFTER_ENV ? process.env.SETUP_FILES_AFTER_ENV.split(',') : [],
+  testRunner: 'jest-circus/runner',
+  testEnvironment: 'node',
 }
 
 if (process.env.RUN_IN_PARALLEL) {
   delete options.runInBand
+  options.maxWorkers = Number(process.env.MAX_WORKERS) || 2
+}
+
+if (process.env.USE_WORKER_THREADS) {
+  delete options.runInBand
   options.maxWorkers = 2
+  options.workerThreads = true
 }
 
 if (process.env.OLD_RUNNER) {
@@ -32,6 +41,22 @@ if (process.env.ENABLE_HAPPY_DOM) {
 
 if (process.env.COLLECT_COVERAGE_FROM) {
   options.collectCoverageFrom = process.env.COLLECT_COVERAGE_FROM.split(',')
+}
+
+if (process.env.COVERAGE_REPORTERS) {
+  options.coverageReporters = process.env.COVERAGE_REPORTERS.split(',')
+}
+
+if (process.env.DO_NOT_INJECT_GLOBALS) {
+  options.injectGlobals = false
+}
+
+if (process.env.WAIT_FOR_UNHANDLED_REJECTIONS) {
+  options.waitForUnhandledRejections = true
+}
+
+if (process.env.WORKER_IDLE_MEMORY_LIMIT) {
+  options.workerIdleMemoryLimit = Number(process.env.WORKER_IDLE_MEMORY_LIMIT)
 }
 
 jest.runCLI(

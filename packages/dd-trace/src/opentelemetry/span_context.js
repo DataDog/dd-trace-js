@@ -9,7 +9,7 @@ function newContext () {
   const spanId = id()
   return new DatadogSpanContext({
     traceId: spanId,
-    spanId
+    spanId,
   })
 }
 

@@ -4,16 +4,16 @@ const rawExpectedSchema = {
   server: {
     v0: {
       serviceName: () => 'test',
-      opName: () => 'next.request'
+      opName: () => 'next.request',
     },
     v1: {
       serviceName: () => 'test',
-      opName: () => 'http.server.request'
-    }
-  }
+      opName: () => 'http.server.request',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

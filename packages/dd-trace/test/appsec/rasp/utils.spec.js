@@ -1,9 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('mocha')
-const sinon = require('sinon')
+const assert = require('node:assert/strict')
+
+const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
 describe('RASP - utils.js', () => {
   let web, utils, stackTrace, config, telemetry
@@ -13,17 +14,17 @@ describe('RASP - utils.js', () => {
 
   beforeEach(() => {
     web = {
-      root: sinon.stub()
+      root: sinon.stub(),
     }
 
     stackTrace = {
       reportStackTrace: sinon.stub(),
       getCallsiteFrames: sinon.stub().returns([]),
-      canReportStackTrace: sinon.stub().returns(false)
+      canReportStackTrace: sinon.stub().returns(false),
     }
 
     telemetry = {
-      updateRaspRuleMatchMetricTags: sinon.stub()
+      updateRaspRuleMatchMetricTags: sinon.stub(),
     }
 
     utils = proxyquire('../../../src/appsec/rasp/utils', {
@@ -31,8 +32,8 @@ describe('RASP - utils.js', () => {
       '../stack_trace': stackTrace,
       '../telemetry': telemetry,
       '../blocking': {
-        getBlockingAction: sinon.spy((actions) => actions?.blocking_action)
-      }
+        getBlockingAction: sinon.spy((actions) => actions?.blocking_action),
+      },
     })
 
     config = {
@@ -40,24 +41,24 @@ describe('RASP - utils.js', () => {
         stackTrace: {
           enabled: true,
           maxStackTraces: 2,
-          maxDepth: 42
-        }
-      }
+          maxDepth: 42,
+        },
+      },
     }
   })
 
   function testAbortErrorInFramework (framework) {
     const rootSpan = {
-      context: sinon.stub().returns({ _name: framework })
+      context: sinon.stub().returns({ _name: framework }),
     }
     const abortController = {
       abort: sinon.stub(),
-      signal: {}
+      signal: {},
     }
     const result = {
       actions: {
-        blocking_action: { type: 'block_request' }
-      }
+        blocking_action: { type: 'block_request' },
+      },
     }
 
     web.root.returns(rootSpan)
@@ -66,9 +67,9 @@ describe('RASP - utils.js', () => {
 
     sinon.assert.calledOnce(abortController.abort)
     const abortError = abortController.abort.firstCall.args[0]
-    expect(abortError).to.be.instanceOf(utils.DatadogRaspAbortError)
-    expect(abortError.raspRule).to.equal(raspRule)
-    expect(abortError.blockingAction).to.equal(result.actions.blocking_action)
+    assert.ok(abortError instanceof utils.DatadogRaspAbortError)
+    assert.strictEqual(abortError.raspRule, raspRule)
+    assert.strictEqual(abortError.blockingAction, result.actions.blocking_action)
   }
 
   describe('handleResult', () => {
@@ -78,10 +79,10 @@ describe('RASP - utils.js', () => {
       const result = {
         actions: {
           generate_stack: {
-            stack_id: stackId
-          }
+            stack_id: stackId,
+          },
         },
-        events: [{ a: [1] }]
+        events: [{ a: [1] }],
       }
 
       web.root.returns(rootSpan)
@@ -95,16 +96,16 @@ describe('RASP - utils.js', () => {
       const rootSpan = {
         meta_struct: {
           '_dd.stack': {
-            exploit: ['stack1', 'stack2']
-          }
-        }
+            exploit: ['stack1', 'stack2'],
+          },
+        },
       }
       const result = {
         actions: {
           generate_stack: {
-            stack_id: 'stackId'
-          }
-        }
+            stack_id: 'stackId',
+          },
+        },
       }
 
       web.root.returns(rootSpan)
@@ -116,8 +117,8 @@ describe('RASP - utils.js', () => {
     it('should not report stack trace when rootSpan is null', () => {
       const result = {
         generate_stack: {
-          stack_id: 'stackId'
-        }
+          stack_id: 'stackId',
+        },
       }
 
       web.root.returns(null)
@@ -137,18 +138,18 @@ describe('RASP - utils.js', () => {
       const result = {
         actions: {
           generate_stack: {
-            stack_id: 'stackId'
-          }
-        }
+            stack_id: 'stackId',
+          },
+        },
       }
       const config = {
         appsec: {
           stackTrace: {
             enabled: false,
             maxStackTraces: 2,
-            maxDepth: 42
-          }
-        }
+            maxDepth: 42,
+          },
+        },
       }
 
       utils.handleResult(result, req, undefined, undefined, config, raspRule)
@@ -165,16 +166,16 @@ describe('RASP - utils.js', () => {
 
     it('should not create DatadogRaspAbortError when blockingAction is present in an unsupported framework', () => {
       const rootSpan = {
-        context: sinon.stub().returns({ _name: 'http.request' })
+        context: sinon.stub().returns({ _name: 'http.request' }),
       }
       const abortController = {
         abort: sinon.stub(),
-        signal: {}
+        signal: {},
       }
       const result = {
         actions: {
-          blocking_action: { type: 'block_request' }
-        }
+          blocking_action: { type: 'block_request' },
+        },
       }
 
       web.root.returns(rootSpan)
@@ -188,10 +189,10 @@ describe('RASP - utils.js', () => {
       const rootSpan = {}
       const abortController = {
         abort: sinon.stub(),
-        signal: {}
+        signal: {},
       }
       const result = {
-        events: [{ a: [1] }]
+        events: [{ a: [1] }],
       }
 
       web.root.returns(rootSpan)
@@ -209,13 +210,12 @@ describe('RASP - utils.js', () => {
 
       const error = new utils.DatadogRaspAbortError(req, res, blockingAction, raspRule)
 
-      expect(error.name).to.equal('DatadogRaspAbortError')
-      expect(error.message).to.equal('DatadogRaspAbortError')
-      expect(error.blockingAction).to.equal(blockingAction)
-      expect(error.raspRule).to.equal(raspRule)
-      expect(error).to.have.property('req')
-      expect(error).to.have.property('res')
-      expect(Object.keys(error)).to.not.include.members(['req', 'res'])
+      assert.strictEqual(error.name, 'DatadogRaspAbortError')
+      assert.strictEqual(error.message, 'DatadogRaspAbortError')
+      assert.strictEqual(error.blockingAction, blockingAction)
+      assert.strictEqual(error.raspRule, raspRule)
+      assert.strictEqual(Object.getOwnPropertyDescriptor(error, 'req')?.enumerable, false)
+      assert.strictEqual(Object.getOwnPropertyDescriptor(error, 'res')?.enumerable, false)
     })
   })
 })

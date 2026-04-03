@@ -1,12 +1,16 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const path = require('node:path')
+
 const Axios = require('axios')
+const { describe, it, beforeEach, before, after } = require('mocha')
+
+const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
-const Config = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
-const path = require('path')
-const { assert } = require('chai')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 function noop () {}
@@ -16,6 +20,7 @@ describe('RASP - ssrf', () => {
     let app, server, axios
 
     before(() => {
+      require('events').defaultMaxListeners = 7
       return agent.load(['express', 'http'], { client: false })
     })
 
@@ -27,18 +32,18 @@ describe('RASP - ssrf', () => {
         app(req, res)
       })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server = expressApp.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
         done()
       })
@@ -52,31 +57,40 @@ describe('RASP - ssrf', () => {
 
     describe('ssrf', () => {
       async function testBlockingRequest () {
-        try {
-          await axios.get('/?host=localhost/ifconfig.pro')
-        } catch (e) {
+        const assertPromise = checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
+        const blockingRequestPromise = axios.get('/?host=localhost/ifconfig.pro').then(() => {
+          assert.fail('Request should be blocked')
+        }).catch(e => {
           if (!e.response) {
             throw e
           }
+        })
 
-          return checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
-        }
-
-        assert.fail('Request should be blocked')
+        await Promise.all([
+          blockingRequestPromise,
+          assertPromise,
+        ])
       }
 
       ['http', 'https'].forEach(protocol => {
         describe(`Test using ${protocol}`, () => {
           it('Should not detect threat', async () => {
+            // Hack to enforce the module to be loaded once before the actual request
+            const module = require(protocol)
+
             app = (req, res) => {
-              const clientRequest = require(protocol).get(`${protocol}://${req.query.host}`)
+              const clientRequest = module.get(`${protocol}://${req.query.host}`, function (incomingResponse) {
+                incomingResponse.resume()
+                res.end('end')
+              })
+
               clientRequest.on('error', noop)
-              res.end('end')
             }
 
-            axios.get('/?host=www.datadoghq.com')
-
-            return checkRaspExecutedAndNotThreat(agent)
+            await Promise.all([
+              checkRaspExecutedAndNotThreat(agent),
+              axios.get('/?host=www.datadoghq.com'),
+            ])
           })
 
           it('Should detect threat doing a GET request', async () => {
@@ -132,9 +146,10 @@ describe('RASP - ssrf', () => {
                 .then(() => res.end('end'))
             }
 
-            await axios.get('/?host=www.datadoghq.com')
-
-            return checkRaspExecutedAndNotThreat(agent)
+            await Promise.all([
+              axios.get('/?host=www.datadoghq.com'),
+              checkRaspExecutedAndNotThreat(agent),
+            ])
           })
 
           it('Should detect threat doing a GET request', async () => {
@@ -185,9 +200,10 @@ describe('RASP - ssrf', () => {
               })
             }
 
-            axios.get('/?host=www.datadoghq.com')
-
-            return checkRaspExecutedAndNotThreat(agent)
+            await Promise.all([
+              axios.get('/?host=www.datadoghq.com'),
+              checkRaspExecutedAndNotThreat(agent),
+            ])
           })
 
           it('Should detect threat doing a GET request', async () => {
@@ -232,18 +248,18 @@ describe('RASP - ssrf', () => {
         }
       })
 
-      appsec.enable(new Config({
+      appsec.enable(getConfigFresh({
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-          rasp: { enabled: true }
-        }
+          rasp: { enabled: true },
+        },
       }))
 
       server.listen(0, () => {
-        const port = server.address().port
+        const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
         axios = Axios.create({
-          baseURL: `http://localhost:${port}`
+          baseURL: `http://localhost:${port}`,
         })
 
         done()
@@ -280,11 +296,11 @@ describe('RASP - ssrf', () => {
 
       const response = await axios.get('/', {
         headers: {
-          host: 'localhost/ifconfig.pro'
-        }
+          host: 'localhost/ifconfig.pro',
+        },
       })
 
-      assert.equal(response.status, 200)
+      assert.strictEqual(response.status, 200)
 
       return checkRaspExecutedAndHasThreat(agent, 'rasp-ssrf-rule-id-1')
     })

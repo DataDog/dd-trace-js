@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
 
 require('./setup/core')
-
 const Histogram = require('../src/histogram')
 
 describe('Histogram', () => {
@@ -23,19 +23,19 @@ describe('Histogram', () => {
     const p50 = histogram.percentile(50)
     const p95 = histogram.percentile(95)
 
-    expect(histogram).to.have.property('min', 1)
-    expect(histogram).to.have.property('max', 99)
-    expect(histogram).to.have.property('sum', 4950)
-    expect(histogram).to.have.property('avg', 50)
-    expect(histogram).to.have.property('median')
-    expect(histogram).to.have.property('count', 99)
-    expect(histogram).to.have.property('p95')
-    expect(median).to.be.gte(49)
-    expect(median).to.be.lte(51)
-    expect(p50).to.be.gte(49)
-    expect(p50).to.be.lte(51)
-    expect(p95).to.be.gte(94)
-    expect(p95).to.be.lte(96)
+    assert.strictEqual(histogram.min, 1)
+    assert.strictEqual(histogram.max, 99)
+    assert.strictEqual(histogram.sum, 4950)
+    assert.strictEqual(histogram.avg, 50)
+    assert.ok(typeof histogram.median === 'number')
+    assert.strictEqual(histogram.count, 99)
+    assert.ok(typeof histogram.p95 === 'number')
+    assert.ok(median >= 49)
+    assert.ok(median <= 51)
+    assert.ok(p50 >= 49)
+    assert.ok(p50 <= 51)
+    assert.ok(p95 >= 94)
+    assert.ok(p95 <= 96)
   })
 
   it('should reset all stats', () => {
@@ -45,13 +45,13 @@ describe('Histogram', () => {
 
     histogram.reset()
 
-    expect(histogram).to.have.property('min', 0)
-    expect(histogram).to.have.property('max', 0)
-    expect(histogram).to.have.property('sum', 0)
-    expect(histogram).to.have.property('avg', 0)
-    expect(histogram).to.have.property('median', 0)
-    expect(histogram).to.have.property('count', 0)
-    expect(histogram).to.have.property('p95', 0)
-    expect(histogram.percentile(50)).to.equal(0)
+    assert.strictEqual(histogram.min, 0)
+    assert.strictEqual(histogram.max, 0)
+    assert.strictEqual(histogram.sum, 0)
+    assert.strictEqual(histogram.avg, 0)
+    assert.strictEqual(histogram.median, 0)
+    assert.strictEqual(histogram.count, 0)
+    assert.strictEqual(histogram.p95, 0)
+    assert.strictEqual(histogram.percentile(50), 0)
   })
 })

@@ -34,5 +34,5 @@ module.exports = {
   vulnerableFindOne,
   vulnerableFindWhere,
   vulnerableFindExec,
-  vulnerableFindWhereExec
+  vulnerableFindWhereExec,
 }

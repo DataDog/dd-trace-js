@@ -10,12 +10,12 @@ const { AsyncLocalStorage } = require('async_hooks')
  * a "handle" object, which is used as a key in a WeakMap, where the values
  * are the real store objects.
  *
- * @typedef {Record<string, unknown>} Store
+ * @template T
+ * @typedef {Record<string, T>} Store
  */
 class DatadogStorage extends AsyncLocalStorage {
   /**
-   *
-   * @param store {Store}
+   * @param {Store<unknown>} [store]
    * @override
    */
   enterWith (store) {
@@ -35,7 +35,7 @@ class DatadogStorage extends AsyncLocalStorage {
    *
    * TODO: Refactor the Scope class to use a span-only store and remove this.
    *
-   * @returns {Store}
+   * @returns {Store<unknown>}
    */
   getHandle () {
     return super.getStore()
@@ -47,8 +47,8 @@ class DatadogStorage extends AsyncLocalStorage {
    * retrieved through `getHandle()` can also be passed in to be used as the
    * key. This is useful if you've stashed a handle somewhere and want to
    * retrieve the store with it.
-   * @param {{}} [handle]
-   * @returns {Store | undefined}
+   * @param {object} [handle]
+   * @returns {Store<unknown> | undefined}
    * @override
    */
   getStore (handle) {
@@ -59,35 +59,53 @@ class DatadogStorage extends AsyncLocalStorage {
       return stores.get(handle)
     }
   }
+}
+
+// To handle all versions always correct, feature detect AsyncContextFrame and
+// fallback to manual approach if not active. With ACF `run` delegates to
+// `enterWith`, without ACF `run` does not.
+const isACFActive = (() => {
+  let active = false
+  const als = new AsyncLocalStorage()
+  als.enterWith = () => { active = true }
+  als.run(1, () => {})
+  als.disable()
+  return active
+})()
+
+if (!isACFActive) {
+  const superGetStore = AsyncLocalStorage.prototype.getStore
+  const superEnterWith = AsyncLocalStorage.prototype.enterWith
 
   /**
-   * Here, we replicate the behavior of the original `run()` method. We ensure
-   * that our `enterWith()` is called internally, so that the handle to the
-   * store is set. As an optimization, we use super for getStore and enterWith
-   * when dealing with the parent store, so that we don't have to access the
-   * WeakMap.
+   * Override the `run` method to manually call `enterWith` and `getStore`
+   * when not using AsyncContextFrame.
+   *
+   * Without ACF, super.run() won't call this.enterWith(), so the WeakMap handle
+   * is never created and getStore() would fail.
+   *
    * @template R
-   * @template TArgs = unknown[]
-   * @param {Store} store
-   * @param {() => R} fn
-   * @param {...TArgs} args
+   * @template {unknown[]} TArgs
+   * @param {Store<unknown>} store
+   * @param {(...args: TArgs) => R} fn
+   * @param {TArgs} args
    * @returns {R}
    * @override
    */
-  run (store, fn, ...args) {
-    const prior = super.getStore()
+  DatadogStorage.prototype.run = function run (store, fn, ...args) {
+    const prior = superGetStore.call(this)
     this.enterWith(store)
     try {
       return Reflect.apply(fn, null, args)
     } finally {
-      super.enterWith(prior)
+      superEnterWith.call(this, prior)
     }
   }
 }
 
 /**
  * This is the map from handles to real stores, used in the class above.
- * @type {WeakMap<WeakKey, Store>}
+ * @type {WeakMap<WeakKey, Store<unknown>|undefined>}
  */
 const stores = new WeakMap()
 
@@ -101,7 +119,7 @@ const storages = Object.create(null)
 
 /**
  *
- * @param namespace {string} the namespace to use
+ * @param {string} namespace The namespace to use
  * @returns {DatadogStorage}
  */
 function storage (namespace) {
@@ -111,4 +129,4 @@ function storage (namespace) {
   return storages[namespace]
 }
 
-module.exports = { storage }
+module.exports = { storage, isACFActive }

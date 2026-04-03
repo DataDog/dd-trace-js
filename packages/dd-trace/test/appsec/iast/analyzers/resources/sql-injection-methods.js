@@ -10,5 +10,5 @@ function executeQueryWithCallback (sql, clientOrPool, cb) {
 
 module.exports = {
   executeQuery,
-  executeQueryWithCallback
+  executeQueryWithCallback,
 }

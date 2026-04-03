@@ -12,7 +12,7 @@ describe('db sources with sequelize', () => {
         Sequelize = require(`../../../../../../../versions/sequelize@${sequelizeVersion}`).get()
         sequelize = new Sequelize('database', 'username', 'password', {
           dialect: 'sqlite',
-          logging: false
+          logging: false,
         })
         await sequelize.query(`CREATE TABLE examples (
                                 id INT,
@@ -68,11 +68,11 @@ describe('db sources with sequelize', () => {
           Example = sequelize.define('example', {
             id: {
               type: Sequelize.DataTypes.INTEGER,
-              primaryKey: true
+              primaryKey: true,
             },
             name: Sequelize.DataTypes.STRING,
             query: Sequelize.DataTypes.STRING,
-            command: Sequelize.DataTypes.STRING
+            command: Sequelize.DataTypes.STRING,
           })
         })
 

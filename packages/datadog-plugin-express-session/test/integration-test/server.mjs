@@ -16,7 +16,7 @@ app.use(expressSession({
   resave: false,
   rolling: true,
   saveUninitialized: true,
-  genid: () => 'sid_123'
+  genid: () => 'sid_123',
 }))
 
 app.get('/', (req, res) => {
@@ -25,6 +25,6 @@ app.get('/', (req, res) => {
 })
 
 const server = app.listen(0, () => {
-  const port = server.address().port
+  const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
   process.send({ port })
 })

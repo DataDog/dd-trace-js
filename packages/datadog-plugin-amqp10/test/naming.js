@@ -6,26 +6,26 @@ const rawExpectedSchema = {
   send: {
     v0: {
       opName: 'amqp.send',
-      serviceName: 'test-amqp'
+      serviceName: 'test-amqp',
     },
     v1: {
       opName: 'amqp.send',
-      serviceName: 'test'
-    }
+      serviceName: 'test',
+    },
   },
   receive: {
     v0: {
       opName: 'amqp.receive',
-      serviceName: 'test-amqp'
+      serviceName: 'test-amqp',
     },
     v1: {
       opName: 'amqp.process',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

@@ -73,12 +73,12 @@ describe('ssrf analyzer', () => {
           [
             {
               httpMethodName: 'get',
-              methodToExecute: executeHttpGet
+              methodToExecute: executeHttpGet,
             },
             {
               httpMethodName: 'request',
-              methodToExecute: executeHttpRequest
-            }
+              methodToExecute: executeHttpRequest,
+            },
           ].forEach(requestMethodData => {
             describe(requestMethodData.httpMethodName, () => {
               describe('with url', () => {
@@ -126,8 +126,8 @@ describe('ssrf analyzer', () => {
                 }, 'SSRF', (done, config) => {
                   axios.get(`http://localhost:${config.port}`, {
                     headers: {
-                      hash: 'taintedHash'
-                    }
+                      hash: 'taintedHash',
+                    },
                   })
                 }, 'should not have SSRF vulnerability when the tainted value is after #')
               })
@@ -140,7 +140,7 @@ describe('ssrf analyzer', () => {
                   const host = newTaintedString(iastContext, 'www.google.com', 'param', 'Request')
                   const options = {
                     host,
-                    protocol: `${pluginName}:`
+                    protocol: `${pluginName}:`,
                   }
 
                   return requestMethodData.methodToExecute(require(pluginName), options)
@@ -150,7 +150,7 @@ describe('ssrf analyzer', () => {
                   const host = 'www.google.com'
                   const options = {
                     host,
-                    protocol: `${pluginName}:`
+                    protocol: `${pluginName}:`,
                   }
 
                   return requestMethodData.methodToExecute(require(pluginName), options)

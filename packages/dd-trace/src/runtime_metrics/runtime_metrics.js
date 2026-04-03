@@ -5,15 +5,16 @@
 const v8 = require('v8')
 const os = require('os')
 const process = require('process')
+const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
 const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
-const { getEnvironmentVariable } = require('../config-helper')
+const { getValueFromEnvSources } = require('../config/helper')
 
 const { NODE_MAJOR } = require('../../../../version')
+const processTags = require('../process-tags')
 // TODO: This environment variable may not be changed, since the agent expects a flush every ten seconds.
 // It is only a variable for testing. Think about alternatives.
-const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getEnvironmentVariable('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
+const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getValueFromEnvSources('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
 const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
 
 const eventLoopDelayResolution = 4
@@ -22,7 +23,7 @@ let nativeMetrics = null
 let gcObserver = null
 let interval = null
 let client = null
-let lastTime = 0n
+let lastTime = 0
 let lastCpuUsage = null
 let eventLoopDelayObserver = null
 
@@ -37,6 +38,12 @@ module.exports = {
   start (config) {
     this.stop()
     const clientConfig = DogStatsDClient.generateClientConfig(config)
+
+    if (config.propagateProcessTags?.enabled) {
+      for (const tag of processTags.tagsArray) {
+        clientConfig.tags.push(tag)
+      }
+    }
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
@@ -103,7 +110,6 @@ module.exports = {
     interval = null
 
     client = null
-    lastTime = 0n
     lastCpuUsage = null
 
     gcObserver?.disconnect()
@@ -118,7 +124,7 @@ module.exports = {
       const handle = nativeMetrics.track(span)
 
       return {
-        finish: () => nativeMetrics.finish(handle)
+        finish: () => nativeMetrics.finish(handle),
       }
     }
 
@@ -147,7 +153,7 @@ module.exports = {
 
   decrement (name, tag) {
     this.count(name, -1, tag)
-  }
+  },
 }
 
 function captureCpuUsage () {
@@ -207,7 +213,7 @@ function captureEventLoopDelay () {
         total: sum,
         avg,
         count: eventLoopDelayObserver.count,
-        p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0)
+        p95: Math.max(eventLoopDelayObserver.percentile(95) - minimum, 0),
       }
 
       histogram('runtime.node.event_loop.delay', stats)
@@ -239,7 +245,7 @@ function captureHeapSpace () {
   const stats = v8.getHeapSpaceStatistics()
 
   for (let i = 0, l = stats.length; i < l; i++) {
-    const tags = [`space:${stats[i].space_name}`]
+    const tags = [`heap_space:${stats[i].space_name}`]
 
     client.gauge('runtime.node.heap.size.by.space', stats[i].space_size, tags)
     client.gauge('runtime.node.heap.used_size.by.space', stats[i].space_used_size, tags)
@@ -339,6 +345,7 @@ function startGCObserver () {
 
   gcObserver = new PerformanceObserver(list => {
     for (const entry of list.getEntries()) {
+      // @ts-expect-error - entry.detail?.kind and entry.kind are not typed
       const type = gcType(entry.detail?.kind || entry.kind)
       const duration = entry.duration * 1_000_000
 

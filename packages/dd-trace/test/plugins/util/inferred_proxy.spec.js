@@ -1,271 +1,487 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, afterEach } = require('tap').mocha
-const axios = require('axios')
+const assert = require('node:assert/strict')
 const { Agent } = require('node:http')
 
-require('../../setup/core')
+const { describe, it, afterEach } = require('mocha')
+const axios = require('axios')
 
+require('../../setup/core')
 const agent = require('../agent')
+const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 
 // Create axios instance with no connection pooling
 const httpClient = axios.create({
   httpAgent: new Agent({ keepAlive: false }),
-  timeout: 5000
+  timeout: 5000,
 })
 
-describe('Inferred Proxy Spans', function () {
-  let http
-  let appListener
-  let controller
-  let port
+// Configuration for each proxy type
+const proxyConfigs = {
+  'aws-apigateway': {
+    headers: {
+      'x-dd-proxy': 'aws-apigateway',
+      'x-dd-proxy-request-time-ms': '1729780025473',
+      'x-dd-proxy-path': '/test',
+      'x-dd-proxy-httpmethod': 'GET',
+      'x-dd-proxy-domain-name': 'example.com',
+      'x-dd-proxy-stage': 'dev',
+    },
+    expectedSpanName: 'aws.apigateway',
+    expectedService: 'example.com',
+    expectedComponent: 'aws-apigateway',
+    expectedUrl: 'https://example.com/test',
+    expectedStartTime: '1729780025472999936',
+  },
+  'azure-apim': {
+    headers: {
+      'x-dd-proxy': 'azure-apim',
+      'x-dd-proxy-request-time-ms': '1729780025473',
+      'x-dd-proxy-path': '/test',
+      'x-dd-proxy-httpmethod': 'GET',
+      'x-dd-proxy-domain-name': 'azure-example.com',
+      // Add any other Azure-specific headers here
+    },
+    expectedSpanName: 'azure.apim',
+    expectedService: 'azure-example.com',
+    expectedComponent: 'azure-apim',
+    expectedUrl: 'https://azure-example.com/test',
+    expectedStartTime: '1729780025472999936',
+  },
+}
 
-  // tap was throwing timeout errors when trying to use hooks like `before`, so instead we just use this function
-  // and call before the test starts
-  const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {
-    const options = {
-      inferredProxyServicesEnabled,
-      service: 'aws-server'
-    }
+Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
+  describe(`Inferred Proxy Spans - ${proxyType}`, function () {
+    let http
+    let appListener
+    let controller
+    let port
 
-    await agent.load(
-      ['http', 'dns', 'net'],
-      [{ client: false }, { enabled: false }, { enabled: false }],
-      options
-    )
-
-    // we can't force re-init the tracer, so we have to set the config manually
-    const tracer = require('../../../../dd-trace').init(options)
-    tracer._tracer._config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
-
-    http = require('http')
-
-    const server = new http.Server(async (req, res) => {
-      controller && await controller(req, res)
-      if (req.url === '/error') {
-        res.statusCode = 500
-        res.end(JSON.stringify({ message: 'ERROR' }))
-      } else {
-        res.writeHead(200)
-        res.end(JSON.stringify({ message: 'OK' }))
+    // Timeout errors occurred when trying to use hooks like `before`, so instead we just use this function
+    // and call before the test starts
+    const loadTest = async function ({ inferredProxyServicesEnabled = true } = {}) {
+      const options = {
+        inferredProxyServicesEnabled,
+        service: 'aws-server',
       }
-    })
 
-    // Force close connections when server closes
-    const connections = new Set()
-    server.on('connection', (connection) => {
-      connections.add(connection)
-      connection.on('close', () => {
-        connections.delete(connection)
-      })
-    })
+      await agent.load(
+        ['http', 'dns', 'net'],
+        [{ client: false }, { enabled: false }, { enabled: false }],
+        options
+      )
 
-    return new Promise((resolve, reject) => {
-      appListener = server.listen(0, '127.0.0.1', () => {
-        port = server.address().port
-        appListener._connections = connections
-        resolve()
-      })
-    })
-  }
+      const tracer = require('../../../../dd-trace').init(options)
+      tracer._tracer._config.inferredProxyServicesEnabled = inferredProxyServicesEnabled
 
-  const cleanupTest = async function () {
-    controller = null
+      http = require('http')
 
-    if (appListener) {
-      // Force close all existing connections
-      if (appListener._connections) {
-        for (const connection of appListener._connections) {
-          connection.destroy()
+      const server = new http.Server(async (req, res) => {
+        controller && await controller(req, res)
+        if (req.url === '/error') {
+          res.statusCode = 500
+          res.end(JSON.stringify({ message: 'ERROR' }))
+        } else {
+          res.writeHead(200)
+          res.end(JSON.stringify({ message: 'OK' }))
         }
-      }
+      })
 
-      await new Promise((resolve, reject) => {
-        appListener.close((err) => {
-          if (err) {
-            reject(err)
-          } else {
-            resolve()
-          }
+      const connections = new Set()
+      server.on('connection', (connection) => {
+        connections.add(connection)
+        connection.on('close', () => {
+          connections.delete(connection)
         })
       })
-      appListener = null
+
+      return new Promise(/** @type {() => void} */ (resolve, reject) => {
+        appListener = server.listen(0, '127.0.0.1', () => {
+          port = (/** @type {import('net').AddressInfo} */ (server.address())).port
+          appListener._connections = connections
+          resolve()
+        })
+      })
     }
 
-    await agent.close()
-  }
+    const cleanupTest = async function () {
+      controller = null
 
-  const inferredHeaders = {
-    'x-dd-proxy': 'aws-apigateway',
-    'x-dd-proxy-request-time-ms': '1729780025473',
-    'x-dd-proxy-path': '/test',
-    'x-dd-proxy-httpmethod': 'GET',
-    'x-dd-proxy-domain-name': 'example.com',
-    'x-dd-proxy-stage': 'dev'
-  }
-
-  afterEach(async () => {
-    await cleanupTest()
-  })
-
-  describe('without configuration', () => {
-    it('should create a parent span and a child span for a 200', async () => {
-      await loadTest({})
-
-      await httpClient.get(`http://127.0.0.1:${port}/`, {
-        headers: inferredHeaders
-      })
-
-      await agent.assertSomeTraces(traces => {
-        const spans = traces[0]
-
-        expect(spans.length).to.be.equal(2)
-
-        expect(spans[0]).to.have.property('name', 'aws.apigateway')
-        expect(spans[0]).to.have.property('service', 'example.com')
-        expect(spans[0]).to.have.property('resource', 'GET /test')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0].meta).to.have.property('http.url', 'example.com/test')
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '200')
-        expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
-        expect(spans[0].meta).to.have.property('_dd.integration', 'aws-apigateway')
-        expect(spans[0].metrics).to.have.property('_dd.inferred_span', 1)
-        expect(spans[0].start.toString()).to.be.equal('1729780025472999936')
-
-        expect(spans[0].span_id.toString()).to.be.equal(spans[1].parent_id.toString())
-
-        expect(spans[1]).to.have.property('name', 'web.request')
-        expect(spans[1]).to.have.property('service', 'aws-server')
-        expect(spans[1]).to.have.property('type', 'web')
-        expect(spans[1]).to.have.property('resource', 'GET')
-        expect(spans[1].meta).to.have.property('component', 'http')
-        expect(spans[1].meta).to.have.property('span.kind', 'server')
-        expect(spans[1].meta).to.have.property('http.url', `http://127.0.0.1:${port}/`)
-        expect(spans[1].meta).to.have.property('http.method', 'GET')
-        expect(spans[1].meta).to.have.property('http.status_code', '200')
-        expect(spans[1].meta).to.have.property('span.kind', 'server')
-      })
-    })
-
-    it('should create a parent span and a child span for an error', async () => {
-      await loadTest({})
-
-      await httpClient.get(`http://127.0.0.1:${port}/error`, {
-        headers: inferredHeaders,
-        validateStatus: function (status) {
-          return status === 500
+      if (appListener) {
+        // Force close all existing connections
+        if (appListener._connections) {
+          for (const connection of appListener._connections) {
+            connection.destroy()
+          }
         }
+
+        await new Promise(/** @type {() => void} */ (resolve, reject) => {
+          appListener.close((err) => {
+            if (err) {
+              reject(err)
+            } else {
+              resolve()
+            }
+          })
+        })
+        appListener = null
+      }
+
+      await agent.close()
+    }
+
+    // Additional test cases for specific scenarios
+    const additionalTestCases = {
+      'aws-httpapi': {
+        headers: {
+          'x-dd-proxy': 'aws-httpapi',
+          'x-dd-proxy-request-time-ms': '1729780025473',
+          'x-dd-proxy-path': '/test',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'dev',
+        },
+        expectedSpanName: 'aws.httpapi',
+        expectedService: 'example.com',
+        expectedResource: 'GET /test',
+        expectedUrl: 'https://example.com/test',
+        expectedComponent: 'aws-httpapi',
+        expectedStartTime: '1729780025472999936',
+      },
+      'with-route': {
+        headers: {
+          'x-dd-proxy': 'aws-apigateway',
+          'x-dd-proxy-request-time-ms': '1729780025473',
+          'x-dd-proxy-path': '/users/123',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'dev',
+          'x-dd-proxy-resource-path': '/users/{id}',
+        },
+        expectedSpanName: 'aws.apigateway',
+        expectedService: 'example.com',
+        expectedResource: 'GET /users/{id}',
+        expectedUrl: 'https://example.com/users/123',
+        expectedComponent: 'aws-apigateway',
+        expectedRoute: '/users/{id}',
+      },
+      'with-optional-tags': {
+        headers: {
+          'x-dd-proxy': 'aws-apigateway',
+          'x-dd-proxy-request-time-ms': '1729780025473',
+          'x-dd-proxy-path': '/users/123',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'prod',
+          'x-dd-proxy-resource-path': '/users/{id}',
+          'x-dd-proxy-account-id': '123456789012',
+          'x-dd-proxy-api-id': 'abc123def4',
+          'x-dd-proxy-region': 'us-east-1',
+          'x-dd-proxy-user': 'arn:aws:iam::123456789012:user/testuser',
+        },
+        expectedSpanName: 'aws.apigateway',
+        expectedOptionalTags: {
+          account_id: '123456789012',
+          apiid: 'abc123def4',
+          region: 'us-east-1',
+          aws_user: 'arn:aws:iam::123456789012:user/testuser',
+          dd_resource_key: 'arn:aws:apigateway:us-east-1::/restapis/abc123def4',
+        },
+      },
+    }
+
+    afterEach(async () => {
+      await cleanupTest()
+    })
+
+    describe('without configuration', () => {
+      it('should create a parent span and a child span for a 200', async () => {
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: config.headers,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+
+          assert.strictEqual(spans.length, 2)
+
+          assert.strictEqual(spans[0].name, config.expectedSpanName)
+          assert.strictEqual(spans[0].service, config.expectedService)
+          assert.strictEqual(spans[0].resource, 'GET /test')
+          assert.strictEqual(spans[0].type, 'web')
+          assertObjectContains(spans[0], {
+            meta: {
+              'span.kind': 'server',
+              'http.url': config.expectedUrl,
+              'http.method': 'GET',
+              'http.status_code': '200',
+              component: config.expectedComponent,
+              '_dd.integration': config.expectedComponent,
+            },
+            metrics: {
+              '_dd.inferred_span': 1,
+            },
+          })
+
+          assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
+
+          assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+
+          assertObjectContains(spans[1], {
+            name: 'web.request',
+            service: 'aws-server',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+        })
       })
 
-      await agent.assertSomeTraces(traces => {
-        const spans = traces[0]
-        expect(spans.length).to.be.equal(2)
+      it('should create a parent span with aws.httpapi for API Gateway v2', async () => {
+        const testCase = additionalTestCases['aws-httpapi']
+        await loadTest({})
 
-        expect(spans[0]).to.have.property('name', 'aws.apigateway')
-        expect(spans[0]).to.have.property('service', 'example.com')
-        expect(spans[0]).to.have.property('resource', 'GET /test')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0].meta).to.have.property('http.url', 'example.com/test')
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '500')
-        expect(spans[0].meta).to.have.property('component', 'aws-apigateway')
-        expect(spans[0].error).to.be.equal(1)
-        expect(spans[0].start.toString()).to.be.equal('1729780025472999936')
-        expect(spans[0].span_id.toString()).to.be.equal(spans[1].parent_id.toString())
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
 
-        expect(spans[1]).to.have.property('name', 'web.request')
-        expect(spans[1]).to.have.property('service', 'aws-server')
-        expect(spans[1]).to.have.property('type', 'web')
-        expect(spans[1]).to.have.property('resource', 'GET')
-        expect(spans[1].meta).to.have.property('component', 'http')
-        expect(spans[1].meta).to.have.property('span.kind', 'server')
-        expect(spans[1].meta).to.have.property('http.url', `http://127.0.0.1:${port}/error`)
-        expect(spans[1].meta).to.have.property('http.method', 'GET')
-        expect(spans[1].meta).to.have.property('http.status_code', '500')
-        expect(spans[1].meta).to.have.property('span.kind', 'server')
-        expect(spans[1].error).to.be.equal(1)
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+
+          assert.strictEqual(spans.length, 2)
+
+          assert.strictEqual(spans[0].name, testCase.expectedSpanName)
+          assert.strictEqual(spans[0].service, testCase.expectedService)
+          assert.strictEqual(spans[0].resource, testCase.expectedResource)
+          assert.strictEqual(spans[0].type, 'web')
+          assertObjectContains(spans[0], {
+            meta: {
+              'span.kind': 'server',
+              'http.url': testCase.expectedUrl,
+              'http.method': 'GET',
+              'http.status_code': '200',
+              component: testCase.expectedComponent,
+              '_dd.integration': testCase.expectedComponent,
+            },
+            metrics: {
+              '_dd.inferred_span': 1,
+            },
+          })
+          assert.strictEqual(spans[0].start.toString(), testCase.expectedStartTime)
+
+          assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+
+          assertObjectContains(spans[1], {
+            name: 'web.request',
+            service: 'aws-server',
+            type: 'web',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+        })
+      })
+
+      it('should include http.route when x-dd-proxy-resource-path header is present', async () => {
+        const testCase = additionalTestCases['with-route']
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+
+          assert.strictEqual(spans.length, 2)
+
+          assert.strictEqual(spans[0].name, testCase.expectedSpanName)
+          assert.strictEqual(spans[0].service, testCase.expectedService)
+          assert.strictEqual(spans[0].resource, testCase.expectedResource)
+          assert.strictEqual(spans[0].type, 'web')
+          assertObjectContains(spans[0], {
+            meta: {
+              'span.kind': 'server',
+              'http.url': testCase.expectedUrl,
+              'http.method': 'GET',
+              'http.route': testCase.expectedRoute,
+              'http.status_code': '200',
+              component: testCase.expectedComponent,
+            },
+            metrics: {
+              '_dd.inferred_span': 1,
+            },
+          })
+        })
+      })
+
+      it('should include optional tags when corresponding headers are present', async () => {
+        const testCase = additionalTestCases['with-optional-tags']
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+
+          assert.strictEqual(spans.length, 2)
+          assert.strictEqual(spans[0].name, testCase.expectedSpanName)
+
+          assertObjectContains(spans[0], {
+            meta: testCase.expectedOptionalTags,
+          })
+        })
+      })
+
+      it('should create a parent span and a child span for an error', async () => {
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/error`, {
+          headers: config.headers,
+          validateStatus: function (status) {
+            return status === 500
+          },
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          assert.strictEqual(spans.length, 2)
+
+          assertObjectContains(spans[0], {
+            name: config.expectedSpanName,
+            service: config.expectedService,
+            resource: 'GET /test',
+            type: 'web',
+            meta: {
+              'span.kind': 'server',
+              'http.url': config.expectedUrl,
+              'http.method': 'GET',
+              'http.status_code': '500',
+              component: config.expectedComponent,
+            },
+          })
+
+          assert.strictEqual(spans[0].error, 1)
+          assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
+          assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+
+          assertObjectContains(spans[1], {
+            name: 'web.request',
+            service: 'aws-server',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/error`,
+              'http.method': 'GET',
+              'http.status_code': '500',
+            },
+          })
+
+          assert.strictEqual(spans[1].error, 1)
+        })
+      })
+
+      it('should not create a proxy span if all necessary headers are missing', async () => {
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/no-proxy-headers`, {
+          headers: {},
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          assert.strictEqual(spans.length, 1)
+
+          assertObjectContains(spans[0], {
+            name: 'web.request',
+            service: 'aws-server',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/no-proxy-headers`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+
+          assert.strictEqual(spans[0].error, 0)
+        })
+      })
+
+      it('should not create a proxy span if missing the proxy system header', async () => {
+        await loadTest({})
+
+        // remove x-dd-proxy from headers
+        const { 'x-dd-proxy': _, ...newHeaders } = config.headers
+
+        await httpClient.get(`http://127.0.0.1:${port}/a-few-proxy-headers`, {
+          headers: newHeaders,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+          assert.strictEqual(spans.length, 1)
+
+          assertObjectContains(spans[0], {
+            name: 'web.request',
+            service: 'aws-server',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/a-few-proxy-headers`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+
+          assert.strictEqual(spans[0].error, 0)
+        })
       })
     })
 
-    it('should not create an API Gateway span if all necessary headers are missing', async () => {
-      await loadTest({})
+    describe('with configuration', function () {
+      it('should not create a span when configured to be off', async () => {
+        await loadTest({ inferredProxyServicesEnabled: false })
 
-      await httpClient.get(`http://127.0.0.1:${port}/no-aws-headers`, {
-        headers: {}
-      })
+        await httpClient.get(`http://127.0.0.1:${port}/configured-off`, {
+          headers: config.headers,
+        })
 
-      await agent.assertSomeTraces(traces => {
-        const spans = traces[0]
-        expect(spans.length).to.be.equal(1)
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
 
-        expect(spans[0]).to.have.property('name', 'web.request')
-        expect(spans[0]).to.have.property('service', 'aws-server')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0]).to.have.property('resource', 'GET')
-        expect(spans[0].meta).to.have.property('component', 'http')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/no-aws-headers`)
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '200')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].error).to.be.equal(0)
-      })
-    })
+          assert.strictEqual(spans.length, 1)
 
-    it('should not create an API Gateway span if missing the proxy system header', async () => {
-      await loadTest({})
-
-      // remove x-dd-proxy from headers
-      const { 'x-dd-proxy': _, ...newHeaders } = inferredHeaders
-
-      await httpClient.get(`http://127.0.0.1:${port}/a-few-aws-headers`, {
-        headers: newHeaders
-      })
-
-      await agent.assertSomeTraces(traces => {
-        const spans = traces[0]
-        expect(spans.length).to.be.equal(1)
-
-        expect(spans[0]).to.have.property('name', 'web.request')
-        expect(spans[0]).to.have.property('service', 'aws-server')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0]).to.have.property('resource', 'GET')
-        expect(spans[0].meta).to.have.property('component', 'http')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/a-few-aws-headers`)
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '200')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].error).to.be.equal(0)
-      })
-    })
-  })
-
-  describe('with configuration', function () {
-    it('should not create a span when configured to be off', async () => {
-      await loadTest({ inferredProxyServicesEnabled: false })
-
-      await httpClient.get(`http://127.0.0.1:${port}/configured-off`, {
-        headers: inferredHeaders
-      })
-
-      await agent.assertSomeTraces(traces => {
-        const spans = traces[0]
-
-        expect(spans.length).to.be.equal(1)
-
-        expect(spans[0]).to.have.property('name', 'web.request')
-        expect(spans[0]).to.have.property('service', 'aws-server')
-        expect(spans[0]).to.have.property('type', 'web')
-        expect(spans[0]).to.have.property('resource', 'GET')
-        expect(spans[0].meta).to.have.property('component', 'http')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
-        expect(spans[0].meta).to.have.property('http.url', `http://127.0.0.1:${port}/configured-off`)
-        expect(spans[0].meta).to.have.property('http.method', 'GET')
-        expect(spans[0].meta).to.have.property('http.status_code', '200')
-        expect(spans[0].meta).to.have.property('span.kind', 'server')
+          assertObjectContains(spans[0], {
+            name: 'web.request',
+            service: 'aws-server',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/configured-off`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+        })
       })
     })
   })

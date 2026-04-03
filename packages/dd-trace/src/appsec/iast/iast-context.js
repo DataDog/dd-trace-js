@@ -54,8 +54,11 @@ function cleanIastContext (store, context, iastContext) {
     context[IAST_CONTEXT_KEY] = null
   }
   if (iastContext) {
-    if (typeof iastContext === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
-      Object.keys(iastContext).forEach(key => delete iastContext[key])
+    if (typeof iastContext === 'object') {
+      for (const key of Object.keys(iastContext)) {
+        // TODO: Consider using a (weak)map instead of an object to avoid the need to delete the keys.
+        delete iastContext[key]
+      }
     }
     return true
   }
@@ -68,5 +71,5 @@ module.exports = {
   cleanIastContext,
   getIastStackTraceId,
   IAST_CONTEXT_KEY,
-  IAST_TRANSACTION_ID
+  IAST_TRANSACTION_ID,
 }

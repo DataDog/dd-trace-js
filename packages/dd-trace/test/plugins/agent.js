@@ -1,20 +1,23 @@
 'use strict'
 
 const assert = require('assert')
-const util = require('util')
 const http = require('http')
-const bodyParser = require('body-parser')
-const msgpack = require('@msgpack/msgpack')
-const express = require('express')
 const path = require('path')
-const ritm = require('../../src/ritm')
-const { storage } = require('../../../datadog-core')
-const { assertObjectContains } = require('../../../../integration-tests/helpers')
-const { expect } = require('chai')
+const util = require('util')
 
+const bodyParser = require('body-parser')
+const express = require('express')
+const msgpack = require('@msgpack/msgpack')
+const proxyquire = require('proxyquire')
+const semifies = require('semifies')
+
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
+const { storage } = require('../../../datadog-core')
+const ritm = require('../../src/ritm')
 const traceHandlers = new Set()
 const statsHandlers = new Set()
-const llmobsHandlers = new Set()
+let llmobsSpanEventsRequests = []
+let llmobsEvaluationMetricsRequests = []
 let sockets = []
 let agent = null
 let listener = null
@@ -117,7 +120,7 @@ function unformatSpanEvents (span) {
       return {
         name: event.name,
         startTime: event.time_unix_nano / 1e6, // Convert from nanoseconds back to milliseconds
-        attributes: event.attributes ? event.attributes : undefined
+        attributes: event.attributes ? event.attributes : undefined,
       }
     })
 
@@ -192,16 +195,11 @@ function handleTraceRequest (req, res, sendToTestAgent) {
         headers: {
           ...req.headers,
           'X-Datadog-Agent-Proxy-Disabled': 'True',
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+        },
       })
 
     testAgentReq.on('response', testAgentRes => {
-      if (res._closed) {
-        // Skip handling for already closed agents
-        return
-      }
-
       if (testAgentRes.statusCode !== 200) {
         // handle request failures from the Test Agent here
         let body = ''
@@ -209,7 +207,8 @@ function handleTraceRequest (req, res, sendToTestAgent) {
           body += chunk
         })
         testAgentRes.on('end', () => {
-          res.status(400).send(body)
+          // eslint-disable-next-line no-console
+          console.warn(`handleTraceRequest: Test agent returned ${testAgentRes.statusCode}: ${body}`)
         })
       }
     })
@@ -228,14 +227,29 @@ function handleTraceRequest (req, res, sendToTestAgent) {
 }
 
 function checkAgentStatus () {
-  const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
-
   return new Promise((resolve) => {
-    const request = http.request(`${agentUrl}/info`, { method: 'GET' }, response => {
+    const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
+    const timeoutMs = 2000
+
+    const request = http.request(`${agentUrl}/info`, { method: 'GET', timeout: timeoutMs }, response => {
       resolve(response.statusCode === 200)
     })
 
-    request.on('error', (_error_) => {
+    request.on('timeout', () => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `checkAgentStatus: Timed out after ${timeoutMs}ms trying to reach test agent at ${agentUrl}. ` +
+        'Proceeding without test agent. If this happens frequently, investigate what is listening on that port.'
+      )
+      request.destroy()
+      resolve(false)
+    })
+
+    request.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+      if (err.code !== 'ECONNREFUSED') {
+        // eslint-disable-next-line no-console
+        console.warn(`checkAgentStatus: Unexpected error reaching test agent at ${agentUrl}`, err)
+      }
       resolve(false)
     })
 
@@ -272,7 +286,7 @@ function assertIntegrationName (traces) {
             // ignore everything that has no component (i.e. manual span)
             // ignore everything that has already the component == _dd.integration
             if (span?.meta?.component && span.meta.component !== span.meta['_dd.integration']) {
-              expect(span.meta['_dd.integration']).to.equal(
+              assert.strictEqual(span.meta['_dd.integration'],
                 currentIntegrationName,
                   `Expected span to have "_dd.integration" tag "${currentIntegrationName}"
                   but found "${span.meta['_dd.integration']}" for span ID ${span.span_id}`
@@ -298,7 +312,7 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * - rejectFirst: false
  * - spanResourceMatch: undefined
  *
- * @typedef {Object} RunCallbackAgainstTracesOptions
+ * @typedef {object} RunCallbackAgainstTracesOptions
  * @property {number} [timeoutMs=1000] - The timeout in ms.
  * @property {boolean} [rejectFirst=false] - If true, reject the first time the callback throws.
  * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
@@ -316,12 +330,13 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * Otherwise, it will reject.
  *
  * @param {RunCallbackAgainstTracesCallback} callback - A function that tests a payload as it's received.
- * @param {RunCallbackAgainstTracesOptions} options={} - An options object
+ * @param {RunCallbackAgainstTracesOptions} options = {} - An options object
  * @param {Set} handlers - Set of handlers to add the callback to.
  * @returns {Promise<void>} A promise resolving if expectations are met
  */
 function runCallbackAgainstTraces (callback, options = {}, handlers) {
-  let error
+  /** @type {Error[]} */
+  const errors = []
   let resolve
   let reject
   const promise = new Promise((_resolve, _reject) => {
@@ -330,32 +345,45 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   })
 
   const rejectionTimeout = setTimeout(() => {
-    if (error) reject(error)
+    if (errors.length) {
+      let error = errors[0]
+      if (errors.length > 1) {
+        error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
+        // Mark errors enumerable for older Node.js versions to be visible.
+        Object.defineProperty(error, 'errors', {
+          enumerable: true,
+        })
+      }
+      // Hack for the information to be fully visible.
+      error.message = util.inspect(error, { depth: null })
+      reject(error)
+    }
   }, options.timeoutMs || 1000)
 
   const handlerPayload = {
     handler,
-    spanResourceMatch: options.spanResourceMatch
+    spanResourceMatch: options.spanResourceMatch,
   }
 
   /**
    * @type {TracesCallback | AgentlessCallback}
-  */
+   */
   function handler (...args) {
     // we assert integration name being tagged on all spans (when running integration tests)
     assertIntegrationName(args[0])
 
     try {
+      // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
       const result = callback(...args)
       handlers.delete(handlerPayload)
       clearTimeout(rejectionTimeout)
       resolve(result)
-    } catch (e) {
+    } catch (error) {
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
         clearTimeout(rejectionTimeout)
-        reject(e)
+        reject(error)
       } else {
-        error = error || e // if no spans match we report exactly the first mismatch error (which is unintuitive)
+        errors.push(error)
       }
     }
   }
@@ -370,7 +398,8 @@ module.exports = {
   /**
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
-   * @param {String|String[]} pluginNames - Name or list of names of plugins to load
+   * @overload
+   * @param {string | string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>} [config]
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
@@ -379,7 +408,7 @@ module.exports = {
    * Load the plugin on the tracer with an optional config and start a mock agent.
    *
    * @overload
-   * @param {String[]} pluginNames - Name or list of names of plugins to load
+   * @param {string[]} pluginNames - Name or list of names of plugins to load
    * @param {Record<string, unknown>[]} config
    * @param {Record<string, unknown>} [tracerConfig={}]
    * @returns Promise<void>
@@ -395,7 +424,23 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    tracer = require('../..')
+    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
+      './defaults': defaults,
+    })
+    // Reload dogstatsd to avoid adding new events to the global process object
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+    const proxy = proxyquire('../../src/proxy', {
+      './config': getConfigFresh,
+      './dogstatsd': dogstatsd,
+    })
+    const TracerProxy = proxyquire('../../src', {
+      './proxy': proxy,
+    })
+    tracer = proxyquire('../../', {
+      './src': TracerProxy,
+    })
+
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
     agent.use(bodyParser.text({ limit: Infinity, type: 'application/json' }))
@@ -417,7 +462,7 @@ module.exports = {
 
     agent.get('/info', (req, res) => {
       res.status(202).send({
-        endpoints: availableEndpoints
+        endpoints: availableEndpoints,
       })
     })
 
@@ -437,9 +482,13 @@ module.exports = {
 
     // LLM Observability traces endpoint
     agent.post('/evp_proxy/v2/api/v2/llmobs', (req, res) => {
-      llmobsHandlers.forEach(({ handler }) => {
-        handler(JSON.parse(req.body))
-      })
+      llmobsSpanEventsRequests.push(JSON.parse(req.body))
+      res.status(200).send()
+    })
+
+    // LLM Observability evaluation metrics endpoint
+    agent.post('/evp_proxy/v2/api/intake/llm-obs/v2/eval-metric', (req, res) => {
+      llmobsEvaluationMetricsRequests.push(JSON.parse(req.body))
       res.status(200).send()
     })
 
@@ -447,7 +496,7 @@ module.exports = {
     dsmStats = []
     agent.post('/v0.1/pipeline_stats', (req, res) => {
       dsmStats.push(req.body)
-      statsHandlers.forEach(({ handler, spanResourceMatch }) => {
+      statsHandlers.forEach(({ handler }) => {
         handler(dsmStats)
       })
       res.status(200).send()
@@ -469,13 +518,14 @@ module.exports = {
       listener = server.listen(0, () => {
         const port = listener.address().port
 
-        tracer.init(Object.assign({}, {
+        tracer.init({
           service: 'test',
           env: 'tester',
           port,
           flushInterval: 0,
-          plugins: false
-        }, tracerConfig))
+          plugins: false,
+          ...tracerConfig,
+        })
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
@@ -514,15 +564,19 @@ module.exports = {
    * @param {Function} handler
    */
   subscribe (handler) {
-    traceHandlers.add({ handler }) // TODO: SHOULD BE .add(handler) SO WE CAN DELETE
+    traceHandlers.add({ handler })
   },
 
   /**
-   * Remove a handler (TODO: THIS DOES NOTHING)
+   * Remove a handler
    * @param {Function} handler
    */
   unsubscribe (handler) {
-    traceHandlers.delete(handler)
+    for (const traceHandler of traceHandlers) {
+      if (traceHandler.handler === handler) {
+        traceHandlers.delete(traceHandler)
+      }
+    }
   },
 
   /**
@@ -559,8 +613,11 @@ module.exports = {
         try {
           assertObjectContains(traces[0][0], callbackOrExpected)
         } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error('Expected span %o did not match traces:\n%o', callbackOrExpected, traces)
+          // Enrich error with actual and expected traces for Node.js < 22.17.0
+          if (semifies(process.version, '<22.17.0')) {
+            error.actualTraces = util.inspect(traces, { depth: null })
+            error.expectedTraces = util.inspect(callbackOrExpected, { depth: null })
+          }
           throw error
         }
       } else {
@@ -581,13 +638,31 @@ module.exports = {
   },
 
   /**
-   * Use a callback handler for LLM Observability traces.
-   * @param {RunCallbackAgainstTracesCallback} callback
-   * @param {RunCallbackAgainstTracesOptions} [options]
-   * @returns
+   * Get the LLM Observability span events requests.
+   * @param {boolean} clear - Clear the requests after getting them.
+   * @returns {Array<object>} The LLM Observability span events requests.
    */
-  useLlmobsTraces (callback, options) {
-    return runCallbackAgainstTraces(callback, options, llmobsHandlers)
+  getLlmObsSpanEventsRequests (clear = false) {
+    const requests = llmobsSpanEventsRequests
+    if (clear) {
+      llmobsSpanEventsRequests = []
+    }
+
+    return requests
+  },
+
+  /**
+   * Get the LLM Observability evaluation metrics requests.
+   * @param {boolean} clear - Clear the requests after getting them.
+   * @returns {Array<object>} The LLM Observability evaluation metrics requests.
+   */
+  getLlmObsEvaluationMetricsRequests (clear = false) {
+    const requests = llmobsEvaluationMetricsRequests
+    if (clear) {
+      llmobsEvaluationMetricsRequests = []
+    }
+
+    return requests
   },
 
   /**
@@ -596,7 +671,8 @@ module.exports = {
   reset () {
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsRequests = []
+    llmobsEvaluationMetricsRequests = []
   },
 
   /**
@@ -606,7 +682,7 @@ module.exports = {
    * - ritmReset: true
    * - wipe: false
    *
-   * @param {Object} [options]
+   * @param {object} [options]
    * @param {boolean} [options.ritmReset=true] - Resets the Require In The Middle cache. You probably don't need this.
    * @param {boolean} [options.wipe=false] - Wipes tracer and non-native modules from require cache. You probably don't
    *     need this.
@@ -625,7 +701,8 @@ module.exports = {
     agent = null
     traceHandlers.clear()
     statsHandlers.clear()
-    llmobsHandlers.clear()
+    llmobsSpanEventsRequests = []
+    llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
@@ -660,6 +737,9 @@ module.exports = {
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
 
+    process.removeAllListeners('exit')
+    process.removeAllListeners('beforeExit')
+
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
     const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
       .map(exception => new RegExp(exception))
@@ -676,5 +756,5 @@ module.exports = {
   getDsmStats,
   dsmStatsExist,
   dsmStatsExistWithParentHash,
-  unformatSpanEvents
+  unformatSpanEvents,
 }

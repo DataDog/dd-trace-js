@@ -15,7 +15,7 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
       childOf,
       service: this.getServiceName(),
       type: this.constructor.type,
-      meta: {}
+      meta: {},
     }
 
     const serviceName = ctx?.attributes?.service
@@ -28,6 +28,11 @@ class ApolloGatewayFetchPlugin extends ApolloBasePlugin {
     ctx.currentStore = { ...store, span }
 
     return ctx.currentStore
+  }
+
+  onAsyncStart (ctx) {
+    const span = ctx?.currentStore?.span
+    this.config.hooks.fetch(span, ctx)
   }
 }
 

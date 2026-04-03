@@ -11,11 +11,11 @@ const OtlpTransformer = require('./otlp_transformer')
 /**
  * OtlpHttpLogExporter exports log records via OTLP over HTTP.
  *
- * This implementation follows the OTLP HTTP specification:
+ * This implementation follows the OTLP HTTP v1.7.0 specification:
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * @class OtlpHttpLogExporter
- * @extends OtlpHttpExporterBase
+ * @augments OtlpHttpExporterBase
  */
 class OtlpHttpLogExporter extends OtlpHttpExporterBase {
   /**
@@ -37,6 +37,8 @@ class OtlpHttpLogExporter extends OtlpHttpExporterBase {
    *
    * @param {LogRecord[]} logRecords - Array of enriched log records to export
    * @param {Function} resultCallback - Callback function for export result
+   *
+   * @returns {void}
    */
   export (logRecords, resultCallback) {
     if (logRecords.length === 0) {
@@ -45,8 +47,8 @@ class OtlpHttpLogExporter extends OtlpHttpExporterBase {
     }
 
     const payload = this.transformer.transformLogRecords(logRecords)
-    this._sendPayload(payload, resultCallback)
-    this._recordTelemetry('otel.log_records', logRecords.length)
+    this.sendPayload(payload, resultCallback)
+    this.recordTelemetry('otel.log_records', logRecords.length)
   }
 }
 

@@ -9,7 +9,7 @@ const { NOOP_REASON } = require('./constants/constants')
  */
 class NoopFlaggingProvider {
   /**
-   * @param {Object} [noopTracer] - Optional noop tracer instance
+   * @param {object} [noopTracer] - Optional noop tracer instance
    */
   constructor (noopTracer) {
     this._tracer = noopTracer
@@ -22,36 +22,36 @@ class NoopFlaggingProvider {
   /**
    * @param {string} flagKey - Flag key
    * @param {boolean} defaultValue - Default value to return
-   * @param {Object} context - Evaluation context
-   * @param {Object} logger - Logger instance
+   * @param {object} context - Evaluation context
+   * @param {object} logger - Logger instance
    * @returns {Promise<{value: boolean, reason: string}>} Resolution details
    */
   resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: NOOP_REASON
+      reason: NOOP_REASON,
     })
   }
 
   /**
    * @param {string} flagKey - Flag key
    * @param {string} defaultValue - Default value to return
-   * @param {Object} context - Evaluation context
-   * @param {Object} logger - Logger instance
+   * @param {object} context - Evaluation context
+   * @param {object} logger - Logger instance
    * @returns {Promise<{value: string, reason: string}>} Resolution details
    */
   resolveStringEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: NOOP_REASON
+      reason: NOOP_REASON,
     })
   }
 
   /**
    * @param {string} flagKey - Flag key
    * @param {number} defaultValue - Default value to return
-   * @param {Object} context - Evaluation context
-   * @param {Object} logger - Logger instance
+   * @param {object} context - Evaluation context
+   * @param {object} logger - Logger instance
    * @returns {Promise<{value: number, reason: string}>} Resolution details
    */
   resolveNumberEvaluation (flagKey, defaultValue, context, logger) {
@@ -63,27 +63,27 @@ class NoopFlaggingProvider {
 
   /**
    * @param {string} flagKey - Flag key
-   * @param {Object} defaultValue - Default value to return
-   * @param {Object} context - Evaluation context
-   * @param {Object} logger - Logger instance
-   * @returns {Promise<{value: Object, reason: string}>} Resolution details
+   * @param {object} defaultValue - Default value to return
+   * @param {object} context - Evaluation context
+   * @param {object} logger - Logger instance
+   * @returns {Promise<{value: object, reason: string}>} Resolution details
    */
   resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
     return Promise.resolve({
       value: defaultValue,
-      reason: NOOP_REASON
+      reason: NOOP_REASON,
     })
   }
 
   /**
-   * @returns {Object} Current configuration
+   * @returns {object} Current configuration
    */
   getConfiguration () {
     return this._config
   }
 
   /**
-   * @param {Object} config - Configuration to set
+   * @param {object} config - Configuration to set
    */
   setConfiguration (config) {
     this._config = config
@@ -91,7 +91,7 @@ class NoopFlaggingProvider {
 
   /**
    * @internal
-   * @param {Object} ufc - Universal Flag Configuration object
+   * @param {object} ufc - Universal Flag Configuration object
    */
   _setConfiguration (ufc) {
     this.setConfiguration(ufc)

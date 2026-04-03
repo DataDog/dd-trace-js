@@ -21,22 +21,22 @@ const amqpMessages = [
     body: 'Hello from an amqp message',
     annotations: {
       'x-opt-custom-annotation-key': 'custom-value', // Custom annotation
-      'x-opt-partition-key': 'myPartitionKey' // Example of a common annotation
+      'x-opt-partition-key': 'myPartitionKey', // Example of a common annotation
     },
     applicationProperties: {
-      'custom-property-key': 'custom-property-value' // Custom property
-    }
+      'custom-property-key': 'custom-property-value', // Custom property
+    },
   },
   {
     body: 'Hello from an amqp message 2 ',
     annotations: {
       'x-opt-custom-annotation-key': 'custom-value-2', // Custom annotation
-      'x-opt-partition-key': 'myPartitionKey-2' // Example of a common annotation
+      'x-opt-partition-key': 'myPartitionKey-2', // Example of a common annotation
     },
     applicationProperties: {
-      'custom-property-key2': 'custom-property-value2' // Custom property
-    }
-  }
+      'custom-property-key2': 'custom-property-value2', // Custom property
+    },
+  },
 ]
 
 app.http('eh1-eventdata', {
@@ -48,7 +48,7 @@ app.http('eh1-eventdata', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh1-amqpmessages', {
@@ -60,7 +60,7 @@ app.http('eh1-amqpmessages', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh1-batch', {
@@ -76,7 +76,7 @@ app.http('eh1-batch', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh2-eventdata', {
@@ -88,7 +88,7 @@ app.http('eh2-eventdata', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh2-amqpmessages', {
@@ -100,7 +100,7 @@ app.http('eh2-amqpmessages', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh2-batch', {
@@ -114,7 +114,7 @@ app.http('eh2-batch', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh1-enqueueEvent', {
@@ -126,7 +126,7 @@ app.http('eh1-enqueueEvent', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh1-enqueueEvents', {
@@ -138,7 +138,7 @@ app.http('eh1-enqueueEvents', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh1-enqueueAmqp', {
@@ -150,7 +150,7 @@ app.http('eh1-enqueueAmqp', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh2-enqueueEvent', {
@@ -162,7 +162,7 @@ app.http('eh2-enqueueEvent', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh2-enqueueEvents', {
@@ -174,7 +174,7 @@ app.http('eh2-enqueueEvents', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.http('eh2-enqueueAmqp', {
@@ -186,7 +186,7 @@ app.http('eh2-enqueueAmqp', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.eventHub('eventHubTest1', {
@@ -197,7 +197,7 @@ app.eventHub('eventHubTest1', {
     return {
       status: 200,
     }
-  }
+  },
 })
 
 app.eventHub('eventHubTest2', {
@@ -208,5 +208,5 @@ app.eventHub('eventHubTest2', {
     return {
       status: 200,
     }
-  }
+  },
 })

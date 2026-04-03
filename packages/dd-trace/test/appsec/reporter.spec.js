@@ -1,15 +1,20 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const dc = require('dc-polyfill')
-const proxyquire = require('proxyquire')
+const assert = require('node:assert/strict')
 const zlib = require('node:zlib')
 
+const dc = require('dc-polyfill')
+const { after, afterEach, beforeEach, describe, it } = require('mocha')
+const proxyquire = require('proxyquire')
+const sinon = require('sinon')
+
+const { USER_KEEP } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
-const { USER_KEEP } = require('../../../../ext/priority')
+const { getConfigFresh } = require('../helpers/config')
+function getAppSecConfig (options) {
+  return getConfigFresh({ appsec: options }).appsec
+}
 
 describe('reporter', () => {
   let Reporter
@@ -23,30 +28,31 @@ describe('reporter', () => {
     extendedHeadersCollection: {
       enabled: false,
       redaction: true,
-      maxHeaders: 50
+      maxHeaders: 50,
     },
     rasp: {
-      bodyCollection: false
-    }
+      bodyCollection: false,
+    },
   }
 
   beforeEach(() => {
     prioritySampler = {
-      setPriority: sinon.stub()
+      setPriority: sinon.stub(),
     }
 
     span = {
       _prioritySampler: prioritySampler,
       context: sinon.stub().returns({
-        _tags: {}
+        _tags: {},
       }),
       addTags: sinon.stub(),
       setTag: sinon.stub(),
-      keep: sinon.stub()
+      keep: sinon.stub(),
     }
 
     web = {
-      root: sinon.stub().returns(span)
+      root: sinon.stub().returns(span),
+      getContext: sinon.stub().returns({}),
     }
 
     telemetry = {
@@ -58,18 +64,18 @@ describe('reporter', () => {
       updateRaspRequestsMetricTags: sinon.stub(),
       updateRaspRuleSkippedMetricTags: sinon.stub(),
       updateRateLimitedMetric: sinon.stub(),
-      getRequestMetrics: sinon.stub()
+      getRequestMetrics: sinon.stub(),
     }
 
     Reporter = proxyquire('../../src/appsec/reporter', {
       '../plugins/util/web': web,
-      './telemetry': telemetry
+      './telemetry': telemetry,
     })
   })
 
   afterEach(() => {
     sinon.restore()
-    Reporter.init(defaultReporterConfig)
+    Reporter.init(getAppSecConfig(defaultReporterConfig))
     Reporter.metricsQueue.clear()
   })
 
@@ -77,7 +83,7 @@ describe('reporter', () => {
     it('should return empty object when providing no headers', () => {
       const result = Reporter.filterHeaders(null)
 
-      expect(result).to.be.an('object').that.is.empty
+      assert.ok(Object.keys(result).length === 0)
     })
 
     it('should filter and format headers from passlist', () => {
@@ -85,18 +91,18 @@ describe('reporter', () => {
         host: 'localhost',
         'user-agent': 42,
         secret: 'password',
-        'x-forwarded-for': '10'
+        'x-forwarded-for': '10',
       }, Reporter.mapHeaderAndTags([
         'host',
         'user-agent',
         'x-forwarded-for',
-        'x-client-ip'
+        'x-client-ip',
       ], 'prefix.'))
 
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         'prefix.host': 'localhost',
         'prefix.user-agent': '42',
-        'prefix.x-forwarded-for': '10'
+        'prefix.x-forwarded-for': '10',
       })
     })
 
@@ -108,29 +114,29 @@ describe('reporter', () => {
         host: 'localhost',
         'user-agent': 42,
         secret: 'password',
-        'x-forwarded-for': '10'
+        'x-forwarded-for': '10',
       }, new Set([
         'host',
         'user-agent',
         'x-forwarded-for',
-        'x-client-ip'
+        'x-client-ip',
       ]), 'prefix.', 3)
 
-      expect(result).to.deep.equal({
+      assert.deepStrictEqual(result, {
         'prefix.content-digest': 'foo',
         'prefix.content-length': '42',
-        'prefix.content-security-policy': 'script-src self'
+        'prefix.content-security-policy': 'script-src self',
       })
     })
   })
 
   describe('formatHeaderName', () => {
     it('should format a string', () => {
-      expect(Reporter.formatHeaderName('Content-Type')).to.equal('content-type')
-      expect(Reporter.formatHeaderName(' Content-Type ')).to.equal('content-type')
-      expect(Reporter.formatHeaderName('C!!!ont_____ent----tYp!/!e')).to.equal('c___ont_____ent----typ_/_e')
-      expect(Reporter.formatHeaderName('Some.Header')).to.equal('some_header')
-      expect(Reporter.formatHeaderName(''.padEnd(300, 'a'))).to.have.lengthOf(200)
+      assert.strictEqual(Reporter.formatHeaderName('Content-Type'), 'content-type')
+      assert.strictEqual(Reporter.formatHeaderName(' Content-Type '), 'content-type')
+      assert.strictEqual(Reporter.formatHeaderName('C!!!ont_____ent----tYp!/!e'), 'c___ont_____ent----typ_/_e')
+      assert.strictEqual(Reporter.formatHeaderName('Some.Header'), 'some_header')
+      assert.strictEqual(Reporter.formatHeaderName(''.padEnd(300, 'a')).length, 200)
     })
   })
 
@@ -140,25 +146,25 @@ describe('reporter', () => {
     const diagnosticsRules = {
       loaded: ['1', '3', '4'],
       failed: ['2'],
-      errors: { error: 'error parsing rule 2' }
+      errors: { error: 'error parsing rule 2' },
     }
 
     it('should add some entries to metricsQueue', () => {
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
-      expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.eq(wafVersion)
+      assert.strictEqual(Reporter.metricsQueue.get('_dd.appsec.waf.version'), wafVersion)
     })
 
     it('should not add entries to metricsQueue with success false', () => {
       Reporter.reportWafInit(wafVersion, rulesVersion, false)
 
-      expect(Reporter.metricsQueue.get('_dd.appsec.waf.version')).to.be.undefined
+      assert.strictEqual(Reporter.metricsQueue.get('_dd.appsec.waf.version'), undefined)
     })
 
     it('should call incrementWafInitMetric', () => {
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementWafInitMetric, wafVersion, rulesVersion, true)
     })
 
     it('should not fail with undefined arguments', () => {
@@ -168,7 +174,7 @@ describe('reporter', () => {
 
       Reporter.reportWafInit(wafVersion, rulesVersion, diagnosticsRules, true)
 
-      expect(telemetry.incrementWafInitMetric).to.have.been.calledOnceWithExactly(wafVersion, rulesVersion, true)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementWafInitMetric, wafVersion, rulesVersion, true)
     })
   })
 
@@ -189,7 +195,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics({})
 
-      expect(span.setTag).not.to.have.been.called
+      sinon.assert.notCalled(span.setTag)
     })
 
     it('should do nothing when rootSpan is not available', () => {
@@ -199,8 +205,8 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).not.to.have.been.called
-      expect(telemetry.updateRaspRequestsMetricTags).not.to.have.been.called
+      sinon.assert.notCalled(telemetry.updateWafRequestsMetricTags)
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should set duration metric if set', () => {
@@ -208,9 +214,9 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should call updateWafRequestsMetricTags', () => {
@@ -219,17 +225,17 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req)
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, store.req)
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should set ext duration metrics if set', () => {
       const metrics = { durationExt: 42 }
       Reporter.reportMetrics(metrics)
 
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should set rulesVersion if set', () => {
@@ -237,9 +243,9 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.setTag).to.have.been.calledOnceWithExactly('_dd.appsec.event_rules.version', '1.2.3')
-      expect(telemetry.updateRaspRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.setTag, '_dd.appsec.event_rules.version', '1.2.3')
+      sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
     it('should set blockTriggered when provided', () => {
@@ -247,7 +253,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics, null)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
     })
 
     it('should set wafTimeout when result has timeout', () => {
@@ -255,7 +261,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(telemetry.updateWafRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
     })
 
     it('should set max truncation string length metric if set', () => {
@@ -263,7 +269,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.string_length', 300)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.truncated.string_length', 300)
     })
 
     it('should set max truncation container size metric if set', () => {
@@ -271,7 +277,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.container_size', 200)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.truncated.container_size', 200)
     })
 
     it('should set max truncation container depth metric if set', () => {
@@ -279,7 +285,7 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics)
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.truncated.container_depth', 100)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.truncated.container_depth', 100)
     })
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
@@ -290,8 +296,8 @@ describe('reporter', () => {
 
       Reporter.reportMetrics(metrics, raspRule)
 
-      expect(telemetry.updateRaspRequestsMetricTags).to.have.been.calledOnceWithExactly(metrics, store.req, raspRule)
-      expect(telemetry.updateWafRequestsMetricTags).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRequestsMetricTags, metrics, store.req, raspRule)
+      sinon.assert.notCalled(telemetry.updateWafRequestsMetricTags)
     })
   })
 
@@ -306,14 +312,14 @@ describe('reporter', () => {
         skipped: [],
         errors: {
           'missing key operator': [
-            'blk-001-001'
-          ]
+            'blk-001-001',
+          ],
         },
         warnings: {
           'invalid tag': [
-            'blk-001-001'
-          ]
-        }
+            'blk-001-001',
+          ],
+        },
       },
       processors: {
         loaded: ['http-endpoint-fingerprint'],
@@ -321,10 +327,10 @@ describe('reporter', () => {
         skipped: [],
         errors: {
           'no mappings defined': [
-            'http-endpoint-fingerprint'
-          ]
-        }
-      }
+            'http-endpoint-fingerprint',
+          ],
+        },
+      },
     }
 
     it('should send diagnostics using telemetry logs', () => {
@@ -335,29 +341,29 @@ describe('reporter', () => {
 
       Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics)
 
-      expect(telemetryLogHandlerAssert).to.have.been.calledThrice
-      expect(telemetryLogHandlerAssert.getCall(0)).to.have.been.calledWithExactly({
+      sinon.assert.calledThrice(telemetryLogHandlerAssert)
+      assert.strictEqual(telemetryLogHandlerAssert.getCall(0).calledWithExactly({
         message: '"missing key operator": ["blk-001-001"]',
         level: 'ERROR',
-        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
-      }, 'datadog:telemetry:log')
-      expect(telemetryLogHandlerAssert.getCall(1)).to.have.been.calledWithExactly({
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1',
+      }, 'datadog:telemetry:log'), true)
+      assert.strictEqual(telemetryLogHandlerAssert.getCall(1).calledWithExactly({
         message: '"invalid tag": ["blk-001-001"]',
         level: 'WARN',
-        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1'
-      }, 'datadog:telemetry:log')
-      expect(telemetryLogHandlerAssert.getCall(2)).to.have.been.calledWithExactly({
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:rules,rc_config_id:1',
+      }, 'datadog:telemetry:log'), true)
+      assert.strictEqual(telemetryLogHandlerAssert.getCall(2).calledWithExactly({
         message: '"no mappings defined": ["http-endpoint-fingerprint"]',
         level: 'ERROR',
-        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:processors,rc_config_id:1'
-      }, 'datadog:telemetry:log')
+        tags: 'log_type:rc::asm_dd::diagnostic,appsec_config_key:processors,rc_config_id:1',
+      }, 'datadog:telemetry:log'), true)
     })
 
     it('should increment waf.config_errors metric', () => {
       Reporter.reportWafConfigUpdate(product, rcConfigId, diagnostics, '1.24.1')
 
-      expect(telemetry.incrementWafConfigErrorsMetric).to.have.been.calledTwice
-      expect(telemetry.incrementWafConfigErrorsMetric).to.always.have.been.calledWithExactly('1.24.1', '1.42.11')
+      sinon.assert.calledTwice(telemetry.incrementWafConfigErrorsMetric)
+      sinon.assert.calledWithExactly(telemetry.incrementWafConfigErrorsMetric, '1.24.1', '1.42.11')
     })
   })
 
@@ -367,12 +373,12 @@ describe('reporter', () => {
     beforeEach(() => {
       req = {
         socket: {
-          remoteAddress: '8.8.8.8'
+          remoteAddress: '8.8.8.8',
         },
         headers: {
           host: 'localhost',
-          'user-agent': 'arachni'
-        }
+          'user-agent': 'arachni',
+        },
       }
       storage('legacy').enterWith({ req })
     })
@@ -388,16 +394,16 @@ describe('reporter', () => {
         events: [
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
-        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
+        '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
       })
     })
 
@@ -406,17 +412,17 @@ describe('reporter', () => {
         events: [
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
       })
     })
 
@@ -425,11 +431,11 @@ describe('reporter', () => {
 
       Reporter.reportAttack({ events: [] })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.appsec.json': '{"triggers":[]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
       })
     })
 
@@ -439,21 +445,21 @@ describe('reporter', () => {
       Reporter.reportAttack({
         events: [
           {
-            rule: {}
+            rule: {},
           },
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
       })
     })
 
@@ -463,28 +469,95 @@ describe('reporter', () => {
       Reporter.reportAttack({
         events: [
           {
-            rule: {}
+            rule: {},
           },
           {
             rule: {},
-            rule_matches: [{}]
-          }
-        ]
+            rule_matches: [{}],
+          },
+        ],
       })
 
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'appsec.event': 'true',
         '_dd.origin': 'appsec',
         '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]},{"rule":{}},{"rule":{},"rule_matches":[{}]}]}',
-        'network.client.ip': '8.8.8.8'
+        'network.client.ip': '8.8.8.8',
+      })
+    })
+
+    describe('inferred proxy spans', () => {
+      it('should propagate _dd.appsec.json to inferred proxy span when present', () => {
+        Reporter.init(getAppSecConfig(defaultReporterConfig), true)
+
+        const inferredProxySpan = {
+          setTag: sinon.stub(),
+        }
+        web.getContext.returns({ inferredProxySpan })
+
+        Reporter.reportAttack({
+          events: [
+            {
+              rule: {},
+              rule_matches: [{}],
+            },
+          ],
+        })
+
+        sinon.assert.calledOnceWithExactly(
+          inferredProxySpan.setTag,
+          '_dd.appsec.json',
+          '{"triggers":[{"rule":{},"rule_matches":[{}]}]}'
+        )
+      })
+
+      it('should not fail when inferred proxy span is not present', () => {
+        Reporter.init(getAppSecConfig(defaultReporterConfig), true)
+        web.getContext.returns({})
+
+        Reporter.reportAttack({
+          events: [
+            {
+              rule: {},
+              rule_matches: [{}],
+            },
+          ],
+        })
+
+        sinon.assert.calledOnceWithExactly(span.addTags, {
+          'appsec.event': 'true',
+          '_dd.origin': 'appsec',
+          '_dd.appsec.json': '{"triggers":[{"rule":{},"rule_matches":[{}]}]}',
+          'network.client.ip': '8.8.8.8',
+        })
+      })
+
+      it('should not add _dd.appsec.json to inferred proxy span when inferredProxyServicesEnabled is false', () => {
+        Reporter.init(getAppSecConfig(defaultReporterConfig), false)
+
+        const inferredProxySpan = {
+          setTag: sinon.stub(),
+        }
+        web.getContext.returns({ inferredProxySpan })
+
+        Reporter.reportAttack({
+          events: [
+            {
+              rule: {},
+              rule_matches: [{}],
+            },
+          ],
+        })
+
+        sinon.assert.notCalled(inferredProxySpan.setTag)
       })
     })
 
     describe('extended collection', () => {
       const expectedBody = {
         foo: 42,
-        bar: 'baz'
+        bar: 'baz',
       }
 
       const objectDepth = (o) =>
@@ -499,65 +572,63 @@ describe('reporter', () => {
       })
 
       it('should report request body in meta struct on rasp event when enabled', () => {
-        Reporter.init(
-          {
-            rateLimit: 100,
-            extendedHeadersCollection: {
-              enabled: false,
-              redaction: true,
-              maxHeaders: 50
-            },
-            rasp: {
-              bodyCollection: true
-            }
-          }
-        )
+        const config = getAppSecConfig({
+          rateLimit: 100,
+          extendedHeadersCollection: {
+            enabled: false,
+            redaction: true,
+            maxHeaders: 50,
+          },
+          rasp: {
+            bodyCollection: true,
+          },
+        })
+        Reporter.init(config)
 
         Reporter.reportAttack({
           events: [
             {
               rule: {
                 tags: {
-                  module: 'rasp'
-                }
+                  module: 'rasp',
+                },
               },
-              rule_matches: [{}]
-            }
-          ]
+              rule_matches: [{}],
+            },
+          ],
         })
 
-        expect(span.meta_struct['http.request.body']).to.be.deep.equal(expectedBody)
+        assert.deepStrictEqual(span.meta_struct['http.request.body'], expectedBody)
       })
 
       it('should not report request body in meta struct on rasp event when disabled', () => {
-        Reporter.init(
-          {
-            rateLimit: 100,
-            extendedHeadersCollection: {
-              enabled: false,
-              redaction: true,
-              maxHeaders: 50
-            },
-            rasp: {
-              bodyCollection: false
-            }
-          }
-        )
+        const config = getAppSecConfig({
+          rateLimit: 100,
+          extendedHeadersCollection: {
+            enabled: false,
+            redaction: true,
+            maxHeaders: 50,
+          },
+          rasp: {
+            bodyCollection: false,
+          },
+        })
+        Reporter.init(config)
 
         Reporter.reportAttack({
           events: [
             {
               rule: {
                 tags: {
-                  module: 'rasp'
-                }
+                  module: 'rasp',
+                },
               },
-              rule_matches: [{}]
-            }
-          ]
+              rule_matches: [{}],
+            },
+          ],
         })
 
-        expect(span.meta_struct?.['http.request.body']).to.be.undefined
+        assert.strictEqual(span.meta_struct?.['http.request.body'], undefined)
       })
 
       describe('Request body truncation', () => {
@@ -579,14 +650,14 @@ describe('reporter', () => {
             emptyObject: {},
             objectWithToJSON: {
               toJSON: () => Object.fromEntries([...Array(300).keys()].map(i => [i, i])),
-              foo: 'bar'
+              foo: 'bar',
             },
             objectWithToJSONRaisingException: {
-              toJSON: () => { throw new TypeError('Object not serializable') }
+              toJSON: () => { throw new TypeError('Object not serializable') },
             },
             emptyArray: [],
-            arrayWithToJSON
-          }
+            arrayWithToJSON,
+          },
         }
 
         requestBody.circularRef = requestBody
@@ -594,37 +665,36 @@ describe('reporter', () => {
         it('should truncate collected request body', () => {
           const { truncated, value: truncatedRequestBody } = Reporter.truncateRequestBody(requestBody)
 
-          expect(truncated).to.be.true
-          expect(truncatedRequestBody).to.have.property('str')
-          expect(truncatedRequestBody.str).to.have.length(4096)
-          expect(objectDepth(truncatedRequestBody.nestedObj)).to.be.equal(19)
-          expect(Object.keys(truncatedRequestBody.objectWithLotsOfNodes)).to.have.length(256)
-          expect(truncatedRequestBody.arr).to.have.length(256)
-          expect(truncatedRequestBody.specialValues.nullValue).to.be.null
-          expect(truncatedRequestBody.specialValues.undefinedValue).to.be.undefined
-          expect(truncatedRequestBody.specialValues.emptyObject).to.be.deep.equal({})
-          expect(Object.keys(truncatedRequestBody.specialValues.objectWithToJSON)).to.have.length(256)
-          expect(truncatedRequestBody.specialValues.objectWithToJSON.foo).to.be.undefined
-          expect(truncatedRequestBody.specialValues.objectWithToJSONRaisingException).to.be.undefined
-          expect(truncatedRequestBody.specialValues.emptyArray).to.be.deep.equal([])
-          expect(objectDepth(truncatedRequestBody.circularRef)).to.be.equal(19)
-          expect(truncatedRequestBody.specialValues.arrayWithToJSON).to.have.length(4096)
+          assert.strictEqual(truncated, true)
+          assert.ok(Object.hasOwn(truncatedRequestBody, 'str'))
+          assert.strictEqual(truncatedRequestBody.str.length, 4096)
+          assert.strictEqual(objectDepth(truncatedRequestBody.nestedObj), 19)
+          assert.strictEqual(Object.keys(truncatedRequestBody.objectWithLotsOfNodes).length, 256)
+          assert.strictEqual(truncatedRequestBody.arr.length, 256)
+          assert.strictEqual(truncatedRequestBody.specialValues.nullValue, null)
+          assert.strictEqual(truncatedRequestBody.specialValues.undefinedValue, undefined)
+          assert.deepStrictEqual(truncatedRequestBody.specialValues.emptyObject, {})
+          assert.strictEqual(Object.keys(truncatedRequestBody.specialValues.objectWithToJSON).length, 256)
+          assert.strictEqual(truncatedRequestBody.specialValues.objectWithToJSON.foo, undefined)
+          assert.strictEqual(truncatedRequestBody.specialValues.objectWithToJSONRaisingException, undefined)
+          assert.deepStrictEqual(truncatedRequestBody.specialValues.emptyArray, [])
+          assert.strictEqual(objectDepth(truncatedRequestBody.circularRef), 19)
+          assert.strictEqual(truncatedRequestBody.specialValues.arrayWithToJSON.length, 4096)
         })
 
         it('should set request body size exceeded when reporter request body has been truncated', () => {
-          Reporter.init(
-            {
-              rateLimit: 100,
-              extendedHeadersCollection: {
-                enabled: false,
-                redaction: true,
-                maxHeaders: 50
-              },
-              rasp: {
-                bodyCollection: true
-              }
-            }
-          )
+          const config = getAppSecConfig({
+            rateLimit: 100,
+            extendedHeadersCollection: {
+              enabled: false,
+              redaction: true,
+              maxHeaders: 50,
+            },
+            rasp: {
+              bodyCollection: true,
+            },
+          })
+          Reporter.init(config)
 
           req.body = requestBody
 
@@ -633,31 +703,30 @@ describe('reporter', () => {
               {
                 rule: {
                   tags: {
-                    module: 'rasp'
-                  }
+                    module: 'rasp',
+                  },
                 },
-                rule_matches: [{}]
-              }
-            ]
+                rule_matches: [{}],
+              },
+            ],
           })
 
-          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', 'true')
+          sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.request_body_size.exceeded', 'true')
         })
 
         it('should set request body size exceeded metric for old and new approaches when both events happen', () => {
-          Reporter.init(
-            {
-              rateLimit: 100,
-              extendedHeadersCollection: {
-                enabled: false,
-                redaction: true,
-                maxHeaders: 50
-              },
-              rasp: {
-                bodyCollection: true
-              }
-            }
-          )
+          const config = getAppSecConfig({
+            rateLimit: 100,
+            extendedHeadersCollection: {
+              enabled: false,
+              redaction: true,
+              maxHeaders: 50,
+            },
+            rasp: {
+              bodyCollection: true,
+            },
+          })
+          Reporter.init(config)
 
           req.body = requestBody
 
@@ -666,26 +735,26 @@ describe('reporter', () => {
               {
                 rule: {
                   tags: {
-                    module: 'rasp'
-                  }
+                    module: 'rasp',
+                  },
                 },
-                rule_matches: [{}]
-              }
+                rule_matches: [{}],
+              },
             ],
             actions: {
               extended_data_collection: {
-                max_collected_headers: 10
-              }
-            }
+                max_collected_headers: 10,
+              },
+            },
           })
 
-          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.request_body_size.exceeded', 'true')
+          sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.request_body_size.exceeded', 'true')
           span.context()._tags = { '_dd.appsec.rasp.request_body_size.exceeded': 'true' }
 
           const res = {}
           Reporter.finishRequest(req, res, {}, req.body)
 
-          expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.request_body_size.exceeded', 'true')
+          sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.request_body_size.exceeded', 'true')
         })
       })
     })
@@ -695,7 +764,7 @@ describe('reporter', () => {
     it('should call incrementWafUpdatesMetric', () => {
       Reporter.reportWafUpdate('0.0.1', '0.0.2', true)
 
-      expect(telemetry.incrementWafUpdatesMetric).to.have.been.calledOnceWithExactly('0.0.1', '0.0.2', true)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementWafUpdatesMetric, '0.0.1', '0.0.2', true)
     })
   })
 
@@ -704,19 +773,19 @@ describe('reporter', () => {
       const raspRule = { type: 'rule-type' }
       Reporter.reportRaspRuleSkipped(raspRule, 'after-request')
 
-      expect(telemetry.updateRaspRuleSkippedMetricTags).to.have.been.calledOnceWithExactly(raspRule, 'after-request')
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRuleSkippedMetricTags, raspRule, 'after-request')
     })
   })
 
   describe('reportAttributes', () => {
     it('should not call addTags if parameter is undefined', () => {
       Reporter.reportAttributes(undefined)
-      expect(span.addTags).not.to.be.called
+      sinon.assert.notCalled(span.addTags)
     })
 
     it('should call addTags with an empty array', () => {
       Reporter.reportAttributes([])
-      expect(span.addTags).to.be.calledOnceWithExactly({})
+      sinon.assert.calledOnceWithExactly(span.addTags, {})
     })
 
     it('should call addTags', () => {
@@ -732,13 +801,13 @@ describe('reporter', () => {
         '_dd.appsec.s.req.cookies': schemaValue,
         '_dd.appsec.s.req.body': schemaValue,
         'custom.processor.output': 'custom_attribute',
-        'custom.processor.output_int': 42
+        'custom.processor.output_int': 42,
       }
 
       Reporter.reportAttributes(attributes)
 
       const schemaEncoded = zlib.gzipSync(JSON.stringify(schemaValue)).toString('base64')
-      expect(span.addTags).to.be.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         '_dd.appsec.fp.http.endpoint': 'endpoint_fingerprint',
         '_dd.appsec.fp.http.header': 'header_fingerprint',
         '_dd.appsec.fp.http.network': 'network_fingerprint',
@@ -749,7 +818,7 @@ describe('reporter', () => {
         '_dd.appsec.s.req.cookies': schemaEncoded,
         '_dd.appsec.s.req.body': schemaEncoded,
         'custom.processor.output': 'custom_attribute',
-        'custom.processor.output_int': 42
+        'custom.processor.output_int': 42,
       })
     })
   })
@@ -775,7 +844,7 @@ describe('reporter', () => {
       'content-language',
       'host',
       'accept-encoding',
-      'accept-language'
+      'accept-language',
     ]
     const requestHeadersAndValuesToTrackOnEvent = {}
     const expectedRequestTagsToTrackOnEvent = {}
@@ -786,7 +855,7 @@ describe('reporter', () => {
 
     beforeEach(() => {
       wafContext = {
-        dispose: sinon.stub()
+        dispose: sinon.stub(),
       }
     })
 
@@ -801,7 +870,7 @@ describe('reporter', () => {
       web.root.withArgs({}).returns(span)
 
       Reporter.finishRequest(null, null)
-      expect(span.addTags).not.to.have.been.called
+      sinon.assert.notCalled(span.addTags)
     })
 
     it('should add metrics tags from metricsQueue', () => {
@@ -812,9 +881,9 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, wafContext, {})
 
-      expect(web.root).to.have.been.calledOnceWithExactly(req)
-      expect(span.addTags).to.have.been.calledWithExactly({ a: 1, b: 2 })
-      expect(Reporter.metricsQueue).to.be.empty
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledWithExactly(span.addTags, { a: 1, b: 2 })
+      assert.strictEqual(Reporter.metricsQueue.size, 0)
     })
 
     it('should only add mandatory headers when no attack or event was previously found', () => {
@@ -831,13 +900,13 @@ describe('reporter', () => {
           'akamai-user-risk': 'h',
           'content-type': 'i',
           accept: 'j',
-          'user-agent': 'k'
-        }
+          'user-agent': 'k',
+        },
       }
 
       Reporter.finishRequest(req)
-      expect(web.root).to.have.been.calledOnceWith(req)
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(web.root, req)
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-amzn-trace-id': 'a',
         'http.request.headers.cloudfront-viewer-ja3-fingerprint': 'b',
         'http.request.headers.cf-ray': 'c',
@@ -848,39 +917,38 @@ describe('reporter', () => {
         'http.request.headers.akamai-user-risk': 'h',
         'http.request.headers.content-type': 'i',
         'http.request.headers.accept': 'j',
-        'http.request.headers.user-agent': 'k'
+        'http.request.headers.user-agent': 'k',
       })
     })
 
     it('should add http response data inside request span', () => {
       const req = {
         route: {
-          path: '/path/:param'
+          path: '/path/:param',
         },
         headers: {
-          'x-cloud-trace-context': 'd'
-        }
+          'x-cloud-trace-context': 'd',
+        },
       }
 
       const res = {
         getHeaders: () => {
           return {
             'content-type': 'application/json',
-            'content-length': '42'
+            'content-length': '42',
           }
-        }
+        },
       }
 
       span.context()._tags['appsec.event'] = 'true'
 
       Reporter.finishRequest(req, res)
-      expect(web.root).to.have.been.calledOnceWith(req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
 
-      expect(span.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(span.addTags, {
         'http.request.headers.x-cloud-trace-context': 'd',
         'http.response.headers.content-type': 'application/json',
         'http.response.headers.content-length': '42',
-        'http.endpoint': '/path/:param'
       })
     })
 
@@ -890,19 +958,19 @@ describe('reporter', () => {
         getHeaders: () => {
           return {
             'content-type': 'application/json',
-            'content-length': '42'
+            'content-length': '42',
           }
-        }
+        },
       }
 
       span.context()._tags['appsec.event'] = 'true'
 
       Reporter.finishRequest(req, res)
-      expect(web.root).to.have.been.calledOnceWith(req)
+      sinon.assert.calledOnceWithExactly(web.root, req)
 
-      expect(span.addTags).to.have.been.calledWithExactly({
+      sinon.assert.calledWithExactly(span.addTags, {
         'http.response.headers.content-type': 'application/json',
-        'http.response.headers.content-length': '42'
+        'http.response.headers.content-length': '42',
       })
     })
 
@@ -910,13 +978,13 @@ describe('reporter', () => {
       const req = {
         headers: {
           'user-agent': 'arachni',
-          ...requestHeadersAndValuesToTrackOnEvent
-        }
+          ...requestHeadersAndValuesToTrackOnEvent,
+        },
       }
       const res = {
         getHeaders: () => {
           return {}
-        }
+        },
       }
       span.context()._tags['appsec.event'] = 'true'
 
@@ -924,23 +992,23 @@ describe('reporter', () => {
 
       const expectedTags = {
         'http.request.headers.user-agent': 'arachni',
-        ...expectedRequestTagsToTrackOnEvent
+        ...expectedRequestTagsToTrackOnEvent,
       }
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
+      sinon.assert.calledWithExactly(span.addTags, expectedTags)
     })
 
     it('should add http request data inside request span when user login success is tracked', () => {
       const req = {
         headers: {
           'user-agent': 'arachni',
-          ...requestHeadersAndValuesToTrackOnEvent
-        }
+          ...requestHeadersAndValuesToTrackOnEvent,
+        },
       }
       const res = {
         getHeaders: () => {
           return {}
-        }
+        },
       }
 
       span.context()
@@ -950,23 +1018,23 @@ describe('reporter', () => {
 
       const expectedTags = {
         'http.request.headers.user-agent': 'arachni',
-        ...expectedRequestTagsToTrackOnEvent
+        ...expectedRequestTagsToTrackOnEvent,
       }
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
+      sinon.assert.calledWithExactly(span.addTags, expectedTags)
     })
 
     it('should add http request data inside request span when user login failure is tracked', () => {
       const req = {
         headers: {
           'user-agent': 'arachni',
-          ...requestHeadersAndValuesToTrackOnEvent
-        }
+          ...requestHeadersAndValuesToTrackOnEvent,
+        },
       }
       const res = {
         getHeaders: () => {
           return {}
-        }
+        },
       }
 
       span.context()
@@ -976,23 +1044,23 @@ describe('reporter', () => {
 
       const expectedTags = {
         'http.request.headers.user-agent': 'arachni',
-        ...expectedRequestTagsToTrackOnEvent
+        ...expectedRequestTagsToTrackOnEvent,
       }
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
+      sinon.assert.calledWithExactly(span.addTags, expectedTags)
     })
 
     it('should add http request data inside request span when user custom event is tracked', () => {
       const req = {
         headers: {
           'user-agent': 'arachni',
-          ...requestHeadersAndValuesToTrackOnEvent
-        }
+          ...requestHeadersAndValuesToTrackOnEvent,
+        },
       }
       const res = {
         getHeaders: () => {
           return {}
-        }
+        },
       }
 
       span.context()
@@ -1002,10 +1070,10 @@ describe('reporter', () => {
 
       const expectedTags = {
         'http.request.headers.user-agent': 'arachni',
-        ...expectedRequestTagsToTrackOnEvent
+        ...expectedRequestTagsToTrackOnEvent,
       }
 
-      expect(span.addTags).to.have.been.calledWithExactly(expectedTags)
+      sinon.assert.calledWithExactly(span.addTags, expectedTags)
     })
 
     it('should call incrementWafRequestsMetric', () => {
@@ -1013,7 +1081,7 @@ describe('reporter', () => {
       const res = {}
       Reporter.finishRequest(req, res)
 
-      expect(telemetry.incrementWafRequestsMetric).to.be.calledOnceWithExactly(req)
+      sinon.assert.calledOnceWithExactly(telemetry.incrementWafRequestsMetric, req)
     })
 
     it('should set waf.duration tags if there are metrics stored', () => {
@@ -1021,11 +1089,11 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration', 1337)
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.duration_ext', 42)
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.duration')
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.duration_ext')
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.rasp.rule.eval')
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.waf.duration', 1337)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.waf.duration_ext', 42)
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.rasp.duration')
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.rasp.duration_ext')
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.rasp.rule.eval')
     })
 
     it('should set waf.timeouts tags if there are metrics stored', () => {
@@ -1033,7 +1101,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.timeouts', true)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.waf.timeouts', true)
     })
 
     it('should set waf error code tags if there are metrics stored', () => {
@@ -1041,7 +1109,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.waf.error', -1)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.waf.error', -1)
     })
 
     it('should set rasp.duration tags if there are metrics stored', () => {
@@ -1049,11 +1117,11 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.waf.duration')
-      expect(span.setTag).to.not.have.been.calledWith('_dd.appsec.waf.duration_ext')
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration', 123)
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.duration_ext', 321)
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.rule.eval', 3)
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.waf.duration')
+      sinon.assert.neverCalledWith(span.setTag, '_dd.appsec.waf.duration_ext')
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.duration', 123)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.duration_ext', 321)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.rule.eval', 3)
     })
 
     it('should set rasp.timeout tags if there are metrics stored', () => {
@@ -1061,7 +1129,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.timeout', true)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.timeout', true)
     })
 
     it('should set rasp error code tags if there are metrics stored', () => {
@@ -1069,7 +1137,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest({}, {})
 
-      expect(span.setTag).to.have.been.calledWithExactly('_dd.appsec.rasp.error', -1)
+      sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.rasp.error', -1)
     })
 
     it('should keep span if there are metrics', () => {
@@ -1080,7 +1148,7 @@ describe('reporter', () => {
 
       Reporter.finishRequest(req, wafContext, {})
 
-      expect(prioritySampler.setPriority).to.have.been.calledOnceWithExactly(span, USER_KEEP, ASM)
+      sinon.assert.calledOnceWithExactly(prioritySampler.setPriority, span, USER_KEEP, ASM)
     })
 
     describe('extended collection', () => {
@@ -1100,7 +1168,7 @@ describe('reporter', () => {
         }))
 
       after(() => {
-        Reporter.init(defaultReporterConfig)
+        Reporter.init(getAppSecConfig(defaultReporterConfig))
       })
 
       it('should collect extended headers on appsec event', () => {
@@ -1108,37 +1176,38 @@ describe('reporter', () => {
           headers: {
             'user-agent': 'arachni',
             ...requestHeadersAndValuesToTrackOnEvent,
-            ...extendedRequestHeadersAndValues
-          }
+            ...extendedRequestHeadersAndValues,
+          },
         }
         const res = {
           getHeaders: () => {
             return extendedResponseHeadersAndValues
-          }
+          },
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        Reporter.init({
+        const config = getAppSecConfig({
           rateLimit: 100,
           extendedHeadersCollection: {
             enabled: true,
             redaction: false,
-            maxHeaders: 50
+            maxHeaders: 50,
           },
           rasp: {
-            bodyCollection: false
-          }
+            bodyCollection: false,
+          },
         })
+        Reporter.init(config)
         Reporter.finishRequest(req, res)
 
         const expectedTags = {
           'http.request.headers.user-agent': 'arachni',
           ...expectedRequestTagsToTrackOnEvent,
           ...extendedRequestHeadersTags,
-          ...extendedResponseHeadersTags
+          ...extendedResponseHeadersTags,
         }
 
-        expect(span.addTags).to.have.been.calledWith(expectedTags)
+        sinon.assert.calledWith(span.addTags, expectedTags)
       })
 
       it('should truncate collected extended headers and set discarded count tags on appsec event', () => {
@@ -1146,13 +1215,13 @@ describe('reporter', () => {
           headers: {
             'user-agent': 'arachni',
             ...requestHeadersAndValuesToTrackOnEvent,
-            ...extendedRequestHeadersAndValues
-          }
+            ...extendedRequestHeadersAndValues,
+          },
         }
         const res = {
           getHeaders: () => {
             return extendedResponseHeadersAndValues
-          }
+          },
         }
         span.context()._tags['appsec.event'] = 'true'
 
@@ -1161,19 +1230,19 @@ describe('reporter', () => {
         const discardedReqHeadersCount = extendedRequestHeaders.length - reportedExtReqHeadersCount
         const discardedResHeadersCount = extendedResponseHeaders.length - maxHeaders
 
-        Reporter.init(
-          {
-            rateLimit: 100,
-            extendedHeadersCollection: {
-              enabled: true,
-              redaction: false,
-              maxHeaders
-            },
-            rasp: {
-              bodyCollection: false
-            }
-          }
-        )
+        const config = getAppSecConfig({
+          rateLimit: 100,
+          extendedHeadersCollection: {
+            enabled: true,
+            redaction: false,
+            maxHeaders,
+          },
+          rasp: {
+            bodyCollection: false,
+          },
+        })
+
+        Reporter.init(config)
         Reporter.finishRequest(req, res)
 
         const expectedTags = {
@@ -1186,10 +1255,10 @@ describe('reporter', () => {
             Object.entries(extendedResponseHeadersTags).slice(0, -discardedResHeadersCount)
           ),
           '_dd.appsec.request.header_collection.discarded': discardedReqHeadersCount,
-          '_dd.appsec.response.header_collection.discarded': discardedResHeadersCount
+          '_dd.appsec.response.header_collection.discarded': discardedResHeadersCount,
         }
 
-        expect(span.addTags).to.have.been.calledWith(expectedTags)
+        sinon.assert.calledWith(span.addTags, expectedTags)
       })
 
       it('should not collect extended headers on appsec event when redaction is enabled', () => {
@@ -1197,35 +1266,37 @@ describe('reporter', () => {
           headers: {
             'user-agent': 'arachni',
             ...requestHeadersAndValuesToTrackOnEvent,
-            ...extendedRequestHeadersAndValues
-          }
+            ...extendedRequestHeadersAndValues,
+          },
         }
         const res = {
           getHeaders: () => {
             return extendedResponseHeadersAndValues
-          }
+          },
         }
         span.context()._tags['appsec.event'] = 'true'
 
-        Reporter.init({
+        const config = getAppSecConfig({
           rateLimit: 100,
           extendedHeadersCollection: {
             enabled: true,
             redaction: true,
-            maxHeaders: 50
+            maxHeaders: 50,
           },
           rasp: {
-            bodyCollection: false
-          }
+            bodyCollection: false,
+          },
         })
+
+        Reporter.init(config)
         Reporter.finishRequest(req, res)
 
         const expectedTags = {
           'http.request.headers.user-agent': 'arachni',
-          ...expectedRequestTagsToTrackOnEvent
+          ...expectedRequestTagsToTrackOnEvent,
         }
 
-        expect(span.addTags).to.have.been.calledWith(expectedTags)
+        sinon.assert.calledWith(span.addTags, expectedTags)
       })
     })
   })

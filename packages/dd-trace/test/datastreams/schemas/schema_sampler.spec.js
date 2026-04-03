@@ -1,10 +1,10 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it } = require('mocha')
 
 require('../../setup/core')
-
 const { SchemaSampler } = require('../../../src/datastreams/schemas/schema_sampler')
 
 describe('SchemaSampler', () => {
@@ -27,15 +27,15 @@ describe('SchemaSampler', () => {
     const canSample5 = sampler.canSample(currentTimeMs + 30001)
     const weight5 = sampler.trySample(currentTimeMs + 30001)
 
-    expect(canSample1).to.be.true
-    expect(weight1).to.equal(1)
-    expect(canSample2).to.be.false
-    expect(weight2).to.equal(0)
-    expect(canSample3).to.be.false
-    expect(weight3).to.equal(0)
-    expect(canSample4).to.be.true
-    expect(weight4).to.equal(3)
-    expect(canSample5).to.be.false
-    expect(weight5).to.equal(0)
+    assert.strictEqual(canSample1, true)
+    assert.strictEqual(weight1, 1)
+    assert.strictEqual(canSample2, false)
+    assert.strictEqual(weight2, 0)
+    assert.strictEqual(canSample3, false)
+    assert.strictEqual(weight3, 0)
+    assert.strictEqual(canSample4, true)
+    assert.strictEqual(weight4, 3)
+    assert.strictEqual(canSample5, false)
+    assert.strictEqual(weight5, 0)
   })
 })

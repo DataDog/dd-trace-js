@@ -1,39 +1,45 @@
-name: 'Dependabot Automation'
+name: "Dependabot Automation"
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - opened
+      - reopened
+      - synchronize
 
 env:
+  # Add Groups here to enable auto-merge for Dependabot PRs
   GROUPS: '["dev-minor-and-patch-dependencies", "gh-actions-packages", "test-versions"]'
 
 jobs:
-  dependabot:
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+  dependabot-automation:
+    # Only run automation on the initial Dependabot-triggered run. If an automation commit is pushed
+    # GitHub re-triggers this workflow with `github.actor == 'dd-octo-sts[bot]'`. We intentionally
+    # avoid minting tokens / approving / enabling auto-merge on that follow-up run.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
     steps:
-      - uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
           policy: dependabot-automation
       - name: Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@08eff52bf64351f401fb50d4972fa95b9f2c2d1b # 2.4.0
+        uses: dependabot/fetch-metadata@ffa630c65fa7e0ecfa0625b5ceda64399aea1b36 # 3.0.0
         with:
           github-token: "${{ steps.octo-sts.outputs.token }}"
-      - name: Enable auto-merge for Dependabot PRs
-        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       - name: Approve a PR
         if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
         run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - name: Enable auto-merge for Dependabot PRs
+        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}

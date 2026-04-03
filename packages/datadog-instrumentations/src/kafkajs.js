@@ -1,12 +1,12 @@
 'use strict'
 
-const {
-  channel,
-  addHook
-} = require('./helpers/instrument')
 const shimmer = require('../../datadog-shimmer')
 
 const log = require('../../dd-trace/src/log')
+const {
+  channel,
+  addHook,
+} = require('./helpers/instrument')
 
 const producerStartCh = channel('apm:kafkajs:produce:start')
 const producerCommitCh = channel('apm:kafkajs:produce:commit')
@@ -23,22 +23,6 @@ const batchConsumerFinishCh = channel('apm:kafkajs:consume-batch:finish')
 const batchConsumerErrorCh = channel('apm:kafkajs:consume-batch:error')
 
 const disabledHeaderWeakSet = new WeakSet()
-
-function commitsFromEvent (event) {
-  const { payload: { groupId, topics } } = event
-  const commitList = []
-  for (const { topic, partitions } of topics) {
-    for (const { partition, offset } of partitions) {
-      commitList.push({
-        groupId,
-        partition,
-        offset,
-        topic
-      })
-    }
-  }
-  consumerCommitCh.publish(commitList)
-}
 
 addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKafka) => {
   class Kafka extends BaseKafka {
@@ -66,7 +50,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
           clusterId,
           disableHeaderInjection: disabledHeaderWeakSet.has(producer),
           messages,
-          topic
+          topic,
         }
 
         for (const message of messages) {
@@ -93,9 +77,10 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
                   // This approach is implemented by other tracers as well.
                   if (err.name === 'KafkaJSProtocolError' && err.type === 'UNKNOWN') {
                     disabledHeaderWeakSet.add(producer)
-                    log.error('Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). ' +
-                      'Please look at broker logs for more information. ' +
-                      'Tracer message header injection for Kafka is disabled.')
+                    log.error(
+                      // eslint-disable-next-line @stylistic/max-len
+                      'Kafka Broker responded with UNKNOWN_SERVER_ERROR (-1). Please look at broker logs for more information. Tracer message header injection for Kafka is disabled.'
+                    )
                   }
                   producerErrorCh.publish(err)
                 }
@@ -131,6 +116,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
     }
 
     const kafkaClusterIdPromise = getKafkaClusterId(this)
+    let resolvedClusterId = null
 
     const eachMessageExtractor = (args, clusterId) => {
       const { topic, partition, message } = args[0]
@@ -145,13 +131,31 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
 
     const consumer = createConsumer.apply(this, arguments)
 
-    consumer.on(consumer.events.COMMIT_OFFSETS, commitsFromEvent)
+    consumer.on(consumer.events.COMMIT_OFFSETS, (event) => {
+      const { payload: { groupId: commitGroupId, topics } } = event
+      const commitList = []
+      for (const { topic, partitions } of topics) {
+        for (const { partition, offset } of partitions) {
+          commitList.push({
+            groupId: commitGroupId,
+            partition,
+            offset,
+            topic,
+            clusterId: resolvedClusterId,
+          })
+        }
+      }
+      consumerCommitCh.publish(commitList)
+    })
 
     const run = consumer.run
     const groupId = arguments[0].groupId
 
     consumer.run = function ({ eachMessage, eachBatch, ...runArgs }) {
       const wrapConsume = (clusterId) => {
+        // In kafkajs COMMIT_OFFSETS always happens in the context of one synchronous run
+        // So this will always reference a correct cluster id
+        resolvedClusterId = clusterId
         return run({
           eachMessage: wrappedCallback(
             eachMessage,
@@ -169,7 +173,7 @@ addHook({ name: 'kafkajs', file: 'src/index.js', versions: ['>=1.4'] }, (BaseKaf
             eachBatchExtractor,
             clusterId
           ),
-          ...runArgs
+          ...runArgs,
         })
       }
 
@@ -193,7 +197,7 @@ const wrappedCallback = (fn, startCh, finishCh, errorCh, extractArgs, clusterId)
     ? function (...args) {
       const extractedArgs = extractArgs(args, clusterId)
       const ctx = {
-        extractedArgs
+        extractedArgs,
       }
 
       return startCh.runStores(ctx, () => {

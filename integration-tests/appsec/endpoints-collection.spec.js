@@ -1,26 +1,19 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, before, after, it } = require('mocha')
-
+const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { createSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { before, describe, it } = require('mocha')
+
+const { assertObjectContains, sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 describe('Endpoints collection', () => {
-  let sandbox, cwd
+  let cwd
 
-  before(async function () {
-    this.timeout(process.platform === 'win32' ? 90000 : 30000)
+  useSandbox(['express', 'fastify'])
 
-    sandbox = await createSandbox(['express', 'fastify'])
-
-    cwd = sandbox.folder
-  })
-
-  after(async function () {
-    this.timeout(60000)
-    await sandbox.remove()
+  before(function () {
+    cwd = sandboxCwd()
   })
 
   function getExpectedEndpoints (framework) {
@@ -155,7 +148,7 @@ describe('Endpoints collection', () => {
               path: endpoint.path,
               type: endpoint.type,
               operation_name: endpoint.operation_name,
-              resource_name: endpoint.resource_name
+              resource_name: endpoint.resource_name,
             })
           })
         }
@@ -166,40 +159,42 @@ describe('Endpoints collection', () => {
         env: {
           DD_TRACE_AGENT_PORT: agent.port,
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-          DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: '10'
-        }
+          DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: '10',
+        },
       })
 
       await telemetryPromise
 
       const trueCount = isFirstFlags.filter(v => v === true).length
-      expect(trueCount).to.equal(1)
+      assert.strictEqual(trueCount, 1)
 
       // Check that all expected endpoints were found
+      const expectedOperationName = `${framework}.request`
       expectedEndpoints.forEach(expected => {
         const found = endpointsFound.find(e =>
           e.method === expected.method && e.path === expected.path
         )
 
-        expect(found).to.exist
-        expect(found.type).to.equal('REST')
-        expect(found.operation_name).to.equal('http.request')
-        expect(found.resource_name).to.equal(`${expected.method} ${expected.path}`)
+        assertObjectContains(found, {
+          type: 'REST',
+          operation_name: expectedOperationName,
+          resource_name: `${expected.method} ${expected.path}`,
+        })
       })
 
       // check that no additional endpoints were found
-      expect(endpointsFound.length).to.equal(expectedEndpoints.length)
+      assert.strictEqual(endpointsFound.length, expectedEndpoints.length)
 
       // Explicitly verify invalid endpoints are NOT reported
       if (framework === 'express') {
         const cycleEndpoints = endpointsFound.filter(e => e.path.includes('cycle'))
-        expect(cycleEndpoints).to.have.lengthOf(0, 'Cycle router endpoints should not be collected')
+        assert.strictEqual(cycleEndpoints.length, 0, 'Cycle router endpoints should not be collected')
 
         const invalidEndpoints = endpointsFound.filter(e => e.path.includes('invalid'))
-        expect(invalidEndpoints).to.have.lengthOf(0, 'Invalid router paths should not be collected')
+        assert.strictEqual(invalidEndpoints.length, 0, 'Invalid router paths should not be collected')
       }
     } finally {
-      proc?.kill()
+      await stopProc(proc)
       await agent?.stop()
     }
   }

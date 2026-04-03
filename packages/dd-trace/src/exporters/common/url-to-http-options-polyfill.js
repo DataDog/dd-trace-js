@@ -18,7 +18,7 @@ module.exports = {
       search,
       pathname,
       path: `${pathname || ''}${search || ''}`,
-      href: url.href
+      href: url.href,
     }
     if (port !== '') {
       options.port = Number(port)
@@ -27,5 +27,5 @@ module.exports = {
       options.auth = `${decodeURIComponent(username)}:${decodeURIComponent(password)}`
     }
     return options
-  }
+  },
 }

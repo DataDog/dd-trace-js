@@ -1,17 +1,18 @@
 'use strict'
 
-const TTLSet = require('ttl-set')
-const config = require('./config')
-const JSONBuffer = require('./json-buffer')
+const TTLSet = require('../../../../../vendor/dist/ttl-set')
 const request = require('../../exporters/common/request')
 const FormData = require('../../exporters/common/form-data')
+const { DEBUGGER_DIAGNOSTICS_V1 } = require('../constants')
+const config = require('./config')
+const JSONBuffer = require('./json-buffer')
 const log = require('./log')
 
 module.exports = {
   ackReceived,
   ackInstalled,
   ackEmitting,
-  ackError
+  ackError,
 }
 
 const ddsource = 'dd_debugger'
@@ -23,7 +24,7 @@ const cache = new TTLSet(60 * 60 * 1000) // 1 hour
 const jsonBuffer = new JSONBuffer({
   size: config.maxTotalPayloadSize,
   timeout: config.dynamicInstrumentation.uploadIntervalSeconds * 1000,
-  onFlush
+  onFlush,
 })
 
 const STATUSES = {
@@ -31,7 +32,7 @@ const STATUSES = {
   INSTALLED: 'INSTALLED',
   EMITTING: 'EMITTING',
   ERROR: 'ERROR',
-  BLOCKED: 'BLOCKED' // TODO: Implement once support for allow list, deny list or max probe limit has been added
+  BLOCKED: 'BLOCKED', // TODO: Implement once support for allow list, deny list or max probe limit has been added
 }
 
 function ackReceived ({ id: probeId, version }) {
@@ -70,7 +71,7 @@ function ackError (err, { id: probeId, version }) {
     payload.debugger.diagnostics.exception = {
       type: err.code,
       message: err.message,
-      stacktrace: err.stack
+      stacktrace: err.stack,
     }
 
     send(payload)
@@ -95,8 +96,8 @@ function onFlush (payload) {
   const options = {
     method: 'POST',
     url: config.url,
-    path: '/debugger/v1/diagnostics',
-    headers: form.getHeaders()
+    path: DEBUGGER_DIAGNOSTICS_V1,
+    headers: form.getHeaders(),
   }
 
   request(form, options, (err) => {
@@ -109,8 +110,8 @@ function statusPayload (probeId, probeVersion, status) {
     ddsource,
     service,
     debugger: {
-      diagnostics: { probeId, runtimeId, probeVersion, status }
-    }
+      diagnostics: { probeId, runtimeId, probeVersion, status },
+    },
   }
 }
 

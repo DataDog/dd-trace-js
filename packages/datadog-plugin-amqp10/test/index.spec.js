@@ -1,12 +1,13 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const agent = require('../../dd-trace/test/plugins/agent')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
-
+const agent = require('../../dd-trace/test/plugins/agent')
+const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -29,7 +30,7 @@ describe('Plugin', () => {
       afterEach(() => {
         return Promise.all([
           receiver && receiver.detach(),
-          sender && sender.detach()
+          sender && sender.detach(),
         ])
       })
 
@@ -47,15 +48,15 @@ describe('Plugin', () => {
 
           client = new amqp.Client(amqp.Policy.merge({
             senderLink: {
-              callback: callbackPolicy
-            }
+              callback: callbackPolicy,
+            },
           }))
 
           return client.connect('amqp://admin:admin@localhost:5673')
             .then(() => {
               return Promise.all([
                 client.createReceiver('amq.topic'),
-                client.createSender('amq.topic')
+                client.createSender('amq.topic'),
               ])
             })
             .then(handlers => {
@@ -81,22 +82,28 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                expect(span).to.have.property('name', expectedSchema.send.opName)
-                expect(span).to.have.property('service', expectedSchema.send.serviceName)
-                expect(span).to.have.property('resource', 'send amq.topic')
-                expect(span).to.not.have.property('type')
-                expect(span.meta).to.have.property('span.kind', 'producer')
-                expect(span.meta).to.have.property('out.host', 'localhost')
-                expect(span.meta).to.have.property('amqp.connection.host', 'localhost')
-                expect(span.meta).to.have.property('amqp.connection.user', 'admin')
-                expect(span.meta).to.have.property('amqp.link.target.address', 'amq.topic')
-                expect(span.meta).to.have.property('amqp.link.role', 'sender')
-                expect(span.meta['amqp.link.name']).to.match(/^amq\.topic_[0-9a-f-]+$/)
-                expect(span.meta).to.have.property('component', 'amqp10')
-                expect(span.meta).to.have.property('_dd.integration', 'amqp10')
-                expect(span.metrics).to.have.property('network.destination.port', 5673)
-                expect(span.metrics).to.have.property('amqp.connection.port', 5673)
-                expect(span.metrics).to.have.property('amqp.link.handle', 1)
+                assertObjectContains(span, {
+                  name: expectedSchema.send.opName,
+                  service: expectedSchema.send.serviceName,
+                  resource: 'send amq.topic',
+                  meta: {
+                    'span.kind': 'producer',
+                    'out.host': 'localhost',
+                    'amqp.connection.host': 'localhost',
+                    'amqp.connection.user': 'admin',
+                    'amqp.link.target.address': 'amq.topic',
+                    'amqp.link.role': 'sender',
+                    component: 'amqp10',
+                    '_dd.integration': 'amqp10',
+                  },
+                  metrics: {
+                    'network.destination.port': 5673,
+                    'amqp.connection.port': 5673,
+                    'amqp.link.handle': 1,
+                  },
+                })
+                assert.ok(!('type' in span))
+                assert.match(span.meta['amqp.link.name'], /^amq\.topic_[0-9a-f-]+$/)
               })
               .then(done)
               .catch(done)
@@ -111,11 +118,11 @@ describe('Plugin', () => {
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                expect(span.error).to.equal(1)
-                expect(span.meta).to.have.property(ERROR_TYPE, error.name)
-                expect(span.meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(span.meta).to.have.property(ERROR_STACK, error.stack)
-                expect(span.meta).to.have.property('component', 'amqp10')
+                assert.strictEqual(span.error, 1)
+                assert.strictEqual(span.meta[ERROR_TYPE], error.name)
+                assert.strictEqual(span.meta[ERROR_MESSAGE], error.message)
+                assert.strictEqual(span.meta[ERROR_STACK], error.stack)
+                assert.strictEqual(span.meta.component, 'amqp10')
               })
               .then(done)
               .catch(done)
@@ -139,7 +146,7 @@ describe('Plugin', () => {
             const promise = sender.send({ key: 'value' })
 
             return promise.then(() => {
-              expect(promise).to.have.property('value')
+              assert.ok(!Object.hasOwn(promise, 'value') && ('value' in promise))
             })
           })
 
@@ -154,19 +161,25 @@ describe('Plugin', () => {
             agent
               .assertSomeTraces(traces => {
                 const span = traces[0][0]
-                expect(span).to.have.property('name', expectedSchema.receive.opName)
-                expect(span).to.have.property('service', expectedSchema.receive.serviceName)
-                expect(span).to.have.property('resource', 'receive amq.topic')
-                expect(span).to.have.property('type', 'worker')
-                expect(span.meta).to.have.property('span.kind', 'consumer')
-                expect(span.meta).to.have.property('amqp.connection.host', 'localhost')
-                expect(span.meta).to.have.property('amqp.connection.user', 'admin')
-                expect(span.meta).to.have.property('amqp.link.source.address', 'amq.topic')
-                expect(span.meta).to.have.property('amqp.link.role', 'receiver')
-                expect(span.meta['amqp.link.name']).to.match(/^amq\.topic_[0-9a-f-]+$/)
-                expect(span.meta).to.have.property('component', 'amqp10')
-                expect(span.metrics).to.have.property('amqp.connection.port', 5673)
-                expect(span.metrics).to.have.property('amqp.link.handle', 0)
+                assertObjectContains(span, {
+                  name: expectedSchema.receive.opName,
+                  service: expectedSchema.receive.serviceName,
+                  resource: 'receive amq.topic',
+                  type: 'worker',
+                  meta: {
+                    'span.kind': 'consumer',
+                    'amqp.connection.host': 'localhost',
+                    'amqp.connection.user': 'admin',
+                    'amqp.link.source.address': 'amq.topic',
+                    'amqp.link.role': 'receiver',
+                    component: 'amqp10',
+                  },
+                  metrics: {
+                    'amqp.connection.port': 5673,
+                    'amqp.link.handle': 0,
+                  },
+                })
+                assert.match(span.meta['amqp.link.name'], /^amq\.topic_[0-9a-f-]+$/)
               })
               .then(done)
               .catch(done)
@@ -179,7 +192,7 @@ describe('Plugin', () => {
               receiver.on('message', message => {
                 const span = tracer.scope().active()
 
-                expect(span).to.not.be.null
+                assert.notStrictEqual(span, null)
 
                 done()
               })
@@ -207,7 +220,7 @@ describe('Plugin', () => {
             .then(() => {
               return Promise.all([
                 client.createReceiver('amq.topic'),
-                client.createSender('amq.topic')
+                client.createSender('amq.topic'),
               ])
             })
             .then(handlers => {
@@ -221,7 +234,7 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(span).to.have.property('service', 'test-custom-name')
+              assert.strictEqual(span.service, 'test-custom-name')
             })
             .then(done)
             .catch(done)
@@ -234,12 +247,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'amqp.receive',
-              serviceName: 'test-custom-name'
+              serviceName: 'test-custom-name',
             },
             v1: {
               opName: 'amqp.process',
-              serviceName: 'test-custom-name'
-            }
+              serviceName: 'test-custom-name',
+            },
           }
         )
       })

@@ -8,14 +8,14 @@ function loadInstFile (file, instrumentations) {
   const instrument = {
     addHook (instrumentation) {
       instrumentations.push(instrumentation)
-    }
+    },
   }
 
   const instPath = path.join(__dirname, `../../../../datadog-instrumentations/src/${file}`)
 
   proxyquire.noPreserveCache()(instPath, {
     './helpers/instrument': instrument,
-    '../helpers/instrument': instrument
+    '../helpers/instrument': instrument,
   })
 }
 
@@ -58,5 +58,5 @@ function getAllInstrumentations () {
 
 module.exports = {
   getInstrumentation: loadOneInst,
-  getAllInstrumentations
+  getAllInstrumentations,
 }

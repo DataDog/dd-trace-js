@@ -93,7 +93,7 @@ function getBlockWithContentData (req, specificType, actionParameters) {
 
   const headers = {
     'Content-Type': type,
-    'Content-Length': Buffer.byteLength(body)
+    'Content-Length': Buffer.byteLength(body),
   }
 
   return { body, statusCode, headers }
@@ -220,7 +220,7 @@ module.exports = {
   getBlockingAction,
   setTemplates,
   isBlocked,
-  setDefaultBlockingActionParameters
+  setDefaultBlockingActionParameters,
 }
 
 

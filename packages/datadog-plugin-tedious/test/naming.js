@@ -6,16 +6,16 @@ const rawExpectedSchema = {
   outbound: {
     v0: {
       opName: 'tedious.request',
-      serviceName: 'test-mssql'
+      serviceName: 'test-mssql',
     },
     v1: {
       opName: 'mssql.query',
-      serviceName: 'test'
-    }
-  }
+      serviceName: 'test',
+    },
+  },
 }
 
 module.exports = {
   rawExpectedSchema,
-  expectedSchema: resolveNaming(rawExpectedSchema)
+  expectedSchema: resolveNaming(rawExpectedSchema),
 }

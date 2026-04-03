@@ -1,23 +1,35 @@
 'use strict'
 
-const { expect } = require('chai')
-const sum = require('../test/sum')
 const tracer = require('dd-trace')
+const assert = require('assert')
 
-describe('test optimization custom tags', () => {
+const sum = require('../test/sum')
+describe('test optimization', () => {
   beforeEach(() => {
     const testSpan = tracer.scope().active()
-    testSpan.setTag('custom_tag.beforeEach', 'true')
+    testSpan.setTag('outer_scope.beforeEach', 'true')
   })
 
-  it('can report tests', () => {
-    const testSpan = tracer.scope().active()
-    testSpan.setTag('custom_tag.it', 'true')
-    expect(sum(1, 2)).to.equal(3)
+  describe('custom tags', () => {
+    beforeEach(() => {
+      const testSpan = tracer.scope().active()
+      testSpan.setTag('custom_tag.beforeEach', 'true')
+    })
+
+    it('can report tests', () => {
+      const testSpan = tracer.scope().active()
+      testSpan.setTag('custom_tag.it', 'true')
+      assert.strictEqual(sum(1, 2), 3)
+    })
+
+    afterEach(() => {
+      const testSpan = tracer.scope().active()
+      testSpan.setTag('custom_tag.afterEach', 'true')
+    })
   })
 
   afterEach(() => {
     const testSpan = tracer.scope().active()
-    testSpan.setTag('custom_tag.afterEach', 'true')
+    testSpan.setTag('outer_scope.afterEach', 'true')
   })
 })

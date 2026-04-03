@@ -1,9 +1,10 @@
 'use strict'
 
-const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { SeverityNumber } = require('@opentelemetry/api-logs')
-const { getProtobufTypes } = require('../otlp/protobuf_loader')
 const { trace } = require('@opentelemetry/api')
+
+const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
+const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
 /**
  * @typedef {import('@opentelemetry/api-logs').LogRecord} LogRecord
@@ -34,17 +35,17 @@ const SEVERITY_MAP = {
   [SeverityNumber.FATAL]: 'SEVERITY_NUMBER_FATAL',
   [SeverityNumber.FATAL2]: 'SEVERITY_NUMBER_FATAL2',
   [SeverityNumber.FATAL3]: 'SEVERITY_NUMBER_FATAL3',
-  [SeverityNumber.FATAL4]: 'SEVERITY_NUMBER_FATAL4'
+  [SeverityNumber.FATAL4]: 'SEVERITY_NUMBER_FATAL4',
 }
 
 /**
  * OtlpTransformer transforms log records to OTLP format.
  *
- * This implementation follows the OTLP Logs Data Model specification:
+ * This implementation follows the OTLP Logs v1.7.0 Data Model specification:
  * https://opentelemetry.io/docs/specs/otlp/#log-data-model
  *
  * @class OtlpTransformer
- * @extends OtlpTransformerBase
+ * @augments OtlpTransformerBase
  */
 class OtlpTransformer extends OtlpTransformerBase {
   /**
@@ -73,45 +74,42 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Transforms log records to protobuf format.
    * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} Protobuf-encoded log records
-   * @private
    */
   #transformToProtobuf (logRecords) {
     const { protoLogsService } = getProtobufTypes()
 
     const logsData = {
       resourceLogs: [{
-        resource: this._transformResource(),
+        resource: this.transformResource(),
         scopeLogs: this.#transformScope(logRecords),
-      }]
+      }],
     }
 
-    return this._serializeToProtobuf(protoLogsService, logsData)
+    return this.serializeToProtobuf(protoLogsService, logsData)
   }
 
   /**
    * Transforms log records to JSON format.
    * @param {LogRecord[]} logRecords - Array of enriched log records to transform
    * @returns {Buffer} JSON-encoded log records
-   * @private
    */
   #transformToJson (logRecords) {
     const logsData = {
       resourceLogs: [{
-        resource: this._transformResource(),
-        scopeLogs: this.#transformScope(logRecords)
-      }]
+        resource: this.transformResource(),
+        scopeLogs: this.#transformScope(logRecords),
+      }],
     }
-    return this._serializeToJson(logsData)
+    return this.serializeToJson(logsData)
   }
 
   /**
    * Creates scope logs grouped by instrumentation library.
    * @param {LogRecord[]} logRecords - Array of log records to transform
-   * @returns {Object[]} Array of scope log objects
-   * @private
+   * @returns {object[]} Array of scope log objects
    */
   #transformScope (logRecords) {
-    const groupedRecords = this._groupByInstrumentationScope(logRecords)
+    const groupedRecords = this.groupByInstrumentationScope(logRecords)
     const scopeLogs = []
 
     for (const records of groupedRecords.values()) {
@@ -121,10 +119,10 @@ class OtlpTransformer extends OtlpTransformerBase {
           name: records[0]?.instrumentationScope?.name || 'dd-trace-js',
           version: records[0]?.instrumentationScope?.version || '',
           attributes: [],
-          droppedAttributesCount: 0
+          droppedAttributesCount: 0,
         },
         schemaUrl,
-        logRecords: records.map(record => this.#transformLogRecord(record))
+        logRecords: records.map(record => this.#transformLogRecord(record)),
       })
     }
 
@@ -134,15 +132,14 @@ class OtlpTransformer extends OtlpTransformerBase {
   /**
    * Transforms a single log record to OTLP format.
    * @param {LogRecord} logRecord - Log record to transform
-   * @returns {Object} OTLP log record object
-   * @private
+   * @returns {object} OTLP log record object
    */
   #transformLogRecord (logRecord) {
     const spanContext = this.#extractSpanContext(logRecord.context)
 
     const result = {
       timeUnixNano: logRecord.timestamp,
-      body: this.#transformBody(logRecord.body)
+      body: this.#transformBody(logRecord.body),
     }
 
     // Add optional fields only if they are set
@@ -159,7 +156,7 @@ class OtlpTransformer extends OtlpTransformerBase {
     }
 
     if (logRecord.attributes) {
-      result.attributes = this._transformAttributes(logRecord.attributes)
+      result.attributes = this.transformAttributes(logRecord.attributes)
     }
 
     if (spanContext?.traceFlags !== undefined) {
@@ -180,9 +177,8 @@ class OtlpTransformer extends OtlpTransformerBase {
 
   /**
    * Extracts span context from the log record's context.
-   * @param {Object} logContext - The log record's context
-   * @returns {Object|null} Span context or null if not available
-   * @private
+   * @param {object} logContext - The log record's context
+   * @returns {object | null} Span context or null if not available
    */
   #extractSpanContext (logContext) {
     if (!logContext) return null
@@ -199,7 +195,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Maps OpenTelemetry severity number to protobuf severity number.
    * @param {number} severityNumber - OpenTelemetry severity number
    * @returns {number} Protobuf severity number
-   * @private
    */
   #mapSeverityNumber (severityNumber) {
     const { protoSeverityNumber } = getProtobufTypes()
@@ -211,7 +206,6 @@ class OtlpTransformer extends OtlpTransformerBase {
    * Converts a hex string to a Buffer.
    * @param {string} hexString - Hex string to convert
    * @returns {Buffer} Buffer containing the hex data
-   * @private
    */
   #hexToBytes (hexString) {
     const cleanHex = hexString ? (hexString.startsWith('0x') ? hexString.slice(2) : hexString) : ''
@@ -221,9 +215,8 @@ class OtlpTransformer extends OtlpTransformerBase {
 
   /**
    * Transforms log body to OTLP AnyValue format.
-   * @param {any} body - Log body to transform
-   * @returns {Object} OTLP AnyValue object
-   * @private
+   * @param {import('@opentelemetry/api-logs').LogBody} body - Log body to transform
+   * @returns {object} OTLP AnyValue object
    */
   #transformBody (body) {
     if (typeof body === 'string') {
@@ -240,9 +233,9 @@ class OtlpTransformer extends OtlpTransformerBase {
         kvlistValue: {
           values: Object.entries(body).map(([key, value]) => ({
             key,
-            value: this._transformAnyValue(value)
-          }))
-        }
+            value: this.transformAnyValue(value),
+          })),
+        },
       }
     }
     return { stringValue: String(body) }

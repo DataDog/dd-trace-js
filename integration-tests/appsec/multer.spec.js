@@ -1,30 +1,29 @@
 'use strict'
 
-const axios = require('axios')
-const { assert } = require('chai')
-const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
 const path = require('node:path')
+const axios = require('axios')
+const { describe, it, beforeEach, afterEach, before } = require('mocha')
 
 const {
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   FakeAgent,
-  spawnProc
+  spawnProc,
+  stopProc,
 } = require('../helpers')
 
 describe('multer', () => {
-  let sandbox, cwd, startupTestFile, agent, proc, env
+  let cwd, startupTestFile, agent, proc, env
 
   ['1.4.4-lts.1', '1.4.5-lts.1'].forEach((version) => {
     describe(`v${version}`, () => {
-      before(async () => {
-        sandbox = await createSandbox(['express', `multer@${version}`])
-        cwd = sandbox.folder
-        startupTestFile = path.join(cwd, 'appsec', 'multer', 'index.js')
-      })
+      useSandbox(['express', `multer@${version}`])
 
-      after(async () => {
-        await sandbox.remove()
+      before(() => {
+        cwd = sandboxCwd()
+        startupTestFile = path.join(cwd, 'appsec', 'multer', 'index.js')
       })
 
       beforeEach(async () => {
@@ -32,7 +31,7 @@ describe('multer', () => {
 
         env = {
           AGENT_PORT: agent.port,
-          DD_APPSEC_RULES: path.join(cwd, 'appsec', 'multer', 'body-parser-rules.json')
+          DD_APPSEC_RULES: path.join(cwd, 'appsec', 'multer', 'body-parser-rules.json'),
         }
 
         const execArgv = []
@@ -41,7 +40,7 @@ describe('multer', () => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -53,7 +52,7 @@ describe('multer', () => {
 
             const res = await axios.post(proc.url, form)
 
-            assert.equal(res.data, 'DONE')
+            assert.strictEqual(res.data, 'DONE')
           })
 
           it('should block the request when attack is detected', async () => {
@@ -65,7 +64,7 @@ describe('multer', () => {
 
               return Promise.reject(new Error('Request should not return 200'))
             } catch (e) {
-              assert.equal(e.response.status, 403)
+              assert.strictEqual(e.response.status, 403)
             }
           })
         })
@@ -77,7 +76,7 @@ describe('multer', () => {
 
             const res = await axios.post(`${proc.url}/no-middleware`, form)
 
-            assert.equal(res.data, 'DONE')
+            assert.strictEqual(res.data, 'DONE')
           })
 
           it('should block the request when attack is detected', async () => {
@@ -89,7 +88,7 @@ describe('multer', () => {
 
               return Promise.reject(new Error('Request should not return 200'))
             } catch (e) {
-              assert.equal(e.response.status, 403)
+              assert.strictEqual(e.response.status, 403)
             }
           })
         })
@@ -97,18 +96,18 @@ describe('multer', () => {
 
       describe('IAST', () => {
         function assertCmdInjection ({ payload }) {
-          assert.isArray(payload)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(payload.length, 1)
-          assert.isArray(payload[0])
+          assert.ok(Array.isArray(payload[0]))
 
           const { meta } = payload[0][0]
 
-          assert.property(meta, '_dd.iast.json')
+          assert.ok(Object.hasOwn(meta, '_dd.iast.json'))
 
           const iastJson = JSON.parse(meta['_dd.iast.json'])
 
-          assert.isTrue(iastJson.vulnerabilities.some(v => v.type === 'COMMAND_INJECTION'))
-          assert.isTrue(iastJson.sources.some(s => s.origin === 'http.request.body'))
+          assert.strictEqual(iastJson.vulnerabilities.some(v => v.type === 'COMMAND_INJECTION'), true)
+          assert.strictEqual(iastJson.sources.some(s => s.origin === 'http.request.body'), true)
         }
 
         describe('using middleware', () => {

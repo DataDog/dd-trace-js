@@ -12,5 +12,5 @@ const graphqlJson = `{"errors":[{"message":"You've been blocked","extensions":{"
 module.exports = {
   html,
   json,
-  graphqlJson
+  graphqlJson,
 }

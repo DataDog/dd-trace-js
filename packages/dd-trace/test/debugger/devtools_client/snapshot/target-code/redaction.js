@@ -12,21 +12,21 @@ function run () {
     [nonNormalizedSecretToken]: 'shh!',
     nested: { secret: 'shh!' },
     arr: [{ secret: 'shh!' }],
-    map: new Map([
+    map: new Map(/** @type {Array<[string | symbol, string]>} */ ([
       ['foo', 'bar'],
       ['secret', 'shh!'],
       [nonNormalizedSecretToken, 'shh!'],
       [Symbol('secret'), 'shh!'],
-      [Symbol(nonNormalizedSecretToken), 'shh!']
-    ]),
+      [Symbol(nonNormalizedSecretToken), 'shh!'],
+    ])),
     weakmap: new WeakMap([[weakMapKey, 42]]),
     [Symbol('secret')]: 'shh!',
-    [Symbol(nonNormalizedSecretToken)]: 'shh!'
+    [Symbol(nonNormalizedSecretToken)]: 'shh!',
   }
 
   Object.defineProperty(obj, 'password', {
     value: 'shh!',
-    enumerable: false
+    enumerable: false,
   })
 
   return obj // breakpoint at this line

@@ -3,6 +3,7 @@
 
 const log = require('../../../../log')
 const vulnerabilities = require('../../vulnerabilities')
+const defaults = require('../../../../config/defaults')
 
 const { contains, intersects, remove } = require('./range-utils')
 
@@ -14,14 +15,12 @@ const sqlSensitiveAnalyzer = require('./sensitive-analyzers/sql-sensitive-analyz
 const taintedRangeBasedSensitiveAnalyzer = require('./sensitive-analyzers/tainted-range-based-sensitive-analyzer')
 const urlSensitiveAnalyzer = require('./sensitive-analyzers/url-sensitive-analyzer')
 
-const { DEFAULT_IAST_REDACTION_NAME_PATTERN, DEFAULT_IAST_REDACTION_VALUE_PATTERN } = require('./sensitive-regex')
-
 const REDACTED_SOURCE_BUFFER = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 class SensitiveHandler {
   constructor () {
-    this._namePattern = new RegExp(DEFAULT_IAST_REDACTION_NAME_PATTERN, 'gmi')
-    this._valuePattern = new RegExp(DEFAULT_IAST_REDACTION_VALUE_PATTERN, 'gmi')
+    this._namePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionNamePattern']), 'gmi')
+    this._valuePattern = new RegExp(/** @type {string} */ (defaults['iast.redactionValuePattern']), 'gmi')
 
     this._sensitiveAnalyzers = new Map()
     this._sensitiveAnalyzers.set(vulnerabilities.CODE_INJECTION, taintedRangeBasedSensitiveAnalyzer)
@@ -185,7 +184,7 @@ class SensitiveHandler {
       }
       redactedSourcesContext[sourceIndex].push({
         start,
-        end
+        end,
       })
     }
   }
@@ -222,7 +221,7 @@ class SensitiveHandler {
         let _value = partValue
         const dedupedSourceRedactionContexts = []
 
-        sourceRedactionContext.forEach(_sourceRedactionContext => {
+        for (const _sourceRedactionContext of sourceRedactionContext) {
           const isPresentInDeduped = dedupedSourceRedactionContexts.some(_dedupedSourceRedactionContext =>
             _dedupedSourceRedactionContext.start === _sourceRedactionContext.start &&
             _dedupedSourceRedactionContext.end === _sourceRedactionContext.end
@@ -231,14 +230,14 @@ class SensitiveHandler {
           if (!isPresentInDeduped) {
             dedupedSourceRedactionContexts.push(_sourceRedactionContext)
           }
-        })
+        }
 
         let offset = 0
-        dedupedSourceRedactionContexts.forEach((_sourceRedactionContext) => {
+        for (const _sourceRedactionContext of dedupedSourceRedactionContexts) {
           if (_sourceRedactionContext.start > 0) {
             valueParts.push({
               source: sourceIndex,
-              value: _value.substring(0, _sourceRedactionContext.start - offset)
+              value: _value.substring(0, _sourceRedactionContext.start - offset),
             })
 
             _value = _value.substring(_sourceRedactionContext.start - offset)
@@ -256,17 +255,17 @@ class SensitiveHandler {
           valueParts.push({
             redacted: true,
             source: sourceIndex,
-            pattern
+            pattern,
           })
 
           _value = _value.slice(pattern.length)
           offset += pattern.length
-        })
+        }
 
         if (_value.length) {
           valueParts.push({
             source: sourceIndex,
-            value: _value
+            value: _value,
           })
         }
       }

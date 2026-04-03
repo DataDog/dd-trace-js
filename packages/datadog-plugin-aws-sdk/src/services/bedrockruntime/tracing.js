@@ -23,7 +23,7 @@ class BedrockRuntime extends BaseAwsSdkPlugin {
     return {
       'resource.name': operation,
       'aws.bedrock.request.model': modelName,
-      'aws.bedrock.request.model_provider': modelProvider.toLowerCase()
+      'aws.bedrock.request.model_provider': modelProvider.toLowerCase(),
     }
   }
 }

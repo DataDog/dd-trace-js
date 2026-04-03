@@ -4,7 +4,7 @@ const { once } = require('node:events')
 const assert = require('node:assert')
 const { exec } = require('child_process')
 
-const { createSandbox, getCiVisAgentlessConfig } = require('../helpers')
+const { sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
 
@@ -14,12 +14,12 @@ const testFrameworks = [
   {
     testFramework: 'mocha',
     command: 'node ./ci-visibility/test-optimization-wrong-init/run-mocha.js',
-    expectedOutput: '1 passing'
+    expectedOutput: '1 passing',
   },
   {
     testFramework: 'jest',
     command: 'node ./ci-visibility/test-optimization-wrong-init/run-jest.js',
-    expectedOutput: 'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js'
+    expectedOutput: 'PASS ci-visibility/test-optimization-wrong-init/sum-wrong-init-test.js',
   },
   {
     testFramework: 'vitest',
@@ -27,40 +27,37 @@ const testFrameworks = [
     expectedOutput: '1 passed',
     extraTestContext: {
       TEST_DIR: 'ci-visibility/test-optimization-wrong-init/vitest-sum-wrong-init*',
-      NODE_OPTIONS: '--import dd-trace/register.js'
-    }
+      NODE_OPTIONS: '--import dd-trace/register.js',
+    },
   },
   {
     testFramework: 'cucumber',
     command: './node_modules/.bin/cucumber-js ci-visibility/test-optimization-wrong-init-cucumber/*.feature',
     expectedOutput: '1 passed',
     extraTestContext: {
-      NODE_OPTIONS: '-r dd-trace/init'
-    }
-  }
+      NODE_OPTIONS: '-r dd-trace/init',
+    },
+  },
 ]
 
 testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestContext }) => {
   describe(`test optimization wrong init for ${testFramework}`, () => {
-    let sandbox, cwd, receiver, childProcess, processOutput
+    let cwd, receiver, childProcess, processOutput
 
-    // cucumber does not support Node.js@18 anymore
-    if (NODE_MAJOR <= 18 && testFramework === 'cucumber') return
+    // cucumber and vitest@4.x do not support Node.js@18
+    if (NODE_MAJOR <= 18 && (testFramework === 'cucumber' || testFramework === 'vitest')) return
 
-    before(async () => {
-      const testFrameworks = ['jest', 'mocha', 'vitest']
+    const testFrameworks = ['jest', 'mocha', 'vitest']
 
-      // Remove once we drop support for Node.js@18
-      if (NODE_MAJOR > 18) {
-        testFrameworks.push('@cucumber/cucumber')
-      }
+    // Remove once we drop support for Node.js@18
+    if (NODE_MAJOR > 18) {
+      testFrameworks.push('@cucumber/cucumber')
+    }
 
-      sandbox = await createSandbox(testFrameworks, true)
-      cwd = sandbox.folder
-    })
+    useSandbox(testFrameworks, true)
 
-    after(async () => {
-      await sandbox.remove()
+    before(() => {
+      cwd = sandboxCwd()
     })
 
     beforeEach(async function () {
@@ -101,23 +98,22 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
             ...restEnvVars,
             DD_TRACE_DISABLED_INSTRUMENTATIONS: 'child_process',
             DD_TRACE_DEBUG: '1',
-            ...extraTestContext
+            ...extraTestContext,
           },
-          stdio: 'pipe'
         }
       )
 
-      childProcess.stderr.on('data', (chunk) => {
+      childProcess.stderr?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 
-      childProcess.stdout.on('data', (chunk) => {
+      childProcess.stdout?.on('data', (chunk) => {
         processOutput += chunk.toString()
       })
 
       await Promise.all([
         once(childProcess, 'exit'),
-        eventsPromise
+        eventsPromise,
       ])
 
       assert.ok(
@@ -125,7 +121,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
           `Plugin "${testFramework}" is not initialized because Test Optimization mode is not enabled.`
         )
       )
-      assert.ok(processOutput.includes(expectedOutput))
+      assert.match(processOutput, new RegExp(expectedOutput))
     })
   })
 })

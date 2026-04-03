@@ -1,14 +1,17 @@
 'use strict'
 
-const { assert } = require('chai')
-const { setup } = require('./utils')
+const assert = require('node:assert/strict')
+const semver = require('semver')
 const { NODE_MAJOR } = require('../../version')
+const { setup } = require('./utils')
+
+const NODE_24_11_1_OR_LATER = semver.gte(process.version, '24.11.1')
 
 describe('Dynamic Instrumentation', function () {
   describe('template evaluation', function () {
     const t = setup({ dependencies: ['fastify'] })
 
-    beforeEach(t.triggerBreakpoint)
+    beforeEach(() => { t.triggerBreakpoint() })
 
     it('should evaluate template if it requires evaluation', function (done) {
       t.agent.on('debugger-input', ({ payload: [payload] }) => {
@@ -22,10 +25,10 @@ describe('Dynamic Instrumentation', function () {
           { str: 'Hello ' },
           {
             dsl: 'request.params.name',
-            json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }
+            json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] },
           },
-          { str: '!' }
-        ]
+          { str: '!' },
+        ],
       }))
     })
 
@@ -97,7 +100,8 @@ describe('Dynamic Instrumentation', function () {
           messages.shift(),
           'ArrayBuffer { ' +
             '[Uint8Contents]: <00 00 00 ... 7 more bytes>, ' +
-            "byteLength: 10, '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9 " +
+            (NODE_24_11_1_OR_LATER ? '[byteLength]' : 'byteLength') +
+              ": 10, '0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9 " +
           '}'
         )
         assert.strictEqual(messages.shift(), 'Uint8Array(10) [ 0, 0, 0, ... 7 more items ]')
@@ -161,8 +165,8 @@ describe('Dynamic Instrumentation', function () {
           { str: ';' },
           { dsl: 'abuf', json: { ref: 'abuf' } },
           { str: ';' },
-          { dsl: 'tarr', json: { ref: 'tarr' } }
-        ]
+          { dsl: 'tarr', json: { ref: 'tarr' } },
+        ],
       }))
     })
 
@@ -177,13 +181,13 @@ describe('Dynamic Instrumentation', function () {
       })
 
       t.agent.addRemoteConfig(t.generateRemoteConfig({
-        template: '0123456789'.repeat(1000)
+        template: '0123456789'.repeat(1000),
       }))
 
       t.agent.addRemoteConfig(t.generateRemoteConfig({
         segments: [
-          { dsl: 'lstr', json: { ref: 'lstr' } }
-        ]
+          { dsl: 'lstr', json: { ref: 'lstr' } },
+        ],
       }))
     })
 
@@ -198,7 +202,7 @@ describe('Dynamic Instrumentation', function () {
 
         const { evaluationErrors } = payload.debugger.snapshot
 
-        assert.isArray(evaluationErrors)
+        assert.ok(Array.isArray(evaluationErrors))
         assert.strictEqual(evaluationErrors.length, 2)
         assert.strictEqual(evaluationErrors[0].expr, 'request.invalid.name')
         assert.strictEqual(evaluationErrors[0].message, 'TypeError: Cannot convert undefined or null to object')
@@ -215,19 +219,19 @@ describe('Dynamic Instrumentation', function () {
           { str: 'This should fail: ' },
           {
             dsl: 'request.invalid.name',
-            json: { getmember: [{ getmember: [{ ref: 'request' }, 'invalid'] }, 'name'] }
+            json: { getmember: [{ getmember: [{ ref: 'request' }, 'invalid'] }, 'name'] },
           },
           { str: ', this should work: ' },
           {
             dsl: 'request.params.name',
-            json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] }
+            json: { getmember: [{ getmember: [{ ref: 'request' }, 'params'] }, 'name'] },
           },
           { str: ', and this should fail: ' },
           {
             dsl: 'invalid',
-            json: { ref: 'invalid' }
-          }
-        ]
+            json: { ref: 'invalid' },
+          },
+        ],
       }))
     })
   })

@@ -1,26 +1,26 @@
 'use strict'
 
-const {
-  createSandbox, varySandbox,
-  FakeAgent, spawnPluginIntegrationTestProc
-} = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
-const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+const assert = require('node:assert/strict')
 const axios = require('axios')
+const {
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  FakeAgent,
+  spawnPluginIntegrationTestProc,
+  stopProc,
+} = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
 withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
   describe('ESM', () => {
-    let sandbox, variants, proc, agent
+    let variants, proc, agent
 
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'express-mongo-sanitize@${version}'`, 'express@<=4.0.0'], false,
-        ['./packages/datadog-plugin-express-mongo-sanitize/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'expressMongoSanitize', undefined, 'express-mongo-sanitize')
-    })
+    useSandbox([`'express-mongo-sanitize@${version}'`, 'express@<=4.0.0'], false,
+      ['./packages/datadog-plugin-express-mongo-sanitize/test/integration-test/*'])
 
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
+    before(function () {
+      variants = varySandbox('server.mjs', 'expressMongoSanitize', undefined, 'express-mongo-sanitize')
     })
 
     beforeEach(async () => {
@@ -28,13 +28,13 @@ withVersions('express-mongo-sanitize', 'express-mongo-sanitize', version => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        const proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        const proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await axios.get(`${proc.url}/?param=paramvalue`)
         assert.equal(response.headers['x-counter'], '1')
       })

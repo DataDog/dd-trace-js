@@ -36,5 +36,5 @@ function streamAddVersion (input) {
 module.exports = {
   exec,
   stdio: ['inherit', 'pipe', 'inherit'],
-  streamAddVersion
+  streamAddVersion,
 }

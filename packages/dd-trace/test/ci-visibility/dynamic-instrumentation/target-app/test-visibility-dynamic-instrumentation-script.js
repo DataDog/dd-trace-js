@@ -2,13 +2,13 @@
 
 const path = require('path')
 const getDiClient = require('../../../../src/ci-visibility/dynamic-instrumentation')
+const getConfig = require('../../../../src/config')
 const sum = require('./di-dependency')
-const Config = require('../../../../src/config')
 
 // keep process alive
 const intervalId = setInterval(() => {}, 5000)
 
-const diClient = getDiClient(new Config())
+const diClient = getDiClient(getConfig())
 
 diClient.start()
 

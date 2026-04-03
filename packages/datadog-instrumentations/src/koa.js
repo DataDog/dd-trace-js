@@ -57,7 +57,9 @@ function wrapRouterUse (use) {
   return function useWithTrace () {
     const router = use.apply(this, arguments)
 
-    router.stack.forEach(wrapStack)
+    for (const layer of router.stack) {
+      wrapStack(layer)
+    }
 
     return router
   }
@@ -90,7 +92,8 @@ function wrapMiddleware (fn, layer) {
     const req = ctx.req
 
     const path = layer && layer.path
-    const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') && path
+    const route = typeof path === 'string' && !path.endsWith('(.*)') && !path.endsWith('([^/]*)') &&
+      !path.includes('(?:') && path
 
     enterChannel.publish({ req, name, route })
 

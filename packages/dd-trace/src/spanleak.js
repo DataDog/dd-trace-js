@@ -2,7 +2,7 @@
 
 /* eslint-disable no-console */
 
-const SortedSet = require('tlhunter-sorted-set')
+const SortedSet = require('../../../vendor/dist/tlhunter-sorted-set')
 
 const INTERVAL = 1000 // look for expired spans every 1s
 const LIFETIME = 60 * 1000 // all spans have a max lifetime of 1m
@@ -11,7 +11,7 @@ const MODES = {
   DISABLED: 0,
   // METRICS_ONLY
   LOG: 1,
-  GC_AND_LOG: 2
+  GC_AND_LOG: 2,
   // GC
 }
 

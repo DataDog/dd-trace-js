@@ -2,10 +2,11 @@
 
 const {
   workerData: {
+    config,
     breakpointSetChannel,
     breakpointHitChannel,
-    breakpointRemoveChannel
-  }
+    breakpointRemoveChannel,
+  },
 } = require('worker_threads')
 const { randomUUID } = require('crypto')
 
@@ -15,17 +16,31 @@ const session = require('../../../debugger/devtools_client/session')
 const { getGeneratedPosition } = require('../../../debugger/devtools_client/source-maps')
 // TODO: move debugger/devtools_client/snapshot to common place
 const { getLocalStateForCallFrame } = require('../../../debugger/devtools_client/snapshot')
+const {
+  DEFAULT_MAX_REFERENCE_DEPTH,
+  DEFAULT_MAX_COLLECTION_SIZE,
+  DEFAULT_MAX_FIELD_COUNT,
+  DEFAULT_MAX_LENGTH,
+} = require('../../../debugger/devtools_client/snapshot/constants')
 // TODO: move debugger/devtools_client/state to common place
 const {
   findScriptFromPartialPath,
-  getStackFromCallFrames
+  getStackFromCallFrames,
 } = require('../../../debugger/devtools_client/state')
 const log = require('../../../log')
+const processTags = require('../../../process-tags')
 
 let sessionStarted = false
 
 const breakpointIdToProbe = new Map()
 const probeIdToBreakpointId = new Map()
+
+const limits = {
+  maxReferenceDepth: DEFAULT_MAX_REFERENCE_DEPTH,
+  maxCollectionSize: DEFAULT_MAX_COLLECTION_SIZE,
+  maxFieldCount: DEFAULT_MAX_FIELD_COUNT,
+  maxLength: DEFAULT_MAX_LENGTH,
+}
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
   const probe = breakpointIdToProbe.get(hitBreakpoint)
@@ -34,9 +49,9 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     return session.post('Debugger.resume')
   }
 
-  const stack = getStackFromCallFrames(callFrames)
+  const stack = await getStackFromCallFrames(callFrames)
 
-  const getLocalState = await getLocalStateForCallFrame(callFrames[0])
+  const { processLocalState } = await getLocalStateForCallFrame(callFrames[0], limits)
 
   await session.post('Debugger.resume')
 
@@ -46,17 +61,17 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     probe: {
       id: probe.id,
       version: '0',
-      location: probe.location
+      location: probe.location,
+    },
+    captures: {
+      lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
     },
     stack,
-    language: 'javascript'
+    language: 'javascript',
   }
 
-  const state = getLocalState()
-  if (state) {
-    snapshot.captures = {
-      lines: { [probe.location.lines[0]]: { locals: state } }
-    }
+  if (config.propagateProcessTags?.enabled) {
+    snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
   }
 
   breakpointHitChannel.postMessage({ snapshot })
@@ -124,8 +139,8 @@ async function addBreakpoint (probe) {
       location: {
         scriptId,
         lineNumber: lineNumber - 1,
-        columnNumber
-      }
+        columnNumber,
+      },
     })
 
     breakpointIdToProbe.set(breakpointId, probe)

@@ -4,7 +4,7 @@ import MongoDBCore from 'mongodb-core'
 const server = new MongoDBCore.Server({
   host: 'localhost',
   port: 27017,
-  reconnect: false
+  reconnect: false,
 })
 
 const connectPromise = new Promise((resolve, reject) => {

@@ -1,7 +1,7 @@
 'use strict'
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
-const pathToRegExp = require('path-to-regexp')
+const pathToRegExp = require('../../../vendor/dist/path-to-regexp')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -15,7 +15,7 @@ const {
   extractMountPaths,
   getRouteFullPaths,
   wrapRouteMethodsAndPublish,
-  collectRoutesFromRouter
+  collectRoutesFromRouter,
 } = require('./helpers/router-helper')
 
 function isFastStar (layer, matchers) {
@@ -93,13 +93,13 @@ function createWrapRouterMethod (name) {
       setLayerMatchers(layer, matchers)
 
       if (layer.route) {
-        METHODS.forEach(method => {
+        for (const method of METHODS) {
           if (typeof layer.route.stack === 'function') {
             layer.route.stack = [{ handle: layer.route.stack }]
           }
 
           layer.route[method] = wrapMethod(layer.route[method])
-        })
+        }
       }
     }
   }
@@ -131,7 +131,7 @@ function createWrapRouterMethod (name) {
         return !isFastStar(layer, matchers) &&
           !isFastSlash(layer, matchers) &&
           cachedPathToRegExp(pattern).test(layer.path)
-      }
+      },
     }))
   }
 
@@ -146,33 +146,34 @@ function createWrapRouterMethod (name) {
   }
 
   function wrapMethod (original) {
-    return shimmer.wrapFunction(original, original => function methodWithTrace (fn, ...otherArgs) {
+    return shimmer.wrapFunction(original, original => function methodWithTrace (...args) {
       let offset = 0
       if (this.stack) {
         offset = Array.isArray(this.stack) ? this.stack.length : 1
       }
-      const router = original.call(this, fn, ...otherArgs)
+      const router = original.apply(this, args)
 
       if (typeof this.stack === 'function') {
         this.stack = [{ handle: this.stack }]
       }
 
       if (routeAddedChannel.hasSubscribers) {
-        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack.at(-1) })
+        routeAddedChannel.publish({ topOfStackFunc: methodWithTrace, layer: this.stack?.at(-1) })
       }
+
+      const fn = args[0]
 
       // Publish only if this router was mounted by app.use() (prevents early '/sub/...')
       if (routeAddedChannel.hasSubscribers && isAppMounted(this) && this.stack?.length > offset) {
         // Handle nested router mounting for 'use' method
-        if (original.name === 'use' && otherArgs.length >= 1) {
+        if (original.name === 'use' && args.length >= 2) {
           const { mountPaths, startIdx } = extractMountPaths(fn)
 
           if (mountPaths.length) {
             const parentPaths = getRouterMountPaths(this)
-            const callArgs = [fn, ...otherArgs]
 
-            for (let i = startIdx; i < callArgs.length; i++) {
-              const nestedRouter = callArgs[i]
+            for (let i = startIdx; i < args.length; i++) {
+              const nestedRouter = args[i]
 
               if (!nestedRouter || typeof nestedRouter !== 'function') continue
 
@@ -206,7 +207,7 @@ function createWrapRouterMethod (name) {
         }
       }
 
-      if (this.stack.length > offset) {
+      if (this.stack?.length > offset) {
         wrapStack(this.stack.slice(offset), extractMatchers(fn))
       }
 
@@ -271,7 +272,7 @@ function wrapHandleRequest (original) {
         req,
         res,
         params: req?.params,
-        abortController
+        abortController,
       })
 
       if (abortController.signal.aborted) return
@@ -282,7 +283,7 @@ function wrapHandleRequest (original) {
 }
 
 addHook({
-  name: 'router', file: 'lib/layer.js', versions: ['>=2']
+  name: 'router', file: 'lib/layer.js', versions: ['>=2'],
 }, Layer => {
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapHandleRequest)
   return Layer
@@ -301,7 +302,7 @@ function wrapParam (original) {
             req,
             res,
             params: req?.params,
-            abortController
+            abortController,
           })
 
           if (abortController.signal.aborted) return
@@ -316,7 +317,7 @@ function wrapParam (original) {
 }
 
 addHook({
-  name: 'router', versions: ['>=2']
+  name: 'router', versions: ['>=2'],
 }, router => {
   shimmer.wrap(router.prototype, 'param', wrapParam)
   return router

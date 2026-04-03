@@ -6,7 +6,7 @@ const executeRequest = (url, method = 'GET', headers = {}, body = null) => {
   return new Promise((resolve, reject) => {
     const req = http.request(url, {
       method,
-      headers
+      headers,
     }, res => {
       const chunks = []
       res.on('data', (chunk) => chunks.push(chunk))
@@ -15,7 +15,7 @@ const executeRequest = (url, method = 'GET', headers = {}, body = null) => {
           const response = Buffer.concat(chunks).toString()
           resolve({
             status: res.statusCode,
-            body: res.statusCode === 200 ? JSON.parse(response) : response
+            body: res.statusCode === 200 ? JSON.parse(response) : response,
           })
         } catch (err) {
           reject(err)

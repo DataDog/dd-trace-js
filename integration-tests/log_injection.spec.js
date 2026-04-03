@@ -1,25 +1,29 @@
 'use strict'
 
-const { FakeAgent, createSandbox, spawnProc, curlAndAssertMessage, assertObjectContains } = require('./helpers')
 const path = require('path')
 const { USER_KEEP } = require('../ext/priority')
+const {
+  FakeAgent,
+  sandboxCwd,
+  useSandbox,
+  spawnProc,
+  stopProc,
+  curlAndAssertMessage,
+  assertObjectContains,
+} = require('./helpers')
 
 describe('Log Injection', () => {
   let agent
   let proc
-  let sandbox
   let cwd
   let app
   let env
 
-  before(async () => {
-    sandbox = await createSandbox(['express', 'winston'])
-    cwd = sandbox.folder
-    app = path.join(cwd, 'log_injection/index.js')
-  })
+  useSandbox(['express', 'winston'])
 
-  after(async () => {
-    await sandbox.remove()
+  before(() => {
+    cwd = sandboxCwd()
+    app = path.join(cwd, 'log_injection/index.js')
   })
 
   beforeEach(async () => {
@@ -32,14 +36,14 @@ describe('Log Injection', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     it('should correctly apply rule based sampling when log injection is enabled', async () => {
       env = {
         AGENT_PORT: agent.port,
-        lOG_INJECTION: 'true'
+        TEST_PROGRAMMATIC_DD_LOGS_INJECTION: 'true',
       }
       proc = await spawnProc(app, { cwd, env, execArgv: [] })
       const url = proc.url + '/sampled'
@@ -54,7 +58,7 @@ describe('Log Injection', () => {
     it('should correctly apply rule based sampling when log injection is disabled', async () => {
       env = {
         AGENT_PORT: agent.port,
-        lOG_INJECTION: 'false'
+        TEST_PROGRAMMATIC_DD_LOGS_INJECTION: 'false',
       }
       proc = await spawnProc(app, { cwd, env, execArgv: [] })
       const url = proc.url + '/sampled'

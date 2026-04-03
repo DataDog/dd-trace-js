@@ -1,7 +1,8 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const assert = require('node:assert/strict')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const ddpv = require('mocha/package.json').version
 const sinon = require('sinon')
 const semver = require('semver')
@@ -9,9 +10,8 @@ const semver = require('semver')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const { expectedSchema, rawExpectedSchema } = require('./naming')
-
 const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 const withTopologies = fn => {
   withVersions('mongodb-core', ['mongodb-core', 'mongodb'], '<4', (version, moduleName) => {
@@ -55,7 +55,12 @@ describe('Plugin', () => {
       })
 
       afterEach(() => {
-        server.destroy()
+        // Newer versions of mongodb-core use the close method instead of destroy
+        if ('close' in server) {
+          server.close()
+        } else {
+          server.destroy()
+        }
       })
 
       describe('without configuration', () => {
@@ -73,7 +78,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -85,19 +90,18 @@ describe('Plugin', () => {
         describe('server', () => {
           it('should do automatic instrumentation', done => {
             agent
-              .assertSomeTraces(traces => {
-                const span = traces[0][0]
-                const resource = `insert test.${collection}`
-
-                expect(span).to.have.property('name', expectedSchema.outbound.opName)
-                expect(span).to.have.property('service', expectedSchema.outbound.serviceName)
-                expect(span).to.have.property('resource', resource)
-                expect(span).to.have.property('type', 'mongodb')
-                expect(span.meta).to.have.property('span.kind', 'client')
-                expect(span.meta).to.have.property('db.name', `test.${collection}`)
-                expect(span.meta).to.have.property('out.host', '127.0.0.1')
-                expect(span.meta).to.have.property('component', 'mongodb')
-                expect(span.meta).to.have.property('_dd.integration', 'mongodb')
+              .assertFirstTraceSpan({
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: `insert test.${collection}`,
+                type: 'mongodb',
+                meta: {
+                  'span.kind': 'client',
+                  'db.name': `test.${collection}`,
+                  'out.host': '127.0.0.1',
+                  component: 'mongodb',
+                  '_dd.integration': 'mongodb',
+                },
               })
               .then(done)
               .catch(done)
@@ -111,14 +115,14 @@ describe('Plugin', () => {
                 const span = traces[0][0]
                 const resource = `planCacheListPlans test.${collection}`
 
-                expect(span).to.have.property('resource', resource)
+                assert.strictEqual(span.resource, resource)
               })
               .then(done)
               .catch(done)
 
             server.command(`test.${collection}`, {
               planCacheListPlans: `test.${collection}`,
-              query: {}
+              query: {},
             }, () => {})
           })
 
@@ -129,8 +133,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collection}`
                 const query = '{"_id":"?"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -138,8 +142,8 @@ describe('Plugin', () => {
             server.command(`test.${collection}`, {
               find: `test.${collection}`,
               query: {
-                _id: Buffer.from('1234')
-              }
+                _id: Buffer.from('1234'),
+              },
             }, () => {})
           })
 
@@ -150,8 +154,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collection}`
                 const query = '{"_id":"9999999999999999999999"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -160,8 +164,8 @@ describe('Plugin', () => {
               server.command(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {
-                  _id: 9999999999999999999999n
-                }
+                  _id: 9999999999999999999999n,
+                },
               }, () => {})
             } catch (err) {
               // It appears that most versions of MongodDB are happy to use a BigInt instance.
@@ -186,8 +190,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collection}`
                 const query = `{"_id":"${id}"}`
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -195,8 +199,8 @@ describe('Plugin', () => {
             server.command(`test.${collection}`, {
               find: `test.${collection}`,
               query: {
-                _id: new BSON.ObjectID(id)
-              }
+                _id: new BSON.ObjectID(id),
+              },
             }, () => {})
           })
 
@@ -207,8 +211,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collection}`
                 const query = '{"_id":"1234"}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -217,14 +221,14 @@ describe('Plugin', () => {
               find: `test.${collection}`,
               query: {
                 _id: '1234',
-                foo: () => {}
-              }
+                foo: () => {},
+              },
             }, () => {})
           })
 
           it('should run the callback in the parent context', done => {
             server.insert(`test.${collection}`, [{ a: 1 }], {}, () => {
-              expect(tracer.scope().active()).to.be.null
+              assert.strictEqual(tracer.scope().active(), null)
               done()
             })
           })
@@ -234,17 +238,21 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(traces[0][0].meta).to.have.property('component', 'mongodb')
+                assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+                assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+                assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+                assert.strictEqual(traces[0][0].meta.component, 'mongodb')
               })
               .then(done)
               .catch(done)
 
             server.insert('', [{ a: 1 }], (err) => {
               error = err
-              server.destroy()
+              if ('close' in server) {
+                server.close()
+              } else {
+                server.destroy()
+              }
             })
           })
 
@@ -264,16 +272,16 @@ describe('Plugin', () => {
             Promise.all([
               agent
                 .assertSomeTraces(traces => {
-                  expect(traces[0][0].resource).to.equal(`find test.${collection}`)
+                  assert.strictEqual(traces[0][0].resource, `find test.${collection}`)
                 }),
               agent
                 .assertSomeTraces(traces => {
-                  expect(traces[0][0].resource).to.equal(`getMore test.${collection}`)
+                  assert.strictEqual(traces[0][0].resource, `getMore test.${collection}`)
                 }),
               agent
                 .assertSomeTraces(traces => {
-                  expect(traces[0][0].resource).to.equal(`killCursors test.${collection}`)
-                })
+                  assert.strictEqual(traces[0][0].resource, `killCursors test.${collection}`)
+                }),
             ])
               .then(() => done())
               .catch(done)
@@ -282,7 +290,7 @@ describe('Plugin', () => {
               cursor = server.cursor(`test.${collection}`, {
                 find: `test.${collection}`,
                 query: {},
-                batchSize: 1
+                batchSize: 1,
               }, { batchSize: 1 })
 
               next(cursor, () => next(cursor, () => cursor.kill(() => {})))
@@ -296,8 +304,8 @@ describe('Plugin', () => {
                 const resource = `find test.${collection}`
                 const query = '{"foo":1,"bar":{"baz":[1,2,3]}}'
 
-                expect(span).to.have.property('resource', resource)
-                expect(span.meta).to.have.property('mongodb.query', query)
+                assert.strictEqual(span.resource, resource)
+                assert.strictEqual(span.meta['mongodb.query'], query)
               })
               .then(done)
               .catch(done)
@@ -307,9 +315,9 @@ describe('Plugin', () => {
               query: {
                 foo: 1,
                 bar: {
-                  baz: [1, 2, 3]
-                }
-              }
+                  baz: [1, 2, 3],
+                },
+              },
             })
 
             next(cursor)
@@ -318,11 +326,11 @@ describe('Plugin', () => {
           it('should run the callback in the parent context', done => {
             const cursor = server.cursor(`test.${collection}`, {
               find: `test.${collection}`,
-              query: { a: 1 }
+              query: { a: 1 },
             })
 
             next(cursor, () => {
-              expect(tracer.scope().active()).to.be.null
+              assert.strictEqual(tracer.scope().active(), null)
               done()
             })
           })
@@ -332,17 +340,17 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                expect(traces[0][0].meta).to.have.property(ERROR_TYPE, error.name)
-                expect(traces[0][0].meta).to.have.property(ERROR_MESSAGE, error.message)
-                expect(traces[0][0].meta).to.have.property(ERROR_STACK, error.stack)
-                expect(traces[0][0].meta).to.have.property('component', 'mongodb')
+                assert.strictEqual(traces[0][0].meta[ERROR_TYPE], error.name)
+                assert.strictEqual(traces[0][0].meta[ERROR_MESSAGE], error.message)
+                assert.strictEqual(traces[0][0].meta[ERROR_STACK], error.stack)
+                assert.strictEqual(traces[0][0].meta.component, 'mongodb')
               })
               .then(done)
               .catch(done)
 
             const cursor = server.cursor(`test.${collection}`, {
               find: `test.${collection}`,
-              query: 'invalid'
+              query: 'invalid',
             })
 
             next(cursor, err => {
@@ -372,7 +380,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -384,8 +392,8 @@ describe('Plugin', () => {
         it('should be configured with the correct values', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(traces[0][0]).to.have.property('name', expectedSchema.outbound.opName)
-              expect(traces[0][0]).to.have.property('service', 'custom')
+              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
+              assert.strictEqual(traces[0][0].service, 'custom')
             })
             .then(done)
             .catch(done)
@@ -398,12 +406,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
+              serviceName: 'custom',
             },
             v1: {
               opName: 'mongodb.query',
-              serviceName: 'custom'
-            }
+              serviceName: 'custom',
+            },
           }
         )
       })
@@ -423,7 +431,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -441,9 +449,9 @@ describe('Plugin', () => {
         it('DBM propagation should not inject comment', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const ops = startSpy.getCall(0).args[0].ops
-              expect(ops).to.not.have.property('comment')
+              assert.ok(!('comment' in ops))
             })
             .then(done)
             .catch(done)
@@ -467,7 +475,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -485,9 +493,9 @@ describe('Plugin', () => {
         it('DBM propagation should not inject comment', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.be.undefined
+              assert.strictEqual(comment, undefined)
             })
             .then(done)
             .catch(done)
@@ -498,9 +506,9 @@ describe('Plugin', () => {
         it('DBM propagation should not alter existing comment', done => {
           agent
             .assertSomeTraces(traces => {
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.equal('test comment')
+              assert.strictEqual(comment, 'test comment')
             })
             .then(done)
             .catch(done)
@@ -508,9 +516,9 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: 'test comment'
+            comment: 'test comment',
           }, () => {})
         })
       })
@@ -530,7 +538,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -550,9 +558,9 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.equal(
+              assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
@@ -573,9 +581,9 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.equal(
+              assert.strictEqual(comment,
                 'test comment,' +
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -592,20 +600,20 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: 'test comment'
+            comment: 'test comment',
           }, () => {})
         })
 
-        it('DBM propagation should inject service mode after eixsting array comment', done => {
+        it('DBM propagation should inject service mode after existing array comment', done => {
           agent
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.deep.equal([
+              assert.deepStrictEqual(comment, [
                 'test comment',
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -613,7 +621,7 @@ describe('Plugin', () => {
                 `ddh='${encodeURIComponent(span.meta['out.host'])}',` +
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
-                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`
+                `ddprs='${encodeURIComponent(span.meta['peer.service'])}'`,
               ])
             })
             .then(done)
@@ -622,15 +630,16 @@ describe('Plugin', () => {
           server.command(`test.${collection}`, {
             find: `test.${collection}`,
             query: {
-              _id: Buffer.from('1234')
+              _id: Buffer.from('1234'),
             },
-            comment: ['test comment']
+            comment: ['test comment'],
           }, () => {})
         })
       })
 
       describe('with dbmPropagationMode full', () => {
         before(() => {
+          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
           return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
         })
 
@@ -644,7 +653,7 @@ describe('Plugin', () => {
           server = new Server({
             host: '127.0.0.1',
             port: 27017,
-            reconnect: false
+            reconnect: false,
           })
 
           server.on('connect', () => done())
@@ -661,14 +670,13 @@ describe('Plugin', () => {
 
         it('DBM propagation should inject full mode with traceparent as comment', done => {
           agent
-            .assertSomeTraces(traces => {
-              const span = traces[0][0]
+            .assertFirstTraceSpan(span => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              expect(startSpy.called).to.be.true
+              assert.strictEqual(startSpy.called, true)
               const { comment } = startSpy.getCall(0).args[0].ops
-              expect(comment).to.equal(
+              assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
                 'dde=\'tester\',' +
@@ -676,7 +684,7 @@ describe('Plugin', () => {
                 `ddps='${encodeURIComponent(span.meta.service)}',` +
                 `ddpv='${ddpv}',` +
                 `ddprs='${encodeURIComponent(span.meta['peer.service'])}',` +
-                `traceparent='00-${traceId}-${spanId}-00'`
+                `traceparent='00-${traceId}-${spanId}-01'`
               )
             })
             .then(done)
@@ -684,6 +692,63 @@ describe('Plugin', () => {
 
           server.insert(`test.${collection}`, [{ a: 1 }], () => {})
         })
+      })
+
+      describe('with dbmPropagationMode full but sampling disabled', () => {
+        before(() => {
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+
+          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        })
+
+        after(() => {
+          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(done => {
+          const Server = getServer()
+
+          server = new Server({
+            host: '127.0.0.1',
+            port: 27017,
+            reconnect: false,
+          })
+
+          server.on('connect', () => done())
+          server.on('error', done)
+
+          server.connect()
+
+          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        })
+
+        afterEach(() => {
+          startSpy?.restore()
+        })
+
+        it(
+          'DBM propagation should inject full mode with traceparent as comment and the rejected sampling decision',
+          done => {
+            agent
+              .assertSomeTraces(traces => {
+                const span = traces[0][0]
+                const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
+                const spanId = span.span_id.toString(16).padStart(16, '0')
+
+                assert.strictEqual(startSpy.called, true)
+                const { comment } = startSpy.getCall(0).args[0].ops
+                assert.match(
+                  comment,
+                  new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
+                )
+              })
+              .then(done)
+              .catch(done)
+
+            server.insert(`test.${collection}`, [{ a: 1 }], () => {})
+          })
       })
     })
   })

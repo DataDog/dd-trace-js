@@ -5,14 +5,14 @@ const {
   setUncaughtExceptionCaptureCallbackStart,
   expressMiddlewareError,
   fastifyMiddlewareError,
-  routerMiddlewareError
+  routerMiddlewareError,
 } = require('../channels')
 const { block, registerBlockDelegation, isBlocked } = require('../blocking')
+const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 const ssrf = require('./ssrf')
 const sqli = require('./sql_injection')
 const lfi = require('./lfi')
 const cmdi = require('./command_injection')
-const { updateRaspRuleMatchMetricTags } = require('../telemetry')
 
 const { DatadogRaspAbortError } = require('./utils')
 
@@ -73,16 +73,14 @@ function handleUncaughtExceptionMonitor (error) {
     }
   } else {
     const cleanUp = removeAllListeners(process, 'uncaughtException')
-    const handler = () => {
-      process.removeListener('uncaughtException', handler)
-    }
+    const handler = () => {}
 
     setTimeout(() => {
       process.removeListener('uncaughtException', handler)
       cleanUp()
     })
 
-    process.on('uncaughtException', handler)
+    process.once('uncaughtException', handler)
   }
 }
 
@@ -138,5 +136,5 @@ module.exports = {
   enable,
   disable,
   handleUncaughtExceptionMonitor, // exported only for testing purpose
-  blockOnDatadogRaspAbortError // exported only for testing purpose
+  blockOnDatadogRaspAbortError, // exported only for testing purpose
 }

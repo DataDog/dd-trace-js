@@ -118,18 +118,16 @@ module.exports = class Plugin {
    * @returns {void}
    */
   addSub (channelName, handler) {
-    const plugin = this
     /**
-     * @this {unknown}
-     * @returns {unknown}
+     * @type {typeof handler}
      */
-    const wrappedHandler = function () {
+    const wrappedHandler = (...args) => {
       try {
-        return handler.apply(this, arguments)
-      } catch (e) {
-        logger.error('Error in plugin handler:', e)
-        logger.info('Disabling plugin: %s', plugin.id)
-        plugin.configure(false)
+        return handler.apply(this, args)
+      } catch (error) {
+        logger.error('Error in plugin handler:', error)
+        logger.info('Disabling plugin: %s', this.constructor.name)
+        this.configure(false)
       }
     }
     this._subscriptions.push(new Subscription(channelName, wrappedHandler))
@@ -174,14 +172,24 @@ module.exports = class Plugin {
       config = { enabled: config }
     }
     this.config = config
-    if (config.enabled && !this._enabled) {
-      this._enabled = true
-      this._subscriptions.forEach(sub => sub.enable())
-      this._bindings.forEach(sub => sub.enable())
-    } else if (!config.enabled && this._enabled) {
+    if (config.enabled) {
+      if (!this._enabled) {
+        this._enabled = true
+        for (const sub of this._subscriptions) {
+          sub.enable()
+        }
+        for (const sub of this._bindings) {
+          sub.enable()
+        }
+      }
+    } else if (this._enabled) {
       this._enabled = false
-      this._subscriptions.forEach(sub => sub.disable())
-      this._bindings.forEach(sub => sub.disable())
+      for (const sub of this._subscriptions) {
+        sub.disable()
+      }
+      for (const sub of this._bindings) {
+        sub.disable()
+      }
     }
   }
 }

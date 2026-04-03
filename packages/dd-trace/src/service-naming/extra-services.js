@@ -20,5 +20,5 @@ function clear () {
 module.exports = {
   registerExtraService,
   getExtraServices,
-  clear
+  clear,
 }

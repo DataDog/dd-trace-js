@@ -1,26 +1,26 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
-  createSandbox, varySandbox, curl,
-  FakeAgent, spawnPluginIntegrationTestProc
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  curl,
+  FakeAgent,
+  spawnPluginIntegrationTestProc,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
-const { assert } = require('chai')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('cookie-parser', 'cookie-parser', version => {
   describe('ESM', () => {
-    let sandbox, variants, proc, agent
+    let variants, proc, agent
 
-    before(async function () {
-      this.timeout(50000)
-      sandbox = await createSandbox([`'cookie-parser@${version}'`, 'express'], false,
-        ['./packages/datadog-plugin-cookie-parser/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'cookieParser', undefined, 'cookie-parser')
-    })
+    useSandbox([`'cookie-parser@${version}'`, 'express'], false,
+      ['./packages/datadog-plugin-cookie-parser/test/integration-test/*'])
 
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
+    before(function () {
+      variants = varySandbox('server.mjs', 'cookieParser', undefined, 'cookie-parser')
     })
 
     beforeEach(async () => {
@@ -28,13 +28,13 @@ withVersions('cookie-parser', 'cookie-parser', version => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProc(sandboxCwd(), variants[variant], agent.port)
         const response = await curl(proc)
         assert.equal(response.headers['x-counter'], '1')
       })

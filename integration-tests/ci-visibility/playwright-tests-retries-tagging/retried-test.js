@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('retried test', () => {
   test('should be retried', async ({ page }) => {
     await expect(page.locator('.hello-world')).toHaveText([
-      'Hello World'
+      'Hello World',
     ])
   })
 })

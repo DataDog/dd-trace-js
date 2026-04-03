@@ -1,12 +1,12 @@
 'use strict'
 
-const { expect } = require('chai')
-const fs = require('fs')
-const path = require('path')
-const os = require('os')
 const { execSync } = require('child_process')
+const fs = require('fs')
+const assert = require('assert')
+const os = require('os')
+const path = require('path')
 
-const { createSandbox } = require('../helpers')
+const { assertObjectContains, sandboxCwd, useSandbox } = require('../helpers')
 
 const FIXED_COMMIT_MESSAGE = 'Test commit message for caching'
 const GET_COMMIT_MESSAGE_COMMAND_ARGS = ['log', '-1', '--pretty=format:%s']
@@ -24,14 +24,15 @@ function removeGitFromPath () {
 }
 
 describe('git-cache integration tests', () => {
-  let sandbox, cwd, gitCache, testRepoPath
+  let cwd, gitCache, testRepoPath
   let originalPath, originalCwd
   let cacheDir
   let originalCacheEnabled, originalCacheDir
 
-  before(async () => {
-    sandbox = await createSandbox([], true)
-    cwd = sandbox.folder
+  useSandbox([], true)
+
+  before(() => {
+    cwd = sandboxCwd()
     testRepoPath = cwd
 
     cacheDir = path.join(os.tmpdir(), 'dd-trace-git-cache-integration-test')
@@ -39,10 +40,6 @@ describe('git-cache integration tests', () => {
     originalCacheDir = process.env.DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR
 
     execSync(`git commit --allow-empty -m '${FIXED_COMMIT_MESSAGE}'`, { cwd: testRepoPath })
-  })
-
-  after(async () => {
-    await sandbox.remove()
   })
 
   beforeEach(() => {
@@ -75,29 +72,29 @@ describe('git-cache integration tests', () => {
     const firstResult = gitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
 
     const firstResultStr = firstResult.toString().trim()
-    expect(firstResultStr).to.equal(FIXED_COMMIT_MESSAGE)
+    assert.strictEqual(firstResultStr, FIXED_COMMIT_MESSAGE)
 
     const cacheKey = gitCache.getCacheKey('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
     const cacheFilePath = gitCache.getCacheFilePath(cacheKey)
-    expect(fs.existsSync(cacheFilePath)).to.be.true
+    assert.strictEqual(fs.existsSync(cacheFilePath), true)
 
     const cachedContent = fs.readFileSync(cacheFilePath, 'utf8')
-    expect(cachedContent).to.equal(firstResultStr)
+    assert.strictEqual(cachedContent, firstResultStr)
   })
 
   it('should return cached results when git is unavailable', function () {
     const firstResult = gitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS).toString().trim()
 
-    expect(firstResult).to.equal(FIXED_COMMIT_MESSAGE)
+    assert.strictEqual(firstResult, FIXED_COMMIT_MESSAGE)
 
     const cacheKey = gitCache.getCacheKey('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
     const cacheFilePath = gitCache.getCacheFilePath(cacheKey)
-    expect(fs.existsSync(cacheFilePath)).to.be.true
+    assert.strictEqual(fs.existsSync(cacheFilePath), true)
 
     removeGitFromPath()
 
     const secondResult = gitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS).toString().trim()
-    expect(secondResult).to.equal(firstResult)
+    assert.strictEqual(secondResult, firstResult)
 
     let secondError
     try {
@@ -105,9 +102,9 @@ describe('git-cache integration tests', () => {
     } catch (error) {
       secondError = error
     }
-    expect(secondError).to.be.an('error')
-    expect(secondError.code).to.equal('ENOENT')
-    expect(secondError.message).to.include('git')
+    assert.ok(secondError instanceof Error)
+    assert.strictEqual(secondError.code, 'ENOENT')
+    assert.match(secondError.message, /git/)
   })
 
   it('should cache git command failures and throw the same error on subsequent calls', function () {
@@ -120,14 +117,13 @@ describe('git-cache integration tests', () => {
       firstError = error
     }
 
-    expect(firstError).to.be.an('error')
+    assert.ok(firstError instanceof Error)
 
     const cacheKey = gitCache.getCacheKey('git', gitArgs)
     const cacheFilePath = gitCache.getCacheFilePath(cacheKey)
-    expect(fs.existsSync(cacheFilePath)).to.be.true
-
     const cachedData = fs.readFileSync(cacheFilePath, 'utf8')
-    expect(cachedData).to.include('__GIT_COMMAND_FAILED__')
+
+    assert.match(cachedData, /__GIT_COMMAND_FAILED__/)
 
     removeGitFromPath()
 
@@ -139,11 +135,13 @@ describe('git-cache integration tests', () => {
       secondError = error
     }
 
-    expect(secondError).to.be.an('error')
-    expect(secondError.message).to.equal(firstError.message)
-    expect(secondError.code).to.equal(firstError.code)
-    expect(secondError.status).to.equal(firstError.status)
-    expect(secondError.errno).to.equal(firstError.errno)
+    assert.ok(secondError instanceof Error)
+    assertObjectContains(secondError, {
+      message: firstError.message,
+      code: firstError.code,
+      status: firstError.status,
+      errno: firstError.errno,
+    })
   })
 
   it('should not cache when DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED is not set to true', function () {
@@ -154,11 +152,11 @@ describe('git-cache integration tests', () => {
 
     const firstResult = disabledGitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
     const firstResultStr = firstResult.toString().trim()
-    expect(firstResultStr).to.equal(FIXED_COMMIT_MESSAGE)
+    assert.strictEqual(firstResultStr, FIXED_COMMIT_MESSAGE)
 
     const cacheKey = disabledGitCache.getCacheKey('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
     const cacheFilePath = disabledGitCache.getCacheFilePath(cacheKey)
-    expect(fs.existsSync(cacheFilePath)).to.be.false
+    assert.strictEqual(fs.existsSync(cacheFilePath), false)
 
     removeGitFromPath()
 
@@ -169,9 +167,9 @@ describe('git-cache integration tests', () => {
       secondError = error
     }
 
-    expect(secondError).to.be.an('error')
-    expect(secondError.code).to.equal('ENOENT')
-    expect(secondError.message).to.include('git')
+    assert.ok(secondError instanceof Error)
+    assert.strictEqual(secondError.code, 'ENOENT')
+    assert.match(secondError.message, /git/)
   })
 
   context('invalid DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR', () => {
@@ -183,11 +181,11 @@ describe('git-cache integration tests', () => {
 
       const firstResult = invalidDirGitCache.cachedExec('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
       const firstResultStr = firstResult.toString().trim()
-      expect(firstResultStr).to.equal(FIXED_COMMIT_MESSAGE)
+      assert.strictEqual(firstResultStr, FIXED_COMMIT_MESSAGE)
 
       const cacheKey = invalidDirGitCache.getCacheKey('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
       const cacheFilePath = invalidDirGitCache.getCacheFilePath(cacheKey)
-      expect(fs.existsSync(cacheFilePath)).to.be.false
+      assert.strictEqual(fs.existsSync(cacheFilePath), false)
 
       removeGitFromPath()
 
@@ -198,9 +196,9 @@ describe('git-cache integration tests', () => {
         secondError = error
       }
 
-      expect(secondError).to.be.an('error')
-      expect(secondError.code).to.equal('ENOENT')
-      expect(secondError.message).to.include('git')
+      assert.ok(secondError instanceof Error)
+      assert.strictEqual(secondError.code, 'ENOENT')
+      assert.match(secondError.message, /git/)
     }
 
     it('set to a file', () => {
@@ -226,16 +224,10 @@ describe('git-cache integration tests', () => {
       } finally {
         try {
           fs.chmodSync(tempDir, 0o755)
-          if (fs.existsSync(tempDir)) {
-            rimraf.sync(tempDir)
-          }
-        } catch (cleanupError) {
-          try {
-            rimraf.sync(tempDir)
-          } catch {
-            // Ignore cleanup errors
-          }
+        } catch {
+          // Ignore cleanup errors
         }
+        fs.rmSync(tempDir, { recursive: true, force: true })
       }
     })
   })

@@ -5,6 +5,6 @@ export default async function POST (req, res) {
   res.status(200).json({
     cache: 'no-store',
     data: body,
-    query: req.query
+    query: req.query,
   })
 }

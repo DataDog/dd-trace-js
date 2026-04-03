@@ -10,19 +10,17 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 /**
  * Base class for OTLP HTTP exporters.
  *
- * This implementation follows the OTLP HTTP specification:
+ * This implementation follows the OTLP HTTP v1.7.0 specification:
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
-  #telemetryTags
-
   /**
    * Creates a new OtlpHttpExporterBase instance.
    *
    * @param {string} url - OTLP endpoint URL
-   * @param {string} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {string|undefined} headers - Additional HTTP headers as comma-separated key=value string
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {string} defaultPath - Default path to use if URL has no path
@@ -46,34 +44,28 @@ class OtlpHttpExporterBase {
       timeout,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
-        ...this.#parseAdditionalHeaders(headers)
-      }
+        ...this.#parseAdditionalHeaders(headers),
+      },
     }
-    this.#telemetryTags = [
+    this.telemetryTags = [
       'protocol:http',
-      `encoding:${isJson ? 'json' : 'protobuf'}`
+      `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
-  }
-
-  /**
-   * Gets the telemetry tags for this exporter.
-   * @returns {Array<string>} Telemetry tags
-   * @protected
-   */
-  _getTelemetryTags () {
-    return this.#telemetryTags
   }
 
   /**
    * Records telemetry metrics for exported data.
    * @param {string} metricName - Name of the metric to record
    * @param {number} count - Count to increment
-   * @param {Array<string>} [tags] - Optional custom tags (defaults to this exporter's tags)
+   * @param {Array<string>} [additionalTags] - Optional custom tags (defaults to this exporter's tags)
    * @protected
    */
-  _recordTelemetry (metricName, count, tags) {
-    const telemetryTags = tags || this.#telemetryTags
-    tracerMetrics.count(metricName, telemetryTags).inc(count)
+  recordTelemetry (metricName, count, additionalTags) {
+    if (additionalTags?.length > 0) {
+      tracerMetrics.count(metricName, [...this.telemetryTags, ...additionalTags || []]).inc(count)
+    } else {
+      tracerMetrics.count(metricName, this.telemetryTags).inc(count)
+    }
   }
 
   /**
@@ -82,13 +74,13 @@ class OtlpHttpExporterBase {
    * @param {Function} resultCallback - Callback for the result
    * @protected
    */
-  _sendPayload (payload, resultCallback) {
+  sendPayload (payload, resultCallback) {
     const options = {
       ...this.options,
       headers: {
         ...this.options.headers,
-        'Content-Length': payload.length
-      }
+        'Content-Length': payload.length,
+      },
     }
 
     const req = http.request(options, (res) => {
@@ -98,7 +90,7 @@ class OtlpHttpExporterBase {
         data += chunk
       })
 
-      res.on('end', () => {
+      res.once('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resultCallback({ code: 0 })
         } else {
@@ -109,11 +101,11 @@ class OtlpHttpExporterBase {
     })
 
     req.on('error', (error) => {
-      log.error(`Error sending OTLP ${this.signalType}:`, error)
+      log.error('Error sending OTLP %s:', this.signalType, error)
       resultCallback({ code: 1, error })
     })
 
-    req.on('timeout', () => {
+    req.once('timeout', () => {
       req.destroy()
       const error = new Error('Request timeout')
       resultCallback({ code: 1, error })
@@ -125,11 +117,10 @@ class OtlpHttpExporterBase {
 
   /**
    * Parses additional HTTP headers from a comma-separated string.
-   * @param {string} headersString - Comma-separated key=value pairs
+   * @param {string} [headersString=''] - Comma-separated key=value pairs
    * @returns {Record<string, string>} Parsed headers object
-   * @private
    */
-  #parseAdditionalHeaders (headersString) {
+  #parseAdditionalHeaders (headersString = '') {
     const headers = {}
     let key = ''
     let value = ''

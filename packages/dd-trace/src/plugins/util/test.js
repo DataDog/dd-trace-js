@@ -4,26 +4,23 @@ const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
-const satisfies = require('semifies')
+const { getEnvironmentVariable } = require('../../config/helper')
+const satisfies = require('../../../../../vendor/dist/semifies')
 
-const istanbul = require('istanbul-lib-coverage')
-const ignore = require('ignore')
+const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
+const ignore = require('../../../../../vendor/dist/ignore')
 
+const id = require('../../id')
 const {
-  getGitMetadata,
-  getGitInformationDiscrepancy,
-  getGitDiff,
-  getGitRemoteName,
-  getSourceBranch,
-  checkAndFetchBranch,
-  getLocalBranches,
-  getMergeBase,
-  getCounts
-} = require('./git')
-const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
-const { getCIMetadata } = require('./ci')
-const { getRuntimeAndOSMetadata } = require('./env')
+  incrementCountMetric,
+  TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
+  TELEMETRY_GIT_SHA_MATCH,
+} = require('../../ci-visibility/telemetry')
+
+const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
+const { SAMPLING_RULE_DECISION } = require('../../constants')
+const { AUTO_KEEP } = require('../../../../../ext/priority')
+const { version: ddTraceVersion } = require('../../../../../package.json')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -35,19 +32,22 @@ const {
   CI_WORKSPACE_PATH,
   CI_PIPELINE_URL,
   CI_JOB_NAME,
-  GIT_COMMIT_HEAD_SHA
+  GIT_COMMIT_HEAD_SHA,
 } = require('./tags')
-const id = require('../../id')
+const { getRuntimeAndOSMetadata } = require('./env')
+const { getCIMetadata } = require('./ci')
+const { getUserProviderGitMetadata, validateGitRepositoryUrl, validateGitCommitSha } = require('./user-provided-git')
 const {
-  incrementCountMetric,
-  TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
-  TELEMETRY_GIT_SHA_MATCH
-} = require('../../ci-visibility/telemetry')
-
-const { SPAN_TYPE, RESOURCE_NAME, SAMPLING_PRIORITY } = require('../../../../../ext/tags')
-const { SAMPLING_RULE_DECISION } = require('../../constants')
-const { AUTO_KEEP } = require('../../../../../ext/priority')
-const { version: ddTraceVersion } = require('../../../../../package.json')
+  getGitMetadata,
+  getGitInformationDiscrepancy,
+  getGitDiff,
+  getGitRemoteName,
+  getSourceBranch,
+  checkAndFetchBranch,
+  getLocalBranches,
+  getMergeBase,
+  getCounts,
+} = require('./git')
 
 /**
  * JSDoc types for test environment metadata helpers.
@@ -65,6 +65,7 @@ const TEST_TYPE = 'test.type'
 const TEST_NAME = 'test.name'
 const TEST_SUITE = 'test.suite'
 const TEST_STATUS = 'test.status'
+const TEST_FINAL_STATUS = 'test.final_status'
 const TEST_PARAMETERS = 'test.parameters'
 const TEST_SKIP_REASON = 'test.skip_reason'
 const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
@@ -87,10 +88,28 @@ const TEST_EARLY_FLAKE_ABORT_REASON = 'test.early_flake.abort_reason'
 const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
+const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
 const CI_APP_ORIGIN = 'ciapp-test'
+
+// Matches patterns that are almost certainly runtime-generated values in test names:
+// - Unix timestamps in ms (13 digits, years ~2020-2090) or s (10 digits)
+// - UUIDs (8-4-4-4-12 hex)
+// - ISO 8601 dates (2024-03-23) or date-times (2024-03-23T14:30)
+// - Random ports on localhost, 127.0.0.1, or 0.0.0.0
+// - Math.random() float values (10+ decimal digits after 0.)
+const DYNAMIC_NAME_RE = new RegExp(
+  String.raw`\b1[6-9]\d{8,11}\b|` +
+  String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|` +
+  String.raw`\b\d{4}-\d{2}-\d{2}|` +
+  String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{4,5}\b|` +
+  String.raw`\b0\.\d{10,}`,
+  'i'
+)
 
 const JEST_TEST_RUNNER = 'test.jest.test_runner'
 const JEST_DISPLAY_NAME = 'test.jest.display_name'
+
+const VITEST_POOL = 'test.vitest.pool'
 
 const CUCUMBER_IS_PARALLEL = 'test.cucumber.is_parallel'
 const MOCHA_IS_PARALLEL = 'test.mocha.is_parallel'
@@ -116,6 +135,7 @@ const TEST_BROWSER_VERSION = 'test.browser.version'
 const JEST_WORKER_TRACE_PAYLOAD_CODE = 60
 const JEST_WORKER_COVERAGE_PAYLOAD_CODE = 61
 const JEST_WORKER_LOGS_PAYLOAD_CODE = 62
+const JEST_WORKER_TELEMETRY_PAYLOAD_CODE = 63
 
 // cucumber worker variables
 const CUCUMBER_WORKER_TRACE_PAYLOAD_CODE = 70
@@ -130,6 +150,8 @@ const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
 const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
 const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
 
+const TEST_IS_TEST_FRAMEWORK_WORKER = 'test.is_test_framework_worker'
+
 // Library Capabilities Tagging
 const DD_CAPABILITIES_TEST_IMPACT_ANALYSIS = '_dd.library_capabilities.test_impact_analysis'
 const DD_CAPABILITIES_EARLY_FLAKE_DETECTION = '_dd.library_capabilities.early_flake_detection'
@@ -139,41 +161,43 @@ const DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE = '_dd.library_capabilities.tes
 const DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE = '_dd.library_capabilities.test_management.disable'
 const DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX = '_dd.library_capabilities.test_management.attempt_to_fix'
 const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test_replay'
+
+// Library configuration request error tag
+const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
+
 const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
-const UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE = new Set(['cucumber', 'mocha'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_IMPACTED_TESTS = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_QUARANTINE = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_DISABLE = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 const MINIMUM_FRAMEWORK_VERSION_FOR_FAILED_TEST_REPLAY = {
-  playwright: '>=1.38.0'
+  playwright: '>=1.38.0',
 }
 
-const UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE = new Set(['mocha'])
 const NOT_SUPPORTED_GRANULARITY_IMPACTED_TESTS_FRAMEWORKS = new Set(['mocha', 'playwright', 'vitest'])
 
 const TEST_LEVEL_EVENT_TYPES = [
   'test',
   'test_suite_end',
   'test_module_end',
-  'test_session_end'
+  'test_session_end',
 ]
 const TEST_RETRY_REASON_TYPES = {
   efd: 'early_flake_detection',
   atr: 'auto_test_retry',
   atf: 'attempt_to_fix',
-  ext: 'external'
+  ext: 'external',
 }
 
 const DD_TEST_IS_USER_PROVIDED_SERVICE = '_dd.test.is_user_provided_service'
@@ -196,6 +220,22 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
 
+/**
+ * Returns request error tags from a test session span for propagation to child events.
+ * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @returns {Record<string, string>}
+ */
+function getSessionRequestErrorTags (sessionSpan) {
+  const tags = sessionSpan?.context()._tags
+  if (!tags || typeof tags !== 'object') return {}
+  if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR] === 'true') {
+    return {
+      [DD_CI_LIBRARY_CONFIGURATION_ERROR]: 'true',
+    }
+  }
+  return {}
+}
+
 module.exports = {
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
@@ -203,12 +243,14 @@ module.exports = {
   TEST_FRAMEWORK_VERSION,
   JEST_TEST_RUNNER,
   JEST_DISPLAY_NAME,
+  VITEST_POOL,
   CUCUMBER_IS_PARALLEL,
   MOCHA_IS_PARALLEL,
   TEST_TYPE,
   TEST_NAME,
   TEST_SUITE,
   TEST_STATUS,
+  TEST_FINAL_STATUS,
   TEST_PARAMETERS,
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
@@ -218,11 +260,13 @@ module.exports = {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
+  JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
   TEST_IS_NEW,
@@ -232,6 +276,7 @@ module.exports = {
   TEST_RETRY_REASON,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
+  TEST_HAS_DYNAMIC_NAME,
   getTestEnvironmentMetadata,
   getTestParametersString,
   finishAllTraceSpans,
@@ -268,6 +313,7 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getEfdRetryCount,
   TEST_BROWSER_DRIVER,
   TEST_BROWSER_DRIVER_VERSION,
   TEST_BROWSER_NAME,
@@ -298,12 +344,19 @@ module.exports = {
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   getLibraryCapabilitiesTags,
+  getSessionRequestErrorTags,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR,
   checkShaDiscrepancies,
   getPullRequestDiff,
   getPullRequestBaseBranch,
   getModifiedFilesFromDiff,
   isModifiedTest,
-  POSSIBLE_BASE_BRANCHES
+  POSSIBLE_BASE_BRANCHES,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
+  logDynamicNamesWarning,
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -349,11 +402,11 @@ function removeInvalidMetadata (metadata) {
 function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
   const {
     [GIT_COMMIT_SHA]: ciCommitSHA,
-    [GIT_REPOSITORY_URL]: ciRepositoryUrl
+    [GIT_REPOSITORY_URL]: ciRepositoryUrl,
   } = ciMetadata
   const {
     [GIT_COMMIT_SHA]: userProvidedCommitSHA,
-    [GIT_REPOSITORY_URL]: userProvidedRepositoryUrl
+    [GIT_REPOSITORY_URL]: userProvidedRepositoryUrl,
   } = userProvidedGitMetadata
   const { gitRepositoryUrl, gitCommitSHA } = getGitInformationDiscrepancy()
 
@@ -370,7 +423,7 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
         {
           type: discrepancyType,
           expected_provider: expectedProvider,
-          discrepant_provider: discrepantProvider
+          discrepant_provider: discrepantProvider,
         }
       )
       return true
@@ -385,14 +438,14 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v2: gitRepositoryUrl,
       type: 'repository_discrepancy',
       expected: 'user_supplied',
-      discrepant: 'git_client'
+      discrepant: 'git_client',
     },
     {
       v1: userProvidedCommitSHA,
       v2: gitCommitSHA,
       type: 'commit_discrepancy',
       expected: 'user_supplied',
-      discrepant: 'git_client'
+      discrepant: 'git_client',
     },
     // User provided vs CI metadata
     {
@@ -400,14 +453,14 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v2: ciRepositoryUrl,
       type: 'repository_discrepancy',
       expected: 'user_supplied',
-      discrepant: 'ci_provider'
+      discrepant: 'ci_provider',
     },
     {
       v1: userProvidedCommitSHA,
       v2: ciCommitSHA,
       type: 'commit_discrepancy',
       expected: 'user_supplied',
-      discrepant: 'ci_provider'
+      discrepant: 'ci_provider',
     },
     // CI metadata vs Git metadata
     {
@@ -415,15 +468,15 @@ function checkShaDiscrepancies (ciMetadata, userProvidedGitMetadata) {
       v2: gitRepositoryUrl,
       type: 'repository_discrepancy',
       expected: 'ci_provider',
-      discrepant: 'git_client'
+      discrepant: 'git_client',
     },
     {
       v1: ciCommitSHA,
       v2: gitCommitSHA,
       type: 'commit_discrepancy',
       expected: 'ci_provider',
-      discrepant: 'git_client'
-    }
+      discrepant: 'git_client',
+    },
   ]
 
   let gitCommitShaMatch = true
@@ -468,7 +521,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
       [GIT_COMMIT_AUTHOR_EMAIL]: authorEmail,
       [GIT_COMMIT_MESSAGE]: commitMessage,
       [CI_WORKSPACE_PATH]: ciWorkspacePath,
-      [GIT_COMMIT_HEAD_SHA]: headCommitSha
+      [GIT_COMMIT_HEAD_SHA]: headCommitSha,
     } = ciMetadata
     gitMetadata = getGitMetadata({
       commitSHA,
@@ -479,7 +532,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
       authorEmail,
       commitMessage,
       ciWorkspacePath,
-      headCommitSha
+      headCommitSha,
     })
   }
 
@@ -492,7 +545,7 @@ function getTestEnvironmentMetadata (testFramework, config, shouldSkipGitMetadat
     ...gitMetadata,
     ...ciMetadata,
     ...userProvidedGitMetadata,
-    ...runtimeAndOSMetadata
+    ...runtimeAndOSMetadata,
   }
   if (config && config.service) {
     metadata['service.name'] = config.service
@@ -523,17 +576,17 @@ function getTestTypeFromFramework (testFramework) {
 }
 
 function finishAllTraceSpans (span) {
-  span.context()._trace.started.forEach(traceSpan => {
+  for (const traceSpan of span.context()._trace.started) {
     if (traceSpan !== span) {
       traceSpan.finish()
     }
-  })
+  }
 }
 
 function getTestParentSpan (tracer) {
   return tracer.extract('text_map', {
     'x-datadog-trace-id': id().toString(10),
-    'x-datadog-parent-id': '0000000000000000'
+    'x-datadog-parent-id': '0000000000000000',
   })
 }
 
@@ -547,7 +600,7 @@ function getTestCommonTags (name, suite, version, testFramework) {
     [TEST_SUITE]: suite,
     [RESOURCE_NAME]: `${suite}.${name}`,
     [TEST_FRAMEWORK_VERSION]: version,
-    [LIBRARY_VERSION]: ddTraceVersion
+    [LIBRARY_VERSION]: ddTraceVersion,
   }
 }
 
@@ -563,14 +616,14 @@ function getTestSuitePath (testSuiteAbsolutePath, sourceRoot) {
     ? testSuiteAbsolutePath
     : path.relative(sourceRoot, testSuiteAbsolutePath)
 
-  return testSuitePath.replace(path.sep, '/')
+  return testSuitePath.replaceAll(path.sep, '/')
 }
 
 const POSSIBLE_CODEOWNERS_LOCATIONS = [
   'CODEOWNERS',
   '.github/CODEOWNERS',
   'docs/CODEOWNERS',
-  '.gitlab/CODEOWNERS'
+  '.gitlab/CODEOWNERS',
 ]
 
 function readCodeOwners (rootDir) {
@@ -621,20 +674,29 @@ function getCodeOwnersFileEntries (rootDir) {
   return entries.reverse()
 }
 
+const codeOwnersPerFileName = new Map()
+
 function getCodeOwnersForFilename (filename, entries) {
   if (!entries) {
     return null
+  }
+  if (codeOwnersPerFileName.has(filename)) {
+    return codeOwnersPerFileName.get(filename)
   }
   for (const entry of entries) {
     try {
       const isResponsible = ignore().add(entry.pattern).ignores(filename)
       if (isResponsible) {
-        return JSON.stringify(entry.owners)
+        const codeOwners = JSON.stringify(entry.owners)
+        codeOwnersPerFileName.set(filename, codeOwners)
+        return codeOwners
       }
     } catch {
+      codeOwnersPerFileName.set(filename, null)
       return null
     }
   }
+  codeOwnersPerFileName.set(filename, null)
   return null
 }
 
@@ -643,7 +705,7 @@ function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
     [TEST_COMMAND]: command,
-    [TEST_TYPE]: getTestTypeFromFramework(testFramework)
+    [TEST_TYPE]: getTestTypeFromFramework(testFramework),
   }
 }
 
@@ -653,7 +715,7 @@ function getTestSessionCommonTags (command, testFrameworkVersion, testFramework)
     [RESOURCE_NAME]: `test_session.${command}`,
     [TEST_MODULE]: testFramework,
     [TEST_TOOLCHAIN]: getPkgManager(),
-    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework),
   }
 }
 
@@ -662,7 +724,7 @@ function getTestModuleCommonTags (command, testFrameworkVersion, testFramework) 
     [SPAN_TYPE]: 'test_module_end',
     [RESOURCE_NAME]: `test_module.${command}`,
     [TEST_MODULE]: testFramework,
-    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework),
   }
 }
 
@@ -672,7 +734,7 @@ function getTestSuiteCommonTags (command, testFrameworkVersion, testSuite, testF
     [RESOURCE_NAME]: `test_suite.${testSuite}`,
     [TEST_MODULE]: testFramework,
     [TEST_SUITE]: testSuite,
-    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework)
+    ...getTestLevelCommonTags(command, testFrameworkVersion, testFramework),
   }
 }
 
@@ -687,7 +749,7 @@ function addIntelligentTestRunnerSpanTags (
     skippingCount,
     skippingType = 'suite',
     hasUnskippableSuites,
-    hasForcedToRunSuites
+    hasForcedToRunSuites,
   }
 ) {
   testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, isSuitesSkipped ? 'true' : 'false')
@@ -738,6 +800,7 @@ function resetCoverage (coverage) {
 
   return coverageMap
     .files()
+    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       fileCoverage.resetHits()
@@ -748,6 +811,7 @@ function mergeCoverage (coverage, targetCoverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
   return coverageMap
     .files()
+    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
 
@@ -761,9 +825,9 @@ function mergeCoverage (coverage, targetCoverage) {
       const targetFileCoverage = targetCoverage.fileCoverageFor(filename)
 
       // branches (.b) are copied by reference, so `resetHits` affects the copy, so we need to copy it manually
-      Object.entries(targetFileCoverage.data.b).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(targetFileCoverage.data.b)) {
         targetFileCoverage.data.b[key] = [...value]
-      })
+      }
     })
 }
 
@@ -798,7 +862,7 @@ function getTestEndLine (testFn, startLine = 0) {
 
 /**
  * Gets an object of test tags from an Playwright annotations array.
- * @param {Object[]} annotations - Annotations from a Playwright test.
+ * @param {object[]} annotations - Annotations from a Playwright test.
  * @param {string} annotations[].type - Type of annotation. A string of the shape DD_TAGS[$tag_name].
  * @param {string} annotations[].description - Value of the tag.
  */
@@ -821,6 +885,31 @@ function parseAnnotations (annotations) {
     }
     return tags
   }, {})
+}
+
+/**
+ * Given a test's first-execution duration (ms) and the slow_test_retries map
+ * from the backend, return how many EFD retries to run.
+ *
+ * Returns 0 when the test is too slow to retry (≥ 5 min).
+ *
+ * @param {number} durationMs
+ * @param {Record<string, number>} slowTestRetries  e.g. { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
+ * @returns {number}
+ */
+function getEfdRetryCount (durationMs, slowTestRetries) {
+  const thresholds = [
+    { limitMs: 5 * 1000, key: '5s' },
+    { limitMs: 10 * 1000, key: '10s' },
+    { limitMs: 30 * 1000, key: '30s' },
+    { limitMs: 5 * 60 * 1000, key: '5m' },
+  ]
+  for (const { limitMs, key } of thresholds) {
+    if (durationMs < limitMs) {
+      return slowTestRetries[key] ?? 0
+    }
+  }
+  return 0 // ≥ 5 min — abort
 }
 
 function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faultyThresholdPercentage) {
@@ -874,7 +963,7 @@ const DEPENDENCY_FOLDERS = [
   'node:',
   '.pnpm',
   '.yarn',
-  '.pnp'
+  '.pnp',
 ]
 
 function getFileAndLineNumberFromError (error, repositoryRoot) {
@@ -916,9 +1005,8 @@ function getFormattedError (error, repositoryRoot) {
   return newError
 }
 
-function isTiaSupported (testFramework, isParallel) {
-  return !(UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework) ||
-           (isParallel && UNSUPPORTED_TIA_FRAMEWORKS_PARALLEL_MODE.has(testFramework)))
+function isTiaSupported (testFramework) {
+  return !UNSUPPORTED_TIA_FRAMEWORKS.has(testFramework)
 }
 
 function isEarlyFlakeDetectionSupported (testFramework, frameworkVersion) {
@@ -945,12 +1033,12 @@ function isDisableSupported (testFramework, frameworkVersion) {
     : true
 }
 
-function isAttemptToFixSupported (testFramework, isParallel, frameworkVersion) {
+function isAttemptToFixSupported (testFramework, frameworkVersion) {
   if (testFramework === 'playwright') {
     return satisfies(frameworkVersion, MINIMUM_FRAMEWORK_VERSION_FOR_ATTEMPT_TO_FIX[testFramework])
   }
 
-  return !(isParallel && UNSUPPORTED_ATTEMPT_TO_FIX_FRAMEWORKS_PARALLEL_MODE.has(testFramework))
+  return true
 }
 
 function isFailedTestReplaySupported (testFramework, frameworkVersion) {
@@ -959,9 +1047,9 @@ function isFailedTestReplaySupported (testFramework, frameworkVersion) {
     : true
 }
 
-function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion) {
+function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
   return {
-    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework, isParallel)
+    [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework)
       ? '1'
       : undefined,
     [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: isEarlyFlakeDetectionSupported(testFramework, frameworkVersion)
@@ -978,12 +1066,12 @@ function getLibraryCapabilitiesTags (testFramework, isParallel, frameworkVersion
       ? '1'
       : undefined,
     [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]:
-      isAttemptToFixSupported(testFramework, isParallel, frameworkVersion)
+      isAttemptToFixSupported(testFramework, frameworkVersion)
         ? '5'
         : undefined,
     [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
       ? '1'
-      : undefined
+      : undefined,
   }
 }
 
@@ -1033,7 +1121,7 @@ function getPullRequestBaseBranch (pullRequestBaseBranch) {
     metrics[candidate] = {
       behind,
       ahead,
-      baseSha
+      baseSha,
     }
   }
 
@@ -1108,6 +1196,62 @@ function getModifiedFilesFromDiff (diff) {
     return null
   }
   return result
+}
+
+/**
+ * Scans serialized worker trace payloads for tests tagged with TEST_HAS_DYNAMIC_NAME
+ * and populates the provided Set. Silently ignores parse errors.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {Set<string>} newTestsWithDynamicNames - Set to populate with "suite › name" strings
+ */
+function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
+  try {
+    const traces = JSON.parse(data)
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (span.meta?.[TEST_HAS_DYNAMIC_NAME] === 'true') {
+          const suite = span.meta[TEST_SUITE]
+          const name = span.meta[TEST_NAME]
+          if (suite && name) {
+            newTestsWithDynamicNames.add(`${suite} › ${name}`)
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+}
+
+/**
+ * Logs a "Datadog Test Optimization" warning about new tests with dynamic names.
+ * Clears the Set after logging. No-op if the Set is empty.
+ *
+ * @param {Set<string>} newTestsWithDynamicNames
+ */
+function logDynamicNamesWarning (newTestsWithDynamicNames) {
+  if (newTestsWithDynamicNames.size === 0) return
+
+  const MAX_SHOWN = 10
+  const names = [...newTestsWithDynamicNames]
+  const shown = names.slice(0, MAX_SHOWN)
+  const more = names.length - shown.length
+  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
+  const nameList = shown.map(n => `  • ${n}`).join('\n') + moreSuffix
+
+  const line = '-'.repeat(50)
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(
+    `\n${line}\nDatadog Test Optimization\n${line}\n` +
+    `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+    'dynamic data (timestamps, UUIDs, etc.).\n' +
+    'Tests with changing names are always treated as new on every run, ' +
+    'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
+    'Consider using stable, deterministic test names.\n\n' +
+    `${nameList}\n`
+  )
+  newTestsWithDynamicNames.clear()
 }
 
 function isModifiedTest (testPath, testStartLine, testEndLine, modifiedFiles, testFramework) {

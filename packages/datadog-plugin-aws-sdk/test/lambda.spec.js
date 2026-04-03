@@ -1,13 +1,15 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, before, after } = require('mocha')
+const assert = require('node:assert/strict')
 
 const JSZip = require('jszip')
-const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { after, before, describe, it } = require('mocha')
+
 const agent = require('../../dd-trace/test/plugins/agent')
-const { setup } = require('./spec_helpers')
+const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./lambda-naming')
+const { setup } = require('./spec_helpers')
 
 const zip = new JSZip()
 
@@ -51,7 +53,7 @@ describe('Plugin', () => {
             Code: { ZipFile },
             Handler: 'handler.handle',
             Role: 'arn:aws:iam::123456:role/test',
-            Runtime: 'nodejs18.x'
+            Runtime: 'nodejs18.x',
           }, (err, res) => {
             if (err) return done(err)
 
@@ -70,11 +72,11 @@ describe('Plugin', () => {
           (done) => lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
+            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } }),
           }, (err) => err && done(err)),
           rawExpectedSchema.invoke,
           {
-            desc: 'invoke'
+            desc: 'invoke',
           }
         )
 
@@ -82,7 +84,7 @@ describe('Plugin', () => {
           (done) => lambda.listFunctions({}, (err) => err && done(err)),
           rawExpectedSchema.client,
           {
-            desc: 'client'
+            desc: 'client',
           }
         )
 
@@ -95,22 +97,22 @@ describe('Plugin', () => {
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
-            expect(span.resource.startsWith('invoke')).to.equal(true)
-            expect(span.meta).to.include({
+            assert.strictEqual(span.resource.startsWith('invoke'), true)
+            assertObjectContains(span.meta, {
               functionname: 'ironmaiden',
               aws_service: 'Lambda',
-              region: 'us-east-1'
+              region: 'us-east-1',
             })
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
-            expect(spanContext.toTraceId()).to.equal(traceId)
-            expect(spanContext.toSpanId()).to.equal(parentId)
+            assert.strictEqual(spanContext.toTraceId(), traceId)
+            assert.strictEqual(spanContext.toSpanId(), parentId)
           }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } })
+            ClientContext: createClientContext({ custom: { megadeth: 'tornado of souls' } }),
           }, (e, data) => {
             receivedContext = parsePayload(data.Payload).client_context
             e && done(e)
@@ -126,18 +128,18 @@ describe('Plugin', () => {
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
-            expect(span.resource.startsWith('invoke')).to.equal(true)
+            assert.strictEqual(span.resource.startsWith('invoke'), true)
 
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
-            expect(spanContext.toTraceId()).to.equal(traceId)
-            expect(spanContext.toSpanId()).to.equal(parentId)
+            assert.strictEqual(spanContext.toTraceId(), traceId)
+            assert.strictEqual(spanContext.toSpanId(), parentId)
           }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
             Payload: '{}',
-            ClientContext: createClientContext({ megadeth: 'tornado of souls' })
+            ClientContext: createClientContext({ megadeth: 'tornado of souls' }),
           }, (e, data) => {
             receivedContext = parsePayload(data.Payload).client_context
             e && done(e)
@@ -153,17 +155,17 @@ describe('Plugin', () => {
             const injectedTraceData = JSON.parse(clientContextSent).custom
             const spanContext = tracer.extract('text_map', injectedTraceData)
 
-            expect(span.resource.startsWith('invoke')).to.equal(true)
+            assert.strictEqual(span.resource.startsWith('invoke'), true)
 
             const parentId = span.span_id.toString()
             const traceId = span.trace_id.toString()
-            expect(spanContext.toTraceId()).to.equal(traceId)
-            expect(spanContext.toSpanId()).to.equal(parentId)
+            assert.strictEqual(spanContext.toTraceId(), traceId)
+            assert.strictEqual(spanContext.toSpanId(), parentId)
           }, { timeoutMs: 10000 }).then(done, done)
 
           lambda.invoke({
             FunctionName: 'ironmaiden',
-            Payload: '{}'
+            Payload: '{}',
           }, (e, data) => {
             receivedContext = parsePayload(data.Payload).client_context
             e && done(e)

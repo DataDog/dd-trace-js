@@ -1,20 +1,22 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const { join } = require('path')
 const {
   FakeAgent,
   curlAndAssertMessage,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProc,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions, insertVersionDep } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-const { join } = require('path')
 
 describe('esm', () => {
   let agent
   let proc
   const env = {
-    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`
+    NODE_OPTIONS: `--loader=${join(__dirname, '..', '..', '..', '..', 'initialize.mjs')}`,
   }
 
   // skip older versions of fastify due to syntax differences
@@ -26,7 +28,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -34,8 +36,8 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
     }).timeout(20000)
@@ -44,8 +46,8 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server1.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
     }).timeout(20000)
@@ -54,8 +56,8 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(__dirname, 'server2.mjs', agent.port, env)
 
       return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
         assert.strictEqual(checkSpansForServiceName(payload, 'fastify.request'), true)
       })
     }).timeout(20000)

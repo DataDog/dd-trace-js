@@ -42,32 +42,32 @@ const resolvers = {
   Query: {
     hello: (_, args) => args.name,
     human: () => Promise.resolve({}),
-    friends: () => [{ name: 'alice' }, { name: 'bob' }]
+    friends: () => [{ name: 'alice' }, { name: 'bob' }],
   },
   Mutation: {
-    human: () => Promise.resolve({ name: 'human name' })
+    human: () => Promise.resolve({ name: 'human name' }),
   },
   Subscription: {
-    human: () => Promise.resolve({ name: 'human name' })
+    human: () => Promise.resolve({ name: 'human name' }),
   },
   Human: {
     name: () => 'test',
     address: () => ({}),
-    pets: () => [{}, {}, {}]
+    pets: () => [{}, {}, {}],
   },
   Address: {
     civicNumber: () => '123',
-    street: () => 'foo street'
+    street: () => 'foo street',
   },
   Pet: {
     type: () => 'dog',
     name: () => 'foo bar',
     owner: () => ({}),
-    colours: () => [{}, {}]
+    colours: () => [{}, {}],
   },
   Colour: {
-    code: () => '#ffffff'
-  }
+    code: () => '#ffffff',
+  },
 }
 
 const name = 'accounts'

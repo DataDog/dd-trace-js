@@ -1,16 +1,16 @@
 'use strict'
 
-const Axios = require('axios')
 const assert = require('node:assert')
+const path = require('node:path')
+const Axios = require('axios')
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const sinon = require('sinon')
-const path = require('node:path')
 
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const { wafRunFinished } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
-const Config = require('../../../src/config')
+const getConfig = require('../../../src/config')
 const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
@@ -23,7 +23,7 @@ describe('RASP - sql_injection', () => {
           user: 'postgres',
           password: 'postgres',
           database: 'postgres',
-          application_name: 'test'
+          application_name: 'test',
         }
         let server, axios, app, pg
 
@@ -40,18 +40,18 @@ describe('RASP - sql_injection', () => {
             app(req, res)
           })
 
-          appsec.enable(new Config({
+          appsec.enable(getConfig({
             appsec: {
               enabled: true,
               rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-              rasp: { enabled: true }
-            }
+              rasp: { enabled: true },
+            },
           }))
 
           server = expressApp.listen(0, () => {
-            const port = server.address().port
+            const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
             axios = Axios.create({
-              baseURL: `http://localhost:${port}`
+              baseURL: `http://localhost:${port}`,
             })
             done()
           })
@@ -246,9 +246,9 @@ describe('RASP - sql_injection', () => {
                 wafRunFinished.publish({
                   payload: {
                     persistent: {
-                      [addresses.HTTP_INCOMING_URL]: 'test'
-                    }
-                  }
+                      [addresses.HTTP_INCOMING_URL]: 'test',
+                    },
+                  },
                 })
 
                 await runQueryAndIgnoreError('SELECT 1')
@@ -268,9 +268,9 @@ describe('RASP - sql_injection', () => {
                 wafRunFinished.publish({
                   payload: {
                     persistent: {
-                      'not-an-input': 'test'
-                    }
-                  }
+                      'not-an-input': 'test',
+                    },
+                  },
                 })
 
                 await runQueryAndIgnoreError('SELECT 1')

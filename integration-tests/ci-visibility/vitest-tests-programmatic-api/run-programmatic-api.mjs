@@ -7,7 +7,7 @@ async function runProgrammaticTests () {
         environment: 'node',
       },
       run: true,
-      watch: false
+      watch: false,
     })
 
     await vitest.close()

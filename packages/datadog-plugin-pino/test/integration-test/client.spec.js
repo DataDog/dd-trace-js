@@ -1,30 +1,27 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const {
   FakeAgent,
-  createSandbox,
-  spawnPluginIntegrationTestProc,
-  varySandbox
+  spawnPluginIntegrationTestProcAndExpectExit,
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { expect } = require('chai')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
 
   withVersions('pino', 'pino', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'pino@${version}'`],
-        false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', 'pino')
-    })
+    useSandbox([`'pino@${version}'`],
+      false, ['./packages/datadog-plugin-pino/test/integration-test/*'])
 
-    after(async () => {
-      await sandbox.remove()
+    before(async function () {
+      variants = varySandbox('server.mjs', 'pino')
     })
 
     beforeEach(async () => {
@@ -32,19 +29,21 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
-        proc = await spawnPluginIntegrationTestProc(
-          sandbox.folder,
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(
+          sandboxCwd(),
           variants[variant],
           agent.port,
+          undefined,
+          undefined,
           (data) => {
             const jsonObject = JSON.parse(data.toString())
-            expect(jsonObject).to.have.property('dd')
+            assert.ok(Object.hasOwn(jsonObject, 'dd'))
           }
         )
       }).timeout(20000)

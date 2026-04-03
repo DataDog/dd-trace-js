@@ -2,56 +2,55 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
-  TEST_SKIP_REASON,
-  TEST_STATUS,
-  TEST_SOURCE_START,
-  finishAllTraceSpans,
-  getTestSuitePath,
-  getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
-  TEST_ITR_UNSKIPPABLE,
-  TEST_ITR_FORCED_RUN,
-  TEST_CODE_OWNERS,
+  finishAllTraceSpans,
+  getTestEndLine,
+  getTestSuiteCommonTags,
+  getTestSuitePath,
+  isModifiedTest,
+  CUCUMBER_IS_PARALLEL,
   ITR_CORRELATION_ID,
-  TEST_SOURCE_FILE,
-  TEST_EARLY_FLAKE_ENABLED,
+  TEST_CODE_OWNERS,
   TEST_EARLY_FLAKE_ABORT_REASON,
+  TEST_EARLY_FLAKE_ENABLED,
+  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_IS_RETRY,
-  CUCUMBER_IS_PARALLEL,
-  TEST_RETRY_REASON,
-  TEST_MANAGEMENT_ENABLED,
-  TEST_MANAGEMENT_IS_QUARANTINED,
-  TEST_MANAGEMENT_IS_DISABLED,
-  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
-  TEST_HAS_FAILED_ALL_RETRIES,
+  TEST_ITR_FORCED_RUN,
+  TEST_ITR_UNSKIPPABLE,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
   TEST_RETRY_REASON_TYPES,
-  TEST_IS_MODIFIED,
-  isModifiedTest,
-  getTestEndLine
+  TEST_RETRY_REASON,
+  TEST_SKIP_REASON,
+  TEST_SOURCE_FILE,
+  TEST_SOURCE_START,
+  TEST_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT, ERROR_MESSAGE } = require('../../dd-trace/src/constants')
 const {
+  TELEMETRY_CODE_COVERAGE_EMPTY,
+  TELEMETRY_CODE_COVERAGE_FINISHED,
+  TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_CODE_COVERAGE_STARTED,
   TELEMETRY_EVENT_CREATED,
   TELEMETRY_EVENT_FINISHED,
-  TELEMETRY_CODE_COVERAGE_STARTED,
-  TELEMETRY_CODE_COVERAGE_FINISHED,
   TELEMETRY_ITR_FORCED_TO_RUN,
-  TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
-  TELEMETRY_CODE_COVERAGE_NUM_FILES,
-  TEST_IS_RUM_ACTIVE,
-  TEST_BROWSER_DRIVER,
-  TELEMETRY_TEST_SESSION
+  TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
+const BREAKPOINT_SET_GRACE_PERIOD_MS = 400
+
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
 
 class CucumberPlugin extends CiPlugin {
@@ -72,7 +71,7 @@ class CucumberPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
-      isParallel
+      isParallel,
     }) => {
       const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
       addIntelligentTestRunnerSpanTags(
@@ -86,7 +85,7 @@ class CucumberPlugin extends CiPlugin {
           skippingCount: numSkippedSuites,
           skippingType: 'suite',
           hasUnskippableSuites,
-          hasForcedToRunSuites
+          hasForcedToRunSuites,
         }
       )
       if (isEarlyFlakeDetectionEnabled) {
@@ -107,11 +106,13 @@ class CucumberPlugin extends CiPlugin {
       this.testModuleSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
+      this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+      })
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getEnvironmentVariable('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER')
+        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
       })
 
       this.libraryConfig = null
@@ -122,17 +123,20 @@ class CucumberPlugin extends CiPlugin {
       testFileAbsolutePath,
       isUnskippable,
       isForcedToRun,
-      itrCorrelationId
+      itrCorrelationId,
     }) => {
       const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)
 
-      const testSuiteMetadata = getTestSuiteCommonTags(
-        this.command,
-        this.frameworkVersion,
-        testSuitePath,
-        'cucumber'
-      )
+      const testSuiteMetadata = {
+        ...getTestSuiteCommonTags(
+          this.command,
+          this.frameworkVersion,
+          testSuitePath,
+          'cucumber'
+        ),
+        ...this.getSessionRequestErrorTags(),
+      }
       if (isUnskippable) {
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
@@ -159,9 +163,9 @@ class CucumberPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           ...this.testEnvironmentMetadata,
-          ...testSuiteMetadata
+          ...testSuiteMetadata,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
       this._testSuiteSpansByTestSuite.set(testSuitePath, testSuiteSpan)
 
@@ -195,7 +199,7 @@ class CucumberPlugin extends CiPlugin {
       const formattedCoverage = {
         sessionId: testSuiteSpan.context()._traceId,
         suiteId: testSuiteSpan.context()._spanId,
-        files: relativeCoverageFiles
+        files: relativeCoverageFiles,
       }
 
       this.tracer._exporter.exportCoverage(formattedCoverage)
@@ -210,7 +214,7 @@ class CucumberPlugin extends CiPlugin {
 
       const extraTags = {
         [TEST_SOURCE_START]: testSourceLine,
-        [TEST_SOURCE_FILE]: testSourceFile
+        [TEST_SOURCE_FILE]: testSourceFile,
       }
       if (isParallel) {
         extraTags[CUCUMBER_IS_PARALLEL] = 'true'
@@ -271,9 +275,9 @@ class CucumberPlugin extends CiPlugin {
         tags: {
           [COMPONENT]: this.constructor.id,
           'cucumber.step': resource,
-          [RESOURCE_NAME]: resource
+          [RESOURCE_NAME]: resource,
         },
-        integrationName: this.constructor.id
+        integrationName: this.constructor.id,
       })
       ctx.parentStore = store
       ctx.currentStore = { ...store, span }
@@ -298,7 +302,7 @@ class CucumberPlugin extends CiPlugin {
       hasFailedAttemptToFix,
       isDisabled,
       isQuarantined,
-      isModified
+      isModified,
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
 
@@ -361,18 +365,13 @@ class CucumberPlugin extends CiPlugin {
         }
       }
 
+      const telemetryTags = this.getTestTelemetryTags(span)
       span.finish()
       if (!isStep) {
-        const spanTags = span.context()._tags
         this.telemetry.ciVisEvent(
           TELEMETRY_EVENT_FINISHED,
           'test',
-          {
-            hasCodeOwners: !!spanTags[TEST_CODE_OWNERS],
-            isNew,
-            isRum: spanTags[TEST_IS_RUM_ACTIVE] === 'true',
-            browserDriver: spanTags[TEST_BROWSER_DRIVER]
-          }
+          telemetryTags
         )
         finishAllTraceSpans(span)
         // If it's a worker, flushing is cheap, as it's just sending data to the main process
@@ -410,7 +409,7 @@ class CucumberPlugin extends CiPlugin {
       modifiedFiles,
       stepIds,
       stepDefinitions,
-      setIsModified
+      setIsModified,
     }) => {
       const testScenarioPath = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot || process.cwd())
       for (const scenario of scenarios) {

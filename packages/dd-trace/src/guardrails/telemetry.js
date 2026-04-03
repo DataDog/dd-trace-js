@@ -74,13 +74,13 @@ function sendTelemetry (name, tags, resultMetadata) {
     }
   }
 
-  var proc = spawn(process.env.DD_TELEMETRY_FORWARDER_PATH, ['library_entrypoint'], {
+  var proc = spawn(telemetryForwarderPath, ['library_entrypoint'], {
     stdio: 'pipe'
   })
   proc.on('error', function () {
     log.error('Failed to spawn telemetry forwarder')
   })
-  proc.on('exit', function (code) {
+  proc.once('exit', function (code) {
     if (code !== 0) {
       log.error('Telemetry forwarder exited with code', code)
     }

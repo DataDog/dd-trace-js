@@ -10,5 +10,5 @@ module.exports = {
   AI_GUARD_META_STRUCT_KEY: 'ai_guard',
 
   AI_GUARD_TELEMETRY_REQUESTS: 'ai_guard.requests',
-  AI_GUARD_TELEMETRY_TRUNCATED: 'ai_guard.truncated'
+  AI_GUARD_TELEMETRY_TRUNCATED: 'ai_guard.truncated',
 }

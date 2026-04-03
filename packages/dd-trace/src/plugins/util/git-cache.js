@@ -7,11 +7,11 @@ const crypto = require('crypto')
 const cp = require('child_process')
 
 const log = require('../../log')
-const { getEnvironmentVariable } = require('../../config-helper')
+const { getValueFromEnvSources } = require('../../config/helper')
 const { isTrue } = require('../../util')
 
-let isGitEnabled = isTrue(getEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED'))
-const GIT_CACHE_DIR = getEnvironmentVariable('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR') ||
+let isGitEnabled = isTrue(getValueFromEnvSources('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED'))
+const GIT_CACHE_DIR = getValueFromEnvSources('DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR') ||
   path.join(os.tmpdir(), 'dd-trace-git-cache')
 
 function ensureCacheDir () {
@@ -115,7 +115,7 @@ function cachedExec (cmd, flags, options) {
         code: err.code,
         status: err.status,
         errno: err.errno,
-        message: err.message
+        message: err.message,
       })
     setCache(cacheKey, cacheValue)
     throw err
@@ -125,5 +125,5 @@ function cachedExec (cmd, flags, options) {
 module.exports = {
   getCacheKey,
   getCacheFilePath,
-  cachedExec
+  cachedExec,
 }

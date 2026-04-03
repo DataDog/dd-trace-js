@@ -1,49 +1,52 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc
+  spawnPluginIntegrationTestProcAndExpectExit,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
+  let variants
 
   // test against later versions because server.mjs uses newer package syntax
   withVersions('couchbase', 'couchbase', '>=4.0.0', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'couchbase@${version}'`], false, [
-        './packages/datadog-plugin-couchbase/test/integration-test/*'])
-    })
-
-    after(async () => {
-      await sandbox.remove()
-    })
+    useSandbox([`'couchbase@${version}'`], false, [
+      './packages/datadog-plugin-couchbase/test/integration-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
     })
 
+    before(async function () {
+      variants = varySandbox('server.mjs', 'couch', 'connect', 'couchbase')
+    })
+
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
-    it('is instrumented', async () => {
-      const res = agent.assertMessageReceived(({ headers, payload }) => {
-        assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-        assert.isArray(payload)
-        assert.strictEqual(checkSpansForServiceName(payload, 'couchbase.upsert'), true)
-      })
+    for (const variant of varySandbox.VARIANTS) {
+      it(`is instrumented ${variant}`, async () => {
+        const res = agent.assertMessageReceived(({ headers, payload }) => {
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
+          assert.strictEqual(checkSpansForServiceName(payload, 'couchbase.upsert'), true)
+        })
 
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'server.mjs', agent.port)
-      await res
-    }).timeout(20000)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
+        await res
+      }).timeout(20000)
+    }
   })
 })

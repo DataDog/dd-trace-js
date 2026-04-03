@@ -2,7 +2,7 @@
 
 const {
   DD_TRACE_SCOPE,
-  COUNT
+  COUNT,
 } = process.env
 
 if (DD_TRACE_SCOPE) {

@@ -5,15 +5,15 @@ const config = {
   server: 'localhost',
   options: {
     database: 'master',
-    trustServerCertificate: true
+    trustServerCertificate: true,
   },
   authentication: {
     type: 'default',
     options: {
       userName: 'sa',
-      password: 'DD_HUNTER2'
-    }
-  }
+      password: 'DD_HUNTER2',
+    },
+  },
 }
 
 let connection

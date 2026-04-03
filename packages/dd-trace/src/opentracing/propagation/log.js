@@ -37,7 +37,7 @@ class LogPropagator {
       const lo = carrier.dd.trace_id.slice(16, 32)
       const spanContext = new DatadogSpanContext({
         traceId: id(lo, 16),
-        spanId: id(carrier.dd.span_id, 10)
+        spanId: id(carrier.dd.span_id, 10),
       })
 
       spanContext._trace.tags['_dd.p.tid'] = hi
@@ -46,7 +46,7 @@ class LogPropagator {
     }
     return new DatadogSpanContext({
       traceId: id(carrier.dd.trace_id, 10),
-      spanId: id(carrier.dd.span_id, 10)
+      spanId: id(carrier.dd.span_id, 10),
     })
   }
 }

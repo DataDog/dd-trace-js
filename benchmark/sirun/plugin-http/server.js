@@ -4,9 +4,8 @@ if (Number(process.env.SERVER_USE_TRACER)) {
   require('../../..').init()
 }
 
-const { port, reqs } = require('./common')
-
 const http = require('http')
+const { port, reqs } = require('./common')
 
 let connectionsMade = 0
 

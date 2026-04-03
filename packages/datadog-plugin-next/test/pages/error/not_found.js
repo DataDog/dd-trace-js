@@ -1,6 +1,6 @@
 export async function getServerSideProps (ctx) {
   return {
-    notFound: true
+    notFound: true,
   }
 }
 

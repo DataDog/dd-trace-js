@@ -1,6 +1,6 @@
 'use strict'
 
-const shellParser = require('shell-quote/parse')
+const shellParser = require('../../../vendor/dist/shell-quote').parse
 
 const ALLOWED_ENV_VARIABLES = new Set(['LD_PRELOAD', 'LD_LIBRARY_PATH', 'PATH'])
 const PROCESS_DENYLIST = new Set(['md5'])
@@ -33,7 +33,7 @@ function getTokensByExpression (expressionTokens) {
   let wipExpressionTokens = []
   let isNewExpression = true
 
-  expressionTokens.forEach(token => {
+  for (const token of expressionTokens) {
     if (isNewExpression) {
       expressionListTokens.push(wipExpressionTokens)
       isNewExpression = false
@@ -45,7 +45,7 @@ function getTokensByExpression (expressionTokens) {
       wipExpressionTokens = []
       isNewExpression = true
     }
-  })
+  }
   return expressionListTokens
 }
 
@@ -56,14 +56,14 @@ function scrubChildProcessCmd (expression) {
   const expressionListTokens = getTokensByExpression(expressionTokens)
 
   const result = []
-  expressionListTokens.forEach((expressionTokens) => {
+  for (const expressionTokens of expressionListTokens) {
     let foundBinary = false
     for (let index = 0; index < expressionTokens.length; index++) {
       const token = expressionTokens[index]
 
       if (token === null) {
         continue
-      } else if (typeof token === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
+      } else if (typeof token === 'object') {
         if (token.pattern) {
           result.push(token.pattern)
         } else if (token.op) {
@@ -119,7 +119,7 @@ function scrubChildProcessCmd (expression) {
         }
       }
     }
-  })
+  }
 
   return result
 }

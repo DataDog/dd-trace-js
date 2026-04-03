@@ -18,6 +18,7 @@ class DSMTextMapPropagator {
 
     this._injectDatadogDSMContext(ctx, carrier)
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Inject into carrier (DSM): ${JSON.stringify(pick(carrier, logKeys))}.`)
   }
 
@@ -28,6 +29,7 @@ class DSMTextMapPropagator {
 
     if (!dsmContext) return dsmContext
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Extract from carrier (DSM): ${JSON.stringify(pick(carrier, logKeys))}.`)
     return dsmContext
   }

@@ -37,7 +37,7 @@ describe('sql-injection-analyzer with mysql', () => {
           connection = mysql.createConnection({
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
           connection.connect((err) => done(err))
         })
@@ -63,7 +63,7 @@ describe('sql-injection-analyzer with mysql', () => {
           })
         }, 'SQL_INJECTION', {
           occurrences: 1,
-          location: { path: 'sql-injection-methods.js' }
+          location: { path: 'sql-injection-methods.js' },
         })
 
         testThatRequestHasNoVulnerability(() => {
@@ -88,7 +88,7 @@ describe('sql-injection-analyzer with mysql', () => {
             connectionLimit: 10,
             host: 'localhost',
             user: 'root',
-            database: 'db'
+            database: 'db',
           })
         })
 
@@ -113,7 +113,7 @@ describe('sql-injection-analyzer with mysql', () => {
           })
         }, 'SQL_INJECTION', {
           occurrences: 1,
-          location: { path: 'sql-injection-methods.js' }
+          location: { path: 'sql-injection-methods.js' },
         })
 
         testThatRequestHasNoVulnerability(() => {

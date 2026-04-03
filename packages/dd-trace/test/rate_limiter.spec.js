@@ -1,11 +1,11 @@
 'use strict'
 
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('./setup/core')
-
 const RateLimiter = require('../src/rate_limiter')
 
 describe('RateLimiter', () => {
@@ -14,7 +14,7 @@ describe('RateLimiter', () => {
 
   beforeEach(() => {
     clock = sinon.useFakeTimers({
-      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime']
+      toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'hrtime'],
     })
   })
 
@@ -25,23 +25,23 @@ describe('RateLimiter', () => {
   it('should rate limit', () => {
     rateLimiter = new RateLimiter(2)
 
-    expect(rateLimiter.isAllowed()).to.be.true
-    expect(rateLimiter.isAllowed()).to.be.true
-    expect(rateLimiter.isAllowed()).to.be.false
+    assert.strictEqual(rateLimiter.isAllowed(), true)
+    assert.strictEqual(rateLimiter.isAllowed(), true)
+    assert.strictEqual(rateLimiter.isAllowed(), false)
   })
 
   it('should support disabling the rate limit', () => {
     rateLimiter = new RateLimiter(-1)
 
-    expect(rateLimiter.isAllowed()).to.be.true
-    expect(rateLimiter.isAllowed()).to.be.true
-    expect(rateLimiter.isAllowed()).to.be.true
+    assert.strictEqual(rateLimiter.isAllowed(), true)
+    assert.strictEqual(rateLimiter.isAllowed(), true)
+    assert.strictEqual(rateLimiter.isAllowed(), true)
   })
 
   it('should support always rejecting', () => {
     rateLimiter = new RateLimiter(0)
 
-    expect(rateLimiter.isAllowed()).to.be.false
+    assert.strictEqual(rateLimiter.isAllowed(), false)
   })
 
   it('should reset every second', () => {
@@ -51,25 +51,25 @@ describe('RateLimiter', () => {
 
     clock.tick(1000)
 
-    expect(rateLimiter.isAllowed()).to.be.true
+    assert.strictEqual(rateLimiter.isAllowed(), true)
   })
 
   it('should calculate its effective rate', () => {
     rateLimiter = new RateLimiter(1)
 
-    expect(rateLimiter.effectiveRate()).to.equal(1)
+    assert.strictEqual(rateLimiter.effectiveRate(), 1)
 
     rateLimiter.isAllowed()
 
-    expect(rateLimiter.effectiveRate()).to.equal(1)
+    assert.strictEqual(rateLimiter.effectiveRate(), 1)
 
     rateLimiter.isAllowed()
 
-    expect(rateLimiter.effectiveRate()).to.equal(0.5)
+    assert.strictEqual(rateLimiter.effectiveRate(), 0.5)
 
     rateLimiter.isAllowed()
 
-    expect(rateLimiter.effectiveRate()).to.equal(0.3333333333333333)
+    assert.strictEqual(rateLimiter.effectiveRate(), 0.3333333333333333)
   })
 
   it('should average its effective rate with the previous rate', () => {
@@ -87,7 +87,7 @@ describe('RateLimiter', () => {
     rateLimiter.isAllowed()
     rateLimiter.isAllowed()
 
-    expect(rateLimiter.effectiveRate()).to.equal(0.5)
+    assert.strictEqual(rateLimiter.effectiveRate(), 0.5)
   })
 
   it('should properly reset the counters at each interval', () => {
@@ -106,7 +106,7 @@ describe('RateLimiter', () => {
     rateLimiter.isAllowed()
     rateLimiter.isAllowed()
 
-    expect(rateLimiter.effectiveRate()).to.equal(1)
+    assert.strictEqual(rateLimiter.effectiveRate(), 1)
   })
 
   it('should use 2 intervals to calculate the effective rate', () => {
@@ -131,12 +131,12 @@ describe('RateLimiter', () => {
     rateLimiter.isAllowed()
     rateLimiter.isAllowed()
 
-    expect(rateLimiter.effectiveRate()).to.equal(1)
+    assert.strictEqual(rateLimiter.effectiveRate(), 1)
   })
 
   it('should always have an effective rate of 0 when limit is 0', () => {
     rateLimiter = new RateLimiter(0)
 
-    expect(rateLimiter.effectiveRate()).to.equal(0)
+    assert.strictEqual(rateLimiter.effectiveRate(), 0)
   })
 })

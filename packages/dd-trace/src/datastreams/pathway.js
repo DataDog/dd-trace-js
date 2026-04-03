@@ -4,10 +4,10 @@
 // other languages use FNV1
 // this inconsistency is ok because hashes do not need to be consistent across services
 const crypto = require('crypto')
-const { encodeVarint, decodeVarint } = require('./encoding')
-const { LRUCache } = require('lru-cache')
+const { LRUCache } = require('../../../../vendor/dist/lru-cache')
 const log = require('../log')
 const pick = require('../../../datadog-core/src/utils/src/pick')
+const { encodeVarint, decodeVarint } = require('./encoding')
 
 const cache = new LRUCache({ max: 500 })
 
@@ -21,35 +21,78 @@ function shaHash (checkpointString) {
   return Buffer.from(hash, 'hex')
 }
 
-function computeHash (service, env, edgeTags, parentHash) {
+/**
+ * @param {string} service
+ * @param {string} env
+ * @param {string[]} edgeTags
+ * @param {Buffer} parentHash
+ * @param {bigint | null} propagationHashBigInt - Optional propagation hash for process/container tags
+ */
+function computeHash (service, env, edgeTags, parentHash, propagationHashBigInt = null) {
   edgeTags.sort()
   const hashableEdgeTags = edgeTags.filter(item => item !== 'manual_checkpoint:true')
 
-  const key = `${service}${env}${hashableEdgeTags.join('')}${parentHash}`
+  // Cache key includes parentHash to handle fan-in/fan-out scenarios where the same
+  // service+env+tags+propagationHash can have different parents. This ensures we cache
+  // the complete pathway context, not just the current node's identity.
+  const propagationPart = propagationHashBigInt ? `:${propagationHashBigInt.toString(16)}` : ''
+  const key = `${service}${env}${hashableEdgeTags.join('')}${parentHash}${propagationPart}`
+
   let value = cache.get(key)
   if (value) {
     return value
   }
-  const currentHash = shaHash(`${service}${env}` + hashableEdgeTags.join(''))
+
+  // Key vs hashInput distinction:
+  // - 'key' (above) is used for caching and includes parentHash to differentiate pathways
+  //   with the same node but different parents (e.g., multiple queues feeding one consumer)
+  // - 'hashInput' (below) excludes parentHash to compute only the current node's identity hash,
+  //   which is then XORed with parentHash (line 54) to build the complete pathway hash
+  // This two-step approach (hash current node independently, then combine with parent) is
+  // required for proper pathway construction in the DSM protocol.
+  const baseString = `${service}${env}` + hashableEdgeTags.join('')
+  const hashInput = propagationHashBigInt
+    ? `${baseString}:${propagationHashBigInt.toString(16)}`
+    : baseString
+
+  const currentHash = shaHash(hashInput)
   const buf = Buffer.concat([currentHash, parentHash], 16)
   value = shaHash(buf.toString())
   cache.set(key, value)
   return value
 }
 
+/**
+ * @param {object} dataStreamsContext
+ * @param {Buffer} dataStreamsContext.hash
+ * @param {number} dataStreamsContext.pathwayStartNs
+ * @param {number} dataStreamsContext.edgeStartNs
+ * @returns {Buffer}
+ */
 function encodePathwayContext (dataStreamsContext) {
   return Buffer.concat([
     dataStreamsContext.hash,
     Buffer.from(encodeVarint(Math.round(dataStreamsContext.pathwayStartNs / 1e6))),
-    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6)))
+    Buffer.from(encodeVarint(Math.round(dataStreamsContext.edgeStartNs / 1e6))),
   ], 20)
 }
 
+/**
+ * @param {object} dataStreamsContext
+ * @param {Buffer} dataStreamsContext.hash
+ * @param {number} dataStreamsContext.pathwayStartNs
+ * @param {number} dataStreamsContext.edgeStartNs
+ * @returns {string}
+ */
 function encodePathwayContextBase64 (dataStreamsContext) {
   const encodedPathway = encodePathwayContext(dataStreamsContext)
   return encodedPathway.toString('base64')
 }
 
+/**
+ * @param {Buffer} pathwayContext
+ * @returns {object}
+ */
 function decodePathwayContext (pathwayContext) {
   if (pathwayContext == null || pathwayContext.length < 8) {
     return null
@@ -68,6 +111,10 @@ function decodePathwayContext (pathwayContext) {
   return { hash: pathwayHash, pathwayStartNs: pathwayStartMs * 1e6, edgeStartNs: edgeStartMs * 1e6 }
 }
 
+/**
+ * @param {string} pathwayContext
+ * @returns {ReturnType<typeof decodePathwayContext>|undefined}
+ */
 function decodePathwayContextBase64 (pathwayContext) {
   if (pathwayContext == null || pathwayContext.length < 8) {
     return
@@ -82,16 +129,29 @@ function decodePathwayContextBase64 (pathwayContext) {
 const DsmPathwayCodec = {
   // we use a class for encoding / decoding in case we update our encoding/decoding. A class will make updates easier
   // instead of using individual functions.
+  /**
+   * @param {object} dataStreamsContext
+   * @param {Buffer} dataStreamsContext.hash
+   * @param {number} dataStreamsContext.pathwayStartNs
+   * @param {number} dataStreamsContext.edgeStartNs
+   * @param {object} carrier
+   */
   encode (dataStreamsContext, carrier) {
     if (!dataStreamsContext || !dataStreamsContext.hash) {
       return
     }
     carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
 
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
   },
 
+  /**
+   * @param {object} carrier
+   * @returns {ReturnType<typeof decodePathwayContext>|undefined}
+   */
   decode (carrier) {
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Attempting extract from DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
 
     if (carrier == null) return
@@ -114,7 +174,7 @@ const DsmPathwayCodec = {
     }
 
     return ctx
-  }
+  },
 }
 
 module.exports = {
@@ -123,5 +183,5 @@ module.exports = {
   decodePathwayContext,
   encodePathwayContextBase64,
   decodePathwayContextBase64,
-  DsmPathwayCodec
+  DsmPathwayCodec,
 }

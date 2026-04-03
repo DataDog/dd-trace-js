@@ -14,8 +14,8 @@ class AnthropicTracingPlugin extends TracingPlugin {
     this.startSpan('anthropic.request', {
       meta: {
         'resource.name': `Messages.${resource}`,
-        'anthropic.request.model': options.model
-      }
+        'anthropic.request.model': options.model,
+      },
     }, ctx)
 
     return ctx.currentStore

@@ -1,9 +1,10 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const path = require('path')
 const os = require('os')
 const fs = require('fs')
-const { assert } = require('chai')
 const { prepareTestServerForIast } = require('../utils')
 const { storage } = require('../../../../../datadog-core')
 const { withVersions } = require('../../../setup/mocha')
@@ -23,7 +24,7 @@ describe('sql-injection-analyzer with mysql2', () => {
         connection = mysql2.createConnection({
           host: 'localhost',
           user: 'root',
-          database: 'db'
+          database: 'db',
         })
         connection.connect()
       })
@@ -66,8 +67,8 @@ describe('sql-injection-analyzer with mysql2', () => {
 
           return vulnerableMethod(connection, sql)
         }, 'SQL_INJECTION', 1, function ([vulnerability]) {
-          assert.isTrue(vulnerability.location.path.endsWith(vulnerableMethodFilename))
-          assert.equal(vulnerability.location.line, 5)
+          assert.strictEqual(vulnerability.location.path.endsWith(vulnerableMethodFilename), true)
+          assert.strictEqual(vulnerability.location.line, 5)
         })
       })
 

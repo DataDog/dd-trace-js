@@ -3,7 +3,7 @@
 function noop () {}
 
 const obj = {
-  eval: noop
+  eval: noop,
 }
 
 module.exports = {
@@ -15,5 +15,5 @@ module.exports = {
   },
   runFakeEval: (code, result) => {
     return obj.eval(`(${code}, result)`)
-  }
+  },
 }

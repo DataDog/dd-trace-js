@@ -1,15 +1,18 @@
 'use strict'
 
-require('../setup/mocha')
-
 const assert = require('node:assert')
+const { MessageChannel } = require('node:worker_threads')
+
 const getDebuggerConfig = require('../../src/debugger/config')
-const Config = require('../../src/config')
+const getConfig = require('../../src/config')
+
+require('../setup/mocha')
+const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('getDebuggerConfig', function () {
   it('should only contain the allowed properties', function () {
-    const tracerConfig = new Config({
-      url: new URL('http://example.com:1234')
+    const tracerConfig = getConfig({
+      url: new URL('http://example.com:1234'),
     })
     const config = getDebuggerConfig(tracerConfig)
     assert.deepStrictEqual(Object.keys(config), [
@@ -19,25 +22,28 @@ describe('getDebuggerConfig', function () {
       'hostname',
       'logLevel',
       'port',
+      'propagateProcessTags',
       'repositoryUrl',
       'runtimeId',
       'service',
       'url',
     ])
-    assert.strictEqual(config.commitSHA, tracerConfig.commitSHA)
-    assert.strictEqual(config.debug, tracerConfig.debug)
-    assert.deepStrictEqual(config.dynamicInstrumentation, tracerConfig.dynamicInstrumentation)
-    assert.strictEqual(config.hostname, tracerConfig.hostname)
-    assert.strictEqual(config.logLevel, tracerConfig.logLevel)
-    assert.strictEqual(config.port, tracerConfig.port)
-    assert.strictEqual(config.repositoryUrl, tracerConfig.repositoryUrl)
-    assert.strictEqual(config.runtimeId, tracerConfig.tags['runtime-id'])
-    assert.strictEqual(config.service, tracerConfig.service)
-    assert.strictEqual(config.url, tracerConfig.url.toString())
+    assertObjectContains(config, {
+      commitSHA: tracerConfig.commitSHA,
+      debug: tracerConfig.debug,
+      dynamicInstrumentation: tracerConfig.dynamicInstrumentation,
+      hostname: tracerConfig.hostname,
+      logLevel: tracerConfig.logLevel,
+      port: tracerConfig.port,
+      repositoryUrl: tracerConfig.repositoryUrl,
+      runtimeId: tracerConfig.tags['runtime-id'],
+      service: tracerConfig.service,
+      url: tracerConfig.url.toString(),
+    })
   })
 
   it('should be able to send the config over a MessageChannel', function () {
-    const config = getDebuggerConfig(new Config())
+    const config = getDebuggerConfig(getConfig())
     const channel = new MessageChannel()
     channel.port1.on('message', (message) => {
       assert.deepStrictEqual(message, config)

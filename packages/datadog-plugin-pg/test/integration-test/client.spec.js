@@ -1,40 +1,38 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
+const semver = require('semver')
 const {
   FakeAgent,
-  createSandbox,
   checkSpansForServiceName,
-  spawnPluginIntegrationTestProc,
-  varySandbox
+  spawnPluginIntegrationTestProcAndExpectExit,
+  sandboxCwd,
+  useSandbox,
+  varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
-const { assert } = require('chai')
-const semver = require('semver')
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
   let variants
 
   withVersions('pg', 'pg', (version, _, realVersion) => {
+    useSandbox([`'pg@${version}'`], false, [
+      './packages/datadog-plugin-pg/test/integration-test/*'])
+
     before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([`'pg@${version}'`], false, [
-        './packages/datadog-plugin-pg/test/integration-test/*'])
-      variants = varySandbox(sandbox, 'server.mjs', {
+      variants = varySandbox('server.mjs', {
         default: 'import pg from \'pg\'',
         star: semver.satisfies(realVersion, '<8.15.0')
           ? 'import * as mod from \'pg\'; const pg = { Client: mod.Client || mod.default.Client }'
           : 'import * as pg from \'pg\';',
         destructure: semver.satisfies(realVersion, '<8.15.0')
           ? 'import { default as pg } from \'pg\';'
-          : 'import { Client } from \'pg\'; const pg = { Client }'
+          : 'import { Client } from \'pg\'; const pg = { Client }',
       })
-    })
-
-    after(async () => {
-      await sandbox.remove()
     })
 
     beforeEach(async () => {
@@ -42,19 +40,19 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc && proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
     for (const variant of varySandbox.VARIANTS) {
       it(`is instrumented loaded with ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
-          assert.propertyVal(headers, 'host', `127.0.0.1:${agent.port}`)
-          assert.isArray(payload)
+          assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+          assert.ok(Array.isArray(payload))
           assert.strictEqual(checkSpansForServiceName(payload, 'pg.query'), true)
         })
 
-        proc = await spawnPluginIntegrationTestProc(sandbox.folder, variants[variant], agent.port)
+        proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port)
 
         await res
       }).timeout(20000)

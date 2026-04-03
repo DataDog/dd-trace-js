@@ -6,9 +6,13 @@ const serverless = {
   server: {
     'azure-functions': {
       opName: () => 'azure.functions.invoke',
-      serviceName: identityService
-    }
-  }
+      serviceName: identityService,
+    },
+    'azure-durable-functions': {
+      opName: () => 'azure.functions.invoke',
+      serviceName: identityService,
+    },
+  },
 }
 
 module.exports = serverless

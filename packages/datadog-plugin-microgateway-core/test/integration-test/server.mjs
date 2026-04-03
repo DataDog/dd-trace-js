@@ -5,9 +5,9 @@ import Gateway from 'microgateway-core'
 const gateway = Gateway({
   edgemicro: {
     port: 0,
-    logging: { level: 'info', dir: os.tmpdir() }
+    logging: { level: 'info', dir: os.tmpdir() },
   },
-  proxies: []
+  proxies: [],
 })
 
 gateway.start((err, server) => {

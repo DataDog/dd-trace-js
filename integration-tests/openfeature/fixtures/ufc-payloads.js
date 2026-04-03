@@ -10,7 +10,7 @@ module.exports = {
         variationType: 'BOOLEAN',
         variations: {
           true: { key: 'true', value: true },
-          false: { key: 'false', value: false }
+          false: { key: 'false', value: false },
         },
         allocations: [
           {
@@ -19,12 +19,12 @@ module.exports = {
             splits: [
               {
                 variationKey: 'true',
-                shards: []
-              }
+                shards: [],
+              },
             ],
-            doLog: true
-          }
-        ]
+            doLog: true,
+          },
+        ],
       },
       'test-string-flag': {
         key: 'test-string-flag',
@@ -32,7 +32,7 @@ module.exports = {
         variationType: 'STRING',
         variations: {
           'variant-a': { key: 'variant-a', value: 'hello' },
-          'variant-b': { key: 'variant-b', value: 'world' }
+          'variant-b': { key: 'variant-b', value: 'world' },
         },
         allocations: [
           {
@@ -45,9 +45,9 @@ module.exports = {
                   {
                     salt: 'test-string-flag-allocation-split',
                     totalShards: 10000,
-                    ranges: [{ start: 0, end: 5000 }]
-                  }
-                ]
+                    ranges: [{ start: 0, end: 5000 }],
+                  },
+                ],
               },
               {
                 variationKey: 'variant-b',
@@ -55,16 +55,16 @@ module.exports = {
                   {
                     salt: 'test-string-flag-allocation-split',
                     totalShards: 10000,
-                    ranges: [{ start: 5000, end: 10000 }]
-                  }
-                ]
-              }
+                    ranges: [{ start: 5000, end: 10000 }],
+                  },
+                ],
+              },
             ],
-            doLog: true
-          }
-        ]
-      }
-    }
+            doLog: true,
+          },
+        ],
+      },
+    },
   },
 
   simpleBooleanFlag: {
@@ -76,17 +76,17 @@ module.exports = {
         defaultVariation: 'true',
         variations: {
           true: { key: 'true', value: true },
-          false: { key: 'false', value: false }
+          false: { key: 'false', value: false },
         },
         allocations: [
           {
             key: 'remove-allocation',
             percentages: { true: 100, false: 0 },
-            filters: []
-          }
-        ]
-      }
-    }
+            filters: [],
+          },
+        ],
+      },
+    },
   },
 
   simpleStringFlagForAck: {
@@ -98,24 +98,24 @@ module.exports = {
         defaultVariation: 'control',
         variations: {
           control: { key: 'control', value: 'control-value' },
-          treatment: { key: 'treatment', value: 'treatment-value' }
+          treatment: { key: 'treatment', value: 'treatment-value' },
         },
         allocations: [
           {
             key: 'default-allocation',
             percentages: { control: 100, treatment: 0 },
-            filters: []
-          }
-        ]
-      }
-    }
+            filters: [],
+          },
+        ],
+      },
+    },
   },
 
   simpleStringFlag: {
     createdAt: '2025-02-14T00:56:56.910Z',
     format: 'SERVER',
     environment: {
-      name: 'Test'
+      name: 'Test',
     },
     flags: {
       'example-flag-2025-02-13': {
@@ -125,16 +125,16 @@ module.exports = {
         variations: {
           control: {
             key: 'control',
-            value: 'control'
+            value: 'control',
           },
           variant1: {
             key: 'variant1',
-            value: 'variant1'
+            value: 'variant1',
           },
           variant2: {
             key: 'variant2',
-            value: 'variant2'
-          }
+            value: 'variant2',
+          },
         },
         totalShards: 10000,
         allocations: [
@@ -145,13 +145,13 @@ module.exports = {
                 conditions: [
                   {
                     value: [
-                      '12345'
+                      '12345',
                     ],
                     operator: 'ONE_OF',
-                    attribute: 'userId'
-                  }
-                ]
-              }
+                    attribute: 'userId',
+                  },
+                ],
+              },
             ],
             splits: [
               {
@@ -162,14 +162,14 @@ module.exports = {
                     ranges: [
                       {
                         start: 0,
-                        end: 10000
-                      }
-                    ]
-                  }
-                ]
-              }
+                        end: 10000,
+                      },
+                    ],
+                  },
+                ],
+              },
             ],
-            doLog: true
+            doLog: true,
           },
           {
             key: 'allocation-18298',
@@ -182,20 +182,20 @@ module.exports = {
                     ranges: [
                       {
                         start: 0,
-                        end: 6000
-                      }
-                    ]
+                        end: 6000,
+                      },
+                    ],
                   },
                   {
                     salt: 'example-flag-2025-02-13-18298-split',
                     ranges: [
                       {
                         start: 0,
-                        end: 3333
-                      }
-                    ]
-                  }
-                ]
+                        end: 3333,
+                      },
+                    ],
+                  },
+                ],
               },
               {
                 variationKey: 'variant1',
@@ -205,20 +205,20 @@ module.exports = {
                     ranges: [
                       {
                         start: 0,
-                        end: 6000
-                      }
-                    ]
+                        end: 6000,
+                      },
+                    ],
                   },
                   {
                     salt: 'example-flag-2025-02-13-18298-split',
                     ranges: [
                       {
                         start: 3333,
-                        end: 6666
-                      }
-                    ]
-                  }
-                ]
+                        end: 6666,
+                      },
+                    ],
+                  },
+                ],
               },
               {
                 variationKey: 'variant2',
@@ -228,36 +228,36 @@ module.exports = {
                     ranges: [
                       {
                         start: 0,
-                        end: 6000
-                      }
-                    ]
+                        end: 6000,
+                      },
+                    ],
                   },
                   {
                     salt: 'example-flag-2025-02-13-18298-split',
                     ranges: [
                       {
                         start: 6666,
-                        end: 10000
-                      }
-                    ]
-                  }
-                ]
-              }
+                        end: 10000,
+                      },
+                    ],
+                  },
+                ],
+              },
             ],
-            doLog: true
+            doLog: true,
           },
           {
             key: 'allocation-18280',
             splits: [
               {
                 variationKey: 'control',
-                shards: []
-              }
+                shards: [],
+              },
             ],
-            doLog: true
-          }
-        ]
-      }
-    }
-  }
+            doLog: true,
+          },
+        ],
+      },
+    },
+  },
 }

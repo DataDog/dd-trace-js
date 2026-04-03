@@ -44,7 +44,7 @@ class Log {
     if (firstArg) {
       if (typeof firstArg === 'string') {
         message = firstArg
-      } else if (typeof firstArg === 'object') { // eslint-disable-line eslint-rules/eslint-safe-typeof-object
+      } else if (typeof firstArg === 'object') {
         message = String(firstArg.message || firstArg)
       } else if (typeof firstArg === 'function') {
         delegate = firstArg

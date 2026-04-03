@@ -1,10 +1,11 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
+
+const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
 const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config-helper')
 
 // Test optimization plugins that should only be enabled when isCiVisibility is true
 const TEST_OPTIMIZATION_PLUGINS = new Set([
@@ -12,19 +13,12 @@ const TEST_OPTIMIZATION_PLUGINS = new Set([
   'vitest',
   'cucumber',
   'mocha',
-  'playwright'
+  'playwright',
 ])
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
-// instrument everything that needs Plugin System V2 instrumentation
-require('../../datadog-instrumentations')
-if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
-  // instrument lambda environment
-  require('./lambda')
-}
-
-const DD_TRACE_DISABLED_PLUGINS = getEnvironmentVariable('DD_TRACE_DISABLED_PLUGINS')
+const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
   DD_TRACE_DISABLED_PLUGINS && DD_TRACE_DISABLED_PLUGINS.split(',').map(plugin => plugin.trim())
@@ -34,14 +28,24 @@ const disabledPlugins = new Set(
 
 const pluginClasses = {}
 
+// Subscribe before requiring instrumentations so that loadChannel events fired
+// during instrumentation initialization (e.g. re-requires in bundler contexts)
+// are captured and populate pluginClasses correctly.
 loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
 
+// instrument everything that needs Plugin System V2 instrumentation
+require('../../datadog-instrumentations')
+if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
+  // instrument lambda environment
+  require('./lambda')
+}
+
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
   if (!pluginClasses[Plugin.id]) {
-    const enabled = getEnvEnabled(Plugin)
+    const enabled = getEnabled(Plugin)
 
     // TODO: remove the need to load the plugin class in order to disable the plugin
     if (isFalse(enabled) || disabledPlugins.has(Plugin.id)) {
@@ -54,9 +58,9 @@ function maybeEnable (Plugin) {
   }
 }
 
-function getEnvEnabled (Plugin) {
+function getEnabled (Plugin) {
   const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-  return getEnvironmentVariable(normalizePluginEnvName(envName))
+  return getValueFromEnvSources(normalizePluginEnvName(envName))
 }
 
 // TODO this must always be a singleton.
@@ -94,13 +98,14 @@ module.exports = class PluginManager {
       this._pluginsByName[name] = new Plugin(this._tracer, this._tracerConfig)
     }
     const pluginConfig = this._configsByName[name] || {
-      enabled: this._tracerConfig.plugins !== false && (!Plugin.experimental || isTrue(getEnvEnabled(Plugin)))
+      enabled: this._tracerConfig.plugins !== false &&
+        (!Plugin.experimental || isTrue(getEnabled(Plugin))),
     }
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
       ...this._getSharedConfig(name),
-      ...pluginConfig
+      ...pluginConfig,
     })
   }
 
@@ -110,7 +115,7 @@ module.exports = class PluginManager {
 
     this._configsByName[name] = {
       ...pluginConfig,
-      enabled
+      enabled,
     }
 
     this.loadPlugin(name)
@@ -165,7 +170,8 @@ module.exports = class PluginManager {
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
-      experimental
+      experimental,
+      resourceRenamingEnabled,
     } = this._tracerConfig
 
     const sharedConfig = {
@@ -184,7 +190,8 @@ module.exports = class PluginManager {
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
-      experimental
+      experimental,
+      resourceRenamingEnabled,
     }
 
     if (logInjection !== undefined) {

@@ -1,15 +1,17 @@
 'use strict'
 
+const assert = require('node:assert/strict')
 const fs = require('node:fs')
+
 const axios = require('axios')
-const { expect } = require('chai')
-const { describe, it, beforeEach, afterEach } = require('mocha')
+
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
-const waf = require('../../src/appsec/waf')
-const RuleManager = require('../../src/appsec/rule_manager')
 const appsec = require('../../src/appsec')
+const RuleManager = require('../../src/appsec/rule_manager')
+const waf = require('../../src/appsec/waf')
 const {
   bodyParser,
   cookieParser,
@@ -25,24 +27,24 @@ const {
   routerParam,
   responseBody,
   responseWriteHead,
-  responseSetHeader
+  responseSetHeader,
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
-const Config = require('../../src/config')
 const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
+const { getConfigFresh } = require('../helpers/config')
 
 const resultActions = {
   actions: {
     block_request: {
       status_code: 401,
       type: 'auto',
-      grpc_status_code: 10
-    }
-  }
+      grpc_status_code: 10,
+    },
+  },
 }
 
 describe('AppSec Index', function () {
@@ -64,6 +66,7 @@ describe('AppSec Index', function () {
 
   beforeEach(() => {
     config = {
+      inferredProxyServicesEnabled: false,
       appsec: {
         enabled: true,
         rules: './path/rules.json',
@@ -74,73 +77,72 @@ describe('AppSec Index', function () {
         blockedTemplateHtml: blockedTemplate.html,
         blockedTemplateJson: blockedTemplate.json,
         eventTracking: {
-          mode: 'anon'
+          mode: 'anon',
         },
         apiSecurity: {
           enabled: false,
-          sampleDelay: 10
+          sampleDelay: 10,
         },
         rasp: {
           enabled: true,
-          bodyCollection: true
+          bodyCollection: true,
         },
         extendedHeadersCollection: {
           enabled: true,
           redaction: false,
-          maxHeaders: 42
-        }
-      }
+          maxHeaders: 42,
+        },
+      },
     }
 
     web = {
       root: sinon.stub(),
       getContext: sinon.stub(),
       _prioritySampler: {
-        isSampled: sinon.stub()
-      }
+        isSampled: sinon.stub(),
+      },
     }
 
     blocking = {
       setTemplates: sinon.stub(),
-      callBlockDelegation: sinon.stub()
+      callBlockDelegation: sinon.stub(),
     }
 
     UserTracking = {
       setCollectionMode: sinon.stub(),
       trackLogin: sinon.stub(),
-      trackUser: sinon.stub()
+      trackUser: sinon.stub(),
     }
 
     log = {
       debug: sinon.stub(),
       warn: sinon.stub(),
-      error: sinon.stub()
+      error: sinon.stub(),
     }
 
     appsecTelemetry = {
       enable: sinon.stub(),
-      disable: sinon.stub()
+      disable: sinon.stub(),
     }
 
     graphql = {
       enable: sinon.stub(),
-      disable: sinon.stub()
+      disable: sinon.stub(),
     }
 
     apiSecuritySampler = proxyquire('../../src/appsec/api_security_sampler', {
-      '../plugins/util/web': web
+      '../plugins/util/web': web,
     })
     sinon.spy(apiSecuritySampler, 'sampleRequest')
 
     rasp = {
       enable: sinon.stub(),
-      disable: sinon.stub()
+      disable: sinon.stub(),
     }
 
     serverless = {
-      isInServerlessEnvironment: sinon.stub()
+      IS_SERVERLESS: false,
     }
-    serverless.isInServerlessEnvironment.returns(false)
 
     AppSec = proxyquire('../../src/appsec', {
       '../log': log,
@@ -151,7 +153,7 @@ describe('AppSec Index', function () {
       './graphql': graphql,
       './api_security_sampler': apiSecuritySampler,
       './rasp': rasp,
-      '../serverless': serverless
+      '../serverless': serverless,
     })
 
     sinon.stub(fs, 'readFileSync').returns(JSON.stringify(RULES))
@@ -172,14 +174,13 @@ describe('AppSec Index', function () {
       AppSec.enable(config)
       AppSec.enable(config)
 
-      expect(blocking.setTemplates).to.have.been.calledOnceWithExactly(config)
-      expect(RuleManager.loadRules).to.have.been.calledOnceWithExactly(config.appsec)
-      expect(Reporter.init).to.have.been.calledOnceWithExactly(config.appsec)
-      expect(UserTracking.setCollectionMode).to.have.been.calledOnceWithExactly('anon', false)
-      expect(incomingHttpRequestStart.subscribe)
-        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
-      expect(incomingHttpRequestEnd.subscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-      expect(graphql.enable).to.have.been.calledOnceWithExactly()
+      sinon.assert.calledOnceWithExactly(blocking.setTemplates, config)
+      sinon.assert.calledOnceWithExactly(RuleManager.loadRules, config.appsec)
+      sinon.assert.calledOnceWithExactly(Reporter.init, config.appsec, config.inferredProxyServicesEnabled)
+      sinon.assert.calledOnceWithExactly(UserTracking.setCollectionMode, 'anon', false)
+      sinon.assert.calledOnceWithExactly(incomingHttpRequestStart.subscribe, AppSec.incomingHttpStartTranslator)
+      sinon.assert.calledOnceWithExactly(incomingHttpRequestEnd.subscribe, AppSec.incomingHttpEndTranslator)
+      sinon.assert.calledOnce(graphql.enable)
     })
 
     it('should log when enable fails', () => {
@@ -190,53 +191,39 @@ describe('AppSec Index', function () {
 
       AppSec.enable(config)
 
-      expect(log.error).to.have.been.calledOnceWithExactly('[ASM] Unable to start AppSec', err)
-      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
-      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
-    })
-
-    it('should not log when enable fails in serverless', () => {
-      RuleManager.loadRules.restore()
-
-      const err = new Error('Invalid Rules')
-      sinon.stub(RuleManager, 'loadRules').throws(err)
-      serverless.isInServerlessEnvironment.returns(true)
-
-      AppSec.enable(config)
-
-      expect(log.error).to.not.have.been.called
-      expect(incomingHttpRequestStart.subscribe).to.not.have.been.called
-      expect(incomingHttpRequestEnd.subscribe).to.not.have.been.called
+      sinon.assert.calledOnceWithExactly(log.error, '[ASM] Unable to start AppSec', err)
+      sinon.assert.notCalled(incomingHttpRequestStart.subscribe)
+      sinon.assert.notCalled(incomingHttpRequestEnd.subscribe)
     })
 
     it('should subscribe to blockable channels', () => {
-      expect(bodyParser.hasSubscribers).to.be.false
-      expect(cookieParser.hasSubscribers).to.be.false
-      expect(passportVerify.hasSubscribers).to.be.false
-      expect(passportUser.hasSubscribers).to.be.false
-      expect(expressSession.hasSubscribers).to.be.false
-      expect(queryParser.hasSubscribers).to.be.false
-      expect(nextBodyParsed.hasSubscribers).to.be.false
-      expect(nextQueryParsed.hasSubscribers).to.be.false
-      expect(expressProcessParams.hasSubscribers).to.be.false
-      expect(routerParam.hasSubscribers).to.be.false
-      expect(responseWriteHead.hasSubscribers).to.be.false
-      expect(responseSetHeader.hasSubscribers).to.be.false
+      assert.strictEqual(bodyParser.hasSubscribers, false)
+      assert.strictEqual(cookieParser.hasSubscribers, false)
+      assert.strictEqual(passportVerify.hasSubscribers, false)
+      assert.strictEqual(passportUser.hasSubscribers, false)
+      assert.strictEqual(expressSession.hasSubscribers, false)
+      assert.strictEqual(queryParser.hasSubscribers, false)
+      assert.strictEqual(nextBodyParsed.hasSubscribers, false)
+      assert.strictEqual(nextQueryParsed.hasSubscribers, false)
+      assert.strictEqual(expressProcessParams.hasSubscribers, false)
+      assert.strictEqual(routerParam.hasSubscribers, false)
+      assert.strictEqual(responseWriteHead.hasSubscribers, false)
+      assert.strictEqual(responseSetHeader.hasSubscribers, false)
 
       AppSec.enable(config)
 
-      expect(bodyParser.hasSubscribers).to.be.true
-      expect(cookieParser.hasSubscribers).to.be.true
-      expect(passportVerify.hasSubscribers).to.be.true
-      expect(passportUser.hasSubscribers).to.be.true
-      expect(expressSession.hasSubscribers).to.be.true
-      expect(queryParser.hasSubscribers).to.be.true
-      expect(nextBodyParsed.hasSubscribers).to.be.true
-      expect(nextQueryParsed.hasSubscribers).to.be.true
-      expect(expressProcessParams.hasSubscribers).to.be.true
-      expect(routerParam.hasSubscribers).to.be.true
-      expect(responseWriteHead.hasSubscribers).to.be.true
-      expect(responseSetHeader.hasSubscribers).to.be.true
+      assert.strictEqual(bodyParser.hasSubscribers, true)
+      assert.strictEqual(cookieParser.hasSubscribers, true)
+      assert.strictEqual(passportVerify.hasSubscribers, true)
+      assert.strictEqual(passportUser.hasSubscribers, true)
+      assert.strictEqual(expressSession.hasSubscribers, true)
+      assert.strictEqual(queryParser.hasSubscribers, true)
+      assert.strictEqual(nextBodyParsed.hasSubscribers, true)
+      assert.strictEqual(nextQueryParsed.hasSubscribers, true)
+      assert.strictEqual(expressProcessParams.hasSubscribers, true)
+      assert.strictEqual(routerParam.hasSubscribers, true)
+      assert.strictEqual(responseWriteHead.hasSubscribers, true)
+      assert.strictEqual(responseSetHeader.hasSubscribers, true)
     })
 
     it('should still subscribe to passportVerify if eventTracking is disabled', () => {
@@ -245,30 +232,30 @@ describe('AppSec Index', function () {
       AppSec.disable()
       AppSec.enable(config)
 
-      expect(passportVerify.hasSubscribers).to.be.true
+      assert.strictEqual(passportVerify.hasSubscribers, true)
     })
 
     it('should call appsec telemetry enable', () => {
       config.telemetry = {
         enabled: true,
-        metrics: true
+        metrics: true,
       }
       AppSec.enable(config)
 
-      expect(appsecTelemetry.enable).to.be.calledOnceWithExactly(config)
+      sinon.assert.calledOnceWithExactly(appsecTelemetry.enable, config)
     })
 
     it('should call rasp enable', () => {
       AppSec.enable(config)
 
-      expect(rasp.enable).to.be.calledOnceWithExactly(config)
+      sinon.assert.calledOnceWithExactly(rasp.enable, config)
     })
 
     it('should not call rasp enable when rasp is disabled', () => {
       config.appsec.rasp.enabled = false
       AppSec.enable(config)
 
-      expect(rasp.enable).to.not.be.called
+      sinon.assert.notCalled(rasp.enable)
     })
   })
 
@@ -286,12 +273,11 @@ describe('AppSec Index', function () {
 
       AppSec.disable()
 
-      expect(RuleManager.clearAllRules).to.have.been.calledOnce
-      expect(incomingHttpRequestStart.unsubscribe)
-        .to.have.been.calledOnceWithExactly(AppSec.incomingHttpStartTranslator)
-      expect(incomingHttpRequestEnd.unsubscribe).to.have.been.calledOnceWithExactly(AppSec.incomingHttpEndTranslator)
-      expect(graphql.disable).to.have.been.calledOnceWithExactly()
-      expect(rasp.disable).to.have.been.calledOnceWithExactly()
+      sinon.assert.calledOnce(RuleManager.clearAllRules)
+      sinon.assert.calledOnceWithExactly(incomingHttpRequestStart.unsubscribe, AppSec.incomingHttpStartTranslator)
+      sinon.assert.calledOnceWithExactly(incomingHttpRequestEnd.unsubscribe, AppSec.incomingHttpEndTranslator)
+      sinon.assert.calledOnce(graphql.disable)
+      sinon.assert.calledOnce(rasp.disable)
     })
 
     it('should disable AppSec when DC channels are not active', () => {
@@ -299,9 +285,9 @@ describe('AppSec Index', function () {
 
       sinon.stub(RuleManager, 'clearAllRules')
 
-      expect(AppSec.disable).to.not.throw()
+      AppSec.disable()
 
-      expect(RuleManager.clearAllRules).to.have.been.calledOnce
+      sinon.assert.calledOnce(RuleManager.clearAllRules)
     })
 
     it('should unsubscribe to blockable channels', () => {
@@ -309,18 +295,18 @@ describe('AppSec Index', function () {
 
       AppSec.disable()
 
-      expect(bodyParser.hasSubscribers).to.be.false
-      expect(cookieParser.hasSubscribers).to.be.false
-      expect(passportVerify.hasSubscribers).to.be.false
-      expect(passportUser.hasSubscribers).to.be.false
-      expect(expressSession.hasSubscribers).to.be.false
-      expect(queryParser.hasSubscribers).to.be.false
-      expect(nextBodyParsed.hasSubscribers).to.be.false
-      expect(nextQueryParsed.hasSubscribers).to.be.false
-      expect(expressProcessParams.hasSubscribers).to.be.false
-      expect(routerParam.hasSubscribers).to.be.false
-      expect(responseWriteHead.hasSubscribers).to.be.false
-      expect(responseSetHeader.hasSubscribers).to.be.false
+      assert.strictEqual(bodyParser.hasSubscribers, false)
+      assert.strictEqual(cookieParser.hasSubscribers, false)
+      assert.strictEqual(passportVerify.hasSubscribers, false)
+      assert.strictEqual(passportUser.hasSubscribers, false)
+      assert.strictEqual(expressSession.hasSubscribers, false)
+      assert.strictEqual(queryParser.hasSubscribers, false)
+      assert.strictEqual(nextBodyParsed.hasSubscribers, false)
+      assert.strictEqual(nextQueryParsed.hasSubscribers, false)
+      assert.strictEqual(expressProcessParams.hasSubscribers, false)
+      assert.strictEqual(routerParam.hasSubscribers, false)
+      assert.strictEqual(responseWriteHead.hasSubscribers, false)
+      assert.strictEqual(responseSetHeader.hasSubscribers, false)
     })
 
     it('should call appsec telemetry disable', () => {
@@ -328,7 +314,7 @@ describe('AppSec Index', function () {
 
       AppSec.disable()
 
-      expect(appsecTelemetry.disable).to.be.calledOnce
+      sinon.assert.calledOnce(appsecTelemetry.disable)
     })
   })
 
@@ -341,7 +327,7 @@ describe('AppSec Index', function () {
 
     it('should propagate incoming http start data', () => {
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
       }
 
       web.root.returns(rootSpan)
@@ -351,31 +337,130 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
+          remotePort: 8080,
+        },
       }
       const res = {}
 
       AppSec.incomingHttpStartTranslator({ req, res })
 
-      expect(rootSpan.addTags).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
         '_dd.appsec.enabled': 1,
         '_dd.runtime_family': 'nodejs',
-        'http.client_ip': '127.0.0.1'
+        'http.client_ip': '127.0.0.1',
       })
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           'server.request.uri.raw': '/path',
           'server.request.headers.no_cookies': { 'user-agent': 'Arachni', host: 'localhost' },
           'server.request.method': 'POST',
-          'http.client_ip': '127.0.0.1'
-        }
+          'http.client_ip': '127.0.0.1',
+        },
       }, req)
+    })
+
+    describe('inferred proxy spans', () => {
+      it('should add _dd.appsec.enabled to inferred proxy span when present', () => {
+        AppSec.disable()
+        config.inferredProxyServicesEnabled = true
+        AppSec.enable(config)
+
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        const inferredProxySpan = {
+          setTag: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({ inferredProxySpan })
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.calledOnceWithExactly(inferredProxySpan.setTag, '_dd.appsec.enabled', 1)
+      })
+
+      it('should not fail when inferred proxy span is not present', () => {
+        AppSec.disable()
+        config.inferredProxyServicesEnabled = true
+        AppSec.enable(config)
+
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({})
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.calledOnce(rootSpan.addTags)
+      })
+
+      it('should not add _dd.appsec.enabled to inferred proxy span when inferredProxyServicesEnabled is false', () => {
+        const rootSpan = {
+          addTags: sinon.stub(),
+        }
+
+        const inferredProxySpan = {
+          setTag: sinon.stub(),
+        }
+
+        web.root.returns(rootSpan)
+        web.getContext.returns({ inferredProxySpan })
+
+        const req = {
+          url: '/path',
+          headers: {
+            'user-agent': 'Arachni',
+            host: 'localhost',
+          },
+          method: 'GET',
+          socket: {
+            remoteAddress: '127.0.0.1',
+            remotePort: 8080,
+          },
+        }
+        const res = {}
+
+        AppSec.incomingHttpStartTranslator({ req, res })
+
+        sinon.assert.notCalled(inferredProxySpan.setTag)
+      })
     })
   })
 
@@ -386,7 +471,7 @@ describe('AppSec Index', function () {
       sinon.stub(waf, 'run')
 
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
       }
 
       web.root.returns(rootSpan)
@@ -398,20 +483,20 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
+          remotePort: 8080,
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       web.patch(req)
@@ -420,9 +505,178 @@ describe('AppSec Index', function () {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.not.been.called
+      sinon.assert.notCalled(waf.run)
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {}, undefined)
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
+    })
+
+    it('should not propagate incoming http end data with invalid framework properties', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+          cookie: 'a=1;b=2',
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080,
+        },
+        body: null,
+        query: 'string',
+        route: {},
+        params: 'string',
+        cookies: 'string',
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42,
+        }),
+        statusCode: 201,
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.notCalled(waf.run)
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, undefined)
+    })
+
+    it('should not propagate incoming http end data with already analyzed framework properties', () => {
+      const body = { São: 'Tomé' }
+      const cookies = { São: 'Nicolau' }
+
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+          cookie: 'a=1;b=2',
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080,
+        },
+        body,
+        cookies,
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42,
+        }),
+        statusCode: 201,
+      }
+
+      bodyParser.publish({ req, res, body })
+      cookieParser.publish({ req, res, cookies })
+
+      sinon.resetHistory()
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.notCalled(waf.run)
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, body)
+    })
+
+    it('should not propagate incoming http end data with empty framework properties', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+          cookie: 'a=1;b=2',
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080,
+        },
+        body: {},
+        query: {},
+        route: {},
+        params: {},
+        cookies: {},
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42,
+        }),
+        statusCode: 201,
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.notCalled(waf.run)
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, {})
+    })
+
+    it('should propagate incoming http end data with express', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+          cookie: 'a=1;b=2',
+        },
+        method: 'POST',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080,
+        },
+        body: {
+          a: '1',
+        },
+        query: {
+          b: '2',
+        },
+        route: {
+          path: '/path/:c',
+        },
+        cookies: {
+          d: '4',
+          e: '5',
+        },
+      }
+      const res = {
+        getHeaders: () => ({
+          'content-type': 'application/json',
+          'content-length': 42,
+        }),
+        statusCode: 201,
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.calledOnceWithExactly(waf.run, {
+        persistent: {
+          'server.request.body': { a: '1' },
+          'server.request.cookies': { d: '4', e: '5' },
+          'server.request.query': { b: '2' },
+        },
+      }, req)
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {}, req.body)
     })
 
     it('should pass stored response headers to Reporter.finishRequest', () => {
@@ -430,26 +684,26 @@ describe('AppSec Index', function () {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          host: 'localhost'
+          host: 'localhost',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        }
+          remotePort: 8080,
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 200
+        statusCode: 200,
       }
 
       const storedHeaders = {
         'content-type': 'text/plain',
         'content-language': 'en-US',
-        'content-length': '15'
+        'content-length': '15',
       }
 
       web.patch(req)
@@ -462,100 +716,12 @@ describe('AppSec Index', function () {
         res,
         abortController: { abort: sinon.stub() },
         statusCode: 200,
-        responseHeaders: storedHeaders
+        responseHeaders: storedHeaders,
       })
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, storedHeaders, undefined)
-    })
-
-    it('should not propagate incoming http end data with invalid framework properties', () => {
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost',
-          cookie: 'a=1;b=2'
-        },
-        method: 'POST',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        },
-        body: null,
-        query: 'string',
-        route: {},
-        params: 'string',
-        cookies: 'string'
-      }
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-length': 42
-        }),
-        statusCode: 201
-      }
-
-      web.patch(req)
-
-      sinon.stub(Reporter, 'finishRequest')
-
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      expect(waf.run).to.have.not.been.called
-
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {}, undefined)
-    })
-
-    it('should propagate incoming http end data with express', () => {
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost',
-          cookie: 'a=1;b=2'
-        },
-        method: 'POST',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080
-        },
-        body: {
-          a: '1'
-        },
-        query: {
-          b: '2'
-        },
-        route: {
-          path: '/path/:c'
-        },
-        cookies: {
-          d: '4',
-          e: '5'
-        }
-      }
-      const res = {
-        getHeaders: () => ({
-          'content-type': 'application/json',
-          'content-length': 42
-        }),
-        statusCode: 201
-      }
-
-      web.patch(req)
-
-      sinon.stub(Reporter, 'finishRequest')
-      AppSec.incomingHttpEndTranslator({ req, res })
-
-      expect(waf.run).to.have.been.calledOnceWithExactly({
-        persistent: {
-          'server.request.body': { a: '1' },
-          'server.request.cookies': { d: '4', e: '5' },
-          'server.request.query': { b: '2' }
-        }
-      }, req)
-      expect(Reporter.finishRequest).to.have.been.calledOnceWithExactly(req, res, {}, req.body)
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
     })
   })
 
@@ -564,7 +730,7 @@ describe('AppSec Index', function () {
       sinon.stub(waf, 'run')
 
       const rootSpan = {
-        addTags: sinon.stub()
+        addTags: sinon.stub(),
       }
 
       web.root.returns(rootSpan)
@@ -574,7 +740,7 @@ describe('AppSec Index', function () {
     it('should not trigger schema extraction with feature disabled', () => {
       config.appsec.apiSecurity = {
         enabled: false,
-        sampleDelay: 1
+        sampleDelay: 1,
       }
 
       AppSec.enable(config)
@@ -584,29 +750,29 @@ describe('AppSec Index', function () {
         headers: {
           'user-agent': 'Arachni',
           host: 'localhost',
-          cookie: 'a=1;b=2'
+          cookie: 'a=1;b=2',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
         body: {
-          a: '1'
+          a: '1',
         },
         query: {
-          b: '2'
+          b: '2',
         },
         route: {
-          path: '/path/:c'
-        }
+          path: '/path/:c',
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       web.patch(req)
@@ -614,53 +780,53 @@ describe('AppSec Index', function () {
       sinon.stub(Reporter, 'finishRequest')
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           'server.request.body': { a: '1' },
-          'server.request.query': { b: '2' }
-        }
+          'server.request.query': { b: '2' },
+        },
       }, req)
     })
 
     it('should trigger schema extraction with sampling enabled', () => {
       config.appsec.apiSecurity = {
         enabled: true,
-        sampleDelay: 1
+        sampleDelay: 1,
       }
 
       AppSec.enable(config)
 
       const req = {
         route: {
-          path: '/path'
+          path: '/path',
         },
         headers: {
           'user-agent': 'Arachni',
-          host: 'localhost'
+          host: 'localhost',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
         body: {
-          a: '1'
-        }
+          a: '1',
+        },
       }
       const res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
-        statusCode: 201
+        statusCode: 201,
       }
 
       const span = {
         context: sinon.stub().returns({
           _sampling: {
-            priority: 1
-          }
-        })
+            priority: 1,
+          },
+        }),
       }
 
       web.root.returns(span)
@@ -668,11 +834,11 @@ describe('AppSec Index', function () {
 
       AppSec.incomingHttpEndTranslator({ req, res })
 
-      expect(waf.run).to.have.been.calledOnceWithExactly({
+      sinon.assert.calledOnceWithExactly(waf.run, {
         persistent: {
           'server.request.body': { a: '1' },
-          'waf.context.processor': { 'extract-schema': true }
-        }
+          'waf.context.processor': { 'extract-schema': true },
+        },
       }, req)
     })
 
@@ -680,7 +846,7 @@ describe('AppSec Index', function () {
       beforeEach(() => {
         config.appsec.apiSecurity = {
           enabled: true,
-          sampleDelay: 1
+          sampleDelay: 1,
         }
 
         AppSec.enable(config)
@@ -694,8 +860,8 @@ describe('AppSec Index', function () {
         responseBody.publish({ req: {}, body: 'string' })
         responseBody.publish({ req: {}, body: null })
 
-        expect(apiSecuritySampler.sampleRequest).to.not.been.called
-        expect(waf.run).to.not.been.called
+        sinon.assert.notCalled(apiSecuritySampler.sampleRequest)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should not call to the waf if it is not a sampled request', () => {
@@ -705,8 +871,8 @@ describe('AppSec Index', function () {
 
         responseBody.publish({ req, res, body: {} })
 
-        expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
-        expect(waf.run).to.not.been.called
+        sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should call to the waf if it is a sampled request', () => {
@@ -717,11 +883,11 @@ describe('AppSec Index', function () {
 
         responseBody.publish({ req, res, body })
 
-        expect(apiSecuritySampler.sampleRequest).to.have.been.calledOnceWith(req, res)
-        expect(waf.run).to.have.been.calledOnceWith({
+        sinon.assert.calledOnceWithMatch(apiSecuritySampler.sampleRequest, req, res)
+        sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
-            [addresses.HTTP_INCOMING_RESPONSE_BODY]: body
-          }
+            [addresses.HTTP_INCOMING_RESPONSE_BODY]: body,
+          },
         }, req)
       })
     })
@@ -736,7 +902,7 @@ describe('AppSec Index', function () {
       rootSpan = {
         setTag: sinon.stub(),
         _tags: {},
-        context: () => ({ _tags: rootSpan._tags })
+        context: () => ({ _tags: rootSpan._tags }),
       }
       web.root.returns(rootSpan)
 
@@ -745,29 +911,29 @@ describe('AppSec Index', function () {
       res = {
         getHeaders: () => ({
           'content-type': 'application/json',
-          'content-length': 42
+          'content-length': 42,
         }),
         writeHead: sinon.stub(),
         getHeaderNames: sinon.stub().returns([]),
         constructor: {
           prototype: {
-            end: sinon.stub()
-          }
-        }
+            end: sinon.stub(),
+          },
+        },
       }
 
       req = {
         url: '/path',
         headers: {
           'user-agent': 'Arachni',
-          host: 'localhost'
+          host: 'localhost',
         },
         method: 'POST',
         socket: {
           remoteAddress: '127.0.0.1',
-          remotePort: 8080
+          remotePort: 8080,
         },
-        res
+        res,
       }
 
       AppSec.enable(config)
@@ -777,9 +943,17 @@ describe('AppSec Index', function () {
       it('Should not block without body', () => {
         bodyParser.publish({ req, res, abortController })
 
-        expect(waf.run).not.to.have.been.called
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.constructor.prototype.end).not.to.have.been.called
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
+      })
+
+      it('should not block with empty body', () => {
+        bodyParser.publish({ req, res, body: {}, abortController })
+
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('Should not block with body by default', () => {
@@ -788,29 +962,45 @@ describe('AppSec Index', function () {
 
         bodyParser.publish({ req, res, body, abortController })
 
-        expect(waf.run).to.have.been.calledOnceWith({
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.body': { key: 'value' }
-          }
+            'server.request.body': { key: 'value' },
+          },
         })
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.constructor.prototype.end).not.to.have.been.called
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
-      it('Should block when it is detected as attack', () => {
+      it('Should block when it is detected as attack with string', () => {
+        const body = 'value'
+        req.body = body
+        waf.run.returns(resultActions)
+
+        bodyParser.publish({ req, res, body, abortController })
+
+        sinon.assert.calledOnceWithMatch(waf.run, {
+          persistent: {
+            'server.request.body': 'value',
+          },
+        })
+        sinon.assert.called(abortController.abort)
+        sinon.assert.called(res.constructor.prototype.end)
+      })
+
+      it('Should block when it is detected as attack with object', () => {
         const body = { key: 'value' }
         req.body = body
         waf.run.returns(resultActions)
 
         bodyParser.publish({ req, res, body, abortController })
 
-        expect(waf.run).to.have.been.calledOnceWith({
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.body': { key: 'value' }
-          }
+            'server.request.body': { key: 'value' },
+          },
         })
-        expect(abortController.abort).to.have.been.called
-        expect(res.constructor.prototype.end).to.have.been.called
+        sinon.assert.called(abortController.abort)
+        sinon.assert.called(res.constructor.prototype.end)
       })
     })
 
@@ -818,9 +1008,17 @@ describe('AppSec Index', function () {
       it('Should not block without cookie', () => {
         cookieParser.publish({ req, res, abortController })
 
-        expect(waf.run).not.to.have.been.called
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.constructor.prototype.end).not.to.have.been.called
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
+      })
+
+      it('Should not block with empty cookie', () => {
+        cookieParser.publish({ req, res, abortController, cookies: {} })
+
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('Should not block with cookie by default', () => {
@@ -828,13 +1026,13 @@ describe('AppSec Index', function () {
 
         cookieParser.publish({ req, res, abortController, cookies })
 
-        expect(waf.run).to.have.been.calledOnceWith({
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.cookies': { key: 'value' }
-          }
+            'server.request.cookies': { key: 'value' },
+          },
         })
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.constructor.prototype.end).not.to.have.been.called
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('Should block when it is detected as attack', () => {
@@ -843,13 +1041,13 @@ describe('AppSec Index', function () {
 
         cookieParser.publish({ req, res, abortController, cookies })
 
-        expect(waf.run).to.have.been.calledOnceWith({
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.cookies': { key: 'value' }
-          }
+            'server.request.cookies': { key: 'value' },
+          },
         })
-        expect(abortController.abort).to.have.been.called
-        expect(res.constructor.prototype.end).to.have.been.called
+        sinon.assert.called(abortController.abort)
+        sinon.assert.called(res.constructor.prototype.end)
       })
     })
 
@@ -857,9 +1055,17 @@ describe('AppSec Index', function () {
       it('Should not block without query', () => {
         queryParser.publish({ req, res, abortController })
 
-        expect(waf.run).not.to.have.been.called
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.constructor.prototype.end).not.to.have.been.called
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
+      })
+
+      it('Should not block with empty query', () => {
+        queryParser.publish({ req, res, query: {}, abortController })
+
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('Should not block with query by default', () => {
@@ -868,13 +1074,13 @@ describe('AppSec Index', function () {
 
         queryParser.publish({ req, res, query, abortController })
 
-        expect(waf.run).to.have.been.calledOnceWith({
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.query': { key: 'value' }
-          }
+            'server.request.query': { key: 'value' },
+          },
         })
-        expect(abortController.abort).not.to.have.been.called
-        expect(res.constructor.prototype.end).not.to.have.been.called
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('Should block when it is detected as attack', () => {
@@ -884,13 +1090,13 @@ describe('AppSec Index', function () {
 
         queryParser.publish({ req, res, query, abortController })
 
-        expect(waf.run).to.have.been.calledOnceWith({
+        sinon.assert.calledOnceWithMatch(waf.run, {
           persistent: {
-            'server.request.query': { key: 'value' }
-          }
+            'server.request.query': { key: 'value' },
+          },
         })
-        expect(abortController.abort).to.have.been.called
-        expect(res.constructor.prototype.end).to.have.been.called
+        sinon.assert.called(abortController.abort)
+        sinon.assert.called(res.constructor.prototype.end)
       })
     })
 
@@ -908,22 +1114,22 @@ describe('AppSec Index', function () {
           login: 'test',
           user: { _id: 1, username: 'test', password: '1234' },
           success: true,
-          abortController
+          abortController,
         }
 
         passportVerify.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
-        expect(web.root).to.have.been.calledOnceWithExactly(req)
-        expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnce(storage('legacy').getStore)
+        sinon.assert.calledOnceWithExactly(web.root, req)
+        sinon.assert.calledOnceWithExactly(UserTracking.trackLogin,
           payload.framework,
           payload.login,
           payload.user,
           payload.success,
           rootSpan
         )
-        expect(abortController.signal.aborted).to.be.true
-        expect(res.constructor.prototype.end).to.have.been.called
+        assert.strictEqual(abortController.signal.aborted, true)
+        sinon.assert.called(res.constructor.prototype.end)
       })
 
       it('should not block when UserTracking.trackLogin() returns nothing', () => {
@@ -935,22 +1141,22 @@ describe('AppSec Index', function () {
           login: 'test',
           user: { _id: 1, username: 'test', password: '1234' },
           success: true,
-          abortController
+          abortController,
         }
 
         passportVerify.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
-        expect(web.root).to.have.been.calledOnceWithExactly(req)
-        expect(UserTracking.trackLogin).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnce(storage('legacy').getStore)
+        sinon.assert.calledOnceWithExactly(web.root, req)
+        sinon.assert.calledOnceWithExactly(UserTracking.trackLogin,
           payload.framework,
           payload.login,
           payload.user,
           payload.success,
           rootSpan
         )
-        expect(abortController.signal.aborted).to.be.false
-        expect(res.constructor.prototype.end).to.not.have.been.called
+        assert.strictEqual(abortController.signal.aborted, false)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should not block and call log if no rootSpan is found', () => {
@@ -962,16 +1168,16 @@ describe('AppSec Index', function () {
           login: 'test',
           user: { _id: 1, username: 'test', password: '1234' },
           success: true,
-          abortController
+          abortController,
         }
 
         passportVerify.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
-        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportVerify')
-        expect(UserTracking.trackLogin).to.not.have.been.called
-        expect(abortController.signal.aborted).to.be.false
-        expect(res.constructor.prototype.end).to.not.have.been.called
+        sinon.assert.calledOnce(storage('legacy').getStore)
+        sinon.assert.calledOnceWithExactly(log.warn, '[ASM] No rootSpan found in onPassportVerify')
+        sinon.assert.notCalled(UserTracking.trackLogin)
+        assert.strictEqual(abortController.signal.aborted, false)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
     })
 
@@ -986,19 +1192,19 @@ describe('AppSec Index', function () {
         const abortController = new AbortController()
         const payload = {
           user: { _id: 1, username: 'test', password: '1234' },
-          abortController
+          abortController,
         }
 
         passportUser.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
-        expect(web.root).to.have.been.calledOnceWithExactly(req)
-        expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnce(storage('legacy').getStore)
+        sinon.assert.calledOnceWithExactly(web.root, req)
+        sinon.assert.calledOnceWithExactly(UserTracking.trackUser,
           payload.user,
           rootSpan
         )
-        expect(abortController.signal.aborted).to.be.true
-        expect(res.constructor.prototype.end).to.have.been.called
+        assert.strictEqual(abortController.signal.aborted, true)
+        sinon.assert.called(res.constructor.prototype.end)
       })
 
       it('should not block when UserTracking.trackUser() returns nothing', () => {
@@ -1007,19 +1213,19 @@ describe('AppSec Index', function () {
         const abortController = new AbortController()
         const payload = {
           user: { _id: 1, username: 'test', password: '1234' },
-          abortController
+          abortController,
         }
 
         passportUser.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
-        expect(web.root).to.have.been.calledOnceWithExactly(req)
-        expect(UserTracking.trackUser).to.have.been.calledOnceWithExactly(
+        sinon.assert.calledOnce(storage('legacy').getStore)
+        sinon.assert.calledOnceWithExactly(web.root, req)
+        sinon.assert.calledOnceWithExactly(UserTracking.trackUser,
           payload.user,
           rootSpan
         )
-        expect(abortController.signal.aborted).to.be.false
-        expect(res.constructor.prototype.end).to.not.have.been.called
+        assert.strictEqual(abortController.signal.aborted, false)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should not block and call log if no rootSpan is found', () => {
@@ -1028,16 +1234,16 @@ describe('AppSec Index', function () {
         const abortController = new AbortController()
         const payload = {
           user: { _id: 1, username: 'test', password: '1234' },
-          abortController
+          abortController,
         }
 
         passportUser.publish(payload)
 
-        expect(storage('legacy').getStore).to.have.been.calledOnce
-        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onPassportDeserializeUser')
-        expect(UserTracking.trackUser).to.not.have.been.called
-        expect(abortController.signal.aborted).to.be.false
-        expect(res.constructor.prototype.end).to.not.have.been.called
+        sinon.assert.calledOnce(storage('legacy').getStore)
+        sinon.assert.calledOnceWithExactly(log.warn, '[ASM] No rootSpan found in onPassportDeserializeUser')
+        sinon.assert.notCalled(UserTracking.trackUser)
+        assert.strictEqual(abortController.signal.aborted, false)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
     })
 
@@ -1047,11 +1253,11 @@ describe('AppSec Index', function () {
 
         expressSession.publish({ req, res, sessionId: '1234', abortController })
 
-        expect(web.root).to.have.been.calledOnceWithExactly(req)
-        expect(log.warn).to.have.been.calledOnceWithExactly('[ASM] No rootSpan found in onExpressSession')
-        expect(waf.run).to.not.have.been.called
-        expect(abortController.abort).to.not.have.been.called
-        expect(res.constructor.prototype.end).to.not.have.been.called
+        sinon.assert.calledOnceWithExactly(web.root, req)
+        sinon.assert.calledOnceWithExactly(log.warn, '[ASM] No rootSpan found in onExpressSession')
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should not call waf when sessionID was set by SDK', () => {
@@ -1059,25 +1265,25 @@ describe('AppSec Index', function () {
 
         expressSession.publish({ req, res, sessionId: '1234', abortController })
 
-        expect(web.root).to.have.been.calledOnceWithExactly(req)
-        expect(log.warn).to.not.have.been.called
-        expect(waf.run).to.not.have.been.called
-        expect(abortController.abort).to.not.have.been.called
-        expect(res.constructor.prototype.end).to.not.have.been.called
+        sinon.assert.calledOnceWithExactly(web.root, req)
+        sinon.assert.notCalled(log.warn)
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should call waf and not block with no attack', () => {
         expressSession.publish({ req, res, sessionId: '1234', abortController })
 
-        expect(web.root).to.have.been.calledOnceWithExactly(req)
-        expect(log.warn).to.not.have.been.called
-        expect(waf.run).to.have.been.calledOnceWithExactly({
+        sinon.assert.calledOnceWithExactly(web.root, req)
+        sinon.assert.notCalled(log.warn)
+        sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
-            'usr.session_id': '1234'
-          }
+            'usr.session_id': '1234',
+          },
         }, req)
-        expect(abortController.abort).to.not.have.been.called
-        expect(res.constructor.prototype.end).to.not.have.been.called
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should call waf and block with attack', () => {
@@ -1085,15 +1291,15 @@ describe('AppSec Index', function () {
 
         expressSession.publish({ req, res, sessionId: '1234', abortController })
 
-        expect(web.root).to.have.been.calledOnceWithExactly(req)
-        expect(log.warn).to.not.have.been.called
-        expect(waf.run).to.have.been.calledOnceWithExactly({
+        sinon.assert.calledOnceWithExactly(web.root, req)
+        sinon.assert.notCalled(log.warn)
+        sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
-            'usr.session_id': '1234'
-          }
+            'usr.session_id': '1234',
+          },
         }, req)
-        expect(abortController.abort).to.have.been.called
-        expect(res.constructor.prototype.end).to.have.been.called
+        sinon.assert.called(abortController.abort)
+        sinon.assert.called(res.constructor.prototype.end)
       })
     })
 
@@ -1104,32 +1310,32 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        expect(waf.run).to.have.been.calledOnceWithExactly({
+        sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-length': 42
-            }
-          }
+              'content-length': 42,
+            },
+          },
         }, req)
-        expect(abortController.abort).to.have.been.calledOnce
-        expect(res.constructor.prototype.end).to.have.been.calledOnce
-        expect(blocking.callBlockDelegation).to.have.been.calledOnce
+        sinon.assert.calledOnce(abortController.abort)
+        sinon.assert.calledOnce(res.constructor.prototype.end)
+        sinon.assert.calledOnce(blocking.callBlockDelegation)
 
         abortController.abort.resetHistory()
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        expect(waf.run).to.have.been.calledOnce
-        expect(abortController.abort).to.have.been.calledOnce
-        expect(res.constructor.prototype.end).to.have.been.calledOnce
-        expect(blocking.callBlockDelegation).to.have.been.calledOnce
+        sinon.assert.calledOnce(waf.run)
+        sinon.assert.calledOnce(abortController.abort)
+        sinon.assert.calledOnce(res.constructor.prototype.end)
+        sinon.assert.calledOnce(blocking.callBlockDelegation)
       })
 
       it('should call abortController if blocking delegate is successful', () => {
@@ -1137,9 +1343,9 @@ describe('AppSec Index', function () {
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders: {} })
 
-        expect(blocking.callBlockDelegation).to.have.been.calledOnceWithExactly(res)
-        expect(abortController.abort).to.have.been.calledOnce
-        expect(waf.run).to.not.have.been.called
+        sinon.assert.calledOnceWithExactly(blocking.callBlockDelegation, res)
+        sinon.assert.calledOnce(abortController.abort)
+        sinon.assert.notCalled(waf.run)
       })
 
       it('should not call the WAF if response was already analyzed', () => {
@@ -1148,28 +1354,28 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        expect(waf.run).to.have.been.calledOnceWithExactly({
+        sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-length': 42
-            }
-          }
+              'content-length': 42,
+            },
+          },
         }, req)
-        expect(abortController.abort).to.have.not.been.called
-        expect(res.constructor.prototype.end).to.have.not.been.called
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        expect(waf.run).to.have.been.calledOnce
-        expect(abortController.abort).to.have.not.been.called
-        expect(res.constructor.prototype.end).to.have.not.been.called
+        sinon.assert.calledOnce(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should not do anything without a root span', () => {
@@ -1179,14 +1385,14 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        expect(waf.run).to.have.not.been.called
-        expect(abortController.abort).to.have.not.been.called
-        expect(res.constructor.prototype.end).to.have.not.been.called
+        sinon.assert.notCalled(waf.run)
+        sinon.assert.notCalled(abortController.abort)
+        sinon.assert.notCalled(res.constructor.prototype.end)
       })
 
       it('should call the WAF with responde code and headers', () => {
@@ -1195,22 +1401,22 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
 
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        expect(waf.run).to.have.been.calledOnceWithExactly({
+        sinon.assert.calledOnceWithExactly(waf.run, {
           persistent: {
             'server.response.status': '404',
             'server.response.headers.no_cookies': {
               'content-type': 'application/json',
-              'content-length': 42
-            }
-          }
+              'content-length': 42,
+            },
+          },
         }, req)
-        expect(abortController.abort).to.have.been.calledOnce
-        expect(res.constructor.prototype.end).to.have.been.calledOnce
+        sinon.assert.calledOnce(abortController.abort)
+        sinon.assert.calledOnce(res.constructor.prototype.end)
       })
     })
 
@@ -1222,23 +1428,23 @@ describe('AppSec Index', function () {
         const responseHeaders = {
           'content-type': 'application/json',
           'content-length': 42,
-          'set-cookie': 'a=1;b=2'
+          'set-cookie': 'a=1;b=2',
         }
         responseWriteHead.publish({ req, res, abortController, statusCode: 404, responseHeaders })
 
-        expect(abortController.abort).to.have.been.calledOnce
+        sinon.assert.calledOnce(abortController.abort)
 
         abortController.abort.reset()
 
         responseSetHeader.publish({ res, abortController })
 
-        expect(abortController.abort).to.have.been.calledOnce
+        sinon.assert.calledOnce(abortController.abort)
       })
 
       it('should not call abortController if response was not blocked', () => {
         responseSetHeader.publish({ res, abortController })
 
-        expect(abortController.abort).to.have.not.been.calledOnce
+        sinon.assert.notCalled(abortController.abort)
       })
     })
   })
@@ -1252,10 +1458,10 @@ describe('AppSec Index', function () {
 
       appsecNamespace.reset()
 
-      config = new Config({
+      config = getConfigFresh({
         appsec: {
-          enabled: true
-        }
+          enabled: true,
+        },
       })
     })
 
@@ -1275,9 +1481,8 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics.series.length).to.equal(2)
-      expect(metrics.series[0].metric).to.equal('enabled')
-      expect(metrics.series[1].metric).to.equal('waf.init')
+      assert.strictEqual(metrics.series.length, 1)
+      assert.strictEqual(metrics.series[0].metric, 'waf.init')
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {
@@ -1288,7 +1493,7 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics).to.be.undefined
+      assert.strictEqual(metrics, undefined)
     })
 
     it('should not increment waf.init metric if telemetry is not enabled', () => {
@@ -1299,7 +1504,75 @@ describe('AppSec Index', function () {
 
       const metrics = appsecNamespace.metrics.toJSON()
 
-      expect(metrics).to.be.undefined
+      assert.strictEqual(metrics, undefined)
+    })
+  })
+})
+
+describe('AppSec Index (Serverless)', () => {
+  let AppSec
+  let log
+  let RuleManager
+  let incomingHttpRequestStart
+  let incomingHttpRequestEnd
+  let config
+
+  beforeEach(() => {
+    log = {
+      error: sinon.stub(),
+    }
+
+    RuleManager = {
+      loadRules: sinon.stub(),
+    }
+
+    incomingHttpRequestStart = {
+      subscribe: sinon.stub(),
+    }
+
+    incomingHttpRequestEnd = {
+      subscribe: sinon.stub(),
+    }
+
+    AppSec = proxyquire('../../src/appsec', {
+      '../log': log,
+      '../plugins/util/web': {},
+      './blocking': {},
+      './user_tracking': {},
+      './telemetry': {},
+      './graphql': {},
+      './api_security_sampler': {},
+      './rasp': {},
+      '../serverless': { IS_SERVERLESS: true },
+      './rule_manager': RuleManager,
+      './reporter': {},
+      './channels': {
+        incomingHttpRequestStart,
+        incomingHttpRequestEnd,
+      },
+    })
+
+    config = {
+      appsec: {
+        enabled: true,
+      },
+    }
+  })
+
+  afterEach(() => {
+    sinon.restore()
+  })
+
+  describe('enable', () => {
+    it('should not log error when enable fails in serverless environment', () => {
+      const err = new Error('Invalid Rules')
+      RuleManager.loadRules.throws(err)
+
+      AppSec.enable(config)
+
+      sinon.assert.notCalled(log.error)
+      sinon.assert.notCalled(incomingHttpRequestStart.subscribe)
+      sinon.assert.notCalled(incomingHttpRequestEnd.subscribe)
     })
   })
 })
@@ -1312,23 +1585,31 @@ describe('IP blocking', function () {
   const ruleData = {
     rules_data: [{
       data: [
-        { value: invalidIp }
+        { value: invalidIp },
       ],
       id: 'blocked_ips',
-      type: 'data_with_expiration'
-    }]
+      type: 'data_with_expiration',
+    }],
   }
 
   const toModify = [{
     product: 'ASM_DATA',
     id: '1',
     path: 'datadog/00/ASM_DATA/test/IP blocking',
-    file: ruleData
+    file: ruleData,
   }]
   const htmlDefaultContent = blockedTemplate.html
   const jsonDefaultContent = JSON.parse(blockedTemplate.json)
 
   let http, appListener, port
+
+  function createTransaction (changes) {
+    return {
+      ...changes,
+      ack: sinon.spy(),
+      error: sinon.spy(),
+    }
+  }
 
   before(() => {
     return agent.load('http')
@@ -1350,16 +1631,16 @@ describe('IP blocking', function () {
   })
 
   beforeEach(() => {
-    appsec.enable(new Config({
+    appsec.enable(getConfigFresh({
       appsec: {
         enabled: true,
         rasp: {
-          enabled: false // disable rasp to not trigger lfi
-        }
-      }
+          enabled: false, // disable rasp to not trigger lfi
+        },
+      },
     }))
 
-    RuleManager.updateWafFromRC({ toUnapply: [], toApply: [], toModify })
+    RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
   })
 
   afterEach(() => {
@@ -1374,7 +1655,7 @@ describe('IP blocking', function () {
   describe('do not block the request', () => {
     it('should not block the request by default', async () => {
       await axios.get(`http://localhost:${port}/`).then((res) => {
-        expect(res.status).to.be.equal(200)
+        assert.strictEqual(res.status, 200)
       })
     })
   })
@@ -1387,17 +1668,17 @@ describe('IP blocking', function () {
     'forwarded-for',
     'forwarded',
     'via',
-    'true-client-ip'
+    'true-client-ip',
   ]
   ipHeaderList.forEach(ipHeader => {
     describe(`not block - ip in header ${ipHeader}`, () => {
       it('should not block the request with valid X-Forwarded-For ip', async () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
-            [ipHeader]: validIp
-          }
+            [ipHeader]: validIp,
+          },
         }).then((res) => {
-          expect(res.status).to.be.equal(200)
+          assert.strictEqual(res.status, 200)
         })
       })
     })
@@ -1406,11 +1687,11 @@ describe('IP blocking', function () {
       it('should block the request with JSON content if no headers', async () => {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
-            [ipHeader]: invalidIp
-          }
+            [ipHeader]: invalidIp,
+          },
         }).catch((err) => {
-          expect(err.response.status).to.be.equal(403)
-          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+          assert.strictEqual(err.response.status, 403)
+          assert.deepStrictEqual(err.response.data, jsonDefaultContent)
         })
       })
 
@@ -1418,11 +1699,11 @@ describe('IP blocking', function () {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            Accept: '*/*'
-          }
+            Accept: '*/*',
+          },
         }).catch((err) => {
-          expect(err.response.status).to.be.equal(403)
-          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+          assert.strictEqual(err.response.status, 403)
+          assert.deepStrictEqual(err.response.data, jsonDefaultContent)
         })
       })
 
@@ -1430,11 +1711,11 @@ describe('IP blocking', function () {
         await axios.get(`http://localhost:${port}/`, {
           headers: {
             [ipHeader]: invalidIp,
-            Accept: 'text/html'
-          }
+            Accept: 'text/html',
+          },
         }).catch((err) => {
-          expect(err.response.status).to.be.equal(403)
-          expect(err.response.data).to.be.equal(htmlDefaultContent)
+          assert.strictEqual(err.response.status, 403)
+          assert.strictEqual(err.response.data, htmlDefaultContent)
         })
       })
     })
@@ -1453,19 +1734,19 @@ describe('IP blocking', function () {
               type: 'block_request',
               parameters: {
                 status_code: 500,
-                type: 'auto'
-              }
-            }
-          ]
-        }
+                type: 'auto',
+              },
+            },
+          ],
+        },
       }]
 
       beforeEach(() => {
-        RuleManager.updateWafFromRC({
+        RuleManager.updateWafFromRC(createTransaction({
           toUnapply: [],
           toApply: [],
-          toModify: [...toModify, ...toModifyCustomActions]
-        })
+          toModify: [...toModify, ...toModifyCustomActions],
+        }))
       })
 
       afterEach(() => {
@@ -1475,14 +1756,14 @@ describe('IP blocking', function () {
       it('Should block with custom status code and JSON content', () => {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
-            'x-forwarded-for': invalidIp
-          }
+            'x-forwarded-for': invalidIp,
+          },
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
-          expect(err.message).to.not.equal('Not expected')
-          expect(err.response.status).to.be.equal(500)
-          expect(err.response.data).to.deep.equal(jsonDefaultContent)
+          assert.notStrictEqual(err.message, 'Not expected')
+          assert.strictEqual(err.response.status, 500)
+          assert.deepStrictEqual(err.response.data, jsonDefaultContent)
         })
       })
 
@@ -1490,14 +1771,14 @@ describe('IP blocking', function () {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
             'x-forwarded-for': invalidIp,
-            Accept: 'text/html'
-          }
+            Accept: 'text/html',
+          },
         }).then(() => {
           throw new Error('Not expected')
         }).catch((err) => {
-          expect(err.message).to.not.equal('Not expected')
-          expect(err.response.status).to.be.equal(500)
-          expect(err.response.data).to.deep.equal(htmlDefaultContent)
+          assert.notStrictEqual(err.message, 'Not expected')
+          assert.strictEqual(err.response.status, 500)
+          assert.deepStrictEqual(err.response.data, htmlDefaultContent)
         })
       })
     })
@@ -1514,19 +1795,19 @@ describe('IP blocking', function () {
               type: 'redirect_request',
               parameters: {
                 status_code: 301,
-                location: '/error'
-              }
-            }
-          ]
-        }
+                location: '/error',
+              },
+            },
+          ],
+        },
       }]
 
       beforeEach(() => {
-        RuleManager.updateWafFromRC({
+        RuleManager.updateWafFromRC(createTransaction({
           toUnapply: [],
           toApply: [],
-          toModify: [...toModify, ...toModifyCustomActions]
-        })
+          toModify: [...toModify, ...toModifyCustomActions],
+        }))
       })
 
       afterEach(() => {
@@ -1536,15 +1817,15 @@ describe('IP blocking', function () {
       it('Should block with redirect', () => {
         return axios.get(`http://localhost:${port}/`, {
           headers: {
-            'x-forwarded-for': invalidIp
+            'x-forwarded-for': invalidIp,
           },
-          maxRedirects: 0
+          maxRedirects: 0,
         }).then(() => {
           throw new Error('Not resolve expected')
         }).catch((err) => {
-          expect(err.message).to.not.equal('Not resolve expected')
-          expect(err.response.status).to.be.equal(301)
-          expect(err.response.headers.location).to.be.equal('/error')
+          assert.notStrictEqual(err.message, 'Not resolve expected')
+          assert.strictEqual(err.response.status, 301)
+          assert.strictEqual(err.response.headers.location, '/error')
         })
       })
     })
