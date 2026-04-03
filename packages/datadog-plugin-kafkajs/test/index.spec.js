@@ -444,8 +444,7 @@ describe('Plugin', () => {
             await consumer.run({
               eachBatch: () => {},
             })
-            await sendMessages(kafka, testTopic, batchMessages)
-            return expectedSpanPromise
+            return Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
           })
 
           it('should run the consumer in the context of the consumer span', done => {
@@ -485,8 +484,33 @@ describe('Plugin', () => {
             })
 
             await consumer.run({ eachBatch: () => {} })
-            await sendMessages(kafka, testTopic, batchMessages)
-            await expectedSpanPromise
+            await Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
+          })
+
+          it('should not fail when messages have headers without trace context', async () => {
+            const messagesWithHeaders = [
+              { key: 'key1', value: 'test1', headers: { 'x-custom-header': 'value' } },
+            ]
+            const meta = {
+              'span.kind': 'consumer',
+              component: 'kafkajs',
+              'kafka.topic': testTopic,
+              'messaging.destination.name': testTopic,
+              'messaging.system': 'kafka',
+            }
+            if (clusterIdAvailable) meta['kafka.cluster_id'] = testKafkaClusterId
+
+            const expectedSpanPromise = expectSpanWithDefaults({
+              name: expectedSchema.receive.opName,
+              service: expectedSchema.receive.serviceName,
+              meta,
+              resource: testTopic,
+              error: 0,
+              type: 'worker',
+            })
+
+            await consumer.run({ eachBatch: () => {} })
+            return Promise.all([sendMessages(kafka, testTopic, messagesWithHeaders), expectedSpanPromise])
           })
 
           withNamingSchema(

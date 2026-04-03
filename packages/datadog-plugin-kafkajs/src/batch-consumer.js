@@ -33,7 +33,9 @@ class KafkajsBatchConsumerPlugin extends ConsumerPlugin {
       const headers = convertToTextMap(message.headers)
       if (headers) {
         const childOf = this.tracer.extract('text_map', headers)
-        span.addLink(childOf)
+        if (childOf) {
+          span.addLink(childOf)
+        }
       }
 
       if (!this.config.dsmEnabled) continue

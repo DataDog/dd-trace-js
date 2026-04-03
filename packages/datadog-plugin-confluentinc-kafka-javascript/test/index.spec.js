@@ -287,8 +287,7 @@ describe('Plugin', () => {
               })
 
               await consumer.run({ eachBatch: () => {} })
-              await sendMessages(kafka, testTopic, batchMessages)
-              return expectedSpanPromise
+              return Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
             })
 
             it('should run the consumer in the context of the consumer span', done => {
@@ -329,8 +328,7 @@ describe('Plugin', () => {
               })
 
               await consumer.run({ eachBatch: () => {} })
-              await sendMessages(kafka, testTopic, batchMessages)
-              await expectedSpanPromise
+              await Promise.all([sendMessages(kafka, testTopic, batchMessages), expectedSpanPromise])
             })
           })
         })
