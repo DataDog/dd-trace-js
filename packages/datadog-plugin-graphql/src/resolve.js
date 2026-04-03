@@ -20,6 +20,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     super(...args)
 
     this.resolverStartCh = dc.channel('datadog:graphql:resolver:start')
+    this.iastResolveCh = dc.channel('apm:graphql:resolve:start')
   }
 
   bindStart (ctx) {
@@ -142,6 +143,10 @@ class GraphQLResolvePlugin extends TracingPlugin {
     if (this.resolverStartCh.hasSubscribers) {
       const abortController = new AbortController()
       this.resolverStartCh.publish({ abortController, resolverInfo: getResolverInfo(info, resolverArgs) })
+    }
+
+    if (this.iastResolveCh.hasSubscribers) {
+      this.iastResolveCh.publish({ rootCtx, args: resolverArgs, info, path: computedPath, pathString: computedPathString })
     }
 
     return ctx.currentStore
