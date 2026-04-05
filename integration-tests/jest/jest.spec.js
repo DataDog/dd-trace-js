@@ -5088,6 +5088,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
           metadataDicts.forEach(metadata => {
+            assert.strictEqual(metadata['*']['test.configuration.lage_package_name'], 'my-lage-package')
             for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
               assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-lage-package')
             }

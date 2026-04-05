@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -22,6 +22,7 @@ const {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  getTestSessionName,
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
   isModifiedTest,
@@ -77,6 +78,41 @@ describe('getTestSuitePath', () => {
     const testSuiteAbsolutePath = sourceRoot
     const testSuitePath = getTestSuitePath(testSuiteAbsolutePath, sourceRoot)
     assert.strictEqual(testSuitePath, sourceRoot)
+  })
+})
+
+describe('getTestSessionName', () => {
+  let originalEnv
+
+  beforeEach(() => {
+    originalEnv = { ...process.env }
+    delete process.env.DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME
+    delete process.env.LAGE_PACKAGE_NAME
+    delete process.env.DD_TEST_SESSION_NAME
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it('returns the explicit test optimization session name from config', () => {
+    process.env.DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME = 'true'
+    process.env.LAGE_PACKAGE_NAME = 'lage-package'
+
+    const testSessionName = getTestSessionName({ ciVisibilityTestSessionName: 'explicit-session' }, 'jest', {})
+
+    assert.strictEqual(testSessionName, 'explicit-session')
+  })
+
+  it('returns the current Lage package name when enabled', () => {
+    process.env.DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME = 'true'
+    process.env.LAGE_PACKAGE_NAME = 'lage-package-a'
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-a')
+
+    process.env.LAGE_PACKAGE_NAME = 'lage-package-b'
+
+    assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-b')
   })
 })
 

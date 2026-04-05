@@ -9,7 +9,6 @@ const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
-const TEST_CONFIGURATION_PACKAGE_TAG = 'test.configuration.lage_package_name'
 const EXPORTER_MAP = {
   jest: 'jest_worker',
   cucumber: 'cucumber_worker',
@@ -34,33 +33,6 @@ function detectTestWorkerType () {
   return null
 }
 
-function getLagePackageConfigurationTags () {
-  if (!isTrue(getEnvironmentVariable('DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME'))) {
-    return
-  }
-
-  const packageName = getEnvironmentVariable('LAGE_PACKAGE_NAME')
-  if (!packageName) {
-    return
-  }
-
-  return {
-    [TEST_CONFIGURATION_PACKAGE_TAG]: packageName,
-  }
-}
-
-function getLageTestSessionName () {
-  if (!isTrue(getEnvironmentVariable('DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME'))) {
-    return
-  }
-
-  if (getEnvironmentVariable('DD_TEST_SESSION_NAME')) {
-    return
-  }
-
-  return getEnvironmentVariable('LAGE_PACKAGE_NAME')
-}
-
 const testWorkerType = detectTestWorkerType()
 const isTestWorker = testWorkerType !== null
 const isJestWorker = testWorkerType === 'jest'
@@ -69,14 +41,6 @@ const baseOptions = {
   startupLogs: false,
   isCiVisibility: true,
   flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL,
-}
-const lagePackageConfigurationTags = getLagePackageConfigurationTags()
-if (lagePackageConfigurationTags) {
-  baseOptions.tags = lagePackageConfigurationTags
-}
-const lageTestSessionName = getLageTestSessionName()
-if (lageTestSessionName) {
-  baseOptions.ciVisibilityTestSessionName = lageTestSessionName
 }
 
 let shouldInit = !isFalse(getValueFromEnvSources('DD_CIVISIBILITY_ENABLED'))
