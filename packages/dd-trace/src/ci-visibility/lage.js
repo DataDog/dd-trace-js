@@ -4,12 +4,12 @@ const { getEnvironmentVariable } = require('../config/helper')
 const { isTrue } = require('../util')
 
 /**
- * Returns the current Lage package name if package-based test optimization is enabled.
+ * Returns the current Lage package name if the Lage package name override is enabled.
  *
  * @returns {string|undefined}
  */
 function getLagePackageName () {
-  if (!isTrue(getEnvironmentVariable('DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME'))) {
+  if (!isTrue(getEnvironmentVariable('DD_ENABLE_LAGE_PACKAGE_NAME'))) {
     return
   }
 

@@ -5095,7 +5095,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
-            DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME: 'true',
+            DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
             LAGE_PACKAGE_NAME: 'my-lage-package',
             TESTS_TO_RUN: 'test/ci-visibility-test',
           },
@@ -5139,7 +5139,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
-            DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME: 'true',
+            DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
             LAGE_PACKAGE_NAME: 'my-initial-lage-package',
           },
         }

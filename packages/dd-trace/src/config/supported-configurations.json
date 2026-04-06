@@ -510,7 +510,7 @@
         ]
       }
     ],
-    "DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME": [
+    "DD_ENABLE_LAGE_PACKAGE_NAME": [
       {
         "implementation": "A",
         "type": "boolean",

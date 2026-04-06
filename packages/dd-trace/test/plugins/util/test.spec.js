@@ -86,7 +86,7 @@ describe('getTestSessionName', () => {
 
   beforeEach(() => {
     originalEnv = { ...process.env }
-    delete process.env.DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME
+    delete process.env.DD_ENABLE_LAGE_PACKAGE_NAME
     delete process.env.LAGE_PACKAGE_NAME
     delete process.env.DD_TEST_SESSION_NAME
   })
@@ -96,7 +96,7 @@ describe('getTestSessionName', () => {
   })
 
   it('returns the explicit test optimization session name from config', () => {
-    process.env.DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME = 'true'
+    process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
     process.env.LAGE_PACKAGE_NAME = 'lage-package'
 
     const testSessionName = getTestSessionName({ ciVisibilityTestSessionName: 'explicit-session' }, 'jest', {})
@@ -105,7 +105,7 @@ describe('getTestSessionName', () => {
   })
 
   it('returns the current Lage package name when enabled', () => {
-    process.env.DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME = 'true'
+    process.env.DD_ENABLE_LAGE_PACKAGE_NAME = 'true'
     process.env.LAGE_PACKAGE_NAME = 'lage-package-a'
 
     assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-a')
