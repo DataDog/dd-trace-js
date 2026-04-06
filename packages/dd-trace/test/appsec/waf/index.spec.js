@@ -22,13 +22,11 @@ describe('WAF Manager', () => {
   ])
   let waf, WAFManager
   let DDWAF
-  let config
+  const config = getConfigFresh()
   let webContext
   let keepTrace, updateRateLimitedMetric, limiterStub
 
   beforeEach(() => {
-    config = getConfigFresh()
-
     limiterStub = {
       isAllowed: sinon.stub().returns(true),
     }

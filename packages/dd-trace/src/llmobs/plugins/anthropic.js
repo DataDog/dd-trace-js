@@ -1,5 +1,6 @@
 'use strict'
 
+const { UNKNOWN_MODEL_PROVIDER } = require('../constants/tags')
 const LLMObsPlugin = require('./base')
 
 const ALLOWED_METADATA_KEYS = new Set([
@@ -108,14 +109,22 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
   }
 
   getLLMObsSpanRegisterOptions (ctx) {
-    const { options } = ctx
+    const { options, baseUrl } = ctx
     const { model } = options
+    const modelProvider = this._getModelProvider(baseUrl)
 
     return {
       kind: 'llm',
       modelName: model,
-      modelProvider: 'anthropic',
+      modelProvider,
     }
+  }
+
+  _getModelProvider (baseUrl = '') {
+    if (baseUrl.includes('anthropic')) {
+      return 'anthropic'
+    }
+    return UNKNOWN_MODEL_PROVIDER
   }
 
   setLLMObsTags (ctx) {
