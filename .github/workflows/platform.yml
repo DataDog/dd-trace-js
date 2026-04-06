@@ -110,11 +110,7 @@ jobs:
       PLUGINS: dd-trace-api
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   esbuild:
     runs-on: ubuntu-latest
@@ -160,11 +156,7 @@ jobs:
       PLUGINS: bluebird
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-body-parser:
     runs-on: ubuntu-latest
@@ -174,11 +166,7 @@ jobs:
       PLUGINS: body-parser
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-child_process:
     runs-on: ubuntu-latest
@@ -188,11 +176,7 @@ jobs:
       PLUGINS: child_process
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-cookie-parser:
     runs-on: ubuntu-latest
@@ -202,11 +186,7 @@ jobs:
       PLUGINS: cookie-parser
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-express-mongo-sanitize:
     runs-on: ubuntu-latest
@@ -222,11 +202,7 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-express-session:
     runs-on: ubuntu-latest
@@ -236,11 +212,7 @@ jobs:
       PLUGINS: express-session
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-express:
     runs-on: ubuntu-latest
@@ -250,11 +222,7 @@ jobs:
       PLUGINS: express
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-fs:
     runs-on: ubuntu-latest
@@ -264,11 +232,7 @@ jobs:
       PLUGINS: fs
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-generic-pool:
     runs-on: ubuntu-latest
@@ -278,11 +242,7 @@ jobs:
       PLUGINS: generic-pool
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
   # ./.github/actions/instrumentations/test once fixed upstream.
@@ -330,11 +290,7 @@ jobs:
       PLUGINS: knex
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-mongoose:
     runs-on: ubuntu-latest
@@ -350,11 +306,7 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-multer:
     runs-on: ubuntu-latest
@@ -364,11 +316,7 @@ jobs:
       PLUGINS: multer
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-mysql2:
     runs-on: ubuntu-latest
@@ -387,11 +335,7 @@ jobs:
       SERVICES: mysql2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-passport:
     runs-on: ubuntu-latest
@@ -401,11 +345,7 @@ jobs:
       PLUGINS: passport
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-passport-http:
     runs-on: ubuntu-latest
@@ -415,11 +355,7 @@ jobs:
       PLUGINS: passport-http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-passport-local:
     runs-on: ubuntu-latest
@@ -429,11 +365,7 @@ jobs:
       PLUGINS: passport-local
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-pg:
     runs-on: ubuntu-latest
@@ -452,11 +384,7 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-promise-js:
     runs-on: ubuntu-latest
@@ -466,11 +394,7 @@ jobs:
       PLUGINS: promise-js
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-promise:
     runs-on: ubuntu-latest
@@ -480,11 +404,7 @@ jobs:
       PLUGINS: promise
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-q:
     runs-on: ubuntu-latest
@@ -494,11 +414,7 @@ jobs:
       PLUGINS: q
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-url:
     runs-on: ubuntu-latest
@@ -508,11 +424,7 @@ jobs:
       PLUGINS: url
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-when:
     runs-on: ubuntu-latest
@@ -522,11 +434,7 @@ jobs:
       PLUGINS: when
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/instrumentations/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentations-misc:
     runs-on: ubuntu-latest

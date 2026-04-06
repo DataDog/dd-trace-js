@@ -289,8 +289,4 @@ jobs:
       PLUGINS: langgraph
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

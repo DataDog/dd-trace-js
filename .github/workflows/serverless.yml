@@ -159,11 +159,7 @@ jobs:
       SERVICES: azurite,azureeventhubsemulator
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-functions:
     strategy:
@@ -276,13 +272,9 @@ jobs:
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   azure-durable-functions:
     runs-on: ubuntu-latest
@@ -301,11 +293,7 @@ jobs:
 
     steps:
      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-     - uses: ./.github/actions/dd-sts
-       id: dd-sts
      - uses: ./.github/actions/plugins/test
-       with:
-        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
@@ -321,8 +309,4 @@ jobs:
       SERVICES: gpubsub
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
