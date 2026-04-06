@@ -61,7 +61,6 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
-  TEST_MANAGEMENT_ATTEMPT_TO_FIX_FAILED,
   TEST_RETRY_REASON_TYPES,
   TEST_HAS_DYNAMIC_NAME,
   GIT_COMMIT_SHA,
@@ -4187,16 +4186,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
               if(index < NUM_RETRIES) {
                 assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
-                assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_FAILED in test.meta))
                 assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
               }
               else {
                 assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta)
-                assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_FAILED in test.meta)
-                assert.ok(TEST_HAS_FAILED_ALL_RETRIES in test.meta)
+                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta)) // Tag is only reported if the test has failed all retries
                 assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-                assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_FAILED], 'false')
-                assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'false')
               }
             })
 
@@ -4212,15 +4207,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
               if(index < NUM_RETRIES) {
                 assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
-                assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_FAILED in test.meta))
                 assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
               }
               else {
                 assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta)
-                assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_FAILED in test.meta)
                 assert.ok(TEST_HAS_FAILED_ALL_RETRIES in test.meta)
                 assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_FAILED], 'true')
                 assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
               }
             })
