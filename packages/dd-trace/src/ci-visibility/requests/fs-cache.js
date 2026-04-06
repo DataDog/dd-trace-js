@@ -27,7 +27,7 @@ function isCacheEnabled () {
  * Builds a deterministic cache key by hashing arbitrary key-value parts.
  *
  * @param {string} prefix - Cache file prefix (e.g. 'known-tests', 'skippable', 'test-mgmt')
- * @param {Array<string | undefined>} parts - Values that uniquely identify the cached response
+ * @param {Array<unknown>} parts - Values that uniquely identify the cached response
  * @returns {string}
  */
 function buildCacheKey (prefix, parts) {
@@ -55,17 +55,18 @@ function getLockPath (cacheKey) {
  * Attempts to read cached data from the filesystem.
  *
  * @param {string} cacheKey
- * @returns {{ data: object } | undefined}
+ * @returns {{ data: unknown } | undefined}
  */
 function readFromCache (cacheKey) {
   const cachePath = getCachePath(cacheKey)
   try {
     const raw = fs.readFileSync(cachePath, 'utf8')
-    const { timestamp, data } = JSON.parse(raw)
-    if (data === undefined || data === null) {
+    const parsed = JSON.parse(raw)
+    if (!Object.hasOwn(parsed, 'data')) {
       log.debug('%s cache file has no data field, ignoring', cacheKey)
       return
     }
+    const { timestamp, data } = parsed
     if (Date.now() - timestamp > CACHE_TTL_MS) {
       log.debug('%s cache expired (age: %d ms)', cacheKey, Date.now() - timestamp)
       return
@@ -81,7 +82,7 @@ function readFromCache (cacheKey) {
  * Writes data to the filesystem cache atomically.
  *
  * @param {string} cacheKey
- * @param {object} data
+ * @param {unknown} data
  */
 function writeToCache (cacheKey, data) {
   if (!cacheKey) return
@@ -130,7 +131,14 @@ function releaseLock (cacheKey) {
  * @param {string} cacheKey
  */
 function touchLock (cacheKey) {
-  try { fs.writeFileSync(getLockPath(cacheKey), String(Date.now())) } catch { /* ignore */ }
+  const lockPath = getLockPath(cacheKey)
+  const tmpPath = lockPath + '.tmp.' + process.pid
+  try {
+    fs.writeFileSync(tmpPath, String(Date.now()))
+    fs.renameSync(tmpPath, lockPath)
+  } catch {
+    try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
+  }
 }
 
 /**
@@ -169,7 +177,7 @@ function isLockStale (cacheKey) {
  *
  * @param {string} cacheKey
  * @param {Function} fetchFn - function(done) that fetches from the API
- * @param {Function} done - callback(err, data)
+ * @param {Function} done - callback(err, ...results)
  */
 function waitForCache (cacheKey, fetchFn, done) {
   const poll = () => {
@@ -178,9 +186,23 @@ function waitForCache (cacheKey, fetchFn, done) {
       return done(null, cached.data)
     }
     if (isLockStale(cacheKey)) {
-      log.debug('%s lock is stale, fetching directly', cacheKey)
+      log.debug('%s lock is stale, attempting takeover', cacheKey)
       releaseLock(cacheKey)
-      return fetchFn(done)
+      if (!tryAcquireLock(cacheKey)) {
+        return setTimeout(poll, CACHE_LOCK_POLL_MS)
+      }
+
+      const cachedAfterTakeover = readFromCache(cacheKey)
+      if (cachedAfterTakeover) {
+        releaseLock(cacheKey)
+        return done(null, cachedAfterTakeover.data)
+      }
+
+      const stopHeartbeat = startLockHeartbeat(cacheKey)
+      return fetchFn((err, ...results) => {
+        stopHeartbeat()
+        done(err, ...results)
+      })
     }
     setTimeout(poll, CACHE_LOCK_POLL_MS)
   }

@@ -47,6 +47,14 @@ const KNOWN_TESTS_RESPONSE = {
   },
 }
 
+const EMPTY_KNOWN_TESTS_RESPONSE = {
+  data: {
+    attributes: {
+      tests: null,
+    },
+  },
+}
+
 function cacheKeyForParams (params) {
   return buildCacheKey('known-tests', [
     params.sha, params.service, params.env, params.repositoryUrl,
@@ -129,13 +137,36 @@ describe('get-known-tests', () => {
     })
   })
 
+  it('should return cached empty known tests on second call without hitting API', (done) => {
+    const scope = nock(BASE_URL)
+      .post('/api/v2/ci/libraries/tests')
+      .reply(200, JSON.stringify(EMPTY_KNOWN_TESTS_RESPONSE))
+
+    getKnownTests(DEFAULT_PARAMS, (err, firstResult) => {
+      assert.strictEqual(err, null)
+      assert.strictEqual(firstResult, null)
+      assert.ok(scope.isDone(), 'API should have been called')
+
+      const secondScope = nock(BASE_URL)
+        .post('/api/v2/ci/libraries/tests')
+        .reply(200, JSON.stringify(EMPTY_KNOWN_TESTS_RESPONSE))
+
+      getKnownTests(DEFAULT_PARAMS, (err, secondResult) => {
+        assert.strictEqual(err, null)
+        assert.strictEqual(secondResult, null)
+        assert.strictEqual(secondScope.isDone(), false, 'API should NOT have been called on cache hit')
+        done()
+      })
+    })
+  })
+
   it('should not use cache if TTL has expired', (done) => {
     // Write an expired cache entry
     const key = cacheKeyForParams(DEFAULT_PARAMS)
     const cachePath = getCachePath(key)
     const expiredData = {
       timestamp: Date.now() - (31 * 60 * 1000), // 31 minutes ago
-      knownTests: { old: { suite: ['old-test'] } },
+      data: { old: { suite: ['old-test'] } },
     }
     fs.writeFileSync(cachePath, JSON.stringify(expiredData), 'utf8')
 
@@ -236,6 +267,32 @@ describe('get-known-tests', () => {
         assert.deepStrictEqual(knownTests, KNOWN_TESTS_RESPONSE.data.attributes.tests)
         done()
       })
+    })
+
+    it('should only fetch once when multiple callers observe a stale lock', function (done) {
+      this.timeout(10_000)
+
+      const key = cacheKeyForParams(DEFAULT_PARAMS)
+      const lockPath = getLockPath(key)
+      let numDoneCalls = 0
+
+      fs.writeFileSync(lockPath, String(Date.now() - 200_000))
+
+      const scope = nock(BASE_URL)
+        .post('/api/v2/ci/libraries/tests')
+        .reply(200, JSON.stringify(KNOWN_TESTS_RESPONSE))
+
+      const onDone = (err, knownTests) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(knownTests, KNOWN_TESTS_RESPONSE.data.attributes.tests)
+        if (++numDoneCalls === 2) {
+          assert.ok(scope.isDone(), 'API should have been called exactly once')
+          done()
+        }
+      }
+
+      getKnownTests(DEFAULT_PARAMS, onDone)
+      getKnownTests(DEFAULT_PARAMS, onDone)
     })
   })
 
