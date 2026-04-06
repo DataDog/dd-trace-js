@@ -775,7 +775,7 @@
     ],
     "DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE": [
       {
-        "implementation": "C",
+        "implementation": "A",
         "type": "boolean",
         "default": "false"
       }
