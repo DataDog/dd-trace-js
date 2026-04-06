@@ -1,12 +1,10 @@
 name: Instrumentation Tests
 description: Run instrumentation tests
-inputs:
-  dd_api_key:
-    description: DD_API_KEY used to push test results
-    required: true
 runs:
   using: composite
   steps:
+    - uses: ./.github/actions/dd-sts
+      id: dd-sts
     - uses: ./.github/actions/node/oldest-maintenance-lts
     - uses: ./.github/actions/install
     - run: yarn test:instrumentations:ci
@@ -17,8 +15,8 @@ runs:
     - uses: ./.github/actions/coverage
       with:
         flags: instrumentations-${{ github.job }}
-        dd_api_key: ${{ inputs.dd_api_key }}
+        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
     - uses: ./.github/actions/push_to_test_optimization
       if: "!cancelled()"
       with:
-        dd_api_key: ${{ inputs.dd_api_key }}
+        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
