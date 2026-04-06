@@ -5140,6 +5140,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
             DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME: 'true',
+            LAGE_PACKAGE_NAME: 'my-initial-lage-package',
           },
         }
       )

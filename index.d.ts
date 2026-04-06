@@ -868,13 +868,6 @@ declare namespace tracer {
     tags?: { [key: string]: any };
 
     /**
-     * Override the test optimization session name.
-     * @env DD_TEST_SESSION_NAME
-     * Programmatic configuration takes precedence over the environment variables listed above.
-     */
-    ciVisibilityTestSessionName?: string;
-
-    /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
      * @default false
      * @env DD_TRACE_REPORT_HOSTNAME

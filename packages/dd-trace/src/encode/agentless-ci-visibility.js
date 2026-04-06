@@ -50,13 +50,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
   addMetadataTags (tags) {
     for (const type of ALLOWED_CONTENT_TYPES) {
-      if (!tags[type]) {
-        continue
-      }
-
-      this.metadataTags[type] = {
-        ...this.metadataTags[type],
-        ...tags[type],
+      if (tags[type]) {
+        this.metadataTags[type] = {
+          ...this.metadataTags[type],
+          ...tags[type],
+        }
       }
     }
   }
@@ -305,17 +303,15 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
   _encodePayloadStart (bytes) {
     // encodes the payload up to `events`. `events` will be encoded via _encode
-    const metadata = {
-      '*': {
-        language: 'javascript',
-        library_version: ddTraceVersion,
-      },
-      ...this.metadataTags,
-    }
-
     const payload = {
       version: ENCODING_VERSION,
-      metadata,
+      metadata: {
+        '*': {
+          language: 'javascript',
+          library_version: ddTraceVersion,
+        },
+        ...this.metadataTags,
+      },
       events: [],
     }
 

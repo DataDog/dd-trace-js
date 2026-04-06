@@ -17,19 +17,16 @@ const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-vi
 describe('CI Visibility Exporter', () => {
   const port = 8126
   const url = `http://127.0.0.1:${port}`
-  let originalEnv
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false
     sinon.stub(cp, 'execFileSync').returns('false')
     sinon.stub(fs, 'readFileSync').returns('')
     process.env.DD_API_KEY = '1'
-    originalEnv = { ...process.env }
     nock.cleanAll()
   })
 
   afterEach(() => {
-    process.env = originalEnv
     sinon.restore()
   })
 
