@@ -406,6 +406,9 @@ function wrapRun (pl, isLatestVersion, version) {
         if (promises.hitBreakpointPromise) {
           await promises.hitBreakpointPromise
         }
+
+        const finalStatus = "this is a final status tag";
+
         testFinishCh.publish({
           status,
           skipReason,
@@ -422,6 +425,7 @@ function wrapRun (pl, isLatestVersion, version) {
           isQuarantined,
           isModified,
           ...attemptCtx.currentStore,
+          finalStatus,
         })
       })
       return promise
