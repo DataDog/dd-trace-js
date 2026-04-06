@@ -41,7 +41,7 @@ function wrapCreate (create) {
     const options = arguments[0]
     const stream = options.stream
 
-    const ctx = { options, resource: 'create' }
+    const ctx = { options, resource: 'create', baseUrl: this._client?.baseURL }
 
     return anthropicTracingChannel.start.runStores(ctx, () => {
       let apiPromise
