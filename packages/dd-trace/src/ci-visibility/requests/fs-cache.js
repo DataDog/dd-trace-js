@@ -19,7 +19,8 @@ const CACHE_LOCK_HEARTBEAT_MS = 30_000 // 30 seconds
  * @returns {boolean}
  */
 function isCacheEnabled () {
-  return !!getValueFromEnvSources('DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE')
+  const { isTrue } = require('../../util')
+  return isTrue(getValueFromEnvSources('DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE'))
 }
 
 /**
