@@ -62,6 +62,10 @@ function readFromCache (cacheKey) {
   try {
     const raw = fs.readFileSync(cachePath, 'utf8')
     const { timestamp, data } = JSON.parse(raw)
+    if (data === undefined || data === null) {
+      log.debug('%s cache file has no data field, ignoring', cacheKey)
+      return
+    }
     if (Date.now() - timestamp > CACHE_TTL_MS) {
       log.debug('%s cache expired (age: %d ms)', cacheKey, Date.now() - timestamp)
       return
