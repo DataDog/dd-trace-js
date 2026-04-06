@@ -112,6 +112,7 @@ function readFromCache (cacheKey) {
  * @param {object} knownTests
  */
 function writeToCache (cacheKey, knownTests) {
+  if (!cacheKey) return
   const cachePath = getCachePath(cacheKey)
   const tmpPath = cachePath + '.tmp.' + process.pid
   try {
@@ -265,6 +266,28 @@ function getKnownTests ({
   runtimeVersion,
   custom,
 }, done) {
+  const isCacheDisabled = getValueFromEnvSources('DD_CIVISIBILITY_KNOWN_TESTS_CACHE_DISABLED')
+
+  if (isCacheDisabled) {
+    return fetchFromApi({
+      url,
+      isEvpProxy,
+      evpProxyPrefix,
+      isGzipCompatible,
+      env,
+      service,
+      repositoryUrl,
+      sha,
+      osVersion,
+      osPlatform,
+      osArchitecture,
+      runtimeName,
+      runtimeVersion,
+      custom,
+      cacheKey: null,
+    }, done)
+  }
+
   const cacheKey = buildCacheKey({
     sha,
     service,

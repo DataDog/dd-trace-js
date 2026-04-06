@@ -752,6 +752,7 @@ function getCiVisAgentlessConfig (port) {
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${port}`,
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+    DD_CIVISIBILITY_KNOWN_TESTS_CACHE_DISABLED: 'true',
   }
 }
 
@@ -769,6 +770,7 @@ function getCiVisEvpProxyConfig (port) {
     NODE_OPTIONS: '-r dd-trace/ci/init',
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+    DD_CIVISIBILITY_KNOWN_TESTS_CACHE_DISABLED: 'true',
   }
 }
 

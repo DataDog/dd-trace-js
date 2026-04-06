@@ -446,6 +446,13 @@
         ]
       }
     ],
+    "DD_CIVISIBILITY_KNOWN_TESTS_CACHE_DISABLED": [
+      {
+        "implementation": "C",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_CIVISIBILITY_ENABLED": [
       {
         "implementation": "A",
