@@ -4138,101 +4138,102 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       onlyLatestIt(
         'checks atf_passed, atf_failed, test_is_retry and test_has_failed_all_retries tags on tests with hooks',
-        (done) => {``
-        const NUM_RETRIES = 3
-        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
-        receiver.setTestManagementTests({
-          mocha: {
-            suites: {
-              'ci-visibility/test-management/test-attempt-to-fix-with-after-each.js': {
-                tests: {
-                  'attempt to fix tests can attempt to fix a test that always passes': {
-                    properties: { attempt_to_fix: true },
-                  },
-                  'attempt to fix tests can attempt to fix a test that always fails': {
-                    properties: { attempt_to_fix: true },
+        (done) => {
+          const NUM_RETRIES = 3
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+          receiver.setTestManagementTests({
+            mocha: {
+              suites: {
+                'ci-visibility/test-management/test-attempt-to-fix-with-after-each.js': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test that always passes': {
+                      properties: { attempt_to_fix: true },
+                    },
+                    'attempt to fix tests can attempt to fix a test that always fails': {
+                      properties: { attempt_to_fix: true },
+                    },
                   },
                 },
               },
             },
-          },
-        })
-
-        const eventsPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const retriedTestsAlwaysPass = events.filter(event => event.type === 'test')
-              .map(event => event.content)
-              .filter(test => test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test that always passes')
-              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-            assert.strictEqual(retriedTestsAlwaysPass.length, NUM_RETRIES + 1)
-
-            const retriedTestsAlwaysFails = events.filter(event => event.type === 'test')
-              .map(event => event.content)
-              .filter(test => test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test that always fails')
-              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-            assert.strictEqual(retriedTestsAlwaysFails.length, NUM_RETRIES + 1)
-
-            // Tags test
-            retriedTestsAlwaysPass.forEach((test, index) => {
-              if(index == 0) {
-                assert.ok(!(TEST_IS_RETRY in test.meta))
-              } else {
-                assert.ok(TEST_IS_RETRY in test.meta)
-                assert.ok(TEST_RETRY_REASON in test.meta)
-                assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
-                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
-              }
-
-              if(index < NUM_RETRIES) {
-                assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
-                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
-              }
-              else {
-                assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta)
-                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta)) // Tag is only reported if the test has failed all retries
-                assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
-              }
-            })
-
-            retriedTestsAlwaysFails.forEach((test, index) => {
-              if(index == 0) {
-                assert.ok(!(TEST_IS_RETRY in test.meta))
-              } else {
-                assert.ok(TEST_IS_RETRY in test.meta)
-                assert.ok(TEST_RETRY_REASON in test.meta)
-                assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
-                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
-              }
-
-              if(index < NUM_RETRIES) {
-                assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
-                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
-              }
-              else {
-                assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta)
-                assert.ok(TEST_HAS_FAILED_ALL_RETRIES in test.meta)
-                assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-                assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-              }
-            })
           })
 
-        childProcess = exec(
-          runTestsCommand,
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              TESTS_TO_RUN: JSON.stringify(['./test-management/test-attempt-to-fix-with-after-each.js']),
-            },
-          }
-        )
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const retriedTestsAlwaysPass = events.filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] ===
+                  'attempt to fix tests can attempt to fix a test that always passes')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              assert.strictEqual(retriedTestsAlwaysPass.length, NUM_RETRIES + 1)
 
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => done()).catch(done)
+              const retriedTestsAlwaysFails = events.filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] ===
+                  'attempt to fix tests can attempt to fix a test that always fails')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              assert.strictEqual(retriedTestsAlwaysFails.length, NUM_RETRIES + 1)
+
+              // Tags test
+              retriedTestsAlwaysPass.forEach((test, index) => {
+                if (index === 0) {
+                  assert.ok(!(TEST_IS_RETRY in test.meta))
+                } else {
+                  assert.ok(TEST_IS_RETRY in test.meta)
+                  assert.ok(TEST_RETRY_REASON in test.meta)
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+                }
+
+                if (index < NUM_RETRIES) {
+                  assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                } else {
+                  assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta)
+                  // Tag is only reported if the test has failed all retries
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
+                }
+              })
+
+              retriedTestsAlwaysFails.forEach((test, index) => {
+                if (index === 0) {
+                  assert.ok(!(TEST_IS_RETRY in test.meta))
+                } else {
+                  assert.ok(TEST_IS_RETRY in test.meta)
+                  assert.ok(TEST_RETRY_REASON in test.meta)
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+                }
+
+                if (index < NUM_RETRIES) {
+                  assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                } else {
+                  assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta)
+                  assert.ok(TEST_HAS_FAILED_ALL_RETRIES in test.meta)
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+                  assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+                }
+              })
+            })
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TESTS_TO_RUN: JSON.stringify(['./test-management/test-attempt-to-fix-with-after-each.js']),
+              },
+            }
+          )
+
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => done()).catch(done)
+          })
         })
-      })
 
       onlyLatestIt('does not fail retry if a test is disabled', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
