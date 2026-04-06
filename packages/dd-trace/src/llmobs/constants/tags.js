@@ -23,6 +23,7 @@ module.exports = {
 
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
+  UNKNOWN_MODEL_PROVIDER: 'unknown',
 
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
