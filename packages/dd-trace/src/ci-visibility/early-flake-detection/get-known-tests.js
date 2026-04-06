@@ -251,4 +251,4 @@ function fetchFromApi ({
   fetchPage(null)
 }
 
-module.exports = { getKnownTests, mergeKnownTests }
+module.exports = { getKnownTests }
