@@ -71,11 +71,13 @@ function cleanup (params) {
 describe('get-known-tests', () => {
   beforeEach(() => {
     process.env.DD_API_KEY = 'test-api-key'
+    process.env.DD_EXPERIMENTAL_TEST_OPT_KNOWN_TESTS_CACHE_ENABLED = 'true'
     cleanup(DEFAULT_PARAMS)
   })
 
   afterEach(() => {
     delete process.env.DD_API_KEY
+    delete process.env.DD_EXPERIMENTAL_TEST_OPT_KNOWN_TESTS_CACHE_ENABLED
     cleanup(DEFAULT_PARAMS)
     nock.cleanAll()
   })

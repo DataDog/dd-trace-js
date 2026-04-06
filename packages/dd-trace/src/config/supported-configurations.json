@@ -446,7 +446,7 @@
         ]
       }
     ],
-    "DD_CIVISIBILITY_KNOWN_TESTS_CACHE_DISABLED": [
+    "DD_EXPERIMENTAL_TEST_OPT_KNOWN_TESTS_CACHE_ENABLED": [
       {
         "implementation": "C",
         "type": "boolean",

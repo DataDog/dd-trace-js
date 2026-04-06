@@ -266,9 +266,9 @@ function getKnownTests ({
   runtimeVersion,
   custom,
 }, done) {
-  const isCacheDisabled = getValueFromEnvSources('DD_CIVISIBILITY_KNOWN_TESTS_CACHE_DISABLED')
+  const isCacheEnabled = getValueFromEnvSources('DD_EXPERIMENTAL_TEST_OPT_KNOWN_TESTS_CACHE_ENABLED')
 
-  if (isCacheDisabled) {
+  if (!isCacheEnabled) {
     return fetchFromApi({
       url,
       isEvpProxy,
