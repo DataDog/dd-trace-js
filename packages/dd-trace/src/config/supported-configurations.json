@@ -446,7 +446,7 @@
         ]
       }
     ],
-    "DD_EXPERIMENTAL_TEST_OPT_KNOWN_TESTS_CACHE_ENABLED": [
+    "DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE": [
       {
         "implementation": "C",
         "type": "boolean",

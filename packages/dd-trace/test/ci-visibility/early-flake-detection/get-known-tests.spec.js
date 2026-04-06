@@ -2,9 +2,6 @@
 
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
-const path = require('node:path')
-const { tmpdir } = require('node:os')
-const { createHash } = require('node:crypto')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
@@ -12,6 +9,11 @@ const nock = require('nock')
 require('../../setup/core')
 
 const { getKnownTests } = require('../../../src/ci-visibility/early-flake-detection/get-known-tests')
+const {
+  buildCacheKey,
+  getCachePath,
+  getLockPath,
+} = require('../../../src/ci-visibility/requests/fs-cache')
 
 const BASE_URL = 'http://localhost:8126'
 
@@ -45,25 +47,16 @@ const KNOWN_TESTS_RESPONSE = {
   },
 }
 
-function buildCacheKey (params) {
-  const parts = [
+function cacheKeyForParams (params) {
+  return buildCacheKey('known-tests', [
     params.sha, params.service, params.env, params.repositoryUrl,
     params.osPlatform, params.osVersion, params.osArchitecture,
     params.runtimeName, params.runtimeVersion, JSON.stringify(params.custom ?? {}),
-  ]
-  return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16)
-}
-
-function getCachePath (key) {
-  return path.join(tmpdir(), `dd-known-tests-${key}.json`)
-}
-
-function getLockPath (key) {
-  return path.join(tmpdir(), `dd-known-tests-${key}.lock`)
+  ])
 }
 
 function cleanup (params) {
-  const key = buildCacheKey(params)
+  const key = cacheKeyForParams(params)
   try { fs.unlinkSync(getCachePath(key)) } catch { /* ignore */ }
   try { fs.unlinkSync(getLockPath(key)) } catch { /* ignore */ }
 }
@@ -71,13 +64,13 @@ function cleanup (params) {
 describe('get-known-tests', () => {
   beforeEach(() => {
     process.env.DD_API_KEY = 'test-api-key'
-    process.env.DD_EXPERIMENTAL_TEST_OPT_KNOWN_TESTS_CACHE_ENABLED = 'true'
+    process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
     cleanup(DEFAULT_PARAMS)
   })
 
   afterEach(() => {
     delete process.env.DD_API_KEY
-    delete process.env.DD_EXPERIMENTAL_TEST_OPT_KNOWN_TESTS_CACHE_ENABLED
+    delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
     cleanup(DEFAULT_PARAMS)
     nock.cleanAll()
   })
@@ -102,12 +95,12 @@ describe('get-known-tests', () => {
     getKnownTests(DEFAULT_PARAMS, (err) => {
       assert.strictEqual(err, null)
 
-      const key = buildCacheKey(DEFAULT_PARAMS)
+      const key = cacheKeyForParams(DEFAULT_PARAMS)
       const cachePath = getCachePath(key)
       assert.ok(fs.existsSync(cachePath), 'cache file should exist')
 
       const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'))
-      assert.deepStrictEqual(cached.knownTests, KNOWN_TESTS_RESPONSE.data.attributes.tests)
+      assert.deepStrictEqual(cached.data, KNOWN_TESTS_RESPONSE.data.attributes.tests)
       assert.ok(typeof cached.timestamp === 'number')
       done()
     })
@@ -138,7 +131,7 @@ describe('get-known-tests', () => {
 
   it('should not use cache if TTL has expired', (done) => {
     // Write an expired cache entry
-    const key = buildCacheKey(DEFAULT_PARAMS)
+    const key = cacheKeyForParams(DEFAULT_PARAMS)
     const cachePath = getCachePath(key)
     const expiredData = {
       timestamp: Date.now() - (31 * 60 * 1000), // 31 minutes ago
@@ -194,7 +187,7 @@ describe('get-known-tests', () => {
     getKnownTests(DEFAULT_PARAMS, (err) => {
       assert.ok(err)
 
-      const key = buildCacheKey(DEFAULT_PARAMS)
+      const key = cacheKeyForParams(DEFAULT_PARAMS)
       assert.strictEqual(fs.existsSync(getCachePath(key)), false, 'cache should not be written on error')
       done()
     })
@@ -202,7 +195,7 @@ describe('get-known-tests', () => {
 
   describe('lock contention', () => {
     it('should wait for cache when lock is held and cache appears', (done) => {
-      const key = buildCacheKey(DEFAULT_PARAMS)
+      const key = cacheKeyForParams(DEFAULT_PARAMS)
       const lockPath = getLockPath(key)
 
       // Simulate another process holding the lock
@@ -220,7 +213,7 @@ describe('get-known-tests', () => {
         const cachePath = getCachePath(key)
         fs.writeFileSync(cachePath, JSON.stringify({
           timestamp: Date.now(),
-          knownTests: KNOWN_TESTS_RESPONSE.data.attributes.tests,
+          data: KNOWN_TESTS_RESPONSE.data.attributes.tests,
         }), 'utf8')
       }, 600)
     })
@@ -228,7 +221,7 @@ describe('get-known-tests', () => {
     it('should fall back to direct fetch when lock is stale', function (done) {
       this.timeout(10_000)
 
-      const key = buildCacheKey(DEFAULT_PARAMS)
+      const key = cacheKeyForParams(DEFAULT_PARAMS)
       const lockPath = getLockPath(key)
 
       // Simulate a stale lock (timestamp far in the past)
@@ -254,7 +247,7 @@ describe('get-known-tests', () => {
     getKnownTests(DEFAULT_PARAMS, (err) => {
       assert.strictEqual(err, null)
 
-      const key = buildCacheKey(DEFAULT_PARAMS)
+      const key = cacheKeyForParams(DEFAULT_PARAMS)
       assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'lock should be cleaned up')
       done()
     })
@@ -273,7 +266,7 @@ describe('get-known-tests', () => {
     getKnownTests(DEFAULT_PARAMS, (err) => {
       assert.ok(err)
 
-      const key = buildCacheKey(DEFAULT_PARAMS)
+      const key = cacheKeyForParams(DEFAULT_PARAMS)
       assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'lock should be cleaned up on error')
       done()
     })
