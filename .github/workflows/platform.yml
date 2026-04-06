@@ -43,7 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/node/active-lts
-      - run: FILENAME=$(npm pack --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
+      - uses: ./.github/actions/install
+      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
       - run: mkdir -p /tmp/app
       - run: npm i -g pnpm
         if: matrix.manager.name == 'pnpm'
@@ -58,7 +59,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: mkdir npm bun
-      - run: FILENAME=$(npm pack) && tar -zxf $FILENAME -C npm
+      - run: FILENAME=$(npm pack --silent) && tar -zxf $FILENAME -C npm
       - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
 
@@ -87,6 +88,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-core
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -114,6 +116,21 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
+          dd_api_key: ${{ secrets.DD_API_KEY }}
+
+  webpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:webpack:ci
+      - uses: ./.github/actions/node/latest
+      - run: yarn test:webpack:ci
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-webpack
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   instrumentation-bluebird:
     runs-on: ubuntu-latest
@@ -222,7 +239,7 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - name: Run instrumentation tests (oldest-maintenance, with retries)
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         with:
           max_attempts: 5
           timeout_minutes: 15
@@ -230,7 +247,7 @@ jobs:
           command: yarn test:instrumentations:ci
       - uses: ./.github/actions/node/latest
       - name: Run instrumentation tests (latest, with retries)
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # v3.0.2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         with:
           max_attempts: 5
           timeout_minutes: 15
@@ -239,6 +256,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-${{ github.job }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -419,6 +437,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-instrumentations-misc
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -449,6 +468,7 @@ jobs:
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
       - run: yarn test:integration
       - run: yarn test:integration:esbuild
+      - run: yarn test:integration:webpack
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -464,6 +484,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -478,12 +499,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node
-        with:
-          version: ${{ matrix.version }}
+      - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
       - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
@@ -521,6 +543,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

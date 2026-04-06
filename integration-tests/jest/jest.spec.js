@@ -29,6 +29,7 @@ const {
   TEST_ITR_FORCED_RUN,
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_IS_RETRY,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_NAME,
@@ -994,6 +995,93 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+  })
+
+  context('when jest is using worker threads', () => {
+    onlyLatestIt('ignores non-array worker-thread messages', (done) => {
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-plugin-tests/jest-worker-message',
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      Promise.all([
+        once(childProcess, 'message'),
+        receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000),
+      ]).then(([, eventsRequests]) => {
+        const tests = eventsRequests.map(({ payload }) => payload)
+          .flatMap(({ events }) => events)
+          .filter(event => event.type === 'test')
+          .map(event => event.content)
+
+        assert.strictEqual(tests.length, 1)
+        assert.strictEqual(
+          tests[0].meta[TEST_NAME],
+          'jest-worker-message passes after sending a non-array worker message'
+        )
+        assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        assert.doesNotMatch(testOutput, /TypeError/)
+        done()
+      }).catch(done)
+    })
+
+    onlyLatestIt('reports tests when using agentless', (done) => {
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+
+      receiver.gatherPayloads(({ url }) => url === '/api/v2/citestcycle', 5000).then(eventsRequests => {
+        const events = eventsRequests.map(({ payload }) => payload)
+          .flatMap(({ events }) => events)
+        const eventTypes = events.map(event => event.type)
+        assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        assert.ok(tests.length >= 2)
+        tests.forEach(testEvent => {
+          assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
+        })
+
+        done()
+      }).catch(done)
+    })
+
+    onlyLatestIt('reports tests when using evp proxy', (done) => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v2'] })
+      childProcess = fork(testFile, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          USE_WORKER_THREADS: 'true',
+        },
+        stdio: 'pipe',
+      })
+
+      receiver.gatherPayloads(({ url }) => url === '/evp_proxy/v2/api/v2/citestcycle', 5000)
+        .then(eventsRequests => {
+          const eventTypes = eventsRequests.map(({ payload }) => payload)
+            .flatMap(({ events }) => events)
+            .map(event => event.type)
+
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+          done()
+        }).catch(done)
     })
   })
 
@@ -2447,7 +2535,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(tests.length, 3)
 
             // Only the last execution (the one with status 'pass') should have TEST_FINAL_STATUS tag
-            tests.sort((a, b) => a.meta.start - b.meta.start).forEach((test, idx) => {
+            tests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, idx) => {
               if (idx < tests.length - 1) {
                 assert.ok(!(TEST_FINAL_STATUS in test.meta),
                   'TEST_FINAL_STATUS should not be set on previous runs'
@@ -2514,7 +2602,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const newTests = tests.filter(test =>
             test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
           )
-          newTests.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
+          newTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
             if (index < newTests.length - 1) {
               assert.ok(!(TEST_FINAL_STATUS in test.meta))
             } else {
@@ -2877,7 +2965,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
-    it('retries flaky tests', (done) => {
+    it('retries flaky tests', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // Tests from ci-visibility/test/occasionally-failing-test will be considered new
       receiver.setKnownTests({ jest: {} })
@@ -2929,12 +3017,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           },
         }
       )
-      childProcess.on('exit', () => {
-        // TODO: check exit code: if a new, retried test fails, the exit code should remain 0
-        eventsPromise.then(() => {
-          done()
-        }).catch(done)
-      })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     it('does not retry new tests that are skipped', (done) => {
@@ -4057,6 +4145,89 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
+
+    it('tags new tests with dynamic names and logs a warning', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // No known tests, so both will be considered new
+      receiver.setKnownTests({ jest: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 1 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Deduplicate by test name (EFD retries produce multiple spans per test)
+          const uniqueTests = new Map()
+          for (const test of tests) {
+            if (!uniqueTests.has(test.meta[TEST_NAME])) {
+              uniqueTests.set(test.meta[TEST_NAME], test)
+            }
+          }
+
+          const dynamicTests = [...uniqueTests.values()]
+            .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+          // 8 dynamic tests: timestamp, localhost port, uuid, iso datetime,
+          //   iso date-only, Math.random float, 127.0.0.1 port, 0.0.0.0 port
+          assert.strictEqual(dynamicTests.length, 8)
+
+          dynamicTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          })
+
+          // Verify each pattern type is detected
+          const dynamicNames = dynamicTests.map(test => test.meta[TEST_NAME])
+          assert.ok(dynamicNames.some(n => /can do stuff at \d+/.test(n)), 'timestamp test detected')
+          assert.ok(dynamicNames.some(n => /localhost:\d+/.test(n)), 'localhost port test detected')
+          assert.ok(dynamicNames.some(n => /user session [0-9a-f-]+/.test(n)), 'uuid test detected')
+          assert.ok(dynamicNames.some(n => /created at \d{4}-\d{2}-\d{2}T/.test(n)), 'iso datetime test detected')
+          assert.ok(dynamicNames.some(n => /event on \d{4}-\d{2}-\d{2}$/.test(n)), 'iso date-only test detected')
+          assert.ok(dynamicNames.some(n => /probability 0\.\d+/.test(n)), 'Math.random float test detected')
+          assert.ok(dynamicNames.some(n => /127\.0\.0\.1:\d+/.test(n)), '127.0.0.1 port test detected')
+          assert.ok(dynamicNames.some(n => /0\.0\.0\.0:\d+/.test(n)), '0.0.0.0 port test detected')
+
+          // The non-dynamic new tests should not have the tag
+          const nonDynamicNewTests = [...uniqueTests.values()].filter(
+            test => test.meta[TEST_IS_NEW] === 'true' && !test.meta[TEST_HAS_DYNAMIC_NAME]
+          )
+          nonDynamicNewTests.forEach(test => {
+            assert.ok(!(TEST_HAS_DYNAMIC_NAME in test.meta))
+          })
+        })
+
+      childProcess = fork(startupTestFile, {
+        cwd,
+        env: {
+          ...getCiVisEvpProxyConfig(receiver.port),
+          TESTS_TO_RUN: 'test/(dynamic-name-test|ci-visibility-test-2)',
+        },
+        stdio: 'pipe',
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+      assert.match(testOutput, /detected as new but their names contain dynamic data/)
+      assert.match(testOutput, /can do stuff at/)
+      assert.match(testOutput, /connects to localhost:/)
+      assert.match(testOutput, /user session/)
+      assert.match(testOutput, /created at/)
+      assert.match(testOutput, /event on/)
+      assert.match(testOutput, /probability 0\./)
+      assert.match(testOutput, /server at 127\.0\.0\.1:/)
+      assert.match(testOutput, /bound to 0\.0\.0\.0:/)
+    })
   })
 
   context('flaky test retries', () => {
@@ -4088,7 +4259,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test => test.resource ===
             'ci-visibility/jest-flaky/flaky-passes.js.test-flaky-test-retries can retry flaky tests'
           )
-          eventuallyPassingTest.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
+          eventuallyPassingTest.sort((a, b) =>
+            (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
             if (index < eventuallyPassingTest.length - 1) {
               assert.ok(!(TEST_FINAL_STATUS in test.meta))
             } else {
@@ -4101,7 +4273,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             test => test.resource ===
             'ci-visibility/jest-flaky/flaky-fails.js.test-flaky-test-retries can retry failed tests'
           )
-          neverPassingTest.sort((a, b) => a.meta.start - b.meta.start).forEach((test, index) => {
+          neverPassingTest.sort((a, b) =>
+            (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
             if (index < neverPassingTest.length - 1) {
               assert.ok(!(TEST_FINAL_STATUS in test.meta))
             } else {
@@ -4822,6 +4995,72 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    // Regression test: without the fix, _ddKnownTests is not injected after worker restart,
+    // so tests that should be detected as new are not marked as such.
+    it('detects new tests after worker restart', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: false,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const oldTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+          )
+          oldTests.forEach(test => {
+            assert.ok(!(TEST_IS_NEW in test.meta))
+          })
+          assert.strictEqual(oldTests.length, 1)
+
+          // Tests from ci-visibility-test-2.js must still be detected as new
+          // even when running on a restarted worker
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+          newTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          })
+          assert.strictEqual(newTests.length, 1)
+
+          const retriedTests = newTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, 0)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            // 4 suites: 2 spacers from test-management/ (sort first), then ci-visibility-test-2
+            // and ci-visibility-test. The new test (ci-visibility-test-2) is the 3rd suite,
+            // running on a child process that has been replaced twice by workerIdleMemoryLimit.
+            TESTS_TO_RUN: '(test/ci-visibility-test|test-management/test-worker-restart-(spacer|known-tests-spacer))',
+            RUN_IN_PARALLEL: 'true',
+            MAX_WORKERS: '1',
+            WORKER_IDLE_MEMORY_LIMIT: '0',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
     })
   })
 
@@ -5744,6 +5983,86 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         )
       })
 
+      // Regression test: with workerIdleMemoryLimit=0, jest restarts the worker after every suite.
+      // Before the fix, sendWrapper was only applied to the original child process. After restart,
+      // the new child process was not wrapped, so _ddTestManagementTests was never injected.
+      it('can disable in parallel mode after worker restart', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-disabled-1.js': {
+                tests: {
+                  'disable tests can disable a test': {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+              'ci-visibility/test-management/test-worker-restart-disabled.js': {
+                tests: {
+                  'worker restart disabled tests can disable a test': {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            const disabledTest1 = tests.find(
+              test => test.meta[TEST_NAME] === 'disable tests can disable a test'
+            )
+            const disabledTestRestart = tests.find(
+              test => test.meta[TEST_NAME] === 'worker restart disabled tests can disable a test'
+            )
+
+            // Both tests must be skipped, including the one that runs on a restarted worker
+            assert.strictEqual(disabledTest1.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTest1.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledTest1.meta[TEST_FINAL_STATUS], 'skip')
+            assert.strictEqual(disabledTestRestart.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTestRestart.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledTestRestart.meta[TEST_FINAL_STATUS], 'skip')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              // Runs 3 suites with maxWorkers=1 and workerIdleMemoryLimit=0: spacer,
+              // test-disabled-1, and test-worker-restart-disabled. The memory limit forces
+              // the single worker to restart after each suite. By the 3rd suite the child
+              // process has been replaced and its send is no longer wrapped by sendWrapper.
+              TESTS_TO_RUN: 'test-management/test-(disabled-1|worker-restart)',
+              RUN_IN_PARALLEL: 'true',
+              MAX_WORKERS: '1',
+              SHOULD_CHECK_RESULTS: '1',
+              WORKER_IDLE_MEMORY_LIMIT: '0',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
+
       it('sets final_status tag to skip for disabled tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
 
@@ -6386,6 +6705,54 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }).catch(done)
       })
     })
+
+    it('does detect custom tags on test suites from beforeAll and afterAll hooks', (done) => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuite = events.find(event => event.type === 'test_suite_end').content
+
+          assertObjectContains(testSuite, {
+            meta: {
+              'suite.beforeAll': 'true',
+              'suite.afterAll': 'true',
+            },
+          })
+
+          const suiteSpanId = testSuite.test_suite_id.toString()
+          const sessionTraceId = testSuite.test_session_id.toString()
+
+          // Spans created in beforeAll/afterAll appear as 'span' events and are children of the test suite span
+          const spans = events.filter(event => event.type === 'span').map(event => event.content)
+          const beforeAllSpan = spans.find(span => span.resource === 'beforeAll.setup')
+          const afterAllSpan = spans.find(span => span.resource === 'afterAll.teardown')
+
+          assert.ok(beforeAllSpan)
+          assert.strictEqual(beforeAllSpan.parent_id.toString(), suiteSpanId)
+          assert.strictEqual(beforeAllSpan.trace_id.toString(), sessionTraceId)
+
+          assert.ok(afterAllSpan)
+          assert.strictEqual(afterAllSpan.parent_id.toString(), suiteSpanId)
+          assert.strictEqual(afterAllSpan.trace_id.toString(), sessionTraceId)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'ci-visibility/test-suite-custom-tags',
+          },
+        }
+      )
+
+      childProcess.on('exit', () => {
+        eventsPromise.then(() => {
+          done()
+        }).catch(done)
+      })
+    })
   })
 
   context('impacted tests', () => {
@@ -6647,6 +7014,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'test-impacted-test/test-impacted',
           RUN_IN_PARALLEL: 'true',
         })
+      })
+
+      // Regression test: without the fix, _ddModifiedFiles is not injected after worker restart,
+      // so tests that should be detected as impacted are not marked as such.
+      it('should be detected as impacted after worker restart', async () => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+
+        // Modify the impacted file in test-management/ and commit so git diff picks it up
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/test-management/test-worker-restart-z-impacted.js'),
+          `const assert = require('assert')
+           describe('worker restart impacted tests', () => {
+             it('can pass normally', () => {
+               assert.strictEqual(1 + 2, 3)
+             })
+           })`
+        )
+        execSync('git add ci-visibility/test-management/test-worker-restart-z-impacted.js', { cwd, stdio: 'ignore' })
+        execSync('git commit --amend --no-edit', { cwd, stdio: 'ignore' })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const impactedTest = tests.find(test =>
+              test.meta[TEST_NAME] === 'worker restart impacted tests can pass normally'
+            )
+
+            assert.ok(impactedTest, 'impacted test not found in payloads')
+            assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              // 3 suites in test-management/ with workerIdleMemoryLimit=0:
+              // test-worker-restart-known-tests-spacer, test-worker-restart-spacer,
+              // then test-worker-restart-z-impacted (sorts last). The worker restarts
+              // after each suite, and the impacted test runs on a replaced child process.
+              TESTS_TO_RUN: 'test-management/test-worker-restart-(spacer|known-tests-spacer|z-impacted)',
+              RUN_IN_PARALLEL: 'true',
+              MAX_WORKERS: '1',
+              WORKER_IDLE_MEMORY_LIMIT: '0',
+              GITHUB_BASE_REF: '',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
     })
 

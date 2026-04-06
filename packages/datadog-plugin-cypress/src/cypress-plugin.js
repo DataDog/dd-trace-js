@@ -49,6 +49,9 @@ const {
   getSessionRequestErrorTags,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_IS_MODIFIED,
+  TEST_HAS_DYNAMIC_NAME,
+  DYNAMIC_NAME_RE,
+  logDynamicNamesWarning,
   getPullRequestBaseBranch,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
@@ -261,6 +264,7 @@ class CypressPlugin {
   testManagementAttemptToFixRetries = 0
   isImpactedTestsEnabled = false
   modifiedFiles = []
+  newTestsWithDynamicNames = new Set()
 
   constructor () {
     const {
@@ -607,7 +611,7 @@ class CypressPlugin {
           [TEST_SESSION_NAME]: testSessionName,
         }
       }
-      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, false, this.frameworkVersion)
+      const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, this.frameworkVersion)
       metadataTags.test = {
         ...metadataTags.test,
         ...libraryCapabilitiesTags,
@@ -674,6 +678,8 @@ class CypressPlugin {
       if (this.isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
+
+      logDynamicNamesWarning(this.newTestsWithDynamicNames)
 
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -989,6 +995,12 @@ class CypressPlugin {
           if (isEfdRetry) {
             this.activeTestSpan.setTag(TEST_IS_RETRY, 'true')
             this.activeTestSpan.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
+          }
+          if (DYNAMIC_NAME_RE.test(testName)) {
+            this.activeTestSpan.setTag(TEST_HAS_DYNAMIC_NAME, 'true')
+            if (testStatuses.length === 1) {
+              this.newTestsWithDynamicNames.add(`${testSuite} › ${testName}`)
+            }
           }
         }
         if (isModified) {

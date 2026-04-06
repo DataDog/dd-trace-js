@@ -28,6 +28,8 @@ describe('span-stats-encode', () => {
   let stat
 
   beforeEach(() => {
+    processTags.initialize()
+
     logger = {
       debug: sinon.stub(),
     }

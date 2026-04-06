@@ -23,6 +23,7 @@ module.exports = {
 
   MODEL_NAME: '_ml_obs.meta.model_name',
   MODEL_PROVIDER: '_ml_obs.meta.model_provider',
+  UNKNOWN_MODEL_PROVIDER: 'unknown',
 
   INPUT_DOCUMENTS: '_ml_obs.meta.input.documents',
   INPUT_MESSAGES: '_ml_obs.meta.input.messages',
@@ -38,6 +39,8 @@ module.exports = {
   TOTAL_TOKENS_METRIC_KEY: 'total_tokens',
   CACHE_READ_INPUT_TOKENS_METRIC_KEY: 'cache_read_input_tokens',
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY: 'cache_write_input_tokens',
+  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY: 'ephemeral_5m_input_tokens',
+  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY: 'ephemeral_1h_input_tokens',
   REASONING_OUTPUT_TOKENS_METRIC_KEY: 'reasoning_output_tokens',
 
   DROPPED_IO_COLLECTION_ERROR: 'dropped_io',

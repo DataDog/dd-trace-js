@@ -7,17 +7,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Adds
-      shell: bash
-      run: |
-        which xsltproc || sudo apt-get install -y xsltproc
-        find . -name '*.xml' | while read -r xml_file; do
-            echo "Fixing $xml_file"
-            tmp_file="$(mktemp)"
-            xsltproc --output "$tmp_file" ".github/actions/push_to_test_optimization/add_final_status.xsl" "$xml_file"
-            mv "$tmp_file" "$xml_file"
-        done
-
     - if: github.actor != 'dependabot[bot]'
       # see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull-request-events-for-forked-repositories
       #

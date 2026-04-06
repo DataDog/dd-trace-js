@@ -317,6 +317,27 @@ versions.forEach((version) => {
           'playwright-tests-ts/one-test.js.playwright should work with passing tests',
           'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
         ])
+        assert.deepStrictEqual(
+          testEvents
+            .map(test => ({
+              resource: test.content.resource,
+              sourceFile: test.content.meta[TEST_SOURCE_FILE],
+              sourceStart: test.content.metrics[TEST_SOURCE_START],
+            }))
+            .sort((left, right) => left.resource.localeCompare(right.resource)),
+          [
+            {
+              resource: 'playwright-tests-ts/one-test.js.playwright should work with passing tests',
+              sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
+              sourceStart: 9,
+            },
+            {
+              resource: 'playwright-tests-ts/one-test.js.playwright should work with skipped tests',
+              sourceFile: 'ci-visibility/playwright-tests-ts/one-test.ts',
+              sourceStart: 14,
+            },
+          ]
+        )
         assert.match(testOutput, /1 passed/)
         assert.match(testOutput, /1 skipped/)
         assert.doesNotMatch(testOutput, /TypeError/)
@@ -664,7 +685,7 @@ versions.forEach((version) => {
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
             assert.strictEqual(retriedTests.length, 0)
-          }, 120000)
+          }, 60000)
 
         childProcess = exec(
           './node_modules/.bin/playwright test -c playwright.config.js',
@@ -1225,6 +1246,39 @@ versions.forEach((version) => {
         )
 
         await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      })
+
+      contextNewVersions('dynamic name detection', () => {
+        it('tags new tests with dynamic names and logs a warning', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 1 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({ playwright: {} })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-tests-dynamic',
+              },
+            }
+          )
+
+          let testOutput = ''
+          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          await once(childProcess, 'exit')
+
+          assert.match(testOutput, /detected as new but their names contain dynamic data/)
+        })
       })
     })
 

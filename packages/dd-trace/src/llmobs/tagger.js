@@ -22,6 +22,8 @@ const {
   ROOT_PARENT_ID,
   CACHE_READ_INPUT_TOKENS_METRIC_KEY,
   CACHE_WRITE_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY,
+  CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY,
   INPUT_TOKENS_METRIC_KEY,
   OUTPUT_TOKENS_METRIC_KEY,
   TOTAL_TOKENS_METRIC_KEY,
@@ -184,6 +186,12 @@ class LLMObsTagger {
           break
         case 'cacheWriteTokens':
           processedKey = CACHE_WRITE_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'cacheWrite5mTokens':
+          processedKey = CACHE_WRITE_5M_INPUT_TOKENS_METRIC_KEY
+          break
+        case 'cacheWrite1hTokens':
+          processedKey = CACHE_WRITE_1H_INPUT_TOKENS_METRIC_KEY
           break
         case 'reasoningOutputTokens':
           processedKey = REASONING_OUTPUT_TOKENS_METRIC_KEY

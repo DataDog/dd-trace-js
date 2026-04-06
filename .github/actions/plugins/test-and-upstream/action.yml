@@ -22,6 +22,7 @@ runs:
     - uses: ./.github/actions/coverage
       with:
         flags: plugins-test-and-upstream-${{ github.job }}
+        dd_api_key: ${{ inputs.dd_api_key }}
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:

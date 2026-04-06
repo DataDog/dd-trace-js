@@ -3,6 +3,8 @@ name: Update 3rd-party licenses
 on:
   pull_request:
     paths:
+      - ".github/vendored-dependencies.csv"
+      - "vendor/package-lock.json"
       - "yarn.lock"
 
 jobs:
@@ -28,8 +30,8 @@ jobs:
       - name: Check out dd-license-attribution
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: DataDog/dd-license-attribution
-          ref: 224a89cb69d3143e8aa4640405037cf9c233ddf5
+          repository: watson/dd-license-attribution
+          ref: 8ea483b9f735bf8da632c89796789cc2a050a9a6
           path: dd-license-attribution
 
       - name: Install dd-license-attribution
@@ -62,7 +64,7 @@ jobs:
             --use-mirrors=mirrors.json \
             --no-scancode-strategy \
             --no-github-sbom-strategy \
-            --yarn-subdir vendor \
+            --lockfile-subdir vendor \
             "${REPOSITORY_URL}" > LICENSE-3rdparty.csv
 
       - name: Append vendored dependencies from PR
@@ -134,14 +136,14 @@ jobs:
       id-token: write
     steps:
       - name: Mint GitHub App token (octo-sts)
-        uses: DataDog/dd-octo-sts-action@acaa02eee7e3bb0839e4272dacb37b8f3b58ba80 # v1.0.3
+        uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
         with:
           scope: DataDog/dd-trace-js
           policy: update-3rdparty-licenses
 
       - name: Download updated LICENSE-3rdparty.csv
-        uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8.0.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: license-csv
 
