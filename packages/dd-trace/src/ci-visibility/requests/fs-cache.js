@@ -172,14 +172,13 @@ function isLockStale (cacheKey) {
  * @param {Function} done - callback(err, data)
  */
 function waitForCache (cacheKey, fetchFn, done) {
-  const deadline = Date.now() + CACHE_LOCK_TIMEOUT_MS
   const poll = () => {
     const cached = readFromCache(cacheKey)
     if (cached) {
       return done(null, cached.data)
     }
-    if (Date.now() > deadline || isLockStale(cacheKey)) {
-      log.debug('%s cache wait timed out, fetching directly', cacheKey)
+    if (isLockStale(cacheKey)) {
+      log.debug('%s lock is stale, fetching directly', cacheKey)
       releaseLock(cacheKey)
       return fetchFn(done)
     }
