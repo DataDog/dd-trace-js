@@ -34,7 +34,7 @@ function getSkippableSuites ({
 }, done) {
   const cacheKey = buildCacheKey('skippable', [
     sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
-    runtimeName, runtimeVersion, testLevel, JSON.stringify(custom ?? {}),
+    runtimeName, runtimeVersion, testLevel, custom,
   ])
 
   withCache(cacheKey, (activeCacheKey, cb) => {

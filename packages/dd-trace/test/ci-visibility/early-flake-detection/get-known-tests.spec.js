@@ -51,7 +51,7 @@ function cacheKeyForParams (params) {
   return buildCacheKey('known-tests', [
     params.sha, params.service, params.env, params.repositoryUrl,
     params.osPlatform, params.osVersion, params.osArchitecture,
-    params.runtimeName, params.runtimeVersion, JSON.stringify(params.custom ?? {}),
+    params.runtimeName, params.runtimeVersion, params.custom,
   ])
 }
 

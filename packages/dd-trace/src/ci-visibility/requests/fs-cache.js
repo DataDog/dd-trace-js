@@ -31,7 +31,7 @@ function isCacheEnabled () {
  * @returns {string}
  */
 function buildCacheKey (prefix, parts) {
-  const hash = createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 16)
+  const hash = createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 16)
   return `${prefix}-${hash}`
 }
 

@@ -70,7 +70,7 @@ function getKnownTests ({
 }, done) {
   const cacheKey = buildCacheKey('known-tests', [
     sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
-    runtimeName, runtimeVersion, JSON.stringify(custom ?? {}),
+    runtimeName, runtimeVersion, custom,
   ])
 
   withCache(cacheKey, (activeCacheKey, cb) => {
