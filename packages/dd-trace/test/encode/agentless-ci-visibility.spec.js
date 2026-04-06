@@ -320,34 +320,6 @@ describe('agentless-ci-visibility-encode', () => {
       })
     })
 
-    it('should support payload-wide metadata tags', () => {
-      encoder.metadataTags = {
-        '*': { existing: 'value1' },
-      }
-
-      encoder.addMetadataTags({
-        '*': { other: 'value2' },
-        test: { tag: 'value3' },
-      })
-
-      assert.deepStrictEqual(encoder.metadataTags, {
-        '*': { existing: 'value1', other: 'value2' },
-        test: { tag: 'value3' },
-      })
-
-      encoder.encode(trace)
-
-      const buffer = encoder.makePayload()
-      const decodedTrace = msgpack.decode(buffer, { useBigInt64: true })
-
-      assertObjectContains(decodedTrace.metadata['*'], {
-        language: 'javascript',
-        library_version: ddTraceVersion,
-        existing: 'value1',
-        other: 'value2',
-      })
-    })
-
     it('should handle empty tags', () => {
       encoder.metadataTags = { test: { tag: 'value1' } }
       encoder.addMetadataTags({})

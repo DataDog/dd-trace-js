@@ -722,50 +722,6 @@ describe('CI Visibility Exporter', () => {
     })
 
     context('if known tests is enabled and can use CI Vis Protocol', () => {
-      it('should resolve Lage package configuration at request time', (done) => {
-        const customConfigs = []
-        const scope = nock(url)
-          .post('/api/v2/ci/libraries/tests', function (body) {
-            customConfigs.push(body.data.attributes.configurations.custom)
-            return true
-          })
-          .times(2)
-          .reply(200, JSON.stringify({
-            data: {
-              attributes: {
-                tests: {},
-              },
-            },
-          }))
-
-        const ciVisibilityExporter = new CiVisibilityExporter({
-          port,
-          isIntelligentTestRunnerEnabled: true,
-        })
-
-        ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
-        ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-
-        process.env.DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME = 'true'
-        process.env.LAGE_PACKAGE_NAME = 'lage-package-a'
-
-        ciVisibilityExporter.getKnownTests({}, (err) => {
-          assert.strictEqual(err, null)
-
-          process.env.LAGE_PACKAGE_NAME = 'lage-package-b'
-
-          ciVisibilityExporter.getKnownTests({}, (secondErr) => {
-            assert.strictEqual(secondErr, null)
-            assert.strictEqual(scope.isDone(), true)
-            assert.deepStrictEqual(customConfigs, [
-              { lage_package_name: 'lage-package-a' },
-              { lage_package_name: 'lage-package-b' },
-            ])
-            done()
-          })
-        })
-      })
-
       it('should request known tests', (done) => {
         const scope = nock(url)
           .post('/api/v2/ci/libraries/tests')

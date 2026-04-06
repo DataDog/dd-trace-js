@@ -2,7 +2,6 @@
 
 const URL = require('url').URL
 
-const { getLagePackageConfigurationTags } = require('../lage')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -114,11 +113,6 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   getRequestConfiguration (testConfiguration) {
-    const custom = {
-      ...getTestConfigurationTags(this._config.tags),
-      ...getLagePackageConfigurationTags(),
-    }
-
     return {
       url: this._getApiUrl(),
       env: this._config.env,
@@ -126,7 +120,7 @@ class CiVisibilityExporter extends BufferingExporter {
       isEvpProxy: !!this._isUsingEvpProxy,
       isGzipCompatible: this._isGzipCompatible,
       evpProxyPrefix: this.evpProxyPrefix,
-      custom,
+      custom: getTestConfigurationTags(this._config.tags),
       ...testConfiguration,
     }
   }

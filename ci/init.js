@@ -2,6 +2,7 @@
 
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
+const { getLageTestSessionName } = require('../packages/dd-trace/src/ci-visibility/lage')
 const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
@@ -41,6 +42,10 @@ const baseOptions = {
   startupLogs: false,
   isCiVisibility: true,
   flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL,
+}
+const lageTestSessionName = getLageTestSessionName()
+if (lageTestSessionName) {
+  baseOptions.ciVisibilityTestSessionName = lageTestSessionName
 }
 
 let shouldInit = !isFalse(getValueFromEnvSources('DD_CIVISIBILITY_ENABLED'))

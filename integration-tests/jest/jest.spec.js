@@ -5065,7 +5065,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   })
 
   context('lage', () => {
-    it('sends Lage package configuration with known tests requests and uses it as the test session name', async () => {
+    it('uses the Lage package name as the test session name', async () => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       receiver.setKnownTests({
         jest: {
@@ -5079,16 +5079,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         known_tests_enabled: true,
       })
 
-      const allRequests = []
-      const onMessage = (message) => {
-        allRequests.push(message)
-      }
-      receiver.on('message', onMessage)
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
           metadataDicts.forEach(metadata => {
-            assert.strictEqual(metadata['*']['test.configuration.lage_package_name'], 'my-lage-package')
             for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
               assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-lage-package')
             }
@@ -5108,23 +5102,54 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }
       )
 
-      try {
-        const [[exitCode]] = await Promise.all([
-          once(childProcess, 'exit'),
-          eventsPromise,
-        ])
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
 
-        const knownTestsRequest = allRequests.find(({ url }) => url.endsWith('/api/v2/ci/libraries/tests'))
+      assert.strictEqual(exitCode, 0)
+    })
 
-        assert.strictEqual(exitCode, 0)
-        assert.ok(knownTestsRequest, 'expected a known tests request')
-        assert.deepStrictEqual(
-          knownTestsRequest.payload.data.attributes.configurations.custom,
-          { lage_package_name: 'my-lage-package' }
-        )
-      } finally {
-        receiver.off('message', onMessage)
-      }
+    it('updates the test session name across repeated jest.runCLI calls in the same process', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+          'ci-visibility/test/ci-visibility-test-2.js': ['ci visibility 2 can report tests 2'],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: false,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          assert.ok(metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-a'))
+          assert.ok(metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-b'))
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-jest-lage-multi.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_CIVISIBILITY_USE_LAGE_PACKAGE_NAME: 'true',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
     })
   })
 

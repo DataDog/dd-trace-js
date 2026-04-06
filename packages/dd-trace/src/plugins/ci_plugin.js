@@ -4,7 +4,6 @@ const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
 const { discoverCoverageReports } = require('../ci-visibility/coverage-report-discovery')
-const { getLagePackageConfigurationEventTags } = require('../ci-visibility/lage')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -194,10 +193,6 @@ module.exports = class CiPlugin extends Plugin {
         metadataTags[testLevel] = {
           [TEST_SESSION_NAME]: testSessionName,
         }
-      }
-      const lageConfigurationEventTags = getLagePackageConfigurationEventTags()
-      if (Object.keys(lageConfigurationEventTags).length > 0) {
-        metadataTags['*'] = lageConfigurationEventTags
       }
       // tracer might not be initialized correctly
       if (this.tracer._exporter.addMetadataTags) {

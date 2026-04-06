@@ -12,7 +12,6 @@ const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
 const ENCODING_VERSION = 1
 const ALLOWED_CONTENT_TYPES = new Set(['test_session_end', 'test_module_end', 'test_suite_end', 'test'])
-const ALLOWED_METADATA_TAG_TYPES = ['*', ...ALLOWED_CONTENT_TYPES]
 
 const TEST_SUITE_KEYS_LENGTH = 12
 const TEST_MODULE_KEYS_LENGTH = 11
@@ -50,7 +49,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   }
 
   addMetadataTags (tags) {
-    for (const type of ALLOWED_METADATA_TAG_TYPES) {
+    for (const type of ALLOWED_CONTENT_TYPES) {
       if (!tags[type]) {
         continue
       }
@@ -307,12 +306,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
   _encodePayloadStart (bytes) {
     // encodes the payload up to `events`. `events` will be encoded via _encode
     const metadata = {
-      ...this.metadataTags,
       '*': {
         language: 'javascript',
         library_version: ddTraceVersion,
-        ...this.metadataTags['*'],
       },
+      ...this.metadataTags,
     }
 
     const payload = {
