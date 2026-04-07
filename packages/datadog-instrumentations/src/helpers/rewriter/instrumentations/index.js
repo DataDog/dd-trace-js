@@ -5,5 +5,6 @@ module.exports = [
   ...require('./bullmq'),
   ...require('./langchain'),
   ...require('./langgraph'),
+  ...require('./mariadb'),
   ...require('./modelcontextprotocol-sdk'),
 ]
