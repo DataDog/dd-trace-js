@@ -706,7 +706,7 @@ function warnWrongOtelSettings () {
   // TODO: Adjust this to work across all sources.
   for (const [otelEnvVar, ddEnvVar, key] of [
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL'],
+    ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases

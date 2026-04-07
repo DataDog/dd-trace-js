@@ -682,8 +682,10 @@ describe('OpenTelemetry Meter Provider', () => {
 
       assert.strictEqual(warnSpy.callCount, 2)
 
-      warnSpy.getCalls().some(call => format(...call.args) === 'addBatchObservableCallback is not implemented')
-      warnSpy.getCalls().some(call => format(...call.args) === 'removeBatchObservableCallback is not implemented')
+      assert.deepStrictEqual(
+        warnSpy.getCalls().map(call => format(...call.args)),
+        ['addBatchObservableCallback is not implemented', 'removeBatchObservableCallback is not implemented']
+      )
       warnSpy.restore()
     })
   })

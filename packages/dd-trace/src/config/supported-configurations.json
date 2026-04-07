@@ -925,7 +925,7 @@
         "type": "string",
         "default": "1-16",
         "internalPropertyName": "grpc.client.error.statuses",
-        "transform": "setIntegerRangeSet"
+        "transform": "setGRPCRange"
       }
     ],
     "DD_GRPC_SERVER_ERROR_STATUSES": [
@@ -934,7 +934,7 @@
         "type": "string",
         "default": "2-16",
         "internalPropertyName": "grpc.server.error.statuses",
-        "transform": "setIntegerRangeSet"
+        "transform": "setGRPCRange"
       }
     ],
     "DD_HEAP_SNAPSHOT_COUNT": [
@@ -4002,14 +4002,6 @@
         "default": null,
         "allowed": "none|otlp",
         "transform": "toLowerCase"
-      }
-    ],
-    "OTEL_LOG_LEVEL": [
-      {
-        "implementation": "C",
-        "type": "string",
-        "default": null,
-        "allowed": "debug|info|warn|error"
       }
     ],
     "OTEL_METRICS_EXPORTER": [

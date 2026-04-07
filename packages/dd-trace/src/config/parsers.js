@@ -23,7 +23,7 @@ function toCase (value, methodName) {
 }
 
 const transformers = {
-  setIntegerRangeSet (value) {
+  setGRPCRange (value) {
     if (value == null) {
       return
     }
@@ -31,13 +31,15 @@ const transformers = {
     const result = []
 
     for (const val of value) {
-      if (val.includes('-')) {
-        const [start, end] = val.split('-').map(Number)
+      const dashIndex = val.indexOf('-')
+      if (dashIndex === -1) {
+        result.push(Number(val))
+      } else {
+        const start = Number(val.slice(0, dashIndex))
+        const end = Number(val.slice(dashIndex + 1))
         for (let i = start; i <= end; i++) {
           result.push(i)
         }
-      } else {
-        result.push(Number(val))
       }
     }
     return result

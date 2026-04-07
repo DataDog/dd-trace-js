@@ -152,9 +152,23 @@ const optionsTable = {
   },
   logger: {
     transformer (object) {
-      if (typeof object === 'object' &&
-          object !== null &&
-          Object.values(object).some(value => typeof value === 'function')) {
+      // Create lazily to avoid the overhead when not used.
+      // Match at least one log level.
+      const knownLogLevels = new Set(supportedConfigurations.DD_TRACE_LOG_LEVEL[0].allowed?.split('|'))
+      if (typeof object !== 'object' || object === null) {
+        return object
+      }
+      let matched = false
+      for (const logLevel of knownLogLevels) {
+        if (object[logLevel] !== undefined) {
+          if (typeof object[logLevel] !== 'function') {
+            warnInvalidValue(object[logLevel], 'logger', 'default', `Invalid log level ${logLevel}`)
+            return
+          }
+          matched = true
+        }
+      }
+      if (matched) {
         return object
       }
     },
