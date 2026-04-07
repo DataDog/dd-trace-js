@@ -16,6 +16,7 @@ class HttpPlugin extends CompositePlugin {
   static id = 'http'
   static get plugins() {
     const plugins = {}
+
     // Load push subscription plugin first (if enabled) for GCP Cloud Run
     if (enableGCPPubSubPushSubscription()) {
       try {

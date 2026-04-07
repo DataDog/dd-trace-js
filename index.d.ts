@@ -2319,7 +2319,7 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * durable-functions module
      */
-      interface azure_durable_functions extends Integration {}
+    interface azure_durable_functions extends Integration { }
 
     /**
      * This plugin patches the [bunyan](https://github.com/trentm/node-bunyan)
@@ -2774,12 +2774,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [langgraph](https://github.com/npmjs/package/langgraph) library.
      */
-    interface langgraph extends Instrumentation {}
+    interface langgraph extends Instrumentation { }
 
-      /**
-     * This plugin automatically instruments the
-     * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
-     */
+    /**
+   * This plugin automatically instruments the
+   * [ldapjs](https://github.com/ldapjs/node-ldapjs/) module.
+   */
     interface ldapjs extends Instrumentation { }
 
     /**

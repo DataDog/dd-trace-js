@@ -62,17 +62,10 @@ class AzureCosmosPlugin extends DatabasePlugin {
     const { dbName, containerName } = this.getDbInfo(requestContext);
     const connectionMode = this.getConnectionMode(requestContext);
     const { outHost, userAgent } = this.getHttpInfo(requestContext);
-    console.log("resource", resource);
-    console.log(requestContext.resourceType);
-    console.log("pluginOn", pluginOn);
     // getting really specific here but otherwise we get doubled up read spans
     if (pluginOn === "request" && ((!resource.includes("read") && !resource.includes("query")) || (resource.includes("read") && requestContext.resourceType != "docs"))) {
       ctx.currentStore = { ...(storage('legacy').getStore() || {}) };
       return ctx.currentStore;
-    }
-
-    if (resource === "create /dbs") {
-      console.log("create dbs", requestContext);
     }
 
     this.startSpan(this.operationName(), {
