@@ -372,6 +372,7 @@ describe('Config', () => {
       env: undefined,
       experimental: {
         aiguard: {
+          block: false,
           enabled: false,
           endpoint: undefined,
           maxMessagesLength: 16,
@@ -507,6 +508,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 1, origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
+      { name: 'experimental.aiguard.block', value: false, origin: 'default' },
       { name: 'experimental.aiguard.enabled', value: false, origin: 'default' },
       { name: 'experimental.aiguard.endpoint', value: undefined, origin: 'default' },
       { name: 'experimental.aiguard.maxContentSize', value: 512 * 1024, origin: 'default' },
@@ -578,7 +580,7 @@ describe('Config', () => {
       { name: 'spanAttributeSchema', value: 'v0', origin: 'default' },
       { name: 'spanComputePeerService', value: false, origin: 'calculated' },
       { name: 'spanRemoveIntegrationFromService', value: false, origin: 'default' },
-      { name: 'startupLogs', value: false, origin: 'default' },
+      { name: 'startupLogs', value: DD_MAJOR >= 6, origin: 'default' },
       { name: 'stats.enabled', value: false, origin: 'calculated' },
       { name: 'tagsHeaderMaxLength', value: 512, origin: 'default' },
       { name: 'telemetry.debug', value: false, origin: 'default' },
@@ -638,6 +640,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
+    process.env.DD_AI_GUARD_BLOCK = 'true'
     process.env.DD_AI_GUARD_ENABLED = 'true'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(1024 * 1024)
@@ -834,6 +837,7 @@ describe('Config', () => {
       env: 'test',
       experimental: {
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
@@ -971,11 +975,12 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
-      { name: 'experimental.aiguard.enabled', value: false, origin: 'default' },
-      { name: 'experimental.aiguard.endpoint', value: undefined, origin: 'default' },
-      { name: 'experimental.aiguard.maxContentSize', value: 512 * 1024, origin: 'default' },
-      { name: 'experimental.aiguard.maxMessagesLength', value: 16, origin: 'default' },
-      { name: 'experimental.aiguard.timeout', value: 10_000, origin: 'default' },
+      { name: 'experimental.aiguard.block', value: true, origin: 'env_var' },
+      { name: 'experimental.aiguard.enabled', value: true, origin: 'env_var' },
+      { name: 'experimental.aiguard.endpoint', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'env_var' },
+      { name: 'experimental.aiguard.maxContentSize', value: String(1024 * 1024), origin: 'env_var' },
+      { name: 'experimental.aiguard.maxMessagesLength', value: '32', origin: 'env_var' },
+      { name: 'experimental.aiguard.timeout', value: '2000', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
@@ -1213,6 +1218,7 @@ describe('Config', () => {
       experimental: {
         b3: true,
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
@@ -1326,6 +1332,7 @@ describe('Config', () => {
       env: 'test',
       experimental: {
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
         },
@@ -1451,6 +1458,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
+      { name: 'experimental.aiguard.block', value: true, origin: 'code' },
       { name: 'experimental.aiguard.enabled', value: true, origin: 'code' },
       { name: 'experimental.aiguard.endpoint', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'code' },
       { name: 'experimental.aiguard.maxContentSize', value: 1024 * 1024, origin: 'code' },
@@ -1648,6 +1656,7 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
+    process.env.DD_AI_GUARD_BLOCK = 'false'
     process.env.DD_AI_GUARD_ENABLED = 'false'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(512 * 1024)
@@ -1783,6 +1792,7 @@ describe('Config', () => {
       env: 'development',
       experimental: {
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
@@ -1903,6 +1913,7 @@ describe('Config', () => {
       env: 'development',
       experimental: {
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
@@ -2580,6 +2591,14 @@ describe('Config', () => {
 
         assert.strictEqual(config.url, '')
       })
+
+      it('should not be used when DD_CIVISIBILITY_AGENTLESS_ENABLED provided', () => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.url, '')
+      })
     })
   })
 
@@ -2985,7 +3004,7 @@ describe('Config', () => {
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
 
-      ;({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: 7 } }))
+      ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: 7 } }))
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 7,
         requestsEnabled: true,
@@ -3003,7 +3022,7 @@ describe('Config', () => {
 
       delete process.env.DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH
 
-      ;({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: NaN } }))
+      ; ({ cloudPayloadTagging } = getConfig({ cloudPayloadTagging: { maxDepth: NaN } }))
       assertObjectContains(cloudPayloadTagging, {
         maxDepth: 10,
       })
@@ -3861,11 +3880,59 @@ rules:
       assert.deepStrictEqual(config.sampler.rules, [])
     })
 
+    it('should disable 128-bit trace ID generation when agentless is enabled', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+      assert.strictEqual(config.traceId128BitGenerationEnabled, false)
+    })
+
+    it('should allow env var to override agentless 128-bit disable', () => {
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      process.env.DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED = 'true'
+      const config = getConfig()
+      // Env var has higher priority than calculated; encoder truncation is the safety net
+      assert.strictEqual(config.traceId128BitGenerationEnabled, true)
+    })
+
     it('should not affect other config when agentless is disabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'false'
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+  })
+
+  describe('should detect when service name is inferred', () => {
+    it('should set isServiceNameInferred to false when DD_SERVICE is defined ', () => {
+      process.env.DD_SERVICE = 'test-service'
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service')
+    })
+
+    it('should set isServiceNameInferred to false when options.service is defined', () => {
+      const config = getConfig({ service: 'test-service-option' })
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-option')
+    })
+
+    it('should set isServiceNameInferred to false when OTEL_SERVICE_NAME is defined', () => {
+      process.env.OTEL_SERVICE_NAME = 'test-service-otel'
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-otel')
+    })
+
+    it('should set isServiceNameInferred to false when tags.service is defined', () => {
+      const config = getConfig({ tags: { service: 'test-service-tags' } })
+      assert.strictEqual(config.isServiceNameInferred, false)
+      assert.strictEqual(config.service, 'test-service-tags')
+    })
+
+    it('should set isServiceNameInfered to true when no name is given', () => {
+      const config = getConfig()
+      assert.strictEqual(config.isServiceNameInferred, true)
+      assert.strictEqual(config.service, 'node')
     })
   })
 })

@@ -13,6 +13,7 @@ const nomenclature = require('./service-naming')
 const PluginManager = require('./plugin_manager')
 const NoopDogStatsDClient = require('./noop/dogstatsd')
 const { IS_SERVERLESS } = require('./serverless')
+const processTags = require('./process-tags')
 const {
   setBaggageItem,
   getBaggageItem,
@@ -84,6 +85,7 @@ class Tracer extends NoopProxy {
     // these requires must work with esm bundler
     this._modules = {
       appsec: new LazyModule(() => require('./appsec')),
+      aiguard: new LazyModule(() => require('./aiguard')),
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
       rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
@@ -101,6 +103,9 @@ class Tracer extends NoopProxy {
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
+
+      // Add config dependent process tags
+      processTags.initialize(config)
 
       // Configure propagation hash manager for process tags + container tags
       const propagationHash = require('./propagation-hash')
@@ -176,7 +181,7 @@ class Tracer extends NoopProxy {
       if (config.profiling.enabled === 'true') {
         this._profilerStarted = this._startProfiler(config)
       } else {
-        this._profilerStarted = Promise.resolve(false)
+        this._profilerStarted = false
         if (config.profiling.enabled === 'auto') {
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
@@ -248,6 +253,7 @@ class Tracer extends NoopProxy {
         'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
         e
       )
+      return false
     }
   }
 
@@ -267,7 +273,9 @@ class Tracer extends NoopProxy {
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+
         if (config.experimental?.aiguard?.enabled) {
+          this._modules.aiguard.enable(this._tracer, config)
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
@@ -282,6 +290,7 @@ class Tracer extends NoopProxy {
       // This needs to be after the IAST module is enabled
     } else if (this._tracingInitialized) {
       this._modules.appsec.disable()
+      this._modules.aiguard.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
       this._modules.openfeature.disable()
@@ -325,11 +334,11 @@ class Tracer extends NoopProxy {
    * @override
    */
   profilerStarted () {
-    if (!this._profilerStarted) {
+    if (this._profilerStarted === undefined) {
       // injection hardening: this is only ever invoked from tests.
       throw new Error('profilerStarted() must be called after init()')
     }
-    return this._profilerStarted
+    return Promise.resolve(this._profilerStarted)
   }
 
   /**

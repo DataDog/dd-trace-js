@@ -8,7 +8,7 @@ module.exports = {
     },
     {
       name: '@ai-sdk/openai',
-      versions: ['>=1.3.23', '>=2.0.0'],
+      versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
     },
     {
       name: 'zod',
@@ -357,6 +357,27 @@ module.exports = {
     {
       name: '@langchain/core',
       versions: ['>=0.1'],
+      dep: true,
+    },
+  ],
+  langgraph: [
+    {
+      name: '@langchain/langgraph',
+      versions: ['>=1.1.2'],
+    },
+    {
+      name: '@langchain/core',
+      versions: ['>=1.1.16'],
+      dep: true,
+    },
+    {
+      name: 'zod',
+      versions: ['>=3.25.32'],
+      dep: true,
+    },
+    {
+      name: 'zod-to-json-schema',
+      versions: ['>=3.0.0'],
       dep: true,
     },
   ],

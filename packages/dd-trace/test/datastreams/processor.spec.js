@@ -293,7 +293,7 @@ describe('DataStreamsProcessor', () => {
   it('should export on interval', () => {
     processor.recordCheckpoint(mockCheckpoint)
     processor.onInterval()
-    sinon.assert.calledWith(writer.flush, {
+    assert.deepStrictEqual(writer.flush.lastCall.args[0], {
       Env: 'test',
       Service: 'service1',
       Version: 'v1',
@@ -319,6 +319,7 @@ describe('DataStreamsProcessor', () => {
   it('should include ProcessTags when propagation is enabled', () => {
     const propagationHash = require('../../src/propagation-hash')
     const processTags = require('../../src/process-tags')
+    processTags.initialize()
 
     // Configure and enable the feature
     propagationHash.configure({ propagateProcessTags: { enabled: true } })

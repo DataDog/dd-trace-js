@@ -8,17 +8,50 @@ const sinon = require('sinon')
 require('../setup/core')
 const agent = require('../plugins/agent')
 
-const expectedProducerHash = '6359420180750536220'
-const expectedConsumerHash = '13652937079614409115'
+const { computePathwayHash, encodePathwayContextBase64 } = require('../../src/datastreams/pathway')
+const { ENTRY_PARENT_HASH } = require('../../src/datastreams/processor')
+const propagationHash = require('../../src/propagation-hash')
+
 const DSM_CONTEXT_HEADER = 'dd-pathway-ctx-base64'
 
 describe('data streams checkpointer manual api', () => {
   let tracer
+  let expectedProducerHash
+  let expectedConsumerHash
+  let encodedProducerContext
 
-  before(() => {
+  before(async () => {
     process.env.DD_DATA_STREAMS_ENABLED = 'true'
     tracer = require('../..').init()
-    agent.load(null, { dsmEnabled: true })
+    await agent.load(null, { dsmEnabled: true })
+
+    // Compute expected hashes using the actual service/env/propagationHash that the processor will use
+    const proc = tracer._tracer._dataStreamsProcessor
+    const service = proc.service
+    const env = proc.env
+    const phash = propagationHash.getHash()
+
+    const producerHash = computePathwayHash(
+      service, env,
+      ['direction:out', 'topic:test-queue', 'type:testProduce'],
+      ENTRY_PARENT_HASH,
+      phash
+    )
+    expectedProducerHash = producerHash.readBigUInt64LE(0).toString()
+
+    encodedProducerContext = encodePathwayContextBase64({
+      hash: producerHash,
+      pathwayStartNs: 0,
+      edgeStartNs: 0,
+    })
+
+    const consumerHash = computePathwayHash(
+      service, env,
+      ['direction:in', 'topic:test-queue', 'type:testConsume'],
+      producerHash,
+      phash
+    )
+    expectedConsumerHash = consumerHash.readBigUInt64LE(0).toString()
   })
 
   after(() => {
@@ -68,7 +101,7 @@ describe('data streams checkpointer manual api', () => {
     }, { timeoutMs: 5000 }).then(done, done)
 
     const headers = {
-      [DSM_CONTEXT_HEADER]: 'ncfR5V9FDZ3E58Cfj2LI2cOfj2I=', // same context as previous produce
+      [DSM_CONTEXT_HEADER]: encodedProducerContext,
     }
 
     tracer.dataStreamsCheckpointer.setConsumeCheckpoint('testConsume', 'test-queue', headers)

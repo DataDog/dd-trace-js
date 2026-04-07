@@ -9,10 +9,14 @@ const {
   useSandbox,
   spawnPluginIntegrationTestProcAndExpectExit,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 function getOpenaiVersion (realVersion) {
+  if (semifies(realVersion, '>=6.0.0')) {
+    return '3.0.0'
+  }
   if (semifies(realVersion, '>=5.0.0')) {
     return '2.0.0'
   }
@@ -42,7 +46,7 @@ describe('esm', () => {
     })
 
     afterEach(async () => {
-      proc?.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 

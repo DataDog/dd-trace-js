@@ -1,5 +1,6 @@
 'use strict'
 
+const { UNKNOWN_MODEL_PROVIDER } = require('../constants/tags')
 const LLMObsPlugin = require('./base')
 
 const ALLOWED_METADATA_KEYS = new Set([
@@ -108,14 +109,22 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
   }
 
   getLLMObsSpanRegisterOptions (ctx) {
-    const { options } = ctx
+    const { options, baseUrl } = ctx
     const { model } = options
+    const modelProvider = this._getModelProvider(baseUrl)
 
     return {
       kind: 'llm',
       modelName: model,
-      modelProvider: 'anthropic',
+      modelProvider,
     }
+  }
+
+  _getModelProvider (baseUrl = '') {
+    if (baseUrl.includes('anthropic')) {
+      return 'anthropic'
+    }
+    return UNKNOWN_MODEL_PROVIDER
   }
 
   setLLMObsTags (ctx) {
@@ -252,6 +261,15 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
 
     if (cacheWriteTokens != null) metrics.cacheWriteTokens = cacheWriteTokens
     if (cacheReadTokens != null) metrics.cacheReadTokens = cacheReadTokens
+
+    const cacheCreation = usage.cache_creation
+    if (cacheCreation) {
+      metrics.cacheWrite5mTokens = cacheCreation.ephemeral_5m_input_tokens ?? 0
+      metrics.cacheWrite1hTokens = cacheCreation.ephemeral_1h_input_tokens ?? 0
+    } else if (cacheWriteTokens != null) {
+      metrics.cacheWrite5mTokens = cacheWriteTokens
+      metrics.cacheWrite1hTokens = 0
+    }
 
     this._tagger.tagMetrics(span, metrics)
   }

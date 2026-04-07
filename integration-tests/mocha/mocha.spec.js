@@ -62,6 +62,7 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
+  TEST_HAS_DYNAMIC_NAME,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
   TEST_IS_MODIFIED,
@@ -70,6 +71,7 @@ const {
   LIBRARY_VERSION,
   TEST_PARAMETERS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const {
@@ -925,9 +927,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             if (isLatestMocha) {
-              assert.strictEqual(tests.length, 8)
+              assert.strictEqual(tests.length, 16)
             } else {
-              assert.strictEqual(tests.length, 2)
+              // In old mocha (< 6.0.0), retries.js reports only final results (2 tests).
+              // retries-with-hooks.js reports each attempt because afterEach hooks trigger
+              // getOnHookEndHandler on every retry (3 pass attempts + 5 fail attempts = 8).
+              assert.strictEqual(tests.length, 10)
             }
 
             const eventuallyPassingTests = tests.filter(t =>
@@ -948,10 +953,36 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             } else {
               assert.strictEqual(failedTests.length, 1)
             }
+
+            // With afterEach hooks — retry tags should still be set correctly
+            if (isLatestMocha) {
+              const hooksPassTests = tests.filter(t =>
+                t.meta[TEST_NAME] === 'mocha-test-retries-with-hooks will be retried and pass'
+              )
+              assert.strictEqual(hooksPassTests.length, 3)
+              const hooksPassRetries = hooksPassTests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(hooksPassRetries.length, 2)
+              hooksPassRetries.forEach(t => {
+                assert.strictEqual(t.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              })
+
+              const hooksFailTests = tests.filter(t =>
+                t.meta[TEST_NAME] === 'mocha-test-retries-with-hooks will be retried and fail' &&
+                t.meta[TEST_STATUS] === 'fail'
+              )
+              assert.strictEqual(hooksFailTests.length, 5)
+              const hooksFailRetries = hooksFailTests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(hooksFailRetries.length, 4)
+              hooksFailRetries.forEach(t => {
+                assert.strictEqual(t.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              })
+            }
           })
 
         childProcess = exec(
-          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/retries.js',
+          'node node_modules/mocha/bin/mocha' +
+          ' ./ci-visibility/mocha-plugin-tests/retries.js' +
+          ' ./ci-visibility/mocha-hooks/retries-with-hooks.js',
           {
             cwd,
             env: envVars,
@@ -1351,6 +1382,70 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         done()
       }).catch(done)
     })
+  })
+
+  onlyLatestIt('correctly reports retries in parallel mode', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+        // Verify we are actually in parallel mode
+        const sessionEvent = events.find(event => event.type === 'test_session_end').content
+        assert.strictEqual(sessionEvent.meta[MOCHA_IS_PARALLEL], 'true')
+
+        // Each file has 1 test that fails twice then passes on the 3rd attempt (3 events per file)
+        assert.strictEqual(tests.length, 6)
+
+        // 2 failed attempts per file = 4 total
+        const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+        assert.strictEqual(failedTests.length, 4)
+
+        // The 3rd attempt passes in each file = 2 total
+        const passingTests = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+        assert.strictEqual(passingTests.length, 2)
+
+        // First attempt of each test is not a retry, subsequent ones are (2 retries * 2 files = 4)
+        const retries = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+        assert.strictEqual(retries.length, 4)
+
+        // Native --retries (not ATR), so retry reason should be 'external'
+        retries.forEach(test => {
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+        })
+
+        // Verify the two files ran in separate worker processes
+        const testsBySuite = {}
+        for (const test of tests) {
+          const suiteName = test.meta[TEST_SUITE]
+          if (!testsBySuite[suiteName]) {
+            testsBySuite[suiteName] = test
+          }
+        }
+        const testFromEachWorker = Object.values(testsBySuite)
+        assert.strictEqual(testFromEachWorker.length, 2)
+        const runtimeIds = testFromEachWorker.map(test => test.meta['runtime-id'])
+        assert.ok(runtimeIds[0])
+        assert.ok(runtimeIds[1])
+        assert.notStrictEqual(runtimeIds[0], runtimeIds[1],
+          'Tests from different files should have different runtime-ids (separate worker processes)'
+        )
+      })
+
+    childProcess = exec(
+      'node node_modules/mocha/bin/mocha' +
+      ' --parallel --jobs 2 --retries 2' +
+      ' ./ci-visibility/mocha-plugin-tests/retries-parallel.js' +
+      ' ./ci-visibility/mocha-plugin-tests/retries-parallel-2.js',
+      {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      }
+    )
+    await Promise.all([
+      eventsPromise,
+      once(childProcess, 'exit'),
+    ])
   })
 
   it('does not blow up when workerpool is used outside of a test', (done) => {
@@ -2036,6 +2131,60 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }).catch(done)
       })
     })
+
+    onlyLatestIt('can skip suites in parallel mode', async () => {
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+
+          const suites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+          assert.strictEqual(suites.length, 2)
+
+          const skippedSuite = suites.find(s =>
+            s.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          )
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          const runningSuite = suites.find(s =>
+            s.resource === 'test_suite.ci-visibility/test/ci-visibility-test-2.js'
+          )
+          assert.strictEqual(runningSuite.meta[TEST_STATUS], 'pass')
+
+          // Only 1 test ran (from the non-skipped suite)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 1)
+          assert.strictEqual(tests[0].meta[TEST_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test/ci-visibility-test.js' +
+        ' ./ci-visibility/test/ci-visibility-test-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
   })
 
   context('error tags', () => {
@@ -2184,6 +2333,26 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           for (let i = 0; i < failTests.length - 1; i++) {
             assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in failTests[i].meta))
           }
+
+          // With afterEach hooks — all EFD tags should still be set correctly
+          const hooksTests = tests
+            .filter(test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js')
+            .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+          assert.strictEqual(hooksTests.length, NUM_RETRIES_EFD + 1)
+          hooksTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          })
+          const hooksRetries = hooksTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(hooksRetries.length, NUM_RETRIES_EFD)
+          hooksRetries.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          })
+          const lastHooksRetry = hooksTests[hooksTests.length - 1]
+          assert.strictEqual(lastHooksRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          for (let i = 0; i < hooksTests.length - 1; i++) {
+            assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in hooksTests[i].meta))
+          }
         })
 
       childProcess = exec(
@@ -2194,6 +2363,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test/fail-test.js',
+              './mocha-hooks/flaky-fails-with-hooks.js',
             ]),
           },
         }
@@ -3170,6 +3340,9 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.setKnownTests({
         mocha: {
           'ci-visibility/test/fail-test.js': ['can report failed tests'],
+          'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js': [
+            'mocha-hooks flaky-fails can retry failed tests',
+          ],
         },
       })
       const NUM_RETRIES_ATR = 2
@@ -3202,6 +3375,24 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           for (let i = 0; i < failTests.length - 1; i++) {
             assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in failTests[i].meta))
           }
+
+          // With afterEach hooks: retries should still be tagged with ATR reason and HAS_FAILED_ALL_RETRIES
+          const hooksTests = tests
+            .filter(test =>
+              test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js'
+            )
+            .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+          assert.strictEqual(hooksTests.length, NUM_RETRIES_ATR + 1)
+          const hooksRetries = hooksTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(hooksRetries.length, NUM_RETRIES_ATR)
+          hooksRetries.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          })
+          const lastHooksRetry = hooksTests[hooksTests.length - 1]
+          assert.strictEqual(lastHooksRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          for (let i = 0; i < hooksTests.length - 1; i++) {
+            assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in hooksTests[i].meta))
+          }
         })
 
       childProcess = exec(
@@ -3210,13 +3401,84 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: JSON.stringify(['./test/fail-test.js']),
+            TESTS_TO_RUN: JSON.stringify([
+              './test/fail-test.js',
+              './mocha-hooks/flaky-fails-with-hooks.js',
+            ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: String(NUM_RETRIES_ATR),
           },
         }
       )
 
       await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    onlyLatestIt('retries failed tests automatically in parallel mode', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Verify we are in parallel mode
+          const sessionEvent = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(sessionEvent.meta[MOCHA_IS_PARALLEL], 'true')
+
+          // Each file has 1 test that fails twice then passes (3 events per file, 6 total)
+          assert.strictEqual(tests.length, 6)
+
+          const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+          assert.strictEqual(failedAttempts.length, 4)
+
+          const passedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'pass')
+          assert.strictEqual(passedAttempts.length, 2)
+
+          // Retries should be tagged with ATR reason
+          const atrRetries = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+          assert.strictEqual(atrRetries.length, 4)
+
+          passedAttempts.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+          })
+
+          // Verify tests ran in separate worker processes
+          const testsBySuite = {}
+          for (const test of tests) {
+            const suiteName = test.meta[TEST_SUITE]
+            if (!testsBySuite[suiteName]) {
+              testsBySuite[suiteName] = test
+            }
+          }
+          const testFromEachWorker = Object.values(testsBySuite)
+          assert.strictEqual(testFromEachWorker.length, 2)
+          const runtimeIds = testFromEachWorker.map(test => test.meta['runtime-id'])
+          assert.ok(runtimeIds[0])
+          assert.ok(runtimeIds[1])
+          assert.notStrictEqual(runtimeIds[0], runtimeIds[1])
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test-flaky-test-retries/eventually-passing-test-parallel.js' +
+        ' ./ci-visibility/test-flaky-test-retries/eventually-passing-test-parallel-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+      await Promise.all([
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
     })
   })
 
@@ -3548,6 +3810,60 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         }).catch(done)
       })
     })
+
+    it('tags new tests with dynamic names and logs a warning', async () => {
+      receiver.setKnownTests({ mocha: {} })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 1 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url.endsWith('/api/v2/citestcycle'),
+        (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const uniqueTests = new Map()
+          for (const test of tests) {
+            if (!uniqueTests.has(test.meta[TEST_NAME])) {
+              uniqueTests.set(test.meta[TEST_NAME], test)
+            }
+          }
+
+          const dynamicTests = [...uniqueTests.values()]
+            .filter(test => test.meta[TEST_HAS_DYNAMIC_NAME] === 'true')
+          assert.strictEqual(dynamicTests.length, 8)
+
+          dynamicTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+          })
+        }
+      )
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify(['./test/dynamic-name-test.js']),
+          },
+        }
+      )
+
+      let testOutput = ''
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+
+      assert.match(testOutput, /detected as new but their names contain dynamic data/)
+    })
   })
 
   context('known tests without early flake detection', () => {
@@ -3859,6 +4175,105 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         runAttemptToFixTest(done, { isAttemptToFix: true, isQuarantined: true })
       })
 
+      onlyLatestIt(
+        'checks atf_passed, atf_failed, test_is_retry and test_has_failed_all_retries tags on tests with hooks',
+        (done) => {
+          const NUM_RETRIES = 3
+          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+          receiver.setTestManagementTests({
+            mocha: {
+              suites: {
+                'ci-visibility/test-management/test-attempt-to-fix-with-after-each.js': {
+                  tests: {
+                    'attempt to fix tests can attempt to fix a test that always passes': {
+                      properties: { attempt_to_fix: true },
+                    },
+                    'attempt to fix tests can attempt to fix a test that always fails': {
+                      properties: { attempt_to_fix: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const retriedTestsAlwaysPass = events.filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] ===
+                  'attempt to fix tests can attempt to fix a test that always passes')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              assert.strictEqual(retriedTestsAlwaysPass.length, NUM_RETRIES + 1)
+
+              const retriedTestsAlwaysFails = events.filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] ===
+                  'attempt to fix tests can attempt to fix a test that always fails')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              assert.strictEqual(retriedTestsAlwaysFails.length, NUM_RETRIES + 1)
+
+              // Tags test
+              retriedTestsAlwaysPass.forEach((test, index) => {
+                if (index === 0) {
+                  assert.ok(!(TEST_IS_RETRY in test.meta))
+                } else {
+                  assert.ok(TEST_IS_RETRY in test.meta)
+                  assert.ok(TEST_RETRY_REASON in test.meta)
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+                }
+
+                if (index < NUM_RETRIES) {
+                  assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                } else {
+                  assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta)
+                  // Tag is only reported if the test has failed all retries
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'true')
+                }
+              })
+
+              retriedTestsAlwaysFails.forEach((test, index) => {
+                if (index === 0) {
+                  assert.ok(!(TEST_IS_RETRY in test.meta))
+                } else {
+                  assert.ok(TEST_IS_RETRY in test.meta)
+                  assert.ok(TEST_RETRY_REASON in test.meta)
+                  assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                  assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+                }
+
+                if (index < NUM_RETRIES) {
+                  assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta))
+                  assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in test.meta))
+                } else {
+                  assert.ok(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in test.meta)
+                  assert.ok(TEST_HAS_FAILED_ALL_RETRIES in test.meta)
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+                  assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+                }
+              })
+            })
+
+          childProcess = exec(
+            runTestsCommand,
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TESTS_TO_RUN: JSON.stringify(['./test-management/test-attempt-to-fix-with-after-each.js']),
+              },
+            }
+          )
+
+          childProcess.on('exit', () => {
+            eventsPromise.then(() => done()).catch(done)
+          })
+        })
+
       onlyLatestIt('does not fail retry if a test is disabled', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
@@ -3879,6 +4294,86 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         })
 
         runAttemptToFixTest(done, { isAttemptToFix: true, isDisabled: true })
+      })
+
+      onlyLatestIt('can attempt to fix in parallel mode', async () => {
+        const NUM_RETRIES = 3
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+        receiver.setTestManagementTests({
+          mocha: {
+            suites: {
+              'ci-visibility/test-management/test-attempt-to-fix-parallel-1.js': {
+                tests: {
+                  'attempt to fix parallel tests 1 can attempt to fix a test': {
+                    properties: { attempt_to_fix: true },
+                  },
+                },
+              },
+              'ci-visibility/test-management/test-attempt-to-fix-parallel-2.js': {
+                tests: {
+                  'attempt to fix parallel tests 2 can attempt to fix a test': {
+                    properties: { attempt_to_fix: true },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const sessionEvent = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(sessionEvent.meta[MOCHA_IS_PARALLEL], 'true')
+            assert.strictEqual(sessionEvent.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+            // Each file: 1 initial attempt + NUM_RETRIES retries = (NUM_RETRIES + 1) per file, 2 files
+            assert.strictEqual(tests.length, (NUM_RETRIES + 1) * 2)
+
+            // All attempts fail (tests always throw)
+            tests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+            })
+
+            // Last attempt of each test should have failed-all-retries
+            const testsBySuite = {}
+            for (const test of tests) {
+              const suite = test.meta[TEST_SUITE]
+              if (!testsBySuite[suite]) testsBySuite[suite] = []
+              testsBySuite[suite].push(test)
+            }
+            for (const suiteTests of Object.values(testsBySuite)) {
+              const lastAttempt = suiteTests[suiteTests.length - 1]
+              assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+            }
+
+            // Verify separate worker processes
+            const firstTestPerSuite = Object.values(testsBySuite).map(t => t[0])
+            assert.strictEqual(firstTestPerSuite.length, 2)
+            const runtimeIds = firstTestPerSuite.map(t => t.meta['runtime-id'])
+            assert.ok(runtimeIds[0])
+            assert.ok(runtimeIds[1])
+            assert.notStrictEqual(runtimeIds[0], runtimeIds[1])
+          })
+
+        childProcess = exec(
+          'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+          ' ./ci-visibility/test-management/test-attempt-to-fix-parallel-1.js' +
+          ' ./ci-visibility/test-management/test-attempt-to-fix-parallel-2.js',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+
+        await Promise.all([
+          eventsPromise,
+          once(childProcess, 'exit'),
+        ])
       })
     })
 
@@ -4265,19 +4760,14 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
   })
 
   context('libraries capabilities', () => {
-    const getTestAssertions = (isParallel) =>
+    const getTestAssertions = () =>
       receiver.gatherPayloadsMaxTimeout(({ url }) => url.endsWith('citestcycle'), (payloads) => {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
         assert.ok(metadataDicts.length > 0)
         metadataDicts.forEach(metadata => {
-          if (isParallel) {
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], undefined)
-          } else {
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
-            assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
-          }
+          assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
+          assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
@@ -4288,8 +4778,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         })
       })
 
-    const runTest = (done, isParallel, extraEnvVars = {}) => {
-      const testAssertionsPromise = getTestAssertions(isParallel)
+    const runTest = (done, extraEnvVars = {}) => {
+      const testAssertionsPromise = getTestAssertions()
 
       childProcess = exec(
         runTestsCommand,
@@ -4308,13 +4798,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
     }
 
     it('adds capabilities to tests', (done) => {
-      runTest(done, false)
+      runTest(done)
     })
 
     onlyLatestIt('adds capabilities to tests (parallel)', (done) => {
-      runTest(done, true, {
-        RUN_IN_PARALLEL: '1',
-      })
+      runTest(done, { RUN_IN_PARALLEL: '1' })
     })
   })
 
@@ -4817,6 +5305,517 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       await once(childProcess, 'exit')
 
       assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+    })
+  })
+  context('final status tag', function () {
+    it('sets final_status tag to test status on regular tests without retry features', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: { enabled: false },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          tests.forEach(test => {
+            assert.strictEqual(
+              test.meta[TEST_FINAL_STATUS],
+              test.meta[TEST_STATUS],
+              `Expected TEST_FINAL_STATUS to match TEST_STATUS for test "${test.meta[TEST_NAME]}"`
+            )
+          })
+
+          const skippedTest = tests.find(test => test.meta[TEST_NAME] === 'mocha-skips can report skipped tests')
+          assert.ok(skippedTest, 'Expected to find the skipped test')
+          assert.strictEqual(skippedTest.meta[TEST_FINAL_STATUS], 'skip')
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify([
+            './test/ci-visibility-test.js',
+            './test/fail-test.js',
+            './mocha-skips/skip-test.js',
+          ]),
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    onlyLatestIt('sets tag only on last ATR retry when EFD is enabled but not active and ATR is active', async () => {
+      // All mocha-flaky tests are known, so EFD will be enabled but not active for them
+      receiver.setKnownTests({
+        mocha: {
+          'ci-visibility/mocha-flaky/flaky-passes.js': [
+            'mocha-flaky can retry flaky tests',
+            'mocha-flaky will not retry passed tests',
+          ],
+          'ci-visibility/mocha-hooks/flaky-passes-with-hooks.js': [
+            'mocha-hooks flaky-passes can retry flaky tests',
+            'mocha-hooks flaky-passes will not retry passed tests',
+          ],
+        },
+      })
+      receiver.setSettings({
+        flaky_test_retries_enabled: true, // ATR enabled
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 3 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const allTests = events
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+          const tests = allTests.filter(test => test.meta[TEST_NAME] === 'mocha-flaky can retry flaky tests')
+
+          // We expect 2 executions: the failed (retry) and the passed (last one)
+          assert.strictEqual(tests.length, 2)
+
+          // Only the last execution (the one with status 'pass') should have TEST_FINAL_STATUS tag
+          tests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, idx) => {
+            if (idx < tests.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                'TEST_FINAL_STATUS should not be set on previous runs'
+              )
+            } else {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            }
+          })
+
+          // A test that passes on the first run (no retries) should have TEST_FINAL_STATUS set immediately
+          const alwaysPassingTests = allTests.filter(
+            test => test.meta[TEST_NAME] === 'mocha-flaky will not retry passed tests'
+          )
+          assert.strictEqual(alwaysPassingTests.length, 1)
+          assert.strictEqual(alwaysPassingTests[0].meta[TEST_FINAL_STATUS], 'pass')
+
+          // With hooks: same behavior — only the last execution of the flaky test should have the tag
+          const testsWithHooks = allTests.filter(
+            test => test.meta[TEST_NAME] === 'mocha-hooks flaky-passes can retry flaky tests'
+          )
+          assert.strictEqual(testsWithHooks.length, 2)
+          testsWithHooks.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, idx) => {
+            if (idx < testsWithHooks.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                'TEST_FINAL_STATUS should not be set on previous runs (with hooks)'
+              )
+            } else {
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+              assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+            }
+          })
+
+          const alwaysPassingTestsWithHooks = allTests.filter(
+            test => test.meta[TEST_NAME] === 'mocha-hooks flaky-passes will not retry passed tests'
+          )
+          assert.strictEqual(alwaysPassingTestsWithHooks.length, 1)
+          assert.strictEqual(alwaysPassingTestsWithHooks[0].meta[TEST_FINAL_STATUS], 'pass')
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify([
+            './mocha-flaky/flaky-passes.js',
+            './mocha-hooks/flaky-passes-with-hooks.js',
+          ]),
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('sets final_status tag to test status reported to test framework on last retry (EFD active only)', async () => {
+      // ci-visibility-test-2.js and new-test-with-hooks.js will be treated as new tests (not in known tests)
+      const knownTestFile = 'ci-visibility/test/ci-visibility-test.js'
+      const knownTestSuiteWithHooks = 'ci-visibility/mocha-hooks/known-test-with-hooks.js'
+      receiver.setKnownTests({
+        mocha: {
+          [knownTestFile]: ['ci visibility can report tests'],
+          [knownTestSuiteWithHooks]: ['mocha-hooks known can report known tests'],
+        },
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': NUM_RETRIES_EFD },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          // Known tests are not retried so every execution is final
+          const knownTests = tests.filter(test => test.meta[TEST_SUITE] === knownTestFile)
+          knownTests.forEach(test => {
+            assert.ok(!(TEST_IS_NEW in test.meta))
+            assert.ok(!(TEST_IS_RETRY in test.meta))
+            assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+          })
+
+          // New test: only the last retry should have the tag
+          const newTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test-2.js'
+          )
+
+          newTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+            if (index < newTests.length - 1) {
+              assert.ok(!(TEST_FINAL_STATUS in test.meta))
+            } else {
+              // only the last execution should have the final status
+              assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+            }
+          })
+
+          // Known tests with hooks: every execution is final
+          const knownTestsWithHooks = tests.filter(test => test.meta[TEST_SUITE] === knownTestSuiteWithHooks)
+          knownTestsWithHooks.forEach(test => {
+            assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+          })
+
+          // New test with hooks: only the last retry should have the tag
+          const newTestsWithHooks = tests.filter(
+            test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/new-test-with-hooks.js'
+          )
+          newTestsWithHooks.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+            .forEach((test, index) => {
+              if (index < newTestsWithHooks.length - 1) {
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
+              } else {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+              }
+            })
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify([
+            './test/ci-visibility-test.js',
+            './test/ci-visibility-test-2.js',
+            './mocha-hooks/known-test-with-hooks.js',
+            './mocha-hooks/new-test-with-hooks.js',
+          ]),
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    onlyLatestIt(
+      'sets final_status tag to test status reported to test framework on last retry (ATR active only)',
+      async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: { enabled: false },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            // Test that eventually passes: finalStatus 'pass' only on last attempt per test name
+            // These tests will pass after the second retry
+            const eventuallyPassingTests = tests.filter(
+              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-passes.js'
+            )
+            const eventuallyPassingByName = eventuallyPassingTests.reduce((acc, test) => {
+              const name = test.meta[TEST_NAME]
+              if (!acc[name]) acc[name] = []
+              acc[name].push(test)
+              return acc
+            }, {}) // Object that associates name to test retries events
+            Object.values(eventuallyPassingByName).forEach(testGroup => {
+              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+                if (index < testGroup.length - 1) {
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                } else {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+                }
+              })
+            })
+
+            // Test that always passes: finalStatus 'pass' only on last attempt
+            const alwaysPassingTests = tests.filter(
+              test => test.meta[TEST_SUITE] === 'ci-visibility/test/ci-visibility-test.js'
+            )
+            alwaysPassingTests.sort((a, b) =>
+              (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+              if (index < alwaysPassingTests.length - 1) {
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
+              } else {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+              }
+            })
+
+            // Test that always fails: finalStatus 'fail' only on last attempt
+            const alwaysFailingTests = tests.filter(
+              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-flaky/flaky-fails.js'
+            )
+            alwaysFailingTests.sort((a, b) =>
+              (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+              if (index < alwaysFailingTests.length - 1) {
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
+              } else {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+              }
+            })
+
+            // With hooks — test that eventually passes
+            const eventuallyPassingTestsWithHooks = tests.filter(
+              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-passes-with-hooks.js'
+            )
+            const eventuallyPassingByNameWithHooks = eventuallyPassingTestsWithHooks.reduce((acc, test) => {
+              const name = test.meta[TEST_NAME]
+              if (!acc[name]) acc[name] = []
+              acc[name].push(test)
+              return acc
+            }, {})
+            Object.values(eventuallyPassingByNameWithHooks).forEach(testGroup => {
+              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+                if (index < testGroup.length - 1) {
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                } else {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+                }
+              })
+            })
+
+            // With hooks — test that always fails
+            const alwaysFailingTestsWithHooks = tests.filter(
+              test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js'
+            )
+            const alwaysFailingByNameWithHooks = alwaysFailingTestsWithHooks.reduce((acc, test) => {
+              const name = test.meta[TEST_NAME]
+              if (!acc[name]) acc[name] = []
+              acc[name].push(test)
+              return acc
+            }, {})
+            Object.values(alwaysFailingByNameWithHooks).forEach(testGroup => {
+              testGroup.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).forEach((test, index) => {
+                if (index < testGroup.length - 1) {
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                } else {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+                }
+              })
+            })
+          })
+
+        childProcess = exec(runTestsCommand, {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './mocha-flaky/flaky-passes.js',
+              'ci-visibility/test/ci-visibility-test.js',
+              './mocha-flaky/flaky-fails.js',
+              './mocha-hooks/flaky-passes-with-hooks.js',
+              './mocha-hooks/flaky-fails-with-hooks.js',
+            ]),
+          },
+        })
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      })
+
+    it('sets final_status tag to skip for disabled tests', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/test-management/test-disabled-1.js': {
+              tests: {
+                'disable tests can disable a test': {
+                  properties: { disabled: true },
+                },
+              },
+            },
+            'ci-visibility/mocha-hooks/disabled-with-hooks.js': {
+              tests: {
+                'disable tests with hooks can disable a test with hooks': {
+                  properties: { disabled: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const disabledTest = tests.find(test => test.meta[TEST_NAME] === 'disable tests can disable a test')
+          assert.ok(disabledTest)
+          assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+          assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+
+          const disabledTestWithHooks = tests.find(
+            test => test.meta[TEST_NAME] === 'disable tests with hooks can disable a test with hooks'
+          )
+          assert.ok(disabledTestWithHooks)
+          assert.strictEqual(disabledTestWithHooks.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(disabledTestWithHooks.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+          assert.strictEqual(disabledTestWithHooks.meta[TEST_FINAL_STATUS], 'skip')
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify([
+            './test-management/test-disabled-1.js',
+            './mocha-hooks/disabled-with-hooks.js',
+          ]),
+          SHOULD_CHECK_RESULTS: '1',
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('sets final_status tag to skip for quarantined tests', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/test-management/test-quarantine-1.js': {
+              tests: {
+                'quarantine tests can quarantine a test': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+            'ci-visibility/mocha-hooks/test-quarantine-with-hooks.js': {
+              tests: {
+                'quarantine tests with hooks can quarantine a test with hooks': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const quarantinedTest = tests.find(test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test')
+          assert.ok(quarantinedTest)
+
+          // Quarantined tests still run and report their actual status.
+          // However, the final status tag must be reported as 'skip'
+          // because test errors are supressed
+          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+
+          const passingTest = tests.find(test => test.meta[TEST_NAME] === 'quarantine tests can pass normally')
+          assert.ok(passingTest)
+          assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+
+          const quarantinedTestWithHooks = tests.find(
+            test => test.meta[TEST_NAME] === 'quarantine tests with hooks can quarantine a test with hooks'
+          )
+          assert.ok(quarantinedTestWithHooks)
+          assert.strictEqual(quarantinedTestWithHooks.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(quarantinedTestWithHooks.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.strictEqual(quarantinedTestWithHooks.meta[TEST_FINAL_STATUS], 'skip')
+
+          const passingTestWithHooks = tests.find(
+            test => test.meta[TEST_NAME] === 'quarantine tests with hooks can pass normally with hooks'
+          )
+          assert.ok(passingTestWithHooks)
+          assert.strictEqual(passingTestWithHooks.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(passingTestWithHooks.meta[TEST_FINAL_STATUS], 'pass')
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify([
+            './test-management/test-quarantine-1.js',
+            './mocha-hooks/test-quarantine-with-hooks.js',
+          ]),
+          SHOULD_CHECK_RESULTS: '1',
+        },
+      })
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('sets final_status tag to skip for quarantined tests when hook throws', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        mocha: {
+          suites: {
+            'ci-visibility/mocha-hooks/test-quarantine-with-failing-after-each.js': {
+              tests: {
+                'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const quarantinedTest = tests.find(
+            test => test.meta[TEST_NAME] ===
+              'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails'
+          )
+          assert.ok(quarantinedTest)
+          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: JSON.stringify(['./mocha-hooks/test-quarantine-with-failing-after-each.js']),
+        },
+      })
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
   })
 })

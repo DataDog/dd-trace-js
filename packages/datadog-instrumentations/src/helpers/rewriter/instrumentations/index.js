@@ -5,4 +5,5 @@ module.exports = [
   ...require('./azure-cosmos'),
   ...require('./bullmq'),
   ...require('./langchain'),
+  ...require('./langgraph'),
 ]

@@ -79,6 +79,51 @@ describe('Plugin', () => {
             }),
           ])
         })
+
+        it('does not leak DynamoDB peer.service to subsequent unrelated HTTP spans', async () => {
+          const http = require('http')
+
+          const server = http.createServer((req, res) => res.end('ok'))
+          await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+          const port = server.address().port
+
+          try {
+            const send = toPromise(dynamo, dynamo.putItem)
+            const allSpans = []
+            const peerService = 'dynamodb.us-east-1.amazonaws.com'
+
+            const tracesPromise = agent.assertSomeTraces(traces => {
+              allSpans.push(...traces.flat())
+              assert.ok(allSpans.find(s => s.name === 'aws.request'), 'expected aws.request span')
+              assert.ok(
+                allSpans.find(s => s.name === 'http.request' && s.meta['http.url']?.includes('/unrelated')),
+                'expected unrelated http.request span'
+              )
+            }, { timeoutMs: 15000 })
+
+            await send({ TableName: tableName, Item: { id: { S: 'leak-test' } } })
+
+            await new Promise((resolve, reject) => {
+              http.get(`http://127.0.0.1:${port}/unrelated`, (res) => {
+                res.on('data', () => {})
+                res.on('end', resolve)
+              }).on('error', reject)
+            })
+
+            await tracesPromise
+
+            const unrelatedHttpSpan = allSpans.find(
+              s => s.name === 'http.request' && s.meta['http.url']?.includes('/unrelated')
+            )
+            assert.notStrictEqual(
+              unrelatedHttpSpan.meta['peer.service'],
+              peerService,
+              'unrelated HTTP span should not inherit DynamoDB peer.service'
+            )
+          } finally {
+            server.close()
+          }
+        })
       })
 
       describe('Kinesis-Serverless', () => {

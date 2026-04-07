@@ -140,7 +140,6 @@ tracer.init({
   },
   iast: {
     enabled: true,
-    cookieFilterPattern: '.*',
     requestSampling: 50,
     maxConcurrentRequests: 4,
     maxContextOperations: 30,
@@ -160,7 +159,6 @@ tracer.init({
   experimental: {
     iast: {
       enabled: true,
-      cookieFilterPattern: '.*',
       requestSampling: 50,
       maxConcurrentRequests: 4,
       maxContextOperations: 30,
@@ -377,6 +375,7 @@ tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
 tracer.use('mariadb', { service: () => `my-custom-mariadb` })
+tracer.use('langgraph');
 tracer.use('memcached');
 tracer.use('microgateway-core');
 tracer.use('microgateway-core', httpServerOptions);
@@ -710,6 +709,7 @@ tracer.init({
   experimental: {
     aiguard: {
       enabled: true,
+      block: true,
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,

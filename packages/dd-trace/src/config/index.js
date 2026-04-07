@@ -49,6 +49,8 @@ const VALID_PROPAGATION_BEHAVIOR_EXTRACT = new Set(['continue', 'restart', 'igno
 const VALID_LOG_LEVELS = new Set(['debug', 'info', 'warn', 'error'])
 const DEFAULT_OTLP_PORT = 4318
 const RUNTIME_ID = uuid()
+// eslint-disable-next-line eslint-rules/eslint-process-env -- internal propagation, not user config
+const ROOT_SESSION_ID = process.env.DD_ROOT_JS_SESSION_ID || RUNTIME_ID
 const NAMING_VERSIONS = new Set(['v0', 'v1'])
 const DEFAULT_NAMING_VERSION = 'v0'
 
@@ -144,6 +146,8 @@ class Config {
       version: this.version,
       'runtime-id': RUNTIME_ID,
     })
+
+    this.rootSessionId = ROOT_SESSION_ID
 
     if (this.isCiVisibility) {
       tagger.add(this.tags, {
@@ -247,6 +251,7 @@ class Config {
     const {
       AWS_LAMBDA_FUNCTION_NAME,
       DD_AGENT_HOST,
+      DD_AI_GUARD_BLOCK,
       DD_AI_GUARD_ENABLED,
       DD_AI_GUARD_ENDPOINT,
       DD_AI_GUARD_MAX_CONTENT_SIZE,
@@ -604,6 +609,7 @@ class Config {
         maybeInt(DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
     }
     setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
+    setBoolean(target, 'experimental.aiguard.block', DD_AI_GUARD_BLOCK)
     setBoolean(target, 'experimental.aiguard.enabled', DD_AI_GUARD_ENABLED)
     setString(target, 'experimental.aiguard.endpoint', DD_AI_GUARD_ENDPOINT)
     target['experimental.aiguard.maxContentSize'] = maybeInt(DD_AI_GUARD_MAX_CONTENT_SIZE)
@@ -722,8 +728,10 @@ class Config {
     // Priority:
     // DD_SERVICE > tags.service > OTEL_SERVICE_NAME > NX_TASK_TARGET_PROJECT (if DD_ENABLE_NX_SERVICE_NAME) > default
     let serviceName = DD_SERVICE || tags.service || OTEL_SERVICE_NAME
+    let isServiceNameInferred
     if (!serviceName && NX_TASK_TARGET_PROJECT) {
       if (isTrue(DD_ENABLE_NX_SERVICE_NAME)) {
+        isServiceNameInferred = true
         serviceName = NX_TASK_TARGET_PROJECT
       } else if (DD_MAJOR < 6) {
         // Warn about v6 behavior change for Nx projects
@@ -734,6 +742,7 @@ class Config {
       }
     }
     setString(target, 'service', serviceName)
+    if (serviceName) setBoolean(target, 'isServiceNameInferred', isServiceNameInferred ?? false)
     if (DD_SERVICE_MAPPING) {
       target.serviceMapping = Object.fromEntries(
         DD_SERVICE_MAPPING.split(',').map(x => x.trim().split(':'))
@@ -932,6 +941,7 @@ class Config {
     this.#optsUnprocessed['dynamicInstrumentation.uploadIntervalSeconds'] =
       options.dynamicInstrumentation?.uploadIntervalSeconds
     setString(opts, 'env', options.env || tags.env)
+    setBoolean(opts, 'experimental.aiguard.block', options.experimental?.aiguard?.block)
     setBoolean(opts, 'experimental.aiguard.enabled', options.experimental?.aiguard?.enabled)
     setString(opts, 'experimental.aiguard.endpoint', options.experimental?.aiguard?.endpoint)
     opts['experimental.aiguard.maxMessagesLength'] = maybeInt(options.experimental?.aiguard?.maxMessagesLength)
@@ -1004,7 +1014,11 @@ class Config {
     setUnit(opts, 'sampleRate', options.sampleRate ?? options.ingestion.sampleRate)
     opts['sampler.rateLimit'] = maybeInt(options.rateLimit ?? options.ingestion.rateLimit)
     setSamplingRule(opts, 'sampler.rules', options.samplingRules)
-    setString(opts, 'service', options.service || tags.service)
+    const optService = options.service || tags.service
+    setString(opts, 'service', optService)
+    if (optService) {
+      setBoolean(opts, 'isServiceNameInferred', false)
+    }
     opts.serviceMapping = options.serviceMapping
     setString(opts, 'site', options.site)
     if (options.spanAttributeSchema) {
@@ -1118,6 +1132,8 @@ class Config {
       setBoolean(calc, 'reportHostname', true)
       // Clear sampling rules - server-side sampling handles this
       calc['sampler.rules'] = []
+      // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
+      setBoolean(calc, 'traceId128BitGenerationEnabled', false)
     }
 
     if (this.#isCiVisibility()) {
@@ -1661,6 +1677,7 @@ function getAgentUrl (url, options) {
     !options.port &&
     !getEnv('DD_AGENT_HOST') &&
     !getEnv('DD_TRACE_AGENT_PORT') &&
+    !isTrue(getEnv('DD_CIVISIBILITY_AGENTLESS_ENABLED')) &&
     fs.existsSync('/var/run/datadog/apm.socket')
   ) {
     return new URL('unix:///var/run/datadog/apm.socket')

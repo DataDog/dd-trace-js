@@ -18,13 +18,6 @@ const TEST_OPTIMIZATION_PLUGINS = new Set([
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
-// instrument everything that needs Plugin System V2 instrumentation
-require('../../datadog-instrumentations')
-if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
-  // instrument lambda environment
-  require('./lambda')
-}
-
 const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
@@ -35,9 +28,19 @@ const disabledPlugins = new Set(
 
 const pluginClasses = {}
 
+// Subscribe before requiring instrumentations so that loadChannel events fired
+// during instrumentation initialization (e.g. re-requires in bundler contexts)
+// are captured and populate pluginClasses correctly.
 loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
+
+// instrument everything that needs Plugin System V2 instrumentation
+require('../../datadog-instrumentations')
+if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
+  // instrument lambda environment
+  require('./lambda')
+}
 
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return

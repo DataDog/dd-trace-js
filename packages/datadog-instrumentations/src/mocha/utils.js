@@ -1,6 +1,6 @@
 'use strict'
 
-const { getTestSuitePath } = require('../../../dd-trace/src/plugins/util/test')
+const { getTestSuitePath, DYNAMIC_NAME_RE } = require('../../../dd-trace/src/plugins/util/test')
 const { channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -23,6 +23,7 @@ const testToStartLine = new WeakMap()
 const testFileToSuiteCtx = new Map()
 const wrappedFunctions = new WeakSet()
 const newTests = {}
+const newTestsWithDynamicNames = new Set()
 const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
 const testsStatuses = new Map()
@@ -140,7 +141,6 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
-    // Flaky test retries does not work in parallel mode
     if (libraryConfig?.isFlakyTestRetriesEnabled) {
       this.retries(libraryConfig?.flakyTestRetriesCount)
     }
@@ -222,6 +222,10 @@ function getOnTestHandler (isMain) {
     testInfo.isDisabled = isDisabled
     testInfo.isQuarantined = isQuarantined
     testInfo.isModified = isModified
+    testInfo.hasDynamicName = isNew && DYNAMIC_NAME_RE.test(test.fullTitle())
+    if (testInfo.hasDynamicName) {
+      newTestsWithDynamicNames.add(`${getTestSuitePath(test.file, process.cwd())} › ${test.fullTitle()}`)
+    }
     // We want to store the result of the new tests
     if (isNew) {
       const testFullName = getTestFullName(test)
@@ -239,6 +243,44 @@ function getOnTestHandler (isMain) {
     const ctx = testInfo
     testToContext.set(test.fn, ctx)
     testStartCh.runStores(ctx, () => {})
+  }
+}
+
+function getFinalStatus ({
+  status,
+  hasFailedAllRetries,
+  isFlakyTestRetriesEnabled,
+  isLastAtrAttempt,
+  isEfdRetry,
+  isLastEfdRetry,
+  isAttemptToFix,
+  isLastAttemptToFix,
+  attemptToFixPassed,
+  isQuarantined,
+  isDisabled,
+}) {
+  // Note that intermediate executions DO NOT report a final status tag
+
+  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
+  // the final status of its last execution should be reported as 'skip'.
+  if (isQuarantined || isDisabled) {
+    return 'skip'
+  }
+
+  const isAtrActive = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry
+
+  // When no retry feature is active, every execution is final
+  if (!isAtrActive && !isEfdRetry && !isAttemptToFix) {
+    return status
+  }
+  if (isAtrActive && isLastAtrAttempt) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isEfdRetry && isLastEfdRetry) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+  if (isAttemptToFix && isLastAttemptToFix) {
+    return attemptToFixPassed ? 'pass' : 'fail'
   }
 }
 
@@ -272,6 +314,11 @@ function getOnTestEndHandler (config) {
 
     const isLastAttempt = testStatuses.length === config.testManagementAttemptToFixRetries + 1
     const isLastEfdRetry = testStatuses.length === config.earlyFlakeDetectionNumRetries + 1
+    const isLastAtrAttempt = getIsLastRetry(test) || (config.isFlakyTestRetriesEnabled && status === 'pass')
+
+    // Needed for the getFinalStatus call. This is because EFD does NOT tag as
+    // EFD retry the first run of the test. It only tags as retries the clones
+    const isEfdRetry = test._ddIsEfdRetry || (test._ddIsNew && config.isEarlyFlakeDetectionEnabled)
 
     if (test._ddIsAttemptToFix && isLastAttempt) {
       if (testStatuses.includes('fail')) {
@@ -300,8 +347,29 @@ function getOnTestEndHandler (config) {
       !test._ddIsAttemptToFix &&
       !test._ddIsEfdRetry
 
-    // if there are afterEach to be run, we don't finish the test yet
-    if (ctx && !getAfterEachHooks(test).length) {
+    const { isFlakyTestRetriesEnabled } = config
+    const { _ddIsAttemptToFix, _ddIsQuarantined, _ddIsDisabled } = test
+
+    const finalStatus = getFinalStatus({
+      status,
+      hasFailedAllRetries,
+      isFlakyTestRetriesEnabled,
+      isLastAtrAttempt,
+      isEfdRetry,
+      isLastEfdRetry,
+      isAttemptToFix: _ddIsAttemptToFix,
+      isLastAttemptToFix: isLastAttempt,
+      attemptToFixPassed,
+      isQuarantined: _ddIsQuarantined,
+      isDisabled: _ddIsDisabled,
+    })
+
+    // If there are afterEach to be run, we don't finish the test yet.
+    // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
+    // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
+    // getOnHookEndHandler to finish the test. This mirrors Jest's approach where the skip handler
+    // directly sets finalStatus without waiting for hooks
+    if (ctx && (!getAfterEachHooks(test).length || test._ddIsDisabled)) {
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
@@ -312,7 +380,15 @@ function getOnTestEndHandler (config) {
         isAttemptToFixRetry,
         isAtrRetry,
         ...ctx.currentStore,
+        finalStatus,
       })
+    } else if (ctx) { // if there is an afterEach to run, let's store the finalStatus for getOnHookEndHandler
+      ctx.finalStatus = finalStatus
+      ctx.hasFailedAllRetries = hasFailedAllRetries
+      ctx.attemptToFixPassed = attemptToFixPassed
+      ctx.attemptToFixFailed = attemptToFixFailed
+      ctx.isAttemptToFixRetry = isAttemptToFixRetry
+      ctx.isAtrRetry = isAtrRetry
     }
   }
 }
@@ -326,12 +402,20 @@ function getOnHookEndHandler () {
       if (isLastAfterEach) {
         const status = getTestStatus(test)
         const ctx = getTestContext(test)
-        if (ctx) {
+        // Disabled tests are already finished in getOnTestEndHandler,
+        // skip to avoid double-publishing
+        if (ctx && !test._ddIsDisabled) {
           testFinishCh.publish({
             status,
             hasBeenRetried: isMochaRetry(test),
             isLastRetry: getIsLastRetry(test),
+            hasFailedAllRetries: ctx.hasFailedAllRetries,
+            attemptToFixPassed: ctx.attemptToFixPassed,
+            attemptToFixFailed: ctx.attemptToFixFailed,
+            isAttemptToFixRetry: ctx.isAttemptToFixRetry,
+            isAtrRetry: ctx.isAtrRetry,
             ...ctx.currentStore,
+            finalStatus: ctx.finalStatus,
           })
         }
       }
@@ -357,7 +441,15 @@ function getOnFailHandler (isMain) {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
         // if it's a hook and it has failed, 'test end' will not be called
-        testFinishCh.publish({ status: 'fail', hasBeenRetried: isMochaRetry(test), ...testContext.currentStore })
+        // quarantined and disabled tests always report 'skip'
+        // as final status, even when hooks fail
+        const isSkippedByManagement = test._ddIsQuarantined || test._ddIsDisabled
+        testFinishCh.publish({
+          status: 'fail',
+          hasBeenRetried: isMochaRetry(test),
+          ...testContext.currentStore,
+          finalStatus: isSkippedByManagement ? 'skip' : 'fail',
+        })
       } else {
         testContext.err = err
         errorCh.runStores(testContext, () => {})
@@ -520,6 +612,7 @@ module.exports = {
   testFileToSuiteCtx,
   getRunTestsWrapper,
   newTests,
+  newTestsWithDynamicNames,
   testsQuarantined,
   testsAttemptToFix,
   testsStatuses,

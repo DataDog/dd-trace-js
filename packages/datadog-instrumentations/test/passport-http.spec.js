@@ -106,6 +106,7 @@ withVersions('passport-http', 'passport-http', version => {
 
     beforeEach(() => {
       subscriberStub = sinon.stub()
+      sinon.reset()
     })
 
     after(() => {
@@ -202,7 +203,7 @@ withVersions('passport-http', 'passport-http', version => {
         login: 'test',
         user: { _id: 1, username: 'test', password: '1234', email: 'testuser@ddog.com' },
         success: true,
-        abortController: new AbortController(),
+        abortController: sinon.match(ac => ac instanceof AbortController && ac.signal.aborted === true),
       })
     })
   })

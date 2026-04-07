@@ -81,7 +81,7 @@ describe('Plugin', () => {
             const buf = type.toBuffer({ name: 'Alyssa', favorite_number: 256, favorite_color: null })
             fs.writeFileSync(filePath, buf)
 
-            assert.strictEqual(span._name, 'user.serialize')
+            assert.strictEqual(span.context()._name, 'user.serialize')
 
             assert.strictEqual(compareJson(BASIC_USER_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
@@ -112,7 +112,7 @@ describe('Plugin', () => {
             })
             fs.writeFileSync(filePath, buf)
 
-            assert.strictEqual(span._name, 'advanced_user.serialize')
+            assert.strictEqual(span.context()._name, 'advanced_user.serialize')
 
             assert.strictEqual(compareJson(ADVANCED_USER_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
@@ -133,7 +133,7 @@ describe('Plugin', () => {
           tracer.trace('user.deserialize', span => {
             type.fromBuffer(buf)
 
-            assert.strictEqual(span._name, 'user.deserialize')
+            assert.strictEqual(span.context()._name, 'user.deserialize')
 
             assert.strictEqual(compareJson(BASIC_USER_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')
@@ -165,7 +165,7 @@ describe('Plugin', () => {
           tracer.trace('advanced_user.deserialize', span => {
             type.fromBuffer(buf)
 
-            assert.strictEqual(span._name, 'advanced_user.deserialize')
+            assert.strictEqual(span.context()._name, 'advanced_user.deserialize')
 
             assert.strictEqual(compareJson(ADVANCED_USER_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'avro')

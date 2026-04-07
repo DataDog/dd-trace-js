@@ -257,7 +257,7 @@ describe('Tracer', () => {
           .catch(done)
       })
 
-      it.skip('should not treat rejections as handled', done => {
+      it('should not treat rejections as handled', done => {
         const err = new Error('boom')
 
         tracer
