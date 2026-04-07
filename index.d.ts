@@ -787,6 +787,15 @@ declare namespace tracer {
          */
         enabled?: boolean,
         /**
+         * Whether to request blocking mode when evaluating prompts via auto-instrumentation.
+         * When `true`, AI Guard will block requests that violate security policies.
+         * When `false`, AI Guard evaluates but never blocks (monitor-only mode).
+         * @default false
+         * @env DD_AI_GUARD_BLOCK
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        block?: boolean,
+        /**
          * URL of the AI Guard REST API.
          * @env DD_AI_GUARD_ENDPOINT
          * Programmatic configuration takes precedence over the environment variables listed above.

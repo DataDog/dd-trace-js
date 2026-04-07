@@ -15,6 +15,8 @@ const {
   TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES,
 } = require('../telemetry')
 
+const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
+
 // Calculate the number of tests from the test management tests response, which has a shape like:
 // { module: { suites: { suite: { tests: { testName: { properties: {...} } } } } } }
 function getNumFromTestManagementTests (testManagementTests) {
@@ -48,6 +50,58 @@ function getTestManagementTests ({
   commitHeadSha,
   commitHeadMessage,
   branch,
+}, done) {
+  const effectiveSha = commitHeadSha || sha
+  const cacheKey = buildCacheKey('test-mgmt', [
+    effectiveSha, repositoryUrl, branch,
+  ])
+
+  withCache(cacheKey, (activeCacheKey, cb) => {
+    fetchFromApi({
+      url,
+      isEvpProxy,
+      evpProxyPrefix,
+      isGzipCompatible,
+      repositoryUrl,
+      commitMessage,
+      sha,
+      commitHeadSha,
+      commitHeadMessage,
+      branch,
+      cacheKey: activeCacheKey,
+    }, cb)
+  }, done)
+}
+
+/**
+ * Fetches test management tests from the API and writes the result to cache on success.
+ *
+ * @param {object} params
+ * @param {string} params.url
+ * @param {boolean} params.isEvpProxy
+ * @param {string} params.evpProxyPrefix
+ * @param {boolean} params.isGzipCompatible
+ * @param {string} params.repositoryUrl
+ * @param {string} [params.commitMessage]
+ * @param {string} params.sha
+ * @param {string} [params.commitHeadSha]
+ * @param {string} [params.commitHeadMessage]
+ * @param {string} [params.branch]
+ * @param {string | null} params.cacheKey
+ * @param {Function} done
+ */
+function fetchFromApi ({
+  url,
+  isEvpProxy,
+  evpProxyPrefix,
+  isGzipCompatible,
+  repositoryUrl,
+  commitMessage,
+  sha,
+  commitHeadSha,
+  commitHeadMessage,
+  branch,
+  cacheKey,
 }, done) {
   const options = {
     path: '/api/v2/test/libraries/test-management/tests',
@@ -109,6 +163,8 @@ function getTestManagementTests ({
         distributionMetric(TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_BYTES, {}, res.length)
 
         log.debug('Test management tests received: %j', testManagementTests)
+
+        writeToCache(cacheKey, testManagementTests)
 
         done(null, testManagementTests)
       } catch (err) {

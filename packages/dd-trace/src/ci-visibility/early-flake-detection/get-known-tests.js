@@ -16,12 +16,17 @@ const {
 } = require('../../ci-visibility/telemetry')
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
+const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 
 const MAX_KNOWN_TESTS_PAGES = 10_000
 
 /**
  * Deep-merges page tests into aggregate.
  * Structure: { module: { suite: [testName, ...] } }
+ *
+ * @param {object | null} aggregate
+ * @param {object | null} page
+ * @returns {object | null}
  */
 function mergeKnownTests (aggregate, page) {
   if (!page) return aggregate
@@ -62,6 +67,71 @@ function getKnownTests ({
   runtimeName,
   runtimeVersion,
   custom,
+}, done) {
+  const cacheKey = buildCacheKey('known-tests', [
+    sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
+    runtimeName, runtimeVersion, custom,
+  ])
+
+  withCache(cacheKey, (activeCacheKey, cb) => {
+    fetchFromApi({
+      url,
+      isEvpProxy,
+      evpProxyPrefix,
+      isGzipCompatible,
+      env,
+      service,
+      repositoryUrl,
+      sha,
+      osVersion,
+      osPlatform,
+      osArchitecture,
+      runtimeName,
+      runtimeVersion,
+      custom,
+      cacheKey: activeCacheKey,
+    }, cb)
+  }, done)
+}
+
+/**
+ * Fetches known tests from the API with cursor-based pagination and writes the
+ * result to cache on success.
+ *
+ * @param {object} params
+ * @param {string} params.url
+ * @param {boolean} params.isEvpProxy
+ * @param {string} params.evpProxyPrefix
+ * @param {boolean} params.isGzipCompatible
+ * @param {string} params.env
+ * @param {string} params.service
+ * @param {string} params.repositoryUrl
+ * @param {string} params.sha
+ * @param {string} params.osVersion
+ * @param {string} params.osPlatform
+ * @param {string} params.osArchitecture
+ * @param {string} params.runtimeName
+ * @param {string} params.runtimeVersion
+ * @param {object} [params.custom]
+ * @param {string | null} params.cacheKey
+ * @param {Function} done
+ */
+function fetchFromApi ({
+  url,
+  isEvpProxy,
+  evpProxyPrefix,
+  isGzipCompatible,
+  env,
+  service,
+  repositoryUrl,
+  sha,
+  osVersion,
+  osPlatform,
+  osArchitecture,
+  runtimeName,
+  runtimeVersion,
+  custom,
+  cacheKey,
 }, done) {
   const options = {
     path: '/api/v2/ci/libraries/tests',
@@ -166,7 +236,9 @@ function getKnownTests ({
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, numTests)
         distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, totalResponseBytes)
 
-        log.debug('Number of received known tests:', numTests)
+        log.debug('Number of received known tests: %d', numTests)
+
+        writeToCache(cacheKey, aggregateTests)
 
         done(null, aggregateTests)
       } catch (err) {
