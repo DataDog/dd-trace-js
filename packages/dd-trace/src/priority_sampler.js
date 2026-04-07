@@ -249,7 +249,7 @@ class PrioritySampler {
     }
     const rawPriority = tags[SAMPLING_PRIORITY]
     if (rawPriority !== undefined) {
-      const priority = Number.parseInt(String(rawPriority), 10)
+      const priority = Math.trunc(rawPriority)
 
       if (priority === 1 || priority === 2) {
         return USER_KEEP

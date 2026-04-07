@@ -1248,35 +1248,37 @@ versions.forEach((version) => {
         await Promise.all([once(childProcess, 'exit'), receiverPromise])
       })
 
-      it('tags new tests with dynamic names and logs a warning', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: { '5s': 1 },
-            faulty_session_threshold: 100,
-          },
-          known_tests_enabled: true,
-        })
-        receiver.setKnownTests({ playwright: {} })
-
-        childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisEvpProxyConfig(receiver.port),
-              TEST_DIR: './ci-visibility/playwright-tests-dynamic',
+      contextNewVersions('dynamic name detection', () => {
+        it('tags new tests with dynamic names and logs a warning', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 1 },
+              faulty_session_threshold: 100,
             },
-          }
-        )
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({ playwright: {} })
 
-        let testOutput = ''
-        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-tests-dynamic',
+              },
+            }
+          )
 
-        await once(childProcess, 'exit')
+          let testOutput = ''
+          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
 
-        assert.match(testOutput, /detected as new but their names contain dynamic data/)
+          await once(childProcess, 'exit')
+
+          assert.match(testOutput, /detected as new but their names contain dynamic data/)
+        })
       })
     })
 

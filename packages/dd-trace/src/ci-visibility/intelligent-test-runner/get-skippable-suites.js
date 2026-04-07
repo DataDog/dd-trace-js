@@ -13,6 +13,7 @@ const {
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS,
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES,
 } = require('../../ci-visibility/telemetry')
+const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 
 function getSkippableSuites ({
   url,
@@ -30,6 +31,76 @@ function getSkippableSuites ({
   runtimeVersion,
   custom,
   testLevel = 'suite',
+}, done) {
+  const cacheKey = buildCacheKey('skippable', [
+    sha, service, env, repositoryUrl, osPlatform, osVersion, osArchitecture,
+    runtimeName, runtimeVersion, testLevel, custom,
+  ])
+
+  withCache(cacheKey, (activeCacheKey, cb) => {
+    fetchFromApi({
+      url,
+      isEvpProxy,
+      evpProxyPrefix,
+      isGzipCompatible,
+      env,
+      service,
+      repositoryUrl,
+      sha,
+      osVersion,
+      osPlatform,
+      osArchitecture,
+      runtimeName,
+      runtimeVersion,
+      custom,
+      testLevel,
+      cacheKey: activeCacheKey,
+    }, cb)
+  }, (err, data) => {
+    if (err) return done(err)
+    done(null, data.skippableSuites, data.correlationId)
+  })
+}
+
+/**
+ * Fetches skippable suites from the API and writes the result to cache on success.
+ *
+ * @param {object} params
+ * @param {string} params.url
+ * @param {boolean} params.isEvpProxy
+ * @param {string} params.evpProxyPrefix
+ * @param {boolean} params.isGzipCompatible
+ * @param {string} params.env
+ * @param {string} params.service
+ * @param {string} params.repositoryUrl
+ * @param {string} params.sha
+ * @param {string} params.osVersion
+ * @param {string} params.osPlatform
+ * @param {string} params.osArchitecture
+ * @param {string} params.runtimeName
+ * @param {string} params.runtimeVersion
+ * @param {object} [params.custom]
+ * @param {string} [params.testLevel]
+ * @param {string | null} params.cacheKey
+ * @param {Function} done
+ */
+function fetchFromApi ({
+  url,
+  isEvpProxy,
+  evpProxyPrefix,
+  isGzipCompatible,
+  env,
+  service,
+  repositoryUrl,
+  sha,
+  osVersion,
+  osPlatform,
+  osArchitecture,
+  runtimeName,
+  runtimeVersion,
+  custom,
+  testLevel,
+  cacheKey,
 }, done) {
   const options = {
     path: '/api/v2/ci/tests/skippable',
@@ -109,7 +180,11 @@ function getSkippableSuites ({
         )
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
         log.debug('Number of received skippable %ss:', testLevel, skippableSuites.length)
-        done(null, skippableSuites, correlationId)
+
+        const result = { skippableSuites, correlationId }
+        writeToCache(cacheKey, result)
+
+        done(null, result)
       } catch (err) {
         done(err)
       }
