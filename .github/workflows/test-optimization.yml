@@ -67,19 +67,16 @@ jobs:
         playwright-version: [oldest, latest]
     name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     container:
       image: rochdev/playwright-tools@sha256:99a8e8df71996aa7797f83e98df50bc550c7c6eaf0b701f19fa4f928f2cf93b2 # 1.54.1-3
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -106,7 +103,6 @@ jobs:
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-mocha:
     strategy:
@@ -114,15 +110,12 @@ jobs:
         version: [oldest, latest]
         mocha-version: [5.2.0, latest]
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -131,7 +124,6 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-jest:
     strategy:
@@ -139,15 +131,12 @@ jobs:
         version: [oldest, latest]
         jest-version: [24.8.0, latest]
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -156,7 +145,6 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cucumber:
     strategy:
@@ -164,15 +152,12 @@ jobs:
         version: [oldest, latest]
         cucumber-version: [7.0.0, latest]
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -181,23 +166,19 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-selenium:
     strategy:
       matrix:
         version: [oldest, latest]
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -222,7 +203,6 @@ jobs:
       - run: yarn test:integration:selenium
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cypress:
     strategy:
@@ -235,15 +215,12 @@ jobs:
         cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
         module-type: ["commonJS", "esm"]
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -263,23 +240,19 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     strategy:
       matrix:
         version: [oldest, latest]
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
       OPTIONS_OVERRIDE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -287,4 +260,3 @@ jobs:
       - run: yarn test:integration:vitest
         env:
           NODE_OPTIONS: "-r ./ci/init"
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
