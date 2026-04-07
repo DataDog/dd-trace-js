@@ -1123,7 +1123,6 @@ class CypressPlugin {
         if (isQuarantinedFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
         }
-        const activeSpan = this.activeTestSpan._span || this.activeTestSpan
         const finishedTest = {
           testName,
           testStatus,
