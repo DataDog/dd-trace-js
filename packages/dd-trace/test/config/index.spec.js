@@ -372,6 +372,7 @@ describe('Config', () => {
       env: undefined,
       experimental: {
         aiguard: {
+          block: false,
           enabled: false,
           endpoint: undefined,
           maxMessagesLength: 16,
@@ -507,6 +508,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: [], origin: 'default' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 1, origin: 'default' },
       { name: 'env', value: undefined, origin: 'default' },
+      { name: 'experimental.aiguard.block', value: false, origin: 'default' },
       { name: 'experimental.aiguard.enabled', value: false, origin: 'default' },
       { name: 'experimental.aiguard.endpoint', value: undefined, origin: 'default' },
       { name: 'experimental.aiguard.maxContentSize', value: 512 * 1024, origin: 'default' },
@@ -638,6 +640,7 @@ describe('Config', () => {
   })
 
   it('should initialize from environment variables', () => {
+    process.env.DD_AI_GUARD_BLOCK = 'true'
     process.env.DD_AI_GUARD_ENABLED = 'true'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datad0g.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(1024 * 1024)
@@ -834,6 +837,7 @@ describe('Config', () => {
       env: 'test',
       experimental: {
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
@@ -971,11 +975,12 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'env_var' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'env_var' },
       { name: 'env', value: 'test', origin: 'env_var' },
-      { name: 'experimental.aiguard.enabled', value: false, origin: 'default' },
-      { name: 'experimental.aiguard.endpoint', value: undefined, origin: 'default' },
-      { name: 'experimental.aiguard.maxContentSize', value: 512 * 1024, origin: 'default' },
-      { name: 'experimental.aiguard.maxMessagesLength', value: 16, origin: 'default' },
-      { name: 'experimental.aiguard.timeout', value: 10_000, origin: 'default' },
+      { name: 'experimental.aiguard.block', value: true, origin: 'env_var' },
+      { name: 'experimental.aiguard.enabled', value: true, origin: 'env_var' },
+      { name: 'experimental.aiguard.endpoint', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'env_var' },
+      { name: 'experimental.aiguard.maxContentSize', value: String(1024 * 1024), origin: 'env_var' },
+      { name: 'experimental.aiguard.maxMessagesLength', value: '32', origin: 'env_var' },
+      { name: 'experimental.aiguard.timeout', value: '2000', origin: 'env_var' },
       { name: 'experimental.enableGetRumData', value: true, origin: 'env_var' },
       { name: 'experimental.exporter', value: 'log', origin: 'env_var' },
       { name: 'hostname', value: 'agent', origin: 'env_var' },
@@ -1213,6 +1218,7 @@ describe('Config', () => {
       experimental: {
         b3: true,
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
@@ -1326,6 +1332,7 @@ describe('Config', () => {
       env: 'test',
       experimental: {
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
         },
@@ -1451,6 +1458,7 @@ describe('Config', () => {
       { name: 'dynamicInstrumentation.redactionExcludedIdentifiers', value: ['a', 'b', 'c'], origin: 'code' },
       { name: 'dynamicInstrumentation.uploadIntervalSeconds', value: 0.1, origin: 'code' },
       { name: 'env', value: 'test', origin: 'code' },
+      { name: 'experimental.aiguard.block', value: true, origin: 'code' },
       { name: 'experimental.aiguard.enabled', value: true, origin: 'code' },
       { name: 'experimental.aiguard.endpoint', value: 'https://dd.datad0g.com/api/unstable/ai-guard', origin: 'code' },
       { name: 'experimental.aiguard.maxContentSize', value: 1024 * 1024, origin: 'code' },
@@ -1648,6 +1656,7 @@ describe('Config', () => {
   })
 
   it('should give priority to the options', () => {
+    process.env.DD_AI_GUARD_BLOCK = 'false'
     process.env.DD_AI_GUARD_ENABLED = 'false'
     process.env.DD_AI_GUARD_ENDPOINT = 'https://dd.datadog.com/api/unstable/ai-guard'
     process.env.DD_AI_GUARD_MAX_CONTENT_SIZE = String(512 * 1024)
@@ -1783,6 +1792,7 @@ describe('Config', () => {
       env: 'development',
       experimental: {
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
@@ -1903,6 +1913,7 @@ describe('Config', () => {
       env: 'development',
       experimental: {
         aiguard: {
+          block: true,
           enabled: true,
           endpoint: 'https://dd.datad0g.com/api/unstable/ai-guard',
           maxContentSize: 1024 * 1024,
