@@ -929,7 +929,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             if (isLatestMocha) {
               assert.strictEqual(tests.length, 16)
             } else {
-              assert.strictEqual(tests.length, 4)
+              // In old mocha (< 6.0.0), retries.js reports only final results (2 tests).
+              // retries-with-hooks.js reports each attempt because afterEach hooks trigger
+              // getOnHookEndHandler on every retry (3 pass attempts + 5 fail attempts = 8).
+              assert.strictEqual(tests.length, 10)
             }
 
             const eventuallyPassingTests = tests.filter(t =>
