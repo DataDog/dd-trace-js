@@ -37,7 +37,7 @@ class ModelcontextprotocolSdkTestSetup {
       }
     })
 
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    const [clientTransport, serverTransport] = this._InMemoryTransport.createLinkedPair()
 
     await this._server.connect(serverTransport)
 
@@ -69,12 +69,18 @@ class ModelcontextprotocolSdkTestSetup {
     return this._client.callTool({ name: 'error-tool', arguments: {} })
   }
 
-  async protocolRequest () {
+  async clientListTools () {
     return this._client.listTools()
   }
 
-  async protocolRequestError () {
-    return this._client.request({ method: 'nonexistent/method', params: {} }, {})
+  async clientReconnect () {
+    const [clientTransport, serverTransport] = this._InMemoryTransport.createLinkedPair()
+    const server = new this._Server({ name: 'test-server', version: '1.0.0' }, { capabilities: { tools: {} } })
+    await server.connect(serverTransport)
+    const client = new this._Client({ name: 'test-client', version: '1.0.0' })
+    await client.connect(clientTransport)
+    await client.close()
+    await server.close()
   }
 }
 

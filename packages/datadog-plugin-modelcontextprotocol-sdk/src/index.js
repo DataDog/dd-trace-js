@@ -2,7 +2,7 @@
 
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const mcpLLMObsPlugins = require('../../dd-trace/src/llmobs/plugins/modelcontextprotocol-sdk')
-const clientPlugin = require('./client')
+const tracingPlugins = require('./tracing')
 
 const plugins = {}
 
@@ -12,7 +12,7 @@ for (const Plugin of mcpLLMObsPlugins) {
 }
 
 // Tracing plugins second
-for (const Plugin of clientPlugin) {
+for (const Plugin of tracingPlugins) {
   plugins[Plugin.id] = Plugin
 }
 

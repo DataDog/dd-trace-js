@@ -1,5 +1,8 @@
 'use strict'
 
+// NOTE: Protocol.request (dist/esm|cjs/shared/protocol.js) is intentionally not instrumented here.
+// It will be used for distributed tracing header injection when server-side coverage is added.
+
 module.exports = [
   {
     module: {
@@ -31,26 +34,52 @@ module.exports = [
     module: {
       name: '@modelcontextprotocol/sdk',
       versionRange: '>=1.27.1',
-      filePath: 'dist/esm/shared/protocol.js',
+      filePath: 'dist/esm/client/index.js',
     },
     functionQuery: {
-      methodName: 'request',
-      className: 'Protocol',
+      methodName: 'listTools',
+      className: 'Client',
       kind: 'Async',
     },
-    channelName: 'Protocol_request',
+    channelName: 'Client_listTools',
   },
   {
     module: {
       name: '@modelcontextprotocol/sdk',
       versionRange: '>=1.27.1',
-      filePath: 'dist/cjs/shared/protocol.js',
+      filePath: 'dist/cjs/client/index.js',
     },
     functionQuery: {
-      methodName: 'request',
-      className: 'Protocol',
+      methodName: 'listTools',
+      className: 'Client',
       kind: 'Async',
     },
-    channelName: 'Protocol_request',
+    channelName: 'Client_listTools',
+  },
+  {
+    module: {
+      name: '@modelcontextprotocol/sdk',
+      versionRange: '>=1.27.1',
+      filePath: 'dist/esm/client/index.js',
+    },
+    functionQuery: {
+      methodName: 'connect',
+      className: 'Client',
+      kind: 'Async',
+    },
+    channelName: 'Client_connect',
+  },
+  {
+    module: {
+      name: '@modelcontextprotocol/sdk',
+      versionRange: '>=1.27.1',
+      filePath: 'dist/cjs/client/index.js',
+    },
+    functionQuery: {
+      methodName: 'connect',
+      className: 'Client',
+      kind: 'Async',
+    },
+    channelName: 'Client_connect',
   },
 ]

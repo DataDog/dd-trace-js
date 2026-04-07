@@ -40,7 +40,6 @@ describe('integrations', () => {
         CallToolRequestSchema = typesMod.CallToolRequestSchema
         ListToolsRequestSchema = typesMod.ListToolsRequestSchema
 
-        // Set up mock MCP server
         server = new Server(
           { name: 'test-server', version: '1.0.0' },
           { capabilities: { tools: {} } }
@@ -83,6 +82,9 @@ describe('integrations', () => {
 
         client = new Client({ name: 'test-client', version: '1.0.0' })
         await client.connect(clientTransport)
+
+        // Drain any spans generated during setup (e.g. mcp.connect workflow span)
+        await getEvents()
       })
 
       after(async () => {
@@ -102,13 +104,9 @@ describe('integrations', () => {
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'tool',
-            name: 'mcp.tool.test-tool',
+            name: 'MCP Client Tool Call: test-tool',
             inputValue: JSON.stringify({ name: 'test-tool', arguments: {} }),
             outputValue: 'Result from test-tool',
-            metadata: {
-              'mcp.tool.name': 'test-tool',
-              'mcp.server.name': 'test-server',
-            },
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
         })
@@ -126,16 +124,12 @@ describe('integrations', () => {
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'tool',
-            name: 'mcp.tool.test-tool',
+            name: 'MCP Client Tool Call: test-tool',
             inputValue: JSON.stringify({
               name: 'test-tool',
               arguments: { query: 'hello world', limit: 10 },
             }),
             outputValue: 'Result from test-tool',
-            metadata: {
-              'mcp.tool.name': 'test-tool',
-              'mcp.server.name': 'test-server',
-            },
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
         })
@@ -151,13 +145,9 @@ describe('integrations', () => {
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'tool',
-            name: 'mcp.tool.multi-content-tool',
+            name: 'MCP Client Tool Call: multi-content-tool',
             inputValue: JSON.stringify({ name: 'multi-content-tool', arguments: {} }),
             outputValue: 'First part\nSecond part',
-            metadata: {
-              'mcp.tool.name': 'multi-content-tool',
-              'mcp.server.name': 'test-server',
-            },
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
         })
@@ -175,17 +165,53 @@ describe('integrations', () => {
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'tool',
-            name: 'mcp.tool.error-tool',
+            name: 'MCP Client Tool Call: error-tool',
             inputValue: JSON.stringify({ name: 'error-tool', arguments: {} }),
             error: {
               type: MOCK_STRING,
               message: MOCK_STRING,
               stack: MOCK_STRING,
             },
-            metadata: {
-              'mcp.tool.name': 'error-tool',
-              'mcp.server.name': 'test-server',
-            },
+            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
+          })
+        })
+      })
+
+      describe('Client.listTools', () => {
+        it('creates a task span for listing tools', async () => {
+          const result = await client.listTools()
+
+          assert.ok(result.tools)
+          assert.equal(result.tools.length, 3)
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'task',
+            name: 'MCP Client list Tools',
+            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
+          })
+        })
+      })
+
+      describe('Client.connect', () => {
+        it('creates a workflow span for connecting', async () => {
+          const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+          const newServer = new Server({ name: 'test-server', version: '1.0.0' }, { capabilities: { tools: {} } })
+          await newServer.connect(serverTransport)
+
+          const newClient = new Client({ name: 'test-client', version: '1.0.0' })
+          await newClient.connect(clientTransport)
+          await newClient.close()
+          await newServer.close()
+
+          const { apmSpans, llmobsSpans } = await getEvents()
+
+          assertLlmObsSpanEvent(llmobsSpans[0], {
+            span: apmSpans[0],
+            spanKind: 'workflow',
+            name: 'MCP Client Session',
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
         })
