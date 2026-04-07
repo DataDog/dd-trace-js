@@ -75,6 +75,31 @@ module.exports = [
     },
     channelName: 'selectTelemetryAttributes',
   },
+  // resolveLanguageModel called by all LLM entry points, its result is the resolved model instance.
+  {
+    module: {
+      name: 'ai',
+      versionRange: '>=6.0.0',
+      filePath: 'dist/index.js',
+    },
+    functionQuery: {
+      functionName: 'resolveLanguageModel',
+      kind: 'Sync',
+    },
+    channelName: 'resolveLanguageModel',
+  },
+  {
+    module: {
+      name: 'ai',
+      versionRange: '>=6.0.0',
+      filePath: 'dist/index.mjs',
+    },
+    functionQuery: {
+      functionName: 'resolveLanguageModel',
+      kind: 'Sync',
+    },
+    channelName: 'resolveLanguageModel',
+  },
   // tool
   {
     module: {
