@@ -520,6 +520,13 @@
         ]
       }
     ],
+    "DD_ENABLE_LAGE_PACKAGE_NAME": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_CIVISIBILITY_MANUAL_API_ENABLED": [
       {
         "implementation": "A",
