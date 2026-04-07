@@ -151,6 +151,10 @@ updates:
       - dependencies
       - javascript
       - semver-patch
+    ignore:
+      - dependency-name: "office-addin-mock"
+        # Pinned to 2.x due to compatibility issues with newer major versions
+        update-types: ["version-update:semver-major"]
     groups:
       test-versions:
         patterns:
