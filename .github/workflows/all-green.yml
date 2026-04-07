@@ -15,6 +15,7 @@ jobs:
   all-green:
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       checks: read
       contents: read
     steps:

@@ -228,7 +228,7 @@ describe('Plugin', () => {
             sub.on('message', msg => {
               const activeSpan = tracer.scope().active()
               if (activeSpan) {
-                const receiverSpanContext = activeSpan._spanContext
+                const receiverSpanContext = activeSpan.context()
                 assert.ok(typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null)
               }
               msg.ack()

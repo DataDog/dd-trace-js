@@ -456,11 +456,15 @@ declare namespace tracer {
   export interface PropagationStyle {
     /**
      * Selection of context propagation injection mechanisms.
+     * @env DD_TRACE_PROPAGATION_STYLE, DD_TRACE_PROPAGATION_STYLE_INJECT
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     inject: string[],
 
     /**
      * Selection and priority order of context propagation extraction mechanisms.
+     * @env DD_TRACE_PROPAGATION_STYLE, DD_TRACE_PROPAGATION_STYLE_EXTRACT
+     * Programmatic configuration takes precedence over the environment variables listed above.
      */
     extract: string[]
   }
@@ -476,6 +480,14 @@ declare namespace tracer {
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
     apmTracingEnabled?: boolean
+
+    /**
+     * List of baggage tag keys to be included in the baggage.
+     * @default ['user.id', 'session.id', 'account.id']
+     * @env DD_TRACE_BAGGAGE_TAG_KEYS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    baggageTagKeys?: string[];
 
     /**
      * Whether to enable trace ID injection in log records to be able to correlate
@@ -577,7 +589,7 @@ declare namespace tracer {
 
     /**
      * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
-     * @env DD_TRACE_SAMPLE_RATE, OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG
+     * @env DD_TRACE_SAMPLE_RATE
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
     sampleRate?: number;
@@ -682,7 +694,7 @@ declare namespace tracer {
     ingestion?: {
       /**
        * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
-       * @env DD_TRACE_SAMPLE_RATE, OTEL_TRACES_SAMPLER, OTEL_TRACES_SAMPLER_ARG
+       * @env DD_TRACE_SAMPLE_RATE
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       sampleRate?: number
@@ -694,6 +706,22 @@ declare namespace tracer {
        */
       rateLimit?: number
     };
+
+    /**
+     * Whether to enable inferred proxy services.
+     * @default false
+     * @env DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    inferredProxyServicesEnabled?: boolean
+
+    /**
+     * The site to use for the trace.
+     * @default 'datadoghq.com'
+     * @env DD_SITE
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    site?: string;
 
     /**
      * Experimental features can be enabled individually using key / value pairs.
@@ -725,24 +753,31 @@ declare namespace tracer {
 
       /**
        * Configuration of the IAST. Can be a boolean as an alias to `iast.enabled`.
+       * @deprecated Please use the non-experimental `iast` option instead.
        */
       iast?: boolean | IastOptions
 
-      appsec?: {
+      /**
+       * Configuration of the AppSec. Can be a boolean as an alias to `appsec.enabled`.
+       * @deprecated Please use the non-experimental `appsec` option instead.
+       */
+      appsec?: boolean | {
         /**
          * Configuration of Standalone ASM mode
          * Deprecated in favor of `apmTracingEnabled`.
          *
-         * @deprecated
+         * @deprecated Please use `apmTracingEnabled` instead.
          */
         standalone?: {
           /**
            * Whether to enable Standalone ASM.
            * @default false
+           * @env DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED
+           * Programmatic configuration takes precedence over the environment variables listed above.
            */
           enabled?: boolean
         }
-      },
+      } | TracerOptions['appsec'],
 
       aiguard?: {
         /**
@@ -751,6 +786,15 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
+        /**
+         * Whether to request blocking mode when evaluating prompts via auto-instrumentation.
+         * When `true`, AI Guard will block requests that violate security policies.
+         * When `false`, AI Guard evaluates but never blocks (monitor-only mode).
+         * @default false
+         * @env DD_AI_GUARD_BLOCK
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        block?: boolean,
         /**
          * URL of the AI Guard REST API.
          * @env DD_AI_GUARD_ENDPOINT
@@ -808,6 +852,7 @@ declare namespace tracer {
 
     /**
      * Whether to load all built-in plugins.
+     * @deprecated To deactivate plugins, use the specific DD_TRACE_<INTEGRATION>_ENABLED environment variables.
      * @default true
      */
     plugins?: boolean;
@@ -1092,6 +1137,18 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean
+
+      experimental?: {
+        exit_spans?: {
+          /**
+           * Whether to attach code origin data to exit spans.
+           * @default false
+           * @env DD_CODE_ORIGIN_FOR_SPANS_EXPERIMENTAL_EXIT_SPANS_ENABLED
+           * Programmatic configuration takes precedence over the environment variables listed above.
+           */
+          enabled?: boolean
+        }
+      }
     }
 
     /**
@@ -1226,6 +1283,134 @@ declare namespace tracer {
        */
       redactionExcludedIdentifiers?: string[]
     }
+
+    /**
+     * Maximum size in bytes for serialized baggage items.
+     * @default 8192
+     * @env DD_TRACE_BAGGAGE_MAX_BYTES
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    baggageMaxBytes?: number
+
+    /**
+     * Maximum number of baggage items allowed on a context.
+     * @default 64
+     * @env DD_TRACE_BAGGAGE_MAX_ITEMS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    baggageMaxItems?: number
+
+    /**
+     * Header tags (key-value pairs comma separated) to extract and attach to spans.
+     * TODO: In the next major version, this will become an object.
+     * @env DD_TRACE_HEADER_TAGS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    headerTags?: string[]
+
+    /**
+     * Whether to use Datadog legacy baggage extraction and injection behavior.
+     * @default false
+     * @env DD_TRACE_LEGACY_BAGGAGE_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    legacyBaggageEnabled?: boolean
+
+    /**
+     * Whether middleware spans should be created.
+     * @default true
+     * @env DD_TRACE_MIDDLEWARE_TRACING_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    middlewareTracingEnabled?: boolean
+
+    /**
+     * Whether to enable OpenAI log collection.
+     * @default false
+     * @env DD_OPENAI_LOGS_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    openAiLogsEnabled?: boolean
+
+    /**
+     * Peer service name remapping rules.
+     * @env DD_TRACE_PEER_SERVICE_MAPPING
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    peerServiceMapping?: { [key: string]: string }
+
+    /**
+     * Controls the naming schema version used for spans.
+     * @default 'v0'
+     * @env DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    spanAttributeSchema?: 'v0' | 'v1'
+
+    /**
+     * Whether to compute peer.service tags automatically.
+     * @default false
+     * @env DD_TRACE_PEER_SERVICE_DEFAULTS_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    spanComputePeerService?: boolean
+
+    /**
+     * Whether to remove integration names from service names under the active schema.
+     * @default false
+     * @env DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    spanRemoveIntegrationFromService?: boolean
+
+    /**
+     * Whether to enable client-side stats computation.
+     * @default false
+     * @env DD_TRACE_STATS_COMPUTATION_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    stats?: boolean
+
+    /**
+     * Whether to generate 128-bit trace IDs.
+     * @default true
+     * @env DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceId128BitGenerationEnabled?: boolean
+
+    /**
+     * Whether to include the high 64 bits of 128-bit trace IDs in logs.
+     * @default true
+     * @env DD_TRACE_128_BIT_TRACEID_LOGGING_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceId128BitLoggingEnabled?: boolean
+
+    /**
+     * Whether websocket message spans should be created.
+     * @default true
+     * @env DD_TRACE_WEBSOCKET_MESSAGES_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceWebsocketMessagesEnabled?: boolean
+
+    /**
+     * Whether websocket message spans should inherit sampling decisions.
+     * @default true
+     * @env DD_TRACE_WEBSOCKET_MESSAGES_INHERIT_SAMPLING
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceWebsocketMessagesInheritSampling?: boolean
+
+    /**
+     * Whether websocket message spans should start separate traces.
+     * @default true
+     * @env DD_TRACE_WEBSOCKET_MESSAGES_SEPARATE_TRACES
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    traceWebsocketMessagesSeparateTraces?: boolean
+
   }
 
   /**
@@ -3257,13 +3442,6 @@ declare namespace tracer {
     maxContextOperations?: number,
 
     /**
-     * Defines the pattern to ignore cookie names in the vulnerability hash calculation
-     * @default ".{32,}"
-     * @deprecated This property has no effect because hash calculation algorithm has been updated for cookie vulnerabilities
-     */
-    cookieFilterPattern?: string,
-
-    /**
      * Defines the number of rows to taint in data coming from databases
      * @default 1
      * @env DD_IAST_DB_ROWS_TO_TAINT
@@ -3304,7 +3482,7 @@ declare namespace tracer {
      * Allows to enable security controls. This option is not supported when
      * using ESM.
      * @deprecated Please use the DD_IAST_SECURITY_CONTROLS_CONFIGURATION
-     * environment variable instead.
+     * environment variable instead. This option will be removed in the next major version.
      * @env DD_IAST_SECURITY_CONTROLS_CONFIGURATION
      * Programmatic configuration takes precedence over the environment variables listed above.
      */

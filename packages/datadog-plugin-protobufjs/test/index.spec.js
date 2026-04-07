@@ -73,7 +73,7 @@ describe('Plugin', () => {
           tracer.trace('other_message.serialize', span => {
             loadedMessages.OtherMessage.type.encode(loadedMessages.OtherMessage.instance).finish()
 
-            assert.strictEqual(span._name, 'other_message.serialize')
+            assert.strictEqual(span.context()._name, 'other_message.serialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -89,7 +89,7 @@ describe('Plugin', () => {
             tracer.trace('other_message.serialize', span => {
               loadedMessages.OtherMessage.type.encode(loadedMessages.OtherMessage.instance).finish()
 
-              assert.strictEqual(span._name, 'other_message.serialize')
+              assert.strictEqual(span.context()._name, 'other_message.serialize')
 
               assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
               assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -107,7 +107,7 @@ describe('Plugin', () => {
           tracer.trace('message_pb2.serialize', span => {
             loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
 
-            assert.strictEqual(span._name, 'message_pb2.serialize')
+            assert.strictEqual(span.context()._name, 'message_pb2.serialize')
 
             assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -124,7 +124,7 @@ describe('Plugin', () => {
           tracer.trace('all_types.serialize', span => {
             loadedMessages.MainMessage.type.encode(loadedMessages.MainMessage.instance).finish()
 
-            assert.strictEqual(span._name, 'all_types.serialize')
+            assert.strictEqual(span.context()._name, 'all_types.serialize')
 
             assert.strictEqual(compareJson(ALL_TYPES_MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -143,7 +143,7 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             loadedMessages.OtherMessage.type.decode(bytes)
 
-            assert.strictEqual(span._name, 'other_message.deserialize')
+            assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -162,7 +162,7 @@ describe('Plugin', () => {
           tracer.trace('my_message.deserialize', span => {
             loadedMessages.MyMessage.type.decode(bytes)
 
-            assert.strictEqual(span._name, 'my_message.deserialize')
+            assert.strictEqual(span.context()._name, 'my_message.deserialize')
 
             assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -181,7 +181,7 @@ describe('Plugin', () => {
           tracer.trace('all_types.deserialize', span => {
             loadedMessages.MainMessage.type.decode(bytes)
 
-            assert.strictEqual(span._name, 'all_types.deserialize')
+            assert.strictEqual(span.context()._name, 'all_types.deserialize')
 
             assert.strictEqual(compareJson(ALL_TYPES_MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -206,7 +206,7 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             OtherMessage.decode(bytes)
 
-            assert.strictEqual(span._name, 'other_message.deserialize')
+            assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -230,7 +230,7 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             OtherMessage.decodeDelimited(bytes)
 
-            assert.strictEqual(span._name, 'other_message.deserialize')
+            assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -256,7 +256,7 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             OtherMessage.decodeDelimited(bytes)
 
-            assert.strictEqual(span._name, 'other_message.deserialize')
+            assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -282,7 +282,7 @@ describe('Plugin', () => {
           tracer.trace('other_message.deserialize', span => {
             OtherMessage.decodeDelimited(bytes)
 
-            assert.strictEqual(span._name, 'other_message.deserialize')
+            assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
             assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -315,7 +315,7 @@ describe('Plugin', () => {
             tracer.trace('message_pb2.serialize', span => {
               loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
 
-              assert.strictEqual(span._name, 'message_pb2.serialize')
+              assert.strictEqual(span.context()._name, 'message_pb2.serialize')
 
               assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
               assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
@@ -332,7 +332,7 @@ describe('Plugin', () => {
             tracer.trace('message_pb2.serialize', span => {
               loadedMessages.MyMessage.type.encode(loadedMessages.MyMessage.instance).finish()
 
-              assert.strictEqual(span._name, 'message_pb2.serialize')
+              assert.strictEqual(span.context()._name, 'message_pb2.serialize')
 
               assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
               assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')

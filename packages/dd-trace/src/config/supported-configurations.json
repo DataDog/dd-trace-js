@@ -46,6 +46,16 @@
         ]
       }
     ],
+    "DD_AI_GUARD_BLOCK": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "experimental.aiguard.block"
+        ],
+        "default": "false"
+      }
+    ],
     "DD_AI_GUARD_ENABLED": [
       {
         "implementation": "A",
@@ -510,6 +520,13 @@
         ]
       }
     ],
+    "DD_ENABLE_LAGE_PACKAGE_NAME": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_CIVISIBILITY_MANUAL_API_ENABLED": [
       {
         "implementation": "A",
@@ -744,9 +761,9 @@
     ],
     "DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "false",
+        "default": "true",
         "configurationNames": [
           "propagateProcessTags.enabled"
         ]
@@ -767,6 +784,13 @@
       }
     ],
     "DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE": [
       {
         "implementation": "A",
         "type": "boolean",
