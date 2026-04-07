@@ -927,9 +927,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
             if (isLatestMocha) {
-              assert.strictEqual(tests.length, 8)
+              assert.strictEqual(tests.length, 16)
             } else {
-              assert.strictEqual(tests.length, 2)
+              // In old mocha (< 6.0.0), retries.js reports only final results (2 tests).
+              // retries-with-hooks.js reports each attempt because afterEach hooks trigger
+              // getOnHookEndHandler on every retry (3 pass attempts + 5 fail attempts = 8).
+              assert.strictEqual(tests.length, 10)
             }
 
             const eventuallyPassingTests = tests.filter(t =>
@@ -950,10 +953,36 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             } else {
               assert.strictEqual(failedTests.length, 1)
             }
+
+            // With afterEach hooks — retry tags should still be set correctly
+            if (isLatestMocha) {
+              const hooksPassTests = tests.filter(t =>
+                t.meta[TEST_NAME] === 'mocha-test-retries-with-hooks will be retried and pass'
+              )
+              assert.strictEqual(hooksPassTests.length, 3)
+              const hooksPassRetries = hooksPassTests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(hooksPassRetries.length, 2)
+              hooksPassRetries.forEach(t => {
+                assert.strictEqual(t.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              })
+
+              const hooksFailTests = tests.filter(t =>
+                t.meta[TEST_NAME] === 'mocha-test-retries-with-hooks will be retried and fail' &&
+                t.meta[TEST_STATUS] === 'fail'
+              )
+              assert.strictEqual(hooksFailTests.length, 5)
+              const hooksFailRetries = hooksFailTests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(hooksFailRetries.length, 4)
+              hooksFailRetries.forEach(t => {
+                assert.strictEqual(t.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              })
+            }
           })
 
         childProcess = exec(
-          'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/retries.js',
+          'node node_modules/mocha/bin/mocha' +
+          ' ./ci-visibility/mocha-plugin-tests/retries.js' +
+          ' ./ci-visibility/mocha-hooks/retries-with-hooks.js',
           {
             cwd,
             env: envVars,
@@ -2305,10 +2334,20 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in failTests[i].meta))
           }
 
-          // With afterEach hooks — TEST_HAS_FAILED_ALL_RETRIES should still be set on last retry
+          // With afterEach hooks — all EFD tags should still be set correctly
           const hooksTests = tests
             .filter(test => test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js')
             .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+          assert.strictEqual(hooksTests.length, NUM_RETRIES_EFD + 1)
+          hooksTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          })
+          const hooksRetries = hooksTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(hooksRetries.length, NUM_RETRIES_EFD)
+          hooksRetries.forEach(test => {
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          })
           const lastHooksRetry = hooksTests[hooksTests.length - 1]
           assert.strictEqual(lastHooksRetry.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
           for (let i = 0; i < hooksTests.length - 1; i++) {
@@ -3301,8 +3340,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       receiver.setKnownTests({
         mocha: {
           'ci-visibility/test/fail-test.js': ['can report failed tests'],
-          'ci-visibility/test-management/test-attempt-to-fix-with-after-each.js': [
-            'attempt to fix tests can attempt to fix a test that always fails',
+          'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js': [
+            'mocha-hooks flaky-fails can retry failed tests',
           ],
         },
       })
@@ -3340,12 +3379,12 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           // With afterEach hooks: retries should still be tagged with ATR reason and HAS_FAILED_ALL_RETRIES
           const hooksTests = tests
             .filter(test =>
-              test.meta[TEST_SUITE] ===
-              'ci-visibility/test-management/test-attempt-to-fix-with-after-each.js' &&
-              test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test that always fails'
+              test.meta[TEST_SUITE] === 'ci-visibility/mocha-hooks/flaky-fails-with-hooks.js'
             )
             .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+          assert.strictEqual(hooksTests.length, NUM_RETRIES_ATR + 1)
           const hooksRetries = hooksTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(hooksRetries.length, NUM_RETRIES_ATR)
           hooksRetries.forEach(test => {
             assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
           })
@@ -3364,7 +3403,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
               './test/fail-test.js',
-              './test-management/test-attempt-to-fix-with-after-each.js',
+              './mocha-hooks/flaky-fails-with-hooks.js',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: String(NUM_RETRIES_ATR),
           },
