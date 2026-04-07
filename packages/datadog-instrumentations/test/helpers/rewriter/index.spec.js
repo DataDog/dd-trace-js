@@ -307,18 +307,6 @@ describe('check-require-cache', () => {
           },
           channelName: 'pregel_stream',
         },
-        {
-          module: {
-            name: 'test-trace-this-property',
-            versionRange: '>=0.1',
-            filePath: 'index.js',
-          },
-          functionQuery: {
-            thisPropertyName: 'test',
-            kind: 'Sync',
-          },
-          channelName: 'test_invoke',
-        },
       ],
     })
   })
@@ -647,19 +635,6 @@ describe('check-require-cache', () => {
     await iter.next()
 
     assert.ok(subs.start.calledOnce, 'instrumented start channel should fire once')
-  })
-
-  it('should auto instrument arrow function instance properties (thisPropertyName)', done => {
-    const { test } = compile('test-trace-this-property')
-
-    subs = {
-      start: () => setImmediate(done),
-    }
-
-    ch = tracingChannel('orchestrion:test-trace-this-property:test_invoke')
-    ch.subscribe(subs)
-
-    test()
   })
 })
 

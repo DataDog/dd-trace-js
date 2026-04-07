@@ -8,7 +8,6 @@ module.exports = [
   ...require('./graphql'),
   ...require('./langchain'),
   ...require('./langgraph'),
-  ...require('./mariadb'),
   ...require('./mercurius'),
   ...require('./modelcontextprotocol-sdk'),
   ...require('./mysql'),
