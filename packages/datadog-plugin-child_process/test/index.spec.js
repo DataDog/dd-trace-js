@@ -511,7 +511,7 @@ describe('Child process plugin', () => {
 
           beforeEach((done) => {
             if (hasParentSpan) {
-              parentSpan = tracer.startSpan('parent')
+              parentSpan = tracer.startSpan('parent')._span
               parentSpan.finish()
               tracer.scope().activate(parentSpan, done)
             } else {
@@ -545,11 +545,10 @@ describe('Child process plugin', () => {
               it('should maintain previous span after the execution', (done) => {
                 const res = childProcess[methodName]('ls')
                 const span = storage('legacy').getStore()?.span
-                const expectedParentSpan = parentSpan?._span || parentSpan
-                assert.strictEqual(span, expectedParentSpan)
+                assert.strictEqual(span, parentSpan)
                 if (async) {
                   res.on('close', () => {
-                    assert.strictEqual(span, expectedParentSpan)
+                    assert.strictEqual(span, parentSpan)
                     done()
                   })
                 } else {
@@ -561,8 +560,7 @@ describe('Child process plugin', () => {
                 it('should maintain previous span in the callback', (done) => {
                   childProcess[methodName]('ls', () => {
                     const span = storage('legacy').getStore()?.span
-                    const expectedParentSpan = parentSpan?._span || parentSpan
-                    assert.strictEqual(span, expectedParentSpan)
+                    assert.strictEqual(span, parentSpan)
                     done()
                   })
                 })
