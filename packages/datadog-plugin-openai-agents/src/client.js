@@ -35,11 +35,13 @@ class BaseOpenaiAgentsClientPlugin extends TracingPlugin {
 }
 
 class GetStreamedResponsePlugin extends BaseOpenaiAgentsClientPlugin {
+  static id = 'openai-agents-get-streamed-response'
   static prefix = 'tracing:orchestrion:@openai/agents-openai:getStreamedResponse'
   static spanName = 'openai-agents.getStreamedResponse'
 }
 
 class GetResponsePlugin extends BaseOpenaiAgentsClientPlugin {
+  static id = 'openai-agents-get-response'
   static prefix = 'tracing:orchestrion:@openai/agents-openai:getResponse'
   static spanName = 'openai-agents.getResponse'
 }

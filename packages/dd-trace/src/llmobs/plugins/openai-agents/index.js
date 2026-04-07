@@ -2,7 +2,7 @@
 
 const LLMObsPlugin = require('../base')
 const {
-  getModelProvider,
+  getOpenAIModelProvider,
   toFunctionToolName,
   extractAgentManifest,
   extractInputMessages,
@@ -253,7 +253,7 @@ class BaseOpenaiAgentsLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions (ctx) {
     const modelName = ctx.self?._model || ''
     const baseURL = ctx.self?._client?.baseURL || ''
-    const modelProvider = getModelProvider(baseURL)
+    const modelProvider = getOpenAIModelProvider(baseURL)
 
     return {
       modelProvider,

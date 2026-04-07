@@ -1,5 +1,7 @@
 'use strict'
 
+const { getOpenAIModelProvider } = require('../utils')
+
 // Maps JS camelCase modelSettings keys to the snake_case keys used in metadata (Python parity).
 const SETTINGS_KEY_MAP = {
   temperature: 'temperature',
@@ -8,20 +10,6 @@ const SETTINGS_KEY_MAP = {
   toolChoice: 'tool_choice',
   text: 'text',
   truncation: 'truncation',
-}
-
-/**
- * Determines the model provider from the OpenAI client base URL.
- * Aligns with the openai LLMObs plugin's provider detection logic.
- *
- * @param {string} baseURL - The base URL of the OpenAI client
- * @returns {string} The model provider name
- */
-function getModelProvider (baseURL) {
-  if (baseURL.includes('azure')) return 'azure_openai'
-  if (baseURL.includes('deepseek')) return 'deepseek'
-  if (baseURL.includes('openai')) return 'openai'
-  return 'unknown'
 }
 
 /**
@@ -266,7 +254,7 @@ function extractMetadata (request) {
 }
 
 module.exports = {
-  getModelProvider,
+  getOpenAIModelProvider,
   toFunctionToolName,
   extractAgentManifest,
   extractInputMessages,

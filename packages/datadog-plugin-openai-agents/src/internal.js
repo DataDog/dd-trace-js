@@ -35,26 +35,31 @@ class BaseOpenaiAgentsInternalPlugin extends TracingPlugin {
 }
 
 class RunPlugin extends BaseOpenaiAgentsInternalPlugin {
+  static id = 'openai-agents-run'
   static prefix = 'tracing:orchestrion:@openai/agents-core:run'
   static spanName = 'openai-agents.run'
 }
 
 class InvokeFunctionToolPlugin extends BaseOpenaiAgentsInternalPlugin {
+  static id = 'openai-agents-invoke-function-tool'
   static prefix = 'tracing:orchestrion:@openai/agents-core:invokeFunctionTool'
   static spanName = 'openai-agents.invokeFunctionTool'
 }
 
 class OnInvokeHandoffPlugin extends BaseOpenaiAgentsInternalPlugin {
+  static id = 'openai-agents-on-invoke-handoff'
   static prefix = 'tracing:orchestrion:@openai/agents-core:onInvokeHandoff'
   static spanName = 'openai-agents.onInvokeHandoff'
 }
 
 class RunToolInputGuardrailsPlugin extends BaseOpenaiAgentsInternalPlugin {
+  static id = 'openai-agents-run-tool-input-guardrails'
   static prefix = 'tracing:orchestrion:@openai/agents-core:runToolInputGuardrails'
   static spanName = 'openai-agents.runInputGuardrails'
 }
 
 class RunToolOutputGuardrailsPlugin extends BaseOpenaiAgentsInternalPlugin {
+  static id = 'openai-agents-run-tool-output-guardrails'
   static prefix = 'tracing:orchestrion:@openai/agents-core:runToolOutputGuardrails'
   static spanName = 'openai-agents.runOutputGuardrails'
 }
