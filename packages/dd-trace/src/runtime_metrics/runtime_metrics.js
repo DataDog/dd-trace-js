@@ -52,9 +52,11 @@ module.exports = {
       startGCObserver()
     }
 
+    const disableNative = config.runtimeMetrics.disableNative === true
+
     // Only load native metrics when at least one native-backed feature is enabled.
     // This avoids loading native code unnecessarily, which can crash in some environments.
-    if (trackEventLoop || trackGc) {
+    if (!disableNative && (trackEventLoop || trackGc)) {
       const watchers = trackEventLoop ? ['loop'] : ['no-gc']
 
       try {

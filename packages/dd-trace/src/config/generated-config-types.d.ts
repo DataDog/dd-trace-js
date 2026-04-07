@@ -523,6 +523,7 @@ export interface GeneratedConfig {
   runtimeMetrics: {
     enabled: boolean;
     eventLoop: boolean;
+    disableNative: boolean;
     gc: boolean;
   };
   runtimeMetricsRuntimeId: boolean;

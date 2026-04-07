@@ -1008,6 +1008,7 @@ class Config {
     setBoolean(opts, 'reportHostname', options.reportHostname)
     setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
     setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
+    setBoolean(opts, 'runtimeMetrics.disableNative', options.runtimeMetrics?.disableNative)
     setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
     setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))

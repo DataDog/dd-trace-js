@@ -468,7 +468,7 @@ function createGarbage (count = 50) {
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.delay.95percentile')
         })
 
-        it('should not load native metrics when both event loop and GC are disabled', () => {
+        it('should not load native metrics when disableNative is true, even if eventLoop or gc are enabled', () => {
           // Stop the default runtimeMetrics instance started in beforeEach
           runtimeMetrics.stop()
 
@@ -503,24 +503,20 @@ function createGarbage (count = 50) {
             '@datadog/native-metrics': nativeMetricsModule,
           })
 
-          const configBothDisabled = {
+          const configDisableNative = {
             ...config,
-            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: false, gc: false },
+            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, disableNative: true },
           }
 
-          localRuntimeMetrics.start(configBothDisabled)
+          localRuntimeMetrics.start(configDisableNative)
 
-          // Native metrics should not have been started
+          // Native metrics should not have been started despite eventLoop and gc being enabled
           sinon.assert.notCalled(nativeMetricsStart)
 
-          // Should still collect basic metrics (CPU, memory, heap) via the JS fallback path
+          // Should still collect basic metrics via the JS fallback path
           clock.tick(10000)
           sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
           sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
-
-          // Should not collect event loop or GC metrics
-          sinon.assert.neverCalledWith(localClient.gauge, 'runtime.node.event_loop.utilization')
-          sinon.assert.neverCalledWith(localClient.gauge, 'runtime.node.event_loop.delay.95percentile')
 
           localRuntimeMetrics.stop()
         })

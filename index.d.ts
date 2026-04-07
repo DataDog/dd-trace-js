@@ -660,7 +660,14 @@ declare namespace tracer {
        * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      eventLoop?: boolean
+      eventLoop?: boolean,
+
+       /**
+       * Forces the JS implementation of runtime metrics, skipping native code entirely.
+       * This is useful for debugging issues in environments where native metrics cause problems.
+       * @default false
+       */
+      disableNative?: boolean
     }
 
     /**
