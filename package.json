@@ -138,7 +138,7 @@
     "import-in-the-middle": "^3.0.0"
   },
   "optionalDependencies": {
-    "@datadog/libdatadog": "0.8.1",
+    "@datadog/libdatadog": "file:../libdatadog-nodejs",
     "@datadog/native-appsec": "11.0.1",
     "@datadog/native-iast-taint-tracking": "4.1.0",
     "@datadog/native-metrics": "3.1.1",
