@@ -384,6 +384,11 @@ function getOnTestEndHandler (config) {
       })
     } else if (ctx) { // if there is an afterEach to run, let's store the finalStatus for getOnHookEndHandler
       ctx.finalStatus = finalStatus
+      ctx.hasFailedAllRetries = hasFailedAllRetries
+      ctx.attemptToFixPassed = attemptToFixPassed
+      ctx.attemptToFixFailed = attemptToFixFailed
+      ctx.isAttemptToFixRetry = isAttemptToFixRetry
+      ctx.isAtrRetry = isAtrRetry
     }
   }
 }
@@ -404,6 +409,11 @@ function getOnHookEndHandler () {
             status,
             hasBeenRetried: isMochaRetry(test),
             isLastRetry: getIsLastRetry(test),
+            hasFailedAllRetries: ctx.hasFailedAllRetries,
+            attemptToFixPassed: ctx.attemptToFixPassed,
+            attemptToFixFailed: ctx.attemptToFixFailed,
+            isAttemptToFixRetry: ctx.isAttemptToFixRetry,
+            isAtrRetry: ctx.isAtrRetry,
             ...ctx.currentStore,
             finalStatus: ctx.finalStatus,
           })
