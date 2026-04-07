@@ -1,0 +1,16 @@
+name: Get Datadog API key
+description: Exchange GitHub OIDC token for Datadog API key via dd-sts.
+
+outputs:
+  api_key:
+    description: "Datadog API key"
+    value: ${{ steps.dd-sts.outputs.api_key }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get Datadog API key
+      id: dd-sts
+      uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+      with:
+        policy: dd-trace-js-api-key

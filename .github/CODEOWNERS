@@ -192,6 +192,7 @@
 
 # CI
 /.github/actions/dd-sts/action.yml @Datadog/lang-platform-js
+/.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
 /.github/chainguard @DataDog/sdlc-security
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
