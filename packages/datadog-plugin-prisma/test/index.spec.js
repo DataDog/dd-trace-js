@@ -34,7 +34,6 @@ function execPrismaGenerate (config, cwd) {
         '--module commonjs',
         '--allowJs true',
         '--moduleResolution node',
-        '--ignoreDeprecations 6.0',
       ].join(' '),
     ].join(' && '), {
       cwd,
