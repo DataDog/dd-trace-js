@@ -467,6 +467,63 @@ function createGarbage (count = 50) {
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.utilization')
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.delay.95percentile')
         })
+
+        it('should not load native metrics when both event loop and GC are disabled', () => {
+          // Stop the default runtimeMetrics instance started in beforeEach
+          runtimeMetrics.stop()
+
+          const nativeMetricsStart = sinon.spy()
+          const nativeMetricsModule = {
+            start: nativeMetricsStart,
+            stop: sinon.spy(),
+            stats: sinon.stub().returns({ cpu: { user: 0, system: 0 }, heap: { spaces: [] }, eventLoop: {}, gc: {} }),
+          }
+
+          const localClient = {
+            gauge: sinon.spy(),
+            increment: sinon.spy(),
+            histogram: sinon.spy(),
+            flush: sinon.spy(),
+          }
+
+          const LocalClient = sinon.spy(function () {
+            return {
+              gauge: localClient.gauge,
+              increment: localClient.increment,
+              histogram: localClient.histogram,
+              flush: localClient.flush,
+            }
+          })
+          LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+            '../dogstatsd': {
+              DogStatsDClient: LocalClient,
+            },
+            '@datadog/native-metrics': nativeMetricsModule,
+          })
+
+          const configBothDisabled = {
+            ...config,
+            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: false, gc: false },
+          }
+
+          localRuntimeMetrics.start(configBothDisabled)
+
+          // Native metrics should not have been started
+          sinon.assert.notCalled(nativeMetricsStart)
+
+          // Should still collect basic metrics (CPU, memory, heap) via the JS fallback path
+          clock.tick(10000)
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
+
+          // Should not collect event loop or GC metrics
+          sinon.assert.neverCalledWith(localClient.gauge, 'runtime.node.event_loop.utilization')
+          sinon.assert.neverCalledWith(localClient.gauge, 'runtime.node.event_loop.delay.95percentile')
+
+          localRuntimeMetrics.stop()
+        })
       })
 
       describe('Event Loop Utilization', () => {
