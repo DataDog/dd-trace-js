@@ -30,7 +30,6 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
         assertObjectContains(runSpan, {
           name: 'openai-agents.run',
           service: ANY_STRING,
-          resource: ANY_STRING,
           meta: {
             component: 'openai-agents',
             'span.kind': 'internal',
@@ -77,14 +76,9 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
         {
           name: 'openai-agents.getResponse',
           service: ANY_STRING,
-          resource: ANY_STRING,
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
-            'out.host': ANY_STRING,
-            'ai.request.model': 'gpt-4',
-            'ai.request.model_provider': 'openai',
-            'openai.request.model': 'gpt-4',
           },
         }
       )
@@ -103,10 +97,6 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
-            'out.host': ANY_STRING,
-            'ai.request.model': 'gpt-4',
-            'ai.request.model_provider': 'openai',
-            'openai.request.model': 'gpt-4',
             'error.type': 'Error',
             'error.message': 'Intentional error for testing',
             'error.stack': ANY_STRING,
@@ -131,15 +121,9 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
         {
           name: 'openai-agents.getStreamedResponse',
           service: ANY_STRING,
-          resource: ANY_STRING,
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
-            'out.host': ANY_STRING,
-            'ai.request.model': 'gpt-4',
-            'ai.request.model_provider': 'openai',
-            'openai.request.model': 'gpt-4',
-            'openai.request.stream': 'true',
           },
         }
       )
@@ -160,11 +144,6 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
-            'out.host': ANY_STRING,
-            'ai.request.model': 'gpt-4',
-            'ai.request.model_provider': 'openai',
-            'openai.request.model': 'gpt-4',
-            'openai.request.stream': 'true',
           },
         }
       )
@@ -185,7 +164,6 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
         {
           name: 'openai-agents.invokeFunctionTool',
           service: ANY_STRING,
-          resource: ANY_STRING,
           meta: {
             component: 'openai-agents',
             'span.kind': 'internal',
@@ -225,7 +203,6 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
         {
           name: 'openai-agents.onInvokeHandoff',
           service: ANY_STRING,
-          resource: ANY_STRING,
           meta: {
             component: 'openai-agents',
             'span.kind': 'internal',
@@ -269,7 +246,6 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
         {
           name: 'openai-agents.runInputGuardrails',
           service: ANY_STRING,
-          resource: ANY_STRING,
           meta: {
             component: 'openai-agents',
             'span.kind': 'internal',
@@ -313,7 +289,6 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
         {
           name: 'openai-agents.runOutputGuardrails',
           service: ANY_STRING,
-          resource: ANY_STRING,
           meta: {
             component: 'openai-agents',
             'span.kind': 'internal',

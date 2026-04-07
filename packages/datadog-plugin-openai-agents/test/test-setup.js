@@ -1,15 +1,13 @@
 'use strict'
 
-const path = require('path')
+const path = require('node:path')
 
 class OpenaiAgentsTestSetup {
-  async setup (module) {
-    this.module = module
+  async setup (clientModule) {
+    this.module = clientModule
 
-    const agentsOpenaiVersionDir = path.join(
-      __dirname, '..', '..', '..', 'versions', '@openai', 'agents-openai@>=0.7.0'
-    )
-    const { OpenAIResponsesModel } = require(agentsOpenaiVersionDir).get()
+    const agentsOpenaiDir = path.join(__dirname, '..', '..', '..', 'versions', '@openai', 'agents-openai@>=0.7.0')
+    const { OpenAIResponsesModel } = require(agentsOpenaiDir).get()
     const openaiPath = require.resolve('openai', {
       paths: [path.join(__dirname, '..', '..', '..', 'versions', 'node_modules', '@openai', 'agents-openai')],
     })
@@ -20,7 +18,7 @@ class OpenaiAgentsTestSetup {
       baseURL: 'http://127.0.0.1:9126/vcr/openai',
     })
 
-    module.setDefaultModelProvider({
+    clientModule.setDefaultModelProvider({
       createModel: (modelName) => new OpenAIResponsesModel(vcrClient, modelName),
     })
 
@@ -37,25 +35,25 @@ class OpenaiAgentsTestSetup {
     this.streamModel = new OpenAIResponsesModel(vcrClient, 'gpt-4')
     this.errorModel = new OpenAIResponsesModel(mockErrorClient, 'gpt-4')
 
-    this.agent = new module.Agent({
+    this.agent = new clientModule.Agent({
       name: 'test_agent',
       instructions: 'You are a test agent',
       model: this.fakeModel,
     })
 
-    this.errorAgent = new module.Agent({
+    this.errorAgent = new clientModule.Agent({
       name: 'error_agent',
       instructions: 'You are an error test agent',
       model: this.errorModel,
     })
 
-    this.targetAgent = new module.Agent({
+    this.targetAgent = new clientModule.Agent({
       name: 'target_agent',
       instructions: 'You are a target agent',
       model: this.fakeModel,
     })
 
-    this.testTool = module.tool({
+    this.testTool = clientModule.tool({
       name: 'test_tool',
       description: 'A test tool',
       parameters: {},
@@ -64,7 +62,7 @@ class OpenaiAgentsTestSetup {
       },
     })
 
-    this.errorTool = module.tool({
+    this.errorTool = clientModule.tool({
       name: 'error_tool',
       description: 'A tool that errors',
       parameters: {},

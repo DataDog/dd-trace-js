@@ -2934,9 +2934,9 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [openai-agents](https://github.com/npmjs/package/@openai/agents) library.
-    */
-   interface openai_agents extends Instrumentation {}
+     * [@openai/agents](https://www.npmjs.com/package/@openai/agents) library.
+     */
+    interface openai_agents extends Instrumentation {}
    
    /**
     * This plugin automatically instruments the

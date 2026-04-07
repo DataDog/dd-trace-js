@@ -4,36 +4,17 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 class BaseOpenaiAgentsInternalPlugin extends TracingPlugin {
   static id = 'openai-agents'
-  static prefix = 'tracing:orchestrion:@openai/agents-core:run'
-  static spanName = 'openai-agents.run'
 
   bindStart (ctx) {
-    const meta = this.getTags(ctx)
-
     this.startSpan(this.constructor.spanName, {
       service: this.config.service,
-      meta,
+      meta: {
+        component: 'openai-agents',
+        'span.kind': 'internal',
+      },
     }, ctx)
 
     return ctx.currentStore
-  }
-
-  /**
-   * @param {{ args?: Array<unknown> }} ctx - The orchestrion context with function arguments
-   * @returns {object} Span tags
-   */
-  getTags (ctx) {
-    const tags = {
-      component: 'openai-agents',
-      'span.kind': 'internal',
-    }
-
-    const agentName = ctx.args?.[0]?.name
-    if (agentName) {
-      tags['resource.name'] = agentName
-    }
-
-    return tags
   }
 
   asyncEnd (ctx) {
@@ -54,26 +35,13 @@ class BaseOpenaiAgentsInternalPlugin extends TracingPlugin {
 }
 
 class RunPlugin extends BaseOpenaiAgentsInternalPlugin {
-  // Inherits prefix and spanName from BaseOpenaiAgentsInternalPlugin for the run channel
+  static prefix = 'tracing:orchestrion:@openai/agents-core:run'
+  static spanName = 'openai-agents.run'
 }
 
 class InvokeFunctionToolPlugin extends BaseOpenaiAgentsInternalPlugin {
   static prefix = 'tracing:orchestrion:@openai/agents-core:invokeFunctionTool'
   static spanName = 'openai-agents.invokeFunctionTool'
-
-  getTags (ctx) {
-    const tags = {
-      component: 'openai-agents',
-      'span.kind': 'internal',
-    }
-
-    const toolName = ctx.args?.[0]?.tool?.name
-    if (toolName) {
-      tags['resource.name'] = toolName
-    }
-
-    return tags
-  }
 }
 
 class OnInvokeHandoffPlugin extends BaseOpenaiAgentsInternalPlugin {
@@ -91,10 +59,10 @@ class RunToolOutputGuardrailsPlugin extends BaseOpenaiAgentsInternalPlugin {
   static spanName = 'openai-agents.runOutputGuardrails'
 }
 
-module.exports = {
+module.exports = [
   RunPlugin,
   InvokeFunctionToolPlugin,
   OnInvokeHandoffPlugin,
   RunToolInputGuardrailsPlugin,
   RunToolOutputGuardrailsPlugin,
-}
+]
