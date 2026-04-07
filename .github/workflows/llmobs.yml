@@ -27,12 +27,8 @@ jobs:
       matrix:
         version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -46,22 +42,18 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-sdk-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   openai:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       PLUGINS: openai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -75,7 +67,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -83,18 +75,14 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   langchain:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       PLUGINS: langchain
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -108,7 +96,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -116,18 +104,14 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   bedrock:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       PLUGINS: aws-sdk
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -139,7 +123,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -147,18 +131,14 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   vertex-ai:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       PLUGINS: google-cloud-vertexai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -172,7 +152,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -180,18 +160,14 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ai:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       PLUGINS: ai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -205,7 +181,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -213,18 +189,14 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   anthropic:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       PLUGINS: anthropic
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -238,7 +210,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -246,18 +218,14 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   google-genai:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       PLUGINS: google-genai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -271,7 +239,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -279,14 +247,14 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
   
   langgraph:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     env:
       PLUGINS: langgraph
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}

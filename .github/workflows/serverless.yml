@@ -24,12 +24,8 @@ env:
 jobs:
   lambda:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -47,11 +43,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   aws-sdk:
     strategy:
@@ -73,8 +69,6 @@ jobs:
           - stepfunctions
           - util
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     services:
       localstack:
         image: localstack/localstack:3.0.2
@@ -113,8 +107,6 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -128,16 +120,14 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-event-hubs:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     services:
       azurite:
         image: mcr.microsoft.com/azure-storage/azurite:3.35.0
@@ -160,6 +150,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-functions:
     strategy:
@@ -170,8 +162,6 @@ jobs:
           - client
           - servicebus
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     services:
       azurite:
         image: mcr.microsoft.com/azure-storage/azurite:3.34.0
@@ -210,8 +200,6 @@ jobs:
       SPEC: ${{ matrix.spec }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
-        id: dd-sts
 
       - name: Copy emulator config files
         run: |
@@ -234,16 +222,14 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-service-bus:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     services:
       azureservicebusemulator:
         image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
@@ -275,11 +261,11 @@ jobs:
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   azure-durable-functions:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     services:
       azurite:
         image: mcr.microsoft.com/azure-storage/azurite:3.34.0
@@ -294,11 +280,11 @@ jobs:
     steps:
      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
      - uses: ./.github/actions/plugins/test
+       with:
+        dd_api_key: ${{ secrets.DD_API_KEY }}
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     services:
       pubsub:
         image: ghcr.io/ridedott/pubsub-emulator
@@ -310,3 +296,5 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+        with:
+          dd_api_key: ${{ secrets.DD_API_KEY }}
