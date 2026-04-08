@@ -503,7 +503,7 @@ Minimal example:
 
 Important fields:
 
-- `type`: parser to use for environment variables. Common values are `string`, `boolean`, `integer`, `decimal`, `array`, `map`, `json`.
+- `type`: parser to use for environment variables. Common values are `string`, `boolean`, `int`, `decimal`, `array`, `map`, `json`.
 - `default`: parsed into the runtime type. `null` means `undefined` at runtime.
 - `configurationNames`: programmatic option names. The first entry becomes the main internal property path.
 - `internalPropertyName`: use this instead of `configurationNames` when the runtime property path should differ from the public option name.
