@@ -1,6 +1,7 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
+const { spanHasError } = require('../../util')
 const {
   getOpenAIModelProvider,
   toFunctionToolName,
@@ -10,6 +11,8 @@ const {
   extractMetrics,
   extractMetadata,
 } = require('./utils')
+
+const streamDataMap = new WeakMap()
 
 // ── Orchestration plugins (workflow / agent / tool / task span kinds) ─────────
 
@@ -71,7 +74,6 @@ class InvokeFunctionToolLLMObsPlugin extends LLMObsPlugin {
   static prefix = 'tracing:orchestrion:@openai/agents-core:invokeFunctionTool'
 
   /**
-   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
    * @returns {{ kind: string, name: string }}
    */
   getLLMObsSpanRegisterOptions () {
@@ -160,7 +162,6 @@ class RunToolInputGuardrailsLLMObsPlugin extends LLMObsPlugin {
   static prefix = 'tracing:orchestrion:@openai/agents-core:runToolInputGuardrails'
 
   /**
-   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
    * @returns {{ kind: string, name: string }}
    */
   getLLMObsSpanRegisterOptions () {
@@ -201,7 +202,6 @@ class RunToolOutputGuardrailsLLMObsPlugin extends LLMObsPlugin {
   static prefix = 'tracing:orchestrion:@openai/agents-core:runToolOutputGuardrails'
 
   /**
-   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
    * @returns {{ kind: string, name: string }}
    */
   getLLMObsSpanRegisterOptions () {
@@ -305,27 +305,89 @@ class GetStreamedResponseLLMObsPlugin extends BaseOpenaiAgentsLLMObsPlugin {
   static prefix = 'tracing:orchestrion:@openai/agents-openai:getStreamedResponse'
 
   /**
-   * Tags inputs and metadata on the streaming span.
-   * Streamed output cannot be captured here because the span closes when the AsyncIterator
-   * is returned — before the caller iterates it. Collecting output would require the
-   * tracing plugin to hold the span open until the iterator is exhausted, which is a
-   * separate, larger change.
-   * TODO: wrap the AsyncIterator to accumulate output and finish the span on completion.
+   * Stores input data in the WeakMap so GetStreamedResponseNextLLMObsPlugin can tag
+   * the span with full I/O once the iterator is exhausted.
    *
-   * @param {{ currentStore?: { span: object }, arguments?: Array<unknown> }} ctx
+   * @param {{ currentStore?: { span: object }, self?: object, arguments?: Array<unknown> }} ctx
+   * @returns {{ modelProvider: string, modelName: string, kind: string, name: string }}
+   */
+  getLLMObsSpanRegisterOptions (ctx) {
+    const options = super.getLLMObsSpanRegisterOptions(ctx)
+    const span = ctx.currentStore?.span
+    if (span) {
+      streamDataMap.set(span, {
+        request: ctx.arguments?.[0],
+        responseDone: undefined,
+      })
+    }
+    return options
+  }
+
+  // Defer all tagging to GetStreamedResponseNextLLMObsPlugin once the stream is consumed.
+  asyncEnd () {}
+}
+
+class GetStreamedResponseNextLLMObsPlugin extends LLMObsPlugin {
+  static id = 'llmobs_openai_agents_get_streamed_response_next'
+  static integration = 'openai-agents'
+  static prefix = 'tracing:orchestrion:@openai/agents-openai:getStreamedResponse_next'
+
+  // Span was already registered by GetStreamedResponseLLMObsPlugin — no-op here.
+  start () {}
+  end () {}
+
+  /**
+   * Accumulates the response_done event and tags the span when the iterator is exhausted.
+   *
+   * @param {{ currentStore?: { span: object }, result?: { value: object, done: boolean },
+   *   error?: Error }} ctx
    */
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const request = ctx.arguments?.[0]
+    const event = ctx.result?.value
+    if (event?.type === 'response_done') {
+      const streamData = streamDataMap.get(span)
+      if (streamData) streamData.responseDone = event.response
+      return
+    }
+
+    if (ctx.result?.done) {
+      this.#tagAndCleanup(span, false)
+    }
+  }
+
+  /**
+   * @param {{ currentStore?: { span: object }, error?: Error }} ctx
+   */
+  error (ctx) {
+    const span = ctx.currentStore?.span
+    if (span) this.#tagAndCleanup(span, true)
+  }
+
+  #tagAndCleanup (span, hasError) {
+    const streamData = streamDataMap.get(span)
+    if (!streamData) return
+
+    const { request, responseDone } = streamData
     const inputMessages = extractInputMessages(request)
 
-    this._tagger.tagLLMIO(span, inputMessages, [{ content: '', role: '' }])
+    if (hasError || spanHasError(span) || !responseDone) {
+      this._tagger.tagLLMIO(span, inputMessages, [{ content: '', role: '' }])
+    } else {
+      const outputMessages = extractOutputMessages(responseDone)
+      this._tagger.tagLLMIO(span, inputMessages, outputMessages)
+
+      const metrics = extractMetrics(responseDone)
+      this._tagger.tagMetrics(span, metrics)
+    }
 
     const metadata = extractMetadata(request)
     metadata.stream = true
     this._tagger.tagMetadata(span, metadata)
+
+    streamDataMap.delete(span)
   }
 }
 
@@ -337,4 +399,5 @@ module.exports = [
   RunToolOutputGuardrailsLLMObsPlugin,
   GetResponseLLMObsPlugin,
   GetStreamedResponseLLMObsPlugin,
+  GetStreamedResponseNextLLMObsPlugin,
 ]

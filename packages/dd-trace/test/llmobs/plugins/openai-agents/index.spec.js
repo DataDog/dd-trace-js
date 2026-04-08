@@ -34,9 +34,10 @@ describe('integrations', () => {
           require(`../../../../../../versions/@openai/agents-openai@${version}`).get()
         OpenAIResponsesModel = Model
 
-        const openaiPath = require.resolve('openai', {
-          paths: [path.join(__dirname, '..', '..', '..', '..', '..', '..', 'versions', 'node_modules', '@openai', 'agents-openai')],
-        })
+        const agentsOpenaiDir = path.join(
+          __dirname, '..', '..', '..', '..', '..', '..', 'versions', 'node_modules', '@openai', 'agents-openai'
+        )
+        const openaiPath = require.resolve('openai', { paths: [agentsOpenaiDir] })
         const { OpenAI } = require(openaiPath)
 
         const vcrClient = new OpenAI({
@@ -260,9 +261,9 @@ describe('integrations', () => {
           await agentsCore.withTrace('test-getStreamedResponse', async () => {
             // After orchestrion wrapping, async *getStreamedResponse returns a Promise<AsyncIterator>
             const iter = await streamModel.getStreamedResponse({
-              systemInstructions: 'You are helpful',
-              input: 'Stream this',
-              modelSettings: { temperature: 0.3 },
+              systemInstructions: 'test',
+              input: 'hello',
+              modelSettings: {},
               tools: [],
               outputSchema: undefined,
               handoffs: [],
@@ -276,7 +277,6 @@ describe('integrations', () => {
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
-          // Streaming spans finish before iteration; output is not available
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'llm',
@@ -284,11 +284,16 @@ describe('integrations', () => {
             modelName: 'gpt-4',
             modelProvider: 'openai',
             inputMessages: [
-              { role: 'system', content: 'You are helpful' },
-              { role: 'user', content: 'Stream this' },
+              { role: 'system', content: 'test' },
+              { role: 'user', content: 'hello' },
             ],
-            outputMessages: [{ content: '', role: '' }],
-            metadata: { temperature: 0.3, stream: true },
+            outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+            metrics: {
+              input_tokens: MOCK_NOT_NULLISH,
+              output_tokens: MOCK_NOT_NULLISH,
+              total_tokens: MOCK_NOT_NULLISH,
+            },
+            metadata: { stream: true },
             tags: { ml_app: 'test', integration: 'openai-agents' },
           })
         })
@@ -322,6 +327,7 @@ describe('integrations', () => {
             name: 'gpt-4 (LLM)',
             modelName: 'gpt-4',
             modelProvider: 'openai',
+            error: true,
             inputMessages: [
               { role: 'system', content: 'test' },
               { role: 'user', content: 'hello' },

@@ -133,14 +133,11 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
       return traceAssertion
     })
 
-    it('should generate span without error when stream errors during iteration', async () => {
-      // For async generators, the orchestrion wraps the function call and finishes
-      // the span when the iterator is returned. Errors during iteration occur AFTER
-      // the span finishes, so the span shows error: 0.
+    it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertFirstTraceSpan(
         {
           name: 'openai-agents.getStreamedResponse',
-          error: 0,
+          error: 1,
           meta: {
             component: 'openai-agents',
             'span.kind': 'client',
@@ -151,7 +148,7 @@ createIntegrationTestSuite('openai-agents', '@openai/agents-core', {
       try {
         await testSetup.getStreamedResponseError()
       } catch (err) {
-        // Error occurs during stream iteration, after span finishes
+        // Error occurs during stream iteration
       }
 
       return traceAssertion
