@@ -3,6 +3,8 @@
 const { channel } = require('dc-polyfill')
 
 const log = require('../log')
+const { DD_MAJOR } = require('../../../../version')
+const startupLogs = require('../startup-log')
 const {
   ML_APP,
   PROPAGATED_ML_APP_KEY,
@@ -15,6 +17,7 @@ const LLMObsEvalMetricsWriter = require('./writers/evaluations')
 const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
+const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
 
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -66,10 +69,12 @@ function enable (config) {
 
   setAgentStrategy(config, useAgentless => {
     if (useAgentless && !(config.apiKey && config.site)) {
-      throw new Error(
-        'Cannot send LLM Observability data without a running agent or without both a Datadog API key and site.\n' +
-        'Ensure these configurations are set before running your application.'
-      )
+      if (DD_MAJOR < 6 || !config?.startupLogs) {
+        // eslint-disable-next-line no-console
+        console.error(INCOMPATIBLE_INITIALIZATION)
+      } else {
+        startupLogs.logGenericError(INCOMPATIBLE_INITIALIZATION)
+      }
     }
 
     evalWriter?.setAgentless(useAgentless)
