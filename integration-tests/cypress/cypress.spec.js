@@ -314,6 +314,40 @@ moduleTypes.forEach(({
       ])
     })
 
+    if (version === '6.7.0') {
+      it('logs a warning if using a deprecated version of cypress', async () => {
+        let stdout = ''
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          `${testCommand} --spec cypress/e2e/spec.cy.js`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+        ])
+        assert.match(
+          stdout,
+          /WARNING: dd-trace support for Cypress<10.2.0 is deprecated/
+        )
+      })
+    }
+
     // These tests require Cypress >=10 features (defineConfig, setupNodeEvents)
     const over10It = (version !== '6.7.0') ? it : it.skip
     over10It('is backwards compatible with the old manual plugin approach', async () => {
