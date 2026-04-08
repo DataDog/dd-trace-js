@@ -200,7 +200,7 @@
     "semver": "^7.7.2",
     "sinon": "^21.0.3",
     "tiktoken": "^1.0.21",
-    "typescript": "^5.9.2",
+    "typescript": "^6.0.2",
     "workerpool": "^10.0.0",
     "yaml": "^2.8.3",
     "yarn-deduplicate": "^6.0.2"
