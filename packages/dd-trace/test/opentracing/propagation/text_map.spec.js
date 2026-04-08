@@ -660,15 +660,15 @@ describe('TextMapPropagator', () => {
 
       // should not add baggage when key list is empty
       config = getConfigFresh({
-        baggageTagKeys: '',
+        baggageTagKeys: [],
       })
       propagator = new TextMapPropagator(config)
       const spanContextC = propagator.extract(carrier)
       assert.deepStrictEqual(spanContextC._trace.tags, {})
 
-      // should not add baggage when key list is empty
+      // should not add baggage when key list does not contain the key
       config = getConfigFresh({
-        baggageTagKeys: 'customKey',
+        baggageTagKeys: ['customKey'],
       })
       propagator = new TextMapPropagator(config)
       carrier = {
@@ -683,7 +683,7 @@ describe('TextMapPropagator', () => {
 
       // should add all baggage to span tags
       config = getConfigFresh({
-        baggageTagKeys: '*',
+        baggageTagKeys: ['*'],
       })
       propagator = new TextMapPropagator(config)
       carrier = {
@@ -1212,6 +1212,76 @@ describe('TextMapPropagator', () => {
           'Extract from carrier (b3multi):',
           '{"x-b3-traceid":"0000000000000123","x-b3-spanid":"0000000000000456"}.',
         ].join(' '))
+      })
+    })
+
+    describe('with B3 propagation from DD_TRACE_PROPAGATION_STYLE', () => {
+      beforeEach(() => {
+        config.tracePropagationStyle.extract = ['b3']
+        config.getOrigin = sinon.stub().withArgs('tracePropagationStyle.extract').returns('env_var')
+
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+
+        TextMapPropagator = proxyquire('../../../src/opentracing/propagation/text_map', {
+          '../../config/helper': {
+            getConfiguredEnvName: sinon.stub().withArgs('DD_TRACE_PROPAGATION_STYLE')
+              .returns('DD_TRACE_PROPAGATION_STYLE'),
+          },
+          '../../log': log,
+          '../../telemetry/metrics': telemetryMetrics,
+        })
+        propagator = new TextMapPropagator(config)
+      })
+
+      it('should extract B3 as multiple headers', () => {
+        textMap['x-b3-traceid'] = '0000000000000123'
+        textMap['x-b3-spanid'] = '0000000000000456'
+        textMap['x-b3-sampled'] = '1'
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.deepStrictEqual(spanContext, createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: {
+            priority: AUTO_KEEP,
+          },
+        }))
+      })
+    })
+
+    describe('with B3 propagation from OTEL_PROPAGATORS', () => {
+      beforeEach(() => {
+        config.tracePropagationStyle.extract = ['b3']
+        config.getOrigin = sinon.stub().withArgs('tracePropagationStyle.extract').returns('env_var')
+
+        delete textMap['x-datadog-trace-id']
+        delete textMap['x-datadog-parent-id']
+
+        TextMapPropagator = proxyquire('../../../src/opentracing/propagation/text_map', {
+          '../../config/helper': {
+            getConfiguredEnvName: sinon.stub().withArgs('DD_TRACE_PROPAGATION_STYLE')
+              .returns('OTEL_PROPAGATORS'),
+          },
+          '../../log': log,
+          '../../telemetry/metrics': telemetryMetrics,
+        })
+        propagator = new TextMapPropagator(config)
+      })
+
+      it('should extract B3 as a single header', () => {
+        textMap.b3 = '0000000000000123-0000000000000456-1'
+
+        const spanContext = propagator.extract(textMap)
+
+        assert.deepStrictEqual(spanContext, createContext({
+          traceId: id('123', 16),
+          spanId: id('456', 16),
+          sampling: {
+            priority: AUTO_KEEP,
+          },
+        }))
       })
     })
 

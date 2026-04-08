@@ -88,10 +88,12 @@ export interface GeneratedConfig {
   DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
   DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
+  DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR: string;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED: boolean;
   DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: string;
+  DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
@@ -379,6 +381,7 @@ export interface GeneratedConfig {
   env: string | undefined;
   experimental: {
     aiguard: {
+      block: boolean;
       enabled: boolean;
       endpoint: string | undefined;
       maxContentSize: number;
@@ -475,7 +478,6 @@ export interface GeneratedConfig {
   };
   openAiLogsEnabled: boolean;
   OTEL_EXPORTER_OTLP_ENDPOINT: string | undefined;
-  OTEL_LOG_LEVEL: "debug" | "info" | "warn" | "error" | undefined;
   OTEL_LOGS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_METRICS_EXPORTER: "none" | "otlp" | undefined;
   OTEL_RESOURCE_ATTRIBUTES: Record<string, string>;

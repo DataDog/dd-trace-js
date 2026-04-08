@@ -71,56 +71,22 @@ class Profiler extends EventEmitter {
     return this.#config?.flushInterval
   }
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
-    const {
-      service,
-      version,
-      env,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      injectionEnabled,
-      reportHostname,
-    } = config
-    const { enabled, sourceMap, exporters } = config.profiling
-    const { heartbeatInterval } = config.telemetry
-
     // TODO: Unify with main logger and rewrite template strings to use printf formatting.
     const logger = {
-      debug (message) { log.debug(message) },
-      info (message) { log.info(message) },
-      warn (message) { log.warn(message) },
-      error (...args) { log.error(...args) },
+      debug: log.debug.bind(log),
+      info: log.info.bind(log),
+      warn: log.warn.bind(log),
+      error: log.error.bind(log),
     }
 
-    const libraryInjected = injectionEnabled.length > 0
-    let activation
-    if (enabled === 'auto') {
-      activation = 'auto'
-    } else if (enabled === 'true') {
-      activation = 'manual'
-    } // else activation = undefined
-
+    // TODO: Rewrite this to not need to copy the config.
     const options = {
-      service,
-      version,
-      env,
+      ...config,
       logger,
-      sourceMap,
-      exporters,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      libraryInjected,
-      activation,
-      heartbeatInterval,
-      reportHostname,
     }
 
     try {
@@ -222,6 +188,9 @@ class Profiler extends EventEmitter {
     return this.#compressionFn
   }
 
+  /**
+   * @param {import('../config/config-base')} options - Tracer configuration
+   */
   _start (options) {
     if (this.enabled) return true
 
