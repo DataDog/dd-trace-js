@@ -88,14 +88,14 @@ const changeTracker = {
  * @param {Config} config
  * @param {RevertibleTelemetrySource} source
  */
-function undo(config, source) {
+function undo (config, source) {
   for (const name of changeTracker[source]) {
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
 }
 
-function get(object, path) {
+function get (object, path) {
   // Fast path for simple property access.
   if (object[path] !== undefined) {
     return object[path]
@@ -119,7 +119,7 @@ function get(object, path) {
  * @param {unknown} [rawValue]
  * @param {TelemetrySource} [source]
  */
-function setAndTrack(config, name, value, rawValue = value, source = 'calculated') {
+function setAndTrack (config, name, value, rawValue = value, source = 'calculated') {
   // envs can not be undefined
   if (value == null) {
     // TODO: This works as before while ignoring undefined programmatic options is not ideal.
@@ -158,14 +158,14 @@ class Config extends ConfigBase {
   /**
    * @type {Record<string, string>}
    */
-  get parsedDdTags() {
+  get parsedDdTags () {
     return this.#parsedDdTags
   }
 
   /**
    * @param {TracerOptions} [options={}]
    */
-  constructor(options = {}) {
+  constructor (options = {}) {
     super()
 
     const configEnvSources = getStableConfigSources()
@@ -216,7 +216,7 @@ class Config extends ConfigBase {
     parseErrors.clear()
   }
 
-  #applyDefaults() {
+  #applyDefaults () {
     for (const [name, value] of Object.entries(defaults)) {
       set(this, name, value)
     }
@@ -226,7 +226,7 @@ class Config extends ConfigBase {
    * @param {import('./helper').TracerEnv} envs
    * @param {'env_var' | 'local_stable_config' | 'fleet_stable_config'} source
    */
-  #applyEnvs(envs, source) {
+  #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
       const entry = configurationsTable[name]
       // TracePropagationStyle is a special case. It is a single option that is used to set both inject and extract.
@@ -257,7 +257,7 @@ class Config extends ConfigBase {
    * @param {'code' | 'remote_config'} source
    * @param {string} [root]
    */
-  #applyOptions(options, source, root = '') {
+  #applyOptions (options, source, root = '') {
     for (const [name, value] of Object.entries(options)) {
       const fullName = root ? `${root}.${name}` : name
       let entry = optionsTable[fullName]
@@ -314,7 +314,7 @@ class Config extends ConfigBase {
    * @param {TracerOptions|null} options - Configurations received via Remote
    *   Config or null to reset all remote configuration
    */
-  setRemoteConfig(options) {
+  setRemoteConfig (options) {
     // Clear all RC-managed fields to ensure previous values don't persist.
     // State is instead managed by the `RCClientLibConfigManager` class
     undo(this, 'remote_config')
@@ -331,12 +331,12 @@ class Config extends ConfigBase {
   /**
    * @param {ConfigPath} name
    */
-  getOrigin(name) {
+  getOrigin (name) {
     return trackedConfigOrigins.get(name) ?? 'default'
   }
 
   // Handles values calculated from a mixture of options and env vars
-  #applyCalculated() {
+  #applyCalculated () {
     undo(this, 'calculated')
 
     if (this.DD_CIVISIBILITY_AGENTLESS_URL ||
@@ -525,11 +525,11 @@ class Config extends ConfigBase {
       if (!this.service) {
         const serverlessName = IS_SERVERLESS
           ? (
-            getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') ||
+              getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') ||
             getEnvironmentVariable('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
             getEnvironmentVariable('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
             getEnvironmentVariable('WEBSITE_SITE_NAME') // set by Azure Functions
-          )
+            )
           : undefined
 
         setAndTrack(this, 'service', serverlessName || pkg.name || 'node')
@@ -616,7 +616,7 @@ class Config extends ConfigBase {
   }
 
   // TODO: Move outside of config. This is unrelated to the config system.
-  #loadGitMetadata() {
+  #loadGitMetadata () {
     // Try to read Git metadata from the environment variables
     this.repositoryUrl = removeUserSensitiveInfo(this.DD_GIT_REPOSITORY_URL ?? this.tags[GIT_REPOSITORY_URL])
     this.commitSHA = this.DD_GIT_COMMIT_SHA ?? this.tags[GIT_COMMIT_SHA]
@@ -666,7 +666,7 @@ class Config extends ConfigBase {
  * @param {Config} config
  * @param {ConfigKey} envVar
  */
-function deactivateIfEnabledAndWarnOnWindows(config, envVar) {
+function deactivateIfEnabledAndWarnOnWindows (config, envVar) {
   if (config[envVar]) {
     const source = trackedConfigOrigins.get(envVar)
     setAndTrack(config, envVar, false)
@@ -677,7 +677,7 @@ function deactivateIfEnabledAndWarnOnWindows(config, envVar) {
   }
 }
 
-function increaseCounter(event, ddVar, otelVar) {
+function increaseCounter (event, ddVar, otelVar) {
   const tags = []
   if (ddVar) {
     tags.push(`config_datadog:${ddVar.toLowerCase()}`)
@@ -686,7 +686,7 @@ function increaseCounter(event, ddVar, otelVar) {
   tracerMetrics.count(event, tags).inc()
 }
 
-function getFromOtelSamplerMap(otelTracesSampler, otelTracesSamplerArg) {
+function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
   const OTEL_TRACES_SAMPLER_MAPPING = {
     always_on: 1,
     always_off: 0,
@@ -701,7 +701,7 @@ function getFromOtelSamplerMap(otelTracesSampler, otelTracesSamplerArg) {
   return result
 }
 
-function warnWrongOtelSettings() {
+function warnWrongOtelSettings () {
   // This mostly works for non-aliased environment variables only.
   // TODO: Adjust this to work across all sources.
   for (const [otelEnvVar, ddEnvVar, key] of [
@@ -744,7 +744,7 @@ function warnWrongOtelSettings() {
 /**
  * @param {TracerOptions} [options]
  */
-function getConfig(options) {
+function getConfig (options) {
   if (!configInstance) {
     configInstance = new Config(options)
   }

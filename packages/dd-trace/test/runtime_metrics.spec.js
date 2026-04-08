@@ -212,6 +212,9 @@ function createGarbage (count = 50) {
             obj: {},
             invalid: 't{e*s#t5-:./',
           },
+          getOrigin: () => {
+            return 'default'
+          },
         }
 
         clock = sinon.useFakeTimers({
