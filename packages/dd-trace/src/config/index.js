@@ -420,6 +420,7 @@ class Config {
       OTEL_TRACES_SAMPLER_ARG,
       DD_EXPERIMENTAL_FLAGGING_PROVIDER_ENABLED,
       DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS,
+      DD_EXPERIMENTAL_FLAGGING_PROVIDER_MAX_FLAG_TAGS,
       OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
       OTEL_EXPORTER_OTLP_LOGS_HEADERS,
       OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
@@ -607,6 +608,10 @@ class Config {
     if (DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS != null) {
       target['experimental.flaggingProvider.initializationTimeoutMs'] =
         maybeInt(DD_EXPERIMENTAL_FLAGGING_PROVIDER_INITIALIZATION_TIMEOUT_MS)
+    }
+    if (DD_EXPERIMENTAL_FLAGGING_PROVIDER_MAX_FLAG_TAGS != null) {
+      target['experimental.flaggingProvider.maxFlagTags'] =
+        Math.min(maybeInt(DD_EXPERIMENTAL_FLAGGING_PROVIDER_MAX_FLAG_TAGS), 1000)
     }
     setBoolean(target, 'traceEnabled', DD_TRACE_ENABLED)
     setBoolean(target, 'experimental.aiguard.block', DD_AI_GUARD_BLOCK)

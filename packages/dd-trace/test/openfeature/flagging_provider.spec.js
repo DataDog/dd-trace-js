@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -15,10 +15,12 @@ describe('FlaggingProvider', () => {
   let mockChannel
   let log
   let channelStub
+  let tagSpansForEvaluation
 
   beforeEach(() => {
     mockTracer = {
       _config: { service: 'test-service' },
+      scope: () => ({ active: () => ({}) }),
     }
 
     mockConfig = {
@@ -29,6 +31,7 @@ describe('FlaggingProvider', () => {
         flaggingProvider: {
           enabled: true,
           initializationTimeoutMs: 30_000,
+          maxFlagTags: 300,
         },
       },
     }
@@ -45,12 +48,19 @@ describe('FlaggingProvider', () => {
       warn: sinon.spy(),
     }
 
+    tagSpansForEvaluation = sinon.spy()
+
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
       '../log': log,
+      './span_tagger': { tagSpansForEvaluation },
     })
+  })
+
+  afterEach(() => {
+    sinon.restore()
   })
 
   describe('constructor', () => {
@@ -72,7 +82,7 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider)
-      sinon.assert.calledWith(log.debug, 'FlaggingProvider created with timeout: 30000ms')
+      sinon.assert.calledWith(log.debug, '%s created with timeout: %dms', 'FlaggingProvider', 30000)
     })
   })
 
@@ -85,7 +95,7 @@ describe('FlaggingProvider', () => {
       provider._setConfiguration(ufc)
 
       sinon.assert.calledOnceWithExactly(setConfigSpy, ufc)
-      sinon.assert.calledWith(log.debug, 'FlaggingProvider provider configuration updated')
+      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
     })
 
     it('should handle null/undefined configuration gracefully', () => {
@@ -102,6 +112,77 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider instanceof DatadogNodeServerProvider)
+    })
+  })
+
+  describe('span tagging on resolve methods', () => {
+    const resolveMethodConfigs = [
+      { method: 'resolveBooleanEvaluation', defaultValue: false },
+      { method: 'resolveStringEvaluation', defaultValue: 'default' },
+      { method: 'resolveNumberEvaluation', defaultValue: 0 },
+      { method: 'resolveObjectEvaluation', defaultValue: {} },
+    ]
+
+    for (const { method, defaultValue } of resolveMethodConfigs) {
+      describe(method, () => {
+        it('should call tagSpansForEvaluation with correct params', async () => {
+          const provider = new FlaggingProvider(mockTracer, mockConfig)
+          const context = { targetingKey: 'user-1' }
+
+          await provider[method]('test-flag', defaultValue, context)
+
+          sinon.assert.calledOnce(tagSpansForEvaluation)
+          const [tracer, params] = tagSpansForEvaluation.firstCall.args
+          assert.strictEqual(tracer, mockTracer)
+          assert.strictEqual(params.flagKey, 'test-flag')
+          assert.strictEqual(params.maxFlagTags, 300)
+        })
+
+        it('should still return the evaluation result', async () => {
+          const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+          const result = await provider[method]('test-flag', defaultValue, { targetingKey: 'user-1' })
+
+          assert.ok(Object.hasOwn(result, 'value'))
+        })
+      })
+    }
+
+    it('should pass variant from result when present', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const parentProto = Object.getPrototypeOf(Object.getPrototypeOf(provider))
+      const stub = sinon.stub(parentProto, 'resolveBooleanEvaluation').resolves({
+        value: true,
+        variant: 'treatment',
+        reason: 'TARGETING_MATCH',
+      })
+
+      try {
+        await provider.resolveBooleanEvaluation('test-flag', false, { targetingKey: 'user-1' })
+
+        const [, params] = tagSpansForEvaluation.firstCall.args
+        assert.strictEqual(params.variantKey, 'treatment')
+      } finally {
+        stub.restore()
+      }
+    })
+
+    it('should fall back to stringified value when variant is absent', async () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      const parentProto = Object.getPrototypeOf(Object.getPrototypeOf(provider))
+      const stub = sinon.stub(parentProto, 'resolveBooleanEvaluation').resolves({
+        value: false,
+        reason: 'DEFAULT',
+      })
+
+      try {
+        await provider.resolveBooleanEvaluation('test-flag', false, { targetingKey: 'user-1' })
+
+        const [, params] = tagSpansForEvaluation.firstCall.args
+        assert.strictEqual(params.variantKey, 'false')
+      } finally {
+        stub.restore()
+      }
     })
   })
 })
