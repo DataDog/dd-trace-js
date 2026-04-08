@@ -7,7 +7,7 @@ class ElectronNetPlugin extends CompositePlugin {
   static id = 'electron:net'
   static get plugins () {
     return {
-      request: ElectronRequestPlugin
+      request: ElectronRequestPlugin,
     }
   }
 }

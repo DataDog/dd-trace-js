@@ -5,11 +5,11 @@
 require('dd-trace').init({
   service: 'electron-integration-test',
   flushInterval: 0,
-  plugins: false
+  plugins: false,
 }).use('electron', true)
 
-const { app, BrowserWindow, net } = require('electron/main')
 const path = require('path')
+const { app, BrowserWindow, net } = require('electron/main')
 
 let win
 
@@ -18,8 +18,8 @@ app.whenReady().then(() => {
   win = new BrowserWindow({
     show: false,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js')
-    }
+      preload: path.join(__dirname, 'preload.js'),
+    },
   })
 
   win.loadFile(path.join(__dirname, 'index.html'))

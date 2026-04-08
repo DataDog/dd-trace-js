@@ -107,7 +107,7 @@ function createWrapRemoveAllListeners (mappings) {
       if (channel) {
         delete mappings[channel]
       } else {
-        Object.keys(mappings).forEach(key => delete mappings[key])
+        for (const key of Object.keys(mappings)) delete mappings[key]
       }
 
       return removeAllListeners.apply(this, channel)
@@ -145,7 +145,7 @@ function wrapBrowserWindow (electron) {
       // TODO: Move this to plugin?
       win.webContents.session.registerPreloadScript({
         type: 'frame', // TODO: service-worker
-        filePath: join(__dirname, 'electron', 'preload.js')
+        filePath: join(__dirname, 'electron', 'preload.js'),
       })
 
       // BrowserWindow doesn't support subclassing because it's all native code
@@ -157,7 +157,7 @@ function wrapBrowserWindow (electron) {
   Object.defineProperty(moduleExports, 'BrowserWindow', {
     enumerable: true,
     get: () => DatadogBrowserWindow,
-    configurable: false
+    configurable: false,
   })
 
   for (const key of Reflect.ownKeys(electron)) {
@@ -189,7 +189,7 @@ function wrapWebContents (proto) {
       }
 
       return webContents
-    }
+    },
   })
 }
 
