@@ -207,7 +207,6 @@ describe('esm', () => {
   let agent
   let proc
   prismaClientConfigs.forEach(config => {
-    // if (!config.name.includes('prisma-generator v7 mssql adapter (url)')) return
     describe(config.name, () => {
       const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0')
       const isPrismaV7 = config.configFile

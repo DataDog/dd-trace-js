@@ -76,7 +76,6 @@ const version = process.env.CYPRESS_VERSION
 const hookFile = 'dd-trace/loader-hook.mjs'
 const NUM_RETRIES_EFD = 3
 const CYPRESS_PRECOMPILED_SPEC_DIST_DIR = 'cypress/e2e/dist'
-
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 
 const moduleTypes = [
@@ -288,10 +287,7 @@ moduleTypes.forEach(({
           assert.ok(!('addTagsAfterFailure' in failedTestSpan.meta))
         }, 60000)
 
-      const {
-        NODE_OPTIONS,
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
 
       const specToRun = 'cypress/e2e/basic-*.js'
 
@@ -305,7 +301,7 @@ moduleTypes.forEach(({
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: specToRun,
           },
@@ -318,17 +314,560 @@ moduleTypes.forEach(({
       ])
     })
 
+    if (version === '6.7.0') {
+      it('logs a warning if using a deprecated version of cypress', async () => {
+        let stdout = ''
+        const {
+          NODE_OPTIONS,
+          ...restEnvVars
+        } = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          `${testCommand} --spec cypress/e2e/spec.cy.js`,
+          {
+            cwd,
+            env: {
+              ...restEnvVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          stdout += chunk.toString()
+        })
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          once(childProcess.stdout, 'end'),
+        ])
+        assert.match(
+          stdout,
+          /WARNING: dd-trace support for Cypress<10.2.0 is deprecated/
+        )
+      })
+    }
+
+    // These tests require Cypress >=10 features (defineConfig, setupNodeEvents)
+    const over10It = (version !== '6.7.0') ? it : it.skip
+    over10It('is backwards compatible with the old manual plugin approach', async () => {
+      receiver.setInfoResponse({ endpoints: [] })
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/v0.4/traces', (payloads) => {
+          const testSpans = payloads.flatMap(({ payload }) => payload.flatMap(trace => trace))
+
+          const passedTestSpan = testSpans.find(span =>
+            span.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+
+          assertObjectContains(passedTestSpan, {
+            name: 'cypress.test',
+            type: 'test',
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
+
+      const legacyConfigFile = type === 'esm'
+        ? 'cypress-legacy-plugin.config.mjs'
+        : 'cypress-legacy-plugin.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
+    over10It('reports tests when using cypress.config.mjs with NODE_OPTIONS', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+          const passedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 20000)
+
+      let testOutput = ''
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        './node_modules/.bin/cypress run --config-file cypress-auto-esm.config.mjs',
+        {
+          cwd,
+          env: {
+            ...envVars,
+            NODE_OPTIONS: '-r dd-trace/ci/init',
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (d) => { testOutput += d })
+      childProcess.stderr?.on('data', (d) => { testOutput += d })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
+    })
+
+    over10It('reports tests when cypress.run is called twice (multi-run state reset)', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const passedTests = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+            .filter(event => event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass')
+
+          assert.strictEqual(passedTests.length, 2)
+          passedTests.forEach((passedTest) => {
+            assertObjectContains(passedTest.content, {
+              meta: {
+                [TEST_STATUS]: 'pass',
+                [TEST_FRAMEWORK]: 'cypress',
+              },
+            })
+          })
+        }, 60000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      const doubleRunScript = type === 'esm'
+        ? 'node ./cypress-double-run.mjs'
+        : 'node ./cypress-double-run.js'
+
+      childProcess = exec(
+        doubleRunScript,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    over10It(
+      'reports tests with a plain-object config when dd-trace is manually configured',
+      async () => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+            const passedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+            )
+
+            assertObjectContains(passedTest?.content, {
+              meta: {
+                [TEST_STATUS]: 'pass',
+                [TEST_FRAMEWORK]: 'cypress',
+              },
+            })
+          }, 60000)
+
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+
+        const plainObjectConfigFile = type === 'esm'
+          ? 'cypress-plain-object-manual.config.mjs'
+          : 'cypress-plain-object-manual.config.js'
+
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --config-file ${plainObjectConfigFile}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      }
+    )
+
+    over10It(
+      'auto-instruments a plain-object config without defineConfig or manual plugin',
+      async () => {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+            const passedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+            )
+
+            assertObjectContains(passedTest?.content, {
+              meta: {
+                [TEST_STATUS]: 'pass',
+                [TEST_FRAMEWORK]: 'cypress',
+              },
+            })
+          }, 20000)
+
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+
+        const plainObjectAutoConfigFile = type === 'esm'
+          ? 'cypress-plain-object-auto.config.mjs'
+          : 'cypress-plain-object-auto.config.js'
+
+        childProcess = exec(
+          `./node_modules/.bin/cypress run --config-file ${plainObjectAutoConfigFile}`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      }
+    )
+
+    over10It(
+      'auto-instruments a plain-object default config (no --config-file)',
+      async () => {
+        const originalConfig = path.join(cwd, 'cypress.config.js')
+        const backupConfig = path.join(cwd, 'cypress.config.js.bak')
+        const plainObjectConfig = path.join(cwd, 'cypress-plain-object-auto.config.js')
+
+        // Replace default cypress.config.js with the plain-object config
+        fs.renameSync(originalConfig, backupConfig)
+        fs.copyFileSync(plainObjectConfig, originalConfig)
+
+        try {
+          const receiverPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads
+                .flatMap(({ payload }) => payload.events)
+                .filter(event => event.type === 'test')
+              const passedTest = events.find(event =>
+                event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+              )
+
+              assertObjectContains(passedTest?.content, {
+                meta: {
+                  [TEST_STATUS]: 'pass',
+                  [TEST_FRAMEWORK]: 'cypress',
+                },
+              })
+            }, 20000)
+
+          const envVars = getCiVisAgentlessConfig(receiver.port)
+
+          childProcess = exec(
+            './node_modules/.bin/cypress run',
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+              },
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+
+          assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+        } finally {
+          fs.renameSync(backupConfig, originalConfig)
+        }
+      }
+    )
+
+    over10It('reports tests with a TypeScript config file', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+          const passedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 20000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        './node_modules/.bin/cypress run --config-file cypress-typescript.config.ts',
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    over10It('does not modify the user support file and cleans up the injected wrapper', async () => {
+      const supportFilePath = path.join(cwd, 'cypress/support/e2e.js')
+      const originalSupportContent = fs.readFileSync(supportFilePath, 'utf8')
+      const supportContentWithoutDdTrace = originalSupportContent
+        .split('\n')
+        .filter(line => !line.includes("require('dd-trace/ci/cypress/support')"))
+        .join('\n')
+
+      const getSupportWrappers = () => fs.readdirSync(os.tmpdir())
+        .filter(filename => filename.startsWith('dd-cypress-support-'))
+        .sort()
+
+      fs.writeFileSync(supportFilePath, supportContentWithoutDdTrace)
+
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+          const passedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const wrapperFilesBefore = getSupportWrappers()
+
+      try {
+        childProcess = exec(testCommand, {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+        assert.strictEqual(fs.readFileSync(supportFilePath, 'utf8'), supportContentWithoutDdTrace)
+        assert.doesNotMatch(fs.readFileSync(supportFilePath, 'utf8'), /dd-trace\/ci\/cypress\/support/)
+        assert.deepStrictEqual(getSupportWrappers(), wrapperFilesBefore)
+      } finally {
+        fs.writeFileSync(supportFilePath, originalSupportContent)
+      }
+    })
+
+    over10It('preserves config returned from setupNodeEvents', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+          const passedTest = events.find(event =>
+            event.content.resource ===
+              'cypress/e2e/returned-config.cy.js.returned config uses env from setupNodeEvents return value'
+          )
+
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      const returnConfigFile = type === 'esm'
+        ? 'cypress-return-config.config.mjs'
+        : 'cypress-return-config.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${returnConfigFile}`,
+        {
+          cwd,
+          env: envVars,
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    it('custom after:spec and after:run handlers are chained with dd-trace instrumentation', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads
+            .flatMap(({ payload }) => payload.events)
+            .filter(event => event.type === 'test')
+          const passedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      let testOutput = ''
+      const customHooksConfigFile = type === 'esm'
+        ? 'cypress-custom-after-hooks.config.mjs'
+        : 'cypress-custom-after-hooks.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${customHooksConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (d) => { testOutput += d })
+      childProcess.stderr?.on('data', (d) => { testOutput += d })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        once(childProcess.stdout, 'end'),
+        once(childProcess.stderr, 'end'),
+        receiverPromise,
+      ])
+
+      // Verify both dd-trace spans AND the custom handlers ran (including their async resolutions)
+      assert.match(testOutput, /\[custom:after:spec\]/)
+      assert.match(testOutput, /\[custom:after:spec:resolved\]/)
+      assert.match(testOutput, /\[custom:after:run\]/)
+      assert.match(testOutput, /\[custom:after:run:resolved\]/)
+    })
+
+    // Tests the old manual API: dd-trace/ci/cypress/after-run and after-spec
+    // used alongside the manual plugin, without NODE_OPTIONS auto-instrumentation.
+    over10It('works if after:run and after:spec are explicitly used with the manual plugin', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          assert.ok(testSessionEvent)
+          const testEvents = events.filter(event => event.type === 'test')
+          assert.ok(testEvents.length > 0)
+        }, 30000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
+            CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
+            CYPRESS_ENABLE_MANUAL_PLUGIN: '1',
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
     over12It('reports correct source file and line for pre-compiled typescript test files', async function () {
-      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
 
       try {
         cleanupPrecompiledSourceLineDist(cwd)
 
         // Compile the TypeScript spec to JS + source map so the plugin can resolve
         // the original TypeScript source file and line via the adjacent .js.map file.
-        // We intentionally run with NODE_OPTIONS removed because sandboxed CWDs may not
-        // have local preload paths (e.g. -r ./ci/init) set by outer test environments.
-        compilePrecompiledTypeScriptSpecs(cwd, restEnvVars)
+        compilePrecompiledTypeScriptSpecs(cwd, envVars)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -379,7 +918,7 @@ moduleTypes.forEach(({
         childProcess = exec(testCommand, {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line.cy.js',
           },
@@ -434,12 +973,12 @@ moduleTypes.forEach(({
     })
 
     over12It('uses declaration scanning fallback when invocationDetails line is invalid', async function () {
-      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
 
       try {
         cleanupPrecompiledSourceLineDist(cwd)
 
-        compilePrecompiledTypeScriptSpecs(cwd, restEnvVars)
+        compilePrecompiledTypeScriptSpecs(cwd, envVars)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -465,7 +1004,7 @@ moduleTypes.forEach(({
         childProcess = exec(testCommand, {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line-fallback.cy.js',
           },
@@ -480,12 +1019,12 @@ moduleTypes.forEach(({
 
     over12It('keeps original invocationDetails line when no declaration match is found', async function () {
       this.timeout(140000)
-      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
 
       try {
         cleanupPrecompiledSourceLineDist(cwd)
 
-        compilePrecompiledTypeScriptSpecs(cwd, restEnvVars)
+        compilePrecompiledTypeScriptSpecs(cwd, envVars)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -513,7 +1052,7 @@ moduleTypes.forEach(({
         childProcess = exec(testCommand, {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line-no-match.cy.js',
           },
@@ -527,7 +1066,7 @@ moduleTypes.forEach(({
     })
 
     over12It('uses invocationDetails line directly for plain javascript specs without source maps', async function () {
-      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
 
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -555,7 +1094,7 @@ moduleTypes.forEach(({
       childProcess = exec(testCommand, {
         cwd,
         env: {
-          ...restEnvVars,
+          ...envVars,
           CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
           SPEC_PATTERN: 'cypress/e2e/spec-source-line-invocation.cy.js',
         },
@@ -609,14 +1148,14 @@ moduleTypes.forEach(({
           )
         }, 60000)
 
-      const { NODE_OPTIONS, ...restEnvVars } = getCiVisAgentlessConfig(receiver.port)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
 
       // Run Cypress directly with the TypeScript spec file — no manual compilation step.
       // Cypress compiles .cy.ts files on the fly via its own preprocessor/bundler.
       childProcess = exec(testCommand, {
         cwd,
         env: {
-          ...restEnvVars,
+          ...envVars,
           CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
           SPEC_PATTERN: 'cypress/e2e/spec-source-line.cy.ts',
         },
@@ -626,46 +1165,8 @@ moduleTypes.forEach(({
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
-    if (version === '6.7.0') {
-      // to be removed when we drop support for cypress@6.7.0
-      it('logs a warning if using a deprecated version of cypress', async () => {
-        let stdout = ''
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
-
-        childProcess = exec(
-          `${testCommand} --spec cypress/e2e/spec.cy.js`,
-          {
-            cwd,
-            env: {
-              ...restEnvVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            },
-          }
-        )
-
-        childProcess.stdout?.on('data', (chunk) => {
-          stdout += chunk.toString()
-        })
-
-        await Promise.all([
-          once(childProcess, 'exit'),
-          once(childProcess.stdout, 'end'),
-        ])
-        assert.match(
-          stdout,
-          /WARNING: dd-trace support for Cypress<10.2.0 is deprecated and will not be supported in future versions of dd-trace./
-        )
-      })
-    }
-
     it('tags session and children with _dd.ci.library_configuration_error when settings fails 4xx', async () => {
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisAgentlessConfig(receiver.port)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
 
       receiver.setSettingsResponseCode(404)
       const eventsPromise = receiver
@@ -685,7 +1186,7 @@ moduleTypes.forEach(({
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
@@ -697,9 +1198,8 @@ moduleTypes.forEach(({
 
     it('does not crash if badly init', async () => {
       const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
         DD_CIVISIBILITY_AGENTLESS_URL,
-        ...restEnvVars
+        ...envVars
       } = getCiVisAgentlessConfig(receiver.port)
 
       let hasReceivedEvents = false
@@ -715,7 +1215,7 @@ moduleTypes.forEach(({
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_SITE: '= invalid = url',
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
@@ -755,14 +1255,15 @@ moduleTypes.forEach(({
     it('can run and report tests', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+          const ciVisPayloads = payloads.filter(({ payload }) => payload.metadata?.test)
+          const ciVisMetadataDicts = ciVisPayloads.flatMap(({ payload }) => payload.metadata)
 
-          metadataDicts.forEach(metadata => {
+          ciVisMetadataDicts.forEach(metadata => {
             for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
               assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
             }
           })
-          const events = payloads.flatMap(({ payload }) => payload.events)
+          const events = ciVisPayloads.flatMap(({ payload }) => payload.events)
 
           const testSessionEvent = events.find(event => event.type === 'test_session_end')
           const testModuleEvent = events.find(event => event.type === 'test_module_end')
@@ -896,17 +1397,14 @@ moduleTypes.forEach(({
           assert.match(describeHookSuite.content.meta[ERROR_MESSAGE], /error in after hook/)
         }, 25000)
 
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
 
       childProcess = exec(
         testCommand,
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_TAGS: 'test.customtag:customvalue,test.customtag2:customvalue2',
             DD_TEST_SESSION_NAME: 'my-test-session',
@@ -923,10 +1421,7 @@ moduleTypes.forEach(({
     })
 
     it('can report code coverage if it is available', async () => {
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisAgentlessConfig(receiver.port)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
 
       const receiverPromise = receiver.gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcov', payloads => {
         const [{ payload: coveragePayloads }] = payloads
@@ -953,7 +1448,7 @@ moduleTypes.forEach(({
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
           },
@@ -975,17 +1470,14 @@ moduleTypes.forEach(({
         const packfileRequestPromise = receiver
           .payloadReceived(({ url }) => url.endsWith('/api/v2/git/repository/packfile'), 25000)
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
           testCommand,
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
@@ -1023,17 +1515,14 @@ moduleTypes.forEach(({
             assertObjectContains(eventTypes, ['test', 'test_session_end', 'test_module_end', 'test_suite_end'])
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
           testCommand,
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
@@ -1094,17 +1583,14 @@ moduleTypes.forEach(({
             assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
           })
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
           testCommand,
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
@@ -1152,17 +1638,14 @@ moduleTypes.forEach(({
             assert.strictEqual(notSkippedTest.content.meta[TEST_STATUS], 'pass')
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
           testCommand,
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/other.cy.js',
             },
@@ -1230,17 +1713,14 @@ moduleTypes.forEach(({
             assert.ok(!(TEST_ITR_FORCED_RUN in unskippableFailedTest.content.meta))
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
           testCommand,
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
@@ -1302,17 +1782,14 @@ moduleTypes.forEach(({
             assert.ok(!(TEST_ITR_FORCED_RUN in unskippableFailedTest.content.meta))
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
           testCommand,
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/{other,spec}.cy.js',
             },
@@ -1358,17 +1835,14 @@ moduleTypes.forEach(({
             assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
           })
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
           testCommand,
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
@@ -1398,17 +1872,14 @@ moduleTypes.forEach(({
             })
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         childProcess = exec(
           testCommand,
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
             },
@@ -1438,10 +1909,7 @@ moduleTypes.forEach(({
           command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
         }
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisAgentlessConfig(receiver.port)
+        const envVars = getCiVisAgentlessConfig(receiver.port)
 
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
@@ -1464,7 +1932,7 @@ moduleTypes.forEach(({
           {
             cwd: `${cwd}/ci-visibility/subproject`,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             },
           }
@@ -1482,10 +1950,7 @@ moduleTypes.forEach(({
     })
 
     it('still reports correct format if there is a plugin incompatibility', async () => {
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
 
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1507,49 +1972,10 @@ moduleTypes.forEach(({
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             CYPRESS_ENABLE_INCOMPATIBLE_PLUGIN: '1',
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
-          },
-        }
-      )
-
-      await Promise.all([
-        once(childProcess, 'exit'),
-        receiverPromise,
-      ])
-    })
-
-    it('works if after:run and after:spec are explicitly used', async () => {
-      const receiverPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSessionEvent = events.find(event => event.type === 'test_session_end')
-          assert.ok(testSessionEvent)
-          const testModuleEvent = events.find(event => event.type === 'test_module_end')
-          assert.ok(testModuleEvent)
-          const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
-          assert.strictEqual(testSuiteEvents.length, 4)
-          const testEvents = events.filter(event => event.type === 'test')
-          assert.strictEqual(testEvents.length, 9)
-        }, 30000)
-
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
-
-      childProcess = exec(
-        testCommand,
-        {
-          cwd,
-          env: {
-            ...restEnvVars,
-            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
-            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
-            CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
-            SPEC_PATTERN: 'cypress/e2e/{spec,other,hook-describe-error,hook-test-error}.cy.js',
           },
         }
       )
@@ -1609,10 +2035,7 @@ moduleTypes.forEach(({
             assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
           }, 25000)
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -1621,7 +2044,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
             },
@@ -1654,10 +2077,7 @@ moduleTypes.forEach(({
           },
         })
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1682,7 +2102,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
@@ -1711,10 +2131,7 @@ moduleTypes.forEach(({
           cypress: {},
         })
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1739,7 +2156,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: 'cypress/e2e/skipped-test.js',
             },
@@ -1768,10 +2185,7 @@ moduleTypes.forEach(({
           cypress: {},
         })
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         // Request module waits before retrying; browser runs are slow — need longer gather timeout
         const receiverPromise = receiver
@@ -1796,7 +2210,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
             },
@@ -1829,10 +2243,7 @@ moduleTypes.forEach(({
           },
         })
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1857,7 +2268,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
@@ -1890,10 +2301,7 @@ moduleTypes.forEach(({
           },
         })
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -1919,7 +2327,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
             },
@@ -1976,10 +2384,7 @@ moduleTypes.forEach(({
             })
           }, 25000)
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -1988,7 +2393,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               CYPRESS_TEST_ISOLATION: 'false',
@@ -2076,10 +2481,7 @@ moduleTypes.forEach(({
             })
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -2088,7 +2490,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
             },
@@ -2195,10 +2597,7 @@ moduleTypes.forEach(({
             assert.equal(testExecutionOrder[9].isRetry, false)
           }, 30000)
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
 
@@ -2207,7 +2606,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
             },
@@ -2253,10 +2652,7 @@ moduleTypes.forEach(({
             assert.ok(!tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
           }, 25000)
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
 
@@ -2265,7 +2661,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: 'false',
               SPEC_PATTERN: specToRun,
@@ -2314,10 +2710,7 @@ moduleTypes.forEach(({
             )
           }, 25000)
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
 
@@ -2326,7 +2719,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               SPEC_PATTERN: specToRun,
@@ -2368,10 +2761,7 @@ moduleTypes.forEach(({
             assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
 
@@ -2380,7 +2770,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
               SPEC_PATTERN: specToRun,
@@ -2418,10 +2808,7 @@ moduleTypes.forEach(({
             assert.equal(tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length, 0)
           }, 30000)
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/flaky-test-retries.js'
 
@@ -2430,7 +2817,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               CYPRESS_TEST_ISOLATION: 'false',
@@ -2457,10 +2844,7 @@ moduleTypes.forEach(({
         command = `node --loader=${hookFile} ../../cypress-esm-config.mjs`
       }
 
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisAgentlessConfig(receiver.port)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2479,7 +2863,7 @@ moduleTypes.forEach(({
         {
           cwd: `${cwd}/ci-visibility/subproject`,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
           },
         }
@@ -2530,11 +2914,6 @@ moduleTypes.forEach(({
         25000
       )
 
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
-
       const specToRun = 'cypress/e2e/dynamic-name-test.cy.js'
 
       childProcess = exec(
@@ -2542,7 +2921,7 @@ moduleTypes.forEach(({
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...getCiVisEvpProxyConfig(receiver.port),
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: specToRun,
           },
@@ -2573,10 +2952,7 @@ moduleTypes.forEach(({
           },
         })
 
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -2601,7 +2977,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
@@ -2619,14 +2995,12 @@ moduleTypes.forEach(({
     // cy.origin is not available in old versions of Cypress
     if (version === 'latest') {
       it('does not crash for multi origin tests', async () => {
-        const {
-          NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
+              .filter(event => event.type !== 'span')
             assert.strictEqual(events.length, 4)
 
             const test = events.find(event => event.type === 'test').content
@@ -2656,7 +3030,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               CYPRESS_BASE_URL_SECOND: `http://localhost:${secondWebAppPort}`,
               SPEC_PATTERN: specToRun,
@@ -2686,17 +3060,14 @@ moduleTypes.forEach(({
           })
         }, 25000)
 
-      const {
-        NODE_OPTIONS, // NODE_OPTIONS dd-trace config does not work with cypress
-        ...restEnvVars
-      } = getCiVisEvpProxyConfig(receiver.port)
+      const envVars = getCiVisEvpProxyConfig(receiver.port)
 
       childProcess = exec(
         testCommand,
         {
           cwd,
           env: {
-            ...restEnvVars,
+            ...envVars,
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             DD_SERVICE: 'my-service',
             SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
@@ -2835,10 +3206,7 @@ moduleTypes.forEach(({
             isDisabled,
           })
 
-          const {
-            NODE_OPTIONS,
-            ...restEnvVars
-          } = getCiVisEvpProxyConfig(receiver.port)
+          const envVars = getCiVisEvpProxyConfig(receiver.port)
 
           const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
@@ -2847,7 +3215,7 @@ moduleTypes.forEach(({
             {
               cwd,
               env: {
-                ...restEnvVars,
+                ...envVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars,
@@ -3004,10 +3372,7 @@ moduleTypes.forEach(({
         const runDisableTest = async (isDisabling, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isDisabling)
 
-          const {
-            NODE_OPTIONS,
-            ...restEnvVars
-          } = getCiVisEvpProxyConfig(receiver.port)
+          const envVars = getCiVisEvpProxyConfig(receiver.port)
 
           const specToRun = 'cypress/e2e/disable.js'
 
@@ -3016,7 +3381,7 @@ moduleTypes.forEach(({
             {
               cwd,
               env: {
-                ...restEnvVars,
+                ...envVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars,
@@ -3107,10 +3472,7 @@ moduleTypes.forEach(({
         const runQuarantineTest = async (isQuarantining, extraEnvVars = {}) => {
           const testAssertionsPromise = getTestAssertions(isQuarantining)
 
-          const {
-            NODE_OPTIONS,
-            ...restEnvVars
-          } = getCiVisEvpProxyConfig(receiver.port)
+          const envVars = getCiVisEvpProxyConfig(receiver.port)
 
           const specToRun = 'cypress/e2e/quarantine.js'
 
@@ -3119,7 +3481,7 @@ moduleTypes.forEach(({
             {
               cwd,
               env: {
-                ...restEnvVars,
+                ...envVars,
                 CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
                 SPEC_PATTERN: specToRun,
                 ...extraEnvVars,
@@ -3178,10 +3540,7 @@ moduleTypes.forEach(({
             assert.strictEqual(tests.length, 1)
           }, 60000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
@@ -3190,7 +3549,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               DD_TRACE_DEBUG: '1',
@@ -3250,10 +3609,7 @@ moduleTypes.forEach(({
             })
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/attempt-to-fix.js'
 
@@ -3262,7 +3618,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               CYPRESS_SHOULD_ALWAYS_PASS: '1',
@@ -3341,10 +3697,7 @@ moduleTypes.forEach(({
             })
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/attempt-to-fix-order.js'
 
@@ -3353,7 +3706,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
             },
@@ -3382,7 +3735,9 @@ moduleTypes.forEach(({
       it('adds capabilities to tests', async () => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+            const metadataDicts = payloads
+              .filter(({ payload }) => payload.metadata?.test)
+              .flatMap(({ payload }) => payload.metadata)
 
             assert.ok(metadataDicts.length > 0)
             metadataDicts.forEach(metadata => {
@@ -3399,10 +3754,7 @@ moduleTypes.forEach(({
             })
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
 
@@ -3411,7 +3763,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               DD_TEST_SESSION_NAME: 'my-test-session-name',
               SPEC_PATTERN: specToRun,
@@ -3542,10 +3894,7 @@ moduleTypes.forEach(({
       ) => {
         const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/impacted-test.js'
 
@@ -3554,7 +3903,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: '',
@@ -3661,10 +4010,7 @@ moduleTypes.forEach(({
             assert.equal(retriedTests.length, 0)
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/impacted-test.js'
 
@@ -3673,7 +4019,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: '',
@@ -3754,10 +4100,7 @@ moduleTypes.forEach(({
             })
           }, 25000)
 
-        const {
-          NODE_OPTIONS,
-          ...restEnvVars
-        } = getCiVisEvpProxyConfig(receiver.port)
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/impacted-test-order.js'
 
@@ -3766,7 +4109,7 @@ moduleTypes.forEach(({
           {
             cwd,
             env: {
-              ...restEnvVars,
+              ...envVars,
               CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
               SPEC_PATTERN: specToRun,
               GITHUB_BASE_REF: '',
