@@ -21,7 +21,7 @@ const {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
 } = require('../serverless')
-const { ORIGIN_KEY } = require('../constants')
+const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
   require('./git_properties')
@@ -620,7 +620,7 @@ class Config {
     unprocessedTarget['experimental.aiguard.timeout'] = DD_AI_GUARD_TIMEOUT
     setBoolean(target, 'experimental.enableGetRumData', DD_TRACE_EXPERIMENTAL_GET_RUM_DATA_ENABLED)
     setString(target, 'experimental.exporter', DD_TRACE_EXPERIMENTAL_EXPORTER)
-    if (AWS_LAMBDA_FUNCTION_NAME) {
+    if (AWS_LAMBDA_FUNCTION_NAME && !fs.existsSync(DATADOG_MINI_AGENT_PATH)) {
       target.flushInterval = 0
     } else if (DD_TRACE_FLUSH_INTERVAL) {
       target.flushInterval = maybeInt(DD_TRACE_FLUSH_INTERVAL)
