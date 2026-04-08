@@ -10,11 +10,11 @@ class PGPlugin extends DatabasePlugin {
 
   bindStart (ctx) {
     const { params = {}, query, processId, stream } = ctx
-    const serviceResult = this.serviceName({ pluginConfig: this.config, params })
+    const service = this.serviceName({ pluginConfig: this.config, params })
     const originalStatement = this.maybeTruncate(query.text)
 
     const span = this.startSpan(this.operationName(), {
-      service: serviceResult,
+      service,
       resource: originalStatement,
       type: 'sql',
       kind: 'client',
@@ -32,7 +32,7 @@ class PGPlugin extends DatabasePlugin {
       span.setTag('db.stream', 1)
     }
 
-    query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, serviceResult.name, !!query.name)
+    query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service.name, !!query.name)
 
     return ctx.currentStore
   }
