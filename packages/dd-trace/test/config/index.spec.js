@@ -1894,7 +1894,7 @@ describe('Config', () => {
         enabled: true,
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
-        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method' + (DD_MAJOR < 6 ? '2' : '1'),
+        ...DD_MAJOR < 6 && { securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method2' },
         stackTrace: {
           enabled: false,
         },
