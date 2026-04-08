@@ -745,11 +745,11 @@ aiguard.evaluate([
     ],
   }
 ]).then(result => {
-  result.action && result.reason && result.tags
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
 })
 
 aiguard.evaluate([
   { role: 'tool', tool_call_id: 'call_1', content: '5' },
 ]).then(result => {
-  result.action && result.reason && result.tags
+  result.action && result.reason && result.tags && result.tagProbabilities && result.sds
 })

@@ -1848,6 +1848,10 @@ declare namespace tracer {
        */
       tags: string[];
       /**
+       * Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })
+       */
+      tagProbabilities: { [key: string]: number }
+      /**
        * Sensitive Data Scanner findings from the evaluation.
        */
       sds: Object[];
@@ -1866,6 +1870,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Dictionary of tag probabilities (e.g. [indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8])
+       */
+      tagProbabilities: { [key: string]: number }
       /**
        * Sensitive Data Scanner findings from the evaluation.
        */

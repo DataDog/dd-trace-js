@@ -25,11 +25,12 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 const ALLOW = 'ALLOW'
 
 class AIGuardAbortError extends Error {
-  constructor (reason, tags, sds) {
+  constructor (reason, tags, tagProbs, sds) {
     super(reason)
     this.name = 'AIGuardAbortError'
     this.reason = reason
     this.tags = tags
+    this.tagProbabilities = tagProbs
     this.sds = sds || []
   }
 }
@@ -188,7 +189,7 @@ class AIGuard extends NoopAIGuard {
           `AI Guard service call failed, status ${response.status}`,
           { errors: response.body?.errors })
       }
-      let action, reason, tags, sdsFindings, blockingEnabled
+      let action, reason, tags, sdsFindings, tagProbabilities, blockingEnabled
       try {
         const attr = response.body.data.attributes
         if (!attr.action) {
@@ -198,6 +199,7 @@ class AIGuard extends NoopAIGuard {
         reason = attr.reason
         tags = attr.tags
         sdsFindings = attr.sds_findings || []
+        tagProbabilities = attr.tagProbs || {}
         blockingEnabled = attr.is_blocking_enabled ?? false
       } catch (e) {
         appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
@@ -215,11 +217,14 @@ class AIGuard extends NoopAIGuard {
       if (sdsFindings?.length > 0) {
         metaStruct.sds = sdsFindings
       }
+      if (Object.keys(tagProbabilities).length > 0) {
+        metaStruct.tag_probs = tagProbabilities
+      }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
-        throw new AIGuardAbortError(reason, tags, sdsFindings)
+        throw new AIGuardAbortError(reason, tags, tagProbabilities, sdsFindings)
       }
-      return { action, reason, tags, sds: sdsFindings }
+      return { action, reason, tags, tagProbabilities, sds: sdsFindings }
     })
   }
 }

@@ -144,9 +144,9 @@ describe('AIGuard SDK', () => {
   }
 
   const testSuite = [
-    { action: 'ALLOW', reason: 'Go ahead', tags: [] },
-    { action: 'DENY', reason: 'Nope', tags: ['deny_everything', 'test_deny'] },
-    { action: 'ABORT', reason: 'Kill it with fire', tags: ['alarm_tag', 'abort_everything'] },
+    { action: 'ALLOW', reason: 'Go ahead', tagProbs: {} },
+    { action: 'DENY', reason: 'Nope', tagProbs: { deny_everything: 0.8, test_deny: 0.2 } },
+    { action: 'ABORT', reason: 'Kill it with fire', tagProbs: { alarm_tag: 0.3, abort_everything: 0.7 } },
   ].flatMap(r => [
     { ...r, blocking: true },
     { ...r, blocking: false },
@@ -156,23 +156,25 @@ describe('AIGuard SDK', () => {
     { ...r, suite: 'prompt', target: 'prompt', messages: prompt },
   ])
 
-  for (const { action, reason, tags, blocking, suite, target, messages } of testSuite) {
+  for (const { action, reason, tagProbs, blocking, suite, target, messages } of testSuite) {
+    const tags = Object.keys(tagProbs)
     it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
-      mockFetch({ body: { data: { attributes: { action, reason, tags, is_blocking_enabled: blocking } } } })
+      mockFetch({ body: { data: { attributes: { action, reason, tags, tagProbs, is_blocking_enabled: blocking } } } })
       const shouldBlock = action !== 'ALLOW' && blocking
 
       if (shouldBlock) {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
           err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === tags &&
-            JSON.stringify(err.sds) === '[]'
+             err.tagProbabilities === tagProbs && JSON.stringify(err.sds) === '[]'
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })
         assert.strictEqual(evaluation.action, action)
         assert.strictEqual(evaluation.reason, reason)
-        if (tags) {
+        if (tagProbs) {
           assert.strictEqual(evaluation.tags, tags)
+          assert.strictEqual(evaluation.tagProbabilities, tagProbs)
         }
         assert.deepStrictEqual(evaluation.sds, [])
       }
@@ -189,6 +191,7 @@ describe('AIGuard SDK', () => {
       {
         messages,
         ...(tags.length > 0 ? { attack_categories: tags } : {}),
+        ...(Object.keys(tagProbs).length > 0 ? { tag_probs: tagProbs } : {}),
       })
     })
   }
