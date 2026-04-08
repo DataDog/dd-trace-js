@@ -8,7 +8,7 @@ const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
 
-// OpCode values are small integers (0-12), written as u64 LE via two u32 writes.
+// OpCode values are small integers (0-16), written as u16 LE (2 bytes).
 
 /**
  * NativeSpansInterface provides the JavaScript bridge to the native span storage.
@@ -59,8 +59,8 @@ class NativeSpansInterface {
     this._flushBuffer = Buffer.alloc(FLUSH_BUFFER_SIZE)
 
     // Change queue buffer state
-    // First 8 bytes store the count of operations
-    this._cqbIndex = 8
+    // First 4 bytes store the count of operations (u32)
+    this._cqbIndex = 4
     this._cqbCount = 0
 
 
@@ -135,7 +135,7 @@ class NativeSpansInterface {
     this.flushChangeQueue()
 
     // Reset change queue state
-    this._cqbIndex = 8
+    this._cqbIndex = 4
     this._cqbCount = 0
 
     // Reset string table (spans will need to re-register strings)
@@ -189,7 +189,7 @@ class NativeSpansInterface {
    * Called after flushing or on error recovery.
    */
   resetChangeQueue () {
-    this._cqbIndex = 8
+    this._cqbIndex = 4
     this._cqbCount = 0
     // Zero out the count header in WASM memory
     if (this._wasmMemory.buffer !== this._cqbView.buffer) {
@@ -197,7 +197,6 @@ class NativeSpansInterface {
       this._cqbBytes = new Uint8Array(this._wasmMemory.buffer, this._cqbPtr)
     }
     this._cqbView.setUint32(0, 0, true)
-    this._cqbView.setUint32(4, 0, true)
   }
 
   /**
@@ -292,9 +291,8 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, op, true)
-    view.setUint32(idx + 4, 0, true)
-    idx += 8
+    view.setUint16(idx, op, true)
+    idx += 2
     buf.set(spanId, idx)
     idx += 8
 
@@ -302,8 +300,8 @@ class NativeSpansInterface {
       const arg = resolvedArgs[i]
       if (typeof arg === 'number') {
         // Pre-resolved string ID
-        view.setUint32(idx, arg, true)
-        idx += 4
+        view.setUint16(idx, arg, true)
+        idx += 2
       } else {
         const type = arg[0]
         const value = arg[1]
@@ -359,7 +357,6 @@ class NativeSpansInterface {
     this._cqbIndex = idx
     this._cqbCount++
     view.setUint32(0, this._cqbCount, true)
-    view.setUint32(4, 0, true)
   }
 
   /**
@@ -370,7 +367,6 @@ class NativeSpansInterface {
     this.#checkDetach()
     this._cqbCount++
     this._cqbView.setUint32(0, this._cqbCount, true)
-    this._cqbView.setUint32(4, 0, true)
   }
 
   /**
@@ -382,7 +378,7 @@ class NativeSpansInterface {
       this.#refreshViews()
     }
     if (this._cqbView.getUint32(0, true) === 0 && this._cqbCount > 0) {
-      this._cqbIndex = 8
+      this._cqbIndex = 4
       this._cqbCount = 0
     }
   }
@@ -409,7 +405,7 @@ class NativeSpansInterface {
 
     let idx = this._cqbIndex
 
-    if (idx + 64 > CHANGE_QUEUE_BUFFER_SIZE) {
+    if (idx + 44 > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
     }
@@ -421,8 +417,8 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, 13, true); view.setUint32(idx + 4, 0, true)
-    idx += 8
+    view.setUint16(idx, 13, true)
+    idx += 2
     buf.set(spanId, idx)
     idx += 8
 
@@ -451,8 +447,8 @@ class NativeSpansInterface {
     }
     idx += 8
 
-    view.setUint32(idx, nameId, true)
-    idx += 4
+    view.setUint16(idx, nameId, true)
+    idx += 2
 
     const ns = Math.round(startMs * 1e6)
     view.setUint32(idx, ns % 0x100000000, true)
@@ -462,7 +458,6 @@ class NativeSpansInterface {
     this._cqbIndex = idx
     this._cqbCount++
     view.setUint32(0, this._cqbCount, true)
-    view.setUint32(4, 0, true)
   }
 
   /**
@@ -482,7 +477,7 @@ class NativeSpansInterface {
 
     let idx = this._cqbIndex
 
-    if (idx + 80 > CHANGE_QUEUE_BUFFER_SIZE) {
+    if (idx + 50 > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
     }
@@ -497,8 +492,8 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, 14, true); view.setUint32(idx + 4, 0, true)
-    idx += 8
+    view.setUint16(idx, 14, true)
+    idx += 2
     buf.set(spanId, idx)
     idx += 8
 
@@ -527,10 +522,10 @@ class NativeSpansInterface {
     }
     idx += 8
 
-    view.setUint32(idx, nameId, true); idx += 4
-    view.setUint32(idx, serviceId, true); idx += 4
-    view.setUint32(idx, resourceId, true); idx += 4
-    view.setUint32(idx, typeId, true); idx += 4
+    view.setUint16(idx, nameId, true); idx += 2
+    view.setUint16(idx, serviceId, true); idx += 2
+    view.setUint16(idx, resourceId, true); idx += 2
+    view.setUint16(idx, typeId, true); idx += 2
 
     const ns = Math.round(startMs * 1e6)
     view.setUint32(idx, ns % 0x100000000, true)
@@ -540,7 +535,6 @@ class NativeSpansInterface {
     this._cqbIndex = idx
     this._cqbCount++
     view.setUint32(0, this._cqbCount, true)
-    view.setUint32(4, 0, true)
   }
 
   /**
@@ -556,7 +550,7 @@ class NativeSpansInterface {
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
-    const needed = 20 + tags.length * 8
+    const needed = 14 + tags.length * 4
 
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
@@ -573,23 +567,22 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, 15, true); view.setUint32(idx + 4, 0, true)
-    idx += 8
+    view.setUint16(idx, 15, true)
+    idx += 2
     buf.set(spanId, idx)
     idx += 8
     view.setUint32(idx, tags.length, true)
     idx += 4
     for (let i = 0; i < tags.length; i++) {
-      view.setUint32(idx, ids[i * 2], true)
-      idx += 4
-      view.setUint32(idx, ids[i * 2 + 1], true)
-      idx += 4
+      view.setUint16(idx, ids[i * 2], true)
+      idx += 2
+      view.setUint16(idx, ids[i * 2 + 1], true)
+      idx += 2
     }
 
     this._cqbIndex = idx
     this._cqbCount++
     view.setUint32(0, this._cqbCount, true)
-    view.setUint32(4, 0, true)
   }
 
   /**
@@ -605,7 +598,7 @@ class NativeSpansInterface {
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
-    const needed = 20 + tags.length * 12
+    const needed = 14 + tags.length * 10
 
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
@@ -621,15 +614,15 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, 16, true); view.setUint32(idx + 4, 0, true)
-    idx += 8
+    view.setUint16(idx, 16, true)
+    idx += 2
     buf.set(spanId, idx)
     idx += 8
     view.setUint32(idx, tags.length, true)
     idx += 4
     for (let i = 0; i < tags.length; i++) {
-      view.setUint32(idx, keyIds[i], true)
-      idx += 4
+      view.setUint16(idx, keyIds[i], true)
+      idx += 2
       view.setFloat64(idx, tags[i][1], true)
       idx += 8
     }
@@ -637,7 +630,6 @@ class NativeSpansInterface {
     this._cqbIndex = idx
     this._cqbCount++
     view.setUint32(0, this._cqbCount, true)
-    view.setUint32(4, 0, true)
   }
 
   /**
