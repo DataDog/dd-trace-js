@@ -17,8 +17,9 @@ const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
+const AllocationProfiler = require('./profilers/allocation')
 const EventsProfiler = require('./profilers/events')
-const { oomExportStrategies, snapshotKinds } = require('./constants')
+const { allocationDefaults, oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
 
 class Config {
@@ -36,6 +37,7 @@ class Config {
       DD_PROFILING_DEBUG_SOURCE_MAPS,
       DD_PROFILING_DEBUG_UPLOAD_COMPRESSION,
       DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+      DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED,
       DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES,
       DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
       DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
@@ -148,6 +150,7 @@ class Config {
       DD_PROFILING_HEAP_ENABLED,
       DD_PROFILING_WALLTIME_ENABLED,
       DD_PROFILING_PROFILERS,
+      DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED,
     })
 
     this.timelineEnabled = isTrue(
@@ -236,11 +239,18 @@ class Config {
 
     this.heartbeatInterval = options.heartbeatInterval || 60 * 1000 // 1 minute
 
+    this.allocationProfiling = {
+      enabled: isTrue(options.allocationProfilingEnabled ??
+        DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED ?? false),
+      maxHeapBytes: Number(allocationDefaults.MAX_HEAP_BYTES),
+    }
+
     this.profilers = ensureProfilers(profilers, this)
   }
 
   get systemInfoReport () {
     const report = {
+      allocationProfiling: { ...this.allocationProfiling },
       asyncContextFrameEnabled: this.asyncContextFrameEnabled,
       codeHotspotsEnabled: this.codeHotspotsEnabled,
       cpuProfilingEnabled: this.cpuProfilingEnabled,
@@ -263,7 +273,10 @@ class Config {
 module.exports = { Config }
 
 function getProfilers ({
-  DD_PROFILING_HEAP_ENABLED, DD_PROFILING_WALLTIME_ENABLED, DD_PROFILING_PROFILERS,
+  DD_PROFILING_HEAP_ENABLED,
+  DD_PROFILING_WALLTIME_ENABLED,
+  DD_PROFILING_PROFILERS,
+  DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED,
 }) {
   // First consider "legacy" DD_PROFILING_PROFILERS env variable, defaulting to space + wall
   // Use a Set to avoid duplicates
@@ -272,7 +285,7 @@ function getProfilers ({
   // snapshots the space profile won't include memory taken by profiles created
   // before it in the sequence. That memory is ultimately transient and will be
   // released when all profiles are subsequently encoded.
-  const profilers = new Set((DD_PROFILING_PROFILERS ?? 'space,wall').split(','))
+  const profilers = new Set((DD_PROFILING_PROFILERS ?? 'space,wall,allocation').split(','))
 
   let spaceExplicitlyEnabled = false
   // Add/remove space depending on the value of DD_PROFILING_HEAP_ENABLED
@@ -294,6 +307,15 @@ function getProfilers ({
     } else if (isFalse(DD_PROFILING_WALLTIME_ENABLED)) {
       profilers.delete('wall')
       profilers.delete('cpu') // remove alias too
+    }
+  }
+
+  // Add/remove allocation depending on the value of DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED
+  if (DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED != null) {
+    if (isTrue(DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED)) {
+      profilers.add('allocation')
+    } else if (isFalse(DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED)) {
+      profilers.delete('allocation')
     }
   }
 
@@ -370,6 +392,8 @@ function getProfiler (name, options) {
       return new WallProfiler(options)
     case 'space':
       return new SpaceProfiler(options)
+    case 'allocation':
+      return new AllocationProfiler(options)
     default:
       options.logger.error(`Unknown profiler "${name}"`)
   }
@@ -441,6 +465,8 @@ function getProfilingEnvValues () {
       getValueFromEnvSources('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION'),
     DD_PROFILING_ENDPOINT_COLLECTION_ENABLED:
       getValueFromEnvSources('DD_PROFILING_ENDPOINT_COLLECTION_ENABLED'),
+    DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED:
+      getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED'),
     DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES:
       getValueFromEnvSources('DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES'),
     DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE:

@@ -1388,6 +1388,13 @@
         ]
       }
     ],
+    "DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_EXPERIMENTAL_PROFILING_ENABLED": [
       {
         "implementation": "A",

@@ -4,6 +4,7 @@ const { getEnvironmentVariable } = require('../config/helper')
 const { Profiler, ServerlessProfiler } = require('./profiler')
 const WallProfiler = require('./profilers/wall')
 const SpaceProfiler = require('./profilers/space')
+const AllocationProfiler = require('./profilers/allocation')
 const { AgentExporter } = require('./exporters/agent')
 const { FileExporter } = require('./exporters/file')
 const { ConsoleLogger } = require('./loggers/console')
@@ -16,5 +17,6 @@ module.exports = {
   FileExporter,
   WallProfiler,
   SpaceProfiler,
+  AllocationProfiler,
   ConsoleLogger,
 }

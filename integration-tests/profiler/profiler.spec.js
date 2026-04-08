@@ -557,6 +557,85 @@ describe('profiler', () => {
     })
   })
 
+  context('allocation profiler', () => {
+    before(function () {
+      if (process.platform === 'win32') {
+        this.skip()
+      }
+    })
+
+    afterEach(async () => {
+      await stopProc(proc)
+    })
+
+    it('produces valid pprof profile with 4 value types', async () => {
+      proc = fork(path.join(cwd, 'profiler/allocation.js'), {
+        cwd,
+        env: {
+          DD_PROFILING_EXPORTERS: 'file',
+          DD_PROFILING_ENABLED: '1',
+          DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED: '1',
+          DD_TRACE_AGENT_PORT: agent.port,
+          TEST_DURATION_MS: '5000',
+        },
+      })
+
+      await processExitPromise(proc, timeout)
+
+      const { profile } = await getLatestProfile(cwd, /^allocation_worker_.+\.pprof$/)
+
+      // 4 sample types
+      assert.strictEqual(profile.sampleType.length, 4)
+      const typeNames = profile.sampleType.map(st => {
+        const typeName = profile.stringTable.strings[st.type]
+        const unitName = profile.stringTable.strings[st.unit]
+        return `${typeName}/${unitName}`
+      })
+      assert.deepStrictEqual(typeNames, [
+        'alloc_objects/count',
+        'alloc_space/bytes',
+        'objects/count',
+        'space/bytes',
+      ])
+
+      // Has samples
+      assert.ok(profile.sample.length > 0, 'should have at least one sample')
+
+      // Build lookup maps
+      const locationById = new Map()
+      for (const loc of profile.location) {
+        locationById.set(loc.id, loc)
+      }
+      const functionById = new Map()
+      for (const fn of profile.function) {
+        functionById.set(fn.id, fn)
+      }
+
+      for (const sample of profile.sample) {
+        // Each sample has 4 values and at least 1 location
+        assert.strictEqual(sample.value.length, 4)
+        assert.ok(sample.locationId.length >= 1)
+
+        // Locations have valid function references
+        for (const locId of sample.locationId) {
+          const loc = locationById.get(locId)
+          assert.ok(loc, `location ${locId} should exist`)
+          for (const line of loc.line) {
+            const fn = functionById.get(line.functionId)
+            assert.ok(fn, `function ${line.functionId} should exist`)
+          }
+        }
+
+        // Values must be non-negative
+        const [allocObjects, allocSpace, inuseObjects, inuseSpace] = sample.value.map(Number)
+        assert.ok(allocObjects >= 0, `alloc_objects (${allocObjects}) >= 0`)
+        assert.ok(allocSpace >= 0, `alloc_space (${allocSpace}) >= 0`)
+        assert.ok(inuseObjects >= 0, `objects (${inuseObjects}) >= 0`)
+        assert.ok(inuseSpace >= 0, `space (${inuseSpace}) >= 0`)
+      }
+    })
+  })
+
   context('shutdown', () => {
     beforeEach(() => {
       oomEnv = {

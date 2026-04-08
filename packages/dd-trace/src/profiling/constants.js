@@ -12,4 +12,10 @@ const oomExportStrategies = Object.freeze({
   LOGS: 'logs',
 })
 
-module.exports = { snapshotKinds, oomExportStrategies }
+const allocationDefaults = Object.freeze({
+  MAX_HEAP_BYTES: 536_870_912, // 512 Mb
+  MAX_WINDOW_DURATION_MS: 60_000, // 60s
+  HEAP_MONITOR_INTERVAL_MS: 5000, // 5s
+})
+
+module.exports = { snapshotKinds, oomExportStrategies, allocationDefaults }
