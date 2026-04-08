@@ -1,13 +1,11 @@
 'use strict'
 
-const lookup = require('dns').lookup // cache to avoid instrumentation
 const dgram = require('dgram')
 const isIP = require('net').isIP
 
 const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
-const { defaults } = require('./config/defaults')
 const { getAgentUrl } = require('./agent/url')
 const { entityId } = require('./exporters/common/docker')
 
@@ -23,7 +21,9 @@ const TYPE_HISTOGRAM = 'h'
  * @implements {DogStatsD}
  */
 class DogStatsDClient {
-  constructor (options = {}) {
+  #lookup
+  constructor (options) {
+    this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
       this._httpOptions = {
         method: 'POST',
@@ -32,11 +32,10 @@ class DogStatsDClient {
       }
     }
 
-    this._host = options.host || defaults['dogstatsd.hostname']
+    this._host = options.host
     this._family = isIP(this._host)
-    this._port = options.port || defaults['dogstatsd.port']
-    this._prefix = options.prefix || ''
-    this._tags = options.tags || []
+    this._port = options.port
+    this._tags = options.tags
     this._queue = []
     this._buffer = ''
     this._offset = 0
@@ -99,7 +98,7 @@ class DogStatsDClient {
 
   _sendUdp (queue) {
     if (this._family === 0) {
-      lookup(this._host, (err, address, family) => {
+      this.#lookup(this._host, (err, address, family) => {
         if (err) return log.error('DogStatsDClient: Host not found', err)
         this._sendUdpFromQueue(queue, address, family)
       })
@@ -118,7 +117,7 @@ class DogStatsDClient {
   }
 
   _add (stat, value, type, tags) {
-    let message = `${this._prefix + stat}:${value}|${type}`
+    let message = `${stat}:${value}|${type}`
 
     // Don't manipulate this._tags as it is still used
     tags = tags ? [...this._tags, ...tags] : this._tags
@@ -164,6 +163,9 @@ class DogStatsDClient {
     return socket
   }
 
+  /**
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
   static generateClientConfig (config) {
     const tags = []
 
@@ -183,6 +185,7 @@ class DogStatsDClient {
       host: config.dogstatsd.hostname,
       port: config.dogstatsd.port,
       tags,
+      lookup: config.lookup,
     }
 
     if (config.url || config.port) {
