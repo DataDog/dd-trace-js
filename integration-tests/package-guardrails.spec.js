@@ -13,7 +13,7 @@ const {
 const NODE_OPTIONS = '--require dd-trace/init.js'
 const DD_TRACE_DEBUG = 'true'
 const DD_INJECTION_ENABLED = 'tracing'
-const DD_LOG_LEVEL = 'error'
+const DD_LOG_LEVEL = 'info'
 const NODE_MAJOR = Number(process.versions.node.split('.')[0])
 const FASTIFY_DEP = NODE_MAJOR < 20 ? 'fastify@4' : 'fastify'
 

@@ -51,8 +51,7 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
 }
 
 function getMaxSamples (options) {
-  const flushInterval = options.flushInterval || 65 * 1e3 // 65 seconds
-  const maxCpuSamples = flushInterval / options.samplingInterval
+  const maxCpuSamples = options.flushInterval / options.samplingInterval
 
   // The lesser of max parallelism and libuv thread pool size, plus one so we can detect
   // oversubscription on libuv thread pool, plus another one for GC.
@@ -403,7 +402,7 @@ class EventsProfiler {
 
   get type () { return 'events' }
 
-  constructor (options = {}) {
+  constructor (options) {
     this.#maxSamples = getMaxSamples(options)
     this.#timelineSamplingEnabled = !!options.timelineSamplingEnabled
     this.#eventSerializer = new EventSerializer(this.#maxSamples)

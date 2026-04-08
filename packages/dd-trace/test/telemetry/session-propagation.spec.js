@@ -2,214 +2,242 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
-const sinon = require('sinon')
-const dc = require('dc-polyfill')
+const { describe, it, beforeEach } = require('mocha')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 require('../setup/core')
 
+/**
+ * @typedef {{
+ *   callArgs?: unknown[],
+ *   shell: boolean,
+ *   command?: string,
+ *   file?: string
+ * }} ChildProcessContext
+ */
+/**
+ * @typedef {{
+ *   telemetry?: { enabled?: boolean },
+ *   DD_ROOT_JS_SESSION_ID?: string,
+ *   tags?: { 'runtime-id'?: string }
+ * }} SessionPropagationConfigOverrides
+ */
+/**
+ * @typedef {{
+ *   subscribe(subscribers: { start?: (context: ChildProcessContext) => void }): void,
+ *   start: { publish(context: ChildProcessContext): void }
+ * }} FakeTracingChannel
+ */
+
 describe('session-propagation', () => {
-  const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
+  /** @type {FakeTracingChannel} */
+  let childProcessChannel
   let sessionPropagation
 
+  /**
+   * @param {SessionPropagationConfigOverrides} [overrides]
+   */
+  function createConfig (overrides = {}) {
+    /**
+     * @type {{
+     *   telemetry: { enabled: boolean },
+     *   DD_ROOT_JS_SESSION_ID: string | undefined,
+     *   tags: { 'runtime-id': string }
+     * }}
+     */
+    const config = {
+      telemetry: { enabled: true, ...overrides.telemetry },
+      DD_ROOT_JS_SESSION_ID: undefined,
+      tags: { 'runtime-id': 'current-id', ...overrides.tags },
+    }
+
+    if (overrides.DD_ROOT_JS_SESSION_ID) {
+      config.DD_ROOT_JS_SESSION_ID = overrides.DD_ROOT_JS_SESSION_ID
+    }
+
+    return config
+  }
+
+  /**
+   * @param {Record<string, string>} additions
+   * @returns {NodeJS.ProcessEnv}
+   */
+  function createExpectedEnv (additions) {
+    return {
+      ...process.env,
+      ...additions,
+    }
+  }
+
+  /**
+   * @param {ChildProcessContext} context
+   * @returns {ChildProcessContext}
+   */
+  function publishStart (context) {
+    childProcessChannel.start.publish(context)
+    return context
+  }
+
+  /**
+   * @returns {FakeTracingChannel}
+   */
+  function createTracingChannel () {
+    /** @type {((context: ChildProcessContext) => void)[]} */
+    const startSubscribers = []
+
+    return {
+      subscribe (subscribers) {
+        if (typeof subscribers.start === 'function') {
+          startSubscribers.push(subscribers.start)
+        }
+      },
+      start: {
+        publish (context) {
+          for (const subscriber of startSubscribers) {
+            subscriber(context)
+          }
+        },
+      },
+    }
+  }
+
   beforeEach(() => {
-    // Fresh require to reset the subscribed flag
-    delete require.cache[require.resolve('../../src/telemetry/session-propagation')]
-    sessionPropagation = require('../../src/telemetry/session-propagation')
-  })
-
-  afterEach(() => {
-    sinon.restore()
-  })
-
-  it('should subscribe to child_process channel', () => {
-    sessionPropagation.start({
-      telemetry: { enabled: true },
-      rootSessionId: 'root-id',
-      tags: { 'runtime-id': 'current-id' },
+    childProcessChannel = createTracingChannel()
+    sessionPropagation = proxyquire('../../src/telemetry/session-propagation', {
+      'dc-polyfill': {
+        tracingChannel () {
+          return childProcessChannel
+        },
+      },
     })
-
-    assert.ok(childProcessChannel.start.hasSubscribers)
   })
 
-  it('should not subscribe when telemetry is disabled', () => {
-    const subscribeSpy = sinon.spy(childProcessChannel, 'subscribe')
+  describe('child process execution contexts', () => {
+    it('seeds child process options with the current runtime id when there is no inherited root', () => {
+      sessionPropagation.start(createConfig())
 
-    sessionPropagation.start({
-      telemetry: { enabled: false },
-      rootSessionId: 'root-id',
-      tags: { 'runtime-id': 'current-id' },
-    })
-
-    assert.strictEqual(subscribeSpy.callCount, 0)
-  })
-
-  it('should only subscribe once', () => {
-    const config = { telemetry: { enabled: true }, rootSessionId: 'root-id', tags: { 'runtime-id': 'current-id' } }
-    sessionPropagation.start(config)
-
-    const subscribeSpy = sinon.spy(childProcessChannel, 'subscribe')
-    sessionPropagation.start(config)
-
-    assert.strictEqual(subscribeSpy.callCount, 0)
-  })
-
-  it('should unsubscribe and allow re-subscribe after stop()', () => {
-    sessionPropagation.start({
-      telemetry: { enabled: true },
-      rootSessionId: 'root-id',
-      tags: { 'runtime-id': 'current-id' },
-    })
-
-    sessionPropagation.stop()
-
-    // After stop(), start() should accept new config
-    sessionPropagation.start({
-      telemetry: { enabled: true },
-      rootSessionId: 'new-root',
-      tags: { 'runtime-id': 'new-id' },
-    })
-
-    const context = { callArgs: ['node', ['test.js'], {}], shell: false }
-    sessionPropagation._onChildProcessStart(context)
-    assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'new-root')
-    assert.strictEqual(context.callArgs[2].env.DD_PARENT_JS_SESSION_ID, 'new-id')
-  })
-
-  describe('env injection via callArgs', () => {
-    let onChildProcessStart
-
-    beforeEach(() => {
-      sessionPropagation.start({
-        telemetry: { enabled: true },
-        rootSessionId: 'root-id',
-        tags: { 'runtime-id': 'current-id' },
-      })
-      onChildProcessStart = sessionPropagation._onChildProcessStart
-    })
-
-    it('should inject env vars when callArgs has (file, args, options)', () => {
       const context = {
         callArgs: ['node', ['test.js'], { cwd: '/tmp', env: { FOO: 'bar' } }],
         shell: false,
       }
 
-      onChildProcessStart(context)
+      publishStart(context)
 
-      assert.strictEqual(context.callArgs[0], 'node')
-      assert.deepStrictEqual(context.callArgs[1], ['test.js'])
-      assert.strictEqual(context.callArgs[2].cwd, '/tmp')
-      assert.strictEqual(context.callArgs[2].env.FOO, 'bar')
-      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[2].env.DD_PARENT_JS_SESSION_ID, 'current-id')
+      assert.deepStrictEqual(context.callArgs, [
+        'node',
+        ['test.js'],
+        {
+          cwd: '/tmp',
+          env: {
+            FOO: 'bar',
+            DD_ROOT_JS_SESSION_ID: 'current-id',
+          },
+        },
+      ])
     })
 
-    it('should inject env vars when callArgs has (file, options)', () => {
+    it('uses process.env as the base when the execution context provides options without env', () => {
+      sessionPropagation.start(createConfig())
+
       const context = {
-        callArgs: ['node', { cwd: '/tmp' }],
+        callArgs: ['npm', ['run', 'test'], { cwd: '/tmp' }],
         shell: false,
       }
 
-      onChildProcessStart(context)
+      publishStart(context)
 
-      assert.strictEqual(context.callArgs[0], 'node')
-      assert.strictEqual(context.callArgs[1].cwd, '/tmp')
-      assert.strictEqual(context.callArgs[1].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[1].env.DD_PARENT_JS_SESSION_ID, 'current-id')
+      assert.deepStrictEqual(context.callArgs, [
+        'npm',
+        ['run', 'test'],
+        {
+          cwd: '/tmp',
+          env: createExpectedEnv({ DD_ROOT_JS_SESSION_ID: 'current-id' }),
+        },
+      ])
     })
 
-    it('should inject env vars when callArgs has (file) only for non-shell', () => {
-      const context = {
-        callArgs: ['node'],
-        shell: false,
-      }
+    it('adds shell options when the execution context does not provide any', () => {
+      sessionPropagation.start(createConfig())
 
-      onChildProcessStart(context)
-
-      assert.strictEqual(context.callArgs[0], 'node')
-      assert.deepStrictEqual(context.callArgs[1], [])
-      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[2].env.DD_PARENT_JS_SESSION_ID, 'current-id')
-    })
-
-    it('should inject env vars as options for shell commands with no options', () => {
       const context = {
         callArgs: ['ls -la'],
         shell: true,
       }
 
-      onChildProcessStart(context)
+      publishStart(context)
 
-      assert.strictEqual(context.callArgs[0], 'ls -la')
-      assert.strictEqual(context.callArgs[1].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[1].env.DD_PARENT_JS_SESSION_ID, 'current-id')
+      assert.deepStrictEqual(context.callArgs, [
+        'ls -la',
+        { env: createExpectedEnv({ DD_ROOT_JS_SESSION_ID: 'current-id' }) },
+      ])
     })
 
-    it('should use process.env as base when no env is specified', () => {
-      const context = {
-        callArgs: ['node', ['test.js'], {}],
-        shell: false,
-      }
+    it('preserves callbacks when it needs to insert child process options', () => {
+      sessionPropagation.start(createConfig())
 
-      onChildProcessStart(context)
-
-      const env = context.callArgs[2].env
-      assert.strictEqual(env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.ok(Object.keys(env).length > 2, 'env should contain process.env keys')
-    })
-
-    it('should preserve callback when callArgs has (file, args, cb)', () => {
-      const cb = () => {}
-      const context = {
-        callArgs: ['node', ['-v'], cb],
-        shell: false,
-      }
-
-      onChildProcessStart(context)
-
-      assert.strictEqual(context.callArgs[0], 'node')
-      assert.deepStrictEqual(context.callArgs[1], ['-v'])
-      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[3], cb)
-    })
-
-    it('should preserve callback when callArgs has (file, cb)', () => {
       const cb = () => {}
       const context = {
         callArgs: ['cmd', cb],
         shell: false,
       }
 
-      onChildProcessStart(context)
+      publishStart(context)
 
-      assert.strictEqual(context.callArgs[0], 'cmd')
-      assert.deepStrictEqual(context.callArgs[1], [])
-      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[3], cb)
+      assert.deepStrictEqual(context.callArgs, [
+        'cmd',
+        [],
+        { env: createExpectedEnv({ DD_ROOT_JS_SESSION_ID: 'current-id' }) },
+        cb,
+      ])
     })
 
-    it('should merge into existing options when args is skipped with undefined', () => {
+    it('does not change child process execution when telemetry is disabled', () => {
+      sessionPropagation.start(createConfig({ telemetry: { enabled: false } }))
+
       const context = {
-        callArgs: ['node', undefined, { cwd: '/tmp', env: { FOO: 'bar' } }],
+        callArgs: ['node', ['test.js'], { cwd: '/tmp', env: { FOO: 'bar' } }],
         shell: false,
       }
 
-      onChildProcessStart(context)
+      publishStart(context)
 
-      assert.strictEqual(context.callArgs[2].cwd, '/tmp')
-      assert.strictEqual(context.callArgs[2].env.FOO, 'bar')
-      assert.strictEqual(context.callArgs[2].env.DD_ROOT_JS_SESSION_ID, 'root-id')
-      assert.strictEqual(context.callArgs[2].env.DD_PARENT_JS_SESSION_ID, 'current-id')
+      assert.deepStrictEqual(context.callArgs, ['node', ['test.js'], { cwd: '/tmp', env: { FOO: 'bar' } }])
     })
 
-    it('should not modify context without callArgs', () => {
+    it('preserves an inherited root session id instead of replacing it with the current runtime id', () => {
+      sessionPropagation.start(createConfig({ DD_ROOT_JS_SESSION_ID: 'root-id' }))
+
+      const context = publishStart({ callArgs: ['node', ['test.js'], {}], shell: false })
+
+      assert.deepStrictEqual(context.callArgs, [
+        'node',
+        ['test.js'],
+        { env: createExpectedEnv({ DD_ROOT_JS_SESSION_ID: 'root-id' }) },
+      ])
+    })
+
+    it('uses process.env as the base when it adds options for non-shell commands', () => {
+      sessionPropagation.start(createConfig())
+
+      const context = publishStart({ callArgs: ['node'], shell: false })
+
+      assert.deepStrictEqual(context.callArgs, [
+        'node',
+        [],
+        { env: createExpectedEnv({ DD_ROOT_JS_SESSION_ID: 'current-id' }) },
+      ])
+    })
+
+    it('ignores execution contexts without call arguments', () => {
+      sessionPropagation.start(createConfig())
+
       const context = {
         command: 'node test.js',
         file: 'node',
         shell: false,
       }
 
-      onChildProcessStart(context)
+      publishStart(context)
 
       assert.strictEqual(context.callArgs, undefined)
     })
