@@ -69,12 +69,12 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:bun
-      - uses: DataDog/junit-upload-github-action@293a1d0af2a269c6300930eb13d3bf0ddec21863  # v2.2.0
+      - uses: DataDog/junit-upload-github-action@24449d01fc01e721fa36ccd2caa3caae6922f0e8  # v3.0.0
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ steps.dd-sts.outputs.api_key }}
@@ -86,7 +86,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -118,7 +118,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -136,7 +136,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -254,7 +254,7 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -442,7 +442,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -485,7 +485,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
@@ -508,7 +508,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -533,7 +533,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
@@ -573,7 +573,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install

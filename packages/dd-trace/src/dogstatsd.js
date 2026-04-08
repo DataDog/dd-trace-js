@@ -7,7 +7,7 @@ const isIP = require('net').isIP
 const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
-const defaults = require('./config/defaults')
+const { defaults } = require('./config/defaults')
 const { getAgentUrl } = require('./agent/url')
 const { entityId } = require('./exporters/common/docker')
 

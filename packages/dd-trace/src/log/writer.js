@@ -2,6 +2,7 @@
 
 const { storage } = require('../../../datadog-core')
 const { LogChannel } = require('./channels')
+
 const defaultLogger = {
   debug: msg => console.debug(msg), /* eslint-disable-line no-console */
   info: msg => console.info(msg), /* eslint-disable-line no-console */
@@ -17,12 +18,8 @@ function withNoop (fn) {
   storage('legacy').run({ noop: true }, fn)
 }
 
-function unsubscribeAll () {
-  logChannel.unsubscribe({ trace, debug, info, warn, error })
-}
-
 function toggleSubscription (enable, level) {
-  unsubscribeAll()
+  logChannel.unsubscribe({ trace, debug, info, warn, error })
 
   if (enable) {
     logChannel = new LogChannel(level)
@@ -30,21 +27,12 @@ function toggleSubscription (enable, level) {
   }
 }
 
-function toggle (enable, level) {
+function configure (enable, level, newLogger) {
   enabled = enable
+  logger = typeof newLogger?.debug === 'function' && typeof newLogger.error === 'function'
+    ? newLogger
+    : defaultLogger
   toggleSubscription(enabled, level)
-}
-
-function use (newLogger) {
-  if (typeof newLogger?.debug === 'function' && typeof newLogger.error === 'function') {
-    logger = newLogger
-  }
-}
-
-function reset () {
-  logger = defaultLogger
-  enabled = false
-  toggleSubscription(false)
 }
 
 function error (err) {
@@ -69,4 +57,4 @@ function trace (log) {
   withNoop(() => logger.debug(log))
 }
 
-module.exports = { use, toggle, reset, error, warn, info, debug, trace }
+module.exports = { configure, error, warn, info, debug, trace }

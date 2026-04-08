@@ -1,10 +1,7 @@
-name: Get Datadog credentials
-description: Exchange GitHub OIDC token for Datadog API credentials via dd-sts.
+name: Get Datadog App key
+description: Exchange GitHub OIDC token for a Datadog App key via dd-sts.
 
 outputs:
-  api_key:
-    description: "Datadog API key"
-    value: ${{ steps.dd-sts.outputs.api_key }}
   app_key:
     description: "Datadog application key"
     value: ${{ steps.dd-sts.outputs.app_key }}
@@ -12,7 +9,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Get Datadog credentials
+    - name: Get Datadog App key
       id: dd-sts
       uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
       with:

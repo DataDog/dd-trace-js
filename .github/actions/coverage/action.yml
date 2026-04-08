@@ -28,7 +28,7 @@ runs:
     - name: Upload coverage to Datadog
       if: always()
       continue-on-error: true
-      uses: DataDog/coverage-upload-github-action@d2cf302a39c05e0ad22063360a2bf6ce0cc4906c # v1
+      uses: DataDog/coverage-upload-github-action@f80c0e6e64e5d20d6af251ba00361eeaebc7ff99 # v1
       with:
         api_key: ${{ inputs.dd_api_key }}
         files: .
