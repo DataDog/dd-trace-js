@@ -53,6 +53,8 @@ jobs:
             aerospike-image: ce-6.4.0.3
             test-image: ubuntu-latest
     runs-on: ${{ matrix.test-image }}
+    permissions:
+      id-token: write
     services:
       aerospike:
         image: aerospike:${{ matrix.aerospike-image }}
@@ -64,6 +66,8 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -80,14 +84,16 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   amqp10:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       qpid:
         image: scholzj/qpid-cpp:1.38.0
@@ -103,11 +109,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   amqplib:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       rabbitmq:
         image: rabbitmq:3.6-alpine
@@ -119,52 +125,52 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   apollo:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: apollo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   avsc:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: avsc
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   axios:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: axios
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   body-parser:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: body-parser
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   bullmq:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       redis:
         image: redis:7.0-alpine
@@ -176,21 +182,21 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   bunyan:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: bunyan
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   cassandra:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       cassandra:
         image: cassandra:3-focal
@@ -202,15 +208,17 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   child_process:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: child_process
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -223,21 +231,21 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-child-process
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   crypto:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: crypto
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   confluentinc-kafka-javascript:
     strategy:
@@ -250,6 +258,8 @@ jobs:
             range: ">=1.4.0"
             range_clean: gte.1.4.0
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       kafka:
         image: apache/kafka:3.9.1
@@ -279,6 +289,8 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -292,31 +304,31 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   cookie-parser:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: cookie-parser
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   cookie:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: cookie
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   couchbase:
     strategy:
@@ -331,6 +343,8 @@ jobs:
           - node-version: 18
             range: ">=4.2.0"
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       couchbase:
         image: ghcr.io/datadog/couchbase-server-sandbox:latest
@@ -344,6 +358,8 @@ jobs:
       DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -354,28 +370,32 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-couchbase-${{ matrix.node-version }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   connect:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: connect
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   dns:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: dns
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -393,14 +413,16 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-dns
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   elasticsearch:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       elasticsearch:
         image: elasticsearch:7.17.22
@@ -413,6 +435,8 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -424,11 +448,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-elasticsearch
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   express:
     runs-on: ubuntu-latest
@@ -443,123 +467,127 @@ jobs:
 
   express-mongo-sanitize:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: express-mongo-sanitize
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   express-session:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: express-session
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   fastify:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: fastify
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   fetch:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: fetch
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   fs:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: fs
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   generic-pool:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: generic-pool
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   graphql:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: graphql
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   grpc:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: grpc
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   handlebars:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: handlebars
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   hapi:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: hapi
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   hono:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: hono
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   http:
     strategy:
       matrix:
         node-version: [oldest, maintenance, latest]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -573,18 +601,22 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http-${{ matrix.node-version }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   http2:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -602,17 +634,19 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http2
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   kafkajs:
     strategy:
       matrix:
         node-version: [oldest, latest]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       kafka:
         image: apache/kafka:3.9.1
@@ -641,6 +675,8 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -654,54 +690,56 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-kafkajs-${{ matrix.node-version }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   knex:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: knex
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   koa:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: koa
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ldapjs:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: ldapjs
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   light-my-request:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: "light-my-request"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   limitd-client:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       limitd:
         image: rochdev/limitd
@@ -717,21 +755,21 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   lodash:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: lodash
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mariadb:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mysql:
         image: mariadb:10.4
@@ -746,11 +784,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   memcached:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       memcached:
         image: memcached:1.5-alpine
@@ -762,31 +800,31 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   microgateway-core:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: microgateway-core
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   moleculer:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: moleculer
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongodb:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
         image: circleci/mongo
@@ -799,11 +837,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongodb-core:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
         image: circleci/mongo
@@ -816,11 +854,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mongoose:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
         image: circleci/mongo
@@ -832,21 +870,21 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   multer:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: multer
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mysql:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mysql:
         image: mariadb:10.4
@@ -861,11 +899,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   mysql2:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mysql:
         image: mariadb:10.4
@@ -880,15 +918,17 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   net:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: net
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -906,11 +946,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-net
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # TODO: fix performance issues and test more Node versions
 
@@ -948,11 +988,15 @@ jobs:
           - range: ">=15.0.0 <15.4.1"
             range_clean: gte.15.0.0
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -964,24 +1008,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-next-${{ matrix.range_clean }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   node-serialize:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: node-serialize
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   opensearch:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       opensearch:
         image: opensearchproject/opensearch:2.8.0
@@ -996,11 +1042,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   oracledb:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       oracledb:
         image: gvenzl/oracle-xe:18-slim
@@ -1024,6 +1070,8 @@ jobs:
       DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: eol
@@ -1043,19 +1091,23 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-oracledb
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: pino
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
@@ -1070,24 +1122,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-pino
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   passport-http:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: passport-http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   postgres:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       postgres:
         image: postgres:9.5
@@ -1102,8 +1156,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   prisma:
     strategy:
@@ -1116,6 +1168,8 @@ jobs:
             range: ""
             range_clean: all
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       postgres:
         image: postgres:9.5
@@ -1149,6 +1203,8 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -1163,45 +1219,47 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   process:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: process
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   protobufjs:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: protobufjs
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   pug:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: pug
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   redis:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       redis:
         image: redis:6.2-alpine
@@ -1213,11 +1271,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ioredis:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       redis:
         image: redis:6.2-alpine
@@ -1229,11 +1287,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   valkey:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       valkey:
         image: valkey/valkey:8.1-alpine
@@ -1245,8 +1303,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
   # see: https://github.com/restify/node-restify/issues/1984
@@ -1265,6 +1321,8 @@ jobs:
 
   rhea:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       qpid:
         image: scholzj/qpid-cpp:1.38.0
@@ -1280,35 +1338,37 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test-and-upstream
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   router:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: router
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   sequelize:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: sequelize
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   sharedb:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -1320,14 +1380,16 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-sharedb
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   tedious:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2019-latest
@@ -1342,6 +1404,8 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
@@ -1354,58 +1418,58 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-tedious
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   undici:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: undici
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   url:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: url
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   vm:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: vm
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   winston:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: winston
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
 
   ws:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: ws
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
-        with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
