@@ -6,7 +6,6 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 
 const DD_CONFIG_WRAPPED = Symbol('dd-trace.cypress.config.wrapped')
-const DD_CLI_CONFIG_WRAPPER_FILE = '.dd-cypress-config'
 
 const noopTask = {
   'dd:testSuiteStart': () => null,
@@ -243,7 +242,7 @@ function wrapConfig (config) {
 function createConfigWrapper (originalConfigFile) {
   const wrapperFile = path.join(
     path.dirname(originalConfigFile),
-    `${DD_CLI_CONFIG_WRAPPER_FILE}-${process.pid}.mjs`
+    `.dd-cypress-config-${process.pid}.mjs`
   )
 
   const cypressConfigPath = require.resolve('./cypress-config')
@@ -251,15 +250,13 @@ function createConfigWrapper (originalConfigFile) {
   // Always use ESM: it can import both CJS and ESM configs, so it works
   // regardless of the original file's extension or "type": "module" in package.json.
   // Import cypress-config.js directly (CJS default = module.exports object).
-  const wrapperContent = [
+  fs.writeFileSync(wrapperFile, [
     `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
     `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
     '',
     'export default cypressConfig.wrapConfig(originalConfig)',
     '',
-  ].join('\n')
-
-  fs.writeFileSync(wrapperFile, wrapperContent)
+  ].join('\n'))
 
   return wrapperFile
 }
@@ -305,13 +302,19 @@ function wrapCliConfigFileOptions (options) {
   // handles .ts configs since they're transpiled to CJS by Cypress.
   if (!configFilePath || !fs.existsSync(configFilePath) || path.extname(configFilePath) === '.ts') return noop
 
-  const wrapperFile = createConfigWrapper(configFilePath)
+  try {
+    const wrapperFile = createConfigWrapper(configFilePath)
 
-  return {
-    options: { ...options, configFile: wrapperFile },
-    cleanup: () => {
-      try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
-    },
+    return {
+      options: { ...options, configFile: wrapperFile },
+      cleanup: () => {
+        try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
+      },
+    }
+  } catch {
+    // Config directory may be read-only — fall back to no wrapping.
+    // The defineConfig shimmer will still handle configs that use defineConfig.
+    return noop
   }
 }
 
