@@ -8,7 +8,8 @@ const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
 const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
 
-// OpCode values are small integers (0-16), written as u16 LE (2 bytes).
+// OpCode values: simple ops use (field_idx << 3) | kind (values 0-31);
+// complex ops (Create=32, CreateSpan=33, CreateSpanFull=34, BatchSetMeta=35, BatchSetMetric=36).
 
 /**
  * NativeSpansInterface provides the JavaScript bridge to the native span storage.
@@ -417,7 +418,7 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, 13, true)
+    view.setUint16(idx, 33, true) // CreateSpan
     idx += 2
     buf.set(spanId, idx)
     idx += 8
@@ -492,7 +493,7 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, 14, true)
+    view.setUint16(idx, 34, true) // CreateSpanFull
     idx += 2
     buf.set(spanId, idx)
     idx += 8
@@ -567,7 +568,7 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, 15, true)
+    view.setUint16(idx, 35, true) // BatchSetMeta
     idx += 2
     buf.set(spanId, idx)
     idx += 8
@@ -614,7 +615,7 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, 16, true)
+    view.setUint16(idx, 36, true) // BatchSetMetric
     idx += 2
     buf.set(spanId, idx)
     idx += 8
