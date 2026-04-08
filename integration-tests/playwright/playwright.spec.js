@@ -84,7 +84,7 @@ versions.forEach((version) => {
     this.retries(2)
     this.timeout(80000)
 
-    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI
