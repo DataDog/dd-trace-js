@@ -525,8 +525,8 @@ export interface GeneratedConfig {
   runtimeMetrics: {
     enabled: boolean;
     eventLoop: boolean;
-    native: boolean;
     gc: boolean;
+    native: boolean;
   };
   runtimeMetricsRuntimeId: boolean;
   sampleRate: number | undefined;
