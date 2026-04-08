@@ -55,6 +55,9 @@ module.exports = {
     const useNative = config.runtimeMetrics.native !== false
 
     if (useNative) {
+      // Using no-gc prevents the native gc metrics from being tracked. Not
+      // passing any options means all metrics are tracked.
+      // TODO: This is a workaround. We should find a better solution.
       const watchers = trackEventLoop ? ['loop'] : ['no-gc']
 
       try {
