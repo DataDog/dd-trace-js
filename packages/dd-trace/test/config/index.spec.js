@@ -792,6 +792,7 @@ describe('Config', () => {
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED = 'false'
     process.env.DD_RUNTIME_METRICS_GC_ENABLED = 'false'
+    process.env.DD_RUNTIME_METRICS_NATIVE = 'false'
     process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
@@ -958,6 +959,7 @@ describe('Config', () => {
         enabled: true,
         eventLoop: false,
         gc: false,
+        native: false,
       },
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5,
