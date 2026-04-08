@@ -3,8 +3,8 @@
 const assert = require('assert')
 const proc = require('child_process')
 const http = require('http')
-const { afterEach, beforeEach, describe, it } = require('mocha')
 const { join } = require('path')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
@@ -37,10 +37,10 @@ describe('Plugin', () => {
         env: {
           ...process.env,
           NODE_OPTIONS: `-r ${join(__dirname, 'tracer')}`,
-          DD_TRACE_AGENT_PORT: agent.port
+          DD_TRACE_AGENT_PORT: agent.port,
         },
         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
-        windowsHide: true
+        windowsHide: true,
       })
 
       child.on('error', done)

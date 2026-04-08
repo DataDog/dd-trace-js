@@ -38,7 +38,7 @@ describe('Electron integration', function () {
         name: 'ElectronTest',
         version: '1.0.0',
         main: 'main.js',
-        dependencies: { 'dd-trace': `file:${ddTraceTgz}` }
+        dependencies: { 'dd-trace': `file:${ddTraceTgz}` },
       })
     )
 
@@ -65,7 +65,7 @@ describe('Electron integration', function () {
         `--arch=${process.arch}`,
         `--electron-version=${electronVersion}`,
         `--out=${outDir}`,
-        '--overwrite'
+        '--overwrite',
       ],
       { cwd: sandboxFolder, stdio: 'pipe' }
     )
@@ -107,10 +107,10 @@ describe('Electron integration', function () {
       env: {
         ...process.env,
         // dd-trace is bundled inside the binary; only the agent port is injected.
-        DD_TRACE_AGENT_PORT: String(agent.port)
+        DD_TRACE_AGENT_PORT: String(agent.port),
       },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
-      windowsHide: true
+      windowsHide: true,
     })
     child.on('error', done)
     // 'ready' is sent by main.js only after the renderer window has finished

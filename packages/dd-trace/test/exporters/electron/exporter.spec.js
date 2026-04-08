@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, beforeEach, afterEach } = require('tap').mocha
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -21,7 +21,7 @@ describe('ElectronExporter', () => {
 
     traceChannel = {
       hasSubscribers: true,
-      publish: sinon.spy()
+      publish: sinon.spy(),
     }
 
     truncateSpan = sinon.stub().callsFake(s => s)
@@ -29,7 +29,7 @@ describe('ElectronExporter', () => {
 
     Exporter = proxyquire('../../../src/exporters/electron', {
       'dc-polyfill': { channel: sinon.stub().returns(traceChannel) },
-      '../../encode/tags-processors': { truncateSpan, normalizeSpan }
+      '../../encode/tags-processors': { truncateSpan, normalizeSpan },
     })
 
     exporter = new Exporter(config)

@@ -9,7 +9,7 @@ class ElectronIpcPlugin extends CompositePlugin {
   static get plugins () {
     return {
       main: ElectronMainPlugin,
-      renderer: ElectronRendererPlugin
+      renderer: ElectronRendererPlugin,
     }
   }
 }
@@ -19,7 +19,7 @@ class ElectronMainPlugin extends CompositePlugin {
   static get plugins () {
     return {
       receive: ElectronMainReceivePlugin,
-      send: ElectronMainSendPlugin
+      send: ElectronMainSendPlugin,
     }
   }
 }
@@ -29,7 +29,7 @@ class ElectronRendererPlugin extends CompositePlugin {
   static get plugins () {
     return {
       receive: ElectronRendererReceivePlugin,
-      send: ElectronRendererSendPlugin
+      send: ElectronRendererSendPlugin,
     }
   }
 }
@@ -55,7 +55,7 @@ class ElectronRendererReceivePlugin extends ConsumerPlugin {
       childOf,
       resource: channel,
       type: 'worker',
-      meta: {}
+      meta: {},
     }, ctx)
 
     return ctx.currentStore
@@ -79,7 +79,7 @@ class ElectronRendererSendPlugin extends ProducerPlugin {
 
     const span = this.startSpan({
       resource: channel,
-      meta: {}
+      meta: {},
     }, ctx)
 
     if (this._shouldInject(ctx)) {
