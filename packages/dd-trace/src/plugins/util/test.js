@@ -3,6 +3,7 @@
 const path = require('path')
 const fs = require('fs')
 const { URL } = require('url')
+const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config/helper')
 const satisfies = require('../../../../../vendor/dist/semifies')
@@ -933,6 +934,10 @@ function getIsFaultyEarlyFlakeDetection (projectSuites, testsBySuiteName, faulty
 function getTestSessionName (config, trimmedCommand, envTags) {
   if (config.ciVisibilityTestSessionName) {
     return config.ciVisibilityTestSessionName
+  }
+  const lageTestSessionName = getLageTestSessionName()
+  if (lageTestSessionName) {
+    return lageTestSessionName
   }
   if (envTags[CI_JOB_NAME]) {
     return `${envTags[CI_JOB_NAME]}-${trimmedCommand}`

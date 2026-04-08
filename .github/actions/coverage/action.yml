@@ -21,14 +21,14 @@ runs:
       run: node scripts/verify-coverage.js --flags "${{ inputs.flags }}"
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
       with:
         flags: ${{ inputs.flags }}
 
     - name: Upload coverage to Datadog
       if: always()
       continue-on-error: true
-      uses: DataDog/coverage-upload-github-action@d2cf302a39c05e0ad22063360a2bf6ce0cc4906c # v1
+      uses: DataDog/coverage-upload-github-action@f80c0e6e64e5d20d6af251ba00361eeaebc7ff99 # v1
       with:
         api_key: ${{ inputs.dd_api_key }}
         files: .

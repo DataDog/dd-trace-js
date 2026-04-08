@@ -174,9 +174,10 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     const folderStat = await lstat(folder)
     if (!folderStat.isDirectory()) continue
     if (entry === 'node_modules') continue
+    if (!isGeneratedWorkspace(entry, parent)) continue
     if (entry.startsWith('@')) {
       // eslint-disable-next-line no-await-in-loop
-      await assertPeerDependencies(folder, entry)
+      await assertPeerDependencies(folder, parent ? join(parent, entry) : entry)
       continue
     }
 
@@ -222,6 +223,29 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     // eslint-disable-next-line no-await-in-loop
     await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
   }
+}
+
+/**
+ * Only inspect workspaces generated for the current install run.
+ * This avoids stale folders in `versions/` from breaking targeted installs.
+ *
+ * @param {string} entry
+ * @param {string} [parent]
+ * @returns {boolean}
+ */
+function isGeneratedWorkspace (entry, parent = '') {
+  const workspaceName = parent ? join(parent, entry) : entry
+
+  if (entry.startsWith('@')) {
+    for (const workspace of workspaces) {
+      if (workspace.startsWith(`${workspaceName}/`)) {
+        return true
+      }
+    }
+    return false
+  }
+
+  return workspaces.has(workspaceName)
 }
 
 /**
