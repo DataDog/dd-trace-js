@@ -40,21 +40,47 @@ function getCliStartWrapper (start) {
   }
 }
 
-// Cypress 10-14 ships lib/exec/{run,open}.js, Cypress 15+ ships dist/exec/{run,open}.js.
-// Hook both so the CLI wrapper fires across all supported versions.
+/**
+ * Wraps `start` on an object (or its `.default`) if present.
+ *
+ * @param {object} mod module exports
+ * @returns {object} mod
+ */
+function wrapStartOnModule (mod) {
+  const target = mod.default || mod
+  if (typeof target.start === 'function') {
+    shimmer.wrap(target, 'start', getCliStartWrapper)
+  }
+  return mod
+}
+
+// Hook the CLI entry points where Cypress resolves and executes `run`/`open`.
+// Cypress 10-14: lib/exec/{run,open}.js as separate files.
+// Cypress 15-15.10: dist/exec/{run,open}.js as separate files.
+// Cypress >=15.11: bundled into dist/cli-<hash>.js exporting runModule/openModule.
 for (const file of ['lib/exec/run.js', 'lib/exec/open.js', 'dist/exec/run.js', 'dist/exec/open.js']) {
   addHook({
     name: 'cypress',
     versions: ['>=10.2.0'],
     file,
-  }, (cypressExecModule) => {
-    const target = cypressExecModule.default || cypressExecModule
-    if (typeof target.start === 'function') {
-      shimmer.wrap(target, 'start', getCliStartWrapper)
-    }
-    return cypressExecModule
-  })
+  }, wrapStartOnModule)
 }
+
+// Cypress >=15.11 bundles run/open into a single CLI chunk (dist/cli-<hash>.js).
+// The chunk exports runModule and openModule, each with a start() method.
+addHook({
+  name: 'cypress',
+  versions: ['>=10.2.0'],
+  filePattern: 'dist/cli.*',
+}, (cliChunk) => {
+  if (cliChunk.runModule?.start) {
+    shimmer.wrap(cliChunk.runModule, 'start', getCliStartWrapper)
+  }
+  if (cliChunk.openModule?.start) {
+    shimmer.wrap(cliChunk.openModule, 'start', getCliStartWrapper)
+  }
+  return cliChunk
+})
 
 // Cypress <10 uses the old pluginsFile approach. No auto-instrumentation;
 // users must use the manual dd-trace/ci/cypress/plugin setup.

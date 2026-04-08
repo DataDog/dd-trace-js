@@ -65,7 +65,13 @@ function injectSupportFile (config) {
 
   try {
     const content = fs.readFileSync(originalSupportFile, 'utf8')
-    if (content.includes('dd-trace/ci/cypress/support')) return
+    // Naive check: skip lines starting with // or * to avoid matching commented-out imports.
+    const hasActiveDdTraceImport = content.split('\n').some(line => {
+      const trimmed = line.trim()
+      return trimmed.includes('dd-trace/ci/cypress/support') &&
+        !trimmed.startsWith('//') && !trimmed.startsWith('*')
+    })
+    if (hasActiveDdTraceImport) return
   } catch {
     return
   }
