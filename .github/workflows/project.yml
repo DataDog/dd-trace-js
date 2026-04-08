@@ -88,17 +88,23 @@ jobs:
 
   static-analysis:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     name: Datadog Static Analyzer
     if: github.actor != 'dependabot[bot]' && github.event_name != 'pull_request'
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts-api-key
+      - uses: ./.github/actions/dd-sts-app-key
+        id: dd-sts-app-key
       - name: Check code meets quality and security standards
         id: datadog-static-analysis
         uses: DataDog/datadog-static-analyzer-github-action@8340f18875fcefca86844b5f947ce2431387e552 # v3.0.0
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
-          dd_app_key: ${{ secrets.DD_APP_KEY }}
+          dd_api_key: ${{ steps.dd-sts-api-key.outputs.api_key }}
+          dd_app_key: ${{ steps.dd-sts-app-key.outputs.app_key }}
           dd_site: datadoghq.com
           cpu_count: 2
 
