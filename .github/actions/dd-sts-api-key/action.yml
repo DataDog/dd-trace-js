@@ -1,5 +1,5 @@
 name: Get Datadog API key
-description: Exchange GitHub OIDC token for Datadog API key via dd-sts.
+description: Exchange GitHub OIDC token for a Datadog API key via dd-sts.
 
 outputs:
   api_key:
