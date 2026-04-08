@@ -333,6 +333,25 @@ class Tracer extends NoopProxy {
   /**
    * @override
    */
+  get profiling () {
+    // Lazily require the profiler module and cache the result. If profiling
+    // is not enabled, runWithLabels still works as a passthrough (just calls fn()).
+    const profilerModule = require('./profiler')
+    const profiling = {
+      setCustomLabelKeys (keys) {
+        profilerModule.setCustomLabelKeys(keys)
+      },
+      runWithLabels (labels, fn) {
+        return profilerModule.runWithLabels(labels, fn)
+      },
+    }
+    Reflect.defineProperty(this, 'profiling', { value: profiling, configurable: true, enumerable: true })
+    return profiling
+  }
+
+  /**
+   * @override
+   */
   profilerStarted () {
     if (this._profilerStarted === undefined) {
       // injection hardening: this is only ever invoked from tests.
