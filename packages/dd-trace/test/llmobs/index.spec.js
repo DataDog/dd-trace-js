@@ -7,6 +7,8 @@ const { after, afterEach, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const { DD_MAJOR } = require('../../../../version')
+const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
@@ -22,6 +24,9 @@ describe('module', () => {
   let LLMObsSpanWriterSpy
   let LLMObsEvalMetricsWriterSpy
   let fetchAgentInfoStub
+
+  /** @type {import('sinon').SinonStub} */
+  let startupLogStub
 
   beforeEach(() => {
     store = {}
@@ -40,7 +45,7 @@ describe('module', () => {
 
     fetchAgentInfoStub = sinon.stub()
 
-    llmobsModule = proxyquire('../../../dd-trace/src/llmobs', {
+    const llmobsModuleProxyRequireMeta = {
       './writers/spans': LLMObsSpanWriterSpy,
       './writers/evaluations': LLMObsEvalMetricsWriterSpy,
       '../log': logger,
@@ -56,7 +61,19 @@ describe('module', () => {
           fetchAgentInfo: fetchAgentInfoStub,
         },
       }),
-    })
+    }
+
+    if (DD_MAJOR < 6) {
+      startupLogStub = sinon.stub(console, 'error')
+    } else {
+      startupLogStub = sinon.stub()
+
+      llmobsModuleProxyRequireMeta['../startup-log'] = {
+        logGenericError: startupLogStub,
+      }
+    }
+
+    llmobsModule = proxyquire('../../../dd-trace/src/llmobs', llmobsModuleProxyRequireMeta)
 
     removeDestroyHandler()
   })
@@ -117,22 +134,22 @@ describe('module', () => {
   describe('with agentlessEnabled set to `true`', () => {
     describe('when no api key is provided', () => {
       it('throws an error', () => {
-        assert.throws(() => llmobsModule.enable({
+        llmobsModule.enable({
           llmobs: {
             agentlessEnabled: true,
           },
-        }),
-        {
-          message: 'Cannot send LLM Observability data without a running agent ' +
-            'or without both a Datadog API key and site.\n' +
-            'Ensure these configurations are set before running your application.',
+          startupLogs: true,
         })
+
+        sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
       })
     })
 
     describe('when no site is provided', () => {
       it('throws an error', () => {
-        assert.throws(() => llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' } }))
+        llmobsModule.enable({ llmobs: { agentlessEnabled: true, apiKey: 'test' }, startupLogs: true })
+
+        sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
       })
     })
 
@@ -180,13 +197,17 @@ describe('module', () => {
 
         describe('when no API key is provided', () => {
           it('throws an error', () => {
-            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }))
+            llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' }, startupLogs: true })
+
+            sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
           })
         })
 
         describe('when no site is provided', () => {
           it('throws an error', () => {
-            assert.throws(() => llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' } }))
+            llmobsModule.enable({ llmobs: { mlApp: 'test', apiKey: 'test' }, startupLogs: true })
+
+            sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
           })
         })
 
@@ -227,20 +248,17 @@ describe('module', () => {
 
       describe('when no API key is provided', () => {
         it('throws an error', () => {
-          assert.throws(
-            () => llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' } }),
-            {
-              message: 'Cannot send LLM Observability data without a running agent ' +
-                'or without both a Datadog API key and site.\n' +
-                'Ensure these configurations are set before running your application.',
-            }
-          )
+          llmobsModule.enable({ llmobs: { mlApp: 'test', site: 'datadoghq.com' }, startupLogs: true })
+
+          sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
       })
 
       describe('when no site is provided', () => {
         it('throws an error', () => {
-          assert.throws(() => llmobsModule.enable({ llmobs: {}, apiKey: 'test' }))
+          llmobsModule.enable({ llmobs: {}, apiKey: 'test', startupLogs: true })
+
+          sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
       })
 
