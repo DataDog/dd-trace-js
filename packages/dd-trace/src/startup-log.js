@@ -63,6 +63,14 @@ function logAgentError (agentError) {
   }
 }
 
+function logGenericError (message) {
+  if (!config?.startupLogs) {
+    return
+  }
+
+  warn('DATADOG TRACER DIAGNOSTIC - Generic Error: ' + message)
+}
+
 /**
  * Returns config info without integrations (used by startupLog).
  * @returns {Record<string, unknown>}
@@ -143,4 +151,5 @@ module.exports = {
   setSamplingRules,
   tracerInfo,
   errors,
+  logGenericError,
 }
