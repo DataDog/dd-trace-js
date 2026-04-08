@@ -10,8 +10,15 @@ class MoleculerClientPlugin extends ClientPlugin {
   bindStart (ctx) {
     const { actionName, opts } = ctx
 
+    const snOpts = {}
+    const service = this.config.service || this.serviceName(snOpts)
+    const srvSrc = this.config.service
+      ? (this.config.serviceFromMapping ? 'opt.mapping' : 'm')
+      : snOpts.srvSrc
+
     const span = this.startSpan(this.operationName(), {
-      service: this.config.service || this.serviceName(),
+      service,
+      srvSrc,
       resource: actionName,
       kind: 'client',
     }, ctx)

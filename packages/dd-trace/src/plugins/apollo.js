@@ -12,9 +12,16 @@ class ApolloBasePlugin extends TracingPlugin {
     const store = storage('legacy').getStore()
     const childOf = store ? /** @type {import('../opentracing/span') | undefined} */ (store.span) : null
 
+    const snOpts = {
+      id: `${this.constructor.id}.${this.constructor.operation}`,
+      pluginConfig: this.config,
+    }
+    const service = this.serviceName(snOpts)
+
     const span = this.startSpan(this.getOperationName(), {
       childOf,
-      service: this.getServiceName(),
+      service,
+      srvSrc: snOpts.srvSrc,
       type: this.constructor.type,
       kind: this.constructor.kind,
       meta: {},

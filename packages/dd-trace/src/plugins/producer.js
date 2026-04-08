@@ -12,7 +12,14 @@ class ProducerPlugin extends OutboundPlugin {
       kind: this.constructor.kind,
     }
     if (!options.service) {
-      options.service = this.config.service || this.serviceName()
+      if (this.config.service) {
+        options.service = this.config.service
+        options.srvSrc = this.config.serviceFromMapping ? 'opt.mapping' : 'm'
+      } else {
+        const snOpts = {}
+        options.service = this.serviceName(snOpts)
+        options.srvSrc = snOpts.srvSrc
+      }
     }
     for (const key of Object.keys(spanDefaults)) {
       if (!options[key]) {

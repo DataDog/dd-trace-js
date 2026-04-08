@@ -2,6 +2,15 @@
 
 const { identityService, httpPluginClientService, awsServiceV0 } = require('../util')
 
+function apolloServiceName (opts) {
+  const { pluginConfig, tracerService } = opts
+  if (pluginConfig.service) {
+    opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+    return pluginConfig.service
+  }
+  return tracerService
+}
+
 const web = {
   client: {
     grpc: {
@@ -26,7 +35,14 @@ const web = {
     },
     genai: {
       opName: () => 'google_genai.request',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: (opts) => {
+        const { pluginConfig, tracerService } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        return tracerService
+      },
     },
     aws: {
       opName: () => 'aws.request',
@@ -44,27 +60,27 @@ const web = {
   server: {
     'apollo.gateway.request': {
       opName: () => 'apollo.gateway.request',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: apolloServiceName,
     },
     'apollo.gateway.plan': {
       opName: () => 'apollo.gateway.plan',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: apolloServiceName,
     },
     'apollo.gateway.validate': {
       opName: () => 'apollo.gateway.validate',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: apolloServiceName,
     },
     'apollo.gateway.execute': {
       opName: () => 'apollo.gateway.execute',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: apolloServiceName,
     },
     'apollo.gateway.fetch': {
       opName: () => 'apollo.gateway.fetch',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: apolloServiceName,
     },
     'apollo.gateway.postprocessing': {
       opName: () => 'apollo.gateway.postprocessing',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: apolloServiceName,
     },
     grpc: {
       opName: () => 'grpc.server',

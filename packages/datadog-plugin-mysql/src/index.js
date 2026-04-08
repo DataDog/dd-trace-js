@@ -19,9 +19,11 @@ class MySQLPlugin extends DatabasePlugin {
   }
 
   bindStart (ctx) {
-    const service = this.serviceName({ pluginConfig: this.config, dbConfig: ctx.conf, system: this.system })
+    const snOpts = { pluginConfig: this.config, dbConfig: ctx.conf, system: this.system }
+    const service = this.serviceName(snOpts)
     const span = this.startSpan(this.operationName(), {
       service,
+      srvSrc: snOpts.srvSrc,
       resource: ctx.sql,
       type: 'sql',
       kind: 'client',

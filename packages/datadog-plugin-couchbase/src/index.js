@@ -31,10 +31,14 @@ class CouchBasePlugin extends StoragePlugin {
       tags[tag] = customTags[tag]
     }
 
+    const snOpts = { pluginConfig: this.config }
+    const service = this.serviceName(snOpts)
+
     return super.startSpan(
       this.operationName({ operation }),
       {
-        service: this.serviceName({ pluginConfig: this.config }),
+        service,
+        srvSrc: snOpts.srvSrc,
         meta: tags,
       },
       ctx

@@ -37,19 +37,28 @@ class HttpClientPlugin extends ClientPlugin {
     const method = (options.method || 'GET').toUpperCase()
     const childOf = store && allowed ? store.span : null
     // TODO delegate to super.startspan
+    const snOpts = { pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }
+    const serviceName = this.serviceName(snOpts)
+
+    const meta = {
+      [COMPONENT]: this.constructor.id,
+      'span.kind': 'client',
+      'service.name': serviceName,
+      'resource.name': method,
+      'span.type': 'http',
+      'http.method': method,
+      'http.url': uri,
+      'out.host': hostname,
+    }
+
+    if (snOpts.srvSrc) {
+      meta['_dd.srv_src'] = snOpts.srvSrc
+    }
+
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
-      meta: {
-        [COMPONENT]: this.constructor.id,
-        'span.kind': 'client',
-        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': uri,
-        'out.host': hostname,
-      },
+      meta,
       metrics: {
         [CLIENT_PORT_KEY]: Number.parseInt(options.port),
       },

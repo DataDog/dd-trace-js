@@ -13,7 +13,8 @@ class OracledbPlugin extends DatabasePlugin {
   bindStart (ctx) {
     let { query, connAttrs, port, hostname, dbInstance } = ctx
 
-    const service = this.serviceName({ pluginConfig: this.config, params: connAttrs })
+    const snOpts = { pluginConfig: this.config, params: connAttrs }
+    const service = this.serviceName(snOpts)
 
     if (hostname === undefined) {
       // Lazy load for performance. This is not needed in v6 and up
@@ -26,6 +27,7 @@ class OracledbPlugin extends DatabasePlugin {
 
     this.startSpan(this.operationName(), {
       service,
+      srvSrc: snOpts.srvSrc,
       resource: query,
       type: 'sql',
       kind: 'client',

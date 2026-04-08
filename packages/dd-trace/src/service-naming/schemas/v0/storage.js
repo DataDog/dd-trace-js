@@ -1,46 +1,70 @@
 'use strict'
 
-function getRedisService (pluginConfig, connectionName) {
+function getRedisService (opts, pluginConfig, connectionName) {
   if (pluginConfig.splitByInstance && connectionName) {
-    return pluginConfig.service
-      ? `${pluginConfig.service}-${connectionName}`
-      : connectionName
+    if (pluginConfig.service) {
+      opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+      return `${pluginConfig.service}-${connectionName}`
+    }
+    opts.srvSrc = 'redis'
+    return connectionName
   }
 
-  return pluginConfig.service
+  if (pluginConfig.service) {
+    opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+    return pluginConfig.service
+  }
 }
 
-function fromSystem (tracerService, system) {
-  return system ? `${tracerService}-${system}` : undefined
+function fromSystem (opts, tracerService, system, integrationName) {
+  if (system) {
+    opts.srvSrc = integrationName
+    return `${tracerService}-${system}`
+  }
 }
 
-function mysqlServiceName ({ tracerService, pluginConfig, dbConfig, system }) {
+function mysqlServiceName (opts) {
+  const { tracerService, pluginConfig, dbConfig, system } = opts
   if (typeof pluginConfig.service === 'function') {
+    opts.srvSrc = 'm'
     return pluginConfig.service(dbConfig)
   }
-  return pluginConfig.service || fromSystem(tracerService, system)
+  if (pluginConfig.service) {
+    opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+    return pluginConfig.service
+  }
+  return fromSystem(opts, tracerService, system, 'mysql')
 }
 
-function withSuffixFunction (suffix) {
-  return ({ tracerService, pluginConfig, params }) => {
+function withSuffixFunction (suffix, integrationName) {
+  return (opts) => {
+    const { tracerService, pluginConfig, params } = opts
     if (typeof pluginConfig.service === 'function') {
+      opts.srvSrc = 'm'
       return pluginConfig.service(params)
     }
-    return pluginConfig.service || `${tracerService}-${suffix}`
+    if (pluginConfig.service) {
+      opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+      return pluginConfig.service
+    }
+    opts.srvSrc = integrationName
+    return `${tracerService}-${suffix}`
   }
 }
 
 const redisConfig = {
   opName: () => 'redis.command',
-  serviceName: ({ tracerService, pluginConfig, system, connectionName }) => {
-    return getRedisService(pluginConfig, connectionName) || fromSystem(tracerService, system)
+  serviceName: (opts) => {
+    const { tracerService, pluginConfig, system, connectionName } = opts
+    return getRedisService(opts, pluginConfig, connectionName) || fromSystem(opts, tracerService, system, 'redis')
   },
 }
 
 const valkeyConfig = {
   opName: () => 'valkey.command',
-  serviceName: ({ tracerService, pluginConfig, system, connectionName }) => {
-    return getRedisService(pluginConfig, connectionName) || fromSystem(tracerService, system)
+  serviceName: (opts) => {
+    const { tracerService, pluginConfig, system, connectionName } = opts
+    return getRedisService(opts, pluginConfig, connectionName) || fromSystem(opts, tracerService, system, 'valkey')
   },
 }
 
@@ -48,22 +72,50 @@ const storage = {
   client: {
     aerospike: {
       opName: () => 'aerospike.command',
-      serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || `${tracerService}-aerospike`,
+      serviceName: (opts) => {
+        const { tracerService, pluginConfig } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        opts.srvSrc = 'aerospike'
+        return `${tracerService}-aerospike`
+      },
     },
     'cassandra-driver': {
       opName: () => 'cassandra.query',
-      serviceName: ({ tracerService, pluginConfig, system }) =>
-        pluginConfig.service || fromSystem(tracerService, system),
+      serviceName: (opts) => {
+        const { tracerService, pluginConfig, system } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        return fromSystem(opts, tracerService, system, 'cassandra-driver')
+      },
     },
     couchbase: {
       opName: ({ operation }) => `couchbase.${operation}`,
-      serviceName: ({ tracerService, pluginConfig }) => pluginConfig.service || `${tracerService}-couchbase`,
+      serviceName: (opts) => {
+        const { tracerService, pluginConfig } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        opts.srvSrc = 'couchbase'
+        return `${tracerService}-couchbase`
+      },
     },
     elasticsearch: {
       opName: () => 'elasticsearch.query',
-      serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || `${tracerService}-elasticsearch`,
+      serviceName: (opts) => {
+        const { tracerService, pluginConfig } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        opts.srvSrc = 'elasticsearch'
+        return `${tracerService}-elasticsearch`
+      },
     },
     ioredis: redisConfig,
     iovalkey: valkeyConfig,
@@ -73,13 +125,26 @@ const storage = {
     },
     memcached: {
       opName: () => 'memcached.command',
-      serviceName: ({ tracerService, pluginConfig, system }) =>
-        pluginConfig.service || fromSystem(tracerService, system),
+      serviceName: (opts) => {
+        const { tracerService, pluginConfig, system } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        return fromSystem(opts, tracerService, system, 'memcached')
+      },
     },
     'mongodb-core': {
       opName: () => 'mongodb.query',
-      serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || `${tracerService}-mongodb`,
+      serviceName: (opts) => {
+        const { tracerService, pluginConfig } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        opts.srvSrc = 'mongodb-core'
+        return `${tracerService}-mongodb`
+      },
     },
     mysql: {
       opName: () => 'mysql.query',
@@ -91,26 +156,39 @@ const storage = {
     },
     opensearch: {
       opName: () => 'opensearch.query',
-      serviceName: ({ tracerService, pluginConfig }) =>
-        pluginConfig.service || `${tracerService}-opensearch`,
+      serviceName: (opts) => {
+        const { tracerService, pluginConfig } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        opts.srvSrc = 'opensearch'
+        return `${tracerService}-opensearch`
+      },
     },
     oracledb: {
       opName: () => 'oracle.query',
-      serviceName: withSuffixFunction('oracle'),
+      serviceName: withSuffixFunction('oracle', 'oracledb'),
     },
     pg: {
       opName: () => 'pg.query',
-      serviceName: withSuffixFunction('postgres'),
+      serviceName: withSuffixFunction('postgres', 'pg'),
     },
     prisma: {
       opName: ({ operation }) => `prisma.${operation}`,
-      serviceName: withSuffixFunction('prisma'),
+      serviceName: withSuffixFunction('prisma', 'prisma'),
     },
     redis: redisConfig,
     tedious: {
       opName: () => 'tedious.request',
-      serviceName: ({ tracerService, pluginConfig, system }) =>
-        pluginConfig.service || fromSystem(tracerService, system),
+      serviceName: (opts) => {
+        const { tracerService, pluginConfig, system } = opts
+        if (pluginConfig.service) {
+          opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+          return pluginConfig.service
+        }
+        return fromSystem(opts, tracerService, system, 'tedious')
+      },
     },
   },
 }

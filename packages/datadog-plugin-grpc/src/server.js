@@ -32,9 +32,16 @@ class GrpcServerPlugin extends ServerPlugin {
     const metadataFilter = this.config.metadataFilter
     const childOf = extract(this.tracer, metadata)
     const method = getMethodMetadata(name, type)
+    const snOpts = {}
+    const service = this.config.service || this.serviceName(snOpts)
+    const srvSrc = this.config.service
+      ? (this.config.serviceFromMapping ? 'opt.mapping' : 'm')
+      : snOpts.srvSrc
+
     const span = this.startSpan(this.operationName(), {
       childOf,
-      service: this.config.service || this.serviceName(),
+      service,
+      srvSrc,
       resource: name,
       kind: 'server',
       type: 'web',

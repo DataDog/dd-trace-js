@@ -442,6 +442,55 @@ describe('Span', () => {
     })
   })
 
+  describe('_dd.srv_src on service override via setTag/addTags', () => {
+    it('should set _dd.srv_src to m when setTag changes service.name to a different service', () => {
+      tracer._service = 'my-service'
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.setTag('service.name', 'other-service')
+
+      sinon.assert.calledWith(tagger.add, span.context()._tags, {
+        'service.name': 'other-service',
+        '_dd.srv_src': 'm',
+      })
+    })
+
+    it('should set _dd.srv_src to m when addTags sets service to a different service', () => {
+      tracer._service = 'my-service'
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addTags({ service: 'other-service' })
+
+      sinon.assert.calledWith(tagger.add, span.context()._tags, {
+        service: 'other-service',
+        '_dd.srv_src': 'm',
+      })
+    })
+
+    it('should not set _dd.srv_src when service.name matches tracer service', () => {
+      tracer._service = 'my-service'
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.setTag('service.name', 'my-service')
+
+      sinon.assert.calledWith(tagger.add, span.context()._tags, {
+        'service.name': 'my-service',
+      })
+    })
+
+    it('should not overwrite _dd.srv_src when explicitly provided in the same call', () => {
+      tracer._service = 'my-service'
+      span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+
+      span.addTags({ 'service.name': 'other-service', '_dd.srv_src': 'redis' })
+
+      sinon.assert.calledWith(tagger.add, span.context()._tags, {
+        'service.name': 'other-service',
+        '_dd.srv_src': 'redis',
+      })
+    })
+  })
+
   describe('finish', () => {
     it('should add itself to the context trace finished spans', () => {
       processor.process.returns(Promise.resolve())

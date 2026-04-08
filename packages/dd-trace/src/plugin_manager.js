@@ -204,6 +204,7 @@ module.exports = class PluginManager {
 
     if (serviceMapping && serviceMapping[name]) {
       sharedConfig.service = serviceMapping[name]
+      sharedConfig.serviceFromMapping = true
     }
 
     if (clientIpEnabled !== undefined) {

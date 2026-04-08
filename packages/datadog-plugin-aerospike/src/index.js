@@ -20,9 +20,13 @@ class AerospikePlugin extends DatabasePlugin {
     const childOf = store ? store.span : null
     const meta = getMeta(resourceName, commandArgs)
 
+    const snOpts = { pluginConfig: this.config }
+    const service = this.serviceName(snOpts)
+
     const span = this.startSpan(this.operationName(), {
       childOf,
-      service: this.serviceName({ pluginConfig: this.config }),
+      service,
+      srvSrc: snOpts.srvSrc,
       type: 'aerospike',
       kind: 'client',
       resource: resourceName,

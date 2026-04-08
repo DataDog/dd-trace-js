@@ -279,6 +279,7 @@ describe('Tracer', () => {
         parent: null,
         tags: {
           'service.name': 'new-service',
+          '_dd.srv_src': 'm',
         },
         startTime: fields.startTime,
         hostname: undefined,
@@ -287,6 +288,37 @@ describe('Tracer', () => {
         links: undefined,
       })
       assert.strictEqual(testSpan, span)
+    })
+
+    it('should set _dd.srv_src to m when service.name tag differs from global service', () => {
+      fields.tags = {
+        'service.name': 'custom-service',
+      }
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, sinon.match({
+        tags: {
+          'service.name': 'custom-service',
+          '_dd.srv_src': 'm',
+        },
+      }))
+    })
+
+    it('should not set _dd.srv_src when service matches global service', () => {
+      fields.tags = {
+        service: 'service',
+      }
+
+      tracer = new Tracer(config)
+      tracer.startSpan('name', fields)
+
+      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, sinon.match({
+        tags: {
+          'service.name': 'service',
+        },
+      }))
     })
 
     it('should start a span with the trace ID generation configuration', () => {

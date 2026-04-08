@@ -53,13 +53,19 @@ class DatadogTracer {
       : getParent(options.references)
 
     // as per spec, allow the setting of service name through options
+    const serviceTag = options?.tags?.service || options?.tags?.['service.name']
+    const hasServiceOverride = serviceTag && String(serviceTag) !== this._service
     const tags = {
-      'service.name': options?.tags?.service ? String(options.tags.service) : this._service,
+      'service.name': serviceTag ? String(serviceTag) : this._service,
+    }
+
+    if (hasServiceOverride && !options?.tags?.['_dd.srv_src']) {
+      tags['_dd.srv_src'] = 'm'
     }
 
     // As per unified service tagging spec if a span is created with a service name different from the global
     // service name it will not inherit the global version value
-    if (options?.tags?.service && options.tags.service !== this._service) {
+    if (hasServiceOverride) {
       options.tags.version = undefined
     }
 

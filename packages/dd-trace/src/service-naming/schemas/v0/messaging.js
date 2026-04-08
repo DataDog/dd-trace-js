@@ -2,8 +2,9 @@
 
 const { identityService, awsServiceV0 } = require('../util')
 
-function amqpServiceName ({ tracerService }) {
-  return `${tracerService}-amqp`
+function amqpServiceName (opts) {
+  opts.srvSrc = 'amqplib'
+  return `${opts.tracerService}-amqp`
 }
 
 const messaging = {
@@ -14,31 +15,52 @@ const messaging = {
     },
     amqp10: {
       opName: () => 'amqp.send',
-      serviceName: amqpServiceName,
+      serviceName: (opts) => {
+        opts.srvSrc = 'amqp10'
+        return `${opts.tracerService}-amqp`
+      },
     },
     'azure-event-hubs': {
       opName: () => 'azure.eventhubs.send',
-      serviceName: ({ tracerService }) => `${tracerService}-azure-event-hubs`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'azure-event-hubs'
+        return `${opts.tracerService}-azure-event-hubs`
+      },
     },
     'azure-service-bus': {
       opName: () => 'azure.servicebus.send',
-      serviceName: ({ tracerService }) => `${tracerService}-azure-service-bus`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'azure-service-bus'
+        return `${opts.tracerService}-azure-service-bus`
+      },
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
-      serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'google-cloud-pubsub'
+        return `${opts.tracerService}-pubsub`
+      },
     },
     kafkajs: {
       opName: () => 'kafka.produce',
-      serviceName: ({ tracerService }) => `${tracerService}-kafka`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'kafkajs'
+        return `${opts.tracerService}-kafka`
+      },
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.produce',
-      serviceName: ({ tracerService }) => `${tracerService}-kafka`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'confluentinc-kafka-javascript'
+        return `${opts.tracerService}-kafka`
+      },
     },
     rhea: {
       opName: () => 'amqp.send',
-      serviceName: ({ tracerService }) => `${tracerService}-amqp-producer`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'rhea'
+        return `${opts.tracerService}-amqp-producer`
+      },
     },
     sqs: {
       opName: () => 'aws.request',
@@ -50,7 +72,10 @@ const messaging = {
     },
     bullmq: {
       opName: () => 'bullmq.add',
-      serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'bullmq'
+        return `${opts.tracerService}-bullmq`
+      },
     },
   },
   consumer: {
@@ -60,7 +85,10 @@ const messaging = {
     },
     amqp10: {
       opName: () => 'amqp.receive',
-      serviceName: amqpServiceName,
+      serviceName: (opts) => {
+        opts.srvSrc = 'amqp10'
+        return `${opts.tracerService}-amqp`
+      },
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.receive',
@@ -68,11 +96,17 @@ const messaging = {
     },
     kafkajs: {
       opName: () => 'kafka.consume',
-      serviceName: ({ tracerService }) => `${tracerService}-kafka`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'kafkajs'
+        return `${opts.tracerService}-kafka`
+      },
     },
     'confluentinc-kafka-javascript': {
       opName: () => 'kafka.consume',
-      serviceName: ({ tracerService }) => `${tracerService}-kafka`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'confluentinc-kafka-javascript'
+        return `${opts.tracerService}-kafka`
+      },
     },
     rhea: {
       opName: () => 'amqp.receive',
@@ -84,7 +118,10 @@ const messaging = {
     },
     bullmq: {
       opName: () => 'bullmq.processJob',
-      serviceName: ({ tracerService }) => `${tracerService}-bullmq`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'bullmq'
+        return `${opts.tracerService}-bullmq`
+      },
     },
   },
   client: {
@@ -94,7 +131,10 @@ const messaging = {
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.request',
-      serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
+      serviceName: (opts) => {
+        opts.srvSrc = 'google-cloud-pubsub'
+        return `${opts.tracerService}-pubsub`
+      },
     },
   },
 }

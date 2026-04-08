@@ -10,11 +10,13 @@ class PGPlugin extends DatabasePlugin {
 
   bindStart (ctx) {
     const { params = {}, query, processId, stream } = ctx
-    const service = this.serviceName({ pluginConfig: this.config, params })
+    const snOpts = { pluginConfig: this.config, params }
+    const service = this.serviceName(snOpts)
     const originalStatement = this.maybeTruncate(query.text)
 
     const span = this.startSpan(this.operationName(), {
       service,
+      srvSrc: snOpts.srvSrc,
       resource: originalStatement,
       type: 'sql',
       kind: 'client',

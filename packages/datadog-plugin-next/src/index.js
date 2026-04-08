@@ -20,16 +20,27 @@ class NextPlugin extends ServerPlugin {
   bindStart ({ req, res }) {
     const store = storage('legacy').getStore()
     const childOf = store ? store.span : store
+    const serviceName = this.config.service || this.serviceName()
+    const srvSrc = this.config.service
+      ? (this.config.serviceFromMapping ? 'opt.mapping' : 'm')
+      : undefined
+
+    const tags = {
+      [COMPONENT]: this.constructor.id,
+      'service.name': serviceName,
+      'resource.name': req.method,
+      'span.type': 'web',
+      'span.kind': 'server',
+      'http.method': req.method,
+    }
+
+    if (srvSrc) {
+      tags['_dd.srv_src'] = srvSrc
+    }
+
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
-      tags: {
-        [COMPONENT]: this.constructor.id,
-        'service.name': this.config.service || this.serviceName(),
-        'resource.name': req.method,
-        'span.type': 'web',
-        'span.kind': 'server',
-        'http.method': req.method,
-      },
+      tags,
       integrationName: this.constructor.id,
     })
 

@@ -1,28 +1,37 @@
 'use strict'
 
+function wsServiceName (opts) {
+  const { pluginConfig, tracerService } = opts
+  if (pluginConfig.service) {
+    opts.srvSrc = pluginConfig.serviceFromMapping ? 'opt.mapping' : 'm'
+    return pluginConfig.service
+  }
+  return tracerService
+}
+
 const websocket = {
   request: {
     ws: {
       opName: () => 'web.request',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: wsServiceName,
     },
   },
   producer: {
     ws: {
       opName: () => 'websocket.send',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: wsServiceName,
     },
   },
   consumer: {
     ws: {
       opName: () => 'websocket.receive',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: wsServiceName,
     },
   },
   close: {
     ws: {
       opName: () => 'websocket.close',
-      serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
+      serviceName: wsServiceName,
     },
   },
 }
