@@ -35,7 +35,7 @@ const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
 /**
  * Initializes OpenTelemetry Metrics support
- * @param {Config} config - Tracer configuration instance
+ * @param {import('../../config/config-base')} config - Tracer configuration instance
  */
 function initializeOpenTelemetryMetrics (config) {
   const resourceAttributes = {
