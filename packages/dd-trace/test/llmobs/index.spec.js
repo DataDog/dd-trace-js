@@ -79,12 +79,11 @@ describe('module', () => {
   })
 
   afterEach(() => {
+    sinon.restore()
     llmobsModule.disable()
   })
 
   after(() => {
-    sinon.restore()
-
     // get rid of mock stubs for writers
     delete require.cache[require.resolve('../../../dd-trace/src/llmobs')]
   })
