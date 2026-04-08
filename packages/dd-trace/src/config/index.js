@@ -345,6 +345,7 @@ class Config {
       DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS,
       DD_RUNTIME_METRICS_ENABLED,
       DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED,
+      DD_RUNTIME_METRICS_NATIVE,
       DD_RUNTIME_METRICS_GC_ENABLED,
       DD_SERVICE,
       DD_SERVICE_MAPPING,
@@ -710,6 +711,7 @@ class Config {
     setBoolean(target, 'runtimeMetrics.enabled', DD_RUNTIME_METRICS_ENABLED ||
     otelSetRuntimeMetrics)
     setBoolean(target, 'runtimeMetrics.eventLoop', DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED)
+    setBoolean(target, 'runtimeMetrics.native', DD_RUNTIME_METRICS_NATIVE)
     setBoolean(target, 'runtimeMetrics.gc', DD_RUNTIME_METRICS_GC_ENABLED)
     setBoolean(target, 'runtimeMetricsRuntimeId', DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED)
     setArray(target, 'sampler.spanSamplingRules', reformatSpanSamplingRules(
@@ -1008,7 +1010,7 @@ class Config {
     setBoolean(opts, 'reportHostname', options.reportHostname)
     setBoolean(opts, 'runtimeMetrics.enabled', options.runtimeMetrics?.enabled)
     setBoolean(opts, 'runtimeMetrics.eventLoop', options.runtimeMetrics?.eventLoop)
-    setBoolean(opts, 'runtimeMetrics.disableNative', options.runtimeMetrics?.disableNative)
+    setBoolean(opts, 'runtimeMetrics.native', options.runtimeMetrics?.native)
     setBoolean(opts, 'runtimeMetrics.gc', options.runtimeMetrics?.gc)
     setBoolean(opts, 'runtimeMetricsRuntimeId', options.runtimeMetricsRuntimeId)
     setArray(opts, 'sampler.spanSamplingRules', reformatSpanSamplingRules(options.spanSamplingRules))

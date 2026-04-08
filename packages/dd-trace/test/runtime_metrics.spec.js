@@ -468,7 +468,7 @@ function createGarbage (count = 50) {
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.delay.95percentile')
         })
 
-        it('should not load native metrics when disableNative is true, even if eventLoop or gc are enabled', () => {
+        it('should not load native metrics when native is false, even if eventLoop or gc are enabled', () => {
           // Stop the default runtimeMetrics instance started in beforeEach
           runtimeMetrics.stop()
 
@@ -503,12 +503,12 @@ function createGarbage (count = 50) {
             '@datadog/native-metrics': nativeMetricsModule,
           })
 
-          const configDisableNative = {
+          const configNativeDisabled = {
             ...config,
-            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, disableNative: true },
+            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, native: false },
           }
 
-          localRuntimeMetrics.start(configDisableNative)
+          localRuntimeMetrics.start(configNativeDisabled)
 
           // Native metrics should not have been started despite eventLoop and gc being enabled
           sinon.assert.notCalled(nativeMetricsStart)

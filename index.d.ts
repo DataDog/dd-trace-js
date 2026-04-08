@@ -663,11 +663,12 @@ declare namespace tracer {
       eventLoop?: boolean,
 
        /**
-       * Forces the JS implementation of runtime metrics, skipping native code entirely.
-       * This is useful for debugging issues in environments where native metrics cause problems.
-       * @default false
+       * Whether to use native metrics. When set to false, forces the JS implementation
+       * @default true
+       * @env DD_RUNTIME_METRICS_NATIVE
+       * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      disableNative?: boolean
+      native?: boolean
     }
 
     /**
