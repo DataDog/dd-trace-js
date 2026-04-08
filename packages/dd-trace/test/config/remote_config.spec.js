@@ -150,7 +150,7 @@ describe('Tracing Remote Config', () => {
 
       // Service config should win
       const lastCall = config.setRemoteConfig.lastCall
-      sinon.assert.match(lastCall.args[0], { tracing_sampling_rate: 0.8 })
+      sinon.assert.match(lastCall.args[0], { sampleRate: 0.8 })
     })
 
     it('should handle config removal', () => {
@@ -181,7 +181,7 @@ describe('Tracing Remote Config', () => {
 
       // Lower priority should now apply
       const lastCall = config.setRemoteConfig.lastCall
-      sinon.assert.match(lastCall.args[0], { tracing_sampling_rate: 0.5 })
+      sinon.assert.match(lastCall.args[0], { sampleRate: 0.5 })
     })
 
     it('should filter configs by service/env', () => {
@@ -232,8 +232,8 @@ describe('Tracing Remote Config', () => {
       // Service config sampling rate should win, but log_injection should come from org
       const lastCall = config.setRemoteConfig.lastCall
       sinon.assert.match(lastCall.args[0], {
-        tracing_sampling_rate: 0.8,
-        log_injection_enabled: true,
+        sampleRate: 0.8,
+        logInjection: true,
       })
     })
 

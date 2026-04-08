@@ -132,7 +132,7 @@ describe('dogstatsd', () => {
     assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g\n')
     assert.strictEqual(udp4.send.firstCall.args[1], 0)
     assert.strictEqual(udp4.send.firstCall.args[2], 14)
-    assert.strictEqual(udp4.send.firstCall.args[3], '8125')
+    assert.strictEqual(udp4.send.firstCall.args[3], 8125)
     assert.strictEqual(udp4.send.firstCall.args[4], '127.0.0.1')
   })
 
@@ -146,7 +146,7 @@ describe('dogstatsd', () => {
     assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.histogram:10|h\n')
     assert.strictEqual(udp4.send.firstCall.args[1], 0)
     assert.strictEqual(udp4.send.firstCall.args[2], 20)
-    assert.strictEqual(udp4.send.firstCall.args[3], '8125')
+    assert.strictEqual(udp4.send.firstCall.args[3], 8125)
     assert.strictEqual(udp4.send.firstCall.args[4], '127.0.0.1')
   })
 
