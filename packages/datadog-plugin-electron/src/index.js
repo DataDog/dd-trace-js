@@ -9,7 +9,7 @@ class ElectronPlugin extends CompositePlugin {
   static get plugins () {
     return {
       net: ElectronNetPlugin,
-      ipc: ElectronIpcPlugin
+      ipc: ElectronIpcPlugin,
     }
   }
 }

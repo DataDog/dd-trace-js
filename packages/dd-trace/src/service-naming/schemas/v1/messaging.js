@@ -26,11 +26,11 @@ const messaging = {
     },
     'electron:ipc:main:send': {
       opName: () => 'electron.main.send',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'electron:ipc:renderer:send': {
       opName: () => 'electron.renderer.send',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.send',
@@ -63,11 +63,11 @@ const messaging = {
     amqp10: amqpInbound,
     'electron:ipc:main:receive': {
       opName: () => 'electron.main.receive',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'electron:ipc:renderer:receive': {
       opName: () => 'electron.renderer.receive',
-      serviceName: identityService
+      serviceName: identityService,
     },
     'google-cloud-pubsub': {
       opName: () => 'gcp.pubsub.process',

@@ -2,8 +2,8 @@
 
 /* eslint-disable no-console */
 
-const { BrowserWindow, app, ipcMain, net } = require('electron/main')
 const { join } = require('path')
+const { BrowserWindow, app, ipcMain, net } = require('electron/main')
 
 app.on('ready', () => {
   process.send('ready')
@@ -65,8 +65,8 @@ function loadWindow (onShow) {
     show: false,
     webPreferences: {
       nodeIntegration: true,
-      preload: join(__dirname, 'preload.js')
-    }
+      preload: join(__dirname, 'preload.js'),
+    },
   })
 
   ipcMain.on('datadog:test:log', (_event, ...args) => {

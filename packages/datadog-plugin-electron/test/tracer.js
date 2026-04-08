@@ -15,6 +15,6 @@ require('../../dd-trace')
     env: 'tester',
     logger,
     flushInterval: 0,
-    plugins: false
+    plugins: false,
   })
   .use('electron', true)
