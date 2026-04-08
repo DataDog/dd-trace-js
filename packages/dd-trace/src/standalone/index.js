@@ -11,6 +11,9 @@ const startCh = channel('dd-trace:span:start')
 const injectCh = channel('dd-trace:span:inject')
 const extractCh = channel('dd-trace:span:extract')
 
+/**
+ * @param {import('../config/config-base')} config - Tracer configuration
+ */
 function configure (config) {
   if (startCh.hasSubscribers) startCh.unsubscribe(onSpanStart)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(onSpanInject)
