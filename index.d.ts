@@ -2449,7 +2449,19 @@ declare namespace tracer {
      * [electron](https://github.com/electron/electron) module.
      */
     interface electron extends Instrumentation {
-      net?: HttpClient
+      /**
+       * Whether to enable instrumentation of ipc spans
+       *
+       * @default true
+       */
+      ipc?: boolean;
+
+      /**
+       * Whether to enable instrumentation of net spans
+       *
+       * @default true
+       */
+      net?: boolean;
     }
 
     /**
