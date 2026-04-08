@@ -10,7 +10,6 @@ const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-fou
 
 class NextPlugin extends ServerPlugin {
   static id = 'next'
-  #requestsBySpanId = new WeakMap()
 
   constructor (...args) {
     super(...args)
@@ -35,11 +34,7 @@ class NextPlugin extends ServerPlugin {
 
     analyticsSampler.sample(span, this.config.measured, true)
 
-    // Store request by span ID to handle cases where child spans are activated
-    const spanId = span.context()._spanId
-    this.#requestsBySpanId.set(spanId, req)
-
-    return { ...store, span }
+    return { ...store, span, req }
   }
 
   error ({ span, error }) {
@@ -90,14 +85,7 @@ class NextPlugin extends ServerPlugin {
 
     if (!store) return
 
-    const span = store.span
-
-    const spanId = span.context()._spanId
-    const parentSpanId = span.context()._parentId
-
-    // Try current span first, then parent span.
-    // This handles cases where pageLoad runs in a child span context
-    const req = this.#requestsBySpanId.get(spanId) ?? this.#requestsBySpanId.get(parentSpanId)
+    const { span, req } = store
 
     // safeguard against missing req in complicated timeout scenarios
     if (!req) return
