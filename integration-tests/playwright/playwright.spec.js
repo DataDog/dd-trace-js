@@ -84,6 +84,7 @@ versions.forEach((version) => {
     this.retries(2)
     this.timeout(80000)
 
+    // TODO: Update tests files accordingly and test with different TS versions
     useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
 
     before(function (done) {
