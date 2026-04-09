@@ -15,6 +15,10 @@ const noopDogStatsDClient = new NoopDogStatsDClient()
 const noopLLMObs = new NoopLLMObsSDK(noop)
 const noopOpenFeatureProvider = new NoopFlaggingProvider()
 const noopAIGuard = new NoopAIGuardSDK()
+const noopProfiling = {
+  setCustomLabelKeys () {},
+  runWithLabels (labels, fn) { return fn() },
+}
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {
@@ -115,6 +119,10 @@ class NoopProxy {
   setUser (user) {
     this.appsec.setUser(user)
     return this
+  }
+
+  get profiling () {
+    return noopProfiling
   }
 
   get TracerProvider () {

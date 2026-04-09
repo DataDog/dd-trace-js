@@ -171,7 +171,7 @@ function wrapExecute (execute) {
         args,
         docSource: documentSources.get(document),
         source,
-        fields: {},
+        fields: Object.create(null),
         abortController: new AbortController(),
       }
 

@@ -150,7 +150,9 @@ describe('sdk', () => {
       }
 
       const config = getConfigFresh({
-        llmobs: {},
+        llmobs: {
+          agentlessEnabled: false,
+        },
       })
 
       const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
