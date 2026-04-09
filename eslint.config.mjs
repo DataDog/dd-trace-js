@@ -14,11 +14,12 @@ import eslintPluginPromise from 'eslint-plugin-promise'
 import eslintPluginUnicorn from 'eslint-plugin-unicorn'
 import globals from 'globals'
 
-import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
-import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
+import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 
 const { dependencies } = JSON.parse(readFileSync('./vendor/package.json', 'utf8'))
 
@@ -376,6 +377,7 @@ export default [
         rules: {
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
+          'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
           'eslint-require-export-exists': eslintRequireExportExists,
@@ -513,6 +515,15 @@ export default [
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
       'unicorn/switch-case-braces': 'off', // Questionable benefit
+    },
+  },
+  {
+    name: 'dd-trace/config-sync',
+    files: [
+      'eslint.config.mjs',
+    ],
+    rules: {
+      'eslint-rules/eslint-config-names-sync': 'error',
     },
   },
   {
