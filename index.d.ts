@@ -1871,7 +1871,7 @@ declare namespace tracer {
        */
       tags: string[];
       /**
-       * Dictionary of tag probabilities (e.g. [indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8])
+       * Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })
        */
       tagProbabilities: { [key: string]: number }
       /**
