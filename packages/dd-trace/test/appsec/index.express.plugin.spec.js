@@ -228,6 +228,7 @@ withVersions('express', 'express', version => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json'),
+          blockedTemplateJson: json,
         },
       }))
     })

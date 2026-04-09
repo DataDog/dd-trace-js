@@ -55,7 +55,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json'),
-          blockedTemplateJson: json
+          blockedTemplateJson: json,
         },
       }))
     })

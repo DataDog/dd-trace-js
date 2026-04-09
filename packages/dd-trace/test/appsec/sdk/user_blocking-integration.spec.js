@@ -202,7 +202,7 @@ describe('user_blocking - Integration with the tracer', () => {
             location: '/redirected?should_ignore=[security_response_id]',
             status_code: 302,
           },
-        }
+        },
       ])
       controller = (req, res) => {
         const ret = tracer.appsec.blockRequest(req, res)
