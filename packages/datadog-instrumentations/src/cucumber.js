@@ -233,6 +233,34 @@ function getPickleByFile (runtimeOrCoodinator) {
   }, {})
 }
 
+function getFinalStatus ({
+  status,
+  hasFailedAllRetries,
+  isLastAtrRetry,
+  isLastEfdRetry,
+  isLastAttemptToFix,
+  isQuarantined,
+  isDisabled,
+}) {
+  // Note that intermediate executions DO NOT report a final status tag
+
+  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
+  // the final status of its last execution should be reported as 'skip'.
+  if (isQuarantined || isDisabled) {
+    return 'skip'
+  }
+
+  // When no retry feature is active, every execution is final
+  if (!isLastAtrRetry && !isLastEfdRetry && !isLastAttemptToFix) {
+    return status
+  }
+  if ( // hasFailedAllRetries is filled according to the retry mechanism
+    isLastAtrRetry || isLastEfdRetry || isLastAttemptToFix
+  ) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+}
+
 function wrapRun (pl, isLatestVersion, version) {
   if (patched.has(pl)) return
 
@@ -407,7 +435,16 @@ function wrapRun (pl, isLatestVersion, version) {
           await promises.hitBreakpointPromise
         }
 
-        const finalStatus = "this is a final status tag";
+        const isAtrRetry = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0
+        const finalStatus = getFinalStatus({
+          status,
+          hasFailedAllRetries,
+          isLastAtrRetry: isAtrRetry,
+          isLastEfdRetry: isEfdRetry,
+          isLastAttemptToFix: isAttemptToFixRetry,
+          isQuarantined,
+          isDisabled,
+        })
 
         testFinishCh.publish({
           status,
