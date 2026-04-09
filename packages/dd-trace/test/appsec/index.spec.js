@@ -31,11 +31,15 @@ const {
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
-const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 const { getConfigFresh } = require('../helpers/config')
+
+const blockedTemplate = {
+  html: 'html template',
+  json: '"json template"',
+}
 
 const resultActions = {
   actions: {
