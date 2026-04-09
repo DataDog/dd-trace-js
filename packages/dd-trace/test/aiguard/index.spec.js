@@ -144,7 +144,7 @@ describe('AIGuard SDK', () => {
   }
 
   const testSuite = [
-    { action: 'ALLOW', reason: 'Go ahead', tagProbs: {} },
+    { action: 'ALLOW', reason: 'Go ahead' },
     { action: 'DENY', reason: 'Nope', tagProbs: { deny_everything: 0.8, test_deny: 0.2 } },
     { action: 'ABORT', reason: 'Kill it with fire', tagProbs: { alarm_tag: 0.3, abort_everything: 0.7 } },
   ].flatMap(r => [
@@ -157,7 +157,7 @@ describe('AIGuard SDK', () => {
   ])
 
   for (const { action, reason, tagProbs, blocking, suite, target, messages } of testSuite) {
-    const tags = Object.keys(tagProbs)
+    const tags = tagProbs ? Object.keys(tagProbs) : undefined
     it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
       mockFetch({ body: { data: { attributes: { action, reason, tags, tagProbs, is_blocking_enabled: blocking } } } })
       const shouldBlock = action !== 'ALLOW' && blocking
@@ -190,8 +190,8 @@ describe('AIGuard SDK', () => {
       },
       {
         messages,
-        ...(tags.length > 0 ? { attack_categories: tags } : {}),
-        ...(Object.keys(tagProbs).length > 0 ? { tag_probs: tagProbs } : {}),
+        ...(tags ? { attack_categories: tags } : {}),
+        ...(tagProbs ? { tag_probs: tagProbs } : {}),
       })
     })
   }
