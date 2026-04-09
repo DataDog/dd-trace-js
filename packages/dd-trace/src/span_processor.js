@@ -52,7 +52,6 @@ class SpanProcessor {
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this.sample(span)
-
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true
