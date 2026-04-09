@@ -81,6 +81,10 @@ if (shouldInit) {
   tracer.init(baseOptions)
   tracer.use('fs', false)
   tracer.use('child_process', false)
+  tracer.use('http', false)
+  tracer.use('http2', false)
+  tracer.use('dns', false)
+  tracer.use('net', false)
 }
 
 module.exports = tracer
