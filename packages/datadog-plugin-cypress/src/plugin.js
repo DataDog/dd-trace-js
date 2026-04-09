@@ -3,7 +3,7 @@
 const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
-const cypressPlugin = require('./cypress-plugin')
+const cypressPlugin = require('../../datadog-instrumentations/src/cypress-plugin')
 const CypressCiPlugin = require('./index')
 
 const noopTask = {

@@ -103,7 +103,7 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
     }
   }
 
-  const cypressPlugin = require('../../../packages/datadog-plugin-cypress/src/cypress-plugin')
+  const cypressPlugin = require('./cypress-plugin')
 
   if (cypressPlugin._isInit) {
     for (const h of userAfterSpecHandlers) on('after:spec', h)

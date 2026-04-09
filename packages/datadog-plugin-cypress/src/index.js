@@ -1,5 +1,7 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
@@ -56,10 +58,13 @@ const {
   TELEMETRY_CODE_COVERAGE_EMPTY,
   TELEMETRY_ITR_UNSKIPPABLE,
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
+  TELEMETRY_ITR_SKIPPED,
   incrementCountMetric,
   distributionMetric,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
+
+const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 
 const {
   resolveOriginalSourcePosition,
@@ -69,6 +74,12 @@ const {
 
 const TEST_FRAMEWORK_NAME = 'cypress'
 
+const knownTestsCh = channel(`ci:${TEST_FRAMEWORK_NAME}:known-tests`)
+const skippableSuitesCh = channel(`ci:${TEST_FRAMEWORK_NAME}:test-suite:skippable`)
+const testManagementTestsCh = channel(`ci:${TEST_FRAMEWORK_NAME}:test-management-tests`)
+const modifiedFilesCh = channel(`ci:${TEST_FRAMEWORK_NAME}:modified-files`)
+const sessionStartCh = channel(`ci:${TEST_FRAMEWORK_NAME}:session:start`)
+
 const CYPRESS_STATUS_TO_TEST_STATUS = {
   passed: 'pass',
   failed: 'fail',
@@ -76,6 +87,10 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
   skipped: 'skip',
 }
 
+/**
+ * @param {object|undefined} suiteStats
+ * @returns {'pass'|'fail'|'skip'}
+ */
 function getSuiteStatus (suiteStats) {
   if (!suiteStats) {
     return 'skip'
@@ -90,6 +105,10 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
+/**
+ * @param {object} summary
+ * @returns {'pass'|'fail'|'skip'}
+ */
 function getSessionStatus (summary) {
   if (summary.totalFailed !== undefined && summary.totalFailed > 0) {
     return 'fail'
@@ -100,13 +119,187 @@ function getSessionStatus (summary) {
   return 'pass'
 }
 
+/**
+ * @param {object|undefined} details - Cypress before:run details
+ * @returns {string}
+ */
+function getCypressVersion (details) {
+  if (details?.cypressVersion) {
+    return details.cypressVersion
+  }
+  if (details?.config?.version) {
+    return details.config.version
+  }
+  return ''
+}
+
+/**
+ * @param {object|undefined} details - Cypress before:run details
+ * @returns {string}
+ */
+function getRootDir (details) {
+  if (details?.config) {
+    return details.config.projectRoot || details.config.repoRoot || process.cwd()
+  }
+  return process.cwd()
+}
+
+/**
+ * @param {object|undefined} details - Cypress before:run details
+ * @returns {string}
+ */
+function getCypressCommand (details) {
+  if (!details) {
+    return TEST_FRAMEWORK_NAME
+  }
+  return `${TEST_FRAMEWORK_NAME} ${details.specPattern || ''}`
+}
+
 class CypressCiPlugin extends CiPlugin {
   static id = TEST_FRAMEWORK_NAME
+
+  testsToSkip = []
+  skippedTests = []
+  isTestsSkipped = false
+  unskippableSuites = []
+  knownTestsByTestSuite = undefined
+  testManagementTests = undefined
+  modifiedFiles = []
+  isTestIsolationEnabled = true
+  rumFlushWaitMillis = undefined
 
   constructor (...args) {
     super(...args)
 
     this._resetRunState()
+
+    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:configure`, ({ cypressConfig }) => {
+      // Reset all test-run state for a new run
+      this.testsToSkip = []
+      this.skippedTests = []
+      this.isTestsSkipped = false
+      this.unskippableSuites = []
+      this.knownTestsByTestSuite = undefined
+      this.testManagementTests = undefined
+      this.modifiedFiles = []
+
+      const isTestIsolationEnabled = cypressConfig?.testIsolation === undefined
+        ? true
+        : !!cypressConfig.testIsolation
+      this.isTestIsolationEnabled = isTestIsolationEnabled
+
+      if (!isTestIsolationEnabled) {
+        log.warn('Test isolation is disabled, retries will not be enabled')
+      }
+
+      const envFlushWait = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS'))
+      this.rumFlushWaitMillis = Number.isFinite(envFlushWait) ? envFlushWait : undefined
+
+      if (this.libraryConfig?.isFlakyTestRetriesEnabled && isTestIsolationEnabled) {
+        const flakyTestRetriesCount = this.libraryConfig.flakyTestRetriesCount ?? 0
+        if (cypressConfig.retries) {
+          cypressConfig.retries.runMode = flakyTestRetriesCount
+        }
+      }
+    })
+
+    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:before-run`, ({ details, onDone }) => {
+      const self = this
+
+      function done () {
+        if (details.specs) {
+          for (const { absolute, relative } of details.specs) {
+            if (isMarkedAsUnskippable({ path: absolute })) {
+              self.unskippableSuites.push(relative)
+            }
+          }
+        }
+
+        sessionStartCh.publish({
+          command: getCypressCommand(details),
+          frameworkVersion: getCypressVersion(details),
+          rootDir: getRootDir(details),
+          isEarlyFlakeDetectionEnabled: self.libraryConfig?.isEarlyFlakeDetectionEnabled || false,
+        })
+
+        onDone()
+      }
+
+      function afterModifiedFiles () {
+        if (!self.libraryConfig?.isTestManagementEnabled) {
+          return done()
+        }
+        if (!testManagementTestsCh.hasSubscribers) {
+          return done()
+        }
+        testManagementTestsCh.publish({
+          onDone: function (response) {
+            if (!response.err) {
+              self.testManagementTests = response.testManagementTests
+            }
+            done()
+          },
+        })
+      }
+
+      function afterSkippableSuites () {
+        if (!self.libraryConfig?.isImpactedTestsEnabled) {
+          return afterModifiedFiles()
+        }
+        if (!modifiedFilesCh.hasSubscribers) {
+          if (self.libraryConfig) self.libraryConfig.isImpactedTestsEnabled = false
+          return afterModifiedFiles()
+        }
+        modifiedFilesCh.publish({
+          onDone: function (response) {
+            if (response.err) {
+              if (self.libraryConfig) self.libraryConfig.isImpactedTestsEnabled = false
+            } else {
+              self.modifiedFiles = response.modifiedFiles
+            }
+            afterModifiedFiles()
+          },
+        })
+      }
+
+      function afterKnownTests () {
+        if (!self.libraryConfig?.isSuitesSkippingEnabled) {
+          return afterSkippableSuites()
+        }
+        if (!skippableSuitesCh.hasSubscribers) {
+          return afterSkippableSuites()
+        }
+        skippableSuitesCh.publish({
+          onDone: function (response) {
+            if (!response.err) {
+              self.testsToSkip = response.skippableSuites || []
+              incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, self.testsToSkip.length)
+            }
+            afterSkippableSuites()
+          },
+        })
+      }
+
+      if (!self.libraryConfig?.isKnownTestsEnabled) {
+        return afterKnownTests()
+      }
+      if (!knownTestsCh.hasSubscribers) {
+        return afterKnownTests()
+      }
+      knownTestsCh.publish({
+        onDone: function (response) {
+          if (!response.err) {
+            if (response.knownTests?.[TEST_FRAMEWORK_NAME]) {
+              self.knownTestsByTestSuite = response.knownTests[TEST_FRAMEWORK_NAME]
+            } else if (self.libraryConfig) {
+              self.libraryConfig.isEarlyFlakeDetectionEnabled = false
+              self.libraryConfig.isKnownTestsEnabled = false
+            }
+          }
+          afterKnownTests()
+        },
+      })
+    })
 
     // Additional session:start subscriber for cypress-specific tags.
     // CiPlugin's own subscriber (registered in super) runs first and creates the spans;
@@ -118,27 +311,55 @@ class CypressCiPlugin extends CiPlugin {
       }
     })
 
-    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:test-suite:start`, ({ testSuite, testSuiteAbsolutePath }) => {
-      if (this.testSuiteSpan) {
-        return
+    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:test-suite:start`, (ctx) => {
+      const { payload } = ctx
+      const { testSuite, testSuiteAbsolutePath } = payload
+
+      if (!this.testSuiteSpan) {
+        this.testSuiteSpan = this._createTestSuiteSpan(testSuite, testSuiteAbsolutePath)
+        this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       }
-      this.testSuiteSpan = this._createTestSuiteSpan(testSuite, testSuiteAbsolutePath)
-      this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
+
+      ctx.suitePayload = {
+        isEarlyFlakeDetectionEnabled: this.libraryConfig?.isEarlyFlakeDetectionEnabled || false,
+        knownTestsForSuite: this.knownTestsByTestSuite?.[testSuite] || [],
+        earlyFlakeDetectionNumRetries: this.libraryConfig?.earlyFlakeDetectionNumRetries || 0,
+        isKnownTestsEnabled: this.libraryConfig?.isKnownTestsEnabled || false,
+        isTestManagementEnabled: this.libraryConfig?.isTestManagementEnabled || false,
+        testManagementAttemptToFixRetries: this.libraryConfig?.testManagementAttemptToFixRetries || 0,
+        testManagementTests: this._getTestSuiteProperties(testSuite),
+        isImpactedTestsEnabled: this.libraryConfig?.isImpactedTestsEnabled || false,
+        isModifiedTest: this._getIsTestModified(testSuiteAbsolutePath),
+        repositoryRoot: this.repositoryRoot,
+        isTestIsolationEnabled: this.isTestIsolationEnabled,
+        rumFlushWaitMillis: this.rumFlushWaitMillis,
+      }
     })
 
     this.addSub(`ci:${TEST_FRAMEWORK_NAME}:test:start`, (ctx) => {
-      const {
-        testName,
-        testSuite,
-        isUnskippable,
-        isForcedToRun,
-        isDisabled,
-        isQuarantined,
-        testSourceFile,
-      } = ctx
+      const { test } = ctx
+      const { testName, testSuite, testSuiteAbsolutePath } = test
+
+      const shouldSkip = this.testsToSkip.some(t => testName === t.name && testSuite === t.suite)
+      const isUnskippable = this.unskippableSuites.includes(testSuite)
+      const isForcedToRun = shouldSkip && isUnskippable
+      const { isAttemptToFix, isDisabled, isQuarantined } = this._getTestProperties(testSuite, testName)
+
+      if (shouldSkip && !isUnskippable) {
+        this.skippedTests.push(test)
+        this.isTestsSkipped = true
+        ctx.result = { shouldSkip: true }
+        return
+      }
+
+      // For disabled tests (not attemptToFix), skip them
+      if (!isAttemptToFix && isDisabled) {
+        ctx.result = { shouldSkip: true }
+        return
+      }
 
       if (this.activeTestSpan) {
-        ctx.traceId = this.activeTestSpan.context().toTraceId()
+        ctx.result = { traceId: this.activeTestSpan.context().toTraceId() }
         return
       }
 
@@ -162,6 +383,10 @@ class CypressCiPlugin extends CiPlugin {
       const { resource, ...testSpanMetadata } = getTestCommonTags(
         testName, testSuite, this.frameworkVersion, TEST_FRAMEWORK_NAME
       )
+
+      const testSourceFile = testSuiteAbsolutePath && this.repositoryRoot
+        ? getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+        : testSuite
 
       if (testSourceFile) {
         testSpanMetadata[TEST_SOURCE_FILE] = testSourceFile
@@ -209,21 +434,17 @@ class CypressCiPlugin extends CiPlugin {
         integrationName: TEST_FRAMEWORK_NAME,
       })
 
-      ctx.traceId = this.activeTestSpan.context().toTraceId()
+      ctx.result = { traceId: this.activeTestSpan.context().toTraceId() }
     })
 
-    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:coverage`, ({
-      coverage,
-      testSuiteAbsolutePath,
-      repositoryRoot,
-      rootDir,
-    }) => {
+    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:coverage`, ({ test, coverage }) => {
+      const { testSuiteAbsolutePath } = test
       if (!this.tracer._exporter?.exportCoverage) {
         return
       }
       const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
       const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
-        file => getTestSuitePath(file, repositoryRoot || rootDir)
+        file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
       )
       if (!relativeCoverageFiles.length) {
         incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
@@ -242,14 +463,7 @@ class CypressCiPlugin extends CiPlugin {
       this.tracer._exporter.exportCoverage(formattedCoverage)
     })
 
-    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:test:finish`, ({
-      test,
-      itrCorrelationId,
-      earlyFlakeDetectionNumRetries,
-      isFlakyTestRetriesEnabled,
-      flakyTestRetriesCount,
-      testManagementAttemptToFixRetries,
-    }) => {
+    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:test:finish`, ({ test }) => {
       if (!this.activeTestSpan) {
         log.warn('There is no active test span in ci:cypress:test:finish handler')
         return
@@ -271,6 +485,15 @@ class CypressCiPlugin extends CiPlugin {
         isModified,
         isQuarantined: isQuarantinedFromSupport,
       } = test
+
+      const earlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries || 0
+      const isFlakyTestRetriesEnabled =
+        this.libraryConfig?.isFlakyTestRetriesEnabled && this.isTestIsolationEnabled
+      const flakyTestRetriesCount = isFlakyTestRetriesEnabled
+        ? (this.libraryConfig.flakyTestRetriesCount ?? 0)
+        : 0
+      const testManagementAttemptToFixRetries =
+        this.libraryConfig?.testManagementAttemptToFixRetries || 0
 
       const testStatus = CYPRESS_STATUS_TO_TEST_STATUS[state]
       this.activeTestSpan.setTag(TEST_STATUS, testStatus)
@@ -401,13 +624,11 @@ class CypressCiPlugin extends CiPlugin {
       this.activeTestSpan = null
     })
 
-    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:after-spec`, ({
-      spec,
-      results,
-      itrCorrelationId,
-      testsToSkip,
-      testManagementTests,
-    }) => {
+    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:after-spec`, ({ spec, results }) => {
+      const itrCorrelationId = this.itrCorrelationId
+      const testsToSkip = this.testsToSkip
+      const testManagementTests = this.testManagementTests
+
       const { tests, stats } = results || {}
       const cypressTests = tests || []
       const finishedTests = this._finishedTestsByFile[spec.relative] || []
@@ -552,15 +773,13 @@ class CypressCiPlugin extends CiPlugin {
       }
     })
 
-    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:session:finish`, ({
-      suiteStats,
-      isSuitesSkipped,
-      isSuitesSkippingEnabled,
-      isCodeCoverageEnabled,
-      skippedTestsCount,
-      isTestManagementTestsEnabled,
-      onDone,
-    }) => {
+    this.addSub(`ci:${TEST_FRAMEWORK_NAME}:session:finish`, ({ suiteStats, onDone }) => {
+      const isSuitesSkipped = this.isTestsSkipped
+      const isSuitesSkippingEnabled = this.libraryConfig?.isSuitesSkippingEnabled || false
+      const isCodeCoverageEnabled = this.libraryConfig?.isCodeCoverageEnabled || false
+      const skippedTestsCount = this.skippedTests.length
+      const isTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled || false
+
       if (this.testSessionSpan && this.testModuleSpan) {
         const testStatus = getSessionStatus(suiteStats)
         this.testModuleSpan.setTag(TEST_STATUS, testStatus)
@@ -716,6 +935,38 @@ class CypressCiPlugin extends CiPlugin {
       },
       integrationName: TEST_FRAMEWORK_NAME,
     })
+  }
+
+  /**
+   * @param {string|undefined} testSuiteAbsolutePath
+   * @returns {boolean}
+   */
+  _getIsTestModified (testSuiteAbsolutePath) {
+    if (!testSuiteAbsolutePath || !this.modifiedFiles) {
+      return false
+    }
+    const relativeTestSuitePath = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
+    const lines = this.modifiedFiles[relativeTestSuitePath]
+    return !!lines && lines.length > 0
+  }
+
+  /**
+   * @param {string} testSuite
+   * @returns {object}
+   */
+  _getTestSuiteProperties (testSuite) {
+    return this.testManagementTests?.cypress?.suites?.[testSuite]?.tests || {}
+  }
+
+  /**
+   * @param {string} testSuite
+   * @param {string} testName
+   * @returns {{ isAttemptToFix: boolean|undefined, isDisabled: boolean|undefined, isQuarantined: boolean|undefined }}
+   */
+  _getTestProperties (testSuite, testName) {
+    const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
+      this._getTestSuiteProperties(testSuite)?.[testName]?.properties || {}
+    return { isAttemptToFix, isDisabled, isQuarantined }
   }
 
   _resetRunState () {
