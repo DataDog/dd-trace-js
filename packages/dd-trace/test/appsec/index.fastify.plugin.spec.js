@@ -15,8 +15,7 @@ const appsec = require('../../src/appsec')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
-
-const json = '"blockedTemplateJson"'
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
@@ -55,9 +54,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json'),
-          blockedTemplateJson: json,
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -121,9 +120,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json'),
-          blockedTemplateJson: json,
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -230,9 +229,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json'),
-          blockedTemplateJson: json,
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -320,9 +319,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json'),
-          blockedTemplateJson: json,
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -500,10 +499,10 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
                 appsec: {
                   enabled: true,
                   rules: path.join(__dirname, 'cookie-parser-rules.json'),
-                  blockedTemplateJson: json,
                 },
               })
             )
+            setTestBlockingTemplates()
           })
 
           afterEach(() => {
@@ -598,9 +597,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'body-parser-rules.json'),
-            blockedTemplateJson: json,
           },
         }))
+        setTestBlockingTemplates()
       })
 
       afterEach(() => {
@@ -704,6 +703,7 @@ describe('Api Security - Fastify', () => {
         },
       })
       appsec.enable(config)
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {

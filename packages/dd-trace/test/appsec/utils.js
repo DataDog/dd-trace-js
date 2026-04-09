@@ -1,5 +1,7 @@
 'use strict'
 
+const { setTemplates } = require('../../../src/appsec/blocking')
+
 function getWebSpan (traces) {
   for (const trace of traces) {
     for (const span of trace) {
@@ -26,7 +28,25 @@ function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
   }
 }
 
+const blockedTemplateHtml = 'testBlockingHtml'
+const blockedTemplateJson = 'testBlockingJson'
+const blockedTemplateGraphql = 'testBlockingGraphql'
+
+function setTestBlockingTemplates () {
+  setTemplates({
+    appsec: {
+      blockedTemplateHtml,
+      blockedTemplateJson,
+      blockedTemplateGraphql,
+    },
+  })
+}
+
 module.exports = {
   getWebSpan,
   createDeepObject,
+  blockedTemplateHtml,
+  blockedTemplateJson,
+  blockedTemplateGraphql,
+  setTestBlockingTemplates,
 }
