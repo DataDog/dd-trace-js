@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers before any test framework can fake them.
+const realSetTimeout = setTimeout
+
 const path = require('path')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -776,7 +779,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
         if (status === 'fail' && mightHitBreakpoint) {
           await new Promise(resolve => {
-            setTimeout(() => {
+            realSetTimeout(() => {
               resolve()
             }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
           })
