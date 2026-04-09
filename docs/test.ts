@@ -522,6 +522,14 @@ const res = {} as OutgoingMessage
 resBlockRequest = tracer.appsec.blockRequest(req, res)
 tracer.appsec.setUser(user)
 
+// Profiling custom labels
+tracer.profiling.setCustomLabelKeys(['customer', 'region'])
+tracer.profiling.setCustomLabelKeys(new Set(['customer', 'region']))
+const labelResult: number = tracer.profiling.runWithLabels({ customer: 'acme', region: 'us-east' }, () => 42)
+tracer.profiling.runWithLabels({ tier: 'premium' }, () => {
+  tracer.profiling.runWithLabels({ region: 'eu-west' }, () => {})
+})
+
 // OTel TracerProvider registers and provides a tracer
 const provider: opentelemetry.TracerProvider = new tracer.TracerProvider();
 provider.register();
@@ -709,6 +717,7 @@ tracer.init({
   experimental: {
     aiguard: {
       enabled: true,
+      block: true,
       endpoint: 'http://localhost',
       maxMessagesLength: 22,
       maxContentSize: 1024,

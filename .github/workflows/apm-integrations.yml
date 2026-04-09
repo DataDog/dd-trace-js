@@ -66,7 +66,7 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
@@ -217,7 +217,7 @@ jobs:
       PLUGINS: child_process
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -289,7 +289,7 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
@@ -358,7 +358,7 @@ jobs:
       DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
@@ -394,7 +394,7 @@ jobs:
       PLUGINS: dns
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -435,7 +435,7 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
@@ -586,7 +586,7 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
@@ -615,7 +615,7 @@ jobs:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -675,7 +675,7 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
@@ -927,7 +927,7 @@ jobs:
       PLUGINS: net
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -995,7 +995,7 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
@@ -1070,7 +1070,7 @@ jobs:
       DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
         with:
@@ -1106,7 +1106,7 @@ jobs:
       PLUGINS: pino
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/newest-maintenance-lts
@@ -1203,7 +1203,7 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
@@ -1367,7 +1367,7 @@ jobs:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
@@ -1404,7 +1404,7 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts
+      - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/latest
