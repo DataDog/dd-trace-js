@@ -30,6 +30,12 @@ function getAiSdkOpenAiPackage (vercelAiVersion) {
   }
 }
 
+const MOCK_TELEMETRY_METADATA = {
+  userId: '12345',
+  organizationId: 'orgAbc123',
+  conversationId: 'convAbc123',
+}
+
 describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
@@ -73,6 +79,9 @@ describe('Plugin', () => {
         system: 'You are a helpful assistant',
         prompt: 'Hello, OpenAI!',
         temperature: 0.5,
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       }
 
       if (semifies(realVersion, '>=5.0.0')) {
@@ -85,7 +94,9 @@ describe('Plugin', () => {
 
       const { apmSpans, llmobsSpans } = await getEvents()
 
-      const expectedWorkflowMetadata = {}
+      const expectedWorkflowMetadata = {
+        ...MOCK_TELEMETRY_METADATA,
+      }
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
         expectedWorkflowMetadata.maxOutputTokens = 100
@@ -117,6 +128,7 @@ describe('Plugin', () => {
         metadata: {
           max_tokens: 100,
           temperature: 0.5,
+          ...MOCK_TELEMETRY_METADATA,
         },
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
@@ -139,6 +151,9 @@ describe('Plugin', () => {
         model: openai('gpt-4o-mini'),
         schema,
         prompt: 'Invent a character for a video game',
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -146,6 +161,7 @@ describe('Plugin', () => {
       const expectedWorkflowMetadata = {
         schema: MOCK_OBJECT,
         output: 'object',
+        ...MOCK_TELEMETRY_METADATA,
       }
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
@@ -171,6 +187,7 @@ describe('Plugin', () => {
         inputMessages: [{ content: 'Invent a character for a video game', role: 'user' }],
         outputMessages: [{ content: MOCK_STRING, role: 'assistant' }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        metadata: MOCK_TELEMETRY_METADATA,
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -179,6 +196,9 @@ describe('Plugin', () => {
       await ai.embed({
         model: openai.embedding('text-embedding-ada-002'),
         value: 'hello world',
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -189,13 +209,14 @@ describe('Plugin', () => {
         spanKind: 'workflow',
         inputValue: 'hello world',
         outputValue: '[1 embedding(s) returned with size 1536]',
+        metadata: {
+          ...MOCK_TELEMETRY_METADATA,
+        },
         tags: { ml_app: 'test', integration: 'ai' },
       }
 
       if (semifies(realVersion, '>=5.0.0')) {
-        expectedWorkflowSpanEvent.metadata = {
-          maxRetries: MOCK_NUMBER,
-        }
+        expectedWorkflowSpanEvent.metadata.maxRetries = MOCK_NUMBER
       }
 
       assertLlmObsSpanEvent(llmobsSpans[0], expectedWorkflowSpanEvent)
@@ -210,6 +231,7 @@ describe('Plugin', () => {
         inputDocuments: [{ text: 'hello world' }],
         outputValue: '[1 embedding(s) returned with size 1536]',
         metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        metadata: MOCK_TELEMETRY_METADATA,
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -218,6 +240,13 @@ describe('Plugin', () => {
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
         values: ['hello world', 'goodbye world'],
+        experimental_telemetry: {
+          metadata: {
+            userId: '12345',
+            organizationId: 'orgAbc123',
+            conversationId: 'convAbc123',
+          },
+        },
       })
 
       const { apmSpans, llmobsSpans } = await getEvents()
@@ -229,11 +258,14 @@ describe('Plugin', () => {
         inputValue: JSON.stringify(['hello world', 'goodbye world']),
         outputValue: '[2 embedding(s) returned with size 1536]',
         tags: { ml_app: 'test', integration: 'ai' },
+        metadata: {
+          userId: '12345',
+          organizationId: 'orgAbc123',
+          conversationId: 'convAbc123',
+        },
       }
       if (semifies(realVersion, '>=5.0.0')) {
-        expectedWorkflowSpanEvent.metadata = {
-          maxRetries: MOCK_NUMBER,
-        }
+        expectedWorkflowSpanEvent.metadata.maxRetries = MOCK_NUMBER
       }
 
       assertLlmObsSpanEvent(llmobsSpans[0], expectedWorkflowSpanEvent)
@@ -248,6 +280,11 @@ describe('Plugin', () => {
         inputDocuments: [{ text: 'hello world' }, { text: 'goodbye world' }],
         outputValue: '[2 embedding(s) returned with size 1536]',
         metrics: { input_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        metadata: {
+          userId: '12345',
+          organizationId: 'orgAbc123',
+          conversationId: 'convAbc123',
+        },
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
@@ -259,6 +296,9 @@ describe('Plugin', () => {
         prompt: 'Hello, OpenAI!',
         maxTokens: 100,
         temperature: 0.5,
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       }
       if (semifies(realVersion, '>=5.0.0')) {
         options.maxOutputTokens = 100
@@ -277,6 +317,8 @@ describe('Plugin', () => {
         semifies(realVersion, '>=5.0.0')
           ? { maxRetries: MOCK_NUMBER, maxOutputTokens: 100 }
           : { maxSteps: MOCK_NUMBER }
+
+      Object.assign(expectedMetadata, MOCK_TELEMETRY_METADATA)
 
       assertLlmObsSpanEvent(llmobsSpans[0], {
         span: apmSpans[0],
@@ -303,6 +345,7 @@ describe('Plugin', () => {
         metadata: {
           max_tokens: 100,
           temperature: 0.5,
+          ...MOCK_TELEMETRY_METADATA,
         },
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
         tags: { ml_app: 'test', integration: 'ai' },
@@ -325,6 +368,9 @@ describe('Plugin', () => {
         model: openai('gpt-4o-mini'),
         schema,
         prompt: 'Invent a character for a video game',
+        experimental_telemetry: {
+          metadata: MOCK_TELEMETRY_METADATA,
+        },
       })
 
       const partialObjectStream = result.partialObjectStream
@@ -338,6 +384,7 @@ describe('Plugin', () => {
       const expectedWorkflowMetadata = {
         schema: MOCK_OBJECT,
         output: 'object',
+        ...MOCK_TELEMETRY_METADATA,
       }
       if (semifies(realVersion, '>=5.0.0')) {
         expectedWorkflowMetadata.maxRetries = MOCK_NUMBER
@@ -366,6 +413,7 @@ describe('Plugin', () => {
           role: 'assistant',
         }],
         metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER, total_tokens: MOCK_NUMBER },
+        metadata: MOCK_TELEMETRY_METADATA,
         tags: { ml_app: 'test', integration: 'ai' },
       })
     })
