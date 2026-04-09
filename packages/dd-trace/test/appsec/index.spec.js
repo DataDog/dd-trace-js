@@ -1638,6 +1638,8 @@ describe('IP blocking', function () {
     appsec.enable(getConfigFresh({
       appsec: {
         enabled: true,
+        blockedTemplateHtml: htmlDefaultContent,
+        blockedTemplateJson: jsonDefaultContent,
         rasp: {
           enabled: false, // disable rasp to not trigger lfi
         },
