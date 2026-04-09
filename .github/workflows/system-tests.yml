@@ -54,6 +54,7 @@ jobs:
     uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
     secrets:
       DD_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
+      TEST_OPTIMIZATION_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
     permissions:
       contents: read
       id-token: write
