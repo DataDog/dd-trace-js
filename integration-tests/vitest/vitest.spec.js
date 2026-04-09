@@ -1931,7 +1931,7 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
           })
 
-          it('does not tag known attempt to fix tests as new', (done) => {
+          it('does not tag known attempt to fix tests as new', async () => {
             receiver.setKnownTests({
               vitest: {
                 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': [
@@ -1977,9 +1977,10 @@ versions.forEach((version) => {
               }
             )
 
-            childProcess.on('exit', () => {
-              eventsPromise.then(() => done()).catch(done)
-            })
+            await Promise.all([
+              once(childProcess, 'exit'),
+              eventsPromise,
+            ])
           })
 
           it('does not fail retry if a test is quarantined', (done) => {

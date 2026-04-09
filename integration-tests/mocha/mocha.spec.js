@@ -4153,7 +4153,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
       })
 
-      onlyLatestIt('does not tag known attempt to fix tests as new', (done) => {
+      onlyLatestIt('does not tag known attempt to fix tests as new', async () => {
         receiver.setKnownTests({
           mocha: {
             'ci-visibility/test-management/test-attempt-to-fix-1.js': [
@@ -4200,9 +4200,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           }
         )
 
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
 
       onlyLatestIt('does not fail retry if a test is quarantined', (done) => {

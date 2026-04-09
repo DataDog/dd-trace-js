@@ -2596,7 +2596,7 @@ describe(`cucumber@${version} commonJS`, () => {
         })
       })
 
-      it('does not tag known attempt to fix tests as new', (done) => {
+      it('does not tag known attempt to fix tests as new', async () => {
         receiver.setKnownTests({
           cucumber: {
             'ci-visibility/features-test-management/attempt-to-fix.feature': [
@@ -2638,9 +2638,10 @@ describe(`cucumber@${version} commonJS`, () => {
           }
         )
 
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
 
       it('does not fail retry if a test is quarantined', (done) => {
