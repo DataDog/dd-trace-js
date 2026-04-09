@@ -12,18 +12,18 @@ const templates = {
   html: {
     body: null,
     idIndex: -1,
-    type: 'text/html; charset=utf-8'
+    type: 'text/html; charset=utf-8',
   },
   json: {
     body: null,
     idIndex: -1,
-    type: 'application/json'
+    type: 'application/json',
   },
   graphqlJson: {
     body: null,
     idIndex: -1,
-    type: 'application/json'
-  }
+    type: 'application/json',
+  },
 }
 
 setTemplates()
@@ -35,7 +35,7 @@ const responseBlockedSet = new WeakSet()
 const blockDelegations = new WeakMap()
 
 const specificBlockingTypes = {
-  GRAPHQL: 'graphqlJson'
+  GRAPHQL: 'graphqlJson',
 }
 
 function getSpecificKey (method, url) {
@@ -188,7 +188,7 @@ function setTemplates (config) {
     if (template.idIndex !== -1) {
       template.body = [
         template.body.slice(0, template.idIndex),
-        template.body.slice(template.idIndex + templateKeyword.length)
+        template.body.slice(template.idIndex + templateKeyword.length),
       ]
     }
   }

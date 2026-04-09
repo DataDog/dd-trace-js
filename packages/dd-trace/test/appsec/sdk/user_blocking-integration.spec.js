@@ -193,23 +193,23 @@ describe('user_blocking - Integration with the tracer', () => {
           id: 'notblock',
           parameters: {
             location: '/notfound',
-            status_code: 404
-          }
+            status_code: 404,
+          },
         },
         {
           id: 'block',
           parameters: {
             location: '/redirected?should_ignore=[security_response_id]',
-            status_code: 302
-          }
+            status_code: 302,
+          },
         }
       ])
       controller = (req, res) => {
         const ret = tracer.appsec.blockRequest(req, res)
-        expect(ret).to.be.true
+        assert.strictEqual(ret, true)
       }
       const response = await axios.get(`http://localhost:${port}/`, { maxRedirects: 0 })
-      expect(response.headers.location).to.equal('/redirected?should_ignore=[security_response_id]')
+      assert.strictEqual(response.headers.location, '/redirected?should_ignore=[security_response_id]')
     })
   })
 })
