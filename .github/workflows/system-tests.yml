@@ -18,6 +18,8 @@ concurrency:
 jobs:
   build-artifacts:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout dd-trace-js
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -34,6 +36,7 @@ jobs:
   get-credentials:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write
     outputs:
       api_key: ${{ steps.dd-sts.outputs.api_key }}
@@ -50,12 +53,10 @@ jobs:
       - get-credentials
     uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
     secrets:
-      TEST_OPTIMIZATION_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
       DD_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
     permissions:
       contents: read
       id-token: write
-      packages: write
     with:
       library: nodejs
       binaries_artifact: system_tests_binaries
@@ -64,4 +65,5 @@ jobs:
       excluded_scenarios: APM_TRACING_E2E_OTEL,APM_TRACING_E2E_SINGLE_SPAN # require AWS and datadog credentials
       parametric_job_count: 8
       skip_empty_scenarios: true
+      dd_sts_policy: dd-trace-js-api-key
       push_to_test_optimization: ${{ github.actor != 'dependabot[bot]' }}
