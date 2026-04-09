@@ -5,6 +5,14 @@ const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
 
+const dc = require('dc-polyfill')
+
+const sessionInitCh = dc.channel('ci:cypress:session:init')
+const beforeRunCh = dc.channel('ci:cypress:before-run')
+const afterSpecCh = dc.channel('ci:cypress:after-spec')
+const afterRunCh = dc.channel('ci:cypress:after-run')
+const getTasksCh = dc.channel('ci:cypress:get-tasks')
+
 const DD_CONFIG_WRAPPED = Symbol('dd-trace.cypress.config.wrapped')
 
 const noopTask = {
@@ -96,11 +104,14 @@ function injectSupportFile (config) {
  * and injects the support file. Handles chaining with user-registered handlers
  * for after:spec/after:run so both the user's code and dd-trace's run in sequence.
  *
+ * Communicates with the dd-trace Cypress plugin via diagnostic channels so that
+ * this instrumentation file has no direct knowledge of the tracer.
+ *
  * @param {Function} on Cypress event registration function
  * @param {object} config Cypress resolved config object
  * @param {Function[]} userAfterSpecHandlers user's after:spec handlers collected from wrappedOn
  * @param {Function[]} userAfterRunHandlers user's after:run handlers collected from wrappedOn
- * @returns {object} the config object (possibly modified)
+ * @returns {object|Promise<object>} the config object (possibly modified), or a promise resolving to it
  */
 function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHandlers) {
   const wrapperFile = injectSupportFile(config)
@@ -110,8 +121,6 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
       try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
     }
   }
-
-  const tracer = global._ddtrace
 
   const registerAfterRunWithCleanup = () => {
     on('after:run', (results) => {
@@ -129,34 +138,35 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
     on('task', noopTask)
   }
 
-  if (!tracer || !tracer._initialized) {
+  if (!sessionInitCh.hasSubscribers) {
     registerNoopHandlers()
     return config
   }
 
-  const NoopTracer = require('../../../packages/dd-trace/src/noop/tracer')
+  const ctx = { config }
+  sessionInitCh.publish(ctx)
 
-  if (tracer._tracer instanceof NoopTracer) {
+  if (ctx.skip) {
     registerNoopHandlers()
     return config
   }
 
-  const cypressPlugin = require('../../../packages/datadog-plugin-cypress/src/cypress-plugin')
-
-  if (cypressPlugin._isInit) {
+  if (ctx.alreadyInit) {
     for (const h of userAfterSpecHandlers) on('after:spec', h)
     registerAfterRunWithCleanup()
     return config
   }
 
-  on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
+  on('before:run', (details) => {
+    return new Promise(resolve => beforeRunCh.publish({ details, onDone: resolve }))
+  })
 
   on('after:spec', (spec, results) => {
     const chain = userAfterSpecHandlers.reduce(
       (p, h) => p.then(() => h(spec, results)),
       Promise.resolve()
     )
-    return chain.then(() => cypressPlugin.afterSpec(spec, results))
+    return chain.then(() => new Promise(resolve => afterSpecCh.publish({ spec, results, onDone: resolve })))
   })
 
   on('after:run', (results) => {
@@ -165,13 +175,15 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
       Promise.resolve()
     )
     return chain
-      .then(() => cypressPlugin.afterRun(results))
+      .then(() => new Promise(resolve => afterRunCh.publish({ results, onDone: resolve })))
       .finally(cleanupWrapper)
   })
 
-  on('task', cypressPlugin.getTasks())
+  const tasksCtx = {}
+  getTasksCh.publish(tasksCtx)
+  on('task', tasksCtx.tasks ?? noopTask)
 
-  return Promise.resolve(cypressPlugin.init(tracer, config)).then(() => config)
+  return Promise.resolve(ctx.initPromise).then(() => config)
 }
 
 /**
