@@ -57,10 +57,10 @@ tracer.init({
   },
   hostname: 'agent',
   logger: {
-    error (message: string | Error) {},
-    warn (message: string) {},
-    info (message: string) {},
-    debug (message: string) {}
+    error(message: string | Error) { },
+    warn(message: string) { },
+    info(message: string) { },
+    debug(message: string) { }
   },
   plugins: false,
   port: 7777,
@@ -70,7 +70,7 @@ tracer.init({
   },
   flushInterval: 1000,
   flushMinSpans: 500,
-  lookup: () => {},
+  lookup: () => { },
   sampleRate: 0.1,
   rateLimit: 1000,
   samplingRules: [
@@ -179,19 +179,19 @@ tracer.init({
 
 tracer.dogstatsd.increment('foo')
 tracer.dogstatsd.increment('foo', 2)
-tracer.dogstatsd.increment('foo', 2, {a: 'b'})
+tracer.dogstatsd.increment('foo', 2, { a: 'b' })
 tracer.dogstatsd.increment('foo', 2, ['a:b'])
 tracer.dogstatsd.decrement('foo')
 tracer.dogstatsd.decrement('foo', 2)
-tracer.dogstatsd.decrement('foo', 2, {a: 'b'})
+tracer.dogstatsd.decrement('foo', 2, { a: 'b' })
 tracer.dogstatsd.decrement('foo', 2, ['a:b'])
 tracer.dogstatsd.distribution('foo')
 tracer.dogstatsd.distribution('foo', 2)
-tracer.dogstatsd.distribution('foo', 2, {a: 'b'})
+tracer.dogstatsd.distribution('foo', 2, { a: 'b' })
 tracer.dogstatsd.distribution('foo', 2, ['a:b'])
 tracer.dogstatsd.gauge('foo')
 tracer.dogstatsd.gauge('foo', 2)
-tracer.dogstatsd.gauge('foo', 2, {a: 'b'})
+tracer.dogstatsd.gauge('foo', 2, { a: 'b' })
 tracer.dogstatsd.gauge('foo', 2, ['a:b'])
 tracer.dogstatsd.flush()
 
@@ -207,7 +207,7 @@ const httpOptions = {
 const httpServerOptions: plugins.HttpServer = {
   ...httpOptions,
   hooks: {
-    request: (span?: Span, req?, res?) => {}
+    request: (span?: Span, req?, res?) => { }
   }
 };
 
@@ -244,16 +244,16 @@ const graphqlOptions: plugins.graphql = {
   collapse: false,
   signature: false,
   hooks: {
-    execute: (span?: Span, args?, res?) => {},
-    validate: (span?: Span, document?, errors?) => {},
-    parse: (span?: Span, source?, document?) => {}
+    execute: (span?: Span, args?, res?) => { },
+    validate: (span?: Span, document?, errors?) => { },
+    parse: (span?: Span, source?, document?) => { }
   }
 };
 
 const elasticsearchOptions: plugins.elasticsearch = {
   service: 'test',
   hooks: {
-    query: (span?: Span, params?) => {},
+    query: (span?: Span, params?) => { },
   },
 };
 
@@ -261,7 +261,7 @@ const awsSdkOptions: plugins.aws_sdk = {
   service: 'test',
   batchPropagationEnabled: false,
   hooks: {
-    request: (span?: Span, response?) => {},
+    request: (span?: Span, response?) => { },
   },
   s3: false,
   sqs: {
@@ -279,8 +279,8 @@ const redisOptions: plugins.redis = {
 const sharedbOptions: plugins.sharedb = {
   service: 'test',
   hooks: {
-    receive: (span?: Span, request?) => {},
-    reply: (span?: Span, request?, reply?) => {},
+    receive: (span?: Span, request?) => { },
+    reply: (span?: Span, request?, reply?) => { },
   },
 };
 
@@ -295,7 +295,7 @@ const moleculerOptions: plugins.moleculer = {
 const openSearchOptions: plugins.opensearch = {
   service: 'test',
   hooks: {
-    query: (span?: Span, params?) => {},
+    query: (span?: Span, params?) => { },
   },
 };
 
@@ -323,7 +323,7 @@ tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);
 tracer.use('electron');
-tracer.use('electron', { net: httpClientOptions });
+tracer.use('electron', { net: false, ipc: false });
 tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');
@@ -439,17 +439,17 @@ span = tracer.startSpan('test', {
 span = tracer.startSpan('test', { childOf: null })
 span = tracer.startSpan('test', { integrationName: 'testIntegration' })
 
-tracer.trace('test', () => {})
-tracer.trace('test', { tags: { foo: 'bar' } }, () => {})
-tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => {})
-tracer.trace('test', { measured: true }, () => {})
-tracer.trace('test', (span: Span) => {})
-tracer.trace('test', (span: Span, fn: () => void) => {})
-tracer.trace('test', (span: Span, fn: (err: Error) => void) => {})
+tracer.trace('test', () => { })
+tracer.trace('test', { tags: { foo: 'bar' } }, () => { })
+tracer.trace('test', { service: 'foo', resource: 'bar', type: 'baz' }, () => { })
+tracer.trace('test', { measured: true }, () => { })
+tracer.trace('test', (span: Span) => { })
+tracer.trace('test', (span: Span, fn: () => void) => { })
+tracer.trace('test', (span: Span, fn: (err: Error) => void) => { })
 
 promise = tracer.trace('test', () => Promise.resolve())
 
-tracer.wrap('test', () => {})
+tracer.wrap('test', () => { })
 tracer.wrap('test', (foo: string) => 'test')
 
 promise = tracer.wrap('test', () => Promise.resolve())()
@@ -469,10 +469,10 @@ const scope = tracer.scope()
 span = scope.active()!;
 
 const activateStringType: string = scope.activate(span, () => 'test');
-const activateVoidType: void = scope.activate(span, () => {});
+const activateVoidType: void = scope.activate(span, () => { });
 
 const bindFunctionStringType: (arg1: string, arg2: number) => string = scope.bind((arg1: string, arg2: number): string => 'test');
-const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => {});
+const bindFunctionVoidType: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): void => { });
 const bindFunctionVoidTypeWithSpan: (arg1: string, arg2: number) => void = scope.bind((arg1: string, arg2: number): string => 'test', span);
 
 tracer.wrap('x', () => {
@@ -530,7 +530,7 @@ tracer.profiling.setCustomLabelKeys(['customer', 'region'])
 tracer.profiling.setCustomLabelKeys(new Set(['customer', 'region']))
 const labelResult: number = tracer.profiling.runWithLabels({ customer: 'acme', region: 'us-east' }, () => 42)
 tracer.profiling.runWithLabels({ tier: 'premium' }, () => {
-  tracer.profiling.runWithLabels({ region: 'eu-west' }, () => {})
+  tracer.profiling.runWithLabels({ region: 'eu-west' }, () => { })
 })
 
 // OTel TracerProvider registers and provides a tracer
@@ -646,8 +646,8 @@ llmobs.registerProcessor((llmobsSpan) => {
 llmobs.deregisterProcessor()
 
 // trace block of code
-llmobs.trace({ name: 'name', kind: 'llm' }, () => {})
-llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => {})
+llmobs.trace({ name: 'name', kind: 'llm' }, () => { })
+llmobs.trace({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, () => { })
 llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
   llmobs.annotate(span, {})
   span.setTag('foo', 'bar')
@@ -655,8 +655,8 @@ llmobs.trace({ name: 'name', kind: 'llm' }, (span, cb) => {
 })
 
 // wrap a function
-llmobs.wrap({ kind: 'llm' }, function myLLM () {})()
-llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction () {})()
+llmobs.wrap({ kind: 'llm' }, function myLLM() { })()
+llmobs.wrap({ kind: 'llm', name: 'myLLM', modelName: 'myModel', modelProvider: 'myProvider' }, function myFunction() { })()
 
 // export a span
 llmobs.enable({ mlApp: 'myApp', agentlessEnabled: false })
