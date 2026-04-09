@@ -54,6 +54,10 @@ class TestApiManualPlugin extends CiPlugin {
     })
   }
 
+  /**
+   * @param {import('../../config/config-base')} config - Tracer configuration
+   * @param {boolean} shouldGetEnvironmentData - Whether to get environment data
+   */
   configure (config, shouldGetEnvironmentData) {
     this._config = config
     super.configure(config, shouldGetEnvironmentData)

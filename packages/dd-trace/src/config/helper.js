@@ -9,6 +9,9 @@
  * @property {string|number|boolean|null|object|unknown[]} default
  * @property {string[]} [aliases]
  * @property {string[]} [configurationNames]
+ * @property {string} [internalPropertyName]
+ * @property {string} [transform]
+ * @property {string} [allowed]
  * @property {string|boolean} [deprecated]
  */
 
@@ -57,6 +60,13 @@ for (const [canonical, configuration] of Object.entries(supportedConfigurations)
 const aliasToCanonical = {}
 for (const canonical of Object.keys(aliases)) {
   for (const alias of aliases[canonical]) {
+    if (supportedConfigurations[alias]) {
+      // Allow 'fallback' aliases to be used for other configurations.
+      // This is used to handle the case where an alias could be used for multiple configurations.
+      // For example, OTEL_EXPORTER_OTLP_ENDPOINT is used for OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+      // and OTEL_EXPORTER_OTLP_METRICS_ENDPOINT.
+      continue
+    }
     if (aliasToCanonical[alias]) {
       throw new Error(`The alias ${alias} is already used for ${aliasToCanonical[alias]}.`)
     }
@@ -99,22 +109,37 @@ function loadStableConfig () {
 }
 
 function getValueFromSource (name, source) {
-  const value = source[name]
+  if (source[name] !== undefined) {
+    return source[name]
+  }
 
-  if (value === undefined && aliases[name]) {
+  if (aliases[name]) {
     for (const alias of aliases[name]) {
       if (source[alias] !== undefined) {
         return source[alias]
       }
     }
   }
+}
 
-  return value
+function getEnvNameFromSource (name, source) {
+  if (source[name] !== undefined) {
+    return name
+  }
+
+  if (aliases[name]) {
+    for (const alias of aliases[name]) {
+      if (source[alias] !== undefined) {
+        return alias
+      }
+    }
+  }
 }
 
 function validateAccess (name) {
-  if ((name.startsWith('DD_') || name.startsWith('OTEL_') || aliasToCanonical[name]) &&
-    !supportedConfigurations[name]) {
+  if ((name.startsWith('DD_') || name.startsWith('OTEL_')) &&
+    !supportedConfigurations[name] &&
+    !aliasToCanonical[name]) {
     throw new Error(`Missing ${name} env/configuration in "supported-configurations.json" file.`)
   }
 }
@@ -144,10 +169,9 @@ module.exports = {
    *
    * @returns {TracerEnv} The environment variables
    */
-  getEnvironmentVariables () {
+  getEnvironmentVariables (source = process.env, internalOnly = false) {
     const configs = {}
-    for (const [key, value] of Object.entries(process.env)) {
-      // TODO(BridgeAR): Handle telemetry reporting for aliases.
+    for (const [key, value] of Object.entries(source)) {
       if (key.startsWith('DD_') || key.startsWith('OTEL_') || aliasToCanonical[key]) {
         if (supportedConfigurations[key]) {
           configs[key] = value
@@ -155,7 +179,7 @@ module.exports = {
           // The alias should only be used if the actual configuration is not set
           // In case that more than a single alias exist, use the one defined first in our own order
           for (const alias of aliases[aliasToCanonical[key]]) {
-            if (process.env[alias] !== undefined) {
+            if (source[alias] !== undefined) {
               configs[aliasToCanonical[key]] = value
               break
             }
@@ -165,9 +189,10 @@ module.exports = {
         //   debug(
         //     `Missing configuration ${env} in supported-configurations file. The environment variable is ignored.`
         //   )
+        // This could be moved inside the main config logic.
         }
         deprecationMethods[key]?.()
-      } else {
+      } else if (!internalOnly) {
         configs[key] = value
       }
     }
@@ -209,6 +234,30 @@ module.exports = {
 
     if (localStableConfig !== undefined) {
       return getValueFromSource(name, localStableConfig)
+    }
+  },
+
+  /**
+   * Returns the actual environment variable name used for a supported configuration
+   * from a specific environment-based source.
+   *
+   * @param {string} name Environment variable name
+   * @returns {string|undefined}
+   */
+  getConfiguredEnvName (name) {
+    validateAccess(name)
+
+    if (!stableConfigLoaded) {
+      loadStableConfig()
+    }
+
+    for (const source of [fleetStableConfig, process.env, localStableConfig]) {
+      if (source !== undefined) {
+        const fromSource = getEnvNameFromSource(name, source)
+        if (fromSource !== undefined) {
+          return fromSource
+        }
+      }
     }
   },
 }

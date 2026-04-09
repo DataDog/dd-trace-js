@@ -147,7 +147,7 @@ function start (config, rcInstance) {
  * Sends the new configuration to the worker thread via the config channel.
  * Does nothing if the worker is not started.
  *
- * @param {Config} config - The updated tracer configuration object
+ * @param {import('../config/config-base')} config - The updated tracer configuration object
  */
 function configure (config) {
   if (configChannel === null) return

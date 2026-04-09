@@ -67,14 +67,6 @@ function calculateDDBasePath (dirname) {
   return dirSteps.slice(0, packagesIndex).join(path.sep) + path.sep
 }
 
-function normalizeProfilingEnabledValue (configValue) {
-  return isTrue(configValue)
-    ? 'true'
-    : isFalse(configValue)
-      ? 'false'
-      : configValue === 'auto' ? 'auto' : undefined
-}
-
 function normalizePluginEnvName (envPluginName, makeLowercase = false) {
   if (envPluginName.startsWith('@')) {
     envPluginName = envPluginName.slice(1)
@@ -89,6 +81,5 @@ module.exports = {
   isError,
   globMatch,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
-  normalizeProfilingEnabledValue,
   normalizePluginEnvName,
 }

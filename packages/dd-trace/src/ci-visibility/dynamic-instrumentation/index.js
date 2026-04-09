@@ -11,6 +11,9 @@ const probeIdToResolveBreakpointSet = new Map()
 const probeIdToResolveBreakpointRemove = new Map()
 
 class TestVisDynamicInstrumentation {
+  /**
+   * @param {import('../../config/config-base')} config - Tracer configuration
+   */
   constructor (config) {
     this._config = config
     this.worker = null
@@ -83,7 +86,6 @@ class TestVisDynamicInstrumentation {
           DD_TRACE_ENABLED: 'false',
           DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
           DD_CIVISIBILITY_MANUAL_API_ENABLED: 'false',
-          DD_TRACING_ENABLED: 'false',
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
         },
         workerData: {
@@ -150,6 +152,9 @@ class TestVisDynamicInstrumentation {
 
 let dynamicInstrumentation
 
+/**
+ * @param {import('../../config/config-base')} config - Tracer configuration
+ */
 module.exports = function createAndGetTestVisDynamicInstrumentation (config) {
   if (dynamicInstrumentation) {
     return dynamicInstrumentation

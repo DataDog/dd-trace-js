@@ -111,7 +111,21 @@
 /integration-tests/config-jest-multiproject.js @DataDog/ci-app-libraries
 /integration-tests/config-jest.js @DataDog/ci-app-libraries
 /integration-tests/cypress-config.json @DataDog/ci-app-libraries
+/integration-tests/cypress-custom-after-hooks.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-auto-esm.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-double-run.js @DataDog/ci-app-libraries
+/integration-tests/cypress-double-run.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-legacy-plugin.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-legacy-plugin.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-auto.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-auto.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-manual.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-manual.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-return-config.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-return-config.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-typescript.config.ts @DataDog/ci-app-libraries
 /integration-tests/cypress.config.js @DataDog/ci-app-libraries
 /integration-tests/my-nyc.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.js @DataDog/ci-app-libraries
@@ -191,6 +205,8 @@
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging
 
 # CI
+/.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
+/.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
 /.github/chainguard @DataDog/sdlc-security
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js

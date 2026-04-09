@@ -57,6 +57,10 @@ class AIGuard extends NoopAIGuard {
   #maxContentSize
   #meta
 
+  /**
+   * @param {import('../tracer')} tracer - Tracer instance
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   constructor (tracer, config) {
     super()
 

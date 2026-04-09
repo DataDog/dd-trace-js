@@ -38,7 +38,7 @@ const TRANSFORM_TYPE_OVERRIDES = {
   normalizeProfilingEnabled: "'true' | 'false' | 'auto'",
   parseOtelTags: 'Record<string, string>',
   sampleRate: 'number',
-  setIntegerRangeSet: 'number[]',
+  setGRPCRange: 'number[]',
   splitJSONPathRules: 'string[]',
 }
 

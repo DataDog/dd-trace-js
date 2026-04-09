@@ -2,7 +2,7 @@
 
 const crypto = require('crypto')
 
-const defaults = require('../../../config/defaults')
+const { defaults } = require('../../../config/defaults')
 
 const STRINGIFY_RANGE_KEY = 'DD_' + crypto.randomBytes(20).toString('hex')
 const STRINGIFY_SENSITIVE_KEY = STRINGIFY_RANGE_KEY + 'SENSITIVE'

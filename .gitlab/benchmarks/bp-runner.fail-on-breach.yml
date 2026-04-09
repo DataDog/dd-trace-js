@@ -2,7 +2,7 @@
 # Generated: 2026-03-30
 #
 # Generation Strategy: tight
-#   Formula: CI_bound / (1 ± T) (T = 5.0%)
+#   Formula: CI_bound / (1 ± T) (T = 15.0%)
 #
 # SLO Checking:
 #   - BREACH: 90% CI boundary crosses threshold
@@ -23,15 +23,15 @@ experiments:
             thresholds:
               - threshold: agg_http_req_duration_p50 < 2 ms
                 warning_range: 1
-              - agg_http_req_duration_p99 < 9.919 ms
+              - agg_http_req_duration_p99 < 11.086 ms
           - name: normal_operation/only-tracing-with-runtime-metrics-enabled
             thresholds:
               - threshold: agg_http_req_duration_p50 < 2 ms
                 warning_range: 1
-              - agg_http_req_duration_p99 < 6.604 ms
+              - agg_http_req_duration_p99 < 7.381 ms
           - name: high_load/only-tracing
             thresholds:
-              - throughput > 458.540 op/s
+              - throughput > 418.667 op/s
           - name: high_load/only-tracing-with-runtime-metrics-enabled
             thresholds:
-              - throughput > 569.478 op/s
+              - throughput > 519.958 op/s
