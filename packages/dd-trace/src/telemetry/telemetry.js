@@ -470,7 +470,6 @@ const nameMapping = {
   otelMetricsUrl: 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT',
   otelMetricsExportInterval: 'OTEL_METRIC_EXPORT_INTERVAL',
   otelMetricsTemporalityPreference: 'OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE',
-  otelTracesEnabled: 'OTEL_TRACES_EXPORTER',
   otelTracesHeaders: 'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
   otelTracesProtocol: 'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL',
   otelTracesTimeout: 'OTEL_EXPORTER_OTLP_TRACES_TIMEOUT',
