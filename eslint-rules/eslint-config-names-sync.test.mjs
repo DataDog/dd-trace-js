@@ -52,12 +52,20 @@ ruleTester.run('eslint-config-names-sync', rule, {
       filename: path.join(fixturesDirectory, 'missing-in-index-dts', 'lint-anchor.js'),
       code: '',
       options: [getFixtureOptions('missing-in-index-dts')],
-      errors: [{
-        messageId: 'configurationMissingInIndexDts',
-        data: {
-          configurationName: 'missingFromTypes',
+      errors: [
+        {
+          messageId: 'configurationMissingInIndexDts',
+          data: {
+            configurationName: 'missingFromTypes',
+          },
         },
-      }],
+        {
+          messageId: 'configurationMissingInIndexDts',
+          data: {
+            configurationName: 'telemetry',
+          },
+        },
+      ],
     },
     {
       filename: path.join(fixturesDirectory, 'missing-in-supported-configurations', 'lint-anchor.js'),

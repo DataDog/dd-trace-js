@@ -14,11 +14,6 @@ const UNSUPPORTED_CONFIGURATION_ROOTS = new Set([
   'plugins',
 ])
 
-const supportedConfigurationInfoCache = new Map()
-const indexDtsConfigurationNamesCache = new Map()
-const envTagNamesCache = new WeakMap()
-const interfacePropertiesCache = new WeakMap()
-
 /**
  * @typedef {{
  *   node: import('typescript').InterfaceDeclaration | import('typescript').TypeAliasDeclaration
@@ -38,99 +33,51 @@ const interfacePropertiesCache = new WeakMap()
 /**
  * @typedef {{
  *   names: Set<string>
- *   envTargets: Map<string, Set<string>>
+ *   primaryEnvTargets: Map<string, Set<string>>
+ *   knownAliasEnvNames: Set<string>
  * }} SupportedConfigurationInfo
  */
 
 /**
+ * @typedef {{
+ *   declarations: Map<string, DeclarationEntry>
+ *   primaryEnvTargets: Map<string, Set<string>>
+ *   knownAliasEnvNames: Set<string>
+ *   names: Set<string>
+ *   visitedDeclarations: Set<string>
+ *   envTagNamesCache: WeakMap<import('typescript').Node, Set<string>>
+ *   interfacePropertiesCache: WeakMap<
+ *     import('typescript').InterfaceDeclaration,
+ *     Map<string, import('typescript').PropertySignature>
+ *   >
+ * }} InspectionState
+ */
+
+/** @type {InspectionState | undefined} */
+let currentInspectionState
+
+/**
+ * @param {Partial<TypeInspectionResult>} [overrides]
  * @returns {TypeInspectionResult}
  */
-function createEmptyInspectionResult () {
+function createInspectionResult (overrides) {
   return {
     hasEnvDescendant: false,
     hasBooleanBranch: false,
     hasObjectBranch: false,
+    ...overrides,
   }
 }
 
 /**
- * @returns {TypeInspectionResult}
+ * @returns {InspectionState}
  */
-function createRecursiveInspectionResult () {
-  return {
-    hasEnvDescendant: false,
-    hasBooleanBranch: false,
-    hasObjectBranch: true,
+function getInspectionState () {
+  if (!currentInspectionState) {
+    throw new Error('Inspection state not initialized.')
   }
-}
 
-/**
- * @returns {TypeInspectionResult}
- */
-function createObjectInspectionResult () {
-  return {
-    hasEnvDescendant: false,
-    hasBooleanBranch: false,
-    hasObjectBranch: true,
-  }
-}
-
-/**
- * @returns {TypeInspectionResult}
- */
-function createBooleanInspectionResult () {
-  return {
-    hasEnvDescendant: false,
-    hasBooleanBranch: true,
-    hasObjectBranch: false,
-  }
-}
-
-/**
- * @param {TypeInspectionResult} target
- * @param {TypeInspectionResult} source
- * @returns {TypeInspectionResult}
- */
-function mergeInspectionResult (target, source) {
-  target.hasEnvDescendant ||= source.hasEnvDescendant
-  target.hasBooleanBranch ||= source.hasBooleanBranch
-  target.hasObjectBranch ||= source.hasObjectBranch
-  return target
-}
-
-/**
- * @param {string} namespaceKey
- * @param {string} name
- * @returns {string}
- */
-function qualifyName (namespaceKey, name) {
-  return namespaceKey ? `${namespaceKey}.${name}` : name
-}
-
-/**
- * @param {string} pathPrefix
- * @param {string} name
- * @returns {string}
- */
-function appendPath (pathPrefix, name) {
-  return pathPrefix ? `${pathPrefix}.${name}` : name
-}
-
-/**
- * @param {string} fullPath
- * @returns {string}
- */
-function getRootPathSegment (fullPath) {
-  const separatorIndex = fullPath.indexOf('.')
-  return separatorIndex === -1 ? fullPath : fullPath.slice(0, separatorIndex)
-}
-
-/**
- * @param {string} filePath
- * @returns {string}
- */
-function readFile (filePath) {
-  return fs.readFileSync(filePath, 'utf8')
+  return currentInspectionState
 }
 
 /**
@@ -138,31 +85,22 @@ function readFile (filePath) {
  * @returns {SupportedConfigurationInfo}
  */
 function getSupportedConfigurationInfo (filePath) {
-  const cachedInfo = supportedConfigurationInfoCache.get(filePath)
-  if (cachedInfo) return cachedInfo
-
-  const parsed = JSON.parse(readFile(filePath))
+  const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'))
   const supportedConfigurations = parsed?.supportedConfigurations
-  if (
-    !supportedConfigurations ||
-    typeof supportedConfigurations !== 'object' ||
-    Array.isArray(supportedConfigurations)
-  ) {
-    throw new Error('Expected a supportedConfigurations object.')
-  }
 
   const names = new Set()
-  const envTargets = new Map()
+  const primaryEnvTargets = new Map()
+  const knownAliasEnvNames = new Set()
 
   /**
    * @param {string} envName
    * @param {Set<string>} targets
    */
-  function addEnvTargets (envName, targets) {
-    let existingTargets = envTargets.get(envName)
+  function addPrimaryEnvTargets (envName, targets) {
+    let existingTargets = primaryEnvTargets.get(envName)
     if (!existingTargets) {
       existingTargets = new Set()
-      envTargets.set(envName, existingTargets)
+      primaryEnvTargets.set(envName, existingTargets)
     }
 
     for (const target of targets) {
@@ -171,42 +109,32 @@ function getSupportedConfigurationInfo (filePath) {
   }
 
   for (const [envName, entries] of Object.entries(supportedConfigurations)) {
-    if (!Array.isArray(entries)) continue
-
     /** @type {Set<string>} */
     const targets = new Set()
 
     for (const entry of entries) {
-      if (!entry || typeof entry !== 'object') continue
-
       if (typeof entry.internalPropertyName === 'string') {
         targets.add(entry.internalPropertyName)
       }
 
-      if (!Array.isArray(entry.configurationNames)) continue
+      for (const alias of entry.aliases ?? []) {
+        if (typeof alias === 'string') {
+          knownAliasEnvNames.add(alias)
+        }
+      }
 
-      for (const name of entry.configurationNames) {
+      for (const name of entry.configurationNames ?? []) {
         if (typeof name === 'string' && !IGNORED_CONFIGURATION_NAMES.has(name)) {
           names.add(name)
           targets.add(name)
         }
       }
-
-      if (Array.isArray(entry.aliases)) {
-        for (const alias of entry.aliases) {
-          if (typeof alias === 'string') {
-            addEnvTargets(alias, targets)
-          }
-        }
-      }
     }
 
-    addEnvTargets(envName, targets)
+    addPrimaryEnvTargets(envName, targets)
   }
 
-  const info = { names, envTargets }
-  supportedConfigurationInfoCache.set(filePath, info)
-  return info
+  return { names, primaryEnvTargets, knownAliasEnvNames }
 }
 
 /**
@@ -241,7 +169,7 @@ function getDeclarationRegistry (sourceFile) {
 
       if (!ts.isInterfaceDeclaration(statement) && !ts.isTypeAliasDeclaration(statement)) continue
 
-      const key = qualifyName(namespaceKey, statement.name.text)
+      const key = namespaceKey ? `${namespaceKey}.${statement.name.text}` : statement.name.text
       declarations.set(key, {
         node: statement,
         namespaceKey,
@@ -255,7 +183,7 @@ function getDeclarationRegistry (sourceFile) {
    * @param {string} namespaceKey
    */
   function visitModuleDeclaration (declaration, namespaceKey) {
-    const nextNamespaceKey = qualifyName(namespaceKey, declaration.name.text)
+    const nextNamespaceKey = namespaceKey ? `${namespaceKey}.${declaration.name.text}` : declaration.name.text
 
     if (!declaration.body) return
 
@@ -285,7 +213,8 @@ function resolveDeclaration (declarations, typeName, namespaceKey) {
   let currentNamespaceKey = namespaceKey
 
   while (true) {
-    const declaration = declarations.get(qualifyName(currentNamespaceKey, typeName))
+    const key = currentNamespaceKey ? `${currentNamespaceKey}.${typeName}` : typeName
+    const declaration = declarations.get(key)
     if (declaration) {
       return declaration
     }
@@ -316,6 +245,7 @@ function getPropertyName (propertyName) {
  * @returns {Set<string>}
  */
 function getEnvTagNames (node) {
+  const { envTagNamesCache } = getInspectionState()
   const cachedNames = envTagNamesCache.get(node)
   if (cachedNames) return cachedNames
 
@@ -333,43 +263,12 @@ function getEnvTagNames (node) {
 }
 
 /**
- * @param {string} fullPath
- * @param {Set<string>} envTagNames
- * @param {Map<string, Set<string>>} supportedEnvTargets
- * @returns {boolean}
- */
-function shouldAddDirectConfigurationName (fullPath, envTagNames, supportedEnvTargets) {
-  let hasSupportedEnvTarget = false
-
-  for (const envName of envTagNames) {
-    const targets = supportedEnvTargets.get(envName)
-    if (!targets) {
-      return true
-    }
-
-    hasSupportedEnvTarget = true
-    if (targets.has(fullPath)) {
-      return true
-    }
-  }
-
-  return !hasSupportedEnvTarget
-}
-
-/**
- * @param {string} fullPath
- * @returns {boolean}
- */
-function isUnsupportedConfigurationPath (fullPath) {
-  return UNSUPPORTED_CONFIGURATION_ROOTS.has(getRootPathSegment(fullPath))
-}
-
-/**
  * @param {import('typescript').InterfaceDeclaration} declaration
  * @param {string} propertyName
  * @returns {import('typescript').PropertySignature | undefined}
  */
 function getInterfaceProperty (declaration, propertyName) {
+  const { interfacePropertiesCache } = getInspectionState()
   let properties = interfacePropertiesCache.get(declaration)
 
   if (!properties) {
@@ -391,25 +290,31 @@ function getInterfaceProperty (declaration, propertyName) {
 }
 
 /**
+ * @param {string} fullPath
+ * @param {Set<string>} envTagNames
+ * @returns {boolean}
+ */
+function hasSupportedDirectEnvTag (fullPath, envTagNames) {
+  const { primaryEnvTargets, knownAliasEnvNames } = getInspectionState()
+
+  for (const envName of envTagNames) {
+    const targets = primaryEnvTargets.get(envName)
+    if (targets?.has(fullPath) || (!targets && !knownAliasEnvNames.has(envName))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
  * @param {readonly import('typescript').TypeElement[]} members
  * @param {string} namespaceKey
  * @param {string} pathPrefix
- * @param {Map<string, DeclarationEntry>} declarations
- * @param {Map<string, Set<string>>} supportedEnvTargets
- * @param {Set<string>} names
- * @param {Set<string>} visitedDeclarations
  * @returns {TypeInspectionResult}
  */
-function inspectMembers (
-  members,
-  namespaceKey,
-  pathPrefix,
-  declarations,
-  supportedEnvTargets,
-  names,
-  visitedDeclarations,
-) {
-  const result = createObjectInspectionResult()
+function inspectMembers (members, namespaceKey, pathPrefix) {
+  const result = createInspectionResult({ hasObjectBranch: true })
 
   for (const member of members) {
     if (!ts.isPropertySignature(member) || !member.type) continue
@@ -420,11 +325,7 @@ function inspectMembers (
     const propertyResult = inspectProperty(
       member,
       namespaceKey,
-      appendPath(pathPrefix, propertyName),
-      declarations,
-      supportedEnvTargets,
-      names,
-      visitedDeclarations
+      pathPrefix ? `${pathPrefix}.${propertyName}` : propertyName
     )
     result.hasEnvDescendant ||= propertyResult.hasEnvDescendant
   }
@@ -436,53 +337,29 @@ function inspectMembers (
  * @param {import('typescript').PropertySignature} property
  * @param {string} namespaceKey
  * @param {string} fullPath
- * @param {Map<string, DeclarationEntry>} declarations
- * @param {Map<string, Set<string>>} supportedEnvTargets
- * @param {Set<string>} names
- * @param {Set<string>} visitedDeclarations
  * @returns {TypeInspectionResult}
  */
-function inspectProperty (
-  property,
-  namespaceKey,
-  fullPath,
-  declarations,
-  supportedEnvTargets,
-  names,
-  visitedDeclarations,
-) {
-  if (isUnsupportedConfigurationPath(fullPath)) {
-    return createEmptyInspectionResult()
+function inspectProperty (property, namespaceKey, fullPath) {
+  const state = getInspectionState()
+
+  if (UNSUPPORTED_CONFIGURATION_ROOTS.has(fullPath.split('.', 1)[0])) {
+    return createInspectionResult()
   }
 
-  const result = inspectTypeNode(
-    property.type,
-    namespaceKey,
-    fullPath,
-    declarations,
-    supportedEnvTargets,
-    names,
-    visitedDeclarations
-  )
+  const result = inspectTypeNode(property.type, namespaceKey, fullPath)
   const envTagNames = getEnvTagNames(property)
-  const hasOwnEnvTag = envTagNames.size > 0
   const isLeafConfiguration = !result.hasObjectBranch
   const isBooleanAlias =
     result.hasBooleanBranch &&
     result.hasObjectBranch &&
     result.hasEnvDescendant
+  const hasSupportedOwnEnvTag = hasSupportedDirectEnvTag(fullPath, envTagNames)
 
-  if (
-    (hasOwnEnvTag && shouldAddDirectConfigurationName(fullPath, envTagNames, supportedEnvTargets)) ||
-    isLeafConfiguration ||
-    isBooleanAlias
-  ) {
-    names.add(fullPath)
+  if (hasSupportedOwnEnvTag || isLeafConfiguration || isBooleanAlias) {
+    state.names.add(fullPath)
   }
 
-  if (hasOwnEnvTag) {
-    result.hasEnvDescendant = true
-  }
+  result.hasEnvDescendant ||= hasSupportedOwnEnvTag
 
   return result
 }
@@ -490,117 +367,59 @@ function inspectProperty (
 /**
  * @param {DeclarationEntry} declaration
  * @param {string} fullPath
- * @param {Map<string, DeclarationEntry>} declarations
- * @param {Map<string, Set<string>>} supportedEnvTargets
- * @param {Set<string>} names
- * @param {Set<string>} visitedDeclarations
  * @returns {TypeInspectionResult}
  */
-function inspectDeclaration (
-  declaration,
-  fullPath,
-  declarations,
-  supportedEnvTargets,
-  names,
-  visitedDeclarations,
-) {
-  if (visitedDeclarations.has(declaration.key)) {
-    return createRecursiveInspectionResult()
+function inspectDeclaration (declaration, fullPath) {
+  const state = getInspectionState()
+
+  if (state.visitedDeclarations.has(declaration.key)) {
+    return createInspectionResult({ hasObjectBranch: true })
   }
 
-  visitedDeclarations.add(declaration.key)
+  state.visitedDeclarations.add(declaration.key)
 
-  const result = ts.isInterfaceDeclaration(declaration.node)
-    ? inspectMembers(
-      declaration.node.members,
-      declaration.namespaceKey,
-      fullPath,
-      declarations,
-      supportedEnvTargets,
-      names,
-      visitedDeclarations
-    )
-    : inspectTypeNode(
-      declaration.node.type,
-      declaration.namespaceKey,
-      fullPath,
-      declarations,
-      supportedEnvTargets,
-      names,
-      visitedDeclarations
-    )
-
-  visitedDeclarations.delete(declaration.key)
-  return result
+  try {
+    return ts.isInterfaceDeclaration(declaration.node)
+      ? inspectMembers(declaration.node.members, declaration.namespaceKey, fullPath)
+      : inspectTypeNode(declaration.node.type, declaration.namespaceKey, fullPath)
+  } finally {
+    state.visitedDeclarations.delete(declaration.key)
+  }
 }
 
 /**
  * @param {import('typescript').TypeNode | undefined} typeNode
  * @param {string} namespaceKey
  * @param {string} fullPath
- * @param {Map<string, DeclarationEntry>} declarations
- * @param {Map<string, Set<string>>} supportedEnvTargets
- * @param {Set<string>} names
- * @param {Set<string>} visitedDeclarations
  * @returns {TypeInspectionResult}
  */
-function inspectTypeNode (
-  typeNode,
-  namespaceKey,
-  fullPath,
-  declarations,
-  supportedEnvTargets,
-  names,
-  visitedDeclarations,
-) {
+function inspectTypeNode (typeNode, namespaceKey, fullPath) {
+  const { declarations } = getInspectionState()
+
   if (!typeNode) {
-    return createEmptyInspectionResult()
+    return createInspectionResult()
   }
 
   if (ts.isParenthesizedTypeNode(typeNode)) {
-    return inspectTypeNode(
-      typeNode.type,
-      namespaceKey,
-      fullPath,
-      declarations,
-      supportedEnvTargets,
-      names,
-      visitedDeclarations
-    )
+    return inspectTypeNode(typeNode.type, namespaceKey, fullPath)
   }
 
   if (typeNode.kind === ts.SyntaxKind.BooleanKeyword) {
-    return createBooleanInspectionResult()
+    return createInspectionResult({ hasBooleanBranch: true })
   }
 
   if (ts.isTypeLiteralNode(typeNode)) {
-    return inspectMembers(
-      typeNode.members,
-      namespaceKey,
-      fullPath,
-      declarations,
-      supportedEnvTargets,
-      names,
-      visitedDeclarations
-    )
+    return inspectMembers(typeNode.members, namespaceKey, fullPath)
   }
 
   if (ts.isUnionTypeNode(typeNode) || ts.isIntersectionTypeNode(typeNode)) {
-    const result = createEmptyInspectionResult()
+    const result = createInspectionResult()
 
     for (const part of typeNode.types) {
-      mergeInspectionResult(
-        result,
-        inspectTypeNode(
-          part,
-          namespaceKey,
-          fullPath,
-          declarations,
-          supportedEnvTargets,
-          names,
-          visitedDeclarations
-        )
-      )
+      const partResult = inspectTypeNode(part, namespaceKey, fullPath)
+      result.hasEnvDescendant ||= partResult.hasEnvDescendant
+      result.hasBooleanBranch ||= partResult.hasBooleanBranch
+      result.hasObjectBranch ||= partResult.hasObjectBranch
     }
 
     return result
@@ -608,9 +427,7 @@ function inspectTypeNode (
 
   if (ts.isTypeReferenceNode(typeNode)) {
     const declaration = resolveDeclaration(declarations, getEntityNameText(typeNode.typeName), namespaceKey)
-    return declaration
-      ? inspectDeclaration(declaration, fullPath, declarations, supportedEnvTargets, names, visitedDeclarations)
-      : createEmptyInspectionResult()
+    return declaration ? inspectDeclaration(declaration, fullPath) : createInspectionResult()
   }
 
   if (
@@ -626,24 +443,14 @@ function inspectTypeNode (
     )
 
     if (!declaration || !ts.isInterfaceDeclaration(declaration.node)) {
-      return createEmptyInspectionResult()
+      return createInspectionResult()
     }
 
     const property = getInterfaceProperty(declaration.node, typeNode.indexType.literal.text)
-    return property
-      ? inspectProperty(
-        property,
-        declaration.namespaceKey,
-        fullPath,
-        declarations,
-        supportedEnvTargets,
-        names,
-        visitedDeclarations
-      )
-      : createEmptyInspectionResult()
+    return property ? inspectProperty(property, declaration.namespaceKey, fullPath) : createInspectionResult()
   }
 
-  return createEmptyInspectionResult()
+  return createInspectionResult()
 }
 
 /**
@@ -652,11 +459,13 @@ function inspectTypeNode (
  * @returns {Set<string>}
  */
 function getIndexDtsConfigurationNames (filePath, supportedConfigurationInfo) {
-  const cacheKey = `${filePath}::${JSON.stringify([...supportedConfigurationInfo.envTargets.keys()].sort())}`
-  const cachedNames = indexDtsConfigurationNamesCache.get(cacheKey)
-  if (cachedNames) return cachedNames
-
-  const sourceFile = ts.createSourceFile(filePath, readFile(filePath), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    fs.readFileSync(filePath, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS
+  )
   const declarations = getDeclarationRegistry(sourceFile)
   const tracerOptions = declarations.get('tracer.TracerOptions')
 
@@ -665,22 +474,53 @@ function getIndexDtsConfigurationNames (filePath, supportedConfigurationInfo) {
   }
 
   const names = new Set()
-  inspectMembers(
-    tracerOptions.node.members,
-    tracerOptions.namespaceKey,
-    '',
+  currentInspectionState = {
     declarations,
-    supportedConfigurationInfo.envTargets,
+    primaryEnvTargets: supportedConfigurationInfo.primaryEnvTargets,
+    knownAliasEnvNames: supportedConfigurationInfo.knownAliasEnvNames,
     names,
-    new Set()
-  )
+    visitedDeclarations: new Set(),
+    envTagNamesCache: new WeakMap(),
+    interfacePropertiesCache: new WeakMap(),
+  }
+
+  try {
+    inspectMembers(tracerOptions.node.members, tracerOptions.namespaceKey, '')
+  } finally {
+    currentInspectionState = undefined
+  }
 
   for (const ignoredConfigurationName of IGNORED_CONFIGURATION_NAMES) {
     names.delete(ignoredConfigurationName)
   }
 
-  indexDtsConfigurationNamesCache.set(cacheKey, names)
   return names
+}
+
+/**
+ * @param {import('eslint').Rule.RuleContext} context
+ * @param {import('estree').Program} node
+ * @param {Set<string>} sourceNames
+ * @param {Set<string>} targetNames
+ * @param {string} messageId
+ * @returns {void}
+ */
+function reportMissingConfigurations (context, node, sourceNames, targetNames, messageId) {
+  const missing = []
+
+  for (const name of sourceNames) {
+    if (!targetNames.has(name)) {
+      missing.push(name)
+    }
+  }
+
+  for (const configurationName of missing.sort()) {
+    context.report({
+      node,
+      messageId,
+      data: { configurationName },
+    })
+  }
 }
 
 /** @type {import('eslint').Rule.RuleModule} */
@@ -738,28 +578,20 @@ export default {
           return
         }
 
-        const missingInIndexDts = [...supportedConfigurationInfo.names]
-          .filter(name => !indexDtsNames.has(name))
-          .sort()
-        const missingInSupportedConfigurations = [...indexDtsNames]
-          .filter(name => !supportedConfigurationInfo.names.has(name))
-          .sort()
-
-        for (const configurationName of missingInIndexDts) {
-          context.report({
-            node,
-            messageId: 'configurationMissingInIndexDts',
-            data: { configurationName },
-          })
-        }
-
-        for (const configurationName of missingInSupportedConfigurations) {
-          context.report({
-            node,
-            messageId: 'configurationMissingInSupportedConfigurations',
-            data: { configurationName },
-          })
-        }
+        reportMissingConfigurations(
+          context,
+          node,
+          supportedConfigurationInfo.names,
+          indexDtsNames,
+          'configurationMissingInIndexDts'
+        )
+        reportMissingConfigurations(
+          context,
+          node,
+          indexDtsNames,
+          supportedConfigurationInfo.names,
+          'configurationMissingInSupportedConfigurations'
+        )
       },
     }
   },
