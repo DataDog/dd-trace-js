@@ -971,12 +971,18 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 addHook({
   name: 'jest-environment-node',
   versions: ['>=24.8.0'],
-}, getTestEnvironment)
+}, (pkg, version) => {
+  log.debug('dd-trace: jest-environment-node hook fired (v%s)', version)
+  return getTestEnvironment(pkg, version)
+})
 
 addHook({
   name: 'jest-environment-jsdom',
   versions: ['>=24.8.0'],
-}, getTestEnvironment)
+}, (pkg, version) => {
+  log.debug('dd-trace: jest-environment-jsdom hook fired (v%s)', version)
+  return getTestEnvironment(pkg, version)
+})
 
 addHook({
   name: '@happy-dom/jest-environment',
@@ -986,15 +992,24 @@ addHook({
 function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   // `scheduleTests` is an async function
   return function (tests) {
+    log.debug('dd-trace: scheduleTests called with %d tests', tests?.length)
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
-      return scheduleTests.apply(this, arguments)
+      const result = scheduleTests.apply(this, arguments)
+      if (result && typeof result.then === 'function') {
+        result.then(() => log.debug('dd-trace: scheduleTests resolved'))
+      }
+      return result
     }
     const [test] = tests
     const rootDir = test?.context?.config?.rootDir
 
     arguments[0] = applySuiteSkipping(tests, rootDir, frameworkVersion)
 
-    return scheduleTests.apply(this, arguments)
+    const result = scheduleTests.apply(this, arguments)
+    if (result && typeof result.then === 'function') {
+      result.then(() => log.debug('dd-trace: scheduleTests resolved (after skipping)'))
+    }
+    return result
   }
 }
 
@@ -1002,15 +1017,20 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
   const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
   shimmer.wrap(SearchSource.prototype, 'getTestPaths', getTestPaths => async function () {
+    log.debug('dd-trace: getTestPaths called')
     const testPaths = await getTestPaths.apply(this, arguments)
+    log.debug('dd-trace: getTestPaths returned %d tests', testPaths.tests.length)
     const [{ rootDir, shard }] = arguments
 
     if (isKnownTestsEnabled) {
       const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
+      log.debug('dd-trace: checking faulty EFD for %d project suites against %d known suites',
+        projectSuites.length, knownTests?.jest ? Object.keys(knownTests.jest).length : 0)
 
       // If the `jest` key does not exist in the known tests response, we consider the Early Flake detection faulty.
       const isFaulty = !knownTests?.jest ||
         getIsFaultyEarlyFlakeDetection(projectSuites, knownTests.jest, earlyFlakeDetectionFaultyThreshold)
+      log.debug('dd-trace: faulty EFD check result: %s', isFaulty)
 
       if (isFaulty) {
         log.error('Early flake detection is disabled because the number of new suites is too high.')
@@ -1165,7 +1185,9 @@ function getCliWrapper (isNewJestVersion) {
       const processArgv = process.argv.slice(2).join(' ')
       testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
 
+      log.debug('dd-trace: calling runCLI')
       const result = await runCLI.apply(this, arguments)
+      log.debug('dd-trace: runCLI returned')
 
       const {
         results: {
@@ -1419,6 +1441,7 @@ addHook({
 }, (testSchedulerPackage, frameworkVersion) => {
   const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
   const newCreateTestScheduler = async function () {
+    log.debug('dd-trace: createTestScheduler called')
     if (!isSuitesSkippingEnabled || hasFilteredSkippableSuites) {
       return oldCreateTestScheduler.apply(this, arguments)
     }
@@ -1495,6 +1518,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ?? jestAdapter
   const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
     const environment = arguments[2]
+    log.debug('dd-trace: jestAdapter called for suite %s', environment?.testSuite)
     if (!environment || !environment.testEnvironmentOptions) {
       return adapter.apply(this, arguments)
     }
@@ -1574,6 +1598,7 @@ addHook({
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
+  log.debug('dd-trace: configureTestEnvironment called with %d configs', readConfigsResult.configs.length)
   const { configs } = readConfigsResult
   testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
   // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
@@ -1617,7 +1642,9 @@ function configureTestEnvironment (readConfigsResult) {
 
 function jestConfigAsyncWrapper (jestConfig) {
   return shimmer.wrap(jestConfig, 'readConfigs', readConfigs => async function () {
+    log.debug('dd-trace: readConfigs called')
     const readConfigsResult = await readConfigs.apply(this, arguments)
+    log.debug('dd-trace: readConfigs returned')
     configureTestEnvironment(readConfigsResult)
     return readConfigsResult
   })
@@ -1911,6 +1938,7 @@ function wrapWorkerChannel (worker) {
 function wrapWorker (worker) {
   // ChildProcessWorker uses _child (child_process), ExperimentalWorker uses _worker (worker_threads)
   const workerChannel = worker._child || worker._worker
+  log.debug('dd-trace: wrapWorker called, channel type: %s', worker._child ? 'child_process' : 'worker_threads')
   if (!workerChannel) return
 
   wrapWorkerChannel(worker)
@@ -1921,15 +1949,19 @@ function wrapWorker (worker) {
 
 function enqueueWrapper (enqueue) {
   return function () {
+    log.debug('dd-trace: enqueue called')
     shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
+      log.debug('dd-trace: enqueue.onStart called, worker exists: %s', !!worker)
       if (worker) {
         const currentChannel = worker._child || worker._worker
         const previousChannel = wrappedWorkerChannels.get(worker)
         if (currentChannel !== previousChannel) {
           if (previousChannel) {
+            log.debug('dd-trace: worker restarted, re-wrapping channel')
             // Worker restarted — only re-wrap the new child's send/postMessage
             wrapWorkerChannel(worker)
           } else {
+            log.debug('dd-trace: first time seeing worker, full setup')
             // First time seeing this worker — full setup
             wrapWorker(worker)
           }
@@ -1982,6 +2014,7 @@ addHook({
   name: 'jest-worker',
   versions: ['>=30.0.0'],
 }, (jestWorkerPackage) => {
+  log.debug('dd-trace: jest-worker >=30 hook fired, wrapping FifoQueue and PriorityQueue enqueue')
   shimmer.wrap(jestWorkerPackage.FifoQueue.prototype, 'enqueue', enqueueWrapper)
   shimmer.wrap(jestWorkerPackage.PriorityQueue.prototype, 'enqueue', enqueueWrapper)
   return jestWorkerPackage
