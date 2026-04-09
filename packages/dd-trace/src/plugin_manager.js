@@ -18,13 +18,6 @@ const TEST_OPTIMIZATION_PLUGINS = new Set([
 
 const loadChannel = channel('dd-trace:instrumentation:load')
 
-// instrument everything that needs Plugin System V2 instrumentation
-require('../../datadog-instrumentations')
-if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
-  // instrument lambda environment
-  require('./lambda')
-}
-
 const DD_TRACE_DISABLED_PLUGINS = getValueFromEnvSources('DD_TRACE_DISABLED_PLUGINS')
 
 const disabledPlugins = new Set(
@@ -35,9 +28,19 @@ const disabledPlugins = new Set(
 
 const pluginClasses = {}
 
+// Subscribe before requiring instrumentations so that loadChannel events fired
+// during instrumentation initialization (e.g. re-requires in bundler contexts)
+// are captured and populate pluginClasses correctly.
 loadChannel.subscribe(({ name }) => {
   maybeEnable(plugins[name])
 })
+
+// instrument everything that needs Plugin System V2 instrumentation
+require('../../datadog-instrumentations')
+if (getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined) {
+  // instrument lambda environment
+  require('./lambda')
+}
 
 function maybeEnable (Plugin) {
   if (!Plugin || typeof Plugin !== 'function') return
@@ -64,7 +67,6 @@ function getEnabled (Plugin) {
 module.exports = class PluginManager {
   constructor (tracer) {
     this._tracer = tracer
-    this._tracerConfig = null
     this._pluginsByName = {}
     this._configsByName = {}
 
@@ -101,7 +103,7 @@ module.exports = class PluginManager {
 
     // extracts predetermined configuration from tracer and combines it with plugin-specific config
     this._pluginsByName[name].configure({
-      ...this._getSharedConfig(name),
+      ...this.#getSharedConfig(name),
       ...pluginConfig,
     })
   }
@@ -118,8 +120,11 @@ module.exports = class PluginManager {
     this.loadPlugin(name)
   }
 
-  // like instrumenter.enable()
-  configure (config = {}) {
+  /**
+   * Like instrumenter.enable()
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
+  configure (config) {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 
@@ -145,7 +150,7 @@ module.exports = class PluginManager {
   }
 
   // TODO: figure out a better way to handle this
-  _getSharedConfig (name) {
+  #getSharedConfig (name) {
     const {
       logInjection,
       serviceMapping,
@@ -169,7 +174,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       experimental,
       resourceRenamingEnabled,
-    } = this._tracerConfig
+    } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
       codeOriginForSpans,

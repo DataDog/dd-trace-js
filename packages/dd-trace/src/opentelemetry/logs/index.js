@@ -33,7 +33,7 @@ const OtlpHttpLogExporter = require('./otlp_http_log_exporter')
 
 /**
  * Initializes OpenTelemetry Logs support
- * @param {Config} config - Tracer configuration instance
+ * @param {import('../../config/config-base')} config - Tracer configuration instance
  */
 function initializeOpenTelemetryLogs (config) {
   // Build resource attributes

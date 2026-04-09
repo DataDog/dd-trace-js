@@ -105,7 +105,7 @@ describe('Plugin', () => {
           })
 
           it('should restore the parent context in the promise callback', () => {
-            const span = {}
+            const span = tracer.startSpan('test')
             return tracer.scope().activate(span, async () => {
               await connection.execute(dbQuery)
               assert.strictEqual(tracer.scope().active(), span)
@@ -131,7 +131,7 @@ describe('Plugin', () => {
           })
 
           it('should restore the parent context in the callback', done => {
-            const span = {}
+            const span = tracer.startSpan('test')
             tracer.scope().activate(span, () => {
               connection.execute(dbQuery, () => {
                 try {

@@ -84,7 +84,8 @@ versions.forEach((version) => {
     this.retries(2)
     this.timeout(80000)
 
-    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
+    // TODO: Update tests files accordingly and test with different TS versions
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI
@@ -1246,6 +1247,39 @@ versions.forEach((version) => {
         )
 
         await Promise.all([once(childProcess, 'exit'), receiverPromise])
+      })
+
+      contextNewVersions('dynamic name detection', () => {
+        it('tags new tests with dynamic names and logs a warning', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 1 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({ playwright: {} })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-tests-dynamic',
+              },
+            }
+          )
+
+          let testOutput = ''
+          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          await once(childProcess, 'exit')
+
+          assert.match(testOutput, /detected as new but their names contain dynamic data/)
+        })
       })
     })
 
