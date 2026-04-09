@@ -29,8 +29,8 @@ function createDeepObject (sheetValue, currentLevel = 1, max = 20) {
 }
 
 const blockedTemplateHtml = 'testBlockingHtml'
-const blockedTemplateJson = 'testBlockingJson'
-const blockedTemplateGraphql = 'testBlockingGraphql'
+const blockedTemplateJson = '"testBlockingJson"'
+const blockedTemplateGraphql = '"testBlockingGraphql"'
 
 function setTestBlockingTemplates () {
   setTemplates({
