@@ -16,7 +16,7 @@ const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
 
-const json = 'blockedTemplateJson'
+const json = '"blockedTemplateJson"'
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
