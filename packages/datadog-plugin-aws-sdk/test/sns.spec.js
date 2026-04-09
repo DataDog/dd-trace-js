@@ -121,7 +121,7 @@ describe('Sns', function () {
           resource: `publish ${TopicArn}`,
           meta: {
             'aws.sns.topic_arn': TopicArn,
-            'messaging.system': 'aws_sns',
+            'messaging.system': 'aws.sns',
             topicname: 'TestTopic',
             aws_service: 'SNS',
             region: 'us-east-1',
@@ -153,7 +153,7 @@ describe('Sns', function () {
           resource: `publish ${TopicArn}`,
           meta: {
             'aws.sns.topic_arn': TopicArn,
-            'messaging.system': 'aws_sns',
+            'messaging.system': 'aws.sns',
             topicname: 'TestTopic',
             aws_service: 'SNS',
             region: 'us-east-1',
@@ -185,7 +185,7 @@ describe('Sns', function () {
               resource: `publish ${TopicArn}`,
               meta: {
                 'aws.sns.topic_arn': TopicArn,
-                'messaging.system': 'aws_sns',
+                'messaging.system': 'aws.sns',
                 topicname: 'TestTopic',
                 aws_service: 'SNS',
                 region: 'us-east-1',
@@ -219,7 +219,7 @@ describe('Sns', function () {
             resource: `getTopicAttributes ${TopicArn}`,
             meta: {
               'aws.sns.topic_arn': TopicArn,
-              'messaging.system': 'aws_sns',
+              'messaging.system': 'aws.sns',
               topicname: 'TestTopic',
               aws_service: 'SNS',
               region: 'us-east-1',
@@ -300,7 +300,7 @@ describe('Sns', function () {
               meta: {
                 aws_service: 'SNS',
                 'aws.sns.topic_arn': TopicArn,
-                'messaging.system': 'aws_sns',
+                'messaging.system': 'aws.sns',
                 topicname: 'TestTopic',
                 region: 'us-east-1',
                 'aws.request.body.Token': 'redacted',
@@ -486,7 +486,7 @@ describe('Sns', function () {
           resource: `publish ${TopicArn}`,
           meta: {
             'aws.sns.topic_arn': TopicArn,
-            'messaging.system': 'aws_sns',
+            'messaging.system': 'aws.sns',
             topicname: 'TestTopic',
             aws_service: 'SNS',
             region: 'us-east-1',
