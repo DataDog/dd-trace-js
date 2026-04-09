@@ -27,6 +27,29 @@ describe('profiler', function () {
   let SourceMapperStub
   let mapperInstance
   let interval
+  let flushInterval
+
+  class ConfigStub {
+    constructor (options) {
+      const compression = process.env.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'off'
+      const [method, level0] = compression.split('-')
+      const level = level0 ? Number.parseInt(level0, 10) : undefined
+
+      this.endpointCollectionEnabled = false
+      this.debugSourceMaps = false
+      this.exporters = options.exporters ?? exporters
+      this.flushInterval = options.flushInterval ?? flushInterval
+      this.logger = options.logger ?? logger
+      this.profilers = options.profilers ?? profilers
+      this.sourceMap = options.sourceMap ?? false
+      this.systemInfoReport = {}
+      this.tags = { ...options.tags }
+      this.uploadCompression = {
+        method,
+        level: Number.isNaN(level) ? undefined : level,
+      }
+    }
+  }
 
   function waitForExport () {
     return Promise.all([
@@ -39,7 +62,8 @@ describe('profiler', function () {
   }
 
   function setUpProfiler () {
-    interval = 65 * 1000
+    flushInterval = 65 * 1000
+    interval = flushInterval
     clock = sinon.useFakeTimers({
       toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
     })
@@ -87,7 +111,7 @@ describe('profiler', function () {
     SourceMapperStub = sinon.stub().returns(mapperInstance)
   }
 
-  function makeStartOptions (overrides = {}) {
+  function makeStartOptions (overrides) {
     return {
       profilers,
       exporters,
@@ -99,6 +123,9 @@ describe('profiler', function () {
   describe('not serverless', function () {
     function initProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
+        './config': {
+          Config: ConfigStub,
+        },
         '@datadog/pprof': {
           SourceMapper: SourceMapperStub,
         },
@@ -434,6 +461,9 @@ describe('profiler', function () {
 
     function initServerlessProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
+        './config': {
+          Config: ConfigStub,
+        },
         '@datadog/pprof': {
           SourceMapper: SourceMapperStub,
         },

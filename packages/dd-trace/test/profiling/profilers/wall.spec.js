@@ -296,6 +296,404 @@ describe('profilers/native/wall', () => {
     })
   })
 
+  describe('_generateLabels with custom labels (ACF)', () => {
+    it('should include custom labels from array context', () => {
+      const profiler = new NativeWallProfiler({
+        timelineEnabled: true,
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+      profiler.stop()
+
+      const shared = require('../../../src/profiling/profilers/shared')
+      const nativeThreadId = shared.getThreadLabels()['os thread id']
+      const threadInfo = {
+        'thread name': 'Main Event Loop',
+        'thread id': '0',
+        'os thread id': nativeThreadId,
+      }
+
+      // Array context: [profilingContext, customLabels]
+      const actual = profiler._generateLabels({
+        node: {},
+        context: {
+          timestamp: 1234n,
+          context: [
+            { spanId: '123', rootSpanId: '456' },
+            { customer: 'acme', region: 'us-east' },
+          ],
+        },
+      })
+
+      assert.deepStrictEqual(actual, {
+        ...threadInfo,
+        end_timestamp_ns: 1234000n,
+        'span id': '123',
+        'local root span id': '456',
+        customer: 'acme',
+        region: 'us-east',
+      })
+    })
+
+    it('should handle array context with empty profiling context', () => {
+      const profiler = new NativeWallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+      profiler.stop()
+
+      const shared = require('../../../src/profiling/profilers/shared')
+      const nativeThreadId = shared.getThreadLabels()['os thread id']
+      const threadInfo = {
+        'thread name': 'Main Event Loop',
+        'thread id': '0',
+        'os thread id': nativeThreadId,
+      }
+
+      // ref is not an object (e.g. undefined) but custom labels exist
+      const actual = profiler._generateLabels({
+        node: {},
+        context: {
+          context: [undefined, { tier: 'premium' }],
+        },
+      })
+
+      assert.deepStrictEqual(actual, {
+        ...threadInfo,
+        tier: 'premium',
+      })
+    })
+
+    it('should not treat non-ACF ref context as array', () => {
+      const profiler = new NativeWallProfiler({
+        timelineEnabled: true,
+        asyncContextFrameEnabled: false,
+      })
+      profiler.start()
+      profiler.stop()
+
+      const shared = require('../../../src/profiling/profilers/shared')
+      const nativeThreadId = shared.getThreadLabels()['os thread id']
+      const threadInfo = {
+        'thread name': 'Main Event Loop',
+        'thread id': '0',
+        'os thread id': nativeThreadId,
+      }
+
+      // In non-ACF mode, context.context.ref is used, not context.context
+      const actual = profiler._generateLabels({
+        node: {},
+        context: {
+          timestamp: 1234n,
+          context: { ref: { spanId: '789' } },
+        },
+      })
+
+      assert.deepStrictEqual(actual, {
+        ...threadInfo,
+        end_timestamp_ns: 1234000n,
+        'span id': '789',
+      })
+    })
+  })
+
+  describe('runWithLabels', () => {
+    let enterCh
+    let currentStore
+    let localPprof
+    let WallProfiler
+
+    beforeEach(() => {
+      enterCh = dc.channel('dd-trace:storage:enter')
+      currentStore = null
+
+      localPprof = {
+        ...pprof,
+        time: {
+          ...pprof.time,
+          setContext: sinon.stub(),
+          getContext: sinon.stub(),
+          runWithContext: sinon.stub(),
+        },
+      }
+
+      WallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
+        '@datadog/pprof': localPprof,
+        '../../../../datadog-core': {
+          storage: () => ({
+            getStore: () => currentStore,
+            enterWith () {},
+            run (store, cb, ...args) { return cb(...args) },
+          }),
+        },
+      })
+    })
+
+    it('should call runWithContext with array context when ACF is enabled', () => {
+      localPprof.time.getContext.returns({ spanId: '123' })
+      localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
+
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+
+      let called = false
+      profiler.runWithLabels({ customer: 'acme' }, () => { called = true })
+
+      assert.ok(called)
+      sinon.assert.calledOnce(localPprof.time.runWithContext)
+      const [ctx] = localPprof.time.runWithContext.firstCall.args
+      assert.ok(Array.isArray(ctx))
+      assert.deepStrictEqual(ctx[0], { spanId: '123' })
+      assert.deepStrictEqual(ctx[1], { customer: 'acme' })
+
+      profiler.stop()
+    })
+
+    it('should merge labels when nested', () => {
+      // Outer call: no existing array context
+      localPprof.time.getContext.onFirstCall().returns({ spanId: '123' })
+      // Inner call: existing array context from outer call
+      localPprof.time.getContext.onSecondCall().returns([{ spanId: '123' }, { customer: 'acme' }])
+      localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
+
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+
+      profiler.runWithLabels({ customer: 'acme' }, () => {
+        profiler.runWithLabels({ region: 'us-east' }, () => {})
+      })
+
+      const innerCtx = localPprof.time.runWithContext.secondCall.args[0]
+      assert.ok(Array.isArray(innerCtx))
+      assert.deepStrictEqual(innerCtx[0], { spanId: '123' })
+      assert.deepStrictEqual(innerCtx[1], { customer: 'acme', region: 'us-east' })
+
+      profiler.stop()
+    })
+
+    it('should override outer labels with inner labels of same key', () => {
+      localPprof.time.getContext.onFirstCall().returns({})
+      localPprof.time.getContext.onSecondCall().returns([{}, { customer: 'acme' }])
+      localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
+
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+
+      profiler.runWithLabels({ customer: 'acme' }, () => {
+        profiler.runWithLabels({ customer: 'beta' }, () => {})
+      })
+
+      const innerCtx = localPprof.time.runWithContext.secondCall.args[0]
+      assert.deepStrictEqual(innerCtx[1], { customer: 'beta' })
+
+      profiler.stop()
+    })
+
+    it('should passthrough when ACF is not enabled', () => {
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: false,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+
+      let called = false
+      const result = profiler.runWithLabels({ customer: 'acme' }, () => {
+        called = true
+        return 42
+      })
+
+      assert.ok(called)
+      assert.strictEqual(result, 42)
+      sinon.assert.notCalled(localPprof.time.runWithContext)
+
+      profiler.stop()
+    })
+
+    it('should passthrough when contexts are not enabled', () => {
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+      })
+      profiler.start()
+
+      let called = false
+      profiler.runWithLabels({ customer: 'acme' }, () => { called = true })
+
+      assert.ok(called)
+      sinon.assert.notCalled(localPprof.time.runWithContext)
+
+      profiler.stop()
+    })
+
+    it('should let internal labels overwrite custom labels with same key', () => {
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+      profiler.stop()
+
+      const shared = require('../../../src/profiling/profilers/shared')
+      const nativeThreadId = shared.getThreadLabels()['os thread id']
+
+      // Custom label collides with internal 'span id' label
+      const actual = profiler._generateLabels({
+        node: {},
+        context: {
+          context: [
+            { spanId: '123' },
+            { 'span id': 'should-be-overwritten', customer: 'acme' },
+          ],
+        },
+      })
+
+      assert.deepStrictEqual(actual, {
+        'thread name': 'Main Event Loop',
+        'thread id': '0',
+        'os thread id': nativeThreadId,
+        'span id': '123',
+        customer: 'acme',
+      })
+    })
+
+    it('should preserve custom labels in #enter when custom labels are active', () => {
+      const customLabelsCtx = [{ spanId: '123' }, { customer: 'acme' }]
+      localPprof.time.getContext.returns(customLabelsCtx)
+      localPprof.time.runWithContext.callsFake((ctx, fn) => {
+        // Simulate #enter being called inside runWithContext scope
+        currentStore = { span: null }
+        enterCh.publish()
+        return fn()
+      })
+
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+
+      profiler.runWithLabels({ customer: 'acme' }, () => {})
+
+      // Verify that setContext was called with an array preserving custom labels
+      const setContextCall = localPprof.time.setContext.lastCall
+      assert.ok(setContextCall, 'setContext should have been called')
+      const setCtx = setContextCall.args[0]
+      assert.ok(Array.isArray(setCtx), 'setContext should receive an array when custom labels are active')
+      assert.deepStrictEqual(setCtx[1], { customer: 'acme' })
+
+      profiler.stop()
+    })
+
+    it('should skip setContext when profiling context is unchanged (array)', () => {
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+
+      // Activate custom labels
+      localPprof.time.getContext.returns({})
+      localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
+      profiler.runWithLabels({ customer: 'acme' }, () => {})
+
+      // Now simulate #enter where the profiling context is the same object
+      const sameCtx = { spanId: '123' }
+      localPprof.time.getContext.returns([sameCtx, { customer: 'acme' }])
+
+      // Make getActiveSpan return a span that produces sameCtx
+      const spanCtx = { _spanId: {}, _parentId: null, _tags: {}, _trace: { started: [] } }
+      const span = { context: () => spanCtx }
+      spanCtx._trace.started.push(span)
+      currentStore = { span }
+
+      // First enter — sets context
+      enterCh.publish()
+      const callCountAfterFirst = localPprof.time.setContext.callCount
+
+      // Second enter with same span — getActiveSpan returns same cached context
+      const lastCtx = localPprof.time.setContext.lastCall?.args[0]?.[0] ?? sameCtx
+      localPprof.time.getContext.returns([lastCtx, { customer: 'acme' }])
+      enterCh.publish()
+
+      // setContext should not have been called again since the profiling context is the same object
+      assert.strictEqual(localPprof.time.setContext.callCount, callCountAfterFirst)
+
+      profiler.stop()
+    })
+
+    it('should skip setContext when context is unchanged (non-array)', () => {
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+
+      // Activate the monotonic flag
+      localPprof.time.getContext.returns({})
+      localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
+      profiler.runWithLabels({ customer: 'acme' }, () => {})
+
+      // Simulate an async context without custom labels
+      const sameCtx = { spanId: '456' }
+      const spanCtx = { _spanId: {}, _parentId: null, _tags: {}, _trace: { started: [] } }
+      const span = { context: () => spanCtx }
+      spanCtx._trace.started.push(span)
+      currentStore = { span }
+
+      // First enter — sets context
+      localPprof.time.getContext.returns(sameCtx)
+      enterCh.publish()
+      const callCountAfterFirst = localPprof.time.setContext.callCount
+
+      // Second enter — getContext returns the same object that was just set
+      const lastSet = localPprof.time.setContext.lastCall.args[0]
+      localPprof.time.getContext.returns(lastSet)
+      enterCh.publish()
+
+      // setContext should not have been called again
+      assert.strictEqual(localPprof.time.setContext.callCount, callCountAfterFirst)
+
+      profiler.stop()
+    })
+
+    it('should preserve custom labels in #enter for async continuations after runWithLabels returns', () => {
+      // After runWithLabels returns, async continuations still carry the custom
+      // labels in their CPED frame. The monotonic flag ensures #enter checks.
+      const profiler = new WallProfiler({
+        asyncContextFrameEnabled: true,
+        codeHotspotsEnabled: true,
+      })
+      profiler.start()
+
+      // First call sets the monotonic flag
+      localPprof.time.getContext.returns({})
+      localPprof.time.runWithContext.callsFake((ctx, fn) => fn())
+      profiler.runWithLabels({ customer: 'acme' }, () => {})
+
+      // Now simulate an async continuation where getContext returns array
+      // (CPED frame from the runWithContext scope is restored)
+      localPprof.time.getContext.returns([{ spanId: '789' }, { customer: 'acme' }])
+      currentStore = { span: null }
+      enterCh.publish()
+
+      // #enter should have preserved the custom labels
+      const setCtx = localPprof.time.setContext.lastCall.args[0]
+      assert.ok(Array.isArray(setCtx), 'setContext should receive an array for async continuations')
+      assert.deepStrictEqual(setCtx[1], { customer: 'acme' })
+
+      profiler.stop()
+    })
+  })
+
   describe('webTags caching in getProfilingContext', () => {
     // TracingPlugin.startSpan() calls storage.enterWith({span}) immediately on span
     // creation, before the plugin calls addRequestTags() to set span.type='web'.

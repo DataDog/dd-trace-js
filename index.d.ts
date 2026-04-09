@@ -130,6 +130,11 @@ interface Tracer extends opentracing.Tracer {
 
   appsec: tracer.Appsec;
 
+  /**
+   * Profiling API for attaching custom labels to profiler samples.
+   */
+  profiling: tracer.Profiling;
+
   TracerProvider: tracer.opentelemetry.TracerProvider;
 
   dogstatsd: tracer.DogStatsD;
@@ -786,6 +791,15 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         enabled?: boolean,
+        /**
+         * Whether to request blocking mode when evaluating prompts via auto-instrumentation.
+         * When `true`, AI Guard will block requests that violate security policies.
+         * When `false`, AI Guard evaluates but never blocks (monitor-only mode).
+         * @default false
+         * @env DD_AI_GUARD_BLOCK
+         * Programmatic configuration takes precedence over the environment variables listed above.
+         */
+        block?: boolean,
         /**
          * URL of the AI Guard REST API.
          * @env DD_AI_GUARD_ENDPOINT
@@ -1559,6 +1573,35 @@ declare namespace tracer {
      * @param {any} metadata Custom fields to link to the login failure event.
      */
     trackUserLoginFailure(login: string, metadata?: any): void;
+  }
+
+  export interface Profiling {
+    /**
+     * Declares the set of custom label keys that will be used with
+     * {@link runWithLabels}. This is used for profile upload metadata
+     * (so the Datadog UI knows which keys to index for filtering) and
+     * for pprof serialization optimization.
+     *
+     * @param keys Custom label key names.
+     */
+    setCustomLabelKeys(keys: Iterable<string>): void;
+
+    /**
+     * Runs a function with custom profiling labels attached to all wall profiler
+     * samples taken during its execution. Labels are key-value pairs that appear
+     * in the pprof output and can be used to filter flame graphs in the Datadog UI.
+     *
+     * Requires AsyncContextFrame (ACF) to be enabled. Supports nesting: inner
+     * calls merge labels with outer calls, with inner values taking precedence.
+     *
+     * When profiling is not enabled or ACF is not active, the function is still
+     * called but labels are silently dropped.
+     *
+     * @param labels Custom labels to attach to profiler samples.
+     * @param fn Function to execute with the labels.
+     * @returns The return value of fn.
+     */
+    runWithLabels<T>(labels: Record<string, string | number>, fn: () => T): T;
   }
 
   export interface Appsec {

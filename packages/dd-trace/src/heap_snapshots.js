@@ -45,6 +45,9 @@ function getName (destination) {
 }
 
 module.exports = {
+  /**
+   * @param {import('./config/config-base')} config - Tracer configuration
+   */
   async start (config) {
     const destination = config.heapSnapshot.destination
 
