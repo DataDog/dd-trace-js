@@ -5064,6 +5064,96 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  context('lage', () => {
+    it('uses the Lage package name as the test session name', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: false,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+          metadataDicts.forEach(metadata => {
+            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
+              assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-lage-package')
+            }
+          })
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
+            LAGE_PACKAGE_NAME: 'my-lage-package',
+            TESTS_TO_RUN: 'test/ci-visibility-test',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
+    it('updates the test session name across repeated jest.runCLI calls in the same process', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({
+        jest: {
+          'ci-visibility/test/ci-visibility-test.js': ['ci visibility can report tests'],
+          'ci-visibility/test/ci-visibility-test-2.js': ['ci visibility 2 can report tests 2'],
+        },
+      })
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: false,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          assert.ok(metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-a'))
+          assert.ok(metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-b'))
+        })
+
+      childProcess = exec(
+        'node ./ci-visibility/run-jest-lage-multi.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DD_ENABLE_LAGE_PACKAGE_NAME: 'true',
+            LAGE_PACKAGE_NAME: 'my-initial-lage-package',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+  })
+
   it('sets _dd.test.is_user_provided_service to true if DD_SERVICE is used', (done) => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -5451,6 +5541,74 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const efdRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd)
             assert.strictEqual(atfRetries.length, 2)
             assert.strictEqual(efdRetries.length, 0)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-flaky/flaky-fails.js',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
+
+      it('does not tag known attempt to fix tests as new', async () => {
+        receiver.setKnownTests({
+          jest: {
+            'ci-visibility/jest-flaky/flaky-fails.js': [
+              'test-flaky-test-retries can retry failed tests',
+            ],
+          },
+        })
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/jest-flaky/flaky-fails.js': {
+                tests: {
+                  'test-flaky-test-retries can retry failed tests': {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const atfTests = tests.filter(
+              t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+            )
+            assert.ok(atfTests.length > 0)
+            for (const test of atfTests) {
+              assert.ok(
+                !(TEST_IS_NEW in test.meta),
+                'ATF test that is in known tests should not be tagged as new'
+              )
+            }
           })
 
         childProcess = exec(

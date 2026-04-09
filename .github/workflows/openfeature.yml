@@ -21,8 +21,12 @@ jobs:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / unit (node-${{ matrix.version }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -36,30 +40,38 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: openfeature-unit-${{ matrix.version }}
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   macos:
     name: ${{ github.workflow }} / macos
     runs-on: macos-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature
@@ -72,13 +84,17 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   windows:
     name: ${{ github.workflow }} / windows
     runs-on: windows-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
@@ -87,4 +103,4 @@ jobs:
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ secrets.DD_API_KEY }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

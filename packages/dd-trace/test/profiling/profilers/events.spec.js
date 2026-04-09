@@ -7,15 +7,25 @@ const dc = require('dc-polyfill')
 
 require('../../setup/core')
 const { storage } = require('../../../../datadog-core')
+const { getConfigFresh } = require('../../helpers/config')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../../../src/profiling/libuv-size')
 const EventsProfiler = require('../../../src/profiling/profilers/events')
 
 const startCh = dc.channel('apm:dns:lookup:start')
 const finishCh = dc.channel('apm:dns:lookup:finish')
 
+function getProfilerConfig (tracerOptions) {
+  const tracerConfig = getConfigFresh(tracerOptions)
+  const ProfilingConfig = require('../../../src/profiling/config').Config
+  return new ProfilingConfig({
+    url: 'http://127.0.0.1:8126',
+    ...tracerConfig,
+  })
+}
+
 describe('profilers/events', () => {
   it('should provide info', () => {
-    const info = new EventsProfiler({ samplingInterval: 1 }).getInfo()
+    const info = new EventsProfiler(getProfilerConfig()).getInfo()
     assert(info.maxSamples > 0)
   })
 

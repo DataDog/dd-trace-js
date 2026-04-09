@@ -25,6 +25,9 @@ class RemoteConfig {
   #products = new Set()
   #batchHandlers = new Map()
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   constructor (config) {
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
