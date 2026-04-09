@@ -154,6 +154,7 @@ for (const name of names) {
 }
 
 globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers.add(logAbortedIntegrations)
+// TODO: check if we want to stop using channels for single subscriber tasks
 channel('dd-trace:exporter:first-flush').subscribe(logAbortedIntegrations)
 
 function logAbortedIntegrations () {

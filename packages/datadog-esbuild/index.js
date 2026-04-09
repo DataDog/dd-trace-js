@@ -184,8 +184,8 @@ ${build.initialOptions.banner.js}`
 
     // TODO: Should this also check for namespace === 'file'?
     if (!modulesOfInterest.has(args.path) &&
-       args.path.startsWith('@') &&
-       !args.importer.includes('node_modules/')) {
+        args.path.startsWith('@') &&
+        !args.importer.includes('node_modules/')) {
       // This is the Next.js convention for loading local files
       log.debug('@LOCAL: %s', args.path)
       return
