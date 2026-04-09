@@ -16,7 +16,6 @@ class S3 extends BaseAwsSdkPlugin {
     return {
       'resource.name': `${operation} ${params.Bucket}`,
       'aws.s3.bucket_name': params.Bucket,
-      'db.system': 's3',
       bucketname: params.Bucket,
     }
   }

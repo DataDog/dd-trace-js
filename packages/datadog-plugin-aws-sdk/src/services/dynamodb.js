@@ -40,7 +40,7 @@ class DynamoDb extends BaseAwsSdkPlugin {
 
     // Also add span type to match serverless convention
     tags['span.type'] = 'dynamodb'
-    tags['db.system'] = 'dynamodb'
+    tags['db.system'] = 'aws.dynamodb'
 
     return tags
   }

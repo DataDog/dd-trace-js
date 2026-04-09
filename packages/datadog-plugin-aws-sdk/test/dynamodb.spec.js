@@ -162,7 +162,7 @@ describe('Plugin', () => {
               resource: `putItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
-                'db.system': 'dynamodb',
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -187,7 +187,7 @@ describe('Plugin', () => {
               resource: `updateItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
-                'db.system': 'dynamodb',
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -217,7 +217,7 @@ describe('Plugin', () => {
               resource: `deleteItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
-                'db.system': 'dynamodb',
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,
@@ -252,7 +252,7 @@ describe('Plugin', () => {
               resource: `getItem ${oneKeyTableName}`,
               meta: {
                 'aws.dynamodb.table_name': oneKeyTableName,
-                'db.system': 'dynamodb',
+                'db.system': 'aws.dynamodb',
                 aws_service: 'DynamoDB',
                 region: 'us-east-1',
                 'aws.request.body.TableName': oneKeyTableName,

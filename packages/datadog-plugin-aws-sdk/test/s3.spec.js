@@ -223,7 +223,6 @@ describe('Plugin', () => {
 
             assertObjectContains(span.meta, {
               bucketname: bucketName,
-              'db.system': 's3',
               aws_service: 'S3',
               region: 'us-east-1',
             })
