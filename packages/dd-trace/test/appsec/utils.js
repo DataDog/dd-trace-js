@@ -1,6 +1,6 @@
 'use strict'
 
-const { setTemplates } = require('../../../src/appsec/blocking')
+const { setTemplates } = require('../../src/appsec/blocking')
 
 function getWebSpan (traces) {
   for (const trace of traces) {
