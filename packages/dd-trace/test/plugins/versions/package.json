@@ -200,7 +200,7 @@
     "stripe": "20.1.0",
     "tedious": "19.2.0",
     "tinypool": "2.1.0",
-    "typescript": "5.9.3",
+    "typescript": "6.0.2",
     "undici": "7.18.2",
     "vitest": "4.1.0",
     "when": "3.7.8",

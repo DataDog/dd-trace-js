@@ -549,6 +549,7 @@ export interface GeneratedConfig {
     debug: boolean;
     dependencyCollection: boolean;
     enabled: boolean;
+    extendedHeartbeatInterval: number;
     heartbeatInterval: number;
     logCollection: boolean;
     metrics: boolean;

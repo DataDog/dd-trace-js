@@ -271,7 +271,7 @@ describe('esm', () => {
               ' --target ES2023' +
               ' --module ESNext' +
               ' --strict true' +
-              ' --moduleResolution node' +
+              ' --moduleResolution bundler' +
               ' --esModuleInterop true'
             )
           }

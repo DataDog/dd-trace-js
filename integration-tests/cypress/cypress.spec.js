@@ -150,7 +150,10 @@ moduleTypes.forEach(({
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
-    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
+    // typescript@5 is pinned because typescript@6 emits "use strict" on line 1 for
+    // non-module files, shifting compiled line numbers and breaking source map resolution.
+    // TODO: Update tests files accordingly and test with different TS versions
+    useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript@5'], true)
 
     before(async function () {
       // Note: Cypress binary is already installed during useSandbox() via the postinstall script
