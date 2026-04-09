@@ -12,7 +12,7 @@ const loader = require('../../../versions/@grpc/proto-loader').get()
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const defaults = require('../../dd-trace/src/config/defaults')
+const { defaults } = require('../../dd-trace/src/config/defaults')
 const { NODE_MAJOR } = require('../../../version')
 const getService = require('./service')
 
@@ -512,7 +512,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate the parent scope to the callback', done => {
-              const span = {}
+              const span = tracer.startSpan('test')
 
               buildClient({
                 getUnary: (call, callback) => callback(),
@@ -527,7 +527,7 @@ describe('Plugin', () => {
             })
 
             it('should propagate the parent scope to event listeners', done => {
-              const span = {}
+              const span = tracer.startSpan('test')
 
               buildClient({
                 getServerStream: stream => {

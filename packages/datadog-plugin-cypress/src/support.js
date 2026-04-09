@@ -61,18 +61,16 @@ Cypress.on('fail', (err, runnable) => {
   }
 
   const testName = runnable.fullTitle()
-  const { isQuarantined, isAttemptToFix } = getTestProperties(testName)
+  const { isQuarantined, isDisabled } = getTestProperties(testName)
 
-  // For pure quarantined tests (not attemptToFix), suppress the failure
-  // This makes the test "pass" from Cypress's perspective while we still track the error
-  if (isQuarantined && !isAttemptToFix) {
-    // Store the error so we can report it to Datadog in afterEach
+  // Suppress failures for quarantined or disabled tests so they don't affect the exit code.
+  // This applies regardless of attempt-to-fix status: per spec, quarantined/disabled test
+  // results are always ignored.
+  if (isQuarantined || isDisabled) {
     quarantinedTestErrors.set(testName, err)
-    // Don't re-throw - this prevents Cypress from marking the test as failed
     return
   }
 
-  // For all other tests (including attemptToFix), let the error propagate normally
   throw err
 })
 
@@ -258,6 +256,7 @@ afterEach(function () {
 
   const testInfo = {
     testName,
+    testItTitle: currentTest.title,
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
     // For quarantined tests, report the actual state (failed) to Datadog, not what Cypress thinks (passed)
@@ -272,7 +271,9 @@ afterEach(function () {
     isQuarantined: isQuarantinedTestThatFailed,
   }
   try {
-    testInfo.testSourceLine = Cypress.mocha.getRunner().currentRunnable.invocationDetails.line
+    const invocationDetails = Cypress.mocha.getRunner().currentRunnable.invocationDetails
+    testInfo.testSourceLine = invocationDetails.line
+    testInfo.testSourceStack = invocationDetails.stack
   } catch {}
 
   const rum = safeGetRum(originalWindow)

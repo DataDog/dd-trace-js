@@ -366,7 +366,7 @@ describe('Tracer', () => {
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      assert.doesNotThrow(() => tracer.inject({}))
+      tracer.inject({})
       sinon.assert.calledOnce(log.error)
     })
 
@@ -424,7 +424,7 @@ describe('Tracer', () => {
     it('should handle errors', () => {
       tracer = new Tracer(config)
 
-      assert.doesNotThrow(() => tracer.extract())
+      tracer.extract()
     })
   })
 })

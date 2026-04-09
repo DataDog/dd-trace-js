@@ -14,6 +14,7 @@ const {
   spawnPluginIntegrationTestProcAndExpectExit,
   assertObjectContains,
   varySandbox,
+  stopProc,
 } = require('../../../../integration-tests/helpers')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 const externals = require('../../../dd-trace/test/plugins/externals')
@@ -206,7 +207,6 @@ describe('esm', () => {
   let agent
   let proc
   prismaClientConfigs.forEach(config => {
-    // if (!config.name.includes('prisma-generator v7 mssql adapter (url)')) return
     describe(config.name, () => {
       const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0')
       const isPrismaV7 = config.configFile
@@ -271,7 +271,7 @@ describe('esm', () => {
               ' --target ES2023' +
               ' --module ESNext' +
               ' --strict true' +
-              ' --moduleResolution node' +
+              ' --moduleResolution bundler' +
               ' --esModuleInterop true'
             )
           }
@@ -299,7 +299,7 @@ describe('esm', () => {
         })
 
         afterEach(async () => {
-          proc?.kill()
+          await stopProc(proc)
           await agent?.stop()
         })
 

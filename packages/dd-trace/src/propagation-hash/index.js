@@ -17,11 +17,12 @@ class PropagationHashManager {
   _cachedHash = null
   _cachedHashString = null
   _cachedHashBase64 = null
+  /** @type {import('../config/config-base') | null} */
   _config = null
 
   /**
    * Configure the propagation hash manager with tracer config
-   * @param {object} config - Tracer configuration
+   * @param {import('../config/config-base')} config - Tracer configuration
    */
   configure (config) {
     this._config = config

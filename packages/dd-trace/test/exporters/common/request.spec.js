@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const http = require('node:http')
 const zlib = require('node:zlib')
+const stream = require('node:stream')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -433,5 +434,54 @@ describe('request', function () {
         done(err)
       })
     })
+  })
+
+  it('should drop requests when too much data is buffered', (done) => {
+    const bufferSize = 8 * 1024 * 1024
+    const buffer = Buffer.alloc(bufferSize).fill(69)
+
+    nock('http://test:123', {
+      reqheaders: {
+        'content-type': 'application/octet-stream',
+        'content-length': bufferSize,
+      },
+    })
+      .put('/path')
+      .times(10)
+      .reply(200, 'OK')
+
+    let okCount = 0
+    let koCount = 0
+
+    for (let i = 0; i < 10; i++) {
+      request(
+        stream.Readable.from(buffer),
+        {
+          protocol: 'http:',
+          hostname: 'test',
+          port: 123,
+          path: '/path',
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/octet-stream',
+          },
+        },
+        (err, res) => {
+          if (err) return done(err)
+
+          if (res) {
+            assert.strictEqual(res, 'OK')
+            okCount++
+          } else {
+            koCount++
+          }
+
+          if (okCount + koCount === 10) {
+            assert.strictEqual(okCount, 8)
+            assert.strictEqual(koCount, 2)
+            done()
+          }
+        })
+    }
   })
 })

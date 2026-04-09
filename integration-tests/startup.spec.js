@@ -10,6 +10,7 @@ const {
   FakeAgent,
   spawnProc,
   spawnProcAndExpectExit,
+  stopProc,
   sandboxCwd,
   useSandbox,
   curlAndAssertMessage,
@@ -40,7 +41,7 @@ const execArgvs = [
 execArgvs.forEach(({ execArgv, skip, optional = true }) => {
   const describe = skip ? globalThis.describe.skip : globalThis.describe
 
-  describe(`startup ${execArgv.join(' ').concat(`(optional: ${optional})`)}`, () => {
+  describe(`startup ${execArgv.join(' ').concat(` (optional: ${optional})`)}`, () => {
     let agent
     let proc
     let cwd
@@ -71,7 +72,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -154,7 +155,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 
@@ -203,7 +204,7 @@ execArgvs.forEach(({ execArgv, skip, optional = true }) => {
       })
 
       afterEach(async () => {
-        proc.kill()
+        await stopProc(proc)
         await agent.stop()
       })
 

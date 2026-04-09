@@ -12,8 +12,19 @@ const ENTRYPOINT_PATH = require.main?.filename || ''
 // entrypoint.basedir = baz
 // package.json.name = <from package.json>
 
-// process tags are constant throughout the lifetime of a process
-function getProcessTags () {
+/**
+ * Sanitize a process tag value
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+function sanitize (value) {
+  return String(value)
+    .toLowerCase()
+    .replaceAll(/[^a-zA-Z0-9/_.-]+/g, '_')
+}
+
+function buildProcessTags (config) {
   // Lazy load pkg to avoid issues with require.main during test initialization
   const pkg = require('../pkg')
 
@@ -35,6 +46,13 @@ function getProcessTags () {
     ['package.json.name', pkg.name || undefined],
   ]
 
+  // If config dependent tags keep growing, we should consider moving this into a function
+  if (config?.isServiceNameInferred) {
+    tags.push(['svc.auto', config.service])
+  } else if (config) {
+    tags.push(['svc.user', true])
+  }
+
   const tagsArray = []
   const tagsObject = {}
 
@@ -46,38 +64,30 @@ function getProcessTags () {
     }
   }
 
-  const serialized = tagsArray.join(',')
-
-  return {
-    tags,
-    serialized,
-    tagsObject,
-    tagsArray,
-  }
+  processTags.tags = tags
+  processTags.serialized = tagsArray.join(',')
+  processTags.tagsObject = tagsObject
+  processTags.tagsArray = tagsArray
 }
 
-// Export the singleton
-module.exports = getProcessTags()
+// Singleton with constant defaults so pre-init reads don't blow up
+const processTags = module.exports = {
+  /**
+   * @param {import('../config/config-base')} config
+   */
+  initialize (config) {
+    // check if one of the properties added during build exist and if so return
+    if (processTags.tags) return
+    buildProcessTags(config)
+  },
 
-module.exports.TRACING_FIELD_NAME = '_dd.tags.process'
-module.exports.DSM_FIELD_NAME = 'ProcessTags'
-module.exports.PROFILING_FIELD_NAME = 'process_tags'
-module.exports.DYNAMIC_INSTRUMENTATION_FIELD_NAME = 'process_tags'
-module.exports.TELEMETRY_FIELD_NAME = 'process_tags'
-module.exports.REMOTE_CONFIG_FIELD_NAME = 'process_tags'
-module.exports.CRASH_TRACKING_FIELD_NAME = 'process_tags'
-module.exports.CLIENT_TRACE_STATISTICS_FIELD_NAME = 'ProcessTags'
-
-/**
- * Sanitize a process tag value
- *
- * @param {string} value
- * @returns {string}
- */
-function sanitize (value) {
-  return String(value)
-    .toLowerCase()
-    .replaceAll(/[^a-zA-Z0-9/_.-]+/g, '_')
+  TRACING_FIELD_NAME: '_dd.tags.process',
+  DSM_FIELD_NAME: 'ProcessTags',
+  PROFILING_FIELD_NAME: 'process_tags',
+  DYNAMIC_INSTRUMENTATION_FIELD_NAME: 'process_tags',
+  TELEMETRY_FIELD_NAME: 'process_tags',
+  REMOTE_CONFIG_FIELD_NAME: 'process_tags',
+  CRASH_TRACKING_FIELD_NAME: 'process_tags',
+  CLIENT_TRACE_STATISTICS_FIELD_NAME: 'ProcessTags',
+  sanitize,
 }
-
-module.exports.sanitize = sanitize

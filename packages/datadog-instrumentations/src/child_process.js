@@ -12,7 +12,7 @@ const {
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
 
 // ignored exec method because it calls to execFile directly
-const execAsyncMethods = ['execFile', 'spawn']
+const execAsyncMethods = ['execFile', 'spawn', 'fork']
 
 function throwSyncError (error) {
   throw error
@@ -87,8 +87,10 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const childProcessInfo = normalizeArgs(arguments, shell)
+      const callArgs = [...arguments]
+      const childProcessInfo = normalizeArgs(callArgs, shell)
       const context = createContextFromChildProcessInfo(childProcessInfo)
+      context.callArgs = callArgs
 
       return childProcessChannel.start.runStores(context, () => {
         try {
@@ -98,7 +100,7 @@ function wrapChildProcessSyncMethod (returnError, shell = false) {
             return returnError(error, context)
           }
 
-          const result = childProcessMethod.apply(this, arguments)
+          const result = childProcessMethod.apply(this, context.callArgs)
           context.result = result
 
           return result
@@ -121,9 +123,11 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       return customPromisifyMethod.apply(this, arguments)
     }
 
-    const childProcessInfo = normalizeArgs(arguments, shell)
+    const callArgs = [...arguments]
+    const childProcessInfo = normalizeArgs(callArgs, shell)
 
     const context = createContextFromChildProcessInfo(childProcessInfo)
+    context.callArgs = callArgs
 
     const { start, end, asyncStart, asyncEnd, error } = childProcessChannel
     start.publish(context)
@@ -133,7 +137,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       result = Promise.reject(context.abortController.signal.reason || new Error('Aborted'))
     } else {
       try {
-        result = customPromisifyMethod.apply(this, arguments)
+        result = customPromisifyMethod.apply(this, context.callArgs)
       } catch (error) {
         context.error = error
         error.publish(context)
@@ -171,9 +175,11 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
         return childProcessMethod.apply(this, arguments)
       }
 
-      const childProcessInfo = normalizeArgs(arguments, shell)
+      const callArgs = [...arguments]
+      const childProcessInfo = normalizeArgs(callArgs, shell)
 
       const context = createContextFromChildProcessInfo(childProcessInfo)
+      context.callArgs = callArgs
       return childProcessChannel.start.runStores(context, () => {
         let childProcess
         if (context.abortController.signal.aborted) {
@@ -184,7 +190,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             const error = context.abortController.signal.reason || new Error('Aborted')
             childProcess.emit('error', error)
 
-            const cb = arguments[arguments.length - 1]
+            const cb = context.callArgs[context.callArgs.length - 1]
             if (typeof cb === 'function') {
               cb(error)
             }
@@ -192,7 +198,7 @@ function wrapChildProcessAsyncMethod (ChildProcess, shell = false) {
             childProcess.emit('close')
           })
         } else {
-          childProcess = childProcessMethod.apply(this, arguments)
+          childProcess = childProcessMethod.apply(this, context.callArgs)
         }
 
         if (childProcess) {

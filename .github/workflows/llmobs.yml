@@ -27,8 +27,12 @@ jobs:
       matrix:
         version: [oldest, maintenance, active, latest]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -42,18 +46,22 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-sdk-${{ matrix.version }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   openai:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: openai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -67,22 +75,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   langchain:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: langchain
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -96,22 +108,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   bedrock:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: aws-sdk
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -123,22 +139,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   vertex-ai:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: google-cloud-vertexai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -152,22 +172,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   ai:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: ai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -181,22 +205,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   anthropic:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: anthropic
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -210,22 +238,26 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   google-genai:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: google-genai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -239,12 +271,22 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+  
+  langgraph:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: langgraph
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/plugins/test

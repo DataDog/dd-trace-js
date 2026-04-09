@@ -1,8 +1,6 @@
 'use strict'
 
 const { EventEmitter } = require('events')
-const { promisify } = require('util')
-const zlib = require('zlib')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
@@ -34,6 +32,14 @@ function findWebSpan (startedSpans, spanId) {
   return false
 }
 
+const MISSING_SOURCE_MAPS_TOKEN = 'dd:has-missing-map-files'
+
+function profileHasMissingSourceMaps (profile) {
+  const strings = profile?.stringTable?.strings
+  if (!strings) return false
+  return profile.comment?.some(idx => strings[idx] === MISSING_SOURCE_MAPS_TOKEN) ?? false
+}
+
 function processInfo (infos, info, type) {
   if (Object.keys(info).length > 0) {
     infos[type] = info
@@ -42,15 +48,16 @@ function processInfo (infos, info, type) {
 
 class Profiler extends EventEmitter {
   #compressionFn
+  #compressionFnInitialized = false
   #compressionOptions
   #config
+  #customLabelKeys = new Set()
   #enabled = false
   #endpointCounts = new Map()
   #lastStart
   #logger
   #profileSeq = 0
   #spanFinishListener
-  #sourceMapCount = 0
   #timer
 
   constructor () {
@@ -64,74 +71,127 @@ class Profiler extends EventEmitter {
     return this.#config?.flushInterval
   }
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
-    const {
-      service,
-      version,
-      env,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      injectionEnabled,
-      reportHostname,
-    } = config
-    const { enabled, sourceMap, exporters } = config.profiling
-    const { heartbeatInterval } = config.telemetry
-
     // TODO: Unify with main logger and rewrite template strings to use printf formatting.
     const logger = {
-      debug (message) { log.debug(message) },
-      info (message) { log.info(message) },
-      warn (message) { log.warn(message) },
-      error (...args) { log.error(...args) },
+      debug: log.debug.bind(log),
+      info: log.info.bind(log),
+      warn: log.warn.bind(log),
+      error: log.error.bind(log),
     }
 
-    const libraryInjected = injectionEnabled.length > 0
-    let activation
-    if (enabled === 'auto') {
-      activation = 'auto'
-    } else if (enabled === 'true') {
-      activation = 'manual'
-    } // else activation = undefined
-
+    // TODO: Rewrite this to not need to copy the config.
     const options = {
-      service,
-      version,
-      env,
+      ...config,
       logger,
-      sourceMap,
-      exporters,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      libraryInjected,
-      activation,
-      heartbeatInterval,
-      reportHostname,
     }
 
-    return this._start(options).catch((err) => {
+    try {
+      return this._start(options)
+    } catch (err) {
       logError(logger, 'Error starting profiler. For troubleshooting tips, see ' +
         '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
       return false
-    })
+    }
   }
 
   get enabled () {
     return this.#enabled
   }
 
+  /**
+   * Declares the set of custom label keys that will be used with
+   * {@link runWithLabels}. This is used for profile upload metadata and
+   * for pprof serialization optimization (low-cardinality deduplication).
+   *
+   * @param {Iterable<string>} keys - Custom label key names
+   */
+  setCustomLabelKeys (keys) {
+    this.#customLabelKeys.clear()
+    for (const key of keys) {
+      this.#customLabelKeys.add(key)
+    }
+    if (this.#config) {
+      for (const profiler of this.#config.profilers) {
+        profiler.setCustomLabelKeys?.(this.#customLabelKeys)
+      }
+    }
+  }
+
+  /**
+   * Runs a function with custom profiling labels attached to wall profiler samples.
+   *
+   * @param {Record<string, string | number>} labels - Custom labels to attach
+   * @param {function(): T} fn - Function to execute with the labels
+   * @returns {T} The return value of fn
+   * @template T
+   */
+  runWithLabels (labels, fn) {
+    if (!this.#enabled || !this.#config) {
+      return fn()
+    }
+    for (const profiler of this.#config.profilers) {
+      if (profiler.runWithLabels) {
+        return profiler.runWithLabels(labels, fn)
+      }
+    }
+    return fn()
+  }
+
   #logError (err) {
     logError(this.#logger, err)
   }
 
-  async _start (options) {
+  #getCompressionFn () {
+    if (!this.#compressionFnInitialized) {
+      this.#compressionFnInitialized = true
+      try {
+        const { promisify } = require('util')
+        const zlib = require('zlib')
+        const { method, level: clevel } = this.#config.uploadCompression
+        switch (method) {
+          case 'gzip':
+            this.#compressionFn = promisify(zlib.gzip)
+            if (clevel !== undefined) {
+              this.#compressionOptions = {
+                level: clevel,
+              }
+            }
+            break
+          case 'zstd':
+            // eslint-disable-next-line n/no-unsupported-features/node-builtins
+            if (typeof zlib.zstdCompress === 'function') {
+              // eslint-disable-next-line n/no-unsupported-features/node-builtins
+              this.#compressionFn = promisify(zlib.zstdCompress)
+              if (clevel !== undefined) {
+                this.#compressionOptions = {
+                  params: {
+                    // eslint-disable-next-line n/no-unsupported-features/node-builtins
+                    [zlib.constants.ZSTD_c_compressionLevel]: clevel,
+                  },
+                }
+              }
+            } else {
+              const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
+              const level = clevel ?? 0 // 0 is zstd default compression level
+              this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
+            }
+            break
+        }
+      } catch (err) {
+        this.#logError(err)
+      }
+    }
+    return this.#compressionFn
+  }
+
+  /**
+   * @param {import('../config/config-base')} options - Tracer configuration
+   */
+  _start (options) {
     if (this.enabled) return true
 
     const config = this.#config = new Config(options)
@@ -148,45 +208,21 @@ class Profiler extends EventEmitter {
       setLogger(config.logger)
 
       if (config.sourceMap) {
-        mapper = await SourceMapper.create([process.cwd()], config.debugSourceMaps)
-        this.#sourceMapCount = mapper.infoMap.size
-        if (config.debugSourceMaps) {
-          this.#logger.debug(() => {
-            return this.#sourceMapCount === 0
-              ? 'Found no source maps'
-              : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+        mapper = new SourceMapper(config.debugSourceMaps)
+        mapper.loadDirectory(process.cwd())
+          .then(() => {
+            if (config.debugSourceMaps) {
+              const count = mapper.infoMap.size
+              this.#logger.debug(() => {
+                return count === 0
+                  ? 'Found no source maps'
+                  : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+              })
+            }
           })
-        }
-      }
-
-      const clevel = config.uploadCompression.level
-      switch (config.uploadCompression.method) {
-        case 'gzip':
-          this.#compressionFn = promisify(zlib.gzip)
-          if (clevel !== undefined) {
-            this.#compressionOptions = {
-              level: clevel,
-            }
-          }
-          break
-        case 'zstd':
-          if (typeof zlib.zstdCompress === 'function') { // eslint-disable-line n/no-unsupported-features/node-builtins
-            // eslint-disable-next-line n/no-unsupported-features/node-builtins
-            this.#compressionFn = promisify(zlib.zstdCompress)
-            if (clevel !== undefined) {
-              this.#compressionOptions = {
-                params: {
-                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                  [zlib.constants.ZSTD_c_compressionLevel]: clevel,
-                },
-              }
-            }
-          } else {
-            const zstdCompress = require('@datadog/libdatadog').load('datadog-js-zstd').zstd_compress
-            const level = clevel ?? 0 // 0 is zstd default compression level
-            this.#compressionFn = (buffer) => Promise.resolve(Buffer.from(zstdCompress(buffer, level)))
-          }
-          break
+          .catch((err) => {
+            this.#logError(err)
+          })
       }
     } catch (err) {
       this.#logError(err)
@@ -295,7 +331,7 @@ class Profiler extends EventEmitter {
     return {
       serverless: this.serverless,
       settings: this.#config.systemInfoReport,
-      sourceMapCount: this.#sourceMapCount,
+      hasMissingSourceMaps: false,
     }
   }
 
@@ -332,15 +368,19 @@ class Profiler extends EventEmitter {
 
       const encodedProfiles = {}
       const infos = this.#createInitialInfos()
+      const compressionFn = this.#getCompressionFn()
 
       // encode and export asynchronously
       await Promise.all(profiles.map(async ({ profiler, profile, info }) => {
         try {
           const encoded = await profiler.encode(profile)
-          const compressed = encoded instanceof Buffer && this.#compressionFn !== undefined
-            ? await this.#compressionFn(encoded, this.#compressionOptions)
+          const compressed = encoded instanceof Buffer && compressionFn !== undefined
+            ? await compressionFn(encoded, this.#compressionOptions)
             : encoded
           encodedProfiles[profiler.type] = compressed
+          if (profileHasMissingSourceMaps(profile)) {
+            infos.hasMissingSourceMaps = true
+          }
           processInfo(infos, info, profiler.type)
           this.#logger.debug(() => {
             const profileJson = JSON.stringify(profile, (_, value) => {
@@ -379,7 +419,10 @@ class Profiler extends EventEmitter {
 
     tags.snapshot = snapshotKind
     tags.profile_seq = this.#profileSeq++
-    const exportSpec = { profiles, infos, start, end, tags, endpointCounts }
+    const customAttributes = this.#customLabelKeys.size > 0
+      ? [...this.#customLabelKeys]
+      : undefined
+    const exportSpec = { profiles, infos, start, end, tags, endpointCounts, customAttributes }
     const tasks = this.#config.exporters.map(exporter =>
       exporter.export(exportSpec).catch(err => {
         if (this.#logger) {

@@ -28,6 +28,7 @@ let shouldKill
 const ANY_STRING = Symbol('test.ANY_STRING')
 const ANY_NUMBER = Symbol('test.ANY_NUMBER')
 const ANY_VALUE = Symbol('test.ANY_VALUE')
+const defaultStopProcTimeoutMs = 2_000
 
 /**
  * @param {string} filename
@@ -41,12 +42,12 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
-    let out = Buffer.alloc(0)
+    const out = []
     proc.stdout.on('data', data => {
-      out = Buffer.concat([out, data])
+      out.push(data)
     })
     proc.stderr.pipe(process.stdout)
-    proc.once('exit', () => resolve(out.toString('utf8')))
+    proc.once('exit', () => resolve(Buffer.concat(out).toString('utf8')))
     if (shouldKill) {
       setTimeout(() => {
         if (proc.exitCode === null) proc.kill()
@@ -65,7 +66,7 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
 
   if (expectedSource) {
     assert.match(out, new RegExp(`instrumentation source: ${expectedSource}`),
-    `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
+      `Expected the process to output "${expectedSource}", but logs only contain: "${out}"`)
   }
   return pid
 }
@@ -262,6 +263,64 @@ function spawnProcAndExpectExit (filename, options = {}, stdioHandler, stderrHan
 }
 
 /**
+ * Stop a process and wait for it to fully exit.
+ *
+ * Sends `signal` first, waits up to `timeoutMs`, and escalates to `SIGKILL` if needed.
+ *
+ * @param {childProcess.ChildProcess|undefined} proc - Process to stop.
+ * @param {object} [options] - Stop options.
+ * @param {NodeJS.Signals} [options.signal='SIGTERM'] - Signal to send before escalating.
+ * @param {number} [options.timeoutMs=defaultStopProcTimeoutMs] - Max wait per signal in milliseconds.
+ * @returns {Promise<void>}
+ */
+async function stopProc (proc, options = {}) {
+  if (!proc) return
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+
+  const signal = options.signal ?? 'SIGTERM'
+  const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
+
+  proc.kill(signal)
+
+  const exitedAfterInitialSignal = await waitForProcExit(proc, timeoutMs)
+  if (exitedAfterInitialSignal) return
+
+  proc.kill('SIGKILL')
+  const exitedAfterSigkill = await waitForProcExit(proc, timeoutMs)
+
+  if (!exitedAfterSigkill) {
+    throw new Error(`Process ${proc.pid} did not exit after SIGKILL`)
+  }
+}
+
+/**
+ * Wait for a process to exit for up to `timeoutMs`.
+ *
+ * @param {childProcess.ChildProcess} proc - Process to wait for.
+ * @param {number} timeoutMs - Max time to wait in milliseconds.
+ * @returns {Promise<boolean>} `true` if the process exited before timeout.
+ */
+function waitForProcExit (proc, timeoutMs) {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return Promise.resolve(true)
+  }
+
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      proc.removeListener('exit', onExit)
+      resolve(false)
+    }, timeoutMs)
+
+    proc.once('exit', onExit)
+
+    function onExit () {
+      clearTimeout(timeout)
+      resolve(true)
+    }
+  })
+}
+
+/**
  * Internal implementation for spawnProc and spawnProcAndAllowExit.
  *
  * @param {string|URL} filename
@@ -332,7 +391,7 @@ function execHelper (command, options) {
  * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
  */
 function packTarball (tarballPath, env) {
-  execHelper(`${BUN} pm pack --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
+  execHelper(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
   log('Tarball packed successfully:', tarballPath)
 }
 
@@ -895,6 +954,8 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
     return
   }
 
+  assert.ok(typeof actual === 'object' && actual !== null, msg)
+
   for (const [key, val] of Object.entries(expected)) {
     assert.ok(Object.hasOwn(actual, key), msg)
     if (useMatchers && val === ANY_STRING) {
@@ -906,7 +967,6 @@ function assertObjectContainsImpl (actual, expected, msg, useMatchers) {
     } else if (val !== null && typeof val === 'object') {
       assertObjectContainsImpl(actual[key], val, msg, useMatchers)
     } else {
-      assert.ok(actual, msg)
       assert.strictEqual(actual[key], expected[key], msg)
     }
   }
@@ -921,11 +981,11 @@ const assertObjectContains = function assertObjectContains (actual, expected, ms
 
   try {
     assertionFn(actual, expected, msg)
-  } catch {
+  } catch (error) {
     // First attempt failed, retry with matcher support
     try {
       assertObjectContainsImpl(actual, expected, msg, true)
-    } catch (error) {
+    } catch {
       // eslint-disable-next-line no-console
       console.error(error)
 
@@ -954,6 +1014,7 @@ module.exports = {
   hookFile,
   assertObjectContains,
   assertUUID,
+  stopProc,
   spawnProc,
   spawnProcAndExpectExit,
   telemetryForwarder,

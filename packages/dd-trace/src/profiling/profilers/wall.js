@@ -20,6 +20,7 @@ const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 let beforeCh
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
+const tagsUpdateCh = dc.channel('dd-trace:span:tags:update')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
@@ -58,33 +59,30 @@ function ensureChannelsActivated (asyncContextFrameEnabled) {
   if (channelsActivated) return
 
   const shimmer = require('../../../../datadog-shimmer')
-  const asyncHooks = require('async_hooks')
 
-  // When using AsyncContextFrame to store sample context, we do not need to use
-  // async_hooks.createHook to create a "before" callback anymore.
-  if (!asyncContextFrameEnabled) {
-    const { createHook } = asyncHooks
-    beforeCh = dc.channel('dd-trace:storage:before')
-    createHook({ before: () => beforeCh.publish() }).enable()
-  }
-
-  const { AsyncLocalStorage } = asyncHooks
-
-  // We need to instrument AsyncLocalStorage.enterWith() both with and without AsyncContextFrame.
+  // We need to instrument enterWith() on the legacy storage — that's the storage
+  // carrying span data and the only one the profiler cares about.
+  const legacyStorage = storage('legacy')
   let inRun = false
-  shimmer.wrap(AsyncLocalStorage.prototype, 'enterWith', function (original) {
-    return function (...args) {
-      const retVal = original.apply(this, args)
+  shimmer.wrap(legacyStorage, 'enterWith', function (original) {
+    return function (store) {
+      const retVal = original.call(this, store)
       if (!inRun) enterCh.publish()
       return retVal
     }
   })
 
-  // We only need to instrument AsyncLocalStorage.run() when not using AsyncContextFrame.
-  // AsyncContextFrame-based implementation of AsyncLocalStorage.run() delegates
-  // to AsyncLocalStorage.enterWith() so it doesn't need to be separately instrumented.
+  // When not using AsyncContextFrame, we need additional instrumentation.
   if (!asyncContextFrameEnabled) {
-    shimmer.wrap(AsyncLocalStorage.prototype, 'run', function (original) {
+    // We need async_hooks.createHook to create a "before" callback.
+    const { createHook } = require('async_hooks')
+    beforeCh = dc.channel('dd-trace:storage:before')
+    createHook({ before: () => beforeCh.publish() }).enable()
+
+    // In ACF-based implementation run() delegates to enterWith()  so it doesn't
+    // need to be separately instrumented. in non-ACF implementation run()
+    // doesn't delegate to enterWith(), so separate instrumentation is necessary.
+    shimmer.wrap(legacyStorage, 'run', function (original) {
       return function (store, callback, ...args) {
         const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
           inRun = false
@@ -110,6 +108,8 @@ class NativeWallProfiler {
   #captureSpanData = false
   #codeHotspotsEnabled = false
   #cpuProfilingEnabled = false
+  #customLabelsActive = false
+  #customLabelKeys
   #endpointCollectionEnabled = false
   #flushIntervalMillis = 0
   #logger
@@ -125,6 +125,7 @@ class NativeWallProfiler {
   // Bind these to this so they can be used as callbacks
   #boundEnter = this.#enter.bind(this)
   #boundSpanFinished = this.#spanFinished.bind(this)
+  #boundSpanTagsUpdated = this.#spanTagsUpdated.bind(this)
   #boundGenerateLabels = this._generateLabels.bind(this)
 
   get type () { return 'wall' }
@@ -204,6 +205,9 @@ class NativeWallProfiler {
         }
         enterCh.subscribe(this.#boundEnter)
         spanFinishCh.subscribe(this.#boundSpanFinished)
+        if (this.#endpointCollectionEnabled) {
+          tagsUpdateCh.subscribe(this.#boundSpanTagsUpdated)
+        }
       }
     }
 
@@ -243,7 +247,24 @@ class NativeWallProfiler {
     // context -- we simply can't tell which one it might've been across all
     // possible async context frames.
     if (this.#asyncContextFrameEnabled) {
-      this.#pprof.time.setContext(sampleContext)
+      if (this.#customLabelsActive) {
+        // Custom labels may be active in this async context. The current CPED
+        // context could be a 2-element array [profilingContext, customLabels].
+        // Replace the profiling context while preserving the custom labels.
+        // This flag is monotonic (once set, stays true) because async
+        // continuations from runWithLabels can fire at any time after the
+        // synchronous runWithLabels call has returned.
+        const current = this.#pprof.time.getContext()
+        if (Array.isArray(current)) {
+          if (current[0] !== sampleContext) {
+            this.#pprof.time.setContext([sampleContext, current[1]])
+          }
+        } else if (current !== sampleContext) {
+          this.#pprof.time.setContext(sampleContext)
+        }
+      } else {
+        this.#pprof.time.setContext(sampleContext)
+      }
     } else {
       const sampleCount = this._profilerState[kSampleCount]
       if (sampleCount !== this._lastSampleCount) {
@@ -309,6 +330,16 @@ class NativeWallProfiler {
     }
   }
 
+  #spanTagsUpdated (span) {
+    if (!this.#started) return
+    const profilingContext = span[ProfilingContext]
+    if (profilingContext === undefined || profilingContext.webTags !== undefined) return
+    const tags = span.context()._tags
+    if (isWebServerSpan(tags)) {
+      profilingContext.webTags = tags
+    }
+  }
+
   #reportV8bug (maybeBug) {
     const tag = `v8_profiler_bug_workaround_enabled:${this.#v8ProfilerBugWorkaroundEnabled}`
     const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
@@ -332,6 +363,13 @@ class NativeWallProfiler {
     const lowCardinalityLabels = Object.keys(getThreadLabels())
     lowCardinalityLabels.push(TRACE_ENDPOINT_LABEL)
 
+    // Custom labels are expected to be low-cardinality (e.g. customer tier, region)
+    if (this.#customLabelKeys) {
+      for (const key of this.#customLabelKeys) {
+        lowCardinalityLabels.push(key)
+      }
+    }
+
     const profile = this.#pprof.time.stop(restart, this.#boundGenerateLabels, lowCardinalityLabels)
 
     if (restart) {
@@ -347,6 +385,9 @@ class NativeWallProfiler {
         }
         enterCh.unsubscribe(this.#boundEnter)
         spanFinishCh.unsubscribe(this.#boundSpanFinished)
+        if (this.#endpointCollectionEnabled) {
+          tagsUpdateCh.unsubscribe(this.#boundSpanTagsUpdated)
+        }
         this._profilerState = undefined
       }
       this.#started = false
@@ -368,7 +409,29 @@ class NativeWallProfiler {
       return getThreadLabels()
     }
 
-    const labels = { ...getThreadLabels() }
+    // Native profiler doesn't set context.context for some samples, such as idle samples or when
+    // the context was otherwise unavailable when the sample was taken. Note that with ACF, we don't
+    // use the "ref" indirection.
+    let ref
+    let customLabels
+    const cctx = context.context
+    if (this.#asyncContextFrameEnabled) {
+      // When custom labels are active with ACF, context.context is a 2-element array:
+      // [profilingContext, customLabels]. Otherwise it's a plain object.
+      if (Array.isArray(cctx)) {
+        [ref, customLabels] = cctx
+      } else {
+        ref = cctx
+      }
+    } else {
+      ref = cctx?.ref
+    }
+
+    // Custom labels are spread first so that internal labels always take
+    // precedence and overwrite them.
+    const labels = customLabels === undefined
+      ? { ...getThreadLabels() }
+      : { ...customLabels, ...getThreadLabels() }
 
     if (this.#timelineEnabled) {
       // Incoming timestamps are in microseconds, we emit nanos.
@@ -380,10 +443,6 @@ class NativeWallProfiler {
       labels['async id'] = asyncId
     }
 
-    // Native profiler doesn't set context.context for some samples, such as idle samples or when
-    // the context was otherwise unavailable when the sample was taken. Note that with async context
-    // frame, we don't use the "ref" indirection.
-    const ref = this.#asyncContextFrameEnabled ? context.context : context.context?.ref
     if (typeof ref !== 'object') {
       return labels
     }
@@ -404,6 +463,45 @@ class NativeWallProfiler {
     }
 
     return labels
+  }
+
+  /**
+   * Sets the custom label keys used for pprof low-cardinality deduplication.
+   * Called once by the top-level Profiler when keys are declared.
+   *
+   * @param {Iterable<string>} keys
+   */
+  setCustomLabelKeys (keys) {
+    this.#customLabelKeys = keys
+  }
+
+  /**
+   * Runs a function with custom profiling labels attached to all wall profiler
+   * samples taken during its execution. Labels are key-value pairs that appear
+   * in the pprof output and can be used to filter flame graphs in the Datadog UI.
+   *
+   * Requires AsyncContextFrame (ACF) to be enabled. Supports nesting: inner
+   * calls merge labels with outer calls, with inner values taking precedence.
+   *
+   * @param {Record<string, string | number>} labels - Custom labels to attach
+   * @param {function(): T} fn - Function to execute with the labels
+   * @returns {T} The return value of fn
+   * @template T
+   */
+  runWithLabels (labels, fn) {
+    if (!this.#asyncContextFrameEnabled || !this.#withContexts) {
+      return fn()
+    }
+
+    // Read current context; merge custom labels if already in a runWithLabels scope
+    const current = this.#pprof.time.getContext()
+    const isCurrentArray = Array.isArray(current)
+    const customLabels = isCurrentArray ? { ...current[1], ...labels } : labels
+
+    const profilingContext = (isCurrentArray ? current[0] : current) ?? {}
+
+    this.#customLabelsActive = true
+    return this.#pprof.time.runWithContext([profilingContext, customLabels], fn)
   }
 
   profile (restart) {

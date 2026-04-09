@@ -1,5 +1,7 @@
 'use strict'
 
+// TODO: Move traceIterator to Orchestrion.
+
 const { parse, query, traverse } = require('./compiler')
 
 const tracingChannelPredicate = (node) => (
@@ -8,15 +10,15 @@ const tracingChannelPredicate = (node) => (
 )
 
 const transforms = module.exports = {
-  tracingChannelImport ({ format }, node) {
+  tracingChannelImport ({ dcModule, sourceType }, node) {
     if (node.body.some(tracingChannelPredicate)) return
 
     const index = node.body.findIndex(child => child.directive === 'use strict')
-    const code = format === 'module'
-      ? 'import { tracingChannel as tr_ch_apm_tracingChannel } from "diagnostics_channel"'
-      : 'const {tracingChannel: tr_ch_apm_tracingChannel} = require("diagnostics_channel")'
+    const code = sourceType === 'module'
+      ? `import { tracingChannel as tr_ch_apm_tracingChannel } from "${dcModule}"`
+      : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
 
-    node.body.splice(index + 1, 0, parse(code, { module: format === 'module' }).body[0])
+    node.body.splice(index + 1, 0, parse(code, { sourceType }).body[0])
   },
 
   tracingChannelDeclaration (state, node) {
@@ -36,10 +38,7 @@ const transforms = module.exports = {
   },
 
   traceAsyncIterator: traceAny,
-  traceCallback: traceAny,
   traceIterator: traceAny,
-  tracePromise: traceAny,
-  traceSync: traceAny,
 }
 
 function traceAny (state, node, _parent, ancestry) {
@@ -117,33 +116,10 @@ function traceInstanceMethod (state, node, program) {
 }
 
 function wrap (state, node, program) {
-  const { channelName, operator } = state
+  const { operator } = state
 
   if (operator === 'traceAsyncIterator') return wrapIterator(state, node, program)
-  if (operator === 'traceCallback') return wrapCallback(state, node)
   if (operator === 'traceIterator') return wrapIterator(state, node, program)
-
-  const async = operator === 'tracePromise' ? 'async' : ''
-  const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
-  const wrapper = parse(`
-    function wrapper () {
-      const __apm$traced = ${async} () => {
-        const __apm$wrapped = () => {};
-        return __apm$wrapped.apply(this, arguments);
-      };
-      if (!${channelVariable}.hasSubscribers) return __apm$traced();
-      return ${channelVariable}.${operator}(__apm$traced, {
-        arguments,
-        self: this,
-        moduleVersion: "1.0.0"
-      });
-    }
-  `).body[0].body // Extract only block statement of function body.
-
-  // Replace the right-hand side assignment of `const __apm$wrapped = () => {}`.
-  query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
-
-  return wrapper
 }
 
 function wrapSuper (_state, node) {
@@ -193,68 +169,6 @@ function wrapSuper (_state, node) {
   if (members.size > 0) {
     node.body.body.unshift(parse('const __apm$super = {}').body[0])
   }
-}
-
-function wrapCallback (state, node) {
-  const { channelName, functionQuery: { index = -1 } } = state
-  const channelVariable = 'tr_ch_apm$' + channelName.replaceAll(':', '_')
-  const wrapper = parse(`
-    function wrapper () {
-      const __apm$cb = Array.prototype.at.call(arguments, ${index});
-      const __apm$ctx = {
-        arguments,
-        self: this,
-        moduleVersion: "1.0.0"
-      };
-      const __apm$traced = () => {
-        const __apm$wrapped = () => {};
-        return __apm$wrapped.apply(this, arguments);
-      };
-
-      if (!${channelVariable}.start.hasSubscribers) return __apm$traced();
-
-      function __apm$wrappedCb(err, res) {
-        if (err) {
-          __apm$ctx.error = err;
-          ${channelVariable}.error.publish(__apm$ctx);
-        } else {
-          __apm$ctx.result = res;
-        }
-
-        ${channelVariable}.asyncStart.runStores(__apm$ctx, () => {
-          try {
-            if (__apm$cb) {
-              return __apm$cb.apply(this, arguments);
-            }
-          } finally {
-            ${channelVariable}.asyncEnd.publish(__apm$ctx);
-          }
-        });
-      }
-
-      if (typeof __apm$cb !== 'function') {
-        return __apm$traced();
-      }
-      Array.prototype.splice.call(arguments, ${index}, 1, __apm$wrappedCb);
-
-      return ${channelVariable}.start.runStores(__apm$ctx, () => {
-        try {
-          return __apm$traced();
-        } catch (err) {
-          __apm$ctx.error = err;
-          ${channelVariable}.error.publish(__apm$ctx);
-          throw err;
-        } finally {
-          ${channelVariable}.end.publish(__apm$ctx);
-        }
-      });
-    }
-  `).body[0].body // Extract only block statement of function body.
-
-  // Replace the right-hand side assignment of `const __apm$wrapped = () => {}`.
-  query(wrapper, '[id.name=__apm$wrapped]')[0].init = node
-
-  return wrapper
 }
 
 function wrapIterator (state, node, program) {

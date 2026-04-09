@@ -81,6 +81,7 @@ describe('config-helper stable config sources', () => {
 
 describe('config-helper env resolution', () => {
   let getValueFromEnvSources
+  let getConfiguredEnvName
   let getEnvironmentVariable
   let resetModule
   let originalEnv
@@ -89,6 +90,7 @@ describe('config-helper env resolution', () => {
     // Ensure we always get a fresh copy of the module when needed
     const mod = proxyquire('../../src/config/helper', overrides)
     getValueFromEnvSources = mod.getValueFromEnvSources
+    getConfiguredEnvName = mod.getConfiguredEnvName
     getEnvironmentVariable = mod.getEnvironmentVariable
     resetModule = () => {}
   }
@@ -142,6 +144,23 @@ describe('config-helper env resolution', () => {
     const value = getValueFromEnvSources('DD_AGENT_HOST')
 
     assert.strictEqual(value, 'canonical-hostname')
+  })
+
+  it('returns the env name used for canonical values', () => {
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'alias-hostname'
+    process.env.DD_AGENT_HOST = 'canonical-hostname'
+
+    const envName = getConfiguredEnvName('DD_AGENT_HOST')
+
+    assert.strictEqual(envName, 'DD_AGENT_HOST')
+  })
+
+  it('returns the env alias name when alias is used', () => {
+    process.env.DD_TRACE_AGENT_HOSTNAME = 'alias-hostname'
+
+    const envName = getConfiguredEnvName('DD_AGENT_HOST')
+
+    assert.strictEqual(envName, 'DD_TRACE_AGENT_HOSTNAME')
   })
 
   it('throws for unsupported DD_ configuration', () => {

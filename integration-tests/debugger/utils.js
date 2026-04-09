@@ -9,7 +9,7 @@ const { randomUUID } = require('crypto')
 const Axios = require('axios')
 
 const { assertObjectContains, assertUUID } = require('../helpers')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/devtools_client/utils')
 const { version } = require('../../package.json')
 
@@ -222,7 +222,7 @@ function setup ({ env, testApp, testAppSource, dependencies, silent, stdioHandle
   })
 
   afterEach(async function () {
-    t.proc?.kill()
+    await stopProc(t.proc)
     await t.agent?.stop()
   })
 
@@ -304,13 +304,14 @@ function setupAssertionListeners (t, done, probe) {
   let traceId, spanId, dd
 
   const messageListener = ({ payload }) => {
-    const span = payload.find((arr) => arr[0].name === 'fastify.request')?.[0]
+    const span = payload
+      .flat()
+      .find((span) => span.name === 'fastify.request' && (!dd || span.span_id.toString() === dd.span_id))
+
     if (!span) return
 
     traceId = span.trace_id.toString()
     spanId = span.span_id.toString()
-
-    t.agent.removeListener('message', messageListener)
 
     assertDD()
   }
@@ -336,6 +337,7 @@ function setupAssertionListeners (t, done, probe) {
     if (!traceId || !spanId || !dd) return
     assert.strictEqual(dd.trace_id, traceId)
     assert.strictEqual(dd.span_id, spanId)
+    t.agent.removeListener('message', messageListener)
     done()
   }
 }
@@ -416,7 +418,9 @@ function assertBasicInputPayload (t, payload, probe = t.rcConfig.config) {
   const topFrame = data.debugger.snapshot.stack[0]
   // path seems to be prefixed with `/private` on Mac
   assert.match(topFrame.fileName, new RegExp(`${t.appFile}$`))
-  assert.strictEqual(topFrame.function, 'fooHandler')
-  assert.strictEqual(topFrame.lineNumber, t.breakpoint.line)
-  assert.strictEqual(topFrame.columnNumber, 3)
+  assertObjectContains(topFrame, {
+    function: 'fooHandler',
+    lineNumber: t.breakpoint.line,
+    columnNumber: 3,
+  })
 }

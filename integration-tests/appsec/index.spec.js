@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const path = require('path')
 const Axios = require('axios')
 const msgpack = require('@msgpack/msgpack')
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc } = require('../helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 
 describe('RASP', () => {
   let axios, cwd, appFile, agent, proc, stdioHandler
@@ -37,13 +37,14 @@ describe('RASP', () => {
           DD_APPSEC_RASP_ENABLED: 'true',
           DD_APPSEC_RULES: path.join(cwd, 'appsec/rasp/rasp_rules.json'),
           DD_APPSEC_RASP_COLLECT_REQUEST_BODY: String(collectRequestBody),
+          DD_TRACE_STARTUP_LOGS: 'false',
         },
       }, stdOutputHandler, stdOutputHandler)
       axios = Axios.create({ baseURL: proc.url })
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
   }

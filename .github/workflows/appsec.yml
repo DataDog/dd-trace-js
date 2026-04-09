@@ -25,25 +25,33 @@ jobs:
   macos:
     name: ${{ github.workflow }} / macos
     runs-on: macos-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-macos
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
@@ -56,17 +64,21 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ubuntu
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   windows:
     name: ${{ github.workflow }} / windows
     runs-on: windows-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
         with:
@@ -75,15 +87,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   ldapjs:
     name: ${{ github.workflow }} / ldapjs
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: ldapjs
     services:
@@ -99,6 +113,8 @@ jobs:
           LDAP_PASSWORDS: "password1,password2"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -107,15 +123,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ldapjs
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   postgres:
     name: ${{ github.workflow }} / postgres
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       postgres:
         image: postgres:9.5
@@ -129,6 +147,8 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -137,15 +157,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-postgres
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   mysql:
     name: ${{ github.workflow }} / mysql
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mysql:
         image: mariadb:10.4
@@ -159,6 +181,8 @@ jobs:
       SERVICES: mysql
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -167,19 +191,23 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mysql
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   express:
     name: ${{ github.workflow }} / express
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: express|body-parser|cookie-parser|multer
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -188,19 +216,23 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-express
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   fastify:
     name: ${{ github.workflow }} / fastify
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: fastify
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -209,19 +241,23 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-fastify
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   graphql:
     name: ${{ github.workflow }} / graphql
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: apollo-server|apollo-server-express|apollo-server-fastify|apollo-server-core
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -230,15 +266,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-graphql
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   mongodb-core:
     name: ${{ github.workflow }} / mongodb-core
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
         image: circleci/mongo
@@ -249,6 +287,8 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -257,15 +297,17 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   mongoose:
     name: ${{ github.workflow }} / mongoose
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       mongodb:
         image: circleci/mongo
@@ -276,6 +318,8 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -284,18 +328,22 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongoose
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   sourcing:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: cookie
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -308,11 +356,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-sourcing
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   next:
     strategy:
@@ -351,11 +399,15 @@ jobs:
             range_clean: gte.15.0.0
     name: ${{ github.workflow }} / next (node-${{ matrix.version }}, ${{ matrix.range_clean }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -369,19 +421,23 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean }}
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   lodash:
     name: ${{ github.workflow }} / lodash
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: lodash
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -390,11 +446,11 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-lodash
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration:
     strategy:
@@ -402,25 +458,32 @@ jobs:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
       - run: yarn test:integration:appsec
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   passport:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: passport-local|passport-http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -429,18 +492,22 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-passport
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   template:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: handlebars|pug
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -449,19 +516,23 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-template
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   node-serialize:
     name: ${{ github.workflow }} / node-serialize
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: node-serialize
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -470,17 +541,19 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-node-serialize
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   kafka:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       kafka:
-        image: apache/kafka-native:3.9.1
+        image: apache/kafka:3.9.1
         env:
           KAFKA_PROCESS_ROLES: broker,controller
           KAFKA_NODE_ID: "1"
@@ -501,6 +574,8 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -509,26 +584,32 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-kafka
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94 # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   stripe:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: stripe
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
-      - uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
-      - uses: DataDog/junit-upload-github-action@055560f63c405095e9228ba443eee7987e22bb94  # v2.1.1
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/coverage
         with:
-          api_key: ${{ secrets.DD_API_KEY }}
-          service: dd-trace-js-tests
+          flags: appsec-stripe
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/push_to_test_optimization
+        if: "!cancelled()"
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

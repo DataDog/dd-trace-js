@@ -16,6 +16,7 @@ const {
   sandboxCwd,
   useSandbox,
   assertObjectContains,
+  stopProc,
 } = require('../helpers')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
@@ -277,8 +278,9 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
     // Gather only tested events
     if (event === eventValue) {
       if (process.platform !== 'win32') {
-        assert.notStrictEqual(spanId, undefined, encoded)
-        assert.notStrictEqual(localRootSpanId, undefined, encoded)
+        // Skip events without span IDs: these are from internal operations (e.g. background
+        // source map loading) that occur outside any user span and are not relevant to the test.
+        if (spanId === undefined || localRootSpanId === undefined) continue
       } else {
         assert.strictEqual(spanId, undefined, encoded)
         assert.strictEqual(localRootSpanId, undefined, encoded)
@@ -565,8 +567,8 @@ describe('profiler', () => {
       }
     })
 
-    afterEach(() => {
-      proc.kill()
+    afterEach(async () => {
+      await stopProc(proc)
     })
 
     it('records profile on process exit', async () => {
@@ -654,8 +656,8 @@ describe('profiler', () => {
   })
 
   context('SSI heuristics', () => {
-    afterEach(() => {
-      proc.kill()
+    afterEach(async () => {
+      await stopProc(proc)
     })
 
     describe('does not trigger for', () => {
@@ -683,7 +685,7 @@ describe('profiler', () => {
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -719,7 +721,7 @@ describe('profiler', () => {
 
         // Same number of requests and responses
         assert.strictEqual(responses.points[0][1], requestCount)
-      }, 'generate-metrics', timeout)
+      }, 'generate-metrics', timeout, 1, true)
 
       const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
         const pp = payload.payload
@@ -747,9 +749,6 @@ describe('profiler', () => {
       if (process.platform === 'win32') {
         this.skip() // Wall profiler context count telemetry is not supported on Windows
       }
-      if (process.platform === 'darwin') {
-        this.skip() // Test is flaky on macOS
-      }
       proc = fork(profilerTestFile, {
         cwd,
         env: {
@@ -758,7 +757,7 @@ describe('profiler', () => {
           DD_PROFILING_UPLOAD_PERIOD: '1',
           DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1',
           DD_TELEMETRY_HEARTBEAT_INTERVAL: '1', // every second
-          TEST_DURATION_MS: 1500,
+          TEST_DURATION_MS: 3000,
         },
       })
 
@@ -771,7 +770,7 @@ describe('profiler', () => {
           assert.strictEqual(sampleContexts.type, 'gauge')
           assert.ok(sampleContexts.points[0][1] >= 1)
         })
-      }, 'generate-metrics', timeout)
+      }, 'generate-metrics', timeout, 1, true)
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics])
     })

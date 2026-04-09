@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const { sandboxCwd, useSandbox, FakeAgent, spawnProc, assertObjectContains } = require('./helpers')
+const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc, assertObjectContains } = require('./helpers')
 
 describe('telemetry', () => {
   describe('dependencies', () => {
@@ -26,14 +26,14 @@ describe('telemetry', () => {
       proc = await spawnProc(startupTestFile, {
         cwd,
         env: {
-          AGENT_PORT: agent.port,
+          AGENT_PORT: String(agent.port),
           DD_LOGS_INJECTION: 'true',
         },
       })
     })
 
     afterEach(async () => {
-      proc.kill()
+      await stopProc(proc)
       await agent.stop()
     })
 
@@ -66,9 +66,9 @@ describe('telemetry', () => {
       await agent.assertTelemetryReceived(msg => {
         const { configuration } = msg.payload.payload
         assertObjectContains(configuration, [
-          { name: 'DD_LOG_INJECTION', value: true, origin: 'default' },
-          { name: 'DD_LOG_INJECTION', value: true, origin: 'env_var' },
-          { name: 'DD_LOG_INJECTION', value: false, origin: 'code' },
+          { name: 'DD_LOGS_INJECTION', value: true, origin: 'default' },
+          { name: 'DD_LOGS_INJECTION', value: true, origin: 'env_var' },
+          { name: 'DD_LOGS_INJECTION', value: false, origin: 'code' },
         ])
       }, 'app-started', 5_000, 1)
     })

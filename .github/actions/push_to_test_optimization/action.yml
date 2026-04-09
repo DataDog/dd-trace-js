@@ -1,0 +1,20 @@
+name: Push to Test Optimization
+description: Upload JUnit XML test results to Datadog Test Optimization
+inputs:
+  dd_api_key:
+    description: DD_API_KEY used to push test results
+    required: true
+runs:
+  using: composite
+  steps:
+    - if: github.actor != 'dependabot[bot]'
+      # see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull-request-events-for-forked-repositories
+      #
+      # > Workflows triggered by Dependabot pull requests are treated as though they are
+      # >  from a forked repository, and are also subject to these restrictions.
+      #
+      # Which means they do not have access to secrets.
+      uses: DataDog/junit-upload-github-action@24449d01fc01e721fa36ccd2caa3caae6922f0e8 # v3.0.0
+      with:
+        api_key: ${{ inputs.dd_api_key }}
+        service: dd-trace-js-tests

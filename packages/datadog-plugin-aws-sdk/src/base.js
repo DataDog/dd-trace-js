@@ -23,12 +23,13 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     return id
   }
 
+  /** @type {import('../../dd-trace/src/config/config-types').ConfigProperties['cloudPayloadTagging']} */
   get cloudTaggingConfig () {
     return this._tracerConfig.cloudPayloadTagging
   }
 
   get payloadTaggingRules () {
-    return this.cloudTaggingConfig.rules.aws?.[this.constructor.id]
+    return this.cloudTaggingConfig.rules?.aws?.[this.constructor.id]
   }
 
   constructor (...args) {
@@ -78,7 +79,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
         this.requestInject(span, request)
       })
 
-      if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.requestsEnabled) {
+      if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.request) {
         const maxDepth = this.cloudTaggingConfig.maxDepth
         const requestTags = tagsFromRequest(this.payloadTaggingRules, request.params, { maxDepth })
         span.addTags(requestTags)
@@ -154,6 +155,11 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       })
 
       this.finish(ctx)
+
+      if (IS_SERVERLESS) {
+        const peerStore = storage('peerServerless').getStore()
+        if (peerStore) delete peerStore.peerHostname
+      }
     })
 
     this.addBind(`apm:aws:response:start:${this.serviceIdentifier}`, ctx => {
@@ -210,7 +216,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
     span.addTags(tags)
 
-    if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.responsesEnabled) {
+    if (this.constructor.isPayloadReporter && this.cloudTaggingConfig.response) {
       const maxDepth = this.cloudTaggingConfig.maxDepth
       const responseBody = this.extractResponseBody(response)
       const responseTags = tagsFromResponse(this.payloadTaggingRules, responseBody, { maxDepth })

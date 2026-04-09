@@ -32,6 +32,8 @@ function assertLLMObsSpan (apmSpans, llmobsSpans) {
       total_tokens: MOCK_NUMBER,
       cache_write_input_tokens: MOCK_NUMBER,
       cache_read_input_tokens: MOCK_NUMBER,
+      ephemeral_5m_input_tokens: MOCK_NUMBER,
+      ephemeral_1h_input_tokens: MOCK_NUMBER,
     },
     tags: { ml_app: 'test', integration: 'anthropic' },
   })
@@ -65,6 +67,26 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertLLMObsSpan(apmSpans, llmobsSpans)
+      })
+
+      it('sets model_provider to unknown for unrecognized base URLs', async () => {
+        const { Anthropic } = require(`../../../../../../versions/@anthropic-ai/sdk@${version}`).get()
+        const customClient = new Anthropic({ baseURL: 'http://localhost:8000' })
+
+        try {
+          await customClient.messages.create({
+            model: 'claude-3-7-sonnet-20250219',
+            messages: [{ role: 'user', content: 'Hello, world!' }],
+            max_tokens: 100,
+            temperature: 0.5,
+          })
+        } catch {
+          // expected error — no server is running
+        }
+
+        const { llmobsSpans } = await getEvents()
+
+        assert.equal(llmobsSpans[0].meta.model_provider, 'unknown', 'Model provider does not match')
       })
 
       describe('stream', () => {

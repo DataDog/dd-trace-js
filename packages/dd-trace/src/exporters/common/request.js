@@ -14,9 +14,9 @@ const { urlToHttpOptions } = require('./url-to-http-options-polyfill')
 const docker = require('./docker')
 const { httpAgent, httpsAgent } = require('./agents')
 
-const maxActiveRequests = 8
+const maxActiveBufferSize = 1024 * 1024 * 64
 
-let activeRequests = 0
+let activeBufferSize = 0
 
 /**
  * @param {string|URL|object} urlObjOrString
@@ -59,7 +59,22 @@ function request (data, options, callback) {
     }
   }
 
-  const isReadable = data instanceof Readable
+  if (data instanceof Readable) {
+    const chunks = []
+
+    data
+      .on('data', (data) => {
+        chunks.push(data)
+      })
+      .on('end', () => {
+        request(Buffer.concat(chunks), options, callback)
+      })
+      .on('error', (err) => {
+        callback(err)
+      })
+
+    return
+  }
 
   // The timeout should be kept low to avoid excessive queueing.
   const timeout = options.timeout || 2000
@@ -67,12 +82,10 @@ function request (data, options, callback) {
   const client = isSecure ? https : http
   let dataArray = data
 
-  if (!isReadable) {
-    if (!Array.isArray(data)) {
-      dataArray = [data]
-    }
-    options.headers['Content-Length'] = byteLength(dataArray)
+  if (!Array.isArray(data)) {
+    dataArray = [data]
   }
+  options.headers['Content-Length'] = byteLength(dataArray)
 
   docker.inject(options.headers)
 
@@ -135,14 +148,14 @@ function request (data, options, callback) {
       return callback(null)
     }
 
-    activeRequests++
+    activeBufferSize += options.headers['Content-Length'] ?? 0
 
     storage('legacy').run({ noop: true }, () => {
       let finished = false
       const finalize = () => {
         if (finished) return
         finished = true
-        activeRequests--
+        activeBufferSize -= options.headers['Content-Length'] ?? 0
       }
 
       const req = client.request(options, (res) => onResponse(res, finalize))
@@ -167,12 +180,8 @@ function request (data, options, callback) {
         }
       })
 
-      if (isReadable) {
-        data.pipe(req) // TODO: Validate whether this is actually retriable.
-      } else {
-        for (const buffer of dataArray) req.write(buffer)
-        req.end()
-      }
+      for (const buffer of dataArray) req.write(buffer)
+      req.end()
     })
   }
 
@@ -192,7 +201,7 @@ function byteLength (data) {
 
 Object.defineProperty(request, 'writable', {
   get () {
-    return activeRequests < maxActiveRequests
+    return activeBufferSize < maxActiveBufferSize
   },
 })
 

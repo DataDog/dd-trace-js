@@ -125,7 +125,7 @@ module.exports = class CiPlugin extends Plugin {
     this._pendingRequestErrorTags = []
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
-      const { onDone, isParallel, frameworkVersion } = ctx
+      const { onDone, frameworkVersion } = ctx
       ctx.currentStore = storage('legacy').getStore()
 
       if (!this.tracer._exporter || !this.tracer._exporter.getLibraryConfiguration) {
@@ -143,7 +143,7 @@ module.exports = class CiPlugin extends Plugin {
           ? getSessionRequestErrorTags(this.testSessionSpan)
           : Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
 
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, isParallel, frameworkVersion)
+        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, frameworkVersion)
         const metadataTags = {
           test: {
             ...libraryCapabilitiesTags,
@@ -469,6 +469,10 @@ module.exports = class CiPlugin extends Plugin {
     return getSessionRequestErrorTags(this.testSessionSpan)
   }
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {boolean} shouldGetEnvironmentData - Whether to get environment data
+   */
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 

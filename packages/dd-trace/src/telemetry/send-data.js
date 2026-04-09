@@ -63,19 +63,6 @@ const { getValueFromEnvSources } = require('../config/helper')
  * } & Record<string, unknown>} TelemetryHost
  */
 /**
- * @typedef {{
- *   hostname?: string,
- *   port?: string | number,
- *   url?: string | URL,
- *   site?: string,
- *   apiKey?: string,
- *   isCiVisibility?: boolean,
- *   spanAttributeSchema?: string,
- *   tags: Record<string, string>,
- *   telemetry?: { debug?: boolean }
- * }} TelemetryConfig
- */
-/**
  * @callback SendDataCallback
  * @param {Error | null | undefined} error
  * @param {SendDataRetryObject} retryObj
@@ -85,7 +72,7 @@ const { getValueFromEnvSources } = require('../config/helper')
 let agentTelemetry = true
 
 /**
- * @param {TelemetryConfig} config
+ * @param {import('../config/config-base')} config
  * @param {TelemetryApplication} application
  * @param {TelemetryRequestType} reqType
  * @returns {Record<string, string>}
@@ -97,6 +84,10 @@ function getHeaders (config, application, reqType) {
     'dd-telemetry-request-type': reqType,
     'dd-client-library-language': application.language_name,
     'dd-client-library-version': application.tracer_version,
+    'dd-session-id': config.tags['runtime-id'],
+  }
+  if (config.DD_ROOT_JS_SESSION_ID) {
+    headers['dd-root-session-id'] = config.DD_ROOT_JS_SESSION_ID
   }
   const debug = config.telemetry && config.telemetry.debug
   if (debug) {
@@ -136,7 +127,7 @@ function getPayload (payload) {
 
 // TODO(BridgeAR): Simplify this code. A lot does not need to be recalculated on every call.
 /**
- * @param {TelemetryConfig} config
+ * @param {import('../config/config-base')} config
  * @param {TelemetryApplication} application
  * @param {TelemetryHost} host
  * @param {TelemetryRequestType} reqType

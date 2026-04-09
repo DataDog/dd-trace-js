@@ -23,6 +23,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
@@ -185,7 +186,7 @@ class JestPlugin extends CiPlugin {
         config._ddRequestErrorTags = this.getSessionRequestErrorTags()
         config._ddItrCorrelationId = this.itrCorrelationId
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
-        config._ddEarlyFlakeDetectionNumRetries = this.libraryConfig?.earlyFlakeDetectionNumRetries ?? 0
+        config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
@@ -386,6 +387,12 @@ class JestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
+    this.addBind('ci:jest:test-suite:hook:fn', (ctx) => {
+      const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(ctx.testSuiteAbsolutePath)
+      const store = storage('legacy').getStore()
+      return { ...store, span: testSuiteSpan }
+    })
+
     this.addSub('ci:jest:test:finish', ({
       span,
       status,
@@ -395,6 +402,7 @@ class JestPlugin extends CiPlugin {
       attemptToFixFailed,
       isAtrRetry,
       finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       span.setTag(TEST_STATUS, status)
       if (finalStatus) {
@@ -414,6 +422,9 @@ class JestPlugin extends CiPlugin {
       if (isAtrRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
 
       this.telemetry.ciVisEvent(
@@ -491,6 +502,7 @@ class JestPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      hasDynamicName,
       testSuiteAbsolutePath,
     } = test
 
@@ -538,6 +550,10 @@ class JestPlugin extends CiPlugin {
 
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
+    }
+
+    if (hasDynamicName) {
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
 

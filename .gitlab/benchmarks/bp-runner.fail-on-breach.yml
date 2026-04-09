@@ -1,6 +1,16 @@
-# Example of measurements can be seen here: https://benchmarking.us1.prod.dog/benchmarks?projectId=1
-
-# Thresholds set based on guidance in https://datadoghq.atlassian.net/wiki/spaces/APMINT/pages/5070193198/How+to+set+up+pre-release+performance+quality+gates#How-to-choose-thresholds-and-warning-ranges%3F
+# Auto-generated SLO Thresholds
+# Generated: 2026-03-30
+#
+# Generation Strategy: tight
+#   Formula: CI_bound / (1 ± T) (T = 15.0%)
+#
+# SLO Checking:
+#   - BREACH: 90% CI boundary crosses threshold
+#   - WARNING: 90% CI boundary crosses warning_threshold (constant)
+#
+# DO NOT EDIT MANUALLY - Regenerate using:
+#   benchmark_analyzer generate slos --help
+#
 
 experiments:
   - name: Run SLO breach check
@@ -13,15 +23,15 @@ experiments:
             thresholds:
               - threshold: agg_http_req_duration_p50 < 2 ms
                 warning_range: 1
-              - agg_http_req_duration_p99 < 15 ms
+              - agg_http_req_duration_p99 < 11.086 ms
           - name: normal_operation/only-tracing-with-runtime-metrics-enabled
             thresholds:
               - threshold: agg_http_req_duration_p50 < 2 ms
                 warning_range: 1
-              - agg_http_req_duration_p99 < 16 ms
+              - agg_http_req_duration_p99 < 7.381 ms
           - name: high_load/only-tracing
             thresholds:
-              - throughput > 400 op/s
+              - throughput > 418.667 op/s
           - name: high_load/only-tracing-with-runtime-metrics-enabled
             thresholds:
-              - throughput > 400 op/s
+              - throughput > 519.958 op/s

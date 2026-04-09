@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 
 const axios = require('axios')
+const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants.js')
 const agent = require('../../dd-trace/test/plugins/agent.js')
@@ -550,6 +551,161 @@ describe('Plugin', () => {
               .then(({ executor }) => {
                 return execute(executor, source, variableValues, operationName).then(() => {})
               })
+          })
+        })
+
+        describe('with hooks configuration', () => {
+          const config = {
+            hooks: {
+              request: sinon.spy((span, ctx) => {}),
+              validate: sinon.spy((span, ctx) => {}),
+              plan: sinon.spy((span, ctx) => {}),
+              execute: sinon.spy((span, ctx) => {}),
+              fetch: sinon.spy((span, ctx) => {}),
+              postprocessing: sinon.spy((span, ctx) => {}),
+            },
+          }
+
+          before(() => agent.load('apollo', config))
+          before(() => setupFixtures())
+          before(() => setupApollo(version))
+
+          afterEach(() => Object.keys(config.hooks).forEach(
+            key => config.hooks[key].resetHistory()
+          ))
+
+          it('should run request, plan, execute and postprocessing hooks before spans are finished', done => {
+            const operationName = 'MyQuery'
+            const source = `query ${operationName} { hello(name: "world") }`
+            const variableValues = { who: 'world' }
+
+            agent
+              .assertSomeTraces((traces) => {
+                sinon.assert.calledOnce(config.hooks.request)
+                sinon.assert.calledOnce(config.hooks.plan)
+                sinon.assert.calledOnce(config.hooks.execute)
+                sinon.assert.calledOnce(config.hooks.postprocessing)
+
+                const requestSpan = config.hooks.request.firstCall.args[0]
+                const requestCtx = config.hooks.request.firstCall.args[1]
+                const planSpan = config.hooks.plan.firstCall.args[0]
+                const executeSpan = config.hooks.execute.firstCall.args[0]
+                const postprocessingSpan = config.hooks.postprocessing.firstCall.args[0]
+
+                assert.strictEqual(requestSpan.context()._name, expectedSchema.server.opName)
+                assert.strictEqual(planSpan.context()._name, 'apollo.gateway.plan')
+                assert.strictEqual(executeSpan.context()._name, 'apollo.gateway.execute')
+                assert.strictEqual(postprocessingSpan.context()._name, 'apollo.gateway.postprocessing')
+                assert.strictEqual(requestCtx.requestContext.operationName, operationName)
+              })
+              .then(done)
+              .catch(done)
+
+            gateway()
+              .then(({ executor }) => {
+                return execute(executor, source, variableValues, operationName).then(() => {})
+              })
+          })
+
+          it('should run validate hook on validation failure and keep error tagging', done => {
+            let error
+            const source = `#graphql
+              query InvalidVariables($first: Int!, $second: Int!) {
+                topReviews(first: $first) {
+                  body
+                }
+              }`
+            const variableValues = { who: 'world' }
+
+            agent
+              .assertSomeTraces((traces) => {
+                sinon.assert.calledOnce(config.hooks.request)
+                sinon.assert.calledOnce(config.hooks.validate)
+                sinon.assert.notCalled(config.hooks.plan)
+                sinon.assert.notCalled(config.hooks.execute)
+                sinon.assert.notCalled(config.hooks.fetch)
+                sinon.assert.notCalled(config.hooks.postprocessing)
+
+                const validateSpan = config.hooks.validate.firstCall.args[0]
+                const validateCtx = config.hooks.validate.firstCall.args[1]
+
+                assert.strictEqual(validateSpan.context()._name, 'apollo.gateway.validate')
+                assert.ok(Array.isArray(validateCtx.result))
+                assert.strictEqual(validateCtx.result.at(-1).message, error.message)
+
+                assertObjectContains(traces[0][1], {
+                  name: 'apollo.gateway.validate',
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                  },
+                })
+              })
+              .then(done)
+              .catch(done)
+
+            gateway()
+              .then(({ executor }) => {
+                return execute(executor, source, variableValues, 'InvalidVariables').then((result) => {
+                  error = result.errors[1]
+                })
+              })
+          })
+
+          it('should run request and fetch hooks on fetch failure', done => {
+            let error
+            const operationName = 'MyQuery'
+            const source = `query ${operationName} { hello(name: "world") }`
+            const variableValues = { who: 'world' }
+
+            agent
+              .assertSomeTraces((traces) => {
+                sinon.assert.calledOnce(config.hooks.request)
+                sinon.assert.calledOnce(config.hooks.fetch)
+
+                const requestSpan = config.hooks.request.firstCall.args[0]
+                const requestCtx = config.hooks.request.firstCall.args[1]
+                const fetchSpan = config.hooks.fetch.firstCall.args[0]
+                const fetchCtx = config.hooks.fetch.firstCall.args[1]
+
+                assert.strictEqual(requestSpan.context()._name, expectedSchema.server.opName)
+                assert.strictEqual(fetchSpan.context()._name, 'apollo.gateway.fetch')
+                assert.ok(requestCtx?.result?.errors?.length)
+                assert.ok(fetchCtx?.error)
+
+                assertObjectContains(traces[0][0], {
+                  name: expectedSchema.server.opName,
+                  error: 1,
+                })
+
+                assertObjectContains(traces[0][4], {
+                  name: 'apollo.gateway.fetch',
+                  error: 1,
+                  meta: {
+                    [ERROR_TYPE]: error.name,
+                    [ERROR_MESSAGE]: error.message,
+                    [ERROR_STACK]: error.stack,
+                  },
+                })
+              })
+              .then(done)
+              .catch(done)
+
+            const gateway = new ApolloGateway({
+              localServiceList: fixtures,
+              fetcher: () => {
+                throw Error('Nooo')
+              },
+            })
+            gateway.load().then(resp => {
+              return execute(resp.executor, source, variableValues, operationName)
+                .then((result) => {
+                  const errors = result.errors
+                  error = errors[errors.length - 1]
+                })
+            })
           })
         })
       })

@@ -8,6 +8,8 @@ const {
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
+  DYNAMIC_NAME_RE,
+  logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const {
@@ -70,6 +72,7 @@ let isImpactedTestsEnabled = false
 let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
+const newTestsWithDynamicNames = new Set()
 let rootDir = ''
 let sessionProjects = []
 
@@ -302,6 +305,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   const {
     _requireFile: testSuiteAbsolutePath,
     location: {
+      file: testSourceFileAbsolutePath,
       line: testSourceLine,
     },
     _type,
@@ -319,7 +323,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
 
   if (isNewTestSuite) {
     startedSuites.push(testSuiteAbsolutePath)
-    const testSuiteCtx = { testSuiteAbsolutePath }
+    const testSuiteCtx = { testSuiteAbsolutePath, testSourceFileAbsolutePath }
     testSuiteToCtx.set(testSuiteAbsolutePath, testSuiteCtx)
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
   }
@@ -335,6 +339,7 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
     const testCtx = {
       testName,
       testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
       testSourceLine,
       browserName,
       isDisabled: test._ddIsDisabled,
@@ -379,6 +384,9 @@ function testEndHandler ({
 
   if (testStatuses.length === 0) {
     testsToTestStatuses.set(testFqn, [testStatus])
+    if (test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test))) {
+      newTestsWithDynamicNames.add(`${getTestSuitePath(test._requireFile, rootDir)} › ${getTestFullname(test)}`)
+    }
   } else {
     testStatuses.push(testStatus)
   }
@@ -404,6 +412,15 @@ function testEndHandler ({
     test._ddHasFailedAllRetries = true
   }
 
+  // ATR: set _ddHasFailedAllRetries when all auto test retries were exhausted and every attempt failed
+  if (isFlakyTestRetriesEnabled && !testProperties.attemptToFix && !test._ddIsEfdRetry &&
+    !(test._ddIsNew || test._ddIsModified) &&
+    flakyTestRetriesCount != null && flakyTestRetriesCount > 0 &&
+    testStatuses.length === flakyTestRetriesCount + 1 &&
+    testStatuses.every(status => status === 'fail')) {
+    test._ddHasFailedAllRetries = true
+  }
+
   // this handles tests that do not go through the worker process (because they're skipped)
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
@@ -421,6 +438,7 @@ function testEndHandler ({
         error,
         extraTags: annotationTags,
         isNew: test._ddIsNew,
+        hasDynamicName: test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test)),
         isAttemptToFix: test._ddIsAttemptToFix,
         isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
         isQuarantined: test._ddIsQuarantined,
@@ -459,6 +477,7 @@ function testEndHandler ({
       testSkipCh.publish({
         testName: getTestFullname(test),
         testSuiteAbsolutePath,
+        testSourceFileAbsolutePath: test.location.file,
         testSourceLine: test.location.line,
         browserName,
         isNew: test._ddIsNew,
@@ -771,6 +790,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         preventedToFail = true
       }
     }
+
+    logDynamicNamesWarning(newTestsWithDynamicNames)
 
     const flushWait = new Promise(resolve => {
       onDone = resolve
@@ -1144,6 +1165,7 @@ addHook({
     const {
       _requireFile: testSuiteAbsolutePath,
       location: {
+        file: testSourceFileAbsolutePath,
         line: testSourceLine,
       },
     } = test
@@ -1159,6 +1181,7 @@ addHook({
     const testCtx = {
       testName,
       testSuiteAbsolutePath,
+      testSourceFileAbsolutePath,
       testSourceLine,
       browserName,
     }
@@ -1267,6 +1290,7 @@ addHook({
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,
+      hasDynamicName: test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test)),
       isRetry: retry > 0,
       isEfdRetry: test._ddIsEfdRetry,
       isAttemptToFix: test._ddIsAttemptToFix,
@@ -1322,7 +1346,10 @@ function generateSummaryWrapper (generateSummary) {
       if (didNotRun) {
         const {
           _requireFile: testSuiteAbsolutePath,
-          location: { line: testSourceLine },
+          location: {
+            file: testSourceFileAbsolutePath,
+            line: testSourceLine,
+          },
           _ddIsNew: isNew,
           _ddIsDisabled: isDisabled,
           _ddIsModified: isModified,
@@ -1333,6 +1360,7 @@ function generateSummaryWrapper (generateSummary) {
         testSkipCh.publish({
           testName: getTestFullname(test),
           testSuiteAbsolutePath,
+          testSourceFileAbsolutePath,
           testSourceLine,
           browserName,
           isNew,

@@ -2,8 +2,9 @@
 
 const { channel } = require('dc-polyfill')
 
+const { inspect } = require('node:util')
 const request = require('../common/request')
-const { startupLog } = require('../../startup-log')
+const { logIntegrations, logAgentError } = require('../../startup-log')
 const runtimeMetrics = require('../../runtime_metrics')
 const log = require('../../log')
 const tracerVersion = require('../../../../../package.json').version
@@ -34,7 +35,7 @@ class AgentWriter extends BaseWriter {
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
 
     const { _headers, _lookup, _protocolVersion, _url } = this
-    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, true, (err, res, status, headers) => {
+    makeRequest(_protocolVersion, data, count, _url, _headers, _lookup, (err, res, status, headers) => {
       if (status) {
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses.by.status`, `status:${status}`, true)
@@ -84,7 +85,7 @@ function getEncoder (protocolVersion) {
     : require('../../encode/0.4').AgentEncoder
 }
 
-function makeRequest (version, data, count, url, headers, lookup, needsStartupLog, cb) {
+function makeRequest (version, data, count, url, headers, lookup, cb) {
   const options = {
     path: `/v${version}/traces`,
     method: 'PUT',
@@ -104,11 +105,9 @@ function makeRequest (version, data, count, url, headers, lookup, needsStartupLo
   log.debug('Request to the agent: %j', options)
 
   request(data, options, (err, res, status, headers) => {
-    if (needsStartupLog) {
-      // Note that logging will only happen once, regardless of how many times this is called.
-      startupLog({
-        agentError: status !== 404 && status !== 200 ? err : undefined,
-      })
+    logIntegrations()
+    if (status !== 404 && status !== 200 && err) {
+      logAgentError({ status, message: err.message ?? inspect(err) })
     }
     cb(err, res, status, headers)
   })

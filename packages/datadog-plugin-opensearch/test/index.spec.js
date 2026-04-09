@@ -191,13 +191,10 @@ describe('Plugin', () => {
         })
 
         it('should support aborting the query', () => {
-          assert.doesNotThrow(() => {
-            const promise = client.ping()
-
-            if (promise.abort) {
-              promise.abort()
-            }
-          })
+          const promise = client.ping()
+          if (promise.abort) {
+            promise.abort()
+          }
         })
 
         it('should work with userland promises', done => {

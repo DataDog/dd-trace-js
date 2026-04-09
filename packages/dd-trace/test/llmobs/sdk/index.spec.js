@@ -150,7 +150,9 @@ describe('sdk', () => {
       }
 
       const config = getConfigFresh({
-        llmobs: {},
+        llmobs: {
+          agentlessEnabled: false,
+        },
       })
 
       const enabledLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
@@ -182,8 +184,8 @@ describe('sdk', () => {
 
           llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, (span, cb) => {
             assert.ok(LLMObsTagger.tagMap.get(span) == null)
-            assert.doesNotThrow(() => span.setTag('k', 'v'))
-            assert.doesNotThrow(() => cb())
+            span.setTag('k', 'v')
+            cb()
           })
 
           sinon.assert.called(llmobs._tracer._processor.process)
@@ -378,7 +380,7 @@ describe('sdk', () => {
             assert.ok(LLMObsTagger.tagMap.get(llmobs._active()) == null)
           })
 
-          assert.doesNotThrow(() => fn(1))
+          fn(1)
 
           sinon.assert.called(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
@@ -1407,7 +1409,7 @@ describe('sdk', () => {
     it('logs if there was an error flushing', () => {
       LLMObsEvalMetricsWriter.prototype.flush.throws(new Error('boom'))
 
-      assert.doesNotThrow(() => llmobs.flush())
+      llmobs.flush()
     })
   })
 

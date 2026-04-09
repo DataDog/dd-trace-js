@@ -4,6 +4,8 @@ const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: fa
 const log = require('../log')
 const telemetryMetrics = require('../telemetry/metrics')
 const tracerVersion = require('../../../../package.json').version
+const { keepTrace } = require('../priority_sampler')
+const { AI_GUARD } = require('../standalone/product')
 const NoopAIGuard = require('./noop')
 const executeRequest = require('./client')
 const {
@@ -23,11 +25,12 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 const ALLOW = 'ALLOW'
 
 class AIGuardAbortError extends Error {
-  constructor (reason, tags) {
+  constructor (reason, tags, sds) {
     super(reason)
     this.name = 'AIGuardAbortError'
     this.reason = reason
     this.tags = tags
+    this.sds = sds || []
   }
 }
 
@@ -54,6 +57,10 @@ class AIGuard extends NoopAIGuard {
   #maxContentSize
   #meta
 
+  /**
+   * @param {import('../tracer')} tracer - Tracer instance
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   constructor (tracer, config) {
     super()
 
@@ -135,7 +142,7 @@ class AIGuard extends NoopAIGuard {
     if (!this.#initialized) {
       return super.evaluate(messages, opts)
     }
-    const { block = false } = opts ?? {}
+    const { block = true } = opts ?? {}
     return this.#tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
       const last = messages[messages.length - 1]
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
@@ -151,6 +158,12 @@ class AIGuard extends NoopAIGuard {
       }
       span.meta_struct = {
         [AI_GUARD_META_STRUCT_KEY]: metaStruct,
+      }
+      const rootSpan = span.context()?._trace?.started?.[0]
+      if (rootSpan) {
+        // keepTrace must be called before executeRequest so the sampling decision
+        // is propagated correctly to outgoing HTTP client calls.
+        keepTrace(rootSpan, AI_GUARD)
       }
       let response
       try {
@@ -175,7 +188,7 @@ class AIGuard extends NoopAIGuard {
           `AI Guard service call failed, status ${response.status}`,
           { errors: response.body?.errors })
       }
-      let action, reason, tags, blockingEnabled
+      let action, reason, tags, sdsFindings, blockingEnabled
       try {
         const attr = response.body.data.attributes
         if (!attr.action) {
@@ -184,6 +197,7 @@ class AIGuard extends NoopAIGuard {
         action = attr.action
         reason = attr.reason
         tags = attr.tags
+        sdsFindings = attr.sds_findings || []
         blockingEnabled = attr.is_blocking_enabled ?? false
       } catch (e) {
         appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
@@ -198,11 +212,14 @@ class AIGuard extends NoopAIGuard {
       if (tags?.length > 0) {
         metaStruct.attack_categories = tags
       }
+      if (sdsFindings?.length > 0) {
+        metaStruct.sds = sdsFindings
+      }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
-        throw new AIGuardAbortError(reason, tags)
+        throw new AIGuardAbortError(reason, tags, sdsFindings)
       }
-      return { action, reason, tags }
+      return { action, reason, tags, sds: sdsFindings }
     })
   }
 }

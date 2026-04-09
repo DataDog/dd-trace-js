@@ -193,7 +193,7 @@ describe('Plugin', () => {
           const req = new IncomingMessage()
           const res = new ServerResponse(req)
 
-          assert.doesNotThrow(() => res.emit('finish'))
+          res.emit('finish')
         })
 
         it('should not cause `end` to be called multiple times', done => {

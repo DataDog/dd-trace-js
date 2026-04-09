@@ -200,11 +200,6 @@ function handleTraceRequest (req, res, sendToTestAgent) {
       })
 
     testAgentReq.on('response', testAgentRes => {
-      if (res._closed) {
-        // Skip handling for already closed agents
-        return
-      }
-
       if (testAgentRes.statusCode !== 200) {
         // handle request failures from the Test Agent here
         let body = ''
@@ -212,7 +207,8 @@ function handleTraceRequest (req, res, sendToTestAgent) {
           body += chunk
         })
         testAgentRes.on('end', () => {
-          res.status(400).send(body)
+          // eslint-disable-next-line no-console
+          console.warn(`handleTraceRequest: Test agent returned ${testAgentRes.statusCode}: ${body}`)
         })
       }
     })
@@ -231,14 +227,29 @@ function handleTraceRequest (req, res, sendToTestAgent) {
 }
 
 function checkAgentStatus () {
-  const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
-
   return new Promise((resolve) => {
-    const request = http.request(`${agentUrl}/info`, { method: 'GET' }, response => {
+    const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
+    const timeoutMs = 2000
+
+    const request = http.request(`${agentUrl}/info`, { method: 'GET', timeout: timeoutMs }, response => {
       resolve(response.statusCode === 200)
     })
 
-    request.on('error', (_error_) => {
+    request.on('timeout', () => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `checkAgentStatus: Timed out after ${timeoutMs}ms trying to reach test agent at ${agentUrl}. ` +
+        'Proceeding without test agent. If this happens frequently, investigate what is listening on that port.'
+      )
+      request.destroy()
+      resolve(false)
+    })
+
+    request.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+      if (err.code !== 'ECONNREFUSED') {
+        // eslint-disable-next-line no-console
+        console.warn(`checkAgentStatus: Unexpected error reaching test agent at ${agentUrl}`, err)
+      }
       resolve(false)
     })
 
@@ -413,7 +424,10 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    const getConfigFresh = (options) => proxyquire.noPreserveCache()('../../src/config', {})(options)
+    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
+      './defaults': defaults,
+    })
     // Reload dogstatsd to avoid adding new events to the global process object
     const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
     const proxy = proxyquire('../../src/proxy', {
