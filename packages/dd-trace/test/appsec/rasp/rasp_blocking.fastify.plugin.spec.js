@@ -13,7 +13,7 @@ const appsec = require('../../../src/appsec')
 const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
-const json = '"blockedTemplateJson"'
+const blockedJson = '"blockedTemplateJson"'
 
 describe('RASP - fastify blocking', () => {
   withVersions('fastify', 'fastify', '>=2', (version) => {
@@ -26,7 +26,7 @@ describe('RASP - fastify blocking', () => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'resources', 'rasp_rules.json'),
-          blockedTemplateJson: json,
+          blockedTemplateJson: blockedJson,
           rasp: { enabled: true },
         },
       }))
