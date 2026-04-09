@@ -35,10 +35,11 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 const { getConfigFresh } = require('../helpers/config')
+const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('../utils')
 
 const blockedTemplate = {
-  html: 'html template',
-  json: '"json template"',
+  html: blockedTemplateHtml,
+  json: blockedTemplateJson,
 }
 
 const resultActions = {
@@ -1638,13 +1639,12 @@ describe('IP blocking', function () {
     appsec.enable(getConfigFresh({
       appsec: {
         enabled: true,
-        blockedTemplateHtml: htmlDefaultContent,
-        blockedTemplateJson: jsonDefaultContent,
         rasp: {
           enabled: false, // disable rasp to not trigger lfi
         },
       },
     }))
+    setTestBlockingTemplates()
 
     RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
   })
