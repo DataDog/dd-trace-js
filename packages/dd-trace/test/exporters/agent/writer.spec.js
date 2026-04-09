@@ -7,6 +7,7 @@ const { describe, it, beforeEach } = require('mocha')
 const context = describe
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { channel } = require('dc-polyfill')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/core')
@@ -181,6 +182,22 @@ function describeWriter (protocolVersion) {
         })
         done()
       })
+    })
+
+    it('should publish event on first flush with data', () => {
+      const ch = channel('dd-trace:exporter:first-flush')
+      let published = false
+      const onFirstFlush = () => { published = !published }
+      ch.subscribe(onFirstFlush)
+
+      encoder.count.returns(1)
+      writer.flush()
+
+      assert.strictEqual(published, true)
+      writer.flush()
+      // should only publish on first flush, hence published should mantain as true
+      assert.strictEqual(published, true)
+      ch.unsubscribe(onFirstFlush)
     })
 
     context('with the url as a unix socket', () => {
