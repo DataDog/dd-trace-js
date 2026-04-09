@@ -105,7 +105,7 @@ describe('Electron integration', function () {
   beforeEach(function (done) {
     this.timeout(15_000)
 
-    child = spawn(binaryPath, [], {
+    child = spawn(binaryPath, process.platform === 'linux' ? ['--no-sandbox'] : [], {
       env: {
         ...process.env,
         // dd-trace is bundled inside the binary; only the agent port is injected.
