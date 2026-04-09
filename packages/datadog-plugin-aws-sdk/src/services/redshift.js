@@ -11,6 +11,7 @@ class Redshift extends BaseAwsSdkPlugin {
     return {
       'resource.name': `${operation} ${params.ClusterIdentifier}`,
       'aws.redshift.cluster_identifier': params.ClusterIdentifier,
+      'db.system': 'redshift',
       clusteridentifier: params.ClusterIdentifier,
     }
   }
