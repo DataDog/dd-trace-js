@@ -77,6 +77,7 @@ const {
 } = require('./util/test')
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
+  cypress: 'cypress run',
   vitest: 'vitest run',
   mocha: 'mocha',
   cucumber: 'cucumber-js',

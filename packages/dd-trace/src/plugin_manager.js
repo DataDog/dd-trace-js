@@ -9,6 +9,7 @@ const log = require('./log')
 
 // Test optimization plugins that should only be enabled when isCiVisibility is true
 const TEST_OPTIMIZATION_PLUGINS = new Set([
+  'cypress',
   'jest',
   'vitest',
   'cucumber',

@@ -7,14 +7,6 @@ const { pathToFileURL } = require('url')
 
 const DD_CONFIG_WRAPPED = Symbol('dd-trace.cypress.config.wrapped')
 
-const noopTask = {
-  'dd:testSuiteStart': () => null,
-  'dd:beforeEach': () => ({}),
-  'dd:afterEach': () => null,
-  'dd:addTags': () => null,
-  'dd:log': () => null,
-}
-
 /**
  * @param {unknown} value
  * @returns {boolean}
@@ -111,9 +103,10 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
     }
   }
 
-  const tracer = global._ddtrace
+  const cypressPlugin = require('../../../packages/datadog-plugin-cypress/src/cypress-plugin')
 
-  const registerAfterRunWithCleanup = () => {
+  if (cypressPlugin._isInit) {
+    for (const h of userAfterSpecHandlers) on('after:spec', h)
     on('after:run', (results) => {
       const chain = userAfterRunHandlers.reduce(
         (p, h) => p.then(() => h(results)),
@@ -121,31 +114,6 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
       )
       return chain.finally(cleanupWrapper)
     })
-  }
-
-  const registerNoopHandlers = () => {
-    for (const h of userAfterSpecHandlers) on('after:spec', h)
-    registerAfterRunWithCleanup()
-    on('task', noopTask)
-  }
-
-  if (!tracer || !tracer._initialized) {
-    registerNoopHandlers()
-    return config
-  }
-
-  const NoopTracer = require('../../../packages/dd-trace/src/noop/tracer')
-
-  if (tracer._tracer instanceof NoopTracer) {
-    registerNoopHandlers()
-    return config
-  }
-
-  const cypressPlugin = require('../../../packages/datadog-plugin-cypress/src/cypress-plugin')
-
-  if (cypressPlugin._isInit) {
-    for (const h of userAfterSpecHandlers) on('after:spec', h)
-    registerAfterRunWithCleanup()
     return config
   }
 
@@ -171,7 +139,7 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
 
   on('task', cypressPlugin.getTasks())
 
-  return Promise.resolve(cypressPlugin.init(tracer, config)).then(() => config)
+  return Promise.resolve(cypressPlugin.init(config)).then(() => config)
 }
 
 /**

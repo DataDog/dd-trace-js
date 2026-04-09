@@ -4,6 +4,7 @@ const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
 const cypressPlugin = require('./cypress-plugin')
+const CypressCiPlugin = require('./index')
 
 const noopTask = {
   'dd:testSuiteStart': () => {
@@ -48,10 +49,14 @@ module.exports = function CypressPlugin (on, config) {
     return config
   }
 
+  const internalTracer = tracer._tracer
+  const ciPlugin = new CypressCiPlugin(internalTracer, internalTracer._config)
+  ciPlugin.configure({ ...internalTracer._config, enabled: true })
+
   on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
   on('after:spec', cypressPlugin.afterSpec.bind(cypressPlugin))
   on('after:run', cypressPlugin.afterRun.bind(cypressPlugin))
   on('task', cypressPlugin.getTasks())
 
-  return cypressPlugin.init(tracer, config)
+  return cypressPlugin.init(config)
 }
