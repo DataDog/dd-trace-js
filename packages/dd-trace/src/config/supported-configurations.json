@@ -2504,6 +2504,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_ELECTRON_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_ENABLED": [
       {
         "implementation": "A",
