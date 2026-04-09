@@ -1,8 +1,8 @@
 'use strict'
 
+const { inspect } = require('node:util')
 const { channel } = require('dc-polyfill')
 
-const { inspect } = require('node:util')
 const request = require('../common/request')
 const { logIntegrations, logAgentError } = require('../../startup-log')
 const runtimeMetrics = require('../../runtime_metrics')
