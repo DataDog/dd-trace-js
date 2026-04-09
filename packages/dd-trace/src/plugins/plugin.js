@@ -72,7 +72,7 @@ module.exports = class Plugin {
    * Create a new plugin instance.
    *
    * @param {object} tracer Tracer instance or wrapper containing it under `_tracer`.
-   * @param {object} tracerConfig Global tracer configuration object.
+   * @param {import('../config/config-base')} tracerConfig Global tracer configuration object.
    */
   constructor (tracer, tracerConfig) {
     this._subscriptions = []
@@ -80,6 +80,8 @@ module.exports = class Plugin {
     this._enabled = false
     this._tracer = tracer
     this.config = {} // plugin-specific configuration, unset until .configure() is called
+
+    /** @type {import('../config/config-base')} */
     this._tracerConfig = tracerConfig // global tracer configuration
   }
 

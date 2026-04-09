@@ -43,9 +43,12 @@ let spanWriter
 /** @type {LLMObsEvalMetricsWriter | null} */
 let evalWriter
 
-/** @type {import('../config')} */
+/** @type {import('../config/config-base')} */
 let globalTracerConfig
 
+/**
+ * @param {@type import('../config/config-base')} config
+ */
 function enable (config) {
   globalTracerConfig = config
 
