@@ -37,7 +37,9 @@ class LLMObs extends NoopLLMObs {
   constructor (tracer, llmobsModule, config) {
     super(tracer)
 
+    /** @type {import('../config/config-base')} */
     this._config = config
+
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
   }
