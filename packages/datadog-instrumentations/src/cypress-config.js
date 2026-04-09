@@ -146,11 +146,6 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
   const ctx = { config }
   sessionInitCh.publish(ctx)
 
-  if (ctx.skip) {
-    registerNoopHandlers()
-    return config
-  }
-
   if (ctx.alreadyInit) {
     for (const h of userAfterSpecHandlers) on('after:spec', h)
     registerAfterRunWithCleanup()

@@ -1,6 +1,5 @@
 'use strict'
 
-const NoopTracer = require('../../dd-trace/src/noop/tracer')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const cypressPlugin = require('./cypress-plugin')
 
@@ -11,11 +10,6 @@ class CypressPlugin extends Plugin {
     super(...args)
 
     this.addSub('ci:cypress:session:init', (ctx) => {
-      if (this._tracer._tracer instanceof NoopTracer) {
-        ctx.skip = true
-        return
-      }
-
       if (cypressPlugin._isInit) {
         ctx.alreadyInit = true
         return
