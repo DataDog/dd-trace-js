@@ -7,25 +7,6 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
-const PublicSpan = require('../opentracing/public/span')
-
-/**
- * Checks whether a value is a Span or PublicSpan instance.
- * @param {unknown} value
- * @returns {boolean}
- */
-function isSpan (value) {
-  return value instanceof Span || value instanceof PublicSpan
-}
-
-/**
- * Returns the underlying raw DatadogSpan, unwrapping a PublicSpan if needed.
- * @param {import('../opentracing/span') | PublicSpan} span
- * @returns {import('../opentracing/span')}
- */
-function unwrapSpan (span) {
-  return span instanceof PublicSpan ? span._span : span
-}
 
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {
@@ -33,6 +14,7 @@ const {
   validateKind,
 } = require('./util')
 const { storage } = require('./storage')
+const { storage: storageCore } = require('../../../datadog-core')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
@@ -130,12 +112,12 @@ class LLMObs extends NoopLLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this._activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
+        this._activate(span._span, { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, span =>
-      this._activate(span, { kind, ...llmobsOptions }, () => fn(span))
+      this._activate(span._span, { kind, ...llmobsOptions }, () => fn(span))
     )
   }
 
@@ -163,7 +145,7 @@ class LLMObs extends NoopLLMObs {
     function wrapped () {
       telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: false, kind })
 
-      const span = llmobs._tracer.scope().active()
+      const span = storageCore('legacy').getStore()?.span
       const fnArgs = arguments
 
       const lastArgId = fnArgs.length - 1
@@ -233,7 +215,7 @@ class LLMObs extends NoopLLMObs {
       span = this._active()
     }
 
-    if ((span && !options) && !isSpan(span)) {
+    if ((span && !options) && !(span instanceof Span)) {
       options = span
       span = this._active()
     }
@@ -254,7 +236,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_span_type'
         throw new Error('Span must be an LLMObs-generated span')
       }
-      if (unwrapSpan(span)._duration !== undefined) {
+      if (span._duration !== undefined) {
         err = 'invalid_finished_span'
         throw new Error('Cannot annotate a finished span')
       }
@@ -311,7 +293,7 @@ class LLMObs extends NoopLLMObs {
         err = 'no_active_span'
         throw new Error('No span provided and no active LLMObs-generated span found')
       }
-      if (!isSpan(span)) {
+      if (!(span instanceof Span)) {
         err = 'invalid_span'
         throw new TypeError('Span must be a valid Span object.')
       }
