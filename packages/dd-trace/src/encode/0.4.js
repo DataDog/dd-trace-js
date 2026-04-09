@@ -140,7 +140,7 @@ class AgentEncoder {
     this._traceBytes.length = 0
     this._stringCount = 0
     this._stringBytes.length = 0
-    this._stringMap = {}
+    this._stringMap = Object.create(null)
 
     this._cacheString('')
   }
