@@ -12,17 +12,17 @@ const templates = {
   html: {
     body: null,
     idIndex: -1,
-    contentType: 'text/html; charset=utf-8'
+    type: 'text/html; charset=utf-8'
   },
   json: {
     body: null,
     idIndex: -1,
-    contentType: 'application/json'
+    type: 'application/json'
   },
   graphqlJson: {
     body: null,
     idIndex: -1,
-    contentType: 'application/json'
+    type: 'application/json'
   }
 }
 
@@ -198,9 +198,9 @@ function getTemplate (type, actionParameters) {
   const template = templates[type]
   if (template.idIndex === -1) return template
 
-  const body = template.body[0] + actionParameters?.security_response_id + template.body[1]
+  const body = template.body[0] + (actionParameters?.security_response_id ?? 'null') + template.body[1]
 
-  return { body, type: template.contentType }
+  return { body, type: template.type }
 }
 
 function isBlocked (res) {
