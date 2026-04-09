@@ -121,6 +121,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json'),
+          blockedTemplateJson: json,
         },
       }))
     })
@@ -229,6 +230,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'body-parser-rules.json'),
+          blockedTemplateJson: json,
         },
       }))
     })
@@ -318,6 +320,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json'),
+          blockedTemplateJson: json,
         },
       }))
     })
@@ -497,6 +500,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
                 appsec: {
                   enabled: true,
                   rules: path.join(__dirname, 'cookie-parser-rules.json'),
+                  blockedTemplateJson: json,
                 },
               })
             )
@@ -594,6 +598,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           appsec: {
             enabled: true,
             rules: path.join(__dirname, 'body-parser-rules.json'),
+            blockedTemplateJson: json,
           },
         }))
       })
