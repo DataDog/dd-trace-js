@@ -20,6 +20,7 @@ module.exports.init = function (tracerConfig) {
         `env:${tracerConfig.tags.env}`,
         `version:${tracerConfig.tags.version}`,
       ],
+      lookup: tracerConfig.lookup,
     })
     : new NoopDogStatsDClient()
 
