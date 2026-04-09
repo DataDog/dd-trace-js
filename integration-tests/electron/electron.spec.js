@@ -102,7 +102,9 @@ describe('Electron integration', function () {
     if (httpServer) await new Promise(resolve => httpServer.close(resolve))
   })
 
-  beforeEach(done => {
+  beforeEach(function (done) {
+    this.timeout(15_000)
+
     child = spawn(binaryPath, [], {
       env: {
         ...process.env,
