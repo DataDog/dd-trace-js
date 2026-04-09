@@ -1702,6 +1702,14 @@
         "default": null
       }
     ],
+    "DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "86400",
+        "internalPropertyName": "telemetry.extendedHeartbeatInterval"
+      }
+    ],
     "DD_TELEMETRY_HEARTBEAT_INTERVAL": [
       {
         "implementation": "B",

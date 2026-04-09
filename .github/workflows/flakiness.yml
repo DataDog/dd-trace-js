@@ -36,6 +36,7 @@ jobs:
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
           payload: |
             channel: ${{ secrets.SLACK_CHANNEL_ID }}
             blocks:
