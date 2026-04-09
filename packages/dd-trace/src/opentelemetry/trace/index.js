@@ -45,10 +45,7 @@ function buildResourceAttributes (config) {
   if (version) resourceAttributes['service.version'] = version
 
   if (config.tags) {
-    const filteredTags = { ...config.tags }
-    delete filteredTags.service
-    delete filteredTags.version
-    delete filteredTags.env
+    const { service, version, env, ...filteredTags } = config.tags
     Object.assign(resourceAttributes, filteredTags)
   }
 
