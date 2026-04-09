@@ -231,6 +231,7 @@
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
+/integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
 
 /packages/datadog-core @DataDog/lang-platform-js
