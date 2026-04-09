@@ -121,7 +121,11 @@ describe('telemetry', () => {
     circularObject.child.parent = circularObject
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: traceAgent.address().port,
       service: 'test service',
@@ -251,7 +255,11 @@ describe('telemetry', () => {
       assert.fail('server should not be called')
     }).listen(0, () => {
       telemetry.start({
-        telemetry: { enabled: false, heartbeatInterval: 60000, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+        telemetry: {
+          enabled: false,
+          heartbeatInterval: 60000,
+          extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        },
         hostname: 'localhost',
         port: (/** @type {import('net').AddressInfo} */ (server.address())).port,
         appsec: { sca: { enabled: false } },
@@ -272,7 +280,11 @@ describe('telemetry', () => {
       },
     })
     notEnabledTelemetry.start({
-      telemetry: { enabled: false, heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: false,
+        heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       appsec: { enabled: false, sca: { enabled: undefined } },
       profiling: { enabled: false },
     }, {
@@ -319,7 +331,11 @@ describe('telemetry app-heartbeat', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -385,7 +401,11 @@ describe('Telemetry extended heartbeat', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -428,7 +448,11 @@ describe('Telemetry extended heartbeat', () => {
     })
 
     const config = {
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -531,7 +555,11 @@ describe('Telemetry extended heartbeat', () => {
     })
 
     const config = {
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -623,7 +651,11 @@ describe('Telemetry retry', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -712,7 +744,11 @@ describe('Telemetry retry', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -783,7 +819,11 @@ describe('Telemetry retry', () => {
     })
 
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -845,7 +885,11 @@ describe('Telemetry retry', () => {
 
     // Start function sends 2 messages app-started & app-integrations-change
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -929,7 +973,11 @@ describe('Telemetry retry', () => {
 
     // Start function sends 2 messages app-started & app-integrations-change
     telemetry.start({
-      telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+      telemetry: {
+        enabled: true,
+        heartbeatInterval: HEARTBEAT_INTERVAL,
+        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+      },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
@@ -1024,7 +1072,11 @@ describe('AVM OSS', () => {
           telemetry = require('../../src/telemetry/telemetry')
 
           telemetryConfig = {
-            telemetry: { enabled: true, heartbeatInterval: HEARTBEAT_INTERVAL, extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL },
+            telemetry: {
+              enabled: true,
+              heartbeatInterval: HEARTBEAT_INTERVAL,
+              extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+            },
             hostname: 'localhost',
             port: traceAgent.address().port,
             service: 'test service',
