@@ -291,8 +291,8 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, op, true)
-    idx += 2
+    view.setUint8(idx, op)
+    idx += 1
     buf.set(spanId, idx)
     idx += 8
 
@@ -405,7 +405,7 @@ class NativeSpansInterface {
 
     let idx = this._cqbIndex
 
-    if (idx + 44 > CHANGE_QUEUE_BUFFER_SIZE) {
+    if (idx + 43 > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
     }
@@ -417,8 +417,8 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, 13, true)
-    idx += 2
+    view.setUint8(idx, 13)
+    idx += 1
     buf.set(spanId, idx)
     idx += 8
 
@@ -477,7 +477,7 @@ class NativeSpansInterface {
 
     let idx = this._cqbIndex
 
-    if (idx + 50 > CHANGE_QUEUE_BUFFER_SIZE) {
+    if (idx + 49 > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
     }
@@ -492,8 +492,8 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, 14, true)
-    idx += 2
+    view.setUint8(idx, 14)
+    idx += 1
     buf.set(spanId, idx)
     idx += 8
 
@@ -550,7 +550,7 @@ class NativeSpansInterface {
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
-    const needed = 14 + tags.length * 4
+    const needed = 13 + tags.length * 4
 
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
@@ -567,8 +567,8 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, 15, true)
-    idx += 2
+    view.setUint8(idx, 15)
+    idx += 1
     buf.set(spanId, idx)
     idx += 8
     view.setUint32(idx, tags.length, true)
@@ -598,7 +598,7 @@ class NativeSpansInterface {
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
-    const needed = 14 + tags.length * 10
+    const needed = 13 + tags.length * 10
 
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
@@ -614,8 +614,8 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint16(idx, 16, true)
-    idx += 2
+    view.setUint8(idx, 16)
+    idx += 1
     buf.set(spanId, idx)
     idx += 8
     view.setUint32(idx, tags.length, true)
