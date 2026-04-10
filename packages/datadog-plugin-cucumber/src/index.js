@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real Date.now at module load time, before any test can install fake timers.
+const realDateNow = Date.now.bind(Date)
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
@@ -252,8 +255,8 @@ class CucumberPlugin extends CiPlugin {
           const { file, line, stackIndex } = probeInformation
           this.runningTestProbe = { file, line }
           this.testErrorStackIndex = stackIndex
-          const waitUntil = Date.now() + BREAKPOINT_SET_GRACE_PERIOD_MS
-          while (Date.now() < waitUntil) {
+          const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
+          while (realDateNow() < waitUntil) {
             // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
             // However, Cucumber doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
             // fall back to a fixed syncronous delay.
