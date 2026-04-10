@@ -1931,6 +1931,58 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
           })
 
+          it('does not tag known attempt to fix tests as new', async () => {
+            receiver.setKnownTests({
+              vitest: {
+                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': [
+                  'attempt to fix tests can attempt to fix a test',
+                ],
+              },
+            })
+            receiver.setSettings({
+              test_management: { enabled: true, attempt_to_fix_retries: 2 },
+              early_flake_detection: {
+                enabled: true,
+                slow_test_retries: { '5s': 2 },
+                faulty_session_threshold: 100,
+              },
+              known_tests_enabled: true,
+            })
+
+            const eventsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const atfTests = tests.filter(
+                  t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+                )
+                assert.ok(atfTests.length > 0)
+                for (const test of atfTests) {
+                  assert.ok(
+                    !(TEST_IS_NEW in test.meta),
+                    'ATF test that is in known tests should not be tagged as new'
+                  )
+                }
+              })
+
+            childProcess = exec(
+              './node_modules/.bin/vitest run',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+
+            await Promise.all([
+              once(childProcess, 'exit'),
+              eventsPromise,
+            ])
+          })
+
           it('does not fail retry if a test is quarantined', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
             receiver.setTestManagementTests({
