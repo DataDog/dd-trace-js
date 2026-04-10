@@ -599,7 +599,6 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             rules: path.join(__dirname, 'body-parser-rules.json'),
           },
         }))
-        setTestBlockingTemplates()
       })
 
       afterEach(() => {
@@ -703,7 +702,6 @@ describe('Api Security - Fastify', () => {
         },
       })
       appsec.enable(config)
-      setTestBlockingTemplates()
     })
 
     afterEach(() => {
