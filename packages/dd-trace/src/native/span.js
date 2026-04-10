@@ -117,9 +117,12 @@ class NativeDatadogSpan {
 
     getIntegrationCounter('spans_created', this._integrationName).inc()
 
+    // Allocate a slot index for this span in native storage
+    const slotIndex = this._nativeSpans.allocSlot()
+
     // Create the span context with native backing.
     // Uses combined CreateSpan opcode (Create + SetName + SetStart in one op).
-    this._spanContext = this.#createContext(parent, fields)
+    this._spanContext = this.#createContext(parent, fields, slotIndex)
     this._spanContext._hostname = hostname
 
     // Calculate start time (must happen before queueCreateSpan)
@@ -127,6 +130,7 @@ class NativeDatadogSpan {
 
     // Queue combined create + name + start as a single WASM operation
     this._nativeSpans.queueCreateSpan(
+      slotIndex,
       this._spanContext._nativeSpanId,
       this._spanContext._createTraceId,
       this._spanContext._createParentId,
@@ -339,7 +343,7 @@ class NativeDatadogSpan {
     // Queue duration to native storage (in nanoseconds)
     this._nativeSpans.queueOp(
       OpCode.SetDuration,
-      this._spanContext._nativeSpanId,
+      this._spanContext._slotIndex,
       ['ns', this._duration]
     )
 
@@ -406,9 +410,10 @@ class NativeDatadogSpan {
    * Create a NativeSpanContext for this span.
    * @param {DatadogSpanContext|null} parent - Parent span context
    * @param {Object} fields - Span creation fields
+   * @param {number} slotIndex - Allocated slot index for native storage
    * @returns {NativeSpanContext}
    */
-  #createContext (parent, fields) {
+  #createContext (parent, fields, slotIndex) {
     let spanContext
     let startTime
     let traceId
@@ -444,7 +449,8 @@ class NativeDatadogSpan {
         tags: { ...existingContext.getTags() },
         trace: existingContext._trace,
         tracestate: existingContext._tracestate,
-        tracerService: this._parentTracer._service
+        tracerService: this._parentTracer._service,
+        slotIndex,
       })
 
       if (!spanContext._trace.startTime) {
@@ -465,7 +471,8 @@ class NativeDatadogSpan {
         baggageItems: { ...parent._baggageItems },
         trace: parent._trace,
         tracestate: parent._tracestate,
-        tracerService: this._parentTracer._service
+        tracerService: this._parentTracer._service,
+        slotIndex,
       })
 
       if (!spanContext._trace.startTime) {
@@ -482,7 +489,8 @@ class NativeDatadogSpan {
       spanContext = new NativeSpanContext(this._nativeSpans, {
         traceId: spanId,
         spanId,
-        tracerService: this._parentTracer._service
+        tracerService: this._parentTracer._service,
+        slotIndex,
       })
       spanContext._trace.startTime = startTime
 
