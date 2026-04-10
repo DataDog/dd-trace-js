@@ -12,6 +12,16 @@ const serverless = {
       opName: () => 'azure.functions.invoke',
       serviceName: identityService,
     },
+    'aws-durable-execution-sdk-js': {
+      opName: () => 'aws.durable-execution.invoke',
+      serviceName: identityService,
+    },
+  },
+  client: {
+    'aws-durable-execution-sdk-js': {
+      opName: () => 'aws.durable-execution.invoke',
+      serviceName: identityService,
+    },
   },
 }
 

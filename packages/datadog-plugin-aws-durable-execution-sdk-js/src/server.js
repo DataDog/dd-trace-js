@@ -4,6 +4,7 @@ const ServerPlugin = require('../../dd-trace/src/plugins/server')
 
 class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
   static id = 'aws-durable-execution-sdk-js'
+  static type = 'serverless'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:withDurableExecution'
 
   bindStart (ctx) {
