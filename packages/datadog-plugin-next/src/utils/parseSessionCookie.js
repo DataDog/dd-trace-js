@@ -8,7 +8,7 @@ const SESSION_ENTRY_REGEXP = /^([a-zA-Z]+)=([a-z0-9-]+)$/
 const SESSION_ENTRY_SEPARATOR = '&'
 
 function parseRumSessionId (cookieValue) {
-  if (!cookieValue) return undefined
+  if (!cookieValue) return
 
   const entries = cookieValue.split(SESSION_ENTRY_SEPARATOR)
   for (const entry of entries) {
@@ -18,8 +18,6 @@ function parseRumSessionId (cookieValue) {
       if (key === 'id') return value
     }
   }
-
-  return undefined
 }
 
 module.exports = { parseRumSessionId }

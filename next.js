@@ -7,5 +7,5 @@ const { datadogOnRequestError } = require('./packages/datadog-plugin-next/src/re
 module.exports = {
   withDatadogServerAction,
   getDatadogTraceMetadata,
-  datadogOnRequestError
+  datadogOnRequestError,
 }
