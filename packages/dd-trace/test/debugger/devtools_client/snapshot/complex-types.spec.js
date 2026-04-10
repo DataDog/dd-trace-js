@@ -46,7 +46,7 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
     })
 
     it('should contain expected properties from closure scope', function () {
-      assert.strictEqual(Object.keys(state).length, 28)
+      assert.strictEqual(Object.keys(state).length, 29)
 
       // from block scope
       // ... tested individually in the remaining it-blocks inside this describe-block
@@ -123,6 +123,11 @@ describe('debugger -> devtools client -> snapshot.getLocalStateForCallFrame', fu
         type: 'Date',
         value: '2024-09-20T07:22:59Z', // missing milliseconds due to API limitation (should have been `998`)
       })
+    })
+
+    it('Invalid Date', function () {
+      assert.ok('idate' in state)
+      assert.deepStrictEqual(state.idate, { type: 'Date', value: 'Invalid Date' })
     })
 
     it('Map', function () {
