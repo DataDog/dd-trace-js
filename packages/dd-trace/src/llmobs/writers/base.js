@@ -45,7 +45,9 @@ class BaseLLMObsWriter {
     /** @type {LLMObsBuffer} */
     this._buffer = new LLMObsBuffer({ events: [], size: 0, isDefault: true })
 
+    /** @type {import('../../config/config-base')} */
     this._config = config
+
     this._endpoint = endpoint
     this._baseEndpoint = endpoint // should not be unset
     this._intake = intake
