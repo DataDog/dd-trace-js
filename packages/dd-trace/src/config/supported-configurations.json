@@ -46,12 +46,12 @@
     ],
     "DD_AI_GUARD_BLOCK": [
       {
-        "implementation": "B",
+        "implementation": "C",
         "type": "boolean",
         "configurationNames": [
           "experimental.aiguard.block"
         ],
-        "default": "false"
+        "default": "true"
       }
     ],
     "DD_AI_GUARD_ENABLED": [
