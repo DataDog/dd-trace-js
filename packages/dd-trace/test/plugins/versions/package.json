@@ -4,6 +4,7 @@
   "license": "BSD-3-Clause",
   "private": true,
   "dependencies": {
+    "@aws/durable-execution-sdk-js": "1.1.0",
     "@babel/core": "7.29.0",
     "@babel/preset-typescript": "7.28.5",
     "@ai-sdk/openai": "3.0.12",

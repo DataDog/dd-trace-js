@@ -30,6 +30,7 @@ tracer.use('pg', {
 <h5 id="anthropic"></h5>
 <h5 id="apollo"></h5>
 <h5 id="avsc"></h5>
+<h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
@@ -111,6 +112,7 @@ tracer.use('pg', {
 * [anthropic](./interfaces/export_.plugins.anthropic.html)
 * [apollo](./interfaces/export_.plugins.apollo.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
+* [aws-durable-execution-sdk-js](./interfaces/export_.plugins.aws_durable_execution_sdk_js.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
 * [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)

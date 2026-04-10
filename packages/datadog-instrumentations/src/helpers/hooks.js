@@ -2,6 +2,7 @@
 
 module.exports = {
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
+  '@aws/durable-execution-sdk-js': () => require('../aws-durable-execution-sdk-js'),
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),
