@@ -53,6 +53,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   bindStart(ctx) {
+    log.info("AZURE COSMOS PLUGIN");
     // executePlugins(diagnosticNode, requestContext, next, on) — `on` is PluginOn.request | PluginOn.operation
     const pluginOn = ctx.arguments?.[3];
 
@@ -62,6 +63,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     const { dbName, containerName } = this.getDbInfo(requestContext);
     const connectionMode = this.getConnectionMode(requestContext);
     const { outHost, userAgent } = this.getHttpInfo(requestContext);
+    console.log('outHost', outHost);
     // getting really specific here but otherwise we get doubled up read spans
     if (pluginOn === "request" && ((!resource.includes("read") && !resource.includes("query")) || (resource.includes("read") && requestContext.resourceType != "docs"))) {
       ctx.currentStore = { ...(storage('legacy').getStore() || {}) };
