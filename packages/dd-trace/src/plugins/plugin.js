@@ -151,8 +151,9 @@ module.exports = class Plugin {
 
     if (!store || !store.span) return
 
-    if (!store.span._spanContext._tags.error) {
-      store.span.setTag('error', error || 1)
+    const span = /** @type {import('../opentracing/span')} */ (store.span)
+    if (!span._spanContext._tags.error) {
+      span.setTag('error', error || 1)
     }
   }
 
@@ -161,8 +162,8 @@ module.exports = class Plugin {
    *
    * TODO: Remove the overloading with `enabled` and use the config object directly.
    *
-   * @param {boolean|import('../config/config-base')} config Either a boolean to enable/disable
-   * or a configuration object containing at least `{ enabled: boolean }`.
+   * @param {boolean | {enabled: boolean} & Record<string, unknown>} config Either a boolean to
+   * enable/disable or a configuration object containing at least `{ enabled: boolean }`.
    */
   configure (config) {
     if (typeof config === 'boolean') {
