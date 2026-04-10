@@ -298,7 +298,7 @@ describe('telemetry', () => {
 describe('telemetry app-heartbeat', () => {
   const HEARTBEAT_INTERVAL = 60000
   let telemetry
-  let pluginsByName
+  const pluginsByName = {}
   let clock
 
   before(() => {
@@ -360,7 +360,7 @@ describe('telemetry app-heartbeat', () => {
 describe('Telemetry extended heartbeat', () => {
   const HEARTBEAT_INTERVAL = 43200000
   let telemetry
-  let pluginsByName
+  const pluginsByName = {}
   let clock
 
   beforeEach(() => {
@@ -376,7 +376,7 @@ describe('Telemetry extended heartbeat', () => {
 
   it('should be sent every 24 hours', (done) => {
     let extendedHeartbeatRequest
-    let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
+    let beats = 0 // to keep track of the amount of times extendedHeartbeat is called
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         if (reqType === 'app-started') {

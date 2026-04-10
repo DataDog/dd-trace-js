@@ -40,12 +40,12 @@ class SchemaBuilder {
     return this.schema
   }
 
-  addProperty (schemaName, fieldName, isArray, type, description, ref, format, enumValues) {
+  addProperty (schemaName, fieldName, isArray, type, ref, format, enumValues) {
     if (this.properties >= maxProperties) {
       return false
     }
     this.properties += 1
-    let property = new OpenApiSchema.PROPERTY(type, description, ref, format, enumValues, null)
+    let property = new OpenApiSchema.PROPERTY(type, null, ref, format, enumValues, null)
     if (isArray) {
       property = new OpenApiSchema.PROPERTY('array', null, null, null, null, property)
     }
