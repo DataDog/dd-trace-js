@@ -17,6 +17,7 @@
 "@jsep-plugin/regex","https://github.com/EricSmekens/jsep","['MIT']","['Shelly']"
 "@napi-rs/wasm-runtime","https://github.com/napi-rs/napi-rs","['MIT']","['LongYinan']"
 "@opentelemetry/api","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
+"@opentelemetry/api-logs","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
 "@opentelemetry/core","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
 "@opentelemetry/resources","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
 "@opentelemetry/semantic-conventions","https://github.com/open-telemetry/opentelemetry-js","['Apache-2.0']","['OpenTelemetry Authors']"
