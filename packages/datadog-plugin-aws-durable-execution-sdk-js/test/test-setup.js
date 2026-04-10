@@ -252,10 +252,8 @@ class AwsDurableExecutionSdkJsTestSetup {
   // --- DurableContextImpl.waitForCondition() operations ---
 
   async durableContextImplWaitForCondition () {
-    let callCount = 0
     return this._invokeHandler(async (event, ctx) => {
       const result = await ctx.waitForCondition('test-condition', async () => {
-        callCount++
         return { met: true }
       }, {
         waitStrategy: (result, attempts) => {
