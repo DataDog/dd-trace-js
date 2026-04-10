@@ -105,6 +105,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       'nyc',
       'mocha-each',
       'workerpool',
+      'sinon',
     ],
     true
   )
@@ -3809,6 +3810,41 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           done()
         }).catch(done)
       })
+    })
+
+    onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 2)
+          const retriedTests = tests.filter(
+            t => t.meta[TEST_IS_RETRY] === 'true'
+          )
+          assert.strictEqual(retriedTests.length, 1)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/fake-timers-test-hit-breakpoint',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0)
     })
 
     it('tags new tests with dynamic names and logs a warning', async () => {
