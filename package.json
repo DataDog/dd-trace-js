@@ -161,6 +161,7 @@
     "version.js"
   ],
   "dependencies": {
+    "@aws/durable-execution-sdk-js": "1.1.0",
     "dc-polyfill": "^0.1.11",
     "import-in-the-middle": "^3.0.1",
     "opentracing": ">=0.14.7"
