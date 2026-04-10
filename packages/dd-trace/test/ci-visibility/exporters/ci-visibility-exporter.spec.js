@@ -13,10 +13,10 @@ const nock = require('nock')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../../../dd-trace/test/setup/core')
 const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
+const { defaults: { hostname, port } } = require('../../../src/config/defaults')
 
 describe('CI Visibility Exporter', () => {
-  const port = 8126
-  const url = `http://127.0.0.1:${port}`
+  const url = `http://${hostname}:${port}`
 
   beforeEach(() => {
     // to make sure `isShallowRepository` in `git.js` returns false

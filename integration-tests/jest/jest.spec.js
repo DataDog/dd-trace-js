@@ -996,6 +996,36 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }).catch(done)
       })
     })
+
+    onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          // Must have 2 tests: 1 original + 1 ATR retry
+          assert.strictEqual(tests.length, 2)
+          const retriedTests = tests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, 1)
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-flaky/fake-timers-flaky-fails',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          SHOULD_CHECK_RESULTS: '1',
+        },
+      })
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1)
+    })
   })
 
   context('when jest is using worker threads', () => {
@@ -5541,6 +5571,74 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const efdRetries = tests.filter(t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd)
             assert.strictEqual(atfRetries.length, 2)
             assert.strictEqual(efdRetries.length, 0)
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'jest-flaky/flaky-fails.js',
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
+
+      it('does not tag known attempt to fix tests as new', async () => {
+        receiver.setKnownTests({
+          jest: {
+            'ci-visibility/jest-flaky/flaky-fails.js': [
+              'test-flaky-test-retries can retry failed tests',
+            ],
+          },
+        })
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/jest-flaky/flaky-fails.js': {
+                tests: {
+                  'test-flaky-test-retries can retry failed tests': {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const atfTests = tests.filter(
+              t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+            )
+            assert.ok(atfTests.length > 0)
+            for (const test of atfTests) {
+              assert.ok(
+                !(TEST_IS_NEW in test.meta),
+                'ATF test that is in known tests should not be tagged as new'
+              )
+            }
           })
 
         childProcess = exec(

@@ -469,6 +469,10 @@ module.exports = class CiPlugin extends Plugin {
     return getSessionRequestErrorTags(this.testSessionSpan)
   }
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   * @param {boolean} shouldGetEnvironmentData - Whether to get environment data
+   */
   configure (config, shouldGetEnvironmentData = true) {
     super.configure(config)
 
