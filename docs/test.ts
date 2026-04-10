@@ -304,6 +304,7 @@ tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
 tracer.use('avsc');
+tracer.use('aws-durable-execution-sdk-js');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('azure-event-hubs')

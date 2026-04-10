@@ -229,6 +229,7 @@ interface Plugins {
   "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
+  "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
@@ -2291,6 +2292,12 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
+    /**
+     * This plugin automatically instruments the
+     * [aws-durable-execution-sdk-js](https://github.com/npmjs/package/@aws/durable-execution-sdk-js) library.
+     */
+    interface aws_durable_execution_sdk_js extends Instrumentation {}
+
     interface aws_sdk extends Instrumentation {
       /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal

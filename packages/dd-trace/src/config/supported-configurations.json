@@ -1240,6 +1240,13 @@
         "internalPropertyName": "otelLogsEnabled"
       }
     ],
+    "DD_TRACE_AWS_DURABLE_EXECUTION_SDK_JS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_LOG_LEVEL": [
       {
         "implementation": "C",
