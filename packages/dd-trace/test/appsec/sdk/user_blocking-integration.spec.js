@@ -197,7 +197,7 @@ describe('user_blocking - Integration with the tracer', () => {
       assert.strictEqual(JSON.stringify(response.data), json.replace('[security_response_id]', ''))
     })
 
-    it('should block using redirect data but ignore security_response_id template', async () => {
+    it('should block using redirect data but remove security_response_id template', async () => {
       blocking.setDefaultBlockingActionParameters([
         {
           id: 'block',
