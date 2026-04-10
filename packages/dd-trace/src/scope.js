@@ -18,7 +18,7 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    span = span?._span || span
+    span = span?._span || null
 
     const oldStore = storage('legacy').getStore()
     const newStore = span ? storage('legacy').getStore(span._store) : oldStore
@@ -41,7 +41,7 @@ class Scope {
   bind (fn, span) {
     if (typeof fn !== 'function') return fn
 
-    span = span?._span || span
+    span = span?._span || null
 
     const scope = this
     const spanOrActive = this._spanOrActive(span)
