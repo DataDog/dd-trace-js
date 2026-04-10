@@ -415,7 +415,8 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         const allSpans = traces.flat()
         const invokeSpan = allSpans.find(s => s.name === 'lambda.invoke')
         if (!invokeSpan) {
-          throw new Error(`Expected span "lambda.invoke" not found. Available: ${JSON.stringify(allSpans.map(s => s.name))}`)
+          const available = JSON.stringify(allSpans.map(s => s.name))
+          throw new Error(`Expected span "lambda.invoke" not found. Available: ${available}`)
         }
         assertObjectContains(invokeSpan, {
           name: 'lambda.invoke',
