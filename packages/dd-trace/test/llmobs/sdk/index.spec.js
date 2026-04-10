@@ -277,7 +277,7 @@ describe('sdk', () => {
           llmobs.trace({ kind: 'workflow', name: 'test' }, outerLLMSpan => {
             llmobs.trace({ kind: 'task', name: 'test' }, innerLLMSpan => {
               assert.strictEqual(
-                LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
+                LLMObsTagger.tagMap.get(innerLLMSpan._span)['_ml_obs.llmobs_parent_id'],
                 outerLLMSpan.context().toSpanId()
               )
               // TODO: need to implement custom trace IDs
@@ -289,15 +289,15 @@ describe('sdk', () => {
 
         it('maintains llmobs parentage separately from apm spans', () => {
           llmobs.trace({ kind: 'workflow', name: 'outer-llm' }, outerLLMSpan => {
-            assert.strictEqual(llmobs._active(), outerLLMSpan)
+            assert.strictEqual(llmobs._active(), outerLLMSpan._span)
             tracer.trace('apmSpan', apmSpan => {
-              assert.strictEqual(llmobs._active(), outerLLMSpan)
+              assert.strictEqual(llmobs._active(), outerLLMSpan._span)
               llmobs.trace({ kind: 'workflow', name: 'inner-llm' }, innerLLMSpan => {
-                assert.strictEqual(llmobs._active(), innerLLMSpan)
+                assert.strictEqual(llmobs._active(), innerLLMSpan._span)
 
                 // llmobs span linkage
                 assert.strictEqual(
-                  LLMObsTagger.tagMap.get(innerLLMSpan)['_ml_obs.llmobs_parent_id'],
+                  LLMObsTagger.tagMap.get(innerLLMSpan._span)['_ml_obs.llmobs_parent_id'],
                   outerLLMSpan.context().toSpanId()
                 )
 
@@ -331,16 +331,16 @@ describe('sdk', () => {
         it('maintains the llmobs parentage when error callbacks are used', () => {
           llmobs.trace({ kind: 'workflow' }, outer => {
             llmobs.trace({ kind: 'task' }, (inner, cb) => {
-              assert.strictEqual(llmobs._active(), inner)
-              assert.strictEqual(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'], outer.context().toSpanId())
+              assert.strictEqual(llmobs._active(), inner._span)
+              assert.strictEqual(LLMObsTagger.tagMap.get(inner._span)['_ml_obs.llmobs_parent_id'], outer.context().toSpanId())
               cb() // finish the span
             })
 
-            assert.strictEqual(llmobs._active(), outer)
+            assert.strictEqual(llmobs._active(), outer._span)
 
             llmobs.trace({ kind: 'task' }, (inner) => {
-              assert.strictEqual(llmobs._active(), inner)
-              assert.strictEqual(LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'], outer.context().toSpanId())
+              assert.strictEqual(llmobs._active(), inner._span)
+              assert.strictEqual(LLMObsTagger.tagMap.get(inner._span)['_ml_obs.llmobs_parent_id'], outer.context().toSpanId())
             })
           })
         })
@@ -359,7 +359,7 @@ describe('sdk', () => {
           span = _span
         })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span._span), {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'override',
           '_ml_obs.meta.model_name': 'modelName',
@@ -710,7 +710,7 @@ describe('sdk', () => {
 
           function outerLLMObs () {
             outerLLMObsSpan = llmobs._active()
-            assert.strictEqual(outerLLMObsSpan, tracer.scope().active())
+            assert.strictEqual(outerLLMObsSpan, tracer.scope().active()._span)
 
             apmWrapped()
           }
@@ -720,7 +720,7 @@ describe('sdk', () => {
           }
           function innerLLMObs () {
             innerLLMObsSpan = llmobs._active()
-            assert.strictEqual(innerLLMObsSpan, tracer.scope().active())
+            assert.strictEqual(innerLLMObsSpan, tracer.scope().active()._span)
             assert.strictEqual(
               LLMObsTagger.tagMap.get(innerLLMObsSpan)['_ml_obs.llmobs_parent_id'],
               outerLLMObsSpan.context().toSpanId()
@@ -768,12 +768,12 @@ describe('sdk', () => {
           function outer () {
             outerSpan = llmobs._active()
             wrappedInner1(() => {})
-            assert.strictEqual(outerSpan, tracer.scope().active())
+            assert.strictEqual(outerSpan, tracer.scope().active()._span)
             wrappedInner2()
           }
 
           function inner1 (cb) {
-            const inner = tracer.scope().active()
+            const inner = tracer.scope().active()._span
             assert.strictEqual(llmobs._active(), inner)
             assert.strictEqual(
               LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'],
@@ -783,7 +783,7 @@ describe('sdk', () => {
           }
 
           function inner2 () {
-            const inner = tracer.scope().active()
+            const inner = tracer.scope().active()._span
             assert.strictEqual(llmobs._active(), inner)
             assert.strictEqual(
               LLMObsTagger.tagMap.get(inner)['_ml_obs.llmobs_parent_id'],
@@ -848,7 +848,7 @@ describe('sdk', () => {
         assert.throws(() => llmobs.annotate(span))
 
         // span should still exist in the registry, just with no annotations
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span._span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -883,7 +883,7 @@ describe('sdk', () => {
       // TODO this might end up being obsolete with llmobs span kind as optional
       sinon.spy(llmobs._tagger, 'tagLLMIO')
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
-        LLMObsTagger.tagMap.get(span)['_ml_obs.meta.span.kind'] = undefined // somehow this is set
+        LLMObsTagger.tagMap.get(span._span)['_ml_obs.meta.span.kind'] = undefined // somehow this is set
         assert.throws(() => llmobs.annotate(span, {}))
       })
 
@@ -898,7 +898,7 @@ describe('sdk', () => {
         const inputData = {}
         llmobs.annotate({ inputData })
 
-        sinon.assert.calledWith(llmobs._tagger.tagTextIO, span, inputData, undefined)
+        sinon.assert.calledWith(llmobs._tagger.tagTextIO, span._span, inputData, undefined)
       })
 
       llmobs._tagger.tagTextIO.restore()
@@ -912,7 +912,7 @@ describe('sdk', () => {
           const inputData = {}
           llmobs.annotate({ inputData })
 
-          sinon.assert.calledWith(llmobs._tagger.tagTextIO, llmobsSpan, inputData, undefined)
+          sinon.assert.calledWith(llmobs._tagger.tagTextIO, llmobsSpan._span, inputData, undefined)
         })
       })
 
@@ -926,7 +926,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span._span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -943,7 +943,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'embedding', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span._span), {
           '_ml_obs.meta.span.kind': 'embedding',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -960,7 +960,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'retrieval', name: 'test' }, span => {
         llmobs.annotate({ inputData, outputData })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span._span), {
           '_ml_obs.meta.span.kind': 'retrieval',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -976,7 +976,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ metadata })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span._span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -991,7 +991,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ metrics })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span._span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1006,7 +1006,7 @@ describe('sdk', () => {
       llmobs.trace({ kind: 'llm', name: 'test' }, span => {
         llmobs.annotate({ tags })
 
-        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span._span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',

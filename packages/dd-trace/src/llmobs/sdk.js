@@ -8,13 +8,13 @@ const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
 
+const { storage: storageCore } = require('../../../datadog-core')
 const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
 const {
   getFunctionArguments,
   validateKind,
 } = require('./util')
 const { storage } = require('./storage')
-const { storage: storageCore } = require('../../../datadog-core')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
@@ -112,12 +112,12 @@ class LLMObs extends NoopLLMObs {
 
     if (fn.length > 1) {
       return this._tracer.trace(name, spanOptions, (span, cb) =>
-        this._activate(span._span, { kind, ...llmobsOptions }, () => fn(span, cb))
+        this._activate(span, { kind, ...llmobsOptions }, () => fn(span, cb))
       )
     }
 
     return this._tracer.trace(name, spanOptions, span =>
-      this._activate(span._span, { kind, ...llmobsOptions }, () => fn(span))
+      this._activate(span, { kind, ...llmobsOptions }, () => fn(span))
     )
   }
 
@@ -215,6 +215,8 @@ class LLMObs extends NoopLLMObs {
       span = this._active()
     }
 
+    span = span?._span || span
+
     if ((span && !options) && !(span instanceof Span)) {
       options = span
       span = this._active()
@@ -287,6 +289,7 @@ class LLMObs extends NoopLLMObs {
 
   exportSpan (span) {
     span = span || this._active()
+    span = span?._span || span
     let err = ''
     try {
       if (!span) {
@@ -527,13 +530,14 @@ class LLMObs extends NoopLLMObs {
   }
 
   _activate (span, options, fn) {
+    span = span?._span || span
     const parentStore = storage.getStore()
     if (this.enabled) storage.enterWith({ ...parentStore, span })
 
     if (options) {
       this._tagger.registerLLMObsSpan(span, {
         ...options,
-        parent: parentStore?.span,
+        parent: parentStore?.span?._span || parentStore?.span,
       })
     }
 
