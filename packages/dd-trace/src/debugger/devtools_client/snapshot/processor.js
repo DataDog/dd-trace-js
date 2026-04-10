@@ -109,7 +109,7 @@ function getObjectValue (obj, maxLength) {
       // TODO: This looses millisecond resolution, as that's not retained in the `.toString()` representation contained
       // in the `description` field. Unfortunately that's all we get from the Chrome DevTools Protocol.
       const date = new Date(obj.description)
-      const value = isNaN(date.getTime()) ? obj.description : `${date.toISOString().slice(0, -5)}Z`
+      const value = Number.isNaN(date.getTime()) ? obj.description : `${date.toISOString().slice(0, -5)}Z`
       return { type: obj.className, value }
     }
     case 'map':
