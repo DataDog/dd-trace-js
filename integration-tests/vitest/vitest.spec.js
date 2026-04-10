@@ -1659,7 +1659,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation-with-fake-timers*',
+                TEST_DIR: 'ci-visibility/vitest-tests/fake-timers-di*',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               },
             }

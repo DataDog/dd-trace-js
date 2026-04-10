@@ -1017,7 +1017,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         cwd,
         env: {
           ...getCiVisAgentlessConfig(receiver.port),
-          TESTS_TO_RUN: 'jest-flaky/flaky-fails-with-fake-timers',
+          TESTS_TO_RUN: 'jest-flaky/fake-timers-flaky-fails',
           DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           SHOULD_CHECK_RESULTS: '1',
         },
