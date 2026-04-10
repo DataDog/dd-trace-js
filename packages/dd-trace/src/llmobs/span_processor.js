@@ -35,7 +35,6 @@ const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
 const LLMObsTagger = require('./tagger')
 
-
 class LLMObservabilitySpan {
   constructor () {
     this.input = []

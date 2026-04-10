@@ -332,7 +332,8 @@ describe('sdk', () => {
           llmobs.trace({ kind: 'workflow' }, outer => {
             llmobs.trace({ kind: 'task' }, (inner, cb) => {
               assert.strictEqual(llmobs._active(), inner._span)
-              assert.strictEqual(LLMObsTagger.tagMap.get(inner._span)['_ml_obs.llmobs_parent_id'], outer.context().toSpanId())
+              assert.strictEqual(LLMObsTagger.tagMap.get(inner._span)['_ml_obs.llmobs_parent_id'],
+                outer.context().toSpanId())
               cb() // finish the span
             })
 
@@ -340,7 +341,8 @@ describe('sdk', () => {
 
             llmobs.trace({ kind: 'task' }, (inner) => {
               assert.strictEqual(llmobs._active(), inner._span)
-              assert.strictEqual(LLMObsTagger.tagMap.get(inner._span)['_ml_obs.llmobs_parent_id'], outer.context().toSpanId())
+              assert.strictEqual(LLMObsTagger.tagMap.get(inner._span)['_ml_obs.llmobs_parent_id'],
+                outer.context().toSpanId())
             })
           })
         })
