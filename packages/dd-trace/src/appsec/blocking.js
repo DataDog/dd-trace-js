@@ -67,7 +67,7 @@ function getBlockWithContentData (req, specificType, actionParameters) {
 
   const specificBlockingType = specificType || detectedSpecificEndpoints[getSpecificKey(req.method, req.url)]
   if (specificBlockingType) {
-    const specificBlockingContent = getTemplate(specificBlockingTypes[specificBlockingType], actionParameters)
+    const specificBlockingContent = getTemplate(specificBlockingType, actionParameters)
     type = specificBlockingContent?.type
     body = specificBlockingContent?.body
   }
