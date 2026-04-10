@@ -187,6 +187,15 @@ describe('user_blocking - Integration with the tracer', () => {
       axios.get(`http://localhost:${port}/`, { maxRedirects: 0 })
     })
 
+    it('should block using json body but remove security_response_id template', async () => {
+      controller = (req, res) => {
+        const ret = tracer.appsec.blockRequest(req, res)
+        assert.strictEqual(ret, true)
+      }
+      const response = await axios.get(`http://localhost:${port}/`)
+      assert.strictEqual(JSON.stringify(response.data), 'TODO')
+    })
+
     it('should block using redirect data but ignore security_response_id template', async () => {
       blocking.setDefaultBlockingActionParameters([
         {
@@ -208,7 +217,7 @@ describe('user_blocking - Integration with the tracer', () => {
         const ret = tracer.appsec.blockRequest(req, res)
         assert.strictEqual(ret, true)
       }
-      const response = await axios.get(`http://localhost:${port}/`, { maxRedirects: 0 })
+      const response = await axios.get(`http://localhost:${port}/`, { maxRedirects: 0, validateStatus: false })
       assert.strictEqual(response.headers.location, '/redirected?should_ignore=[security_response_id]')
     })
   })
