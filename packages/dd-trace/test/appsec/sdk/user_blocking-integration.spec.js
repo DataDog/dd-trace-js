@@ -11,6 +11,7 @@ const appsec = require('../../../src/appsec')
 const blocking = require('../../../src/appsec/blocking')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
+const { json } = require('../../../src/appsec/blocked_templates')
 
 describe('user_blocking - Integration with the tracer', () => {
   const config = getConfigFresh({
@@ -192,19 +193,12 @@ describe('user_blocking - Integration with the tracer', () => {
         const ret = tracer.appsec.blockRequest(req, res)
         assert.strictEqual(ret, true)
       }
-      const response = await axios.get(`http://localhost:${port}/`)
-      assert.strictEqual(JSON.stringify(response.data), 'TODO')
+      const response = await axios.get(`http://localhost:${port}/`, { validateStatus: false })
+      assert.strictEqual(JSON.stringify(response.data), json.replace('[security_response_id]', ''))
     })
 
     it('should block using redirect data but ignore security_response_id template', async () => {
       blocking.setDefaultBlockingActionParameters([
-        {
-          id: 'notblock',
-          parameters: {
-            location: '/notfound',
-            status_code: 404,
-          },
-        },
         {
           id: 'block',
           parameters: {
@@ -218,7 +212,7 @@ describe('user_blocking - Integration with the tracer', () => {
         assert.strictEqual(ret, true)
       }
       const response = await axios.get(`http://localhost:${port}/`, { maxRedirects: 0, validateStatus: false })
-      assert.strictEqual(response.headers.location, '/redirected?should_ignore=[security_response_id]')
+      assert.strictEqual(response.headers.location, '/redirected?should_ignore=')
     })
   })
 })
