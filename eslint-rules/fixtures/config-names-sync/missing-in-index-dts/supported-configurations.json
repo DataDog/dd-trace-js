@@ -1,0 +1,35 @@
+{
+  "supportedConfigurations": {
+    "DD_SIMPLE": [
+      {
+        "configurationNames": [
+          "simple"
+        ]
+      }
+    ],
+    "DD_MISSING_FROM_TYPES": [
+      {
+        "configurationNames": [
+          "missingFromTypes"
+        ]
+      }
+    ],
+    "DD_INSTRUMENTATION_TELEMETRY_ENABLED": [
+      {
+        "configurationNames": [
+          "telemetry"
+        ],
+        "aliases": [
+          "DD_TRACE_TELEMETRY_ENABLED"
+        ]
+      }
+    ],
+    "DD_TELEMETRY_EXPORTER_URL": [
+      {
+        "configurationNames": [
+          "telemetry.exporter.url"
+        ]
+      }
+    ]
+  }
+}

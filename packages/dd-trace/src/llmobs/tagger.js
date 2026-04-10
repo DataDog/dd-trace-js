@@ -47,8 +47,11 @@ const { storage } = require('./storage')
 const registry = new WeakMap()
 
 class LLMObsTagger {
+  /** @type {import('../config/config-base')} */
+  #config
+
   constructor (config, softFail = false) {
-    this._config = config
+    this.#config = config
 
     this.softFail = softFail
   }
@@ -72,15 +75,15 @@ class LLMObsTagger {
     integration,
     _decorator,
   } = {}) {
-    if (!this._config.llmobs.enabled) return
+    if (!this.#config.llmobs.enabled) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
     const spanMlApp =
       mlApp ||
       registry.get(parent)?.[ML_APP] ||
       span.context()._trace.tags[PROPAGATED_ML_APP_KEY] ||
-      this._config.llmobs.mlApp ||
-      this._config.service // this should always have a default
+      this.#config.llmobs.mlApp ||
+      this.#config.service // this should always have a default
 
     if (!spanMlApp) {
       throw new Error(
@@ -624,7 +627,7 @@ class LLMObsTagger {
   }
 
   _register (span) {
-    if (!this._config.llmobs.enabled) return
+    if (!this.#config.llmobs.enabled) return
     if (registry.has(span)) {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
@@ -634,7 +637,7 @@ class LLMObsTagger {
   }
 
   _setTag (span, key, value) {
-    if (!this._config.llmobs.enabled) return
+    if (!this.#config.llmobs.enabled) return
     if (!registry.has(span)) {
       this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
