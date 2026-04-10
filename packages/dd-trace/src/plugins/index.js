@@ -1,6 +1,7 @@
 'use strict'
 
 const plugins = {
+  get '@anthropic-ai/claude-agent-sdk' () { return require('../../../datadog-plugin-claude-agent-sdk/src') },
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
