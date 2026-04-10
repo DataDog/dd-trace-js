@@ -1639,6 +1639,35 @@ versions.forEach((version) => {
             }).catch(done)
           })
         })
+
+        it('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.ok(tests.length > 0)
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --retry=1',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation-with-fake-timers*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              },
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 1)
+        })
       })
     }
 

@@ -996,6 +996,36 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         }).catch(done)
       })
     })
+
+    onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          // Must have 2 tests: 1 original + 1 ATR retry
+          assert.strictEqual(tests.length, 2)
+          const retriedTests = tests.filter(t => t.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, 1)
+        })
+
+      childProcess = exec(runTestsCommand, {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          TESTS_TO_RUN: 'jest-flaky/flaky-fails-with-fake-timers',
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          SHOULD_CHECK_RESULTS: '1',
+        },
+      })
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 1)
+    })
   })
 
   context('when jest is using worker threads', () => {
