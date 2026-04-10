@@ -775,7 +775,7 @@ moduleTypes.forEach(({
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
-    it('custom after:spec and after:run handlers are chained with dd-trace instrumentation', async () => {
+    over10It('custom after:spec and after:run handlers are chained with dd-trace instrumentation', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads
