@@ -27,6 +27,7 @@ const testVersions = [
   '^3',
   '^4',
   '^5',
+  '^6',
 ]
 
 const testCases = [
@@ -101,7 +102,7 @@ describe('typescript', () => {
 
           // compile typescript
           execSync(
-            `tsc --target ES6 --experimentalDecorators --module commonjs --sourceMap ${file}.ts`,
+            `tsc --target ES6 --experimentalDecorators --module commonjs --sourceMap --types node ${file}.ts`,
             { cwd, stdio: 'inherit' }
           )
 

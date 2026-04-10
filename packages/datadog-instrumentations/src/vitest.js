@@ -1,4 +1,8 @@
 'use strict'
+
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const path = require('node:path')
 
 const shimmer = require('../../datadog-shimmer')
@@ -6,6 +10,9 @@ const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  DYNAMIC_NAME_RE,
+  collectDynamicNamesFromTraces,
+  logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -20,6 +27,7 @@ const isAttemptToFixCh = channel('ci:vitest:test:is-attempt-to-fix')
 const isDisabledCh = channel('ci:vitest:test:is-disabled')
 const isQuarantinedCh = channel('ci:vitest:test:is-quarantined')
 const isModifiedCh = channel('ci:vitest:test:is-modified')
+const testFnCh = channel('ci:vitest:test:fn')
 
 // test suite hooks
 const testSuiteStartCh = channel('ci:vitest:test-suite:start')
@@ -41,7 +49,10 @@ const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
+const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
+const dynamicNameTasks = new WeakSet()
+const newTestsWithDynamicNames = new Set()
 const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
@@ -58,6 +69,9 @@ let isEarlyFlakeDetectionFaulty = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
+let vitestGetFn = null
+let vitestSetFn = null
+let vitestGetHooks = null
 let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
@@ -73,7 +87,7 @@ function getTestCommand () {
 
 function waitForHitProbe () {
   return new Promise(resolve => {
-    setTimeout(() => {
+    realSetTimeout(() => {
       resolve()
     }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
   })
@@ -239,6 +253,37 @@ function getTestName (task) {
   }
 
   return testName
+}
+
+/**
+ * Wraps a function so it runs inside the current test span context.
+ * @param {object} task
+ * @param {Function} fn
+ * @returns {Function}
+ */
+function wrapTestScopedFn (task, fn) {
+  return shimmer.wrapFunction(fn, fn => function () {
+    return testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+  })
+}
+
+/**
+ * Wraps a `beforeEach` cleanup callback so it inherits the test span context.
+ * Vitest allows `beforeEach` to return a cleanup function, including via a promise.
+ * @param {object} task
+ * @param {unknown} result
+ * @returns {unknown}
+ */
+function wrapBeforeEachCleanupResult (task, result) {
+  if (typeof result === 'function') {
+    return wrapTestScopedFn(task, result)
+  }
+
+  if (result && typeof result.then === 'function') {
+    return result.then(cleanupFn => wrapBeforeEachCleanupResult(task, cleanupFn))
+  }
+
+  return result
 }
 
 function getSortWrapper (sort, frameworkVersion) {
@@ -435,6 +480,8 @@ function getFinishWrapper (exitOrClose) {
       onFinish,
     })
 
+    logDynamicNamesWarning(newTestsWithDynamicNames)
+
     await flushPromise
 
     // If coverage was generated, publish coverage report channel for upload
@@ -495,6 +542,7 @@ function threadHandler (thread) {
   workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
       if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+        collectDynamicNamesFromTraces(message.data, newTestsWithDynamicNames)
         workerReportTraceCh.publish(message.data)
       } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
         workerReportLogsCh.publish(message.data)
@@ -536,6 +584,7 @@ function getWrappedOn (on) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
         if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+          collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
           workerReportTraceCh.publish(data)
         } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
           workerReportLogsCh.publish(data)
@@ -659,6 +708,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
             }
             newTasks.add(task)
             taskToStatuses.set(task, [])
+            if (DYNAMIC_NAME_RE.test(testName)) {
+              dynamicNameTasks.add(task)
+            }
           }
         },
       })
@@ -828,6 +880,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       isRetryReasonEfd,
       isRetryReasonAttemptToFix: isRetryReasonAttemptToFix && numRepetition > 0,
       isNew,
+      hasDynamicName: dynamicNameTasks.has(task),
       mightHitProbe: isDiEnabled && numAttempt > 0,
       isAttemptToFix: attemptToFixTasks.has(task),
       isDisabled: disabledTasks.has(task),
@@ -838,6 +891,47 @@ function wrapVitestTestRunner (VitestTestRunner) {
     taskToCtx.set(task, ctx)
 
     testStartCh.runStores(ctx, () => {})
+
+    // Wrap the test function so it runs inside the test span context.
+    // Without this, HTTP requests during test execution become orphaned root spans.
+    if (vitestGetFn && vitestSetFn) {
+      const originalFn = vitestGetFn(task)
+      if (originalFn && !originalFn.__ddTraceWrapped) {
+        const wrappedFn = wrapTestScopedFn(task, originalFn)
+        wrappedFn.__ddTraceWrapped = true
+        vitestSetFn(task, wrappedFn)
+      }
+    }
+
+    // Wrap beforeEach/afterEach hooks so they also run inside the test span context.
+    // In vitest 4+, hooks are in a WeakMap accessed via getHooks(). In older versions, they're on suite.hooks.
+    let currentSuite = task.suite
+    while (currentSuite) {
+      const hooks = vitestGetHooks ? vitestGetHooks(currentSuite) : currentSuite.hooks
+      if (hooks) {
+        for (const hookType of ['beforeEach', 'afterEach']) {
+          const hookArray = hooks[hookType]
+          if (!hookArray) continue
+          for (let i = 0; i < hookArray.length; i++) {
+            const currentFn = hookArray[i]
+            const originalFn = originalHookFns.get(currentFn) || currentFn
+            const wrappedFn = shimmer.wrapFunction(originalFn, fn => function () {
+              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, arguments))
+
+              if (hookType === 'beforeEach') {
+                return wrapBeforeEachCleanupResult(task, result)
+              }
+
+              return result
+            })
+            originalHookFns.set(wrappedFn, originalFn)
+            hookArray[i] = wrappedFn
+          }
+        }
+      }
+      currentSuite = currentSuite.suite
+    }
+
     return onBeforeTryTask.apply(this, arguments)
   })
 
@@ -886,6 +980,20 @@ function wrapVitestTestRunner (VitestTestRunner) {
     })
 }
 
+function captureRunnerFunctions (pkg) {
+  if (vitestGetFn) return
+  const getFnExport = findExportByName(pkg, 'getFn')
+  const setFnExport = findExportByName(pkg, 'setFn')
+  if (getFnExport && setFnExport) {
+    vitestGetFn = getFnExport.value
+    vitestSetFn = setFnExport.value
+  }
+  const getHooksExport = findExportByName(pkg, 'getHooks')
+  if (getHooksExport) {
+    vitestGetHooks = getHooksExport.value
+  }
+}
+
 addHook({
   name: 'vitest',
   versions: ['>=4.0.0'],
@@ -896,9 +1004,24 @@ addHook({
     return testPackage
   }
 
+  captureRunnerFunctions(testPackage)
   wrapVitestTestRunner(testRunner.value)
 
   return testPackage
+})
+
+addHook({
+  name: '@vitest/runner',
+  versions: ['>=1.6.0'],
+}, (runnerModule) => {
+  if (!vitestGetFn && runnerModule.getFn && runnerModule.setFn) {
+    vitestGetFn = runnerModule.getFn
+    vitestSetFn = runnerModule.setFn
+  }
+  if (!vitestGetHooks && runnerModule.getHooks) {
+    vitestGetHooks = runnerModule.getHooks
+  }
+  return runnerModule
 })
 
 addHook({

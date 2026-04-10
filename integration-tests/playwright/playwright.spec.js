@@ -84,7 +84,8 @@ versions.forEach((version) => {
     this.retries(2)
     this.timeout(80000)
 
-    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
+    // TODO: Update tests files accordingly and test with different TS versions
+    useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI
@@ -1247,6 +1248,39 @@ versions.forEach((version) => {
 
         await Promise.all([once(childProcess, 'exit'), receiverPromise])
       })
+
+      contextNewVersions('dynamic name detection', () => {
+        it('tags new tests with dynamic names and logs a warning', async () => {
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 1 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+          receiver.setKnownTests({ playwright: {} })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                TEST_DIR: './ci-visibility/playwright-tests-dynamic',
+              },
+            }
+          )
+
+          let testOutput = ''
+          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+          await once(childProcess, 'exit')
+
+          assert.match(testOutput, /detected as new but their names contain dynamic data/)
+        })
+      })
     })
 
     it('correctly calculates test code owners when working directory is not repository root', (done) => {
@@ -1624,6 +1658,59 @@ versions.forEach((version) => {
           })
 
           await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+        })
+
+        it('does not tag known attempt to fix tests as new', async () => {
+          receiver.setKnownTests({
+            playwright: {
+              'attempt-to-fix-test.js': [
+                'attempt to fix should attempt to fix failed test',
+                'attempt to fix should attempt to fix passed test',
+              ],
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 2 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const atfTests = tests.filter(
+                t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+              )
+              assert.ok(atfTests.length > 0)
+              for (const test of atfTests) {
+                assert.ok(
+                  !(TEST_IS_NEW in test.meta),
+                  'ATF test that is in known tests should not be tagged as new'
+                )
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-test-management',
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
         })
 
         it('does not fail retry if a test is quarantined', async () => {

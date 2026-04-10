@@ -1,4 +1,5 @@
 "component","origin","license","copyright"
+"@apm-js-collab/code-transformer","https://github.com/nodejs/orchestrion-js","['Apache-2.0']","['nodejs']"
 "@datadog/flagging-core","https://github.com/DataDog/openfeature-js-client","['Apache-2.0']","['DataDog']"
 "@datadog/libdatadog","https://github.com/DataDog/libdatadog-nodejs","['Apache-2.0']","['Datadog Inc.']"
 "@datadog/native-appsec","https://github.com/DataDog/dd-native-appsec-js","['Apache-2.0']","['Datadog Inc.']"
@@ -51,6 +52,7 @@
 "@protobufjs/pool","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
 "@protobufjs/utf8","https://github.com/protobufjs/protobuf.js","['BSD-3-Clause']","['Daniel Wirtz']"
 "@tybys/wasm-util","https://github.com/toyobayashi/wasm-util","['MIT']","['toyobayashi']"
+"@types/estree","https://github.com/DefinitelyTyped/DefinitelyTyped","['MIT']","['DefinitelyTyped']"
 "@types/node","https://github.com/DefinitelyTyped/DefinitelyTyped","['MIT']","['DefinitelyTyped']"
 "acorn","https://github.com/acornjs/acorn","['MIT']","['acornjs']"
 "acorn-import-attributes","https://github.com/xtuc/acorn-import-attributes","['MIT']","['Sven Sauleau']"

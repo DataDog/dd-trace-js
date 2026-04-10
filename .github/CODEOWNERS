@@ -33,12 +33,12 @@
 /packages/dd-trace/test/plugins/util/inferred_proxy.spec.js @DataDog/serverless-aws @DataDog/apm-serverless
 
 # IDM
-/integration-tests/esbuild/esm.integration.spec.js @DataDog/apm-idm-js
-/integration-tests/esbuild/index.spec.js @DataDog/apm-idm-js
-/integration-tests/esbuild/openfeature.spec.js @DataDog/apm-idm-js
+/integration-tests/esbuild/ @DataDog/apm-idm-js
+/integration-tests/webpack/ @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/apm-idm-js
 
 /packages/datadog-esbuild @DataDog/apm-idm-js
+/packages/datadog-webpack @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
 /packages/dd-trace/src/plugins/ @DataDog/apm-idm-js
@@ -111,7 +111,21 @@
 /integration-tests/config-jest-multiproject.js @DataDog/ci-app-libraries
 /integration-tests/config-jest.js @DataDog/ci-app-libraries
 /integration-tests/cypress-config.json @DataDog/ci-app-libraries
+/integration-tests/cypress-custom-after-hooks.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-custom-after-hooks.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-auto-esm.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-double-run.js @DataDog/ci-app-libraries
+/integration-tests/cypress-double-run.mjs @DataDog/ci-app-libraries
 /integration-tests/cypress-esm-config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-legacy-plugin.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-legacy-plugin.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-auto.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-auto.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-manual.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-plain-object-manual.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-return-config.config.js @DataDog/ci-app-libraries
+/integration-tests/cypress-return-config.config.mjs @DataDog/ci-app-libraries
+/integration-tests/cypress-typescript.config.ts @DataDog/ci-app-libraries
 /integration-tests/cypress.config.js @DataDog/ci-app-libraries
 /integration-tests/my-nyc.config.js @DataDog/ci-app-libraries
 /integration-tests/playwright.config.js @DataDog/ci-app-libraries
@@ -143,6 +157,8 @@
 /packages/**/*.dsm.spec.js @DataDog/data-streams-monitoring
 
 # API SDK Capabilities
+/eslint-rules/ @DataDog/apm-sdk-capabilities-js
+
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry-logs.spec.js @DataDog/apm-sdk-capabilities-js
@@ -183,12 +199,16 @@
 /packages/dd-trace/test/tagger.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/tracer.spec.js @DataDog/apm-sdk-capabilities-js
 
+/scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
+
 # Feature Flagging
 /integration-tests/openfeature/ @DataDog/feature-flagging
 /packages/dd-trace/src/openfeature/ @DataDog/feature-flagging
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging
 
 # CI
+/.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
+/.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
 /.github/chainguard @DataDog/sdlc-security
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
@@ -213,6 +233,7 @@
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
+/integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
 
 /packages/datadog-core @DataDog/lang-platform-js

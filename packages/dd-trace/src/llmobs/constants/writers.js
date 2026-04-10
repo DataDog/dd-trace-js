@@ -13,5 +13,5 @@ module.exports = {
   EVALUATIONS_ENDPOINT: '/api/intake/llm-obs/v2/eval-metric',
 
   EVP_PAYLOAD_SIZE_LIMIT: 5 << 20, // 5MB (actual limit is 5.1MB)
-  EVP_EVENT_SIZE_LIMIT: (1 << 20) - 1024, // 999KB (actual limit is 1MB)
+  EVP_EVENT_SIZE_LIMIT: 5 << 20, // 5MB (actual backend limit is 10MB; Python SDK defaults to 5MB)
 }

@@ -6,6 +6,7 @@ const id = require('../../id')
 const DatadogSpanContext = require('../span_context')
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
+const { getConfiguredEnvName } = require('../../config/helper')
 const { setBaggageItem, getAllBaggageItems, removeAllBaggageItems } = require('../../baggage')
 const telemetryMetrics = require('../../telemetry/metrics')
 
@@ -65,8 +66,15 @@ const zeroTraceId = '0000000000000000'
 const hex16 = /^[0-9A-Fa-f]{16}$/
 
 class TextMapPropagator {
+  #extractB3Context
+
   constructor (config) {
     this._config = config
+
+    // TODO: should match "b3 single header" in next major
+    const envName = getConfiguredEnvName('DD_TRACE_PROPAGATION_STYLE')
+    // eslint-disable-next-line eslint-rules/eslint-env-aliases
+    this.#extractB3Context = envName === 'OTEL_PROPAGATORS' ? this._extractB3SingleContext : this._extractB3MultiContext
   }
 
   inject (spanContext, carrier) {
@@ -363,10 +371,7 @@ class TextMapPropagator {
           extractedContext = this._extractB3SingleContext(carrier)
           break
         case 'b3':
-          extractedContext = this._config.tracePropagationStyle.otelPropagators
-            // TODO: should match "b3 single header" in next major
-            ? this._extractB3SingleContext(carrier)
-            : this._extractB3MultiContext(carrier)
+          extractedContext = this.#extractB3Context(carrier)
           break
         case 'b3multi':
           extractedContext = this._extractB3MultiContext(carrier)

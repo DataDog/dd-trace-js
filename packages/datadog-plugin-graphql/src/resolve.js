@@ -28,7 +28,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
       if (rootCtx.fields[computedPathString]) return
 
       if (!rootCtx[collapsedPathSym]) {
-        rootCtx[collapsedPathSym] = {}
+        rootCtx[collapsedPathSym] = Object.create(null)
       } else if (rootCtx[collapsedPathSym][computedPathString]) {
         return
       }

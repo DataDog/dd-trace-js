@@ -51,6 +51,7 @@ class Profiler extends EventEmitter {
   #compressionFnInitialized = false
   #compressionOptions
   #config
+  #customLabelKeys = new Set()
   #enabled = false
   #endpointCounts = new Map()
   #lastStart
@@ -70,56 +71,22 @@ class Profiler extends EventEmitter {
     return this.#config?.flushInterval
   }
 
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
-    const {
-      service,
-      version,
-      env,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      injectionEnabled,
-      reportHostname,
-    } = config
-    const { enabled, sourceMap, exporters } = config.profiling
-    const { heartbeatInterval } = config.telemetry
-
     // TODO: Unify with main logger and rewrite template strings to use printf formatting.
     const logger = {
-      debug (message) { log.debug(message) },
-      info (message) { log.info(message) },
-      warn (message) { log.warn(message) },
-      error (...args) { log.error(...args) },
+      debug: log.debug.bind(log),
+      info: log.info.bind(log),
+      warn: log.warn.bind(log),
+      error: log.error.bind(log),
     }
 
-    const libraryInjected = injectionEnabled.length > 0
-    let activation
-    if (enabled === 'auto') {
-      activation = 'auto'
-    } else if (enabled === 'true') {
-      activation = 'manual'
-    } // else activation = undefined
-
+    // TODO: Rewrite this to not need to copy the config.
     const options = {
-      service,
-      version,
-      env,
+      ...config,
       logger,
-      sourceMap,
-      exporters,
-      url,
-      hostname,
-      port,
-      tags,
-      repositoryUrl,
-      commitSHA,
-      libraryInjected,
-      activation,
-      heartbeatInterval,
-      reportHostname,
     }
 
     try {
@@ -133,6 +100,45 @@ class Profiler extends EventEmitter {
 
   get enabled () {
     return this.#enabled
+  }
+
+  /**
+   * Declares the set of custom label keys that will be used with
+   * {@link runWithLabels}. This is used for profile upload metadata and
+   * for pprof serialization optimization (low-cardinality deduplication).
+   *
+   * @param {Iterable<string>} keys - Custom label key names
+   */
+  setCustomLabelKeys (keys) {
+    this.#customLabelKeys.clear()
+    for (const key of keys) {
+      this.#customLabelKeys.add(key)
+    }
+    if (this.#config) {
+      for (const profiler of this.#config.profilers) {
+        profiler.setCustomLabelKeys?.(this.#customLabelKeys)
+      }
+    }
+  }
+
+  /**
+   * Runs a function with custom profiling labels attached to wall profiler samples.
+   *
+   * @param {Record<string, string | number>} labels - Custom labels to attach
+   * @param {function(): T} fn - Function to execute with the labels
+   * @returns {T} The return value of fn
+   * @template T
+   */
+  runWithLabels (labels, fn) {
+    if (!this.#enabled || !this.#config) {
+      return fn()
+    }
+    for (const profiler of this.#config.profilers) {
+      if (profiler.runWithLabels) {
+        return profiler.runWithLabels(labels, fn)
+      }
+    }
+    return fn()
   }
 
   #logError (err) {
@@ -182,6 +188,9 @@ class Profiler extends EventEmitter {
     return this.#compressionFn
   }
 
+  /**
+   * @param {import('../config/config-base')} options - Tracer configuration
+   */
   _start (options) {
     if (this.enabled) return true
 
@@ -410,7 +419,10 @@ class Profiler extends EventEmitter {
 
     tags.snapshot = snapshotKind
     tags.profile_seq = this.#profileSeq++
-    const exportSpec = { profiles, infos, start, end, tags, endpointCounts }
+    const customAttributes = this.#customLabelKeys.size > 0
+      ? [...this.#customLabelKeys]
+      : undefined
+    const exportSpec = { profiles, infos, start, end, tags, endpointCounts, customAttributes }
     const tasks = this.#config.exporters.map(exporter =>
       exporter.export(exportSpec).catch(err => {
         if (this.#logger) {

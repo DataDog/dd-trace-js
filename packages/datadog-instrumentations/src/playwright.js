@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const satisfies = require('../../../vendor/dist/semifies')
 
 const shimmer = require('../../datadog-shimmer')
@@ -8,6 +11,8 @@ const {
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
+  DYNAMIC_NAME_RE,
+  logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const {
@@ -70,6 +75,7 @@ let isImpactedTestsEnabled = false
 let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
+const newTestsWithDynamicNames = new Set()
 let rootDir = ''
 let sessionProjects = []
 
@@ -381,6 +387,9 @@ function testEndHandler ({
 
   if (testStatuses.length === 0) {
     testsToTestStatuses.set(testFqn, [testStatus])
+    if (test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test))) {
+      newTestsWithDynamicNames.add(`${getTestSuitePath(test._requireFile, rootDir)} › ${getTestFullname(test)}`)
+    }
   } else {
     testStatuses.push(testStatus)
   }
@@ -432,6 +441,7 @@ function testEndHandler ({
         error,
         extraTags: annotationTags,
         isNew: test._ddIsNew,
+        hasDynamicName: test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test)),
         isAttemptToFix: test._ddIsAttemptToFix,
         isAttemptToFixRetry: test._ddIsAttemptToFixRetry,
         isQuarantined: test._ddIsQuarantined,
@@ -783,6 +793,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         preventedToFail = true
       }
     }
+
+    logDynamicNamesWarning(newTestsWithDynamicNames)
 
     const flushWait = new Promise(resolve => {
       onDone = resolve
@@ -1207,7 +1219,7 @@ addHook({
 
                 if (isRumActive) {
                   // Give some time RUM to flush data, similar to what we do in selenium
-                  await new Promise(resolve => setTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+                  await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
                   const url = page.url()
                   if (url) {
                     const domain = new URL(url).hostname
@@ -1281,6 +1293,7 @@ addHook({
       error,
       extraTags: annotationTags,
       isNew: test._ddIsNew,
+      hasDynamicName: test._ddIsNew && DYNAMIC_NAME_RE.test(getTestFullname(test)),
       isRetry: retry > 0,
       isEfdRetry: test._ddIsEfdRetry,
       isAttemptToFix: test._ddIsAttemptToFix,

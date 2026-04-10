@@ -164,6 +164,9 @@ function getBlockingAction (actions) {
   return actions?.redirect_request || actions?.block_request
 }
 
+/**
+ * @param {import('../config/config-base')} config - Tracer configuration
+ */
 function setTemplates (config) {
   templateHtml = config.appsec.blockedTemplateHtml || blockedTemplates.html
 

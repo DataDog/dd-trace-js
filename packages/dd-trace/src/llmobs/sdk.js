@@ -29,16 +29,23 @@ class LLMObs extends NoopLLMObs {
    */
   #hasUserSpanProcessor = false
 
+  /**
+   * @param {import('../tracer')} tracer - Tracer instance
+   * @param {import('./index')} llmobsModule - LLMObs module instance
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   constructor (tracer, llmobsModule, config) {
     super(tracer)
 
+    /** @type {import('../config/config-base')} */
     this._config = config
+
     this._llmobsModule = llmobsModule
     this._tagger = new LLMObsTagger(config)
   }
 
   get enabled () {
-    return this._config.llmobs.enabled
+    return this._config.llmobs.enabled ?? false
   }
 
   enable (options = {}) {
@@ -56,13 +63,10 @@ class LLMObs extends NoopLLMObs {
       return
     }
 
-    const llmobs = {
-      mlApp: options.mlApp,
-      agentlessEnabled: options.agentlessEnabled,
-    }
-    // TODO: This will update config telemetry with the origin 'code', which is not ideal when `enable()` is called
-    // based on `APM_TRACING` RC product updates.
-    this._config.updateOptions({ llmobs })
+    // TODO: These configs should be passed through directly at construction time instead.
+    this._config.llmobs.enabled = true
+    this._config.llmobs.mlApp = options.mlApp
+    this._config.llmobs.agentlessEnabled = options.agentlessEnabled
 
     // configure writers and channel subscribers
     this._llmobsModule.enable(this._config)

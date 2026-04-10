@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
@@ -23,6 +26,7 @@ const {
   TEST_SOURCE_FILE,
   TEST_IS_NEW,
   TEST_IS_RETRY,
+  TEST_HAS_DYNAMIC_NAME,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_EARLY_FLAKE_ABORT_REASON,
   JEST_DISPLAY_NAME,
@@ -59,8 +63,7 @@ const CHILD_MESSAGE_END = 2
 
 function withTimeout (promise, timeoutMs) {
   return new Promise(resolve => {
-    // Set a timeout to resolve after 1s
-    setTimeout(resolve, timeoutMs)
+    realSetTimeout(resolve, timeoutMs)
 
     // Also resolve if the original promise resolves
     promise.then(resolve)
@@ -501,6 +504,7 @@ class JestPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      hasDynamicName,
       testSuiteAbsolutePath,
     } = test
 
@@ -548,6 +552,10 @@ class JestPlugin extends CiPlugin {
 
     if (isNew) {
       extraTags[TEST_IS_NEW] = 'true'
+    }
+
+    if (hasDynamicName) {
+      extraTags[TEST_HAS_DYNAMIC_NAME] = 'true'
     }
     const testSuiteSpan = this.testSuiteSpanPerTestSuiteAbsolutePath.get(testSuiteAbsolutePath) || this.testSuiteSpan
 

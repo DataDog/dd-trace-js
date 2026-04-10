@@ -18,6 +18,7 @@ const {
   getToolNameFromTags,
   getToolCallResultContent,
   getLlmObsSpanName,
+  getTelemetryMetadata,
 } = require('./util')
 
 /**
@@ -216,6 +217,9 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagEmbeddingIO(span, parsedInputs, output)
 
+    const metadata = getTelemetryMetadata(tags)
+    this._tagger.tagMetadata(span, metadata)
+
     const usage = tags['ai.usage.tokens']
     this._tagger.tagMetrics(span, {
       inputTokens: usage,
@@ -234,7 +238,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
 
     this._tagger.tagTextIO(span, prompt, output)
 
-    const metadata = getGenerationMetadata(tags) ?? {}
+    const metadata = getGenerationMetadata(tags)
     metadata.schema = getJsonStringValue(tags['ai.schema'], {})
     this._tagger.tagMetadata(span, metadata)
   }
