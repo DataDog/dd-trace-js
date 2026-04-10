@@ -6,6 +6,14 @@ const { pathToFileURL } = require('url')
 
 const dc = require('dc-polyfill')
 
+// When this module is loaded in the Cypress plugin process (e.g. imported by a
+// generated wrapper config), `require('cypress')` never runs, so the normal
+// addHook path that fires 'dd-trace:instrumentation:load' for 'cypress' never
+// executes and CypressPlugin is never instantiated.  Publish the channel now so
+// the plugin manager creates the instance and subscribes to ci:cypress:*
+// channels before registerDdTraceHooks checks sessionInitCh.hasSubscribers.
+dc.channel('dd-trace:instrumentation:load').publish({ name: 'cypress' })
+
 const sessionInitCh = dc.channel('ci:cypress:session:init')
 const beforeRunCh = dc.channel('ci:cypress:before-run')
 const afterSpecCh = dc.channel('ci:cypress:after-spec')
