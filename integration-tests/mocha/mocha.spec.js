@@ -3822,7 +3822,11 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const tests = events.filter(event => event.type === 'test').map(event => event.content)
-          assert.ok(tests.length > 0)
+          assert.strictEqual(tests.length, 2)
+          const retriedTests = tests.filter(
+            t => t.meta[TEST_IS_RETRY] === 'true'
+          )
+          assert.strictEqual(retriedTests.length, 1)
         })
 
       childProcess = exec(

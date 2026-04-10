@@ -1,7 +1,8 @@
 'use strict'
 
-// Capture real Date.now at module load time, before any test can install fake timers.
+// Capture real timers at module load time, before any test can install fake timers.
 const realDateNow = Date.now.bind(Date)
+const realSetTimeout = setTimeout
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
@@ -232,7 +233,7 @@ class CucumberPlugin extends CiPlugin {
       // Time we give the breakpoint to be hit
       if (promises && this.runningTestProbe) {
         promises.hitBreakpointPromise = new Promise((resolve) => {
-          setTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
+          realSetTimeout(resolve, BREAKPOINT_HIT_GRACE_PERIOD_MS)
         })
       }
 

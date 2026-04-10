@@ -2170,7 +2170,11 @@ describe(`cucumber@${version} commonJS`, () => {
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
-              assert.ok(tests.length > 0)
+              assert.strictEqual(tests.length, 2)
+              const retriedTests = tests.filter(
+                t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+              )
+              assert.strictEqual(retriedTests.length, 1)
             })
 
           const featurePath = 'ci-visibility/features-di-fake-timers/test-hit-breakpoint.feature'
