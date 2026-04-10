@@ -87,17 +87,17 @@ class SpanProcessor {
       spanContext._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
 
       // Sync manual decision to native storage
-      const nativeSpanId = spanContext._nativeSpanId
-      if (nativeSpanId !== undefined) {
-        this._syncSamplingToNative(spanContext, nativeSpanId)
+      const slotIndex = spanContext._slotIndex
+      if (slotIndex !== undefined) {
+        this._syncSamplingToNative(spanContext, slotIndex)
       }
     } else {
       // Use JS-side sampling
       this._prioritySampler.sample(spanContext)
 
       // Sync sampling decision to native storage if span is in native storage
-      if (spanContext._nativeSpanId !== undefined) {
-        this._syncSamplingToNative(spanContext, spanContext._nativeSpanId)
+      if (spanContext._slotIndex !== undefined) {
+        this._syncSamplingToNative(spanContext, spanContext._slotIndex)
       }
     }
 
@@ -109,16 +109,16 @@ class SpanProcessor {
    * Sync sampling decision from JS to native storage.
    *
    * @param {Object} spanContext - The span context
-   * @param {bigint} nativeSpanId - The native span ID
+   * @param {number} slotIndex - The native slot index
    * @private
    */
-  _syncSamplingToNative (spanContext, nativeSpanId) {
+  _syncSamplingToNative (spanContext, slotIndex) {
     const { OpCode } = require('./native')
 
     // Sync priority as trace metric
     this._nativeSpans.queueOp(
       OpCode.SetTraceMetricsAttr,
-      nativeSpanId,
+      slotIndex,
       '_sampling_priority_v1',
       ['f64', spanContext._sampling.priority]
     )
@@ -127,7 +127,7 @@ class SpanProcessor {
     if (spanContext._sampling.mechanism !== undefined) {
       this._nativeSpans.queueOp(
         OpCode.SetTraceMetaAttr,
-        nativeSpanId,
+        slotIndex,
         '_dd.p.dm',
         `-${spanContext._sampling.mechanism}`
       )

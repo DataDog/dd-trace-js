@@ -63,8 +63,9 @@ class NativeSpansInterface {
     this._cqbIndex = 8
     this._cqbCount = 0
 
-
-
+    // Slot allocator state
+    this._nextSlot = 0
+    this._freeSlots = []
 
     // String table state
     this._stringMap = new Map()
@@ -201,6 +202,24 @@ class NativeSpansInterface {
   }
 
   /**
+   * Allocate a slot index for a new span.
+   * Reuses freed slots when available, otherwise increments the counter.
+   * @returns {number} The allocated slot index
+   */
+  allocSlot () {
+    if (this._freeSlots.length > 0) return this._freeSlots.pop()
+    return this._nextSlot++
+  }
+
+  /**
+   * Return slot indices to the free list after spans are flushed.
+   * @param {Array<number>} slots Array of slot indices to free
+   */
+  freeSlots (slots) {
+    for (let i = 0; i < slots.length; i++) this._freeSlots.push(slots[i])
+  }
+
+  /**
    * Flush the change queue to native storage.
    * This processes all queued operations in Rust.
    */
@@ -266,15 +285,15 @@ class NativeSpansInterface {
    * it to WASM memory in a single Uint8Array.set() call.
    *
    * @param {number} op The OpCode value
-   * @param {Uint8Array} spanId The span ID as a little-endian byte buffer
+   * @param {number} slotIndex The slot index (u32)
    * @param {...(string|Array)} args Operation arguments
    */
-  queueOp (op, spanId, ...args) {
+  queueOp (op, slotIndex, ...args) {
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
 
-    if (idx + 80 > CHANGE_QUEUE_BUFFER_SIZE) {
+    if (idx + 76 > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
       idx = this._cqbIndex
     }
@@ -295,8 +314,8 @@ class NativeSpansInterface {
     view.setUint32(idx, op, true)
     view.setUint32(idx + 4, 0, true)
     idx += 8
-    buf.set(spanId, idx)
-    idx += 8
+    view.setUint32(idx, slotIndex, true)
+    idx += 4
 
     for (let i = 0; i < resolvedArgs.length; i++) {
       const arg = resolvedArgs[i]
@@ -398,13 +417,14 @@ class NativeSpansInterface {
   /**
    * Queue a CreateSpan operation (combined Create + SetName + SetStart).
    *
+   * @param {number} slotIndex The slot index (u32)
    * @param {Uint8Array} spanId LE span ID
    * @param {Uint8Array|number[]} traceId BE Identifier buffer (8 or 16 bytes)
    * @param {Uint8Array|number[]|null} parentId BE Identifier buffer or null
    * @param {string} name Span name
    * @param {number} startMs Start time in milliseconds
    */
-  queueCreateSpan (spanId, traceId, parentId, name, startMs) {
+  queueCreateSpan (slotIndex, spanId, traceId, parentId, name, startMs) {
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
@@ -423,6 +443,8 @@ class NativeSpansInterface {
 
     view.setUint32(idx, 13, true); view.setUint32(idx + 4, 0, true)
     idx += 8
+    view.setUint32(idx, slotIndex, true)
+    idx += 4
     buf.set(spanId, idx)
     idx += 8
 
@@ -468,6 +490,7 @@ class NativeSpansInterface {
   /**
    * Queue a CreateSpanFull operation (Create + name + service + resource + type + start).
    *
+   * @param {number} slotIndex The slot index (u32)
    * @param {Uint8Array} spanId LE span ID
    * @param {Uint8Array|number[]} traceId BE Identifier buffer
    * @param {Uint8Array|number[]|null} parentId BE Identifier buffer or null
@@ -477,7 +500,7 @@ class NativeSpansInterface {
    * @param {string} type Span type
    * @param {number} startMs Start time in milliseconds
    */
-  queueCreateSpanFull (spanId, traceId, parentId, name, service, resource, type, startMs) {
+  queueCreateSpanFull (slotIndex, spanId, traceId, parentId, name, service, resource, type, startMs) {
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
@@ -499,6 +522,8 @@ class NativeSpansInterface {
 
     view.setUint32(idx, 14, true); view.setUint32(idx + 4, 0, true)
     idx += 8
+    view.setUint32(idx, slotIndex, true)
+    idx += 4
     buf.set(spanId, idx)
     idx += 8
 
@@ -547,16 +572,16 @@ class NativeSpansInterface {
    * Queue multiple meta (string) tags using the BatchSetMeta opcode.
    * Single header, N key/value pairs. Written directly to WASM memory.
    *
-   * @param {Uint8Array} spanId The span ID (little-endian)
+   * @param {number} slotIndex The slot index (u32)
    * @param {Array<[string, string]>} tags Array of [key, value] pairs
    */
-  queueBatchMeta (spanId, tags) {
+  queueBatchMeta (slotIndex, tags) {
     if (tags.length === 0) return
 
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
-    const needed = 20 + tags.length * 8
+    const needed = 16 + tags.length * 8
 
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
@@ -571,12 +596,11 @@ class NativeSpansInterface {
     }
 
     const view = this._cqbView
-    const buf = this._cqbBytes
 
     view.setUint32(idx, 15, true); view.setUint32(idx + 4, 0, true)
     idx += 8
-    buf.set(spanId, idx)
-    idx += 8
+    view.setUint32(idx, slotIndex, true)
+    idx += 4
     view.setUint32(idx, tags.length, true)
     idx += 4
     for (let i = 0; i < tags.length; i++) {
@@ -596,16 +620,16 @@ class NativeSpansInterface {
    * Queue multiple metric tags using the BatchSetMetric opcode.
    * Single header, N key/value pairs. Written directly to WASM memory.
    *
-   * @param {Uint8Array} spanId The span ID (little-endian)
+   * @param {number} slotIndex The slot index (u32)
    * @param {Array<[string, number]>} tags Array of [key, value] pairs
    */
-  queueBatchMetrics (spanId, tags) {
+  queueBatchMetrics (slotIndex, tags) {
     if (tags.length === 0) return
 
     this.#ensureWasmViews()
 
     let idx = this._cqbIndex
-    const needed = 20 + tags.length * 12
+    const needed = 16 + tags.length * 12
 
     if (idx + needed > CHANGE_QUEUE_BUFFER_SIZE) {
       this.flushChangeQueue()
@@ -619,12 +643,11 @@ class NativeSpansInterface {
     }
 
     const view = this._cqbView
-    const buf = this._cqbBytes
 
     view.setUint32(idx, 16, true); view.setUint32(idx + 4, 0, true)
     idx += 8
-    buf.set(spanId, idx)
-    idx += 8
+    view.setUint32(idx, slotIndex, true)
+    idx += 4
     view.setUint32(idx, tags.length, true)
     idx += 4
     for (let i = 0; i < tags.length; i++) {
@@ -643,33 +666,33 @@ class NativeSpansInterface {
   /**
    * Flush spans to the Datadog agent.
    *
-   * @param {Array<Uint8Array>} spanIds Array of span ID buffers (little-endian)
+   * @param {Array<number>} slots Array of u32 slot indices
    * @param {boolean} [firstIsLocalRoot=true] Whether the first span is the local root
    * @returns {Promise<string>} Response from the agent
    */
-  async flushSpans (spanIds, firstIsLocalRoot = true) {
+  async flushSpans (slots, firstIsLocalRoot = true) {
     // Flush any pending change queue operations first
     this.flushChangeQueue()
 
-    if (spanIds.length === 0) {
+    if (slots.length === 0) {
       return 'no spans to flush'
     }
 
     // Ensure flush buffer is large enough
-    const requiredSize = spanIds.length * 8
+    const requiredSize = slots.length * 4
     if (requiredSize > this._flushBuffer.length) {
       this._flushBuffer = Buffer.alloc(requiredSize)
     }
 
-    // Write span IDs to flush buffer (already little-endian, just copy)
+    // Write slot indices to flush buffer as u32 LE
     let index = 0
-    for (const spanId of spanIds) {
-      this._flushBuffer.set(spanId, index)
-      index += 8
+    for (const slot of slots) {
+      this._flushBuffer.writeUInt32LE(slot, index)
+      index += 4
     }
 
     try {
-      this._state.prepareChunk(spanIds.length, firstIsLocalRoot, this._flushBuffer)
+      this._state.prepareChunk(slots.length, firstIsLocalRoot, this._flushBuffer)
       const result = await this._state.sendPreparedChunk()
       return result
     } catch (e) {
@@ -679,150 +702,139 @@ class NativeSpansInterface {
   }
 
   /**
-   * Ensure a span ID is a Uint8Array for passing to WASM.
-   * WASM functions take &[u8] (JS Uint8Array) for span IDs.
-   * @param {Uint8Array|number[]} buf The span ID buffer
-   * @returns {Uint8Array}
-   */
-  #toUint8Array (buf) {
-    if (buf instanceof Uint8Array) return buf
-    return new Uint8Array(buf)
-  }
-
-  /**
    * Get a meta (string) attribute from a span.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @param {string} key The attribute key
    * @returns {string|null} The attribute value or null
    */
-  getMetaAttr (spanId, key) {
+  getMetaAttr (slotIndex, key) {
     this.flushChangeQueue()
-    return this._state.getMetaAttr(this.#toUint8Array(spanId), key)
+    return this._state.getMetaAttr(slotIndex, key)
   }
 
   /**
    * Get a metric (numeric) attribute from a span.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @param {string} key The attribute key
    * @returns {number|null} The attribute value or null
    */
-  getMetricAttr (spanId, key) {
+  getMetricAttr (slotIndex, key) {
     this.flushChangeQueue()
-    return this._state.getMetricAttr(this.#toUint8Array(spanId), key)
+    return this._state.getMetricAttr(slotIndex, key)
   }
 
   /**
    * Get the span name.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @returns {string} The span name
    */
-  getName (spanId) {
+  getName (slotIndex) {
     this.flushChangeQueue()
-    return this._state.getName(this.#toUint8Array(spanId))
+    return this._state.getName(slotIndex)
   }
 
   /**
    * Get the service name.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @returns {string} The service name
    */
-  getServiceName (spanId) {
+  getServiceName (slotIndex) {
     this.flushChangeQueue()
-    return this._state.getServiceName(this.#toUint8Array(spanId))
+    return this._state.getServiceName(slotIndex)
   }
 
   /**
    * Get the resource name.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @returns {string} The resource name
    */
-  getResourceName (spanId) {
+  getResourceName (slotIndex) {
     this.flushChangeQueue()
-    return this._state.getResourceName(this.#toUint8Array(spanId))
+    return this._state.getResourceName(slotIndex)
   }
 
   /**
    * Get the span type.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @returns {string} The span type
    */
-  getType (spanId) {
+  getType (slotIndex) {
     this.flushChangeQueue()
-    return this._state.getType(this.#toUint8Array(spanId))
+    return this._state.getType(slotIndex)
   }
 
   /**
    * Get the error flag.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @returns {number} The error flag (0 or 1)
    */
-  getError (spanId) {
+  getError (slotIndex) {
     this.flushChangeQueue()
-    return this._state.getError(this.#toUint8Array(spanId))
+    return this._state.getError(slotIndex)
   }
 
   /**
    * Get the start time.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @returns {number} The start time in nanoseconds
    */
-  getStart (spanId) {
+  getStart (slotIndex) {
     this.flushChangeQueue()
-    return this._state.getStart(this.#toUint8Array(spanId))
+    return this._state.getStart(slotIndex)
   }
 
   /**
    * Get the duration.
    *
-   * @param {Uint8Array|number[]} spanId The span ID buffer
+   * @param {number} slotIndex The slot index
    * @returns {number} The duration in nanoseconds
    */
-  getDuration (spanId) {
+  getDuration (slotIndex) {
     this.flushChangeQueue()
-    return this._state.getDuration(this.#toUint8Array(spanId))
+    return this._state.getDuration(slotIndex)
   }
 
   /**
    * Get a trace-level meta attribute.
    *
-   * @param {Uint8Array|number[]} spanId A span ID buffer in the trace
+   * @param {number} slotIndex A slot index for a span in the trace
    * @param {string} key The attribute key
    * @returns {string|null} The attribute value or null
    */
-  getTraceMetaAttr (spanId, key) {
+  getTraceMetaAttr (slotIndex, key) {
     this.flushChangeQueue()
-    return this._state.getTraceMetaAttr(this.#toUint8Array(spanId), key)
+    return this._state.getTraceMetaAttr(slotIndex, key)
   }
 
   /**
    * Get a trace-level metric attribute.
    *
-   * @param {Uint8Array|number[]} spanId A span ID buffer in the trace
+   * @param {number} slotIndex A slot index for a span in the trace
    * @param {string} key The attribute key
    * @returns {number|null} The attribute value or null
    */
-  getTraceMetricAttr (spanId, key) {
+  getTraceMetricAttr (slotIndex, key) {
     this.flushChangeQueue()
-    return this._state.getTraceMetricAttr(this.#toUint8Array(spanId), key)
+    return this._state.getTraceMetricAttr(slotIndex, key)
   }
 
   /**
    * Get the trace origin.
    *
-   * @param {Uint8Array|number[]} spanId A span ID buffer in the trace
+   * @param {number} slotIndex A slot index for a span in the trace
    * @returns {string|null} The trace origin or null
    */
-  getTraceOrigin (spanId) {
+  getTraceOrigin (slotIndex) {
     this.flushChangeQueue()
-    return this._state.getTraceOrigin(this.#toUint8Array(spanId))
+    return this._state.getTraceOrigin(slotIndex)
   }
 
   // Note: sample() is not available in the WASM pipeline module.
