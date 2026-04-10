@@ -410,7 +410,6 @@ class CypressPlugin extends Plugin {
         return
       }
 
-      this.wrapperFile = injectSupportFile(ctx.config)
       ctx.initPromise = this.init(ctx.config)
     })
 
@@ -493,6 +492,7 @@ class CypressPlugin extends Plugin {
   init (cypressConfig) {
     this.resetRunState()
     this._isInit = true
+    this.wrapperFile = injectSupportFile(cypressConfig)
     this.cypressConfig = cypressConfig
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
