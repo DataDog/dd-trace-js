@@ -15,7 +15,7 @@ const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
 
-const json = '"blockedTemplateJson"'
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
@@ -77,9 +77,9 @@ withVersions('express', 'express', version => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json'),
-          blockedTemplateJson: json,
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -228,9 +228,9 @@ withVersions('express', 'express', version => {
         appsec: {
           enabled: true,
           rules: path.join(__dirname, 'rules-example.json'),
-          blockedTemplateJson: json,
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
