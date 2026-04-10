@@ -696,7 +696,7 @@ function warnWrongOtelSettings () {
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE'],
+    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE', 'DD_TRACE_PROPAGATION_STYLE'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_SERVICE_NAME', 'DD_SERVICE', 'service'],
     ['OTEL_TRACES_SAMPLER', 'DD_TRACE_SAMPLE_RATE'],
@@ -717,11 +717,7 @@ function warnWrongOtelSettings () {
         increaseCounter('otel.env.hiding', ddEnvVar, otelEnvVar)
       }
 
-      // eslint-disable-next-line eslint-rules/eslint-env-aliases
-      const invalidOtelValue = otelEnvVar === 'OTEL_PROPAGATORS'
-        ? trackedConfigOrigins.get(/** @type {ConfigPath} */ ('tracePropagationStyle.inject')) !== otelSource &&
-          !envs[ddEnvVar]
-        : !otelSource
+      const invalidOtelValue = !otelSource
       if (invalidOtelValue) {
         increaseCounter('otel.env.invalid', ddEnvVar, otelEnvVar)
       }
