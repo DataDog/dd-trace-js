@@ -69,8 +69,8 @@ function getDatadogTraceMetadata () {
     other: {
       'dd-trace-id': traceId,
       'dd-trace-time': traceTime,
-      'dd-root-span-id': browserSpanId.toString(10)
-    }
+      'dd-root-span-id': browserSpanId.toString(10),
+    },
   }
 }
 

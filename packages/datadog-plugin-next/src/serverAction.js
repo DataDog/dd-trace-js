@@ -29,8 +29,8 @@ async function withDatadogServerAction (actionName, action) {
   const actionSpan = tracer.startSpan(actionName, {
     childOf: activeSpan,
     tags: {
-      'span.kind': 'internal'
-    }
+      'span.kind': 'internal',
+    },
   })
 
   try {

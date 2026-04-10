@@ -13,9 +13,9 @@ const { parseRumSessionId } = require('./utils/parseSessionCookie')
  *
  * Creates an error span with route context, error details, and RUM session correlation.
  *
- * @param {Object} error - { message, stack?, digest? }
- * @param {Object} request - { path, method, headers }
- * @param {Object} context - { routerKind, routePath, routeType, renderSource? }
+ * @param {object} error - { message, stack?, digest? }
+ * @param {object} request - { path, method, headers }
+ * @param {object} context - { routerKind, routePath, routeType, renderSource? }
  */
 function datadogOnRequestError (error, request, context) {
   const tracer = global._ddtrace
@@ -26,15 +26,15 @@ function datadogOnRequestError (error, request, context) {
       'resource.name': `${request.method} ${context.routePath}`,
       'http.method': request.method,
       'http.url': request.path,
-      'error': true,
+      error: true,
       'error.message': error.message,
       'error.stack': error.stack,
       'error.type': (error.constructor && error.constructor.name) || 'Error',
       'nextjs.router_kind': context.routerKind,
       'nextjs.route_path': context.routePath,
       'nextjs.route_type': context.routeType,
-      'span.kind': 'server'
-    }
+      'span.kind': 'server',
+    },
   })
 
   if (context.renderSource) {
