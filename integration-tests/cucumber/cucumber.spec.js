@@ -97,7 +97,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
   let cwd, receiver, childProcess, testOutput
 
-  useSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
+  useSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc', 'sinon'], true)
 
   before(function () {
     cwd = sandboxCwd()
@@ -2158,6 +2158,36 @@ describe(`cucumber@${version} commonJS`, () => {
               done()
             }).catch(done)
           })
+        })
+
+        onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 2)
+              const retriedTests = tests.filter(
+                t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+              )
+              assert.strictEqual(retriedTests.length, 1)
+            })
+
+          const featurePath = 'ci-visibility/features-di-fake-timers/test-hit-breakpoint.feature'
+          childProcess = exec(
+            `./node_modules/.bin/cucumber-js ${featurePath} --retry 1`,
+            {
+              cwd,
+              env: envVars,
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 1)
         })
 
         onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {

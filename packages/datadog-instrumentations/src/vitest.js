@@ -1,4 +1,8 @@
 'use strict'
+
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const path = require('node:path')
 
 const shimmer = require('../../datadog-shimmer')
@@ -83,7 +87,7 @@ function getTestCommand () {
 
 function waitForHitProbe () {
   return new Promise(resolve => {
-    setTimeout(() => {
+    realSetTimeout(() => {
       resolve()
     }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
   })
