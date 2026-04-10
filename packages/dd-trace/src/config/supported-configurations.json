@@ -1886,6 +1886,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_CLAUDE_AGENT_SDK_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_APOLLO_ENABLED": [
       {
         "implementation": "A",
