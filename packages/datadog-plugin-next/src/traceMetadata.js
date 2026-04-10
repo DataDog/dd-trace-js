@@ -4,8 +4,13 @@
  * Returns Datadog trace metadata for RUM<>APM correlation.
  *
  * Call this from your `generateMetadata` function in the root layout to inject
- * `<meta name="dd-trace-id">` and `<meta name="dd-trace-time">` tags into the page.
- * The Datadog RUM SDK reads these on initial page load to link with the server APM trace.
+ * `<meta name="dd-trace-id">`, `<meta name="dd-trace-time">`, and
+ * `<meta name="dd-root-span-id">` tags into the page. The Datadog RUM SDK reads
+ * these on initial page load to link with the server APM trace.
+ *
+ * For RSC (React Server Component) fetches initiated by the browser SDK's trace
+ * header injection, meta tags are suppressed to avoid overwriting the document's
+ * original trace context during client-side navigation.
  *
  * Usage:
  * ```js
@@ -20,8 +25,6 @@
  * }
  * ```
  *
- * Returns a Next.js Metadata-compatible object:
- * { other: { 'dd-trace-id': '<traceId>', 'dd-trace-time': '<timestamp>' } }
  */
 function getDatadogTraceMetadata () {
   const tracer = global._ddtrace
@@ -31,6 +34,16 @@ function getDatadogTraceMetadata () {
   if (!activeSpan) return {}
 
   const context = activeSpan.context()
+
+  // Skip meta tag emission for RSC fetches that already have a RUM-injected parent.
+  // The RUM SDK sets x-datadog-origin: 'rum' which dd-trace stores as _trace.origin.
+  // For these requests the browser already has the trace context — emitting meta tags
+  // would overwrite the document's original trace data during client-side navigation.
+  const origin = context._trace && context._trace.origin
+  if (origin === 'rum') {
+    return {}
+  }
+
   const traceId = context.toTraceId()
   const traceTime = String(Date.now())
 
