@@ -8,7 +8,7 @@ const esmEntries = [
       filePath: 'dist/index.mjs'
     },
     functionQuery: {
-      methodName: 'withDurableExecution',
+      functionName: 'runHandler',
       kind: 'Async'
     },
     channelName: 'withDurableExecution'

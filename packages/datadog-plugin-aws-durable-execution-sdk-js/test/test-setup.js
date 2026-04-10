@@ -32,19 +32,72 @@ class MockDurableExecutionClient {
 }
 
 /**
+ * Mock client that resolves operations immediately in the checkpoint response.
+ * Bypasses the SDK's two-phase polling (START → poll → SUCCEEDED) by returning
+ * terminal status directly, which avoids the 20ms termination cooldown that
+ * would otherwise kill the handler before polling completes.
+ *
+ * @param {string} [failOnAction] - If set, operations with this Action return FAILED
+ */
+class ImmediateCompletionMockClient {
+  constructor (failOnAction) {
+    this._tokenCounter = 0
+    this._failOnAction = failOnAction
+  }
+
+  async getExecutionState () {
+    return { Operations: [] }
+  }
+
+  async checkpoint (params) {
+    this._tokenCounter++
+    const operations = (params.Updates || []).map(update => {
+      const shouldFail = this._failOnAction && update.Action === this._failOnAction
+      const op = {
+        Id: update.Id,
+        Type: update.Type || 'STEP',
+        Status: shouldFail ? 'FAILED' : 'SUCCEEDED',
+        Name: update.Name,
+        StepDetails: {},
+        ChainedInvokeDetails: {}
+      }
+      if (shouldFail) {
+        op.ChainedInvokeDetails = {
+          Error: { ErrorType: 'InvokeError', ErrorMessage: 'Intentional invoke error' }
+        }
+        op.StepDetails = {
+          Error: { ErrorType: 'Error', ErrorMessage: 'Intentional error' }
+        }
+      } else {
+        op.StepDetails = update.Payload
+          ? { Result: update.Payload }
+          : { Result: JSON.stringify(null) }
+        op.ChainedInvokeDetails = { Result: JSON.stringify(null) }
+      }
+      return op
+    })
+    return {
+      CheckpointToken: `mock-token-${this._tokenCounter}`,
+      NewExecutionState: { Operations: operations }
+    }
+  }
+}
+
+/**
  * Creates a mock Lambda context object for testing.
  * @returns {object} Mock AWS Lambda context
  */
 function createMockLambdaContext () {
+  const startTime = Date.now()
   return {
-    awsRequestId: `test-req-${Date.now()}`,
+    awsRequestId: `test-req-${startTime}`,
     functionName: 'test-durable-function',
     functionVersion: '$LATEST',
     invokedFunctionArn: 'arn:aws:lambda:us-east-1:123456789012:function:test-durable-function',
     memoryLimitInMB: '128',
     logGroupName: '/aws/lambda/test-durable-function',
     logStreamName: '2024/01/01/[$LATEST]test',
-    getRemainingTimeInMillis: () => 30000,
+    getRemainingTimeInMillis: () => Math.max(0, 30000 - (Date.now() - startTime)),
     tenantId: 'test-tenant'
   }
 }
@@ -86,11 +139,12 @@ class AwsDurableExecutionSdkJsTestSetup {
   /**
    * Invokes the full withDurableExecution flow with a given handler.
    * @param {Function} handlerFn - The durable handler to execute
+   * @param {object} [client] - Optional mock client override (defaults to this.mockClient)
    * @returns {Promise<object>} The invocation output
    */
-  async _invokeHandler (handlerFn) {
+  async _invokeHandler (handlerFn, client) {
     const handler = this.mod.withDurableExecution(handlerFn)
-    const event = createMockEvent(this.mod, this.mockClient)
+    const event = createMockEvent(this.mod, client || this.mockClient)
     const context = createMockLambdaContext()
     return handler(event, context)
   }
@@ -98,15 +152,23 @@ class AwsDurableExecutionSdkJsTestSetup {
   // --- withDurableExecution operations ---
 
   async withDurableExecution () {
+    // The orchestrion rewriter wraps the internal runHandler function which
+    // executes when the returned handler is called. The workflow.execute span
+    // covers the full handler execution lifecycle.
+    const client = new ImmediateCompletionMockClient()
     return this._invokeHandler(async (event, ctx) => {
       return { status: 'completed' }
-    })
+    }, client)
   }
 
   async withDurableExecutionError () {
+    // The SDK's runHandler catches handler errors and returns a FAILED status,
+    // so the span finishes normally (without error tags). We verify the span
+    // is still created even on the error path.
+    const client = new ImmediateCompletionMockClient()
     return this._invokeHandler(async () => {
       throw new Error('Intentional durable execution error')
-    })
+    }, client)
   }
 
   // --- DurableContextImpl.step() operations ---
@@ -132,17 +194,19 @@ class AwsDurableExecutionSdkJsTestSetup {
   // --- DurableContextImpl.invoke() operations ---
 
   async durableContextImplInvoke () {
+    const client = new ImmediateCompletionMockClient()
     return this._invokeHandler(async (event, ctx) => {
       const result = await ctx.invoke('test-func', 'arn:aws:lambda:us-east-1:123456789012:function:target', {})
       return result
-    })
+    }, client)
   }
 
   async durableContextImplInvokeError () {
+    const client = new ImmediateCompletionMockClient('START')
     return this._invokeHandler(async (event, ctx) => {
       const result = await ctx.invoke('error-func', 'arn:aws:lambda:us-east-1:123456789012:function:nonexistent', {})
       return result
-    })
+    }, client)
   }
 
   // --- DurableContextImpl.runInChildContext() operations ---
@@ -168,17 +232,21 @@ class AwsDurableExecutionSdkJsTestSetup {
   // --- DurableContextImpl.wait() operations ---
 
   async durableContextImplWait () {
+    const client = new ImmediateCompletionMockClient()
     return this._invokeHandler(async (event, ctx) => {
       await ctx.wait('test-wait', { seconds: 1 })
       return { waited: true }
-    })
+    }, client)
   }
 
   async durableContextImplWaitError () {
+    const client = new ImmediateCompletionMockClient()
     return this._invokeHandler(async (event, ctx) => {
-      await ctx.wait('error-wait', { seconds: -1 })
+      // Passing null duration triggers a synchronous TypeError in the SDK,
+      // which the orchestrion wrapper captures as an error on the span.
+      await ctx.wait('error-wait', null)
       return { waited: false }
-    })
+    }, client)
   }
 
   // --- DurableContextImpl.waitForCondition() operations ---
