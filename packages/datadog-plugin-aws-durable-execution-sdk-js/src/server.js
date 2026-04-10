@@ -12,7 +12,7 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
 
     this.startSpan('workflow.execute', {
       service: this.serviceName({ pluginService: this.config.service }),
-      meta
+      meta,
     }, ctx)
 
     return ctx.currentStore
@@ -21,7 +21,7 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
   getTags (ctx) {
     return {
       component: 'aws-durable-execution-sdk-js',
-      'span.kind': 'server'
+      'span.kind': 'server',
     }
   }
 

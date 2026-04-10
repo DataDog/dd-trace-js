@@ -10,7 +10,7 @@ class AwsDurableExecutionSdkJsPlugin extends CompositePlugin {
   static plugins = {
     server: serverPlugin,
     ...internalPlugin,
-    client: clientPlugin
+    client: clientPlugin,
   }
 }
 

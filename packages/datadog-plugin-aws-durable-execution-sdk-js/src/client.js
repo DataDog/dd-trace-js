@@ -14,7 +14,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     this.startSpan('lambda.invoke', {
       service: this.serviceName({ pluginService: this.config.service }),
       resource: meta.functionname || 'lambda.invoke',
-      meta
+      meta,
     }, ctx)
 
     return ctx.currentStore
@@ -32,7 +32,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
 
     const tags = {
       component: 'aws-durable-execution-sdk-js',
-      'span.kind': 'client'
+      'span.kind': 'client',
     }
 
     if (functionname) {

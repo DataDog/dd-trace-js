@@ -13,7 +13,7 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
 
     this.startSpan('workflow.step.execute', {
       service: this.serviceName({ pluginService: this.config.service }),
-      meta
+      meta,
     }, ctx)
 
     return ctx.currentStore
@@ -22,7 +22,7 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
   getTags (ctx) {
     return {
       component: 'aws-durable-execution-sdk-js',
-      'span.kind': 'internal'
+      'span.kind': 'internal',
     }
   }
 
@@ -73,12 +73,12 @@ class DurableContextImplParallelPlugin extends BaseAwsDurableExecutionSdkJsInter
 }
 
 module.exports = {
-  'BaseAwsDurableExecutionSdkJsInternalPlugin': BaseAwsDurableExecutionSdkJsInternalPlugin,
-  'DurableContextImplRunInChildContextPlugin': DurableContextImplRunInChildContextPlugin,
-  'DurableContextImplWaitPlugin': DurableContextImplWaitPlugin,
-  'DurableContextImplWaitForConditionPlugin': DurableContextImplWaitForConditionPlugin,
-  'DurableContextImplWaitForCallbackPlugin': DurableContextImplWaitForCallbackPlugin,
-  'DurableContextImplCreateCallbackPlugin': DurableContextImplCreateCallbackPlugin,
-  'DurableContextImplMapPlugin': DurableContextImplMapPlugin,
-  'DurableContextImplParallelPlugin': DurableContextImplParallelPlugin
+  BaseAwsDurableExecutionSdkJsInternalPlugin,
+  DurableContextImplRunInChildContextPlugin,
+  DurableContextImplWaitPlugin,
+  DurableContextImplWaitForConditionPlugin,
+  DurableContextImplWaitForCallbackPlugin,
+  DurableContextImplCreateCallbackPlugin,
+  DurableContextImplMapPlugin,
+  DurableContextImplParallelPlugin,
 }

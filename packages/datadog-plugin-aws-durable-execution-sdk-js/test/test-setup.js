@@ -22,11 +22,11 @@ class MockDurableExecutionClient {
       Id: update.Id,
       Type: update.Type || 'STEP',
       Status: update.Action === 'START' ? 'STARTED' : 'SUCCEEDED',
-      StepDetails: update.Payload ? { Result: update.Payload } : {}
+      StepDetails: update.Payload ? { Result: update.Payload } : {},
     }))
     return {
       CheckpointToken: `mock-token-${this._tokenCounter}`,
-      NewExecutionState: { Operations: operations }
+      NewExecutionState: { Operations: operations },
     }
   }
 }
@@ -59,14 +59,14 @@ class ImmediateCompletionMockClient {
         Status: shouldFail ? 'FAILED' : 'SUCCEEDED',
         Name: update.Name,
         StepDetails: {},
-        ChainedInvokeDetails: {}
+        ChainedInvokeDetails: {},
       }
       if (shouldFail) {
         op.ChainedInvokeDetails = {
-          Error: { ErrorType: 'InvokeError', ErrorMessage: 'Intentional invoke error' }
+          Error: { ErrorType: 'InvokeError', ErrorMessage: 'Intentional invoke error' },
         }
         op.StepDetails = {
-          Error: { ErrorType: 'Error', ErrorMessage: 'Intentional error' }
+          Error: { ErrorType: 'Error', ErrorMessage: 'Intentional error' },
         }
       } else {
         op.StepDetails = update.Payload
@@ -78,7 +78,7 @@ class ImmediateCompletionMockClient {
     })
     return {
       CheckpointToken: `mock-token-${this._tokenCounter}`,
-      NewExecutionState: { Operations: operations }
+      NewExecutionState: { Operations: operations },
     }
   }
 }
@@ -98,7 +98,7 @@ function createMockLambdaContext () {
     logGroupName: '/aws/lambda/test-durable-function',
     logStreamName: '2024/01/01/[$LATEST]test',
     getRemainingTimeInMillis: () => Math.max(0, 30000 - (Date.now() - startTime)),
-    tenantId: 'test-tenant'
+    tenantId: 'test-tenant',
   }
 }
 
@@ -118,10 +118,10 @@ function createMockEvent (mod, mockClient) {
         Type: 'EXECUTION',
         Status: 'STARTED',
         ExecutionDetails: {
-          InputPayload: JSON.stringify({ testInput: true })
-        }
-      }]
-    }
+          InputPayload: JSON.stringify({ testInput: true }),
+        },
+      }],
+    },
   }, mockClient)
 }
 
@@ -261,7 +261,7 @@ class AwsDurableExecutionSdkJsTestSetup {
         waitStrategy: (result, attempts) => {
           if (result?.met) return { shouldContinue: false }
           return { shouldContinue: true, delay: { seconds: 1 } }
-        }
+        },
       })
       return result
     })
@@ -272,7 +272,7 @@ class AwsDurableExecutionSdkJsTestSetup {
       const result = await ctx.waitForCondition('error-condition', async () => {
         throw new Error('Intentional condition check error')
       }, {
-        waitStrategy: () => ({ shouldContinue: false })
+        waitStrategy: () => ({ shouldContinue: false }),
       })
       return result
     })
@@ -312,8 +312,8 @@ class AwsDurableExecutionSdkJsTestSetup {
       const result = await ctx.createCallback('error-create-cb', {
         serdes: {
           serialize: () => { throw new Error('Intentional serdes error') },
-          deserialize: (v) => v
-        }
+          deserialize: (v) => v,
+        },
       })
       return result
     })
@@ -345,7 +345,7 @@ class AwsDurableExecutionSdkJsTestSetup {
     return this._invokeHandler(async (event, ctx) => {
       const result = await ctx.parallel('test-parallel', [
         async (pCtx) => { return 'branch-a' },
-        async (pCtx) => { return 'branch-b' }
+        async (pCtx) => { return 'branch-b' },
       ])
       return result
     })
@@ -354,7 +354,7 @@ class AwsDurableExecutionSdkJsTestSetup {
   async durableContextImplParallelError () {
     return this._invokeHandler(async (event, ctx) => {
       const result = await ctx.parallel('error-parallel', [
-        async () => { throw new Error('Intentional parallel error') }
+        async () => { throw new Error('Intentional parallel error') },
       ], { retryStrategy: () => ({ shouldRetry: false }) })
       return result
     })

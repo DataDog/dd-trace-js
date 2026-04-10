@@ -425,8 +425,8 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
             'span.kind': 'client',
             functionname: expectedArn,
             'peer.service': expectedArn,
-            '_dd.peer.service.source': 'functionname'
-          }
+            '_dd.peer.service.source': 'functionname',
+          },
         })
       })
 
