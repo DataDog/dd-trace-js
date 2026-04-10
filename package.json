@@ -10,6 +10,7 @@
       "default": "./index.js"
     },
     "./init": "./init.js",
+    "./loader-hook.mjs": "./loader-hook.mjs",
     "./next": {
       "types": "./next.d.ts",
       "default": "./next.js"
