@@ -54,8 +54,8 @@ function getBlockWithRedirectData (actionParameters) {
 
   const headers = { Location: actionParameters.location }
 
-  if (headers.Location && actionParameters.security_response_id) {
-    headers.Location = headers.Location.replace(templateKeyword, actionParameters.security_response_id)
+  if (headers.Location) {
+    headers.Location = headers.Location.replace(templateKeyword, actionParameters.security_response_id ?? '')
   }
 
   return { headers, statusCode }
