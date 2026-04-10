@@ -35,7 +35,7 @@ const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 const { getConfigFresh } = require('../helpers/config')
-const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('../utils')
+const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 
 const blockedTemplate = {
   html: blockedTemplateHtml,
