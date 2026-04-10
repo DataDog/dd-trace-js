@@ -1,6 +1,6 @@
 'use strict'
 
-module.exports = [
+const esmEntries = [
   {
     module: {
       name: '@aws/durable-execution-sdk-js',
@@ -131,3 +131,13 @@ module.exports = [
     channelName: 'DurableContextImpl_parallel'
   }
 ]
+
+const cjsEntries = esmEntries.map(entry => ({
+  ...entry,
+  module: {
+    ...entry.module,
+    filePath: 'dist-cjs/index.js'
+  }
+}))
+
+module.exports = [...esmEntries, ...cjsEntries]

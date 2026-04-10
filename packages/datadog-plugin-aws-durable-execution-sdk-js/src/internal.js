@@ -4,6 +4,8 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
+  static type = 'serverless'
+  static kind = 'server'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_step'
 
   bindStart (ctx) {
