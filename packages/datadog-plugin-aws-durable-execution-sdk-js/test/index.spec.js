@@ -1,5 +1,6 @@
 'use strict'
 
+const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const TestSetup = require('./test-setup')
@@ -390,6 +391,46 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       } catch (err) {
         // Expected error
       }
+
+      return traceAssertion
+    })
+  })
+
+  describe('peer service computation', () => {
+    let computePeerServiceSpy
+
+    beforeEach(() => {
+      const tracer = require('../../dd-trace')
+      const plugin = tracer._pluginManager._pluginsByName['aws-durable-execution-sdk-js']
+      computePeerServiceSpy = sinon.stub(plugin._tracerConfig, 'spanComputePeerService').value(true)
+    })
+
+    afterEach(() => {
+      computePeerServiceSpy.restore()
+    })
+
+    it('should set peer.service from functionname on lambda.invoke spans', async () => {
+      const expectedArn = 'arn:aws:lambda:us-east-1:123456789012:function:target'
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        const allSpans = traces.flat()
+        const invokeSpan = allSpans.find(s => s.name === 'lambda.invoke')
+        if (!invokeSpan) {
+          throw new Error(`Expected span "lambda.invoke" not found. Available: ${JSON.stringify(allSpans.map(s => s.name))}`)
+        }
+        assertObjectContains(invokeSpan, {
+          name: 'lambda.invoke',
+          resource: expectedArn,
+          meta: {
+            component: 'aws-durable-execution-sdk-js',
+            'span.kind': 'client',
+            functionname: expectedArn,
+            'peer.service': expectedArn,
+            '_dd.peer.service.source': 'functionname'
+          }
+        })
+      })
+
+      await testSetup.durableContextImplInvoke()
 
       return traceAssertion
     })
