@@ -117,27 +117,25 @@ class NativeExporter {
       this.#syncTraceTags(spans[0])
     }
 
-    // Extract BigInt span IDs for native export
+    // Collect slot indices for native export
     // Note: flushChangeQueue is called inside flushSpans, no need to call it here
-    const spanIds = spans.map(span => {
-      const context = span.context()
-      // Support both native spans (with _nativeSpanId) and regular spans
-      return context._nativeSpanId ?? context._spanId.toBigInt()
-    })
+    const slots = spans.map(span => span.context()._slotIndex)
 
     // prepareChunk is synchronous — extract spans from native storage now.
     // sendPreparedChunk is async (HTTP send). We serialize sends so that
     // prepared chunks don't accumulate faster than they can be sent, which
     // would cause unbounded memory growth proportional to total requests.
-    this._nativeSpans.flushSpans(spanIds, firstIsLocalRoot)
+    this._nativeSpans.flushSpans(slots, firstIsLocalRoot)
       .then(() => {
         this.#flushInFlight = false
+        this._nativeSpans.freeSlots(slots)
         // If spans arrived while the send was in flight, flush them now
         if (this._pendingSpans.length > 0) {
           this.flush()
         }
       }, (err) => {
         this.#flushInFlight = false
+        this._nativeSpans.freeSlots(slots)
         log.error('Error sending spans to agent via native exporter:', err)
       })
     this.#flushInFlight = true

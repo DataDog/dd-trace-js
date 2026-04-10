@@ -11,8 +11,29 @@
 
 const tracer = require('../../..').init()
 
+const nativeSpans = tracer._tracer._nativeSpans
+const pendingNativeIds = nativeSpans ? [] : null
+const DRAIN_THRESHOLD = 5000
+
 tracer._tracer._processor.process = function (span) {
+  if (pendingNativeIds) {
+    pendingNativeIds.push(span.context()._slotIndex)
+  }
   this._erase(span.context()._trace)
+}
+
+function drainNative () {
+  if (!pendingNativeIds || pendingNativeIds.length === 0) return
+  nativeSpans.flushChangeQueue()
+  const buf = Buffer.alloc(pendingNativeIds.length * 4)
+  let idx = 0
+  for (const slot of pendingNativeIds) {
+    buf.writeUInt32LE(slot, idx)
+    idx += 4
+  }
+  nativeSpans._state.prepareChunk(pendingNativeIds.length, false, buf)
+  nativeSpans.freeSlots(pendingNativeIds)
+  pendingNativeIds.length = 0
 }
 
 const ITERATIONS = 1_000_000
@@ -21,6 +42,7 @@ const scenario = process.env.SCENARIO || 'bare'
 if (scenario === 'bare') {
   for (let i = 0; i < ITERATIONS; i++) {
     tracer.startSpan('bench.create.bare').finish()
+    if (pendingNativeIds && pendingNativeIds.length >= DRAIN_THRESHOLD) drainNative()
   }
 } else if (scenario === '10tags') {
   for (let i = 0; i < ITERATIONS; i++) {
@@ -39,5 +61,7 @@ if (scenario === 'bare') {
       },
     })
     span.finish()
+    if (pendingNativeIds && pendingNativeIds.length >= DRAIN_THRESHOLD) drainNative()
   }
 }
+drainNative()

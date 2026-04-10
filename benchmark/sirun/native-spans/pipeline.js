@@ -19,8 +19,34 @@ const tracer = require('../../..').init({
   port: 8126,
 })
 
-// Stub export to a no-op — we only want to measure process()
-tracer._tracer._exporter.export = function () {}
+const nativeSpans = tracer._tracer._nativeSpans
+const pendingNativeIds = nativeSpans ? [] : null
+const DRAIN_THRESHOLD = 5000
+
+// Stub export — in native mode, drain spans from WASM directly;
+// in JS mode, just discard.
+tracer._tracer._exporter.export = function (spans) {
+  if (pendingNativeIds) {
+    for (const span of spans) {
+      pendingNativeIds.push(span.context()._slotIndex)
+    }
+    if (pendingNativeIds.length >= DRAIN_THRESHOLD) drainNative()
+  }
+}
+
+function drainNative () {
+  if (!pendingNativeIds || pendingNativeIds.length === 0) return
+  nativeSpans.flushChangeQueue()
+  const buf = Buffer.alloc(pendingNativeIds.length * 4)
+  let idx = 0
+  for (const slot of pendingNativeIds) {
+    buf.writeUInt32LE(slot, idx)
+    idx += 4
+  }
+  nativeSpans._state.prepareChunk(pendingNativeIds.length, false, buf)
+  nativeSpans.freeSlots(pendingNativeIds)
+  pendingNativeIds.length = 0
+}
 
 const ITERATIONS = 200_000
 
@@ -63,3 +89,4 @@ for (let i = 0; i < ITERATIONS; i++) {
   root.setTag('http.status_code', 200)
   root.finish()
 }
+drainNative()
