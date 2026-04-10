@@ -49,7 +49,7 @@ class LLMObservabilitySpan {
 }
 
 class LLMObsSpanProcessor {
-  /** @type {import('../config')} */
+  /** @type {import('../config/config-base')} */
   #config
 
   /** @type {((span: LLMObservabilitySpan) => LLMObservabilitySpan | null) | null} */
