@@ -18,9 +18,8 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    // We need the span fallback because Otel (e.g. the OTel context manager)
-    // passes raw DDSpans that which have no ._span property.
-    span = span?._span || span
+    // Internal plugin utilities (e.g. web.js) pass raw DatadogSpans directly.
+    span = span?._span || null
 
     const oldStore = storage('legacy').getStore()
     const newStore = span ? storage('legacy').getStore(span._store) : oldStore
@@ -43,9 +42,8 @@ class Scope {
   bind (fn, span) {
     if (typeof fn !== 'function') return fn
 
-    // We need the span fallback because Otel (e.g. the OTel context manager)
-    // passes raw DDSpans that which have no ._span property.
-    span = span?._span || span
+    // Internal plugin utilities (e.g. web.js) pass raw DatadogSpans directly.
+    span = span?._span || null
 
     const scope = this
     const spanOrActive = this._spanOrActive(span)
