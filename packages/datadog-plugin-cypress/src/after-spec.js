@@ -1,5 +1,10 @@
 'use strict'
 
-const cypressPlugin = require('./cypress-plugin')
+const dc = require('dc-polyfill')
 
-module.exports = cypressPlugin.afterSpec.bind(cypressPlugin)
+const afterSpecCh = dc.channel('ci:cypress:after-spec')
+
+module.exports = function afterSpec (spec, results) {
+  if (!afterSpecCh.hasSubscribers) return
+  return new Promise(resolve => afterSpecCh.publish({ spec, results, onDone: resolve }))
+}

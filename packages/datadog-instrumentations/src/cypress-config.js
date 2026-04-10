@@ -1,7 +1,6 @@
 'use strict'
 
 const fs = require('fs')
-const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
 
@@ -59,53 +58,10 @@ function mergeReturnedConfig (config, updatedConfig) {
 }
 
 /**
- * Creates a temporary wrapper support file under os.tmpdir() that loads
- * dd-trace's browser-side hooks before the user's original support file.
- * Returns the wrapper path (for cleanup) or undefined if injection was skipped.
- *
- * @param {object} config Cypress resolved config object
- * @returns {string|undefined} wrapper file path, or undefined if skipped
- */
-function injectSupportFile (config) {
-  const originalSupportFile = config.supportFile
-  if (!originalSupportFile || originalSupportFile === false) return
-
-  try {
-    const content = fs.readFileSync(originalSupportFile, 'utf8')
-    // Naive check: skip lines starting with // or * to avoid matching commented-out imports.
-    const hasActiveDdTraceImport = content.split('\n').some(line => {
-      const trimmed = line.trim()
-      return trimmed.includes('dd-trace/ci/cypress/support') &&
-        !trimmed.startsWith('//') && !trimmed.startsWith('*')
-    })
-    if (hasActiveDdTraceImport) return
-  } catch {
-    return
-  }
-
-  const ddSupportFile = require.resolve('../../../ci/cypress/support')
-  const wrapperFile = path.join(os.tmpdir(), `dd-cypress-support-${process.pid}.mjs`)
-
-  // Always use ESM: it can import both CJS and ESM support files.
-  const wrapperContent =
-    `import ${JSON.stringify(ddSupportFile)}\nimport ${JSON.stringify(originalSupportFile)}\n`
-
-  try {
-    fs.writeFileSync(wrapperFile, wrapperContent)
-    config.supportFile = wrapperFile
-    return wrapperFile
-  } catch {
-    // Can't write wrapper - skip injection
-  }
-}
-
-/**
  * Registers dd-trace's Cypress hooks (before:run, after:spec, after:run, tasks)
- * and injects the support file. Handles chaining with user-registered handlers
- * for after:spec/after:run so both the user's code and dd-trace's run in sequence.
- *
- * Communicates with the dd-trace Cypress plugin via diagnostic channels so that
- * this instrumentation file has no direct knowledge of the tracer.
+ * by publishing to diagnostic channels. Handles chaining with user-registered
+ * handlers for after:spec/after:run so both the user's code and dd-trace's run
+ * in sequence.
  *
  * @param {Function} on Cypress event registration function
  * @param {object} config Cypress resolved config object
@@ -114,32 +70,19 @@ function injectSupportFile (config) {
  * @returns {object|Promise<object>} the config object (possibly modified), or a promise resolving to it
  */
 function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHandlers) {
-  const wrapperFile = injectSupportFile(config)
-
-  const cleanupWrapper = () => {
-    if (wrapperFile) {
-      try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
-    }
-  }
-
-  const registerAfterRunWithCleanup = () => {
+  const registerUserAfterRunHandler = () => {
     on('after:run', (results) => {
-      const chain = userAfterRunHandlers.reduce(
+      return userAfterRunHandlers.reduce(
         (p, h) => p.then(() => h(results)),
         Promise.resolve()
       )
-      return chain.finally(cleanupWrapper)
     })
   }
 
-  const registerNoopHandlers = () => {
-    for (const h of userAfterSpecHandlers) on('after:spec', h)
-    registerAfterRunWithCleanup()
-    on('task', noopTask)
-  }
-
   if (!sessionInitCh.hasSubscribers) {
-    registerNoopHandlers()
+    for (const h of userAfterSpecHandlers) on('after:spec', h)
+    registerUserAfterRunHandler()
+    on('task', noopTask)
     return config
   }
 
@@ -148,7 +91,7 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
 
   if (ctx.alreadyInit) {
     for (const h of userAfterSpecHandlers) on('after:spec', h)
-    registerAfterRunWithCleanup()
+    registerUserAfterRunHandler()
     return config
   }
 
@@ -165,13 +108,9 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
   })
 
   on('after:run', (results) => {
-    const chain = userAfterRunHandlers.reduce(
-      (p, h) => p.then(() => h(results)),
-      Promise.resolve()
-    )
-    return chain
+    return userAfterRunHandlers
+      .reduce((p, h) => p.then(() => h(results)), Promise.resolve())
       .then(() => new Promise(resolve => afterRunCh.publish({ results, onDone: resolve })))
-      .finally(cleanupWrapper)
   })
 
   const tasksCtx = {}

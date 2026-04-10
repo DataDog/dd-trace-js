@@ -1,34 +1,29 @@
 'use strict'
 
-const NoopTracer = require('../../dd-trace/src/noop/tracer')
+const dc = require('dc-polyfill')
+
 const satisfies = require('../../../vendor/dist/semifies')
 const { DD_MAJOR } = require('../../../version')
-const cypressPlugin = require('./cypress-plugin')
+
+const sessionInitCh = dc.channel('ci:cypress:session:init')
+const beforeRunCh = dc.channel('ci:cypress:before-run')
+const afterSpecCh = dc.channel('ci:cypress:after-spec')
+const afterRunCh = dc.channel('ci:cypress:after-run')
+const getTasksCh = dc.channel('ci:cypress:get-tasks')
 
 const noopTask = {
-  'dd:testSuiteStart': () => {
-    return null
-  },
-  'dd:beforeEach': () => {
-    return {}
-  },
-  'dd:afterEach': () => {
-    return null
-  },
-  'dd:addTags': () => {
-    return null
-  },
+  'dd:testSuiteStart': () => null,
+  'dd:beforeEach': () => ({}),
+  'dd:afterEach': () => null,
+  'dd:addTags': () => null,
+  'dd:log': () => null,
 }
 
 module.exports = function CypressPlugin (on, config) {
-  const tracer = require('../../dd-trace')
-
   if (satisfies(config.version, '<10.2.0')) {
     if (DD_MAJOR >= 6) {
       // eslint-disable-next-line no-console
-      console.error(
-        'ERROR: dd-trace v6 has deleted support for Cypress<10.2.0.'
-      )
+      console.error('ERROR: dd-trace v6 has deleted support for Cypress<10.2.0.')
       on('task', noopTask)
       return config
     }
@@ -41,17 +36,29 @@ module.exports = function CypressPlugin (on, config) {
     )
   }
 
-  // The tracer was not init correctly for whatever reason (such as invalid DD_SITE)
-  if (tracer._tracer instanceof NoopTracer) {
-    // We still need to register these tasks or the support file will fail
+  if (!sessionInitCh.hasSubscribers) {
     on('task', noopTask)
     return config
   }
 
-  on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
-  on('after:spec', cypressPlugin.afterSpec.bind(cypressPlugin))
-  on('after:run', cypressPlugin.afterRun.bind(cypressPlugin))
-  on('task', cypressPlugin.getTasks())
+  const ctx = { config }
+  sessionInitCh.publish(ctx)
 
-  return cypressPlugin.init(tracer, config)
+  on('before:run', (details) => {
+    return new Promise(resolve => beforeRunCh.publish({ details, onDone: resolve }))
+  })
+
+  on('after:spec', (spec, results) => {
+    return new Promise(resolve => afterSpecCh.publish({ spec, results, onDone: resolve }))
+  })
+
+  on('after:run', (results) => {
+    return new Promise(resolve => afterRunCh.publish({ results, onDone: resolve }))
+  })
+
+  const tasksCtx = {}
+  getTasksCh.publish(tasksCtx)
+  on('task', tasksCtx.tasks ?? noopTask)
+
+  return Promise.resolve(ctx.initPromise).then(() => config)
 }

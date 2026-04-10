@@ -1,5 +1,10 @@
 'use strict'
 
-const cypressPlugin = require('./cypress-plugin')
+const dc = require('dc-polyfill')
 
-module.exports = cypressPlugin.afterRun.bind(cypressPlugin)
+const afterRunCh = dc.channel('ci:cypress:after-run')
+
+module.exports = function afterRun (results) {
+  if (!afterRunCh.hasSubscribers) return
+  return new Promise(resolve => afterRunCh.publish({ results, onDone: resolve }))
+}
