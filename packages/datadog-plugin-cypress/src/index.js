@@ -423,11 +423,11 @@ class CypressPlugin extends Plugin {
     })
 
     this.addSub('ci:cypress:after-run', ({ results, onDone }) => {
+      const wrapperFile = this.wrapperFile
       Promise.resolve(this.afterRun(results))
         .finally(() => {
-          if (this.wrapperFile) {
-            try { fs.unlinkSync(this.wrapperFile) } catch { /* best effort */ }
-            this.wrapperFile = null
+          if (wrapperFile) {
+            try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
           }
         })
         .then(onDone, onDone)
