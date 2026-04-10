@@ -431,7 +431,7 @@ describe('blocking', () => {
       const blocked = block(req, res, rootSpan, null, actionParameters)
 
       assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 40)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 403)
       sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'sec_id: 1337')
     })
   })
