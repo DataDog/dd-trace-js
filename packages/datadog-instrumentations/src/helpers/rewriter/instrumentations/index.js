@@ -5,5 +5,5 @@ module.exports = [
   ...require('./bullmq'),
   ...require('./langchain'),
   ...require('./langgraph'),
-  ...require('./aws-durable-execution-sdk-js')
+  ...require('./aws-durable-execution-sdk-js'),
 ]

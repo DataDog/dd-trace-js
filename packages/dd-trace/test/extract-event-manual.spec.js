@@ -5,8 +5,8 @@ const { describe, it, beforeEach } = require('tap').mocha
 
 require('./setup/core')
 
-const { getConfigFresh } = require('./helpers/config')
 const TextMapPropagator = require('../src/opentracing/propagation/text_map')
+const { getConfigFresh } = require('./helpers/config')
 
 describe('Extract from your API Gateway event', () => {
   let propagator
@@ -20,18 +20,18 @@ describe('Extract from your API Gateway event', () => {
   it('should extract and show trace IDs from your headers', () => {
     // Your actual event headers
     const headers = {
-      'traceparent': '00-00000000000000009c047848bf426236-0798fc2348d88522-01',
-      'tracestate': 'dd=s:1;o:rum',
+      traceparent: '00-00000000000000009c047848bf426236-0798fc2348d88522-01',
+      tracestate: 'dd=s:1;o:rum',
       'x-datadog-origin': 'rum',
       'x-datadog-parent-id': '547464583201719600',
       'x-datadog-sampling-priority': '1',
-      'x-datadog-trace-id': '11242242823665377000'
+      'x-datadog-trace-id': '11242242823665377000',
     }
 
     console.log('\n=== Input Headers ===')
     console.log('x-datadog-trace-id:', headers['x-datadog-trace-id'])
     console.log('x-datadog-parent-id:', headers['x-datadog-parent-id'])
-    console.log('traceparent:', headers['traceparent'])
+    console.log('traceparent:', headers.traceparent)
 
     // Extract the span context
     const spanContext = propagator.extract(headers)
@@ -52,7 +52,7 @@ describe('Extract from your API Gateway event', () => {
     console.log('\n=== Analysis ===')
 
     // Parse traceparent to understand what it contains
-    const traceparentParts = headers['traceparent'].split('-')
+    const traceparentParts = headers.traceparent.split('-')
     const traceparentTraceIdFull = traceparentParts[1] // 00000000000000009c047848bf426236
     const traceparentTraceIdLower64 = traceparentTraceIdFull.slice(-16) // 9c047848bf426236
     const traceparentSpanId = traceparentParts[2] // 0798fc2348d88522
