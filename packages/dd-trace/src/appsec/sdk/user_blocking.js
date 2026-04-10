@@ -51,7 +51,6 @@ function blockRequest (tracer, req, res) {
     return false
   }
 
-  // this shit should not have blockID
   return block(req, res, rootSpan)
 }
 
