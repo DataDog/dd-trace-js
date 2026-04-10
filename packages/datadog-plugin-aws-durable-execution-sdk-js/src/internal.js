@@ -5,13 +5,14 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
-  static kind = 'server'
+  static kind = 'internal'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_step'
+  static spanName = 'workflow.step.execute'
 
   bindStart (ctx) {
     const meta = this.getTags(ctx)
 
-    this.startSpan('workflow.step.execute', {
+    this.startSpan(this.constructor.spanName, {
       service: this.serviceName({ pluginService: this.config.service }),
       meta,
     }, ctx)
@@ -26,7 +27,6 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
     }
   }
 
-  // asyncEnd and end delegate to finish() which has the required guard
   asyncEnd (ctx) {
     this.finish(ctx)
   }
@@ -35,9 +35,8 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
     this.finish(ctx)
   }
 
-  // You may modify this method, but the guard below is REQUIRED and MUST NOT be removed!
+  // tracingChannel fires both asyncEnd and end; only finish the span when result or error is present
   finish (ctx) {
-    // CRITICAL GUARD - DO NOT REMOVE: Ensures span only finishes when operation completes
     if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
 
     super.finish(ctx)
@@ -46,30 +45,37 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
 
 class DurableContextImplRunInChildContextPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_runInChildContext'
+  static spanName = 'workflow.child_context.execute'
 }
 
 class DurableContextImplWaitPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_wait'
+  static spanName = 'workflow.wait'
 }
 
 class DurableContextImplWaitForConditionPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_waitForCondition'
+  static spanName = 'workflow.wait_for_condition'
 }
 
 class DurableContextImplWaitForCallbackPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_waitForCallback'
+  static spanName = 'workflow.wait_for_callback'
 }
 
 class DurableContextImplCreateCallbackPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_createCallback'
+  static spanName = 'workflow.create_callback'
 }
 
 class DurableContextImplMapPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_map'
+  static spanName = 'workflow.map'
 }
 
 class DurableContextImplParallelPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_parallel'
+  static spanName = 'workflow.parallel'
 }
 
 module.exports = {
