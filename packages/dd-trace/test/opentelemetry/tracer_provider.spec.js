@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire')
 const { trace } = require('@opentelemetry/api')
 
 require('../setup/core')
@@ -73,5 +74,29 @@ describe('OTel TracerProvider', () => {
 
     provider.forceFlush()
     sinon.assert.calledOnce(processor.forceFlush)
+  })
+})
+
+describe('TracerProvider getter without @opentelemetry/api', () => {
+  const noopCheckPeerDeps = { checkOpenTelemetryAPIDeps: () => false }
+  const expectedMessage =
+    '@opentelemetry/api is required to use TracerProvider. Install it with: npm install @opentelemetry/api'
+
+  it('should throw when instantiated via main proxy', () => {
+    const TracerProxy = proxyquire.noPreserveCache()('../../src/proxy', {
+      './opentelemetry/check_peer_deps': noopCheckPeerDeps,
+    })
+    const getter = Object.getOwnPropertyDescriptor(TracerProxy.prototype, 'TracerProvider').get
+    const NoopClass = getter.call({})
+    assert.throws(() => new NoopClass(), { message: expectedMessage })
+  })
+
+  it('should throw when instantiated via noop proxy', () => {
+    const NoopProxy = proxyquire.noPreserveCache()('../../src/noop/proxy', {
+      '../opentelemetry/check_peer_deps': noopCheckPeerDeps,
+    })
+    const getter = Object.getOwnPropertyDescriptor(NoopProxy.prototype, 'TracerProvider').get
+    const NoopClass = getter.call({})
+    assert.throws(() => new NoopClass(), { message: expectedMessage })
   })
 })

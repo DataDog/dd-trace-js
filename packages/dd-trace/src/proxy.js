@@ -388,7 +388,14 @@ class Tracer extends NoopProxy {
     if (checkOpenTelemetryAPIDeps()) {
       return require('./opentelemetry/tracer_provider')
     }
-    return require('./opentelemetry/noop/tracer_provider')
+    return class {
+      constructor () {
+        throw new Error(
+          '@opentelemetry/api is required to use TracerProvider. ' +
+          'Install it with: npm install @opentelemetry/api'
+        )
+      }
+    }
   }
 }
 
