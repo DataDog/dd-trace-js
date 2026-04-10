@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const satisfies = require('../../../vendor/dist/semifies')
 
 const shimmer = require('../../datadog-shimmer')
@@ -1216,7 +1219,7 @@ addHook({
 
                 if (isRumActive) {
                   // Give some time RUM to flush data, similar to what we do in selenium
-                  await new Promise(resolve => setTimeout(resolve, RUM_FLUSH_WAIT_TIME))
+                  await new Promise(resolve => realSetTimeout(resolve, RUM_FLUSH_WAIT_TIME))
                   const url = page.url()
                   if (url) {
                     const domain = new URL(url).hostname
