@@ -308,35 +308,35 @@ describe('blocking', () => {
 
     it('should block with default json template and custom status ' +
       'when type is forced to json and accept is html', () => {
-      const actionParameters = {
-        status_code: 401,
-        type: 'json',
-      }
-      req.headers.accept = 'text/html'
-      setTemplates(config)
+        const actionParameters = {
+          status_code: 401,
+          type: 'json',
+        }
+        req.headers.accept = 'text/html'
+        setTemplates(config)
 
-      const blocked = block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
-      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
-    })
+        assert.strictEqual(blocked, true)
+        sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+        sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
+      })
 
     it('should block with default html template and custom status ' +
       'when type is forced to html and accept is html', () => {
-      const actionParameters = {
-        status_code: 401,
-        type: 'html',
-      }
-      req.headers.accept = 'text/html'
-      setTemplates(config)
+        const actionParameters = {
+          status_code: 401,
+          type: 'html',
+        }
+        req.headers.accept = 'text/html'
+        setTemplates(config)
 
-      const blocked = block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
-      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
-    })
+        assert.strictEqual(blocked, true)
+        sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+        sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
+      })
 
     it('should block with default json template and custom status', () => {
       const actionParameters = {
@@ -354,33 +354,33 @@ describe('blocking', () => {
 
     it('should block with default json template and custom status ' +
       'when type is forced to json and accept is not defined', () => {
-      const actionParameters = {
-        status_code: 401,
-        type: 'json',
-      }
-      setTemplates(config)
+        const actionParameters = {
+          status_code: 401,
+          type: 'json',
+        }
+        setTemplates(config)
 
-      const blocked = block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
-      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
-    })
+        assert.strictEqual(blocked, true)
+        sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+        sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.json)
+      })
 
     it('should block with default html template and custom status ' +
       'when type is forced to html and accept is not defined', () => {
-      const actionParameters = {
-        status_code: 401,
-        type: 'html',
-      }
-      setTemplates(config)
+        const actionParameters = {
+          status_code: 401,
+          type: 'html',
+        }
+        setTemplates(config)
 
-      const blocked = block(req, res, rootSpan, null, actionParameters)
+        const blocked = block(req, res, rootSpan, null, actionParameters)
 
-      assert.strictEqual(blocked, true)
-      sinon.assert.calledOnceWithMatch(res.writeHead, 401)
-      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
-    })
+        assert.strictEqual(blocked, true)
+        sinon.assert.calledOnceWithMatch(res.writeHead, 401)
+        sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, defaultBlockedTemplate.html)
+      })
 
     it('should block with custom redirect', () => {
       const actionParameters = {
@@ -396,6 +396,43 @@ describe('blocking', () => {
         Location: '/you-have-been-blocked',
       })
       sinon.assert.calledOnce(res.constructor.prototype.end)
+    })
+  })
+
+  describe('security response ID', () => {
+    it('should block with security response id in custom redirect url', () => {
+      const actionParameters = {
+        status_code: 301,
+        location: '/you-have-been-blocked?sec_id=[security_response_id]',
+        security_response_id: '1337',
+      }
+      setTemplates(config)
+
+      const blocked = block(req, res, rootSpan, null, actionParameters)
+
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(res.writeHead, 301, {
+        Location: '/you-have-been-blocked?sec_id=1337',
+      })
+      sinon.assert.calledOnce(res.constructor.prototype.end)
+    })
+
+    it('should block with security response id in custom template', () => {
+      const actionParameters = {
+        type: 'html',
+        security_response_id: '1337',
+      }
+      setTemplates({
+        appsec: {
+          blockedTemplateHtml: 'sec_id: [security_response_id]',
+        },
+      })
+
+      const blocked = block(req, res, rootSpan, null, actionParameters)
+
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 40)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'sec_id: 1337')
     })
   })
 })
