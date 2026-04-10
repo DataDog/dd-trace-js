@@ -305,8 +305,8 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['tracecontext'])
   })
 
   it('should use generic OTLP exporter config for logs and metrics when specific config is not set', () => {
@@ -514,17 +514,17 @@ describe('Config', () => {
       traceId128BitLoggingEnabled: true,
       tracePropagationBehaviorExtract: 'continue',
     })
-    assert.deepStrictEqual(config.dynamicInstrumentation?.redactedIdentifiers, [])
-    assert.deepStrictEqual(config.dynamicInstrumentation?.redactionExcludedIdentifiers, [])
+    assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, [])
+    assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, [])
     assert.deepStrictEqual(config.grpc.client.error.statuses, GRPC_CLIENT_ERROR_STATUSES)
     assert.deepStrictEqual(config.grpc.server.error.statuses, GRPC_SERVER_ERROR_STATUSES)
     assert.deepStrictEqual(config.injectionEnabled, undefined)
     assert.deepStrictEqual(config.serviceMapping, {})
-    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['datadog', 'tracecontext', 'baggage'])
-    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['datadog', 'tracecontext', 'baggage'])
-    assert.strictEqual(config.queryStringObfuscation?.length, 626)
-    assert.strictEqual(config.appsec?.obfuscatorKeyRegex?.length, 190)
-    assert.strictEqual(config.appsec?.obfuscatorValueRegex?.length, 578)
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
+    assert.strictEqual(config.queryStringObfuscation.length, 626)
+    assert.strictEqual(config.appsec.obfuscatorKeyRegex.length, 190)
+    assert.strictEqual(config.appsec.obfuscatorValueRegex.length, 578)
 
     sinon.assert.calledOnce(updateConfig)
 
@@ -702,7 +702,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assert.strictEqual(config.service, 'test')
-    assert.strictEqual(config.tags?.service, 'test')
+    assert.strictEqual(config.tags.service, 'test')
   })
 
   it('should initialize from the default version', () => {
@@ -711,7 +711,7 @@ describe('Config', () => {
     const config = getConfig()
 
     assert.strictEqual(config.version, '1.2.3')
-    assert.strictEqual(config.tags?.version, '1.2.3')
+    assert.strictEqual(config.tags.version, '1.2.3')
   })
 
   it('should initialize from environment variables', () => {
@@ -1002,8 +1002,8 @@ describe('Config', () => {
       ],
     })
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
-    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['b3', 'tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['b3', 'tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['b3', 'tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['b3', 'tracecontext'])
 
     sinon.assert.calledOnce(updateConfig)
 
@@ -1164,7 +1164,7 @@ describe('Config', () => {
 
     config = getConfig()
 
-    assert.strictEqual(config.tags?.a, 'b:c:d')
+    assert.strictEqual(config.tags.a, 'b:c:d')
 
     process.env.DD_TAGS = 'a,1'
 
@@ -1223,8 +1223,16 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['tracecontext'])
-    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['tracecontext'])
+
+    sinon.assert.calledOnce(updateConfig)
+
+    assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+      { name: 'DD_TRACE_PROPAGATION_STYLE', value: 'datadog', origin: 'env_var' },
+      { name: 'DD_TRACE_PROPAGATION_STYLE_INJECT', value: 'tracecontext', origin: 'env_var' },
+      { name: 'DD_TRACE_PROPAGATION_STYLE_EXTRACT', value: 'tracecontext', origin: 'env_var' },
+    ].sort(comparator))
   })
 
   it('should enable crash tracking for SSI by default', () => {
@@ -1232,7 +1240,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.crashtracking?.enabled, true)
+    assert.deepStrictEqual(config.crashtracking.enabled, true)
   })
 
   it('should disable crash tracking for SSI when configured', () => {
@@ -1241,7 +1249,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.deepStrictEqual(config.crashtracking?.enabled, false)
+    assert.deepStrictEqual(config.crashtracking.enabled, false)
   })
 
   it('should prioritize DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE over DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING', () => {
@@ -1250,7 +1258,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.appsec?.eventTracking?.mode, 'anonymous')
+    assert.strictEqual(config.appsec.eventTracking.mode, 'anonymous')
   })
 
   it('should initialize from the options', () => {
@@ -1472,10 +1480,10 @@ describe('Config', () => {
       traceId128BitLoggingEnabled: true,
       version: '0.1.0',
     })
-    assert.deepStrictEqual(config.dynamicInstrumentation?.redactedIdentifiers, ['foo', 'bar'])
-    assert.deepStrictEqual(config.dynamicInstrumentation?.redactionExcludedIdentifiers, ['a', 'b', 'c'])
+    assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, ['foo', 'bar'])
+    assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, ['a', 'b', 'c'])
     if (DD_MAJOR < 6) {
-      assert.strictEqual(config.iast?.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+      assert.strictEqual(config.iast.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method')
     } else {
       assert.ok(!('iast.securityControlsConfiguration' in config))
     }
@@ -1498,8 +1506,8 @@ describe('Config', () => {
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
     assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
-    assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['datadog', 'b3', 'b3 single header'])
-    assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['datadog', 'b3', 'b3 single header'])
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'b3', 'b3 single header'])
 
     if (DD_MAJOR < 6) {
       sinon.assert.calledOnce(log.warn)
@@ -1620,7 +1628,7 @@ describe('Config', () => {
       sampleRate: 0.5,
     })
     assert.strictEqual(config.logger, logger)
-    assert.strictEqual(config.tags?.foo, 'bar')
+    assert.strictEqual(config.tags.foo, 'bar')
     assertObjectContains(config, {
       flushInterval: 5000,
       flushMinSpans: 500,
@@ -1628,24 +1636,28 @@ describe('Config', () => {
     })
   })
 
-  it('should warn if mixing shared and extract propagation style env vars', () => {
-    process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog'
+  it('should prioritize specific propagation style over shared propagation style env vars', () => {
+    process.env.DD_TRACE_PROPAGATION_STYLE_EXTRACT = 'datadog,tracecontext'
     process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
 
-    getConfig()
+    const config = getConfig()
 
-    sinon.assert.calledWith(log.warn, 'Use either DD_TRACE_PROPAGATION_STYLE or separate ' +
-      'DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables')
-  })
+    assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext'])
+    assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog'])
 
-  it('should warn if mixing shared and inject propagation style env vars', () => {
-    process.env.DD_TRACE_PROPAGATION_STYLE_INJECT = 'datadog'
-    process.env.DD_TRACE_PROPAGATION_STYLE = 'datadog'
+    sinon.assert.calledOnce(updateConfig)
 
-    getConfig()
+    assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
+      { name: 'DD_TRACE_PROPAGATION_STYLE', value: 'datadog', origin: 'env_var' },
+      { name: 'DD_TRACE_PROPAGATION_STYLE_EXTRACT', value: 'datadog,tracecontext', origin: 'env_var' },
+      { name: 'DD_TRACE_PROPAGATION_STYLE_INJECT', value: 'datadog', origin: 'calculated' },
+    ].sort(comparator))
 
-    sinon.assert.calledWith(log.warn, 'Use either DD_TRACE_PROPAGATION_STYLE or separate ' +
-      'DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables')
+    assert.ok(
+      !updateConfig.getCall(0).args[0].some(entry => {
+        return entry.name === 'DD_TRACE_PROPAGATION_STYLE_EXTRACT' && entry.origin === 'calculated'
+      })
+    )
   })
 
   it('should warn if defaulting to v0 span attribute schema', () => {
@@ -2246,9 +2258,9 @@ describe('Config', () => {
   })
 
   it('should sanitize the sample rate to be between 0 and 1', () => {
-    assert.strictEqual(getConfig({ sampleRate: -1 })?.sampleRate, 0)
-    assert.strictEqual(getConfig({ sampleRate: 2 })?.sampleRate, 1)
-    assert.strictEqual(getConfig({ sampleRate: NaN })?.sampleRate, undefined)
+    assert.strictEqual(getConfig({ sampleRate: -1 }).sampleRate, 0)
+    assert.strictEqual(getConfig({ sampleRate: 2 }).sampleRate, 1)
+    assert.strictEqual(getConfig({ sampleRate: NaN }).sampleRate, undefined)
   })
 
   it('should ignore empty service names', () => {
@@ -2526,8 +2538,8 @@ describe('Config', () => {
       tags: { foo: 'bar' },
     })
 
-    assert.strictEqual(config.tags?.foo, 'bar')
-    assert.strictEqual(config.tags?.['runtime-id'], runtimeId)
+    assert.strictEqual(config.tags.foo, 'bar')
+    assert.strictEqual(config.tags['runtime-id'], runtimeId)
   })
 
   it('should ignore invalid iast.requestSampling', () => {
@@ -2671,7 +2683,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.dogstatsd?.hostname, 'localhost')
+    assert.strictEqual(config.dogstatsd.hostname, 'localhost')
   })
 
   context('auto configuration w/ unix domain sockets', () => {
@@ -2825,7 +2837,7 @@ describe('Config', () => {
       })
       it('should enable telemetry', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.telemetry?.enabled, true)
+        assert.strictEqual(config.telemetry.enabled, true)
       })
       it('should enable early flake detection by default', () => {
         const config = getConfig(options)
@@ -3317,7 +3329,7 @@ apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: 'true'
 `)
       const config = getConfig()
-      assert.strictEqual(config.runtimeMetrics?.enabled, true)
+      assert.strictEqual(config.runtimeMetrics.enabled, true)
     })
 
     it('should apply service specific config', () => {
@@ -3377,11 +3389,11 @@ rules:
       DD_SERVICE: service_fleet_stable
 `)
       const config4 = getConfig()
-      assert.strictEqual(config4?.service, 'service_fleet_stable')
+      assert.strictEqual(config4.service, 'service_fleet_stable')
 
       // 5. Code > Fleet Stable > Env > Local stable > Default
       const config5 = getConfig({ service: 'service_code' })
-      assert.strictEqual(config5?.service, 'service_code')
+      assert.strictEqual(config5.service, 'service_code')
     })
 
     it('should ignore unknown keys', () => {
@@ -3393,10 +3405,10 @@ apm_configuration_default:
   DD_FOOBAR_ENABLED: baz
 `)
       const stableConfig = new StableConfig()
-      assert.strictEqual(stableConfig.warnings?.length, 0)
+      assert.strictEqual(stableConfig.warnings.length, 0)
 
       const config = getConfig()
-      assert.strictEqual(config.runtimeMetrics?.enabled, true)
+      assert.strictEqual(config.runtimeMetrics.enabled, true)
     })
 
     it('should log a warning if the YAML files are malformed', () => {
@@ -3407,12 +3419,12 @@ apm_configuration_default:
 DD_RUNTIME_METRICS_ENABLED true
 `)
       const stableConfig = new StableConfig()
-      assert.strictEqual(stableConfig.warnings?.length, 1)
+      assert.strictEqual(stableConfig.warnings.length, 1)
     })
 
     it('should only load the WASM module if the stable config files exist', () => {
       const stableConfig1 = new StableConfig()
-      assert.strictEqual(stableConfig1?.wasm_loaded, false)
+      assert.strictEqual(stableConfig1.wasm_loaded, false)
 
       fs.writeFileSync(
         localConfigPath,
@@ -3421,7 +3433,7 @@ apm_configuration_default:
   DD_RUNTIME_METRICS_ENABLED: 'true'
 `)
       const stableConfig2 = new StableConfig()
-      assert.strictEqual(stableConfig2?.wasm_loaded, true)
+      assert.strictEqual(stableConfig2.wasm_loaded, true)
     })
 
     it('should not load the WASM module in a serverless environment', () => {
@@ -3469,8 +3481,8 @@ apm_configuration_default:
 
       // Tracing
       assert.strictEqual(config.traceId128BitGenerationEnabled, true)
-      assert.deepStrictEqual(config.tracePropagationStyle?.inject, ['tracecontext'])
-      assert.deepStrictEqual(config.tracePropagationStyle?.extract, ['tracecontext'])
+      assert.deepStrictEqual(config.tracePropagationStyle.inject, ['tracecontext'])
+      assert.deepStrictEqual(config.tracePropagationStyle.extract, ['tracecontext'])
 
       // Appsec
       assertObjectContains(config, {

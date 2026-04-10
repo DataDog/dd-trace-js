@@ -29,7 +29,6 @@ const {
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
-  getValueFromEnvSources,
 } = require('./helper')
 const {
   defaults,
@@ -229,22 +228,6 @@ class Config extends ConfigBase {
   #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
       const entry = configurationsTable[name]
-      // TracePropagationStyle is a special case. It is a single option that is used to set both inject and extract.
-      // TODO: Consider what to do with this later
-      if (name === 'DD_TRACE_PROPAGATION_STYLE') {
-        if (
-          getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE_INJECT') !== undefined ||
-          getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE_EXTRACT') !== undefined
-        ) {
-          log.warn(
-            // eslint-disable-next-line @stylistic/max-len
-            'Use either DD_TRACE_PROPAGATION_STYLE or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
-          )
-          continue
-        }
-        this.#applyEnvs({ DD_TRACE_PROPAGATION_STYLE_INJECT: value, DD_TRACE_PROPAGATION_STYLE_EXTRACT: value }, source)
-        continue
-      }
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
       const rawValue = transformed !== null && typeof transformed === 'object' ? value : parsed
@@ -293,6 +276,7 @@ class Config extends ConfigBase {
         } else {
           if (fullName === 'tracePropagationStyle') {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
+            // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
             this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
           } else {

@@ -3442,7 +3442,10 @@
           "tracePropagationStyle.extract"
         ],
         "default": "datadog, tracecontext, baggage",
-        "transform": "toLowerCase"
+        "transform": "toLowerCase",
+        "aliases": [
+          "DD_TRACE_PROPAGATION_STYLE"
+        ]
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_INJECT": [
@@ -3453,7 +3456,10 @@
           "tracePropagationStyle.inject"
         ],
         "default": "datadog, tracecontext, baggage",
-        "transform": "toLowerCase"
+        "transform": "toLowerCase",
+        "aliases": [
+          "DD_TRACE_PROPAGATION_STYLE"
+        ]
       }
     ],
     "DD_TRACE_PROTOBUFJS_ENABLED": [
