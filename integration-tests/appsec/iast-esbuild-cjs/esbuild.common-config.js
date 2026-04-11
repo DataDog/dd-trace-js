@@ -1,5 +1,6 @@
 'use strict'
 
+// eslint-disable-next-line n/no-extraneous-require
 const ddPlugin = require('dd-trace/esbuild')
 
 module.exports = {
