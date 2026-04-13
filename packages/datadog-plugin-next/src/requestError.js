@@ -21,15 +21,19 @@ function datadogOnRequestError (error, request, context) {
   const tracer = global._ddtrace
   if (!tracer) return
 
+  const errMessage = error?.message ?? 'Unknown error'
+  const errStack = error?.stack
+  const errType = error?.constructor?.name ?? 'Error'
+
   const span = tracer.startSpan('nextjs.server_error', {
     tags: {
       'resource.name': `${request.method} ${context.routePath}`,
       'http.method': request.method,
       'http.url': request.path,
       error: true,
-      'error.message': error.message,
-      'error.stack': error.stack,
-      'error.type': (error.constructor && error.constructor.name) || 'Error',
+      'error.message': errMessage,
+      'error.stack': errStack,
+      'error.type': errType,
       'nextjs.router_kind': context.routerKind,
       'nextjs.route_path': context.routePath,
       'nextjs.route_type': context.routeType,
@@ -41,7 +45,7 @@ function datadogOnRequestError (error, request, context) {
     span.setTag('nextjs.render_source', context.renderSource)
   }
 
-  if (error.digest) {
+  if (error?.digest) {
     span.setTag('nextjs.error_digest', error.digest)
   }
 
