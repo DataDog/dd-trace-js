@@ -33,7 +33,7 @@ class MySQLPlugin extends DatabasePlugin {
         [CLIENT_PORT_KEY]: ctx.conf.port,
       },
     }, ctx)
-    ctx.sql = this.injectDbmQuery(span, ctx.sql, service)
+    ctx.sql = this.injectDbmQuery(span, ctx.sql, service.name)
 
     return ctx.currentStore
   }
