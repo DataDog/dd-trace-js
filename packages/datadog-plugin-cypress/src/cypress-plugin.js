@@ -1103,7 +1103,7 @@ class CypressPlugin {
         const finishedTest = {
           testName,
           testStatus,
-          // TODO: removed the need of accessing private span internals
+          // TODO: remove the need of accessing private span internals
           finishTime: this.activeTestSpan._span._getTime(), // we store the finish time here
           testSpan: this.activeTestSpan,
           isEfdRetry,
