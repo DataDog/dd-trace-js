@@ -15,7 +15,7 @@ export function getDatadogTraceMetadata(): { other?: Record<string, string> };
  * Export as `onRequestError` from `instrumentation.ts`.
  */
 export function datadogOnRequestError(
-  error: { message: string; stack?: string; digest?: string },
+  error: { message?: string; stack?: string; digest?: string } | undefined,
   request: { path: string; method: string; headers: Record<string, string | undefined> },
   context: { routerKind: string; routePath: string; routeType: string; renderSource?: string }
 ): void;
