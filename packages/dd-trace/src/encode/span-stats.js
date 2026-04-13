@@ -31,7 +31,7 @@ class SpanStatsEncoder extends AgentEncoder {
   }
 
   _encodeStat (bytes, stat) {
-    this._encodeMapPrefix(bytes, 14)
+    this._encodeMapPrefix(bytes, 15)
 
     this._encodeString(bytes, 'Service')
     const service = stat.Service || DEFAULT_SERVICE_NAME
@@ -76,6 +76,9 @@ class SpanStatsEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'HTTPEndpoint')
     this._encodeString(bytes, stat.HTTPEndpoint)
+
+    this._encodeString(bytes, 'srv_src')
+    this._encodeString(bytes, stat.srv_src || '')
   }
 
   _encodeBucket (bytes, bucket) {
