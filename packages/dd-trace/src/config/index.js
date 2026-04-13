@@ -340,12 +340,12 @@ class Config extends ConfigBase {
     undo(this, 'calculated')
 
     if (this.DD_CIVISIBILITY_AGENTLESS_URL ||
-      this.url ||
-      os.type() !== 'Windows_NT' &&
-      !trackedConfigOrigins.has('hostname') &&
-      !trackedConfigOrigins.has('port') &&
-      !this.DD_CIVISIBILITY_AGENTLESS_ENABLED &&
-      fs.existsSync('/var/run/datadog/apm.socket')) {
+        this.url ||
+        os.type() !== 'Windows_NT' &&
+        !trackedConfigOrigins.has('hostname') &&
+        !trackedConfigOrigins.has('port') &&
+        !this.DD_CIVISIBILITY_AGENTLESS_ENABLED &&
+        fs.existsSync('/var/run/datadog/apm.socket')) {
       setAndTrack(
         this,
         'url',
@@ -369,8 +369,8 @@ class Config extends ConfigBase {
       setAndTrack(this, 'logInjection', false)
     }
     if (this.otelMetricsEnabled &&
-      trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
-      this.OTEL_METRICS_EXPORTER === 'none') {
+        trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
+        this.OTEL_METRICS_EXPORTER === 'none') {
       setAndTrack(this, 'otelMetricsEnabled', false)
     }
 
@@ -417,7 +417,7 @@ class Config extends ConfigBase {
     }
 
     if (!trackedConfigOrigins.has('apmTracingEnabled') &&
-      trackedConfigOrigins.has('experimental.appsec.standalone.enabled')) {
+        trackedConfigOrigins.has('experimental.appsec.standalone.enabled')) {
       setAndTrack(this, 'apmTracingEnabled', !this.experimental.appsec.standalone.enabled)
     }
 
@@ -459,8 +459,8 @@ class Config extends ConfigBase {
 
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
     if (!this.llmobs.enabled &&
-      !trackedConfigOrigins.has('llmobs.enabled') &&
-      (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
+        !trackedConfigOrigins.has('llmobs.enabled') &&
+        (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
         trackedConfigOrigins.has('llmobs.mlApp'))) {
       setAndTrack(this, 'llmobs.enabled', true)
     }
@@ -526,9 +526,9 @@ class Config extends ConfigBase {
         const serverlessName = IS_SERVERLESS
           ? (
               getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') ||
-            getEnvironmentVariable('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
-            getEnvironmentVariable('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
-            getEnvironmentVariable('WEBSITE_SITE_NAME') // set by Azure Functions
+              getEnvironmentVariable('FUNCTION_NAME') || // Google Cloud Function Name set by deprecated runtimes
+              getEnvironmentVariable('K_SERVICE') || // Google Cloud Function Name set by newer runtimes
+              getEnvironmentVariable('WEBSITE_SITE_NAME') // set by Azure Functions
             )
           : undefined
 
@@ -721,7 +721,7 @@ function warnWrongOtelSettings () {
   ]) {
     // eslint-disable-next-line eslint-rules/eslint-process-env
     const envs = process.env
-    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */(key ?? otelEnvVar))
+    const otelSource = trackedConfigOrigins.get(/** @type {ConfigPath} */ (key ?? otelEnvVar))
     const otelEnvValue = envs[otelEnvVar]
     if (otelEnvValue) {
       if (envs[ddEnvVar]) {
@@ -731,8 +731,8 @@ function warnWrongOtelSettings () {
 
       // eslint-disable-next-line eslint-rules/eslint-env-aliases
       const invalidOtelValue = otelEnvVar === 'OTEL_PROPAGATORS'
-        ? trackedConfigOrigins.get(/** @type {ConfigPath} */('tracePropagationStyle.inject')) !== otelSource &&
-        !envs[ddEnvVar]
+        ? trackedConfigOrigins.get(/** @type {ConfigPath} */ ('tracePropagationStyle.inject')) !== otelSource &&
+          !envs[ddEnvVar]
         : !otelSource
       if (invalidOtelValue) {
         increaseCounter('otel.env.invalid', ddEnvVar, otelEnvVar)
