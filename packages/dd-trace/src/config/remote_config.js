@@ -2,6 +2,7 @@
 
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
 const log = require('../log')
+const tagger = require('../tagger')
 
 module.exports = {
   enable,
@@ -194,10 +195,66 @@ function enable (rc, config, onConfigUpdated) {
       transaction.ack(item.path)
     }
 
-    // Get merged config and apply it
-    const mergedLibConfig = rcClientLibConfigManager.getMergedLibConfig()
+    /** @type {import('../config').TracerOptions|null|RemoteConfigOptions} */
+    let mergedLibConfig = rcClientLibConfigManager.getMergedLibConfig()
+
+    if (mergedLibConfig) {
+      mergedLibConfig = transformRemoteConfigToLocalOption(mergedLibConfig)
+    }
+
     config.setRemoteConfig(mergedLibConfig)
 
     onConfigUpdated()
   })
+}
+
+/**
+ * @param {RemoteConfigOptions} libConfig
+ * @returns {import('../config').TracerOptions}
+ */
+function transformRemoteConfigToLocalOption (libConfig) {
+  const normalizedConfig = {}
+  for (const [name, value] of Object.entries(libConfig)) {
+    if (value !== null) {
+      normalizedConfig[optionLookupTable[name] ?? name] = transformers[name]?.(value) ?? value
+    }
+  }
+  return normalizedConfig
+}
+
+// This is intermediate solution until remote config is reworked to handle all known entries with proper names
+const optionLookupTable = {
+  dynamic_instrumentation_enabled: 'dynamicInstrumentation.enabled',
+  code_origin_enabled: 'codeOriginForSpans.enabled',
+  tracing_sampling_rate: 'sampleRate',
+  log_injection_enabled: 'logInjection',
+  tracing_enabled: 'tracing',
+  tracing_sampling_rules: 'samplingRules',
+  tracing_header_tags: 'headerTags',
+  tracing_tags: 'tags',
+}
+
+const transformers = {
+  tracing_sampling_rules (samplingRules) {
+    for (const rule of (samplingRules || [])) {
+      if (rule.tags) {
+        const reformattedTags = {}
+        for (const tag of rule.tags) {
+          reformattedTags[tag.key] = tag.value_glob
+        }
+        rule.tags = reformattedTags
+      }
+    }
+    return samplingRules
+  },
+  tracing_header_tags (headerTags) {
+    return headerTags?.map(tag => {
+      return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
+    })
+  },
+  tracing_tags (tags) {
+    const normalizedTags = {}
+    tagger.add(normalizedTags, tags)
+    return normalizedTags
+  },
 }

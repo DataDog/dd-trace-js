@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const path = require('path')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -111,6 +114,8 @@ const efdDeterminedRetries = new Map()
 const efdSlowAbortedTests = new Set()
 // Tests added as EFD new-test candidates (not ATF, not impacted).
 const efdNewTestCandidates = new Set()
+// Tests that are genuinely new (not in known tests list).
+const newTests = new Set()
 const testSuiteAbsolutePathsWithFastCheck = new Set()
 const testSuiteJestObjects = new Map()
 
@@ -485,7 +490,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         if (this.isKnownTestsEnabled) {
-          isNewTest = retriedTestsToNumAttempts.has(testName)
+          isNewTest = newTests.has(testName)
         }
 
         const willRunEfd = this.isEarlyFlakeDetectionEnabled && (isNewTest || isModified)
@@ -605,6 +610,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         if (!isAttemptToFix && this.isKnownTestsEnabled) {
           const isNew = !this.knownTestsForThisSuite.includes(testFullName)
+          if (isNew && !isSkipped) {
+            newTests.add(testFullName)
+          }
           if (isNew && !isSkipped && !retriedTestsToNumAttempts.has(testFullName)) {
             if (DYNAMIC_NAME_RE.test(testFullName)) {
               // Populated directly for runInBand; for parallel workers the main process
@@ -715,7 +723,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isEfdRetry = false
         // We'll store the test statuses of the retries
         if (this.isKnownTestsEnabled) {
-          const isNewTest = retriedTestsToNumAttempts.has(testName)
+          const isNewTest = newTests.has(testName)
           if (isNewTest) {
             if (newTestsTestStatuses.has(testName)) {
               newTestsTestStatuses.get(testName).push(status)
@@ -776,7 +784,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
         if (status === 'fail' && mightHitBreakpoint) {
           await new Promise(resolve => {
-            setTimeout(() => {
+            realSetTimeout(() => {
               resolve()
             }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
           })
@@ -811,6 +819,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         efdDeterminedRetries.clear()
         efdSlowAbortedTests.clear()
         efdNewTestCandidates.clear()
+        newTests.clear()
         retriedTestsToNumAttempts.clear()
         attemptToFixRetriedTestsStatuses.clear()
         testsToBeRetried.clear()
@@ -1345,7 +1354,7 @@ function getCliWrapper (isNewJestVersion) {
       })
 
       const timeoutPromise = new Promise((resolve) => {
-        timeoutId = setTimeout(() => {
+        timeoutId = realSetTimeout(() => {
           resolve('timeout')
         }, FLUSH_TIMEOUT).unref()
       })

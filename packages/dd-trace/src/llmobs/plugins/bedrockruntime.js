@@ -65,10 +65,12 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
 
     const parent = llmobsStore.getStore()?.span
+    // Use full modelId and unified provider for LLMObs (required for backend cost estimation).
+    // Split modelProvider/modelName from parseModelId() are still used below for response parsing.
     this._tagger.registerLLMObsSpan(span, {
       parent,
-      modelName: modelName.toLowerCase(),
-      modelProvider: modelProvider.toLowerCase(),
+      modelName: request.params.modelId.toLowerCase(),
+      modelProvider: 'amazon_bedrock',
       kind: 'llm',
       name: 'bedrock-runtime.command',
       integration: 'bedrock',

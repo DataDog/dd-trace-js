@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const { getTestSuitePath, DYNAMIC_NAME_RE } = require('../../../dd-trace/src/plugins/util/test')
 const { channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
@@ -293,7 +296,7 @@ function getOnTestEndHandler (config) {
     // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
     if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
       await new Promise((resolve) => {
-        setTimeout(() => {
+        realSetTimeout(() => {
           resolve()
         }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
       })
@@ -384,6 +387,11 @@ function getOnTestEndHandler (config) {
       })
     } else if (ctx) { // if there is an afterEach to run, let's store the finalStatus for getOnHookEndHandler
       ctx.finalStatus = finalStatus
+      ctx.hasFailedAllRetries = hasFailedAllRetries
+      ctx.attemptToFixPassed = attemptToFixPassed
+      ctx.attemptToFixFailed = attemptToFixFailed
+      ctx.isAttemptToFixRetry = isAttemptToFixRetry
+      ctx.isAtrRetry = isAtrRetry
     }
   }
 }
@@ -404,6 +412,11 @@ function getOnHookEndHandler () {
             status,
             hasBeenRetried: isMochaRetry(test),
             isLastRetry: getIsLastRetry(test),
+            hasFailedAllRetries: ctx.hasFailedAllRetries,
+            attemptToFixPassed: ctx.attemptToFixPassed,
+            attemptToFixFailed: ctx.attemptToFixFailed,
+            isAttemptToFixRetry: ctx.isAttemptToFixRetry,
+            isAtrRetry: ctx.isAtrRetry,
             ...ctx.currentStore,
             finalStatus: ctx.finalStatus,
           })

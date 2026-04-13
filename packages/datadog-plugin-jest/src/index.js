@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
@@ -60,8 +63,7 @@ const CHILD_MESSAGE_END = 2
 
 function withTimeout (promise, timeoutMs) {
   return new Promise(resolve => {
-    // Set a timeout to resolve after 1s
-    setTimeout(resolve, timeoutMs)
+    realSetTimeout(resolve, timeoutMs)
 
     // Also resolve if the original promise resolves
     promise.then(resolve)
