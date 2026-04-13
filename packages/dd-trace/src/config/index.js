@@ -625,7 +625,10 @@ class Config extends ConfigBase {
     if (!this.otelMetricsUrl) {
       setAndTrack(this, 'otelMetricsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`)
     }
-    if (!this.otelTracesUrl) {
+    if (!trackedConfigOrigins.has('otelTracesUrl') && trackedConfigOrigins.has('OTEL_EXPORTER_OTLP_ENDPOINT')) {
+      // Generic OTLP endpoint: per spec, append /v1/traces signal-specific subpath
+      setAndTrack(this, 'otelTracesUrl', this.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/traces')
+    } else if (!this.otelTracesUrl) {
       const tracesHostname = agentHostname === '127.0.0.1' ? 'localhost' : agentHostname
       setAndTrack(this, 'otelTracesUrl', `http://${tracesHostname}:${DEFAULT_OTLP_PORT}/v1/traces`)
     }

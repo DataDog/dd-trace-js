@@ -504,6 +504,10 @@ export interface GeneratedConfig {
   otelMetricsUrl: string | undefined;
   otelProtocol: string;
   otelTimeout: number;
+  otelTracesHeaders: Record<string, string> | undefined;
+  otelTracesProtocol: string;
+  otelTracesTimeout: number;
+  otelTracesUrl: string | undefined;
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {

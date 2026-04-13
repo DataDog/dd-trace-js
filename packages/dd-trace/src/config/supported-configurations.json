@@ -3891,15 +3891,12 @@
         "implementation": "A",
         "type": "string",
         "default": null,
-        "internalPropertyName": "otelTracesUrl",
-        "aliases": [
-          "OTEL_EXPORTER_OTLP_ENDPOINT"
-        ]
+        "internalPropertyName": "otelTracesUrl"
       }
     ],
     "OTEL_EXPORTER_OTLP_TRACES_HEADERS": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "map",
         "default": null,
         "internalPropertyName": "otelTracesHeaders",
