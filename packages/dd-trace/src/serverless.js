@@ -35,6 +35,10 @@ function getIsFlexConsumptionAzureFunction () {
   return getIsAzureFunction() && getEnvironmentVariable('WEBSITE_SKU') === 'FlexConsumption'
 }
 
+function isLambdaLite () {
+  return getEnvironmentVariable('AWS_LAMBDA_INITIALIZATION_TYPE') === 'native-http'
+}
+
 function isInServerlessEnvironment () {
   const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
   const isGCPFunction = getIsGCPFunction()
@@ -48,5 +52,6 @@ module.exports = {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  isLambdaLite,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }

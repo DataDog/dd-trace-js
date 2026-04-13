@@ -19,6 +19,53 @@ const Plugin = proxyquire('../../src/plugins/plugin', {
 })
 const { storage } = require('../../../datadog-core')
 
+describe('Plugin subscription lifecycle (via addSub)', () => {
+  let plugin
+
+  class SubTestPlugin extends Plugin {
+    static id = 'subTest'
+  }
+
+  afterEach(() => {
+    plugin.configure({ enabled: false })
+  })
+
+  it('should not subscribe twice when enabled multiple times', () => {
+    plugin = new SubTestPlugin()
+    const handler = sinon.stub()
+    plugin.addSub('apm:subTest:event', handler)
+
+    plugin.configure({ enabled: true })
+    plugin.configure({ enabled: true }) // idempotent — no double-subscribe
+
+    channel('apm:subTest:event').publish({})
+
+    sinon.assert.calledOnce(handler)
+  })
+
+  it('should not throw when disabled without ever being enabled', () => {
+    plugin = new SubTestPlugin()
+    plugin.addSub('apm:subTest:event', sinon.stub())
+
+    plugin.configure({ enabled: false }) // never enabled — should be a no-op
+  })
+
+  it('should not re-subscribe after double disable and re-enable', () => {
+    plugin = new SubTestPlugin()
+    const handler = sinon.stub()
+    plugin.addSub('apm:subTest:event', handler)
+
+    plugin.configure({ enabled: true })
+    plugin.configure({ enabled: false })
+    plugin.configure({ enabled: false }) // double disable — idempotent
+    plugin.configure({ enabled: true }) // re-enable
+
+    channel('apm:subTest:event').publish({})
+
+    sinon.assert.calledOnce(handler)
+  })
+})
+
 describe('Plugin', () => {
   let plugin
 

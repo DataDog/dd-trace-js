@@ -469,6 +469,14 @@ export interface GeneratedConfig {
     enabled: boolean;
     mlApp: string | undefined;
   };
+  logCaptureEnabled: boolean;
+  logCaptureFlushIntervalMs: number;
+  logCaptureHost: string;
+  logCaptureMaxBufferSize: number;
+  logCapturePath: string;
+  logCapturePort: number;
+  logCaptureProtocol: string;
+  logCaptureTimeoutMs: number;
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
   memcachedCommandEnabled: boolean;

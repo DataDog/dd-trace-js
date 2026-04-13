@@ -504,6 +504,68 @@ declare namespace tracer {
     logInjection?: boolean,
 
     /**
+     * Enable automatic log forwarding to a custom HTTP intake.
+     * @default false
+     * @env DD_LOG_CAPTURE_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureEnabled?: boolean,
+
+    /**
+     * Host for the log capture intake endpoint.
+     * @env DD_LOG_CAPTURE_HOST
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureHost?: string,
+
+    /**
+     * Port for the log capture intake endpoint.
+     * @env DD_LOG_CAPTURE_PORT
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCapturePort?: number,
+
+    /**
+     * URL path for the log capture intake endpoint.
+     * @default '/logs'
+     * @env DD_LOG_CAPTURE_PATH
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCapturePath?: string,
+
+    /**
+     * Protocol for the log capture intake endpoint ('http:' or 'https:').
+     * @default 'http:'
+     * @env DD_LOG_CAPTURE_PROTOCOL
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureProtocol?: 'http:' | 'https:',
+
+    /**
+     * Maximum number of log records to buffer before flushing.
+     * @default 1000
+     * @env DD_LOG_CAPTURE_MAX_BUFFER_SIZE
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureMaxBufferSize?: number,
+
+    /**
+     * Interval in milliseconds between automatic flushes.
+     * @default 5000
+     * @env DD_LOG_CAPTURE_FLUSH_INTERVAL_MS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureFlushIntervalMs?: number,
+
+    /**
+     * Timeout in milliseconds for HTTP flush requests.
+     * @default 5000
+     * @env DD_LOG_CAPTURE_TIMEOUT_MS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureTimeoutMs?: number,
+
+    /**
      * Whether to enable startup logs.
      * @default false
      * @env DD_TRACE_STARTUP_LOGS

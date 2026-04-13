@@ -1240,6 +1240,86 @@
         "internalPropertyName": "otelLogsEnabled"
       }
     ],
+    "DD_LOG_CAPTURE_ENABLED": [
+      {
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "logCaptureEnabled"
+        ],
+        "default": "false"
+      }
+    ],
+    "DD_LOG_CAPTURE_FLUSH_INTERVAL_MS": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "configurationNames": [
+          "logCaptureFlushIntervalMs"
+        ],
+        "default": "5000"
+      }
+    ],
+    "DD_LOG_CAPTURE_HOST": [
+      {
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "logCaptureHost"
+        ],
+        "default": "localhost"
+      }
+    ],
+    "DD_LOG_CAPTURE_MAX_BUFFER_SIZE": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "configurationNames": [
+          "logCaptureMaxBufferSize"
+        ],
+        "default": "1000"
+      }
+    ],
+    "DD_LOG_CAPTURE_PATH": [
+      {
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "logCapturePath"
+        ],
+        "default": "/logs"
+      }
+    ],
+    "DD_LOG_CAPTURE_PORT": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "configurationNames": [
+          "logCapturePort"
+        ],
+        "default": "10517"
+      }
+    ],
+    "DD_LOG_CAPTURE_PROTOCOL": [
+      {
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "logCaptureProtocol"
+        ],
+        "default": "http:"
+      }
+    ],
+    "DD_LOG_CAPTURE_TIMEOUT_MS": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "configurationNames": [
+          "logCaptureTimeoutMs"
+        ],
+        "default": "5000"
+      }
+    ],
     "DD_TRACE_LOG_LEVEL": [
       {
         "implementation": "C",

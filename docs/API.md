@@ -529,6 +529,38 @@ const tracer = require('dd-trace').init({
 })
 ```
 
+<h4 id="log-capture">Automatic log capture</h4>
+
+dd-trace can forward JSON log records written by Winston, Bunyan, and Pino directly to a custom HTTP(S) intake without adding transports to each logger. The forwarding hook publishes full log entries (including Datadog trace metadata when log injection is enabled) through an internal buffer that flushes on a timer and before process exit.
+
+**Default behavior:** Log capture is enabled automatically in AWS Lambda Lite environments. For all other environments, enable it with `logCaptureEnabled: true` (or `DD_LOG_CAPTURE_ENABLED=true`). By default the sender targets `localhost:10517`; override with `logCaptureHost`/`DD_LOG_CAPTURE_HOST` and `logCapturePort`/`DD_LOG_CAPTURE_PORT` when needed.
+
+Optional tuning knobs map 1:1 with the configuration API:
+
+* `logCaptureHost` (`DD_LOG_CAPTURE_HOST`, default `localhost`)
+* `logCapturePort` (`DD_LOG_CAPTURE_PORT`, default `10517`)
+* `logCapturePath` (`DD_LOG_CAPTURE_PATH`, default `/logs`)
+* `logCaptureProtocol` (`DD_LOG_CAPTURE_PROTOCOL`, default `http:`)
+* `logCaptureMaxBufferSize` (`DD_LOG_CAPTURE_MAX_BUFFER_SIZE`, default `1000` records)
+* `logCaptureFlushIntervalMs` (`DD_LOG_CAPTURE_FLUSH_INTERVAL_MS`, default `5000`)
+* `logCaptureTimeoutMs` (`DD_LOG_CAPTURE_TIMEOUT_MS`, default `5000`)
+
+Example:
+
+```javascript
+require('dd-trace').init({
+  logInjection: true,
+  logCaptureEnabled: true,
+  // host and port default to localhost:10517; override if needed:
+  logCaptureHost: 'logs.my-intake.internal',
+  logCapturePort: 8080,
+  logCaptureProtocol: 'https:',
+})
+```
+
+No additional transports or stream shims are required in user code.
+
+
 <h3 id="span-hooks">Span Hooks</h3>
 
 In some cases, it's necessary to update the metadata of a span created by one of the built-in integrations. This is possible using span hooks registered by integration. Each hook provides the span as the first argument and other contextual objects as additional arguments.

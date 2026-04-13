@@ -6,10 +6,13 @@ const {
   addHook,
 } = require('./helpers/instrument')
 
+const PINO_JSON_CHANNEL = 'apm:pino:json'
+
 function wrapPino (symbol, wrapper, pino) {
   return function pinoWithTrace () {
     const instance = pino.apply(this, arguments)
 
+    // Trace injection wrapper (mixinSym for >=5.14, asJsonSym for <5.14)
     Object.defineProperty(instance, symbol, {
       configurable: true,
       enumerable: true,
@@ -17,12 +20,25 @@ function wrapPino (symbol, wrapper, pino) {
       value: wrapper(instance[symbol]),
     })
 
+    // For >=5.14.0: mixin only sees partial data (no pid, hostname, time, msg).
+    // Additionally wrap asJson to capture the complete JSON record for log forwarding.
+    const asJsonSym = pino.symbols && pino.symbols.asJsonSym
+    if (asJsonSym && symbol !== asJsonSym && typeof instance[asJsonSym] === 'function') {
+      Object.defineProperty(instance, asJsonSym, {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: wrapAsJsonForCapture(instance[asJsonSym]),
+      })
+    }
+
     return instance
   }
 }
 
 function wrapAsJson (asJson) {
   const ch = channel('apm:pino:log')
+  const captureCh = channel(PINO_JSON_CHANNEL)
   return function asJsonWithTrace (obj, msg, num, time) {
     obj = arguments[0] = obj || {}
 
@@ -30,7 +46,11 @@ function wrapAsJson (asJson) {
     ch.publish(payload)
     arguments[0] = payload.message
 
-    return asJson.apply(this, arguments)
+    const jsonLine = asJson.apply(this, arguments)
+    if (captureCh.hasSubscribers) {
+      captureCh.publish({ json: jsonLine, holder: payload.holder })
+    }
+    return jsonLine
   }
 }
 
@@ -47,6 +67,25 @@ function wrapMixin (mixin) {
     ch.publish(payload)
 
     return payload.message
+  }
+}
+
+/**
+ * Wraps asJson to capture the complete serialized JSON line for log forwarding.
+ * Publishes to 'apm:pino:json' with { json: string }.
+ * Used for Pino >=5.14.0 where mixinSym is the primary trace-injection hook
+ * and only provides partial mixin data (no pid, hostname, time, msg).
+ * @param {Function} asJson
+ * @returns {Function}
+ */
+function wrapAsJsonForCapture (asJson) {
+  const captureCh = channel(PINO_JSON_CHANNEL)
+  return function asJsonWithCapture (obj, msg, num, time) {
+    const jsonLine = asJson.apply(this, arguments)
+    if (captureCh.hasSubscribers) {
+      captureCh.publish({ json: jsonLine })
+    }
+    return jsonLine
   }
 }
 
@@ -115,3 +154,5 @@ addHook({ name: 'pino-pretty', file: 'lib/utils.js', versions: ['>=3'] }, utils 
 addHook({ name: 'pino-pretty', versions: ['1 - 2'] }, prettyFactory => {
   return shimmer.wrapFunction(prettyFactory, wrapPrettyFactory)
 })
+
+module.exports = {}

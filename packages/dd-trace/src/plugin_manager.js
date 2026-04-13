@@ -3,6 +3,7 @@
 const { channel } = require('dc-polyfill')
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
+const captureSender = require('./log-capture/sender')
 const { isFalse, isTrue, normalizePluginEnvName } = require('./util')
 const plugins = require('./plugins')
 const log = require('./log')
@@ -128,6 +129,23 @@ module.exports = class PluginManager {
     this._tracerConfig = config
     this._tracer._nomenclature.configure(config)
 
+    if (config.logCaptureEnabled) {
+      captureSender.configure({
+        host: config.logCaptureHost,
+        port: config.logCapturePort,
+        path: config.logCapturePath ?? '/logs',
+        protocol: config.logCaptureProtocol ?? 'http:',
+        maxBufferSize: config.logCaptureMaxBufferSize ?? 1000,
+        flushIntervalMs: config.logCaptureFlushIntervalMs ?? 5000,
+        timeoutMs: config.logCaptureTimeoutMs ?? 5000,
+      })
+
+      const handlers = globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers
+      if (handlers && !handlers.has(captureSender.flush)) {
+        handlers.add(captureSender.flush)
+      }
+    }
+
     for (const name in pluginClasses) {
       this.loadPlugin(name)
     }
@@ -153,6 +171,14 @@ module.exports = class PluginManager {
   #getSharedConfig (name) {
     const {
       logInjection,
+      logCaptureEnabled,
+      logCaptureHost,
+      logCapturePort,
+      logCaptureProtocol,
+      logCapturePath,
+      logCaptureFlushIntervalMs,
+      logCaptureMaxBufferSize,
+      logCaptureTimeoutMs,
       serviceMapping,
       queryStringObfuscation,
       site,
@@ -194,6 +220,14 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       experimental,
       resourceRenamingEnabled,
+      logCaptureEnabled,
+      logCaptureHost,
+      logCapturePort,
+      logCaptureProtocol,
+      logCapturePath,
+      logCaptureFlushIntervalMs,
+      logCaptureMaxBufferSize,
+      logCaptureTimeoutMs,
     }
 
     if (logInjection !== undefined) {

@@ -47,6 +47,16 @@ describe('Plugin', () => {
             const pretty = require('../../../versions/pino-pretty@8.0.0').get()
 
             stream = pretty().pipe(stream)
+          } else if (semver.intersects(version, '>=5 <8') && options.prettyPrint) {
+            // pino 5-7 supports prettyPrint internally by calling require('pino-pretty').
+            // In this test environment, that resolves to pino-pretty@8 which exports an
+            // abstractTransport-based Transform stream — incompatible with pino 5-7's
+            // expectation of a sync factory function. pino-pretty@8 also creates a
+            // SonicBoom (writing to stdout) that registers with on-exit-leak-free,
+            // leaving async resources that prevent mocha from exiting after the test.
+            // Provide pino-pretty@3 via the `prettifier` option so pino uses its
+            // synchronous factory interface and avoids the leaked resources.
+            options.prettifier = require('../../../versions/pino-pretty@3.0.0').get()
           }
 
           logger = pino(options, stream)
@@ -235,6 +245,121 @@ describe('Plugin', () => {
             })
           }
         })
+
+        if (semver.intersects(version, '>=5.14.0')) {
+          describe('log capture channel (apm:pino:json)', () => {
+            beforeEach(() => {
+              return agent.load('pino')
+            })
+
+            beforeEach(function () {
+              setupTest()
+
+              if (!logger) {
+                this.skip()
+              }
+            })
+
+            it('should emit a complete JSON record including pid, hostname, level, time, msg', (done) => {
+              const { channel } = require('dc-polyfill')
+              const captureCh = channel('apm:pino:json')
+              let captured
+              const sub = (payload) => { captured = payload }
+              captureCh.subscribe(sub)
+
+              logger.info('hello capture')
+
+              setImmediate(() => {
+                captureCh.unsubscribe(sub)
+                assert.ok(captured, 'capture channel should have fired')
+                const record = JSON.parse(captured.json)
+                assert.ok(record.pid, 'should have pid')
+                assert.ok(record.hostname, 'should have hostname')
+                assert.ok(record.time, 'should have time')
+                assert.strictEqual(record.msg, 'hello capture')
+                done()
+              })
+            })
+          })
+        }
+
+        if (semver.intersects(version, '<5.14.0')) {
+          describe('log capture channel (apm:pino:json) for <5.14.0', () => {
+            beforeEach(() => {
+              return agent.load('pino')
+            })
+
+            beforeEach(function () {
+              setupTest()
+
+              if (!logger) {
+                this.skip()
+              }
+            })
+
+            it('should emit a complete JSON record for pino <5.14', (done) => {
+              const { channel } = require('dc-polyfill')
+              const captureCh = channel('apm:pino:json')
+              let captured
+              const sub = (payload) => { captured = payload }
+              captureCh.subscribe(sub)
+
+              logger.info('hello old pino')
+
+              setImmediate(() => {
+                captureCh.unsubscribe(sub)
+                assert.ok(captured, 'capture channel should have fired for <5.14')
+                const record = JSON.parse(captured.json)
+                assert.ok(record.time, 'should have time')
+                assert.strictEqual(record.msg, 'hello old pino')
+                done()
+              })
+            })
+
+            it('should include holder from apm:pino:log in the capture payload for <5.14', (done) => {
+              const { channel } = require('dc-polyfill')
+              const captureCh = channel('apm:pino:json')
+              let captured
+              const sub = (payload) => { captured = payload }
+              captureCh.subscribe(sub)
+
+              const activeSpan = tracer.startSpan('capture-holder-test')
+              tracer.scope().activate(activeSpan, () => {
+                logger.info('holder test')
+              })
+              activeSpan.finish()
+
+              setImmediate(() => {
+                captureCh.unsubscribe(sub)
+                assert.ok(captured, 'capture channel should have fired')
+                // wrapAsJson passes payload.holder (set by log_plugin apm:pino:log subscription)
+                // so log_plugin can enrich the captured record with dd trace context
+                assert.ok(captured.holder, 'holder should be present in capture payload')
+                assert.ok(captured.holder.dd, 'holder.dd should contain trace context')
+                done()
+              })
+            })
+
+            it('should not publish to capture channel when there are no subscribers', (done) => {
+              // agent.load() defaults to logInjection:true, which activates the apm:pino:json
+              // subscription. Reload with both disabled so the channel has no subscribers,
+              // letting us test the captureCh.hasSubscribers guard in wrapAsJson.
+              agent.reload('pino', { logInjection: false, logCaptureEnabled: false })
+
+              const { channel } = require('dc-polyfill')
+              const captureCh = channel('apm:pino:json')
+              assert.strictEqual(captureCh.hasSubscribers, false)
+
+              // Logging should still succeed — the captureCh.hasSubscribers guard in wrapAsJson
+              // prevents any publish attempt when no one is listening
+              logger.info('no subscriber test')
+
+              setImmediate(() => {
+                done()
+              })
+            })
+          })
+        }
       })
     })
   })

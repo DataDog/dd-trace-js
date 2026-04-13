@@ -1369,6 +1369,145 @@ describe('Config', () => {
     assert.strictEqual(config.appsec.eventTracking.mode, 'anonymous')
   })
 
+  it('should read DD_LOG_CAPTURE_ENABLED', () => {
+    process.env.DD_LOG_CAPTURE_ENABLED = 'true'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, true)
+    delete process.env.DD_LOG_CAPTURE_ENABLED
+  })
+
+  it('should default logCaptureEnabled to true when AWS_LAMBDA_INITIALIZATION_TYPE is native-http', () => {
+    process.env.AWS_LAMBDA_INITIALIZATION_TYPE = 'native-http'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, true)
+    delete process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+  })
+
+  it('should not override DD_LOG_CAPTURE_ENABLED=false when AWS_LAMBDA_INITIALIZATION_TYPE is native-http', () => {
+    process.env.AWS_LAMBDA_INITIALIZATION_TYPE = 'native-http'
+    process.env.DD_LOG_CAPTURE_ENABLED = 'false'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, false)
+    delete process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+    delete process.env.DD_LOG_CAPTURE_ENABLED
+  })
+
+  it('should not default logCaptureEnabled to true when AWS_LAMBDA_INITIALIZATION_TYPE is not native-http', () => {
+    process.env.AWS_LAMBDA_INITIALIZATION_TYPE = 'on-demand'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, false)
+    delete process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+  })
+
+  it('should restore logCaptureEnabled to Lambda Lite default after remote config rollback', () => {
+    process.env.AWS_LAMBDA_INITIALIZATION_TYPE = 'native-http'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, true)
+
+    config.setRemoteConfig({ logCaptureEnabled: false })
+    assert.strictEqual(config.logCaptureEnabled, false)
+
+    config.setRemoteConfig(null)
+    assert.strictEqual(config.logCaptureEnabled, true)
+
+    delete process.env.AWS_LAMBDA_INITIALIZATION_TYPE
+  })
+
+  it('should default logCaptureHost to localhost', () => {
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureHost, 'localhost')
+  })
+
+  it('should default logCapturePort to 10517', () => {
+    const config = getConfig()
+    assert.strictEqual(config.logCapturePort, 10517)
+  })
+
+  it('should read DD_LOG_CAPTURE_HOST', () => {
+    process.env.DD_LOG_CAPTURE_HOST = 'my-intake.internal'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureHost, 'my-intake.internal')
+    delete process.env.DD_LOG_CAPTURE_HOST
+  })
+
+  it('should read DD_LOG_CAPTURE_PORT', () => {
+    process.env.DD_LOG_CAPTURE_PORT = '8080'
+    const config = getConfig()
+    assert.strictEqual(config.logCapturePort, 8080)
+    delete process.env.DD_LOG_CAPTURE_PORT
+  })
+
+  it('should read DD_LOG_CAPTURE_PATH', () => {
+    process.env.DD_LOG_CAPTURE_PATH = '/custom-logs'
+    const config = getConfig()
+    assert.strictEqual(config.logCapturePath, '/custom-logs')
+    delete process.env.DD_LOG_CAPTURE_PATH
+  })
+
+  it('should read DD_LOG_CAPTURE_PROTOCOL', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'https:'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should normalize DD_LOG_CAPTURE_PROTOCOL without trailing colon', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'https'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should normalize DD_LOG_CAPTURE_PROTOCOL to lowercase', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'HTTPS'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should normalize DD_LOG_CAPTURE_PROTOCOL uppercase without colon', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'HTTPS:'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should read DD_LOG_CAPTURE_MAX_BUFFER_SIZE', () => {
+    process.env.DD_LOG_CAPTURE_MAX_BUFFER_SIZE = '500'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureMaxBufferSize, 500)
+    delete process.env.DD_LOG_CAPTURE_MAX_BUFFER_SIZE
+  })
+
+  it('should read DD_LOG_CAPTURE_FLUSH_INTERVAL_MS', () => {
+    process.env.DD_LOG_CAPTURE_FLUSH_INTERVAL_MS = '2000'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureFlushIntervalMs, 2000)
+    delete process.env.DD_LOG_CAPTURE_FLUSH_INTERVAL_MS
+  })
+
+  it('should read DD_LOG_CAPTURE_TIMEOUT_MS', () => {
+    process.env.DD_LOG_CAPTURE_TIMEOUT_MS = '3000'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureTimeoutMs, 3000)
+    delete process.env.DD_LOG_CAPTURE_TIMEOUT_MS
+  })
+
+  it('should normalize logCaptureProtocol option to lowercase with colon', () => {
+    const config = getConfig({ logCaptureProtocol: 'HTTPS:' })
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+  })
+
+  it('should normalize logCaptureProtocol option without trailing colon', () => {
+    const config = getConfig({ logCaptureProtocol: 'HTTPS' })
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+  })
+
+  it('should normalize logCaptureProtocol option lowercase without colon', () => {
+    const config = getConfig({ logCaptureProtocol: 'https' })
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+  })
+
   it('should initialize from the options', () => {
     const logger = {
       warn: sinon.spy(),

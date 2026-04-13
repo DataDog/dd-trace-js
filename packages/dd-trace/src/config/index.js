@@ -19,6 +19,7 @@ const {
   IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
+  isLambdaLite,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
@@ -216,6 +217,7 @@ class Config extends ConfigBase {
   }
 
   #applyDefaults () {
+    defaults.logCaptureEnabled = isLambdaLite()
     for (const [name, value] of Object.entries(defaults)) {
       set(this, name, value)
     }
@@ -634,6 +636,14 @@ class Config extends ConfigBase {
 
     // Single tags update is tracked as a calculated value.
     setAndTrack(this, 'tags', this.tags)
+
+    if (this.logCaptureProtocol) {
+      let protocol = this.logCaptureProtocol.toLowerCase()
+      if (!protocol.endsWith(':')) {
+        protocol += ':'
+      }
+      setAndTrack(this, 'logCaptureProtocol', protocol)
+    }
 
     telemetry.updateConfig([...configWithOrigin.values()], this)
   }

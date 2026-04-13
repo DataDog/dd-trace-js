@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const { channel } = require('dc-polyfill')
 const { storage } = require('../../../datadog-core')
 
@@ -104,5 +104,96 @@ describe('LogPlugin', () => {
 
     assert.strictEqual(data.message.dd, override)
     assert.ok(Object.hasOwn(data.message, 'dd'))
+  })
+
+  it('does not add duplicate dd key when message already has a dd property', () => {
+    const existingDd = { trace_id: 'existing-trace' }
+    const data = { message: { level: 'info', dd: existingDd } }
+    testLogChannel.publish(data)
+    // Trigger the ownKeys trap — dd should appear exactly once
+    const keys = Object.keys(data.message)
+    assert.strictEqual(keys.filter(k => k === 'dd').length, 1)
+    assert.strictEqual(data.message.dd, existingDd)
+  })
+
+  describe('log capture forwarding', () => {
+    let captureSender
+
+    beforeEach(() => {
+      // Sender configuration is the responsibility of PluginManager, not LogPlugin.
+      // Configure it directly here to keep these tests self-contained.
+      // Do NOT clear the require cache — log_plugin.js holds a top-level reference to
+      // the same sender module, so we must configure the same instance.
+      captureSender = require('../../src/log-capture/sender')
+      captureSender.stop() // reset any prior state
+      captureSender.configure({
+        host: 'localhost',
+        port: 9999,
+        path: '/logs',
+        protocol: 'http:',
+        maxBufferSize: 1000,
+        flushIntervalMs: 5000,
+        timeoutMs: 5000,
+      })
+    })
+
+    afterEach(() => {
+      captureSender.stop()
+      plugin.configure({ logInjection: true, logCaptureEnabled: false, enabled: true })
+    })
+
+    it('forwards log records when capture is enabled', () => {
+      plugin.configure({
+        logInjection: false,
+        logCaptureEnabled: true,
+        enabled: true,
+      })
+      const data = { message: { level: 'info', msg: 'hello', time: Date.now() } }
+      testLogChannel.publish(data)
+      assert.strictEqual(captureSender.bufferSize(), 1)
+    })
+
+    it('does not forward when logCaptureEnabled is false', () => {
+      plugin.configure({ logInjection: true, logCaptureEnabled: false, enabled: true })
+      const data = { message: { level: 'info', msg: 'hello' } }
+      testLogChannel.publish(data)
+      assert.strictEqual(captureSender.bufferSize(), 0)
+    })
+
+    it('does not throw when log message cannot be serialized', () => {
+      plugin.configure({
+        logInjection: false,
+        logCaptureEnabled: true,
+        enabled: true,
+      })
+      const circular = {}
+      circular.self = circular
+      const data = { message: circular }
+      testLogChannel.publish(data)
+      assert.strictEqual(captureSender.bufferSize(), 0)
+    })
+
+    it('does not inject dd into actual message when logInjection is false', () => {
+      plugin.configure({
+        logInjection: false,
+        logCaptureEnabled: true,
+        enabled: true,
+      })
+      const data = { message: { level: 'info', msg: 'hello' } }
+      testLogChannel.publish(data)
+      assert.ok(!('dd' in data.message), 'actual message should not have dd when logInjection is false')
+      assert.strictEqual(captureSender.bufferSize(), 1)
+    })
+
+    it('forwards captured record with dd proxy when logInjection and capture are both enabled', () => {
+      plugin.configure({
+        logInjection: true,
+        logCaptureEnabled: true,
+        enabled: true,
+      })
+      const data = { message: { level: 'info', msg: 'hello', time: Date.now() } }
+      testLogChannel.publish(data)
+      assert.strictEqual(captureSender.bufferSize(), 1)
+    })
   })
 })
