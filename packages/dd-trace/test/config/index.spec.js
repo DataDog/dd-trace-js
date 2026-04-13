@@ -55,6 +55,7 @@ describe('Config', () => {
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
   const getConfig = (options) => {
     log = proxyquire('../../src/log', {})
+    sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
     sinon.spy(log, 'error')
     const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})

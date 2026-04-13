@@ -723,11 +723,23 @@ function increaseCounter (event, ddVar, otelVar) {
 }
 
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
+  const NON_PARENTBASED_TO_PARENTBASED = {
+    always_on: 'parentbased_always_on',
+    always_off: 'parentbased_always_off',
+    traceidratio: 'parentbased_traceidratio',
+  }
   const OTEL_TRACES_SAMPLER_MAPPING = {
-    always_on: 1,
-    always_off: 0,
     parentbased_always_on: 1,
     parentbased_always_off: 0,
+  }
+
+  const parentBasedEquivalent = NON_PARENTBASED_TO_PARENTBASED[otelTracesSampler]
+  if (parentBasedEquivalent) {
+    log.info(
+      'OTEL_TRACES_SAMPLER=%s does not respect upstream sampling decisions; using parent-based equivalent %s instead',
+      otelTracesSampler, parentBasedEquivalent
+    )
+    otelTracesSampler = parentBasedEquivalent
   }
 
   const result = OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler] ?? otelTracesSamplerArg
