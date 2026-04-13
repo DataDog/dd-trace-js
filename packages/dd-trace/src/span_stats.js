@@ -131,11 +131,36 @@ class TimeBuckets extends Map {
 }
 
 class SpanStatsProcessor {
+  /**
+   * @param {object} config
+   * @param {object} [config.stats]
+   * @param {boolean} [config.stats.enabled]
+   * @param {number} [config.stats.interval]
+   * @param {object} [config.traceMetrics]
+   * @param {boolean} [config.traceMetrics.enabled]
+   * @param {string} [config.traceMetrics.url]
+   * @param {string} [config.traceMetrics.protocol]
+   * @param {number} [config.traceMetrics.interval]
+   * @param {string} [config.traceMetrics.histogramType]
+   * @param {string} [config.hostname]
+   * @param {number} [config.port]
+   * @param {string} [config.url]
+   * @param {string} [config.env]
+   * @param {object} [config.tags]
+   * @param {string} [config.version]
+   */
   constructor ({
     stats: {
-      enabled = false,
+      enabled: statsEnabled = false,
       interval = 10,
-    },
+    } = {},
+    traceMetrics: {
+      enabled: traceMetricsEnabled = false,
+      url: traceMetricsUrl,
+      protocol: traceMetricsProtocol = 'http/protobuf',
+      interval: traceMetricsInterval,
+      histogramType = 'explicit',
+    } = {},
     hostname,
     port,
     url,
@@ -143,43 +168,68 @@ class SpanStatsProcessor {
     tags,
     version,
   } = {}) {
-    this.exporter = new SpanStatsExporter({
-      hostname,
-      port,
-      tags,
-      url,
-    })
-    this.interval = interval
-    this.bucketSizeNs = interval * 1e9
+    this.enabled = statsEnabled || traceMetricsEnabled
+    this.interval = traceMetricsInterval || interval
+
+    this.exporter = statsEnabled
+      ? new SpanStatsExporter({ hostname, port, tags, url })
+      : null
+
+    if (traceMetricsEnabled) {
+      const { OtlpStatsExporter } = require('./exporters/otlp-span-stats')
+      this.otlpExporter = new OtlpStatsExporter(
+        { url: traceMetricsUrl, protocol: traceMetricsProtocol, histogramType },
+        {
+          'service.name': tags?.service,
+          'deployment.environment': env,
+          'service.version': version,
+          'host.name': os.hostname(),
+          'dd.runtime_id': tags?.['runtime-id'],
+        }
+      )
+    }
+
+    this.bucketSizeNs = this.interval * 1e9
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
-    this.enabled = enabled
     this.env = env
     this.tags = tags || {}
     this.sequence = 0
     this.version = version
 
     if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), interval * 1e3)
+      this.timer = setInterval(this.onInterval.bind(this), this.interval * 1e3)
       this.timer.unref()
     }
   }
 
   onInterval () {
-    const serialized = this._serializeBuckets()
-    if (!serialized) return
+    const drained = this._drainBuckets()
+    if (!drained.length) return
 
-    this.exporter.export({
-      Hostname: this.hostname,
-      Env: this.env,
-      Version: this.version || version,
-      Stats: serialized,
-      Lang: 'javascript',
-      TracerVersion: pkg.version,
-      RuntimeID: this.tags['runtime-id'],
-      Sequence: ++this.sequence,
-      ProcessTags: processTags.serialized,
-    })
+    if (this.exporter) {
+      const serialized = drained.map(({ timeNs, bucket }) => ({
+        Start: timeNs,
+        Duration: this.bucketSizeNs,
+        Stats: Array.from(bucket.values(), s => s.toJSON()),
+      }))
+
+      this.exporter.export({
+        Hostname: this.hostname,
+        Env: this.env,
+        Version: this.version || version,
+        Stats: serialized,
+        Lang: 'javascript',
+        TracerVersion: pkg.version,
+        RuntimeID: this.tags['runtime-id'],
+        Sequence: ++this.sequence,
+        ProcessTags: processTags.serialized,
+      })
+    }
+
+    if (this.otlpExporter) {
+      this.otlpExporter.export(drained, this.bucketSizeNs)
+    }
   }
 
   onSpanFinished (span) {
@@ -194,27 +244,20 @@ class SpanStatsProcessor {
       .record(span)
   }
 
-  _serializeBuckets () {
-    const { bucketSizeNs } = this
-    const serializedBuckets = []
+  /**
+   * Drains all accumulated time buckets and returns raw bucket data.
+   * Clears the internal bucket map after draining.
+   * @returns {Array<{timeNs: number, bucket: SpanBuckets}>}
+   */
+  _drainBuckets () {
+    const drained = []
 
     for (const [timeNs, bucket] of this.buckets.entries()) {
-      const bucketAggStats = []
-
-      for (const stats of bucket.values()) {
-        bucketAggStats.push(stats.toJSON())
-      }
-
-      serializedBuckets.push({
-        Start: timeNs,
-        Duration: bucketSizeNs,
-        Stats: bucketAggStats,
-      })
+      drained.push({ timeNs, bucket })
     }
 
     this.buckets.clear()
-
-    return serializedBuckets
+    return drained
   }
 }
 

@@ -391,6 +391,14 @@ class Config extends ConfigBase {
       setAndTrack(this, 'otelTracesProtocol', 'http/json')
     }
 
+    if (this.traceMetrics?.protocol === 'grpc') {
+      log.warn('DD_TRACE_OTEL_METRICS_PROTOCOL=grpc is not supported in dd-trace-js; falling back to http/protobuf')
+      setAndTrack(this, 'traceMetrics.protocol', 'http/protobuf')
+    } else if (!trackedConfigOrigins.has('traceMetrics.protocol') && trackedConfigOrigins.has('otelMetricsProtocol')) {
+      // Fallback: OTEL_EXPORTER_OTLP_METRICS_PROTOCOL → OTEL_EXPORTER_OTLP_PROTOCOL (both via otelMetricsProtocol)
+      setAndTrack(this, 'traceMetrics.protocol', this.otelMetricsProtocol)
+    }
+
     if (this.telemetry.heartbeatInterval) {
       setAndTrack(this, 'telemetry.heartbeatInterval', Math.floor(this.telemetry.heartbeatInterval * 1000))
     }
@@ -625,6 +633,29 @@ class Config extends ConfigBase {
     if (!this.otelMetricsUrl) {
       setAndTrack(this, 'otelMetricsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`)
     }
+
+    // traceMetrics.url fallback chain:
+    // 1. DD_TRACE_OTEL_METRICS_URL (already set via supported-configurations.json)
+    // 2. OTEL_EXPORTER_OTLP_METRICS_ENDPOINT (full endpoint URL, via otelMetricsUrl)
+    // 3. OTEL_EXPORTER_OTLP_ENDPOINT + /v1/metrics
+    // 4. Default: http://localhost:4318/v1/metrics
+    if (!trackedConfigOrigins.has('traceMetrics.url')) {
+      if (trackedConfigOrigins.has('otelMetricsUrl')) {
+        // OTEL_EXPORTER_OTLP_METRICS_ENDPOINT (or alias) was explicitly set
+        setAndTrack(this, 'traceMetrics.url', this.otelMetricsUrl)
+      } else if (this.OTEL_EXPORTER_OTLP_ENDPOINT) {
+        // Generic endpoint: append /v1/metrics per OTel spec
+        setAndTrack(this, 'traceMetrics.url', this.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/metrics')
+      } else {
+        setAndTrack(this, 'traceMetrics.url', `http://localhost:${DEFAULT_OTLP_PORT}/v1/metrics`)
+      }
+    }
+
+    // traceMetrics.interval fallback: OTEL_METRIC_EXPORT_INTERVAL (ms) → seconds
+    if (!trackedConfigOrigins.has('traceMetrics.interval') && trackedConfigOrigins.has('otelMetricsExportInterval')) {
+      setAndTrack(this, 'traceMetrics.interval', Math.floor(this.otelMetricsExportInterval / 1000))
+    }
+
     if (!trackedConfigOrigins.has('otelTracesUrl') && this.OTEL_EXPORTER_OTLP_ENDPOINT) {
       // Generic OTLP endpoint: per spec, append /v1/traces signal-specific subpath
       setAndTrack(this, 'otelTracesUrl', this.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/traces')

@@ -9,7 +9,6 @@ const proxyquire = require('proxyquire')
 
 require('./setup/core')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
-const { version } = require('../src/pkg')
 const pkg = require('../../../package.json')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../src/constants')
 
@@ -77,7 +76,12 @@ const exporter = {
   export: sinon.stub(),
 }
 
+const otlpExporter = {
+  export: sinon.stub(),
+}
+
 const SpanStatsExporter = sinon.stub().returns(exporter)
+const OtlpStatsExporter = sinon.stub().returns(otlpExporter)
 
 const {
   SpanAggStats,
@@ -88,6 +92,9 @@ const {
 } = proxyquire('../src/span_stats', {
   './exporters/span-stats': {
     SpanStatsExporter,
+  },
+  './exporters/otlp-span-stats': {
+    OtlpStatsExporter,
   },
 })
 
@@ -394,22 +401,96 @@ describe('SpanStatsProcessor', () => {
     })
   })
 
-  it('should export on interval with default version', () => {
+  it('should not export on interval when buckets are empty', () => {
+    const callsBefore = exporter.export.callCount
     const versionlessConfig = { ...config }
     delete versionlessConfig.version
-    const processor = new SpanStatsProcessor(versionlessConfig)
-    processor.onInterval()
+    const emptyProcessor = new SpanStatsProcessor(versionlessConfig)
+    clearTimeout(emptyProcessor.timer)
 
-    assert.deepStrictEqual(exporter.export.lastCall.args[0], {
-      Hostname: hostname(),
-      Env: config.env,
-      Version: version,
-      Stats: [],
-      Lang: 'javascript',
-      TracerVersion: pkg.version,
-      RuntimeID: processor.tags['runtime-id'],
-      Sequence: processor.sequence,
-      ProcessTags: processTags.serialized,
-    })
+    emptyProcessor.onInterval()
+
+    assert.strictEqual(exporter.export.callCount, callsBefore)
+  })
+
+  it('should drain buckets and clear them', () => {
+    const proc = new SpanStatsProcessor(config)
+    clearTimeout(proc.timer)
+
+    proc.onSpanFinished(topLevelSpan)
+    proc.onSpanFinished(errorSpan)
+    assert.ok(proc.buckets.size > 0)
+
+    const drained = proc._drainBuckets()
+    assert.ok(Array.isArray(drained))
+    assert.ok(drained.length > 0)
+    assert.ok('timeNs' in drained[0])
+    assert.ok(drained[0].bucket instanceof SpanBuckets)
+
+    // Buckets should be cleared after drain
+    assert.strictEqual(proc.buckets.size, 0)
+    // Second drain should be empty
+    assert.deepStrictEqual(proc._drainBuckets(), [])
+  })
+
+  it('should call both exporters when stats and traceMetrics are both enabled', () => {
+    const dualConfig = {
+      ...config,
+      traceMetrics: {
+        enabled: true,
+        url: 'http://localhost:4318/v1/metrics',
+        protocol: 'http/protobuf',
+        histogramType: 'explicit',
+      },
+    }
+
+    const callsBefore = {
+      exporter: exporter.export.callCount,
+      otlp: otlpExporter.export.callCount,
+    }
+
+    const dualProcessor = new SpanStatsProcessor(dualConfig)
+    clearTimeout(dualProcessor.timer)
+    dualProcessor.onSpanFinished(topLevelSpan)
+    dualProcessor.onInterval()
+
+    assert.strictEqual(exporter.export.callCount, callsBefore.exporter + 1)
+    assert.strictEqual(otlpExporter.export.callCount, callsBefore.otlp + 1)
+
+    // OTLP exporter receives raw drained data + bucketSizeNs
+    const [otlpDrained, otlpBucketSizeNs] = otlpExporter.export.lastCall.args
+    assert.ok(Array.isArray(otlpDrained))
+    assert.ok(otlpDrained.length > 0)
+    assert.strictEqual(otlpBucketSizeNs, dualConfig.stats.interval * 1e9)
+  })
+
+  it('should activate with only traceMetrics.enabled=true', () => {
+    const otlpOnlyConfig = {
+      stats: { enabled: false, interval: 10 },
+      traceMetrics: {
+        enabled: true,
+        url: 'http://localhost:4318/v1/metrics',
+        protocol: 'http/protobuf',
+        histogramType: 'explicit',
+      },
+      hostname: '127.0.0.1',
+      port: 8126,
+      env: 'test',
+      tags: {},
+      version: '1.0.0',
+    }
+
+    const callsBefore = otlpExporter.export.callCount
+
+    const otlpProcessor = new SpanStatsProcessor(otlpOnlyConfig)
+    clearTimeout(otlpProcessor.timer)
+
+    assert.strictEqual(otlpProcessor.enabled, true)
+    assert.strictEqual(otlpProcessor.exporter, null)
+
+    otlpProcessor.onSpanFinished(topLevelSpan)
+    otlpProcessor.onInterval()
+
+    assert.strictEqual(otlpExporter.export.callCount, callsBefore + 1)
   })
 })
