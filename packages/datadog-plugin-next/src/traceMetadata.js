@@ -53,12 +53,16 @@ function getDatadogTraceMetadata () {
   // By setting it as the server root span's parentId, the browser span becomes the
   // root of the trace with the server trace nested under it — establishing an explicit
   // parent-child link without relying on clock synchronization.
+  //
+  // NOTE: This mutates internal DatadogSpanContext fields (_parentId, _trace.started).
+  // If those internals change, this re-parenting logic must be updated accordingly.
   const browserSpanId = id()
   const trace = context._trace
-  if (trace && trace.started) {
+  if (trace?.started?.length) {
     for (const span of trace.started) {
-      if (!span.context()._parentId) {
-        span.context()._parentId = browserSpanId
+      const spanContext = span.context?.()
+      if (spanContext && !spanContext._parentId) {
+        spanContext._parentId = browserSpanId
         break
       }
     }
