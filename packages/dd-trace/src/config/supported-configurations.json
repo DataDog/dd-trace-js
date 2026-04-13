@@ -3891,8 +3891,9 @@
         "implementation": "A",
         "type": "string",
         "default": null,
-        "configurationNames": [
-          "otelTracesUrl"
+        "internalPropertyName": "otelTracesUrl",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_ENDPOINT"
         ]
       }
     ],
@@ -3901,8 +3902,9 @@
         "implementation": "A",
         "type": "map",
         "default": null,
-        "configurationNames": [
-          "otelTracesHeaders"
+        "internalPropertyName": "otelTracesHeaders",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_HEADERS"
         ]
       }
     ],
@@ -3910,9 +3912,10 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "",
-        "configurationNames": [
-          "otelTracesProtocol"
+        "default": "http/json",
+        "internalPropertyName": "otelTracesProtocol",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
       }
     ],
@@ -3920,10 +3923,11 @@
       {
         "implementation": "A",
         "type": "int",
-        "configurationNames": [
-          "otelTracesTimeout"
-        ],
-        "default": "10000"
+        "internalPropertyName": "otelTracesTimeout",
+        "default": "10000",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_TIMEOUT"
+        ]
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": [
