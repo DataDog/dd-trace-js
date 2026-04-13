@@ -144,7 +144,7 @@ describe('Plugin', () => {
           ret: dummySpan,
         })
         span = tracer.startSpan.getCall(0).returnValue
-        span = span._span || span
+        span = span._span
         sinon.spy(span)
       })
 

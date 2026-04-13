@@ -5,7 +5,6 @@ const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('../baggage')
 
 const tracer = require('../../')
-const PublicSpan = require('../opentracing/public/span')
 const SpanContext = require('./span_context')
 
 class ContextManager {
@@ -61,7 +60,6 @@ class ContextManager {
   // converts otel to dd
   with (context, fn, thisArg, ...args) {
     const span = trace.getSpan(context)
-    const ddScope = tracer.scope()
     const run = () => {
       const cb = thisArg == null ? fn : fn.bind(thisArg)
       return this._store.run(context, cb, ...args)
@@ -75,7 +73,11 @@ class ContextManager {
     for (const baggage of baggageItems) {
       setBaggageItem(baggage[0], baggage[1].value)
     }
-    if (span && span._ddSpan) return ddScope.activate(new PublicSpan(span._ddSpan), run)
+    if (span && span._ddSpan) {
+      const ddSpan = span._ddSpan
+      const parentStore = storage('legacy').getStore(ddSpan._store) ?? storage('legacy').getStore()
+      return storage('legacy').run({ ...parentStore, span: ddSpan }, run)
+    }
     return run()
   }
 
