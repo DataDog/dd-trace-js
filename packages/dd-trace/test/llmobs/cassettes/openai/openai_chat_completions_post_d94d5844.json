@@ -1,0 +1,55 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Connection": "keep-alive",
+      "Accept": "application/json",
+      "User-Agent": "OpenAI/JS 6.18.0",
+      "X-Stainless-Retry-Count": "0",
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": "6.18.0",
+      "X-Stainless-OS": "MacOS",
+      "X-Stainless-Arch": "arm64",
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": "v22.17.0",
+      "Content-Type": "application/json",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "370"
+    },
+    "body": "{\"model\":\"gpt-3.5-turbo\",\"messages\":[{\"role\":\"user\",\"content\":\"What is the weather in New York City?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get the weather in a given city\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"The city to get the weather for\"}}}}}],\"tool_choice\":\"auto\",\"stream\":true}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "CF-RAY": "952cfaeebd9d4cf6-BOS",
+      "Connection": "keep-alive",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Date": "Fri, 20 Jun 2025 17:28:01 GMT",
+      "Server": "cloudflare",
+      "Set-Cookie": "__cf_bm=tUAGYgpB4tbio9w9.WEE7955zh6RdZLsW5F6xOGqOHw-1750440481-1.0.1.1-1Koq3M49YfbhmeVooPOgxWw7FPJHw.PxEJhhOJgnZV_HE5qY10bJ.YuMXPFpggmgaNNR5DSfg.87tT4Jp9TzA._Hnn3NqC9HKxC2vCToKS8; path=/; expires=Fri, 20-Jun-25 17:58:01 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+      "Transfer-Encoding": "chunked",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID",
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-cache-status": "DYNAMIC",
+      "openai-processing-ms": "298",
+      "openai-version": "2020-10-01",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "x-envoy-upstream-service-time": "301",
+      "x-ratelimit-limit-requests": "10000",
+      "x-ratelimit-limit-tokens": "50000000",
+      "x-ratelimit-remaining-requests": "9999",
+      "x-ratelimit-remaining-tokens": "49999987",
+      "x-ratelimit-reset-requests": "6ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_6885b43a936a4afda08586ce916ecfa5"
+    },
+    "body": "data: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"index\":0,\"id\":\"call_0AJJT9DziAwrsNvXjPnUBT6o\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}],\"refusal\":null},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"city\"}}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\":\\\"\"}}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"New\"}}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\" York\"}}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\" City\"}}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"}\"}}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-BkZovPSQbtQE7inRJtfkkglI2o3A4\",\"object\":\"chat.completion.chunk\",\"created\":1750440481,\"model\":\"gpt-3.5-turbo-0125\",\"service_tier\":\"default\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n"
+  }
+}
