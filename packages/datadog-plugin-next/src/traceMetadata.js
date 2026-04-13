@@ -1,5 +1,7 @@
 'use strict'
 
+const id = require('../../dd-trace/src/id')
+
 /**
  * Returns Datadog trace metadata for RUM<>APM correlation.
  *
@@ -51,7 +53,6 @@ function getDatadogTraceMetadata () {
   // By setting it as the server root span's parentId, the browser span becomes the
   // root of the trace with the server trace nested under it — establishing an explicit
   // parent-child link without relying on clock synchronization.
-  const id = require('../../dd-trace/src/id')
   const browserSpanId = id()
   const trace = context._trace
   if (trace && trace.started) {
