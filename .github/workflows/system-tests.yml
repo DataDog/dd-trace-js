@@ -55,6 +55,7 @@ jobs:
       packages: write
     with:
       library: nodejs
+      ref: 1e5d6b7096279ca43ce4826fda3cc805635b63c1
       binaries_artifact: system_tests_binaries
       desired_execution_time: 300 # 5 minutes
       scenarios_groups: tracer-release
