@@ -8,20 +8,26 @@ const { channel } = require('dc-polyfill')
 
 require('../setup/core')
 const TracingPlugin = require('../../src/plugins/tracing')
+const { SVC_SRC_KEY } = require('../../src/constants')
 const agent = require('../plugins/agent')
 const plugins = require('../../src/plugins')
 
 describe('TracingPlugin', () => {
   describe('startSpan method', () => {
-    it('passes given childOf relationship to the tracer', () => {
-      const startSpanSpy = sinon.spy()
-      const plugin = new TracingPlugin({
+    let startSpanSpy
+    let plugin
+
+    beforeEach(() => {
+      startSpanSpy = sinon.spy()
+      plugin = new TracingPlugin({
         _tracer: {
           startSpan: startSpanSpy,
         },
       })
       plugin.configure({})
+    })
 
+    it('passes given childOf relationship to the tracer', () => {
       plugin.startSpan('Test span', { childOf: 'some parent span' })
 
       sinon.assert.calledWith(startSpanSpy,
@@ -30,6 +36,40 @@ describe('TracingPlugin', () => {
           childOf: 'some parent span',
         })
       )
+    })
+
+    it('sets SVC_SRC_KEY tag when service is provided as an object with source', () => {
+      plugin.startSpan('Test span', { service: { name: 'my-service', source: 'kafka' } })
+
+      sinon.assert.calledWith(startSpanSpy,
+        'Test span',
+        sinon.match({
+          tags: sinon.match({
+            [SVC_SRC_KEY]: 'kafka',
+          }),
+        })
+      )
+    })
+
+    it('defaults SVC_SRC_KEY to opt.plugin when service is a plain string', () => {
+      // This means the service name was provided from the config, so it should default to opt.plugin
+      plugin.startSpan('Test span', { service: 'my-service' })
+
+      sinon.assert.calledWith(startSpanSpy,
+        'Test span',
+        sinon.match({
+          tags: sinon.match({
+            [SVC_SRC_KEY]: 'opt.plugin',
+          }),
+        })
+      )
+    })
+
+    it('does not set SVC_SRC_KEY tag when service is not provided', () => {
+      plugin.startSpan('Test span', {})
+
+      const callArgs = startSpanSpy.firstCall.args[1]
+      assert.ok(!(SVC_SRC_KEY in callArgs.tags), 'SVC_SRC_KEY should not be present when service is not provided')
     })
   })
 })
