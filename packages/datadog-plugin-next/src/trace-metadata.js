@@ -46,6 +46,19 @@ function getDatadogTraceMetadata () {
     return {}
   }
 
+  // Return cached metadata if already computed for this trace, avoiding
+  // repeated re-parenting when generateMetadata is called multiple times
+  // (e.g., from nested layouts).
+  if (context._ddBrowserSpanId) {
+    return {
+      other: {
+        'dd-trace-id': context.toTraceId(),
+        'dd-trace-time': String(Date.now()),
+        'dd-root-span-id': context._ddBrowserSpanId.toString(10),
+      },
+    }
+  }
+
   const traceId = context.toTraceId()
   const traceTime = String(Date.now())
 
@@ -57,6 +70,8 @@ function getDatadogTraceMetadata () {
   // NOTE: This mutates internal DatadogSpanContext fields (_parentId, _trace.started).
   // If those internals change, this re-parenting logic must be updated accordingly.
   const browserSpanId = id()
+  context._ddBrowserSpanId = browserSpanId
+
   const trace = context._trace
   if (trace?.started?.length) {
     for (const span of trace.started) {
