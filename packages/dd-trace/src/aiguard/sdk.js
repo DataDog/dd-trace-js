@@ -145,7 +145,6 @@ class AIGuard extends NoopAIGuard {
     }
     const { block = true } = opts ?? {}
     return this.#tracer.trace(AI_GUARD_RESOURCE, {}, async (span) => {
-      span = span._span
       const last = messages[messages.length - 1]
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(AI_GUARD_TARGET_TAG_KEY, target)
@@ -158,7 +157,7 @@ class AIGuard extends NoopAIGuard {
       const metaStruct = {
         messages: this.#buildMessagesForMetaStruct(messages),
       }
-      span.meta_struct = {
+      span._span.meta_struct = {
         [AI_GUARD_META_STRUCT_KEY]: metaStruct,
       }
       const rootSpan = span.context()?._trace?.started?.[0]

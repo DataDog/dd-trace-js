@@ -208,7 +208,7 @@ class LLMObs extends NoopLLMObs {
     return this._tracer.wrap(name, spanOptions, wrapped)
   }
 
-  annotate (span, options) {
+  annotate (span, options, autoinstrumented = false) {
     if (!this.enabled) return
 
     if (!span) {
@@ -248,11 +248,15 @@ class LLMObs extends NoopLLMObs {
       }
       throw e
     } finally {
-      telemetry.recordLLMObsAnnotate(span, err)
+      if (autoinstrumented === false) {
+        telemetry.recordLLMObsAnnotate(span, err)
+      }
     }
   }
 
   _annotate (span, options) {
+    if (!this.enabled) return
+
     const spanKind = LLMObsTagger.tagMap.get(span)[SPAN_KIND]
     if (!spanKind) {
       const err = new Error('LLMObs span must have a span kind specified')
