@@ -1,7 +1,6 @@
 'use strict'
 
 const os = require('node:os')
-const pkg = require('../../../package.json')
 
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
 const {
@@ -12,8 +11,6 @@ const {
   HTTP_METHOD,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('./constants')
-const { version } = require('./pkg')
-const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
 
@@ -171,13 +168,15 @@ class SpanStatsProcessor {
     this.enabled = statsEnabled || traceMetricsEnabled
     this.interval = traceMetricsInterval || interval
 
-    this.exporter = statsEnabled
-      ? new SpanStatsExporter({ hostname, port, tags, url })
-      : null
+    this.exporters = []
+
+    if (statsEnabled) {
+      this.exporters.push(new SpanStatsExporter({ hostname, port, url, env, version, tags }))
+    }
 
     if (traceMetricsEnabled) {
-      const { OtlpStatsExporter } = require('./exporters/otlp-span-stats')
-      this.otlpExporter = new OtlpStatsExporter(
+      const { OtlpSpanStatsExporter } = require('./exporters/otlp-span-stats')
+      this.exporters.push(new OtlpSpanStatsExporter(
         { url: traceMetricsUrl, protocol: traceMetricsProtocol, histogramType },
         {
           'service.name': tags?.service,
@@ -186,16 +185,11 @@ class SpanStatsProcessor {
           'host.name': os.hostname(),
           'dd.runtime_id': tags?.['runtime-id'],
         }
-      )
+      ))
     }
 
     this.bucketSizeNs = this.interval * 1e9
     this.buckets = new TimeBuckets()
-    this.hostname = os.hostname()
-    this.env = env
-    this.tags = tags || {}
-    this.sequence = 0
-    this.version = version
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), this.interval * 1e3)
@@ -207,28 +201,8 @@ class SpanStatsProcessor {
     const drained = this._drainBuckets()
     if (!drained.length) return
 
-    if (this.exporter) {
-      const serialized = drained.map(({ timeNs, bucket }) => ({
-        Start: timeNs,
-        Duration: this.bucketSizeNs,
-        Stats: Array.from(bucket.values(), s => s.toJSON()),
-      }))
-
-      this.exporter.export({
-        Hostname: this.hostname,
-        Env: this.env,
-        Version: this.version || version,
-        Stats: serialized,
-        Lang: 'javascript',
-        TracerVersion: pkg.version,
-        RuntimeID: this.tags['runtime-id'],
-        Sequence: ++this.sequence,
-        ProcessTags: processTags.serialized,
-      })
-    }
-
-    if (this.otlpExporter) {
-      this.otlpExporter.export(drained, this.bucketSizeNs)
+    for (const exporter of this.exporters) {
+      exporter.export(drained, this.bucketSizeNs)
     }
   }
 

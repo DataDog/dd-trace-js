@@ -36,36 +36,33 @@ function makeDrained (count = 1) {
 
 const BUCKET_SIZE_NS = 10 * 1e9
 
-describe('OtlpStatsExporter', () => {
+describe('OtlpSpanStatsExporter', () => {
   let sendPayloadStub
   let recordTelemetryStub
-  let OtlpStatsExporter
+  let fakeMetricsExporter
+  let OtlpSpanStatsExporter
 
   beforeEach(() => {
     sendPayloadStub = sinon.stub()
     recordTelemetryStub = sinon.stub()
 
-    const fakeTransformer = {
+    fakeMetricsExporter = {
+      protocol: 'http/protobuf',
+      sendPayload: sendPayloadStub,
+      recordTelemetry: recordTelemetryStub,
+    }
+
+    const FakeTransformer = {
       transform: sinon.stub().returns(Buffer.from('payload')),
     }
+    const FakeTransformerClass = sinon.stub().returns(FakeTransformer)
+    const FakeMetricExporterClass = sinon.stub().returns(fakeMetricsExporter)
 
-    const FakeTransformerClass = sinon.stub().returns(fakeTransformer)
-
-    const { OtlpStatsExporter: Exporter } = proxyquire('../../../src/exporters/otlp-span-stats/index', {
+    const mod = proxyquire('../../../src/exporters/otlp-span-stats/index', {
       './transformer': FakeTransformerClass,
+      '../../opentelemetry/metrics/otlp_http_metric_exporter': FakeMetricExporterClass,
     })
-
-    // Patch prototype methods on the constructed instance
-    OtlpStatsExporter = class extends Exporter {
-      sendPayload (payload, cb) {
-        sendPayloadStub(payload, cb)
-        cb({ code: 0 })
-      }
-
-      recordTelemetry (name, count, tags) {
-        recordTelemetryStub(name, count, tags)
-      }
-    }
+    OtlpSpanStatsExporter = mod.OtlpSpanStatsExporter
   })
 
   afterEach(() => {
@@ -73,7 +70,7 @@ describe('OtlpStatsExporter', () => {
   })
 
   it('should construct without error', () => {
-    const exporter = new OtlpStatsExporter(
+    const exporter = new OtlpSpanStatsExporter(
       { url: 'http://localhost:4318/v1/metrics', protocol: 'http/protobuf', histogramType: 'explicit' },
       resourceAttributes
     )
@@ -81,7 +78,7 @@ describe('OtlpStatsExporter', () => {
   })
 
   it('should not send if drained is empty', () => {
-    const exporter = new OtlpStatsExporter(
+    const exporter = new OtlpSpanStatsExporter(
       { url: 'http://localhost:4318/v1/metrics', protocol: 'http/protobuf', histogramType: 'explicit' },
       resourceAttributes
     )
@@ -90,8 +87,8 @@ describe('OtlpStatsExporter', () => {
     assert.strictEqual(recordTelemetryStub.callCount, 0)
   })
 
-  it('should call sendPayload with transformer output', () => {
-    const exporter = new OtlpStatsExporter(
+  it('should call sendPayload on _metricsExporter with transformer output', () => {
+    const exporter = new OtlpSpanStatsExporter(
       { url: 'http://localhost:4318/v1/metrics', protocol: 'http/protobuf', histogramType: 'explicit' },
       resourceAttributes
     )
@@ -102,7 +99,7 @@ describe('OtlpStatsExporter', () => {
   })
 
   it('should record attempt telemetry before sending', () => {
-    const exporter = new OtlpStatsExporter(
+    const exporter = new OtlpSpanStatsExporter(
       { url: 'http://localhost:4318/v1/metrics', protocol: 'http/protobuf', histogramType: 'explicit' },
       resourceAttributes
     )
@@ -114,7 +111,8 @@ describe('OtlpStatsExporter', () => {
   })
 
   it('should record success telemetry on 2xx response', () => {
-    const exporter = new OtlpStatsExporter(
+    sendPayloadStub.callsFake((payload, cb) => cb({ code: 0 }))
+    const exporter = new OtlpSpanStatsExporter(
       { url: 'http://localhost:4318/v1/metrics', protocol: 'http/protobuf', histogramType: 'explicit' },
       resourceAttributes
     )
@@ -125,27 +123,24 @@ describe('OtlpStatsExporter', () => {
   })
 
   it('should not record success telemetry on failure', () => {
-    // Override sendPayload to simulate failure
-    const failingExporter = new OtlpStatsExporter(
+    sendPayloadStub.callsFake((payload, cb) => cb({ code: 1, error: new Error('timeout') }))
+    const exporter = new OtlpSpanStatsExporter(
       { url: 'http://localhost:4318/v1/metrics', protocol: 'http/protobuf', histogramType: 'explicit' },
       resourceAttributes
     )
-    failingExporter.sendPayload = (payload, cb) => cb({ code: 1, error: new Error('timeout') })
-
     const drained = makeDrained()
-    failingExporter.export(drained, BUCKET_SIZE_NS)
+    exporter.export(drained, BUCKET_SIZE_NS)
 
     const successCalls = recordTelemetryStub.getCalls().filter(c => c.args[0] === 'otel.span_stats_export_successes')
     assert.strictEqual(successCalls.length, 0)
   })
 
   it('should include points tag in telemetry', () => {
-    const exporter = new OtlpStatsExporter(
+    const exporter = new OtlpSpanStatsExporter(
       { url: 'http://localhost:4318/v1/metrics', protocol: 'http/protobuf', histogramType: 'explicit' },
       resourceAttributes
     )
     const drained = makeDrained()
-    // drained has 1 bucket with 1 entry → points:1
     exporter.export(drained, BUCKET_SIZE_NS)
     const attemptCall = recordTelemetryStub.getCalls().find(c => c.args[0] === 'otel.span_stats_export_attempts')
     assert.ok(attemptCall.args[2].includes('points:1'))

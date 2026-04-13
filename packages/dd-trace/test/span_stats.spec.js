@@ -1,15 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { hostname } = require('os')
-
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
 const { LogCollapsingLowestDenseDDSketch } = require('../../../vendor/dist/@datadog/sketches-js')
-const pkg = require('../../../package.json')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../src/constants')
 
 const {
@@ -23,7 +20,6 @@ const {
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME,
 } = require('../src/encode/tags-processors')
-const processTags = require('../src/process-tags')
 
 // Mock spans
 const basicSpan = {
@@ -81,7 +77,7 @@ const otlpExporter = {
 }
 
 const SpanStatsExporter = sinon.stub().returns(exporter)
-const OtlpStatsExporter = sinon.stub().returns(otlpExporter)
+const OtlpSpanStatsExporter = sinon.stub().returns(otlpExporter)
 
 const {
   SpanAggStats,
@@ -94,7 +90,7 @@ const {
     SpanStatsExporter,
   },
   './exporters/otlp-span-stats': {
-    OtlpStatsExporter,
+    OtlpSpanStatsExporter,
   },
 })
 
@@ -282,8 +278,6 @@ describe('TimeBuckets', () => {
 })
 
 describe('SpanStatsProcessor', () => {
-  let errorDistribution
-  let okDistribution
   let processor
   const n = 100
 
@@ -308,23 +302,21 @@ describe('SpanStatsProcessor', () => {
       hostname: config.hostname,
       port: config.port,
       url: config.url,
+      env: config.env,
+      version: config.version,
       tags: config.tags,
     })
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
-    assert.strictEqual(processor.hostname, hostname())
     assert.strictEqual(processor.enabled, config.stats.enabled)
-    assert.strictEqual(processor.env, config.env)
-    assert.deepStrictEqual(processor.tags, config.tags)
-    assert.strictEqual(processor.version, config.version)
   })
 
   it('should construct a disabled instance', () => {
     const disabledConfig = { ...config, stats: { enabled: false, interval: 10 } }
-    const processor = new SpanStatsProcessor(disabledConfig)
+    const disabledProcessor = new SpanStatsProcessor(disabledConfig)
 
-    assert.strictEqual(processor.enabled, false)
-    assert.strictEqual(processor.timer, undefined)
+    assert.strictEqual(disabledProcessor.enabled, false)
+    assert.strictEqual(disabledProcessor.timer, undefined)
   })
 
   it('should track span stats', () => {
@@ -342,8 +334,8 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(timeBucket.size, 1)
     assert.ok(spanBucket instanceof SpanAggStats)
 
-    okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
-    errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
+    const okDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
+    const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     for (let i = 0; i < n; i++) {
       okDistribution.accept(topLevelSpan.duration)
     }
@@ -367,38 +359,17 @@ describe('SpanStatsProcessor', () => {
   })
 
   it('should export on interval', () => {
+    const callsBefore = exporter.export.callCount
     processor.onInterval()
 
-    assert.deepStrictEqual(exporter.export.lastCall.args[0], {
-      Hostname: hostname(),
-      Env: config.env,
-      Version: config.version,
-      Stats: [{
-        Start: 12340000000000,
-        Duration: 10000000000,
-        Stats: [{
-          Name: 'top-level-span',
-          Service: 'service-name',
-          Resource: 'resource-name',
-          Type: 'span-type',
-          HTTPStatusCode: 200,
-          Synthetics: false,
-          HTTPMethod: '',
-          HTTPEndpoint: '',
-          Hits: n,
-          TopLevelHits: n,
-          Errors: 0,
-          Duration: (topLevelSpan.duration) * n,
-          OkSummary: okDistribution.toProto(),
-          ErrorSummary: errorDistribution.toProto(),
-        }],
-      }],
-      Lang: 'javascript',
-      TracerVersion: pkg.version,
-      RuntimeID: processor.tags['runtime-id'],
-      Sequence: processor.sequence,
-      ProcessTags: processTags.serialized,
-    })
+    assert.strictEqual(exporter.export.callCount, callsBefore + 1)
+
+    const [drained, bucketSizeNs] = exporter.export.lastCall.args
+    assert.ok(Array.isArray(drained))
+    assert.ok(drained.length > 0)
+    assert.ok('timeNs' in drained[0])
+    assert.ok(drained[0].bucket instanceof SpanBuckets)
+    assert.strictEqual(bucketSizeNs, processor.bucketSizeNs)
   })
 
   it('should not export on interval when buckets are empty', () => {
@@ -457,11 +428,11 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(exporter.export.callCount, callsBefore.exporter + 1)
     assert.strictEqual(otlpExporter.export.callCount, callsBefore.otlp + 1)
 
-    // OTLP exporter receives raw drained data + bucketSizeNs
-    const [otlpDrained, otlpBucketSizeNs] = otlpExporter.export.lastCall.args
-    assert.ok(Array.isArray(otlpDrained))
-    assert.ok(otlpDrained.length > 0)
-    assert.strictEqual(otlpBucketSizeNs, dualConfig.stats.interval * 1e9)
+    // Both exporters receive the same (drained, bucketSizeNs) interface
+    const [drained, bucketSizeNs] = otlpExporter.export.lastCall.args
+    assert.ok(Array.isArray(drained))
+    assert.ok(drained.length > 0)
+    assert.strictEqual(bucketSizeNs, dualConfig.stats.interval * 1e9)
   })
 
   it('should activate with only traceMetrics.enabled=true', () => {
@@ -486,7 +457,8 @@ describe('SpanStatsProcessor', () => {
     clearTimeout(otlpProcessor.timer)
 
     assert.strictEqual(otlpProcessor.enabled, true)
-    assert.strictEqual(otlpProcessor.exporter, null)
+    assert.strictEqual(otlpProcessor.exporters.length, 1)
+    assert.strictEqual(otlpProcessor.exporters[0], otlpExporter)
 
     otlpProcessor.onSpanFinished(topLevelSpan)
     otlpProcessor.onInterval()

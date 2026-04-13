@@ -1,6 +1,7 @@
 'use strict'
 
-const OtlpHttpExporterBase = require('../../opentelemetry/otlp/otlp_http_exporter_base')
+const { SpanStatsExporter } = require('../span-stats')
+const OtlpHttpMetricExporter = require('../../opentelemetry/metrics/otlp_http_metric_exporter')
 const OtlpStatsTransformer = require('./transformer')
 
 /**
@@ -11,13 +12,14 @@ const OtlpStatsTransformer = require('./transformer')
 /**
  * Exports span stats as OTLP metrics to a configurable HTTP endpoint.
  *
- * Acts as an additional flush consumer alongside the existing SpanStatsExporter,
- * sharing the same raw bucket data drained by SpanStatsProcessor.onInterval().
+ * Extends SpanStatsExporter and overrides _serializeBuckets to produce
+ * OTLP ExportMetricsServiceRequest payloads. Uses OtlpHttpMetricExporter
+ * for transport so the same HTTP/telemetry infrastructure is reused.
  *
- * @class OtlpStatsExporter
- * @augments OtlpHttpExporterBase
+ * @class OtlpSpanStatsExporter
+ * @augments SpanStatsExporter
  */
-class OtlpStatsExporter extends OtlpHttpExporterBase {
+class OtlpSpanStatsExporter extends SpanStatsExporter {
   /**
    * @param {object} config
    * @param {string} config.url - OTLP metrics endpoint URL
@@ -26,17 +28,28 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource-level attributes
    */
   constructor (config, resourceAttributes) {
+    super({})
     const { url, protocol = 'http/protobuf', histogramType = 'explicit' } = config
-    super(url, undefined, 10_000, protocol, '/v1/metrics', 'span-stats')
-    this.transformer = new OtlpStatsTransformer(resourceAttributes, this.protocol, histogramType)
+    this._metricsExporter = new OtlpHttpMetricExporter(url, undefined, 10_000, protocol, resourceAttributes)
+    this._transformer = new OtlpStatsTransformer(resourceAttributes, this._metricsExporter.protocol, histogramType)
   }
 
   /**
-   * Exports drained span bucket data as OTLP metrics.
+   * Serializes drained bucket data into a serialized OTLP metrics payload.
    *
-   * @param {DrainedBucket[]} drained - Raw drained bucket entries from SpanStatsProcessor
-   * @param {number} bucketSizeNs - Bucket duration in nanoseconds
-   * @returns {void}
+   * @param {DrainedBucket[]} drained
+   * @param {number} bucketSizeNs
+   * @returns {Buffer} Serialized OTLP payload
+   */
+  _serializeBuckets (drained, bucketSizeNs) {
+    return this._transformer.transform(drained, bucketSizeNs)
+  }
+
+  /**
+   * Exports drained bucket data as OTLP metrics.
+   *
+   * @param {DrainedBucket[]} drained
+   * @param {number} bucketSizeNs
    */
   export (drained, bucketSizeNs) {
     if (!drained.length) return
@@ -47,15 +60,15 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
     }
 
     const additionalTags = [`points:${pointCount}`]
-    this.recordTelemetry('otel.span_stats_export_attempts', 1, additionalTags)
+    this._metricsExporter.recordTelemetry('otel.span_stats_export_attempts', 1, additionalTags)
 
-    const payload = this.transformer.transform(drained, bucketSizeNs)
-    this.sendPayload(payload, (result) => {
+    const payload = this._serializeBuckets(drained, bucketSizeNs)
+    this._metricsExporter.sendPayload(payload, (result) => {
       if (result.code === 0) {
-        this.recordTelemetry('otel.span_stats_export_successes', 1, additionalTags)
+        this._metricsExporter.recordTelemetry('otel.span_stats_export_successes', 1, additionalTags)
       }
     })
   }
 }
 
-module.exports = { OtlpStatsExporter }
+module.exports = { OtlpSpanStatsExporter }
