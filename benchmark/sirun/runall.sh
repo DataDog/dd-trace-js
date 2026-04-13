@@ -36,8 +36,14 @@ fi
 # once all of the tests have complete move on to the next version
 
 TOTAL_CPU_CORES=$(nproc 2>/dev/null || echo "24")
-AVAILABLE_CORES=$((TOTAL_CPU_CORES - ${CPU_START_ID:-0}))
 export CPU_AFFINITY="${CPU_START_ID:-$TOTAL_CPU_CORES}" # Benchmarking Platform convention
+
+echo "CPU diagnostics:"
+echo "  nproc: ${TOTAL_CPU_CORES}"
+echo "  CPU_START_ID: ${CPU_START_ID:-<unset>}"
+echo "  CPU_AFFINITY start: ${CPU_AFFINITY}"
+echo "  cpuset: $(cat /proc/self/status 2>/dev/null | grep Cpus_allowed_list || echo 'N/A')"
+echo "  taskset: $(taskset -p $$ 2>/dev/null || echo 'N/A')"
 
 nvm install $MAJOR_VERSION # provided by each benchmark stage
 export VERSION=`nvm current`
@@ -61,8 +67,8 @@ BENCH_INDEX=0
 BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
-if [[ ${GROUP_SIZE} -gt ${AVAILABLE_CORES} ]]; then
-  echo "Group size ${GROUP_SIZE} exceeds available CPU cores (${AVAILABLE_CORES}, cpuset starts at ${CPU_START_ID:-0} of ${TOTAL_CPU_CORES} total)"
+if [[ ${GROUP_SIZE} -gt ${TOTAL_CPU_CORES} ]]; then
+  echo "Group size ${GROUP_SIZE} exceeds available CPU cores (${TOTAL_CPU_CORES} from nproc)"
   exit 1
 fi
 
@@ -78,7 +84,7 @@ for D in "${DIRS[@]}"; do
 
       export SIRUN_VARIANT=$V
 
-      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished.") &
+      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished." || echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2) &
       ((CPU_AFFINITY=CPU_AFFINITY+1))
     fi
 
