@@ -32,7 +32,6 @@ module.exports = {
   ERROR_STACK: 'error.stack',
   IGNORE_OTEL_ERROR: Symbol('ignore.otel.error'),
   COMPONENT: 'component',
-  SVC_SRC_KEY: '_dd.svc_src',
   CLIENT_PORT_KEY: 'network.destination.port',
   PEER_SERVICE_KEY: 'peer.service',
   PEER_SERVICE_SOURCE_KEY: '_dd.peer.service.source',
