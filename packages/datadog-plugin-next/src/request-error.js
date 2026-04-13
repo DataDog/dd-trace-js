@@ -1,6 +1,6 @@
 'use strict'
 
-const { parseRumSessionId } = require('./utils/parseSessionCookie')
+const { parseRumSessionId } = require('./utils/parse-session-cookie')
 
 /**
  * Handler for Next.js `onRequestError` instrumentation hook.
@@ -25,7 +25,10 @@ function datadogOnRequestError (error, request, context) {
   const errStack = error?.stack
   const errType = error?.constructor?.name ?? 'Error'
 
+  const activeSpan = tracer.scope().active()
+
   const span = tracer.startSpan('nextjs.server_error', {
+    childOf: activeSpan,
     tags: {
       'resource.name': `${request.method} ${context.routePath}`,
       'http.method': request.method,
@@ -50,7 +53,7 @@ function datadogOnRequestError (error, request, context) {
   }
 
   // Extract RUM session ID from _dd_s cookie for client<>server correlation
-  const cookieHeader = request.headers && request.headers.cookie
+  const cookieHeader = request.headers?.cookie
   if (cookieHeader) {
     const ddsCookieMatch = cookieHeader.match(/(?:^|;\s*)_dd_s=([^;]*)/)
     if (ddsCookieMatch) {
