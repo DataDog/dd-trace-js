@@ -9,7 +9,15 @@ require('dd-trace').init({
 }).use('electron', true)
 
 const path = require('path')
-const { app, BrowserWindow, net } = require('electron/main')
+const { app, BrowserWindow, ipcMain, net } = require('electron/main')
+
+const BRIDGE_CONFIG_CHANNEL = 'datadog:bridge-config'
+
+// The Datadog preload script calls ipcRenderer.sendSync(BRIDGE_CONFIG_CHANNEL)
+// at load time, so this handler must be registered before any BrowserWindow loads.
+ipcMain.on(BRIDGE_CONFIG_CHANNEL, event => {
+  event.returnValue = null
+})
 
 let win
 
@@ -41,6 +49,13 @@ app.whenReady().then(() => {
       // an electron.main.send span.
       case 'ipc':
         return win.webContents.send('ping')
+
+      // Ask the renderer to check DatadogEventBridge and report back.
+      case 'bridge':
+        ipcMain.once('bridge-result', (_event, result) => {
+          process.send({ name: 'bridge-result', result })
+        })
+        return win.webContents.send('check-bridge')
     }
   })
 })
