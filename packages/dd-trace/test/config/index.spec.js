@@ -445,7 +445,7 @@ describe('Config', () => {
       env: undefined,
       experimental: {
         aiguard: {
-          block: false,
+          block: true,
           enabled: false,
           endpoint: undefined,
           maxMessagesLength: 16,
@@ -581,7 +581,7 @@ describe('Config', () => {
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 1, origin: 'default' },
       { name: 'DD_ENV', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_ENABLED', value: false, origin: 'default' },
-      { name: 'DD_AI_GUARD_BLOCK', value: false, origin: 'default' },
+      { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 512 * 1024, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },
@@ -792,6 +792,7 @@ describe('Config', () => {
     process.env.DD_RUNTIME_METRICS_ENABLED = 'true'
     process.env.DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED = 'false'
     process.env.DD_RUNTIME_METRICS_GC_ENABLED = 'false'
+    process.env.DD_RUNTIME_METRICS_NATIVE = 'false'
     process.env.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED = 'true'
     process.env.DD_SERVICE = 'service'
     process.env.DD_SERVICE_MAPPING = 'a:aa, b:bb'
@@ -958,6 +959,7 @@ describe('Config', () => {
         enabled: true,
         eventLoop: false,
         gc: false,
+        native: false,
       },
       runtimeMetricsRuntimeId: true,
       sampleRate: 0.5,
@@ -1047,7 +1049,7 @@ describe('Config', () => {
       { name: 'DD_DYNAMIC_INSTRUMENTATION_UPLOAD_INTERVAL_SECONDS', value: 0.1, origin: 'env_var' },
       { name: 'DD_ENV', value: 'test', origin: 'env_var' },
       { name: 'DD_AI_GUARD_ENABLED', value: false, origin: 'default' },
-      { name: 'DD_AI_GUARD_BLOCK', value: false, origin: 'default' },
+      { name: 'DD_AI_GUARD_BLOCK', value: true, origin: 'default' },
       { name: 'DD_AI_GUARD_ENDPOINT', value: null, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_CONTENT_SIZE', value: 512 * 1024, origin: 'default' },
       { name: 'DD_AI_GUARD_MAX_MESSAGES_LENGTH', value: 16, origin: 'default' },

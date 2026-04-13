@@ -35,9 +35,9 @@ class MongodbCorePlugin extends DatabasePlugin {
     }
     const query = getQuery(ops)
     const resource = truncate(getResource(this, ns, query, name))
-    const service = this.serviceName({ pluginConfig: this.config })
+    const serviceResult = this.serviceName({ pluginConfig: this.config })
     const span = this.startSpan(this.operationName(), {
-      service,
+      service: serviceResult,
       resource,
       type: 'mongodb',
       kind: 'client',
@@ -49,7 +49,7 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port,
       },
     }, ctx)
-    const comment = this.injectDbmComment(span, ops.comment, service)
+    const comment = this.injectDbmComment(span, ops.comment, serviceResult.name)
     if (comment) {
       ops.comment = comment
     }

@@ -665,7 +665,15 @@ declare namespace tracer {
        * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      eventLoop?: boolean
+      eventLoop?: boolean,
+
+       /**
+       * Whether to use native metrics. When set to false, forces the JS implementation
+       * @default true
+       * @env DD_RUNTIME_METRICS_NATIVE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      native?: boolean
     }
 
     /**
@@ -795,7 +803,7 @@ declare namespace tracer {
          * Whether to request blocking mode when evaluating prompts via auto-instrumentation.
          * When `true`, AI Guard will block requests that violate security policies.
          * When `false`, AI Guard evaluates but never blocks (monitor-only mode).
-         * @default false
+         * @default true
          * @env DD_AI_GUARD_BLOCK
          * Programmatic configuration takes precedence over the environment variables listed above.
          */

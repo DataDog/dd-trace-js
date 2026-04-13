@@ -775,7 +775,7 @@ moduleTypes.forEach(({
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
-    it('custom after:spec and after:run handlers are chained with dd-trace instrumentation', async () => {
+    over10It('custom after:spec and after:run handlers are chained with dd-trace instrumentation', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads
@@ -3272,6 +3272,62 @@ moduleTypes.forEach(({
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
           await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+        })
+
+        it('does not tag known attempt to fix tests as new', async () => {
+          receiver.setKnownTests({
+            cypress: {
+              'cypress/e2e/attempt-to-fix.js': [
+                'attempt to fix is attempt to fix',
+              ],
+            },
+          })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 2 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const atfTests = tests.filter(
+                t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+              )
+              assert.ok(atfTests.length > 0)
+              for (const test of atfTests) {
+                assert.ok(
+                  !(TEST_IS_NEW in test.meta),
+                  'ATF test that is in known tests should not be tagged as new'
+                )
+              }
+            }, 25000)
+
+          const envVars = getCiVisEvpProxyConfig(receiver.port)
+          const specToRun = 'cypress/e2e/attempt-to-fix.js'
+
+          childProcess = exec(
+            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+                SPEC_PATTERN: specToRun,
+                CYPRESS_SHOULD_ALWAYS_PASS: '1',
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
         })
 
         /**

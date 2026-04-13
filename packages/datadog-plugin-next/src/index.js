@@ -3,7 +3,7 @@
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
-const { COMPONENT } = require('../../dd-trace/src/constants')
+const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
@@ -19,15 +19,21 @@ class NextPlugin extends ServerPlugin {
   bindStart ({ req, res }) {
     const store = storage('legacy').getStore()
     const childOf = store ? store.span : store
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const serviceName = this.config.service || schemaServiceName
+    let serviceSource = this.config.service ? 'opt.plugin' : schemaServiceSource
+    if (!serviceName || serviceName === this.tracer._service) serviceSource = undefined
+
     const span = this.tracer.startSpan(this.operationName(), {
       childOf,
       tags: {
         [COMPONENT]: this.constructor.id,
-        'service.name': this.config.service || this.serviceName(),
+        'service.name': serviceName,
         'resource.name': req.method,
         'span.type': 'web',
         'span.kind': 'server',
         'http.method': req.method,
+        ...(serviceSource === undefined ? {} : { [SVC_SRC_KEY]: serviceSource }),
       },
       integrationName: this.constructor.id,
     })
