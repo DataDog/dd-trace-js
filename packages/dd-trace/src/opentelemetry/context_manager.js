@@ -7,12 +7,12 @@ const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('.
 const SpanContext = require('./span_context')
 
 class ContextManager {
-  constructor () {
+  constructor() {
     this._store = storage('opentelemetry')
   }
 
   // converts dd to otel
-  active () {
+  active() {
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
     const activeSpan = storage('legacy').getStore()?.span
@@ -57,7 +57,7 @@ class ContextManager {
   }
 
   // converts otel to dd
-  with (context, fn, thisArg, ...args) {
+  with(context, fn, thisArg, ...args) {
     const span = trace.getSpan(context)
     const run = () => {
       const cb = thisArg == null ? fn : fn.bind(thisArg)
@@ -80,14 +80,14 @@ class ContextManager {
     return run()
   }
 
-  bind (context, target) {
+  bind(context, target) {
     const self = this
     return function (...args) {
       return self.with(context, target, this, ...args)
     }
   }
 
-  enable () {}
-  disable () {}
+  enable() { }
+  disable() { }
 }
 module.exports = ContextManager
