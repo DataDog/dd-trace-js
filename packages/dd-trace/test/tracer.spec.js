@@ -9,6 +9,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
+const PublicSpan = require('../src/opentracing/public/span')
 const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -108,7 +109,7 @@ describe('Tracer', () => {
     })
 
     it('should start the span as a child of the active span', () => {
-      const childOf = tracer.startSpan('parent')
+      const childOf = new PublicSpan(tracer.startSpan('parent'))
 
       tracer.scope().activate(childOf, () => {
         tracer.trace('name', {}, span => {
@@ -118,8 +119,8 @@ describe('Tracer', () => {
     })
 
     it('should allow overriding the parent span', () => {
-      const root = tracer.startSpan('root')
-      const childOf = tracer.startSpan('parent')
+      const root = new PublicSpan(tracer.startSpan('root'))
+      const childOf = new PublicSpan(tracer.startSpan('parent'))
 
       tracer.scope().activate(root, () => {
         tracer.trace('name', { childOf }, span => {

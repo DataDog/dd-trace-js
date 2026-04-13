@@ -6,6 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 const { Span } = require('../../../vendor/dist/opentracing')
+const PublicSpan = require('../src/opentracing/public/span')
 require('./setup/core')
 const Scope = require('../src/scope')
 
@@ -15,7 +16,7 @@ describe('Scope', () => {
 
   beforeEach(() => {
     scope = new Scope()
-    span = new Span()
+    span = new PublicSpan(new Span())
   })
 
   describe('active()', () => {
@@ -26,8 +27,7 @@ describe('Scope', () => {
     it('should return a PublicSpan wrapping the active span', () => {
       scope.activate(span, () => {
         const active = scope.active()
-        assert.notStrictEqual(active, span)
-        assert.strictEqual(active._span, span)
+        assert.strictEqual(active, span)
       })
     })
   })
@@ -53,7 +53,7 @@ describe('Scope', () => {
       assert.strictEqual(scope.active(), null)
 
       scope.activate(span, () => {
-        assert.strictEqual(scope.active()._span, span)
+        assert.strictEqual(scope.active(), span)
       })
 
       assert.strictEqual(scope.active(), null)
@@ -63,7 +63,7 @@ describe('Scope', () => {
       scope.activate(span, () => {
         const publicSpan = scope.active()
         scope.activate(publicSpan, () => {
-          assert.strictEqual(scope.active()._span, span)
+          assert.strictEqual(scope.active(), span)
         })
       })
     })
@@ -71,7 +71,7 @@ describe('Scope', () => {
     it('should persist through setTimeout', done => {
       scope.activate(span, () => {
         setTimeout(() => {
-          assert.strictEqual(scope.active()?._span, span)
+          assert.strictEqual(scope.active(), span)
           done()
         }, 0)
       })
@@ -80,7 +80,7 @@ describe('Scope', () => {
     it('should persist through setImmediate', done => {
       scope.activate(span, () => {
         setImmediate(() => {
-          assert.strictEqual(scope.active()?._span, span)
+          assert.strictEqual(scope.active(), span)
           done()
         }, 0)
       })
@@ -91,7 +91,7 @@ describe('Scope', () => {
         let shouldReturn = false
 
         const timer = setInterval(() => {
-          assert.strictEqual(scope.active()?._span, span)
+          assert.strictEqual(scope.active(), span)
 
           if (shouldReturn) {
             clearInterval(timer)
@@ -106,7 +106,7 @@ describe('Scope', () => {
     it('should persist through process.nextTick', done => {
       scope.activate(span, () => {
         process.nextTick(() => {
-          assert.strictEqual(scope.active()?._span, span)
+          assert.strictEqual(scope.active(), span)
           done()
         }, 0)
       })
@@ -117,7 +117,7 @@ describe('Scope', () => {
 
       return scope.activate(span, () => {
         return promise.then(() => {
-          assert.strictEqual(scope.active()?._span, span)
+          assert.strictEqual(scope.active(), span)
         })
       })
     })
@@ -125,7 +125,7 @@ describe('Scope', () => {
     it('should handle concurrency', done => {
       scope.activate(span, () => {
         setImmediate(() => {
-          assert.strictEqual(scope.active()?._span, span)
+          assert.strictEqual(scope.active(), span)
           done()
         })
       })
@@ -136,14 +136,14 @@ describe('Scope', () => {
     it('should handle errors', () => {
       const error = new Error('boom')
 
-      sinon.spy(span, 'setTag')
+      sinon.spy(span._span, 'setTag')
 
       try {
         scope.activate(span, () => {
           throw error
         })
       } catch (e) {
-        sinon.assert.calledWith(span.setTag, 'error', e)
+        sinon.assert.calledWith(span._span.setTag, 'error', e)
       }
     })
   })
@@ -152,7 +152,7 @@ describe('Scope', () => {
     describe('with a function', () => {
       it('should bind the function to the active span', () => {
         let fn = () => {
-          assert.strictEqual(scope.active()?._span, span)
+          assert.strictEqual(scope.active(), span)
         }
 
         scope.activate(span, () => {
@@ -164,7 +164,7 @@ describe('Scope', () => {
 
       it('should bind the function to the provided span', () => {
         let fn = () => {
-          assert.strictEqual(scope.active()?._span, span)
+          assert.strictEqual(scope.active(), span)
         }
 
         fn = scope.bind(fn, span)
