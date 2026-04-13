@@ -49,9 +49,6 @@ jobs:
       - build-artifacts
       - get-credentials
     uses: DataDog/system-tests/.github/workflows/system-tests.yml@1e5d6b7096279ca43ce4826fda3cc805635b63c1
-    secrets:
-      TEST_OPTIMIZATION_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
-      DD_API_KEY: ${{ needs.get-credentials.outputs.api_key }}
     permissions:
       contents: read
       id-token: write
