@@ -20,7 +20,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('parent', {}, parent => {
         const root = getRootSpan()
 
-        assert.strictEqual(root, parent)
+        assert.strictEqual(root, parent._span)
       })
     })
 
@@ -65,7 +65,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1', { childOf }, child1 => {
         const root = getRootSpan()
 
-        assert.strictEqual(root, child1)
+        assert.strictEqual(root, child1._span)
       })
     })
 
@@ -90,7 +90,7 @@ describe('Appsec SDK utils', () => {
 
         const root = getRootSpan()
 
-        assert.strictEqual(root, child1)
+        assert.strictEqual(root, child1._span)
       })
     })
 
@@ -156,7 +156,7 @@ describe('Appsec SDK utils', () => {
           tracer.trace('child1.2.1.1', { childOf: child121 }, child1211 => {
             const root = getRootSpan()
 
-            assert.strictEqual(root, child1211)
+            assert.strictEqual(root, child1211._span)
           })
         })
       })

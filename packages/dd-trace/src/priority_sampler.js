@@ -388,9 +388,7 @@ class PrioritySampler {
    * @param {Product} [product]
    */
   static keepTrace (span, product) {
-    // Unwrap PublicSpan (scope().active()) so _prioritySampler is reachable.
-    const target = span?._span ?? span
-    target?._prioritySampler?.setPriority(target, USER_KEEP, product)
+    span?._prioritySampler?.setPriority(span, USER_KEEP, product)
   }
 }
 
