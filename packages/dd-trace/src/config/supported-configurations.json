@@ -3907,7 +3907,7 @@
     ],
     "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "string",
         "default": "http/json",
         "internalPropertyName": "otelTracesProtocol",
@@ -3918,7 +3918,7 @@
     ],
     "OTEL_EXPORTER_OTLP_TRACES_TIMEOUT": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "int",
         "internalPropertyName": "otelTracesTimeout",
         "default": "10000",
