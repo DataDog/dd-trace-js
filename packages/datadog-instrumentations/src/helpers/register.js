@@ -131,13 +131,9 @@ for (const name of names) {
         // Do not log in case of an error to prevent duplicate telemetry for the same integration version.
         instrumentedIntegrationsSuccess.set(`${name}@${moduleVersion}`, true)
         try {
-          // Electron exports a string in Node which is not supported by
-          // WeakSets.
-          if (typeof moduleExports !== 'string') {
-            loadChannel.publish({ name })
+          loadChannel.publish({ name })
 
-            moduleExports = hook(moduleExports, moduleVersion, isIitm) ?? moduleExports
-          }
+          moduleExports = hook(moduleExports, moduleVersion, isIitm) ?? moduleExports
         } catch (error) {
           log.info('Error during ddtrace instrumentation of application, aborting.', error)
           telemetry('error', [
