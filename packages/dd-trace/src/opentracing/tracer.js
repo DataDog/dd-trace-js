@@ -82,7 +82,7 @@ class DatadogTracer {
   }
 
   inject (context, format, carrier) {
-    if (context instanceof Span || context instanceof PublicSpan) {
+    if (context instanceof Span) {
       context = context.context()
     }
 

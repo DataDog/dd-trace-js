@@ -100,8 +100,11 @@ class NoopProxy {
     return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 
-  inject () {
-    return this._tracer.inject.apply(this._tracer, arguments)
+  inject (context, format, carrier) {
+    if (context instanceof PublicSpan) {
+      context = context._span
+    }
+    return this._tracer.inject(context, format, carrier)
   }
 
   extract () {
