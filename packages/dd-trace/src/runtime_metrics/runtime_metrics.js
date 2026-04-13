@@ -35,6 +35,9 @@ let eventLoopDelayObserver = null
 // https://github.com/DataDog/dogweb/blob/prod/integration/node/node_metadata.csv
 
 module.exports = {
+  /**
+   * @param {import('../config/config-base')} config - Tracer configuration
+   */
   start (config) {
     this.stop()
     const clientConfig = DogStatsDClient.generateClientConfig(config)

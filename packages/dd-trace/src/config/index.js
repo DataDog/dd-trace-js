@@ -377,6 +377,10 @@ class Config extends ConfigBase {
     if (this.telemetry.heartbeatInterval) {
       setAndTrack(this, 'telemetry.heartbeatInterval', Math.floor(this.telemetry.heartbeatInterval * 1000))
     }
+    if (this.telemetry.extendedHeartbeatInterval) {
+      setAndTrack(this, 'telemetry.extendedHeartbeatInterval',
+        Math.floor(this.telemetry.extendedHeartbeatInterval * 1000))
+    }
 
     // Enable resourceRenamingEnabled when appsec is enabled and only
     // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set

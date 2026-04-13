@@ -305,7 +305,7 @@ function extendedHeartbeat (config) {
       heartbeatFailedDependencies = []
     }
     sendData(config, application, host, 'app-extended-heartbeat', appPayload)
-  }, 1000 * 60 * 60 * 24).unref()
+  }, config.telemetry.extendedHeartbeatInterval).unref()
 }
 
 /**

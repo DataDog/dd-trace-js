@@ -46,12 +46,12 @@
     ],
     "DD_AI_GUARD_BLOCK": [
       {
-        "implementation": "B",
+        "implementation": "C",
         "type": "boolean",
         "configurationNames": [
           "experimental.aiguard.block"
         ],
-        "default": "false"
+        "default": "true"
       }
     ],
     "DD_AI_GUARD_ENABLED": [
@@ -1710,6 +1710,14 @@
         "implementation": "A",
         "type": "string",
         "default": null
+      }
+    ],
+    "DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "86400",
+        "internalPropertyName": "telemetry.extendedHeartbeatInterval"
       }
     ],
     "DD_TELEMETRY_HEARTBEAT_INTERVAL": [

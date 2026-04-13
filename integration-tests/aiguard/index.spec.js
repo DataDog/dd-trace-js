@@ -39,8 +39,8 @@ describe('AIGuard SDK integration tests', () => {
       env: {
         DD_SERVICE: 'ai_guard_integration_test',
         DD_ENV: 'test',
-        DD_TRACING_ENABLED: 'true',
-        DD_TRACE_AGENT_PORT: agent.port,
+        DD_TRACE_ENABLED: 'true',
+        DD_TRACE_AGENT_PORT: String(agent.port),
         DD_AI_GUARD_ENABLED: 'true',
         DD_AI_GUARD_BLOCK: 'true',
         DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
