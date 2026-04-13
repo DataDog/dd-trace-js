@@ -756,7 +756,7 @@ declare namespace tracer {
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      exporter?: 'log' | 'agent' | 'datadog'
+      exporter?: 'log' | 'agent' | 'datadog' | 'electron'
 
       /**
        * Whether to enable the experimental `getRumData` method.
