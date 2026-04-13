@@ -20,7 +20,7 @@
  * }
  * ```
  */
-async function withDatadogServerAction (actionName, action) {
+function withDatadogServerAction (actionName, action) {
   const tracer = global._ddtrace
   if (!tracer) return action()
 
@@ -33,15 +33,12 @@ async function withDatadogServerAction (actionName, action) {
     },
   })
 
-  try {
-    const result = await tracer.scope().activate(actionSpan, () => action())
-    actionSpan.finish()
-    return result
-  } catch (error) {
-    actionSpan.setTag('error', error)
-    actionSpan.finish()
-    throw error
-  }
+  return tracer.scope().activate(actionSpan, () => {
+    return action().then(
+      (result) => { actionSpan.finish(); return result },
+      (error) => { actionSpan.setTag('error', error); actionSpan.finish(); throw error }
+    )
+  })
 }
 
 module.exports = { withDatadogServerAction }
