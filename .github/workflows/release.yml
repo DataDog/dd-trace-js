@@ -98,6 +98,8 @@ jobs:
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
       - run: node scripts/release/notes --latest
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
   docs:
     needs: "publish-latest"
