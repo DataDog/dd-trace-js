@@ -189,6 +189,28 @@ describe('Plugin', () => {
 
           child.send({ name: 'receive' })
         })
+
+        it('should inject DatadogEventBridge into the renderer via preload', done => {
+          const handler = msg => {
+            if (msg?.name !== 'bridge') return
+            child.off('message', handler)
+            try {
+              const { result } = msg
+              assert.ok(result.exists, 'DatadogEventBridge should exist on window')
+              assert.strictEqual(result.capabilities, '[]')
+              assert.strictEqual(result.privacyLevel, 'mask')
+              const hosts = JSON.parse(result.allowedHosts)
+              assert.ok(Array.isArray(hosts), 'getAllowedWebViewHosts() should return a JSON array')
+              assert.ok(result.sendSuccess, 'bridge.send() should not throw')
+              done()
+            } catch (e) {
+              done(e)
+            }
+          }
+
+          child.on('message', handler)
+          child.send({ name: 'bridge' })
+        })
       })
     })
   })

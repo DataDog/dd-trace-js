@@ -142,7 +142,6 @@ function wrapBrowserWindow (electron) {
     constructor (options = {}) {
       const win = super(options)
 
-      // TODO: Move this to plugin?
       win.webContents.session.registerPreloadScript({
         type: 'frame', // TODO: service-worker
         filePath: join(__dirname, 'electron', 'preload.js'),
