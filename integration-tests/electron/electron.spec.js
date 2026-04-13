@@ -9,8 +9,6 @@ const path = require('path')
 const { FakeAgent, useSandbox, sandboxCwd } = require('../helpers')
 
 describe('Electron integration', function () {
-  this.timeout(300_000)
-
   let agent
   let httpServer
   let httpPort
@@ -23,6 +21,8 @@ describe('Electron integration', function () {
   useSandbox(['electron', '@electron/packager'], false, [path.join(__dirname, 'app')])
 
   before(async function () {
+    this.timeout(30_000)
+
     const sandboxFolder = sandboxCwd()
     const appDir = path.join(sandboxFolder, 'app')
 
@@ -165,6 +165,23 @@ describe('Electron integration', function () {
       .then(done, done)
 
     child.send({ name: 'ipc' })
+  })
+
+  it('should inject DatadogEventBridge in the renderer process', done => {
+    child.once('message', msg => {
+      if (!msg || msg.name !== 'bridge-result') return
+      try {
+        assert.strictEqual(msg.result.exists, true, 'DatadogEventBridge should exist on window')
+        assert.strictEqual(msg.result.capabilities, '[]')
+        assert.ok(msg.result.privacyLevel, 'privacyLevel should be set')
+        assert.ok(msg.result.sendSuccess, 'bridge.send() should not throw')
+        done()
+      } catch (e) {
+        done(e)
+      }
+    })
+
+    child.send({ name: 'bridge' })
   })
 
   it('should produce spans for both HTTP and IPC when both operations are triggered', done => {
