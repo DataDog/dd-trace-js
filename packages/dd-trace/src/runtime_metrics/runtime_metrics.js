@@ -55,17 +55,21 @@ module.exports = {
       startGCObserver()
     }
 
-    // Using no-gc prevents the native gc metrics from being tracked. Not
-    // passing any options means all metrics are tracked.
-    // TODO: This is a workaround. We should find a better solution.
-    const watchers = trackEventLoop ? ['loop'] : ['no-gc']
+    const useNative = config.runtimeMetrics.native !== false
 
-    try {
-      nativeMetrics = require('@datadog/native-metrics')
-      nativeMetrics.start(...watchers)
-    } catch (error) {
-      log.error('Error starting native metrics', error)
-      nativeMetrics = null
+    if (useNative) {
+      // Using no-gc prevents the native gc metrics from being tracked. Not
+      // passing any options means all metrics are tracked.
+      // TODO: This is a workaround. We should find a better solution.
+      const watchers = trackEventLoop ? ['loop'] : ['no-gc']
+
+      try {
+        nativeMetrics = require('@datadog/native-metrics')
+        nativeMetrics.start(...watchers)
+      } catch (error) {
+        log.error('Error starting native metrics', error)
+        nativeMetrics = null
+      }
     }
 
     client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
