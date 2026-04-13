@@ -3273,6 +3273,58 @@
         "default": "false"
       }
     ],
+    "DD_TRACE_OTEL_METRICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "internalPropertyName": "traceMetrics.enabled",
+        "configurationNames": [
+          "traceMetrics.enabled"
+        ]
+      }
+    ],
+    "DD_TRACE_OTEL_METRICS_HISTOGRAM_TYPE": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "explicit",
+        "allowed": "exponential|explicit",
+        "internalPropertyName": "traceMetrics.histogramType"
+      }
+    ],
+    "DD_TRACE_OTEL_METRICS_INTERVAL_SECONDS": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "allowed": "[1-9]\\d*",
+        "default": "10",
+        "internalPropertyName": "traceMetrics.interval"
+      }
+    ],
+    "DD_TRACE_OTEL_METRICS_PROTOCOL": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": "http/protobuf",
+        "allowed": "http/protobuf|http/json|grpc",
+        "internalPropertyName": "traceMetrics.protocol",
+        "configurationNames": [
+          "traceMetrics.protocol"
+        ]
+      }
+    ],
+    "DD_TRACE_OTEL_METRICS_URL": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "internalPropertyName": "traceMetrics.url",
+        "configurationNames": [
+          "traceMetrics.url"
+        ]
+      }
+    ],
     "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [
       {
         "implementation": "B",

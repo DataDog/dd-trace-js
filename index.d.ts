@@ -1385,6 +1385,34 @@ declare namespace tracer {
     stats?: boolean
 
     /**
+     * Configuration for OTLP span metrics export.
+     * When enabled, span metrics (hits, errors, duration) are exported in OTLP format.
+     * Requires DD_TRACE_STATS_COMPUTATION_ENABLED or sets up its own span aggregation.
+     */
+    traceMetrics?: {
+      /**
+       * Whether to enable OTLP span metrics export.
+       * @default false
+       * @env DD_TRACE_OTEL_METRICS_ENABLED
+       */
+      enabled?: boolean
+
+      /**
+       * OTLP metrics endpoint URL.
+       * @default "http://localhost:4318/v1/metrics"
+       * @env DD_TRACE_OTEL_METRICS_URL, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, OTEL_EXPORTER_OTLP_ENDPOINT
+       */
+      url?: string
+
+      /**
+       * OTLP transport protocol. gRPC is not supported and will fall back to http/protobuf.
+       * @default "http/protobuf"
+       * @env DD_TRACE_OTEL_METRICS_PROTOCOL, OTEL_EXPORTER_OTLP_METRICS_PROTOCOL, OTEL_EXPORTER_OTLP_PROTOCOL
+       */
+      protocol?: 'http/protobuf' | 'http/json' | 'grpc'
+    }
+
+    /**
      * Whether to generate 128-bit trace IDs.
      * @default true
      * @env DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED
