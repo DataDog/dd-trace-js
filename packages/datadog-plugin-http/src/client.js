@@ -40,10 +40,10 @@ class HttpClientPlugin extends ClientPlugin {
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
+      service: this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
       meta: {
         [COMPONENT]: this.constructor.id,
         'span.kind': 'client',
-        'service.name': this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
