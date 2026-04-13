@@ -6,7 +6,6 @@ const { join } = require('path')
 const { BrowserWindow, app, ipcMain, net } = require('electron/main')
 
 const CONFIG_CHANNEL = 'datadog:bridge-config'
-const BRIDGE_CHANNEL = 'datadog:bridge-send'
 
 ipcMain.on(CONFIG_CHANNEL, event => {
   event.returnValue = null
@@ -22,7 +21,6 @@ app.on('ready', () => {
         case 'request': return onRequest(msg)
         case 'send': return onSend(msg)
         case 'receive': return onReceive(msg)
-        case 'bridge': return onBridge()
       }
     } catch (e) {
       console.error(e)
@@ -65,20 +63,6 @@ function onReceive () {
 
   loadWindow(win => {
     win.webContents.send('datadog:test:send')
-  })
-}
-
-function onBridge () {
-  ipcMain.once(BRIDGE_CHANNEL, (_event, msg) => {
-    process.send({ name: 'bridge-send', msg })
-  })
-
-  ipcMain.once('datadog:test:bridge:result', (_event, result) => {
-    process.send({ name: 'bridge', result })
-  })
-
-  loadWindow(win => {
-    win.webContents.send('datadog:test:bridge')
   })
 }
 
