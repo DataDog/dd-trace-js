@@ -4,16 +4,12 @@
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "default": "./index.js"
-    },
-    "./next": {
-      "types": "./next.d.ts",
-      "default": "./next.js"
-    },
-    "./*": "./*"
+  "typesVersions": {
+    "*": {
+      "next": [
+        "./next.d.ts"
+      ]
+    }
   },
   "scripts": {
     "env": "bash ./plugin-env",
