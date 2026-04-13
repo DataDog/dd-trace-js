@@ -1,7 +1,9 @@
 'use strict'
 
-function getRootSpan (tracer) {
-  let span = tracer.scope().active()
+const { storage } = require('../../../../datadog-core')
+
+function getRootSpan () {
+  let span = storage('legacy').getStore()?.span
   if (!span) return
 
   const context = span.context()

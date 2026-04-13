@@ -18,9 +18,9 @@ describe('Appsec SDK utils', () => {
   describe('getRootSpan', () => {
     it('should return root span if there are no childs', () => {
       tracer.trace('parent', { }, parent => {
-        const root = getRootSpan(tracer)
+        const root = getRootSpan()
 
-        assert.strictEqual(root, parent)
+        assert.strictEqual(root, parent._span)
       })
     })
 
@@ -28,7 +28,7 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
 
       tracer.trace('child1', { childOf }, child1 => {
-        const root = getRootSpan(tracer)
+        const root = getRootSpan()
 
         assert.strictEqual(root, childOf)
       })
@@ -39,7 +39,7 @@ describe('Appsec SDK utils', () => {
       childOf.context()._parentId = id()
 
       tracer.trace('child1', { childOf }, child1 => {
-        const root = getRootSpan(tracer)
+        const root = getRootSpan()
 
         assert.strictEqual(root, childOf)
       })
@@ -52,7 +52,7 @@ describe('Appsec SDK utils', () => {
         tracer.trace('child1.1.2', { childOf: child11 }, child112 => {})
       })
       tracer.trace('child1.2', { childOf }, child12 => {
-        const root = getRootSpan(tracer)
+        const root = getRootSpan()
 
         assert.strictEqual(root, childOf)
       })
@@ -63,9 +63,9 @@ describe('Appsec SDK utils', () => {
       childOf.setTag('_inferred_span', {})
 
       tracer.trace('child1', { childOf }, child1 => {
-        const root = getRootSpan(tracer)
+        const root = getRootSpan()
 
-        assert.strictEqual(root, child1)
+        assert.strictEqual(root, child1._span)
       })
     })
 
@@ -75,7 +75,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1', { childOf }, child1 => {
         child1.setTag('_inferred_span', {})
 
-        const root = getRootSpan(tracer)
+        const root = getRootSpan()
 
         assert.strictEqual(root, childOf)
       })
@@ -88,9 +88,9 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1', { childOf }, child1 => {
         child1.setTag('_inferred_span', {})
 
-        const root = getRootSpan(tracer)
+        const root = getRootSpan()
 
-        assert.strictEqual(root, child1)
+        assert.strictEqual(root, child1._span)
       })
     })
 
@@ -101,7 +101,7 @@ describe('Appsec SDK utils', () => {
       tracer.trace('child1.1', { childOf }, child11 => {})
       tracer.trace('child1.2', { childOf }, child12 => {
         tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
-          const root = getRootSpan(tracer)
+          const root = getRootSpan()
           assert.strictEqual(root, child12._span)
         })
       })
@@ -115,7 +115,7 @@ describe('Appsec SDK utils', () => {
         child12.setTag('_inferred_span', {})
 
         tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
-          const root = getRootSpan(tracer)
+          const root = getRootSpan()
 
           assert.strictEqual(root, childOf)
         })
@@ -133,7 +133,7 @@ describe('Appsec SDK utils', () => {
           child121.setTag('_inferred_span', {})
 
           tracer.trace('child1.2.1.1', { childOf: child121 }, child1211 => {
-            const root = getRootSpan(tracer)
+            const root = getRootSpan()
 
             assert.strictEqual(root, childOf)
           })
@@ -153,9 +153,9 @@ describe('Appsec SDK utils', () => {
           child121.setTag('_inferred_span', {})
 
           tracer.trace('child1.2.1.1', { childOf: child121 }, child1211 => {
-            const root = getRootSpan(tracer)
+            const root = getRootSpan()
 
-            assert.strictEqual(root, child1211)
+            assert.strictEqual(root, child1211._span)
           })
         })
       })
