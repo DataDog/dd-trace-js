@@ -9,13 +9,11 @@
       "types": "./index.d.ts",
       "default": "./index.js"
     },
-    "./init": "./init.js",
-    "./loader-hook.mjs": "./loader-hook.mjs",
     "./next": {
       "types": "./next.d.ts",
       "default": "./next.js"
     },
-    "./register": "./register.js"
+    "./*": "./*"
   },
   "scripts": {
     "env": "bash ./plugin-env",
@@ -139,6 +137,8 @@
     "LICENSE.Apache",
     "LICENSE.BSD3",
     "loader-hook.mjs",
+    "next.d.ts",
+    "next.js",
     "packages/*/index.js",
     "packages/*/lib/**/*",
     "packages/*/src/**/*",
