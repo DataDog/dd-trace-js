@@ -9,7 +9,7 @@ require('../../../../../dd-trace/test/setup/core')
 let Writer
 let writer
 let span
-let request
+let queueSend
 let encoder
 let coverageEncoder
 let url
@@ -19,7 +19,9 @@ describe('CI Visibility Writer', () => {
   beforeEach(() => {
     span = 'formatted'
 
-    request = sinon.stub().yieldsAsync(null, 'OK', 200)
+    queueSend = sinon.stub().callsFake((data, options, cb) => {
+      process.nextTick(() => cb(null, 'OK', 200))
+    })
 
     encoder = {
       encode: sinon.stub(),
@@ -50,8 +52,13 @@ describe('CI Visibility Writer', () => {
       return coverageEncoder
     }
 
+    const MockPayloadRequestQueue = function () {
+      this.send = queueSend
+      this.drain = sinon.stub().callsFake((cb) => cb())
+    }
+
     Writer = proxyquire('../../../../src/ci-visibility/exporters/agentless/writer', {
-      '../../../exporters/common/request': request,
+      '../payload-request-queue': MockPayloadRequestQueue,
       '../../../encode/agentless-ci-visibility': { AgentlessCiVisibilityEncoder },
       '../../../encode/coverage-ci-visibility': { CoverageCIVisibilityEncoder },
       '../../../log': log,
@@ -93,7 +100,7 @@ describe('CI Visibility Writer', () => {
       encoder.makePayload.returns(expectedData)
 
       writer.flush(() => {
-        sinon.assert.calledWithMatch(request, expectedData, {
+        sinon.assert.calledWithMatch(queueSend, expectedData, {
           url,
           path: '/api/v2/citestcycle',
           method: 'POST',
@@ -109,12 +116,14 @@ describe('CI Visibility Writer', () => {
       it('should log request errors', done => {
         const error = new Error('boom')
 
-        request.yields(error)
+        queueSend.callsFake((data, options, cb) => {
+          process.nextTick(() => cb(error))
+        })
 
         encoder.count.returns(1)
 
         writer.flush(() => {
-          sinon.assert.calledWith(log.error, 'Error sending CI agentless payload', error)
+          sinon.assert.calledWith(log.error, 'Error sending Test Optimization agentless payload', error)
           done()
         })
       })

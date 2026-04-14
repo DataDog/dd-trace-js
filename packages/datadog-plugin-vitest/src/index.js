@@ -18,6 +18,7 @@ const {
   TEST_CODE_OWNERS,
   TEST_LEVEL_EVENT_TYPES,
   TEST_SESSION_NAME,
+  TEST_COMMAND,
   TEST_SOURCE_START,
   TEST_IS_NEW,
   TEST_EARLY_FLAKE_ENABLED,
@@ -300,6 +301,7 @@ class VitestPlugin extends CiPlugin {
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
           [TEST_SESSION_NAME]: testSessionName,
+          [TEST_COMMAND]: this.command,
         }
       }
       if (this.tracer._exporter.addMetadataTags) {

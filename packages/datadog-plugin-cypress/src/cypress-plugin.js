@@ -654,6 +654,7 @@ class CypressPlugin {
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
           [TEST_SESSION_NAME]: testSessionName,
+          [TEST_COMMAND]: this.command,
         }
       }
       const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, this.frameworkVersion)

@@ -51,6 +51,13 @@ let itrCorrelationId = ''
 let isForcedToRun = false
 const config = {}
 
+// Flush coordination state for guaranteed final flush before process exit.
+// 'idle' → 'waiting_flush' (callback set, waiting for plugin flush) → 'idle'
+// 'idle' → 'flush_done' (plugin flushed before callback was set) → 'idle'
+const FLUSH_TIMEOUT_MS = 30_000
+let _flushState = 'idle'
+let _flushDoneCallback = null
+
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
 let untestedCoverage
@@ -102,6 +109,36 @@ function getFilteredSuites (originalSuites) {
     }
     return acc
   }, { suitesToRun: [], skippedSuites: new Set() })
+}
+
+/**
+ * Wraps mocha's completion callback to wait for the exporter flush
+ * to complete before allowing mocha to proceed with exit.
+ * @param {Function} originalCb - mocha's original completion callback
+ * @returns {Function}
+ */
+function wrapMochaCallback (originalCb) {
+  if (!originalCb) return originalCb
+  return function (...args) {
+    let called = false
+    const finish = () => {
+      if (called) return
+      called = true
+      _flushState = 'idle'
+      originalCb.apply(null, args)
+    }
+
+    if (_flushState === 'flush_done') {
+      // Flush already completed before mocha called the callback
+      _flushState = 'idle'
+      originalCb.apply(null, args)
+      return
+    }
+
+    _flushDoneCallback = finish
+    _flushState = 'waiting_flush'
+    setTimeout(finish, FLUSH_TIMEOUT_MS).unref()
+  }
 }
 
 function getOnStartHandler (frameworkVersion) {
@@ -209,6 +246,16 @@ function getOnEndHandler (isParallel) {
       isEarlyFlakeDetectionFaulty: config.isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled: config.isTestManagementTestsEnabled,
       isParallel,
+      onFlushDone () {
+        if (_flushState === 'waiting_flush') {
+          const cb = _flushDoneCallback
+          _flushDoneCallback = null
+          _flushState = 'idle'
+          cb()
+        } else {
+          _flushState = 'flush_done'
+        }
+      },
     })
 
     logDynamicNamesWarning(newTestsWithDynamicNames)
@@ -449,10 +496,13 @@ addHook({
 
   shimmer.wrap(Runner.prototype, 'runTests', runTests => getRunTestsWrapper(runTests, config))
 
-  shimmer.wrap(Runner.prototype, 'run', run => function () {
+  shimmer.wrap(Runner.prototype, 'run', run => function (fn, ...restArgs) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
+
+    // Wrap mocha's completion callback to wait for the exporter flush
+    const wrappedFn = wrapMochaCallback(fn)
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
 
@@ -539,7 +589,7 @@ addHook({
       }
     })
 
-    return run.apply(this, arguments)
+    return run.apply(this, [wrappedFn, ...restArgs])
   })
 
   return Runner
@@ -623,10 +673,15 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/nodejs/parallel-buffered-runner.js',
 }, (ParallelBufferedRunner, frameworkVersion) => {
-  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, { files }) {
+  shimmer.wrap(ParallelBufferedRunner.prototype, 'run', run => function (cb, opts) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
+
+    const { files } = opts
+
+    // Wrap mocha's completion callback to wait for the exporter flush
+    const wrappedCb = wrapMochaCallback(cb)
 
     this.once('start', getOnStartHandler(frameworkVersion))
     this.once('end', getOnEndHandler(true))
@@ -667,9 +722,9 @@ addHook({
         }
         isSuitesSkipped = skippedFiles.length > 0
         skippedSuites = skippedFiles
-        run.apply(this, [cb, { files: filteredFiles }])
+        run.apply(this, [wrappedCb, { ...opts, files: filteredFiles }])
       } else {
-        run.apply(this, arguments)
+        run.apply(this, [wrappedCb, opts])
       }
     })
 
