@@ -4094,7 +4094,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 }
-                // Final status: quarantined/disabled always report 'skip'; pass only if all attempts passed, fail otherwise
+                // Final status: quarantined/disabled always report 'skip';
+                // pass only if all attempts passed, fail otherwise
                 const expectedFinalStatus = (isQuarantined || isDisabled)
                   ? 'skip'
                   : (shouldAlwaysPass ? 'pass' : 'fail')
