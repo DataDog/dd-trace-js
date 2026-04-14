@@ -7,9 +7,9 @@ const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 require('./setup/core')
+const { storage } = require('../../datadog-core')
 const Tracer = require('../src/tracer')
 const Span = require('../src/opentracing/span')
-const PublicSpan = require('../src/opentracing/public/span')
 const getConfig = require('../src/config')
 const tags = require('../../../ext/tags')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -109,9 +109,9 @@ describe('Tracer', () => {
     })
 
     it('should start the span as a child of the active span', () => {
-      const childOf = new PublicSpan(tracer.startSpan('parent'))
+      const childOf = tracer.startSpan('parent')
 
-      tracer.scope().activate(childOf, () => {
+      storage('legacy').run({ span: childOf }, () => {
         tracer.trace('name', {}, span => {
           assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
         })
@@ -119,10 +119,10 @@ describe('Tracer', () => {
     })
 
     it('should allow overriding the parent span', () => {
-      const root = new PublicSpan(tracer.startSpan('root'))
-      const childOf = new PublicSpan(tracer.startSpan('parent'))
+      const root = tracer.startSpan('root')
+      const childOf = tracer.startSpan('parent')
 
-      tracer.scope().activate(root, () => {
+      storage('legacy').run({ span: root }, () => {
         tracer.trace('name', { childOf }, span => {
           assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
         })

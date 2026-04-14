@@ -6,6 +6,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -346,6 +347,7 @@ describe('Plugin', () => {
             service: 'custom',
             hooks: {
               query: (span, params) => {
+                assert.ok(span instanceof PublicSpan)
                 span.addTags({ 'elasticsearch.params': 'foo', 'elasticsearch.method': params.method })
               },
             },

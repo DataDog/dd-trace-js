@@ -13,6 +13,7 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const plugin = require('../src')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
@@ -1819,6 +1820,7 @@ describe('Plugin', () => {
               sinon.assert.calledOnce(config.hooks.execute)
 
               const span = config.hooks.execute.firstCall.args[0]
+              assert.ok(span instanceof PublicSpan)
               const args = config.hooks.execute.firstCall.args[1]
               const res = config.hooks.execute.firstCall.args[2]
 
@@ -1860,6 +1862,7 @@ describe('Plugin', () => {
               sinon.assert.calledOnce(config.hooks.validate)
 
               const span = config.hooks.validate.firstCall.args[0]
+              assert.ok(span instanceof PublicSpan)
               const hookDocument = config.hooks.validate.firstCall.args[1]
               const hookErrors = config.hooks.validate.firstCall.args[2]
 
@@ -1885,6 +1888,7 @@ describe('Plugin', () => {
               sinon.assert.calledOnce(config.hooks.parse)
 
               const span = config.hooks.parse.firstCall.args[0]
+              assert.ok(span instanceof PublicSpan)
               const hookSource = config.hooks.parse.firstCall.args[1]
               const hookDocument = config.hooks.parse.firstCall.args[2]
 

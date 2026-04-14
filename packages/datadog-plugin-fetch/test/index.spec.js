@@ -8,6 +8,7 @@ const tags = require('../../../ext/tags')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./naming')
@@ -516,6 +517,7 @@ describe('Plugin', function () {
         config = {
           hooks: {
             request: (span, req, res) => {
+              assert.ok(span instanceof PublicSpan)
               span.setTag('foo', '/foo')
             },
           },

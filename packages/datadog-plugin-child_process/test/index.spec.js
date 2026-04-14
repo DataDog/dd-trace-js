@@ -517,9 +517,9 @@ describe('Child process plugin', () => {
 
           beforeEach((done) => {
             if (hasParentSpan) {
-              parentSpan = tracer.startSpan('parent')
+              parentSpan = tracer._tracer.startSpan('parent')
               parentSpan.finish()
-              tracer.scope().activate(parentSpan, done)
+              storage('legacy').run({ span: parentSpan }, done)
             } else {
               storage('legacy').enterWith({})
               done()
@@ -551,10 +551,10 @@ describe('Child process plugin', () => {
               it('should maintain previous span after the execution', (done) => {
                 const res = childProcess[methodName]('ls')
                 const span = storage('legacy').getStore()?.span
-                assert.strictEqual(span, parentSpan?._span)
+                assert.strictEqual(span, parentSpan)
                 if (async) {
                   res.on('close', () => {
-                    assert.strictEqual(span, parentSpan?._span)
+                    assert.strictEqual(span, parentSpan)
                     done()
                   })
                 } else {
@@ -566,7 +566,7 @@ describe('Child process plugin', () => {
                 it('should maintain previous span in the callback', (done) => {
                   childProcess[methodName]('ls', () => {
                     const span = storage('legacy').getStore()?.span
-                    assert.strictEqual(span, parentSpan?._span)
+                    assert.strictEqual(span, parentSpan)
                     done()
                   })
                 })
@@ -659,9 +659,9 @@ describe('Child process plugin', () => {
           ]
           if (parentSpan) {
             beforeEach((done) => {
-              const parentSpan = tracer.startSpan('parent')
-              parentSpan.finish()
-              tracer.scope().activate(parentSpan, done)
+              const span = tracer._tracer.startSpan('parent')
+              span.finish()
+              storage('legacy').run({ span }, done)
             })
           }
 

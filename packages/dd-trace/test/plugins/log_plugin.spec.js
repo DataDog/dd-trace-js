@@ -10,7 +10,6 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 require('../setup/core')
 const LogPlugin = require('../../src/plugins/log_plugin')
 const Tracer = require('../../src/tracer')
-const PublicSpan = require('../../src/opentracing/public/span')
 const getConfig = require('../../src/config')
 
 const testLogChannel = channel('apm:test:log')
@@ -53,7 +52,7 @@ describe('LogPlugin', () => {
   })
 
   it('should include trace_id and span_id when a span is active', () => {
-    const span = new PublicSpan(tracer.startSpan('test'))
+    const span = tracer.startSpan('test')
 
     storage('legacy').run({ span }, () => {
       const data = { message: {} }
