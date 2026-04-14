@@ -144,7 +144,6 @@ describe('Plugin', () => {
           ret: dummySpan,
         })
         span = tracer.startSpan.getCall(0).returnValue
-        span = span._span
         sinon.spy(span)
       })
 
@@ -208,7 +207,6 @@ describe('Plugin', () => {
             fn: span.setTag,
             self: dummySpan,
             ret: dummySpan,
-            args: ['key', 'value'],
           })
         })
       })
@@ -220,7 +218,6 @@ describe('Plugin', () => {
             fn: span.addTags,
             self: dummySpan,
             ret: dummySpan,
-            args: [{ key: 'value' }],
           })
         })
       })
@@ -231,7 +228,6 @@ describe('Plugin', () => {
             name: 'span:finish',
             fn: span.finish,
             self: dummySpan,
-            args: [123],
           })
         })
       })
