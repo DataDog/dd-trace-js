@@ -204,8 +204,8 @@ class AIGuard extends NoopAIGuard {
       if (sdsFindings.length > 0) {
         metaStruct.sds = sdsFindings
       }
-      const tagProbabilities = attr.tagProbs ?? {}
-      if (attr.tagProbs) {
+      const tagProbabilities = attr.tag_probs ?? {}
+      if (attr.tag_probs) {
         metaStruct.tag_probs = tagProbabilities
       }
       const blockingEnabled = attr.is_blocking_enabled ?? false

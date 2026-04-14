@@ -159,7 +159,9 @@ describe('AIGuard SDK', () => {
   for (const { action, reason, tagProbs, blocking, suite, target, messages } of testSuite) {
     const tags = tagProbs ? Object.keys(tagProbs) : undefined
     it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
-      mockFetch({ body: { data: { attributes: { action, reason, tags, tagProbs, is_blocking_enabled: blocking } } } })
+      mockFetch({
+        body: { data: { attributes: { action, reason, tags, tag_probs: tagProbs, is_blocking_enabled: blocking } } },
+      })
       const shouldBlock = action !== 'ALLOW' && blocking
 
       if (shouldBlock) {
