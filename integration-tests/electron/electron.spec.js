@@ -6,10 +6,10 @@ const fs = require('fs')
 const http = require('http')
 const path = require('path')
 
-const { FakeAgent, useSandbox, sandboxCwd } = require('../helpers')
+const { useSandbox, sandboxCwd } = require('../helpers')
+const { assertTraceReceived } = require('./helpers')
 
 describe('Electron integration', function () {
-  let agent
   let httpServer
   let httpPort
   let binaryPath
@@ -83,8 +83,6 @@ describe('Electron integration', function () {
       binaryPath = path.join(packageDir, 'ElectronTest')
     }
 
-    agent = await new FakeAgent().start()
-
     await new Promise(resolve => {
       httpServer = http.createServer((_req, res) => {
         res.writeHead(200)
@@ -98,7 +96,6 @@ describe('Electron integration', function () {
   })
 
   after(async function () {
-    if (agent) await agent.stop()
     if (httpServer) await new Promise(resolve => httpServer.close(resolve))
   })
 
@@ -106,11 +103,6 @@ describe('Electron integration', function () {
     this.timeout(15_000)
 
     child = spawn(binaryPath, process.platform === 'linux' ? ['--no-sandbox'] : [], {
-      env: {
-        ...process.env,
-        // dd-trace is bundled inside the binary; only the agent port is injected.
-        DD_TRACE_AGENT_PORT: String(agent.port),
-      },
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       windowsHide: true,
     })
@@ -128,48 +120,45 @@ describe('Electron integration', function () {
   })
 
   it('should create an http.request span for net.fetch calls', done => {
-    agent
-      .assertMessageReceived(({ payload }) => {
-        const spans = payload.flat()
-        const span = spans.find(s => s.name === 'http.request')
-        if (!span) throw new Error('No http.request span found')
+    assertTraceReceived(child, ({ payload }) => {
+      const spans = payload.flat()
+      const span = spans.find(s => s.name === 'http.request')
+      if (!span) throw new Error('No http.request span found')
 
-        assert.strictEqual(span.type, 'http')
-        assert.strictEqual(span.resource, 'GET')
-        assert.strictEqual(span.service, 'electron-integration-test')
-        assert.strictEqual(span.error, 0)
-        assert.strictEqual(span.meta.component, 'electron')
-        assert.strictEqual(span.meta['span.kind'], 'client')
-        assert.strictEqual(span.meta['http.method'], 'GET')
-        assert.strictEqual(span.meta['http.status_code'], '200')
-        assert.strictEqual(span.meta['http.url'], `http://127.0.0.1:${httpPort}/`)
-      })
-      .then(done, done)
+      assert.strictEqual(span.type, 'http')
+      assert.strictEqual(span.resource, 'GET')
+      assert.strictEqual(span.service, 'electron-integration-test')
+      assert.strictEqual(span.error, 0)
+      assert.strictEqual(span.meta.component, 'electron')
+      assert.strictEqual(span.meta['span.kind'], 'client')
+      assert.strictEqual(span.meta['http.method'], 'GET')
+      assert.strictEqual(span.meta['http.status_code'], '200')
+      assert.strictEqual(span.meta['http.url'], `http://127.0.0.1:${httpPort}/`)
+    }).then(done, done)
 
     child.send({ name: 'http', url: `http://127.0.0.1:${httpPort}/` })
   })
 
   it('should create an electron.main.send span for IPC send from main to renderer', done => {
-    agent
-      .assertMessageReceived(({ payload }) => {
-        const spans = payload.flat()
-        const span = spans.find(s => s.name === 'electron.main.send')
-        if (!span) throw new Error('No electron.main.send span found')
+    assertTraceReceived(child, ({ payload }) => {
+      const spans = payload.flat()
+      const span = spans.find(s => s.name === 'electron.main.send')
+      if (!span) throw new Error('No electron.main.send span found')
 
-        assert.strictEqual(span.resource, 'ping')
-        assert.strictEqual(span.service, 'electron-integration-test')
-        assert.strictEqual(span.error, 0)
-        assert.strictEqual(span.meta.component, 'electron')
-        assert.strictEqual(span.meta['span.kind'], 'producer')
-      })
-      .then(done, done)
+      assert.strictEqual(span.resource, 'ping')
+      assert.strictEqual(span.service, 'electron-integration-test')
+      assert.strictEqual(span.error, 0)
+      assert.strictEqual(span.meta.component, 'electron')
+      assert.strictEqual(span.meta['span.kind'], 'producer')
+    }).then(done, done)
 
     child.send({ name: 'ipc' })
   })
 
   it('should inject DatadogEventBridge in the renderer process', done => {
-    child.once('message', msg => {
+    function handler (msg) {
       if (!msg || msg.name !== 'bridge-result') return
+      child.removeListener('message', handler)
       try {
         assert.strictEqual(msg.result.exists, true, 'DatadogEventBridge should exist on window')
         assert.strictEqual(msg.result.capabilities, '[]')
@@ -179,14 +168,15 @@ describe('Electron integration', function () {
       } catch (e) {
         done(e)
       }
-    })
+    }
 
+    child.on('message', handler)
     child.send({ name: 'bridge' })
   })
 
   it('should produce spans for both HTTP and IPC when both operations are triggered', done => {
     // Register both assertions before triggering anything so no message is missed.
-    const httpSpanSeen = agent.assertMessageReceived(({ payload }) => {
+    const httpSpanSeen = assertTraceReceived(child, ({ payload }) => {
       const spans = payload.flat()
       const span = spans.find(s => s.name === 'http.request')
       if (!span) throw new Error('No http.request span found')
@@ -197,7 +187,7 @@ describe('Electron integration', function () {
       assert.strictEqual(span.meta['http.url'], `http://127.0.0.1:${httpPort}/`)
     })
 
-    const ipcSpanSeen = agent.assertMessageReceived(({ payload }) => {
+    const ipcSpanSeen = assertTraceReceived(child, ({ payload }) => {
       const spans = payload.flat()
       const span = spans.find(s => s.name === 'electron.main.send')
       if (!span) throw new Error('No electron.main.send span found')
