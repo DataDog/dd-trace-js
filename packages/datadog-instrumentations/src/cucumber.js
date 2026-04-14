@@ -264,7 +264,7 @@ function getFinalStatus ({
   }
 
   // Branch for ATF (We need to check hasPassedAllRetries)
-  if (!(isLastAtrRetry || isLastEfdRetry) && isLastAttemptToFix) {
+  if (isLastAttemptToFix) {
     return hasPassedAllRetries ? 'pass' : 'fail'
   }
 }
