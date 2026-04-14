@@ -15,6 +15,7 @@ const externals = require('../plugins/externals')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const agent = require('../plugins/agent')
 const Nomenclature = require('../../src/service-naming')
+const { SVC_SRC_KEY } = require('../../src/constants')
 const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
@@ -61,7 +62,7 @@ function withNamingSchema (
 
         hooks(versionName, false)
 
-        const { opName, serviceName } = expected[versionName]
+        const { opName, serviceName, defaultTracerService } = expected[versionName]
 
         it('should conform to the naming schema', function () {
           this.retries(3)
@@ -80,6 +81,22 @@ function withNamingSchema (
 
                 assert.strictEqual(span.name, expectedOpName)
                 assert.strictEqual(span.service, expectedServiceName)
+
+                const tracerService = defaultTracerService || Nomenclature.config.service
+
+                if (span.service !== tracerService) {
+                  assert.notStrictEqual(
+                    span.meta[SVC_SRC_KEY],
+                    undefined,
+                    `${SVC_SRC_KEY} must be present when a service override is active`
+                  )
+                } else {
+                  assert.strictEqual(
+                    span.meta[SVC_SRC_KEY],
+                    undefined,
+                    `${SVC_SRC_KEY} must be absent when the service matches the default`
+                  )
+                }
               }, { timeoutMs: 25000 })
 
             const testPromise = spanProducerFn(reject)
@@ -106,7 +123,7 @@ function withNamingSchema (
 
       hooks('v0', true)
 
-      const { serviceName } = expected.v1
+      const { serviceName, defaultTracerService } = expected.v1
 
       it('should pass service name through', function () {
         this.retries(3)
@@ -120,6 +137,21 @@ function withNamingSchema (
                 ? serviceName()
                 : serviceName
               assert.strictEqual(span.service, expectedServiceName)
+
+              const tracerService = defaultTracerService || Nomenclature.config.service
+              if (span.service !== tracerService) {
+                assert.notStrictEqual(
+                  span.meta[SVC_SRC_KEY],
+                  undefined,
+                  `${SVC_SRC_KEY} must be present when a service override is active`
+                )
+              } else {
+                assert.strictEqual(
+                  span.meta[SVC_SRC_KEY],
+                  undefined,
+                  `${SVC_SRC_KEY} must be absent when the service matches the default`
+                )
+              }
             }, { timeoutMs: 15000 })
 
           const testPromise = spanProducerFn(reject)

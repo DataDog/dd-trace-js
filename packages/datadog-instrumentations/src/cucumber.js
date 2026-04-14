@@ -61,6 +61,8 @@ const numRetriesByPickleId = new Map()
 const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
 const modifiedTestsByPickleId = new Map()
+// Pickle IDs for tests that are genuinely new (not in known tests list).
+const newTestPickleIds = new Set()
 
 let eventDataCollector = null
 let pickleByFile = {}
@@ -389,7 +391,7 @@ function wrapRun (pl, isLatestVersion, version) {
         }
 
         if (isKnownTestsEnabled && status !== 'skip') {
-          isNew = numRetries !== undefined
+          isNew = newTestPickleIds.has(this.pickle.id)
         }
 
         if (isNew || isModified) {
@@ -769,6 +771,7 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (isKnownTestsEnabled && !isAttemptToFix) {
       isNew = isNewTest(testSuitePath, pickle.name)
       if (isNew) {
+        newTestPickleIds.add(pickle.id)
         numRetriesByPickleId.set(pickle.id, 0)
       }
     }

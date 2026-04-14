@@ -31,11 +31,16 @@ const {
 } = require('../../src/appsec/channels')
 const Reporter = require('../../src/appsec/reporter')
 const agent = require('../plugins/agent')
-const blockedTemplate = require('../../src/appsec/blocked_templates')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
 const { getConfigFresh } = require('../helpers/config')
+const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
+
+const blockedTemplate = {
+  html: blockedTemplateHtml,
+  json: blockedTemplateJson,
+}
 
 const resultActions = {
   actions: {
@@ -1639,6 +1644,7 @@ describe('IP blocking', function () {
         },
       },
     }))
+    setTestBlockingTemplates()
 
     RuleManager.updateWafFromRC(createTransaction({ toUnapply: [], toApply: [], toModify }))
   })

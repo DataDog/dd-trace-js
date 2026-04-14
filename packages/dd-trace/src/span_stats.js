@@ -11,7 +11,7 @@ const {
   HTTP_ROUTE,
   HTTP_METHOD,
 } = require('../../../ext/tags')
-const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('./constants')
+const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -60,6 +60,7 @@ class SpanAggStats {
       synthetics,
       method,
       endpoint,
+      srvSrc,
     } = this.aggKey
 
     return {
@@ -71,6 +72,7 @@ class SpanAggStats {
       Synthetics: synthetics,
       HTTPMethod: method,
       HTTPEndpoint: endpoint,
+      srv_src: srvSrc,
       Hits: this.hits,
       TopLevelHits: this.topLevelHits,
       Errors: this.errors,
@@ -91,6 +93,7 @@ class SpanAggKey {
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
     this.method = span.meta[HTTP_METHOD] || ''
+    this.srvSrc = span.meta[SVC_SRC_KEY] || ''
   }
 
   toString () {
@@ -103,6 +106,7 @@ class SpanAggKey {
       this.synthetics,
       this.method,
       this.endpoint,
+      this.srvSrc,
     ].join(',')
   }
 }

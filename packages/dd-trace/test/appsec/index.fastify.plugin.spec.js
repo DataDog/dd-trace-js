@@ -12,10 +12,10 @@ const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
@@ -56,6 +56,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -121,6 +122,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'body-parser-rules.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -229,6 +231,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'body-parser-rules.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -318,6 +321,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -498,6 +502,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
                 },
               })
             )
+            setTestBlockingTemplates()
           })
 
           afterEach(() => {
