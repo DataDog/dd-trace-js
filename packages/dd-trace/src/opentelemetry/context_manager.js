@@ -4,7 +4,6 @@ const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setBaggageItem, removeAllBaggageItems } = require('../baggage')
 
-const tracer = require('../../')
 const SpanContext = require('./span_context')
 
 class ContextManager {
@@ -16,7 +15,7 @@ class ContextManager {
   active () {
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
-    const activeSpan = tracer.scope().active()?._span
+    const activeSpan = storage('legacy').getStore()?.span
 
     const storedSpan = store ? trace.getSpan(store) : null
 
