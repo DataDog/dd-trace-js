@@ -157,26 +157,28 @@ describe('AIGuard SDK', () => {
   ])
 
   for (const { action, reason, tagProbs, blocking, suite, target, messages } of testSuite) {
-    const tags = tagProbs ? Object.keys(tagProbs) : undefined
     it(`test evaluate '${suite}' with ${action} action (blocking: ${blocking})`, async () => {
-      mockFetch({
-        body: { data: { attributes: { action, reason, tags, tag_probs: tagProbs, is_blocking_enabled: blocking } } },
-      })
+      const attributes = { action, reason, is_blocking_enabled: blocking }
+      if (tagProbs) {
+        attributes.tags = Object.keys(tagProbs)
+        attributes.tag_probs = tagProbs
+      }
+      mockFetch({ body: { data: { attributes } } })
       const shouldBlock = action !== 'ALLOW' && blocking
 
       if (shouldBlock) {
         await rejects(
           () => aiguard.evaluate(messages, { block: true }),
-          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === tags &&
-             err.tagProbabilities === tagProbs && JSON.stringify(err.sds) === '[]'
+          err => err.name === 'AIGuardAbortError' && err.reason === reason && err.tags === attributes.tags &&
+             err.tagProbabilities === attributes.tag_probs && JSON.stringify(err.sds) === '[]'
         )
       } else {
         const evaluation = await aiguard.evaluate(messages, { block: true })
         assert.strictEqual(evaluation.action, action)
         assert.strictEqual(evaluation.reason, reason)
         if (tagProbs) {
-          assert.strictEqual(evaluation.tags, tags)
-          assert.strictEqual(evaluation.tagProbabilities, tagProbs)
+          assert.strictEqual(evaluation.tags, attributes.tags)
+          assert.strictEqual(evaluation.tagProbabilities, attributes.tag_probs)
         }
         assert.deepStrictEqual(evaluation.sds, [])
       }
@@ -192,8 +194,8 @@ describe('AIGuard SDK', () => {
       },
       {
         messages,
-        ...(tags ? { attack_categories: tags } : {}),
-        ...(tagProbs ? { tag_probs: tagProbs } : {}),
+        ...(attributes.tags ? { attack_categories: attributes.tags } : {}),
+        ...(attributes.tag_probs ? { tag_probs: attributes.tag_probs } : {}),
       })
     })
   }
