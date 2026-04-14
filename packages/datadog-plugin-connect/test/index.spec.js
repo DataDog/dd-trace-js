@@ -9,6 +9,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -172,7 +173,7 @@ describe('Plugin', () => {
           let span
 
           app.use((req, res, next) => {
-            span = tracer.scope().active()._span
+            span = storage('legacy').getStore()?.span
 
             sinon.spy(span, 'finish')
 

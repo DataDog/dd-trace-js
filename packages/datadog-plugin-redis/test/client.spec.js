@@ -139,7 +139,7 @@ describe('Plugin', () => {
           const span = tracer.startSpan('test')
           tracer.scope().activate(span, () => {
             client.get('foo', () => {
-              assert.strictEqual(tracer.scope().active(), span)
+              assert.strictEqual(span.context().active(), span)
             })
           })
         })
