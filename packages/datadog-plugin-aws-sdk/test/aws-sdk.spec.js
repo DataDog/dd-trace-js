@@ -7,6 +7,7 @@ const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { setup, sort } = require('./spec_helpers')
@@ -258,6 +259,7 @@ describe('Plugin', () => {
             service: 'test',
             hooks: {
               request (span, response) {
+                assert.ok(span instanceof PublicSpan)
                 span.setTag('hook.operation', response.request.operation)
                 span.addTags({
                   error: 0,
