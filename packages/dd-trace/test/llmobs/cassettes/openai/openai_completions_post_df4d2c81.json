@@ -1,0 +1,47 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/completions",
+    "headers": {
+      "Content-Length": "208",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.104.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "4.104.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.17.0",
+      "x-stainless-retry-count": "0",
+      "x-stainless-timeout": "600",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"text-embedding-3-small\",\n  \"temperature\": 0.7,\n  \"max_tokens\": 256,\n  \"top_p\": 1,\n  \"frequency_penalty\": 0,\n  \"presence_penalty\": 0,\n  \"n\": 1,\n  \"stream\": false,\n  \"prompt\": [\n    \"Hello!\"\n  ]\n}"
+  },
+  "response": {
+    "status": {
+      "code": 403,
+      "message": "Forbidden"
+    },
+    "headers": {
+      "CF-RAY": "96b7de3d9e1af83a-IAD",
+      "Connection": "keep-alive",
+      "Content-Encoding": "gzip",
+      "Content-Type": "application/json; charset=utf-8",
+      "Date": "Thu, 07 Aug 2025 15:39:41 GMT",
+      "Server": "cloudflare",
+      "Set-Cookie": "__cf_bm=OFYwF6cVi3Pv7L7knV5hQXA3W7xof_NMi.C8_bh9AJo-1754581181-1.0.1.1-TQmPOyAz69ZEYA00QMY8B0rRy9axaz2YWfWPmCh2ypTiSnKdV9Lz5zHRX0s9UQnVFnvDXo0bFl79YzHU8NWMc107HG3NIRGFZeBiXBT8oLY; path=/; expires=Thu, 07-Aug-25 16:09:41 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "Transfer-Encoding": "chunked",
+      "X-Content-Type-Options": "nosniff",
+      "alt-svc": "h3=\":443\"; ma=86400",
+      "cf-cache-status": "DYNAMIC",
+      "vary": "Origin",
+      "x-envoy-upstream-service-time": "7",
+      "x-request-id": "req_2c156b3433534647ae4cc109367a0886"
+    },
+    "body": "{\n    \"error\": {\n        \"message\": \"You are not allowed to sample from this model\",\n        \"type\": \"invalid_request_error\",\n        \"param\": null,\n        \"code\": null\n    }\n}\n"
+  }
+}
