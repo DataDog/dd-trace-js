@@ -9,8 +9,8 @@ const sinon = require('sinon')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
-const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('cookie-parser', 'cookie-parser', version => {
   describe('Suspicious request blocking - cookie-parser', () => {
@@ -45,6 +45,7 @@ withVersions('cookie-parser', 'cookie-parser', version => {
           rules: path.join(__dirname, 'cookie-parser-rules.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
