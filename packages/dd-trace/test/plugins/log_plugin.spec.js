@@ -65,4 +65,43 @@ describe('LogPlugin', () => {
       assert.strictEqual(message.dd.span_id, span.context().toSpanId())
     })
   })
+
+  it('should allow overriding injected dd fields', () => {
+    const data = { message: {} }
+    testLogChannel.publish(data)
+
+    const override = {
+      trace_id: 'custom-trace-id',
+      span_id: 'custom-span-id',
+      service: 'custom-service',
+    }
+
+    data.message.dd = override
+
+    assert.strictEqual(data.message.dd, override)
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(data.message)), {
+      dd: override,
+    })
+    assert.ok(Object.hasOwn(data.message, 'dd'))
+  })
+
+  it('should allow defining dd after injection', () => {
+    const data = { message: {} }
+    testLogChannel.publish(data)
+
+    const override = {
+      trace_id: 'custom-trace-id',
+      span_id: 'custom-span-id',
+    }
+
+    Object.defineProperty(data.message, 'dd', {
+      value: override,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
+
+    assert.strictEqual(data.message.dd, override)
+    assert.ok(Object.hasOwn(data.message, 'dd'))
+  })
 })
