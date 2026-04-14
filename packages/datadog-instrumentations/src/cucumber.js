@@ -258,10 +258,8 @@ function getFinalStatus ({
     return status
   }
 
-  // Branch for ATR and EFD
-  if ( // hasFailedAllRetries is filled according to the retry mechanism
-    (isLastAtrRetry || isLastEfdRetry) && !isLastAttemptToFix
-  ) {
+  // ATR and EFD: pass unless every attempt failed
+  if (isLastAtrRetry || isLastEfdRetry) {
     return hasFailedAllRetries ? 'fail' : 'pass'
   }
 
