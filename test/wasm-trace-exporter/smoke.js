@@ -27,6 +27,7 @@ process.env.DD_LLMOBS_ENABLED = 'false'
 
 let receivedPayload = null
 let requestCount = 0
+let failNextN = 0
 
 const server = http.createServer((req, res) => {
   requestCount++
@@ -34,12 +35,24 @@ const server = http.createServer((req, res) => {
   req.on('data', chunk => chunks.push(chunk))
   req.on('end', () => {
     receivedPayload = Buffer.concat(chunks)
-    res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ rate_by_service: {} }))
+    if (failNextN > 0) {
+      failNextN--
+      res.writeHead(503)
+      res.end()
+    } else {
+      res.writeHead(200, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ rate_by_service: {} }))
+    }
   })
 })
 
-server.listen(0, '127.0.0.1', () => {
+function flushAndWait (exporter, waitMs = 500) {
+  return new Promise(resolve => {
+    exporter.flush(() => setTimeout(resolve, waitMs))
+  })
+}
+
+server.listen(0, '127.0.0.1', async () => {
   const port = server.address().port
   process.env.DD_AGENT_HOST = '127.0.0.1'
   process.env.DD_TRACE_AGENT_PORT = String(port)
@@ -54,32 +67,46 @@ server.listen(0, '127.0.0.1', () => {
     process.exit(1)
   }
 
-  const span = tracer.startSpan('smoke-test-operation')
-  span.finish()
-
   const exporter = tracer._tracer?._exporter
-  if (exporter && exporter.flush) {
-    exporter.flush(() => {
-      setTimeout(() => {
-        server.close()
-
-        if (requestCount === 0) {
-          console.error('FAIL: Mock agent received no requests')
-          process.exit(1)
-        }
-
-        if (!receivedPayload || receivedPayload.length === 0) {
-          console.error('FAIL: Received empty payload')
-          process.exit(1)
-        }
-
-        assert(receivedPayload.length > 0, 'Payload should be non-empty')
-        console.log('PASS: wasm trace exporter smoke test - received %d bytes', receivedPayload.length)
-      }, 300)
-    })
-  } else {
+  if (!exporter || !exporter.flush) {
     console.error('FAIL: No exporter with flush found')
     server.close()
     process.exit(1)
+  }
+
+  try {
+    // --- Phase 1: happy path ---
+    const span = tracer.startSpan('smoke-test-operation')
+    span.finish()
+
+    await flushAndWait(exporter)
+
+    assert(requestCount > 0, 'Mock agent should have received at least one request')
+    assert(receivedPayload && receivedPayload.length > 0, 'Payload should be non-empty')
+    console.log('PASS: happy path - received %d bytes', receivedPayload.length)
+
+    // --- Phase 2: retry on 503 ---
+    // The wasm trace exporter now retries with exponential backoff via
+    // SleepCapability (previously retries were disabled on wasm).
+    const beforeRetry = requestCount
+    failNextN = 1
+
+    const retrySpan = tracer.startSpan('smoke-test-retry')
+    retrySpan.finish()
+
+    await flushAndWait(exporter, 2000)
+
+    assert(
+      requestCount >= beforeRetry + 2,
+      `expected at least 2 requests (1 fail + 1 success), got ${requestCount - beforeRetry}`
+    )
+    console.log('PASS: retry on 503 - agent received trace after retry')
+
+    console.log('\nAll smoke tests passed.')
+  } catch (err) {
+    console.error('Test error:', err)
+    process.exitCode = 1
+  } finally {
+    server.close()
   }
 })
