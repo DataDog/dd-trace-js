@@ -5,6 +5,10 @@ const log = require('../../../../dd-trace/src/log')
 // eslint-disable-next-line camelcase, no-undef
 const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
 
+function isModuleSourceType (sourceType) {
+  return sourceType === 'module' || sourceType === 'esm'
+}
+
 const compiler = {
   parse: (sourceText, options) => {
     try {
@@ -31,7 +35,7 @@ const compiler = {
         return meriyah.parse(sourceText.toString(), {
           loc: range,
           ranges: range,
-          module: sourceType === 'module',
+          module: isModuleSourceType(sourceType),
         })
       }
     }
@@ -59,6 +63,7 @@ const compiler = {
 }
 
 module.exports = {
+  isModuleSourceType,
   parse: (...args) => compiler.parse(...args),
   traverse: (...args) => compiler.traverse(...args),
   query: (...args) => compiler.query(...args),

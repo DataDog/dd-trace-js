@@ -2,7 +2,7 @@
 
 // TODO: Move traceIterator to Orchestrion.
 
-const { parse, query, traverse } = require('./compiler')
+const { isModuleSourceType, parse, query, traverse } = require('./compiler')
 
 const tracingChannelPredicate = (node) => (
   node.specifiers?.[0]?.local?.name === 'tr_ch_apm_tracingChannel' ||
@@ -14,11 +14,13 @@ const transforms = module.exports = {
     if (node.body.some(tracingChannelPredicate)) return
 
     const index = node.body.findIndex(child => child.directive === 'use strict')
-    const code = sourceType === 'module'
+    const code = isModuleSourceType(sourceType)
       ? `import { tracingChannel as tr_ch_apm_tracingChannel } from "${dcModule}"`
       : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
 
-    node.body.splice(index + 1, 0, parse(code, { sourceType }).body[0])
+    node.body.splice(index + 1, 0, parse(code, {
+      sourceType: isModuleSourceType(sourceType) ? 'module' : 'script'
+    }).body[0])
   },
 
   tracingChannelDeclaration (state, node) {
