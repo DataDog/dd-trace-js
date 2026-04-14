@@ -1,0 +1,29 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/amazon.nova-pro-v1:0/invoke-with-response-stream",
+    "headers": {
+      "Content-Type": "application/json",
+      "x-amzn-bedrock-accept": "application/json",
+      "Content-Length": "215",
+      "User-Agent": "aws-sdk-js/3.422.0 ua/2.0 os/darwin#24.6.0 lang/js md/nodejs#22.17.0 api/bedrock-runtime#3.422.0",
+      "Connection": "keep-alive"
+    },
+    "body": "{\"system\":[{\"text\":\"Please respond with one sentence.\"}],\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"What is the capital of France?\"}]}],\"inferenceConfig\":{\"maxTokens\":512,\"topP\":0.1,\"topK\":20,\"temperature\":0.5}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/vnd.amazon.eventstream",
+      "Date": "Thu, 02 Oct 2025 19:46:53 GMT",
+      "Transfer-Encoding": "chunked",
+      "X-Amzn-Bedrock-Content-Type": "application/json",
+      "x-amzn-RequestId": "304f6fcf-dbd6-4988-9b40-00d9292ffec5"
+    },
+    "body": "base64:AAAAtAAAAEtha+mlCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SnRaWE56WVdkbFUzUmhjblFpT25zaWNtOXNaU0k2SW1GemMybHpkR0Z1ZENKOWZRPT0iLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyIn2EuFbLAAAA/QAAAEs0iNOdCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SmpiMjUwWlc1MFFteHZZMnRFWld4MFlTSTZleUprWld4MFlTSTZleUowWlhoMElqb2lWR2hsSW4wc0ltTnZiblJsYm5SQ2JHOWphMGx1WkdWNElqb3dmWDA9IiwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWSJ9JeC8fwAAAM4AAABL0gkRyws6ZXZlbnQtdHlwZQcABWNodW5rDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiYnl0ZXMiOiJleUpqYjI1MFpXNTBRbXh2WTJ0VGRHOXdJanA3SW1OdmJuUmxiblJDYkc5amEwbHVaR1Y0SWpvd2ZYMD0iLCJwIjoiYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXpBQkNERUZHSElKIn19Iz6eAAAA6gAAAEvmSJgPCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SmpiMjUwWlc1MFFteHZZMnRFWld4MFlTSTZleUprWld4MFlTSTZleUowWlhoMElqb2lJR05oY0dsMFlXd2dZMmwwZVNKOUxDSmpiMjUwWlc1MFFteHZZMnRKYm1SbGVDSTZNWDE5IiwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0In1xt8leAAAAzAAAAEuoyUKrCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SmpiMjUwWlc1MFFteHZZMnRUZEc5d0lqcDdJbU52Ym5SbGJuUkNiRzlqYTBsdVpHVjRJam94ZlgwPSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRkdIIn2R5LfxAAABFAAAAEvaEKWWCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SmpiMjUwWlc1MFFteHZZMnRFWld4MFlTSTZleUprWld4MFlTSTZleUowWlhoMElqb2lJRzltSUVaeVlXNWpaU0JwY3lCUVlYSnBjeTRpZlN3aVkyOXVkR1Z1ZEVKc2IyTnJTVzVrWlhnaU9qSjlmUT09IiwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVldYIn1lesVRAAAAygAAAEsnibcLCzpldmVudC10eXBlBwAFY2h1bmsNOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJieXRlcyI6ImV5SmpiMjUwWlc1MFFteHZZMnRUZEc5d0lqcDdJbU52Ym5SbGJuUkNiRzlqYTBsdVpHVjRJam95ZlgwPSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRiJ9ERsZYwAAAMcAAABL3xlzugs6ZXZlbnQtdHlwZQcABWNodW5rDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsiYnl0ZXMiOiJleUp0WlhOellXZGxVM1J2Y0NJNmV5SnpkRzl3VW1WaGMyOXVJam9pWlc1a1gzUjFjbTRpZlgwPSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRkcifVdJFUsAAAI/AAAAS+qVyS0LOmV2ZW50LXR5cGUHAAVjaHVuaw06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7ImJ5dGVzIjoiZXlKdFpYUmhaR0YwWVNJNmV5SjFjMkZuWlNJNmV5SnBibkIxZEZSdmEyVnVjeUk2TVRNc0ltOTFkSEIxZEZSdmEyVnVjeUk2T0N3aVkyRmphR1ZTWldGa1NXNXdkWFJVYjJ0bGJrTnZkVzUwSWpvd0xDSmpZV05vWlZkeWFYUmxTVzV3ZFhSVWIydGxia052ZFc1MElqb3dmU3dpYldWMGNtbGpjeUk2ZTMwc0luUnlZV05sSWpwN2ZYMHNJbUZ0WVhwdmJpMWlaV1J5YjJOckxXbHVkbTlqWVhScGIyNU5aWFJ5YVdOeklqcDdJbWx1Y0hWMFZHOXJaVzVEYjNWdWRDSTZNVE1zSW05MWRIQjFkRlJ2YTJWdVEyOTFiblFpT2pnc0ltbHVkbTlqWVhScGIyNU1ZWFJsYm1ONUlqb3lOemdzSW1acGNuTjBRbmwwWlV4aGRHVnVZM2tpT2prMkxDSmpZV05vWlZKbFlXUkpibkIxZEZSdmEyVnVRMjkxYm5RaU9qQXNJbU5oWTJobFYzSnBkR1ZKYm5CMWRGUnZhMlZ1UTI5MWJuUWlPakI5ZlE9PSIsInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQyJ9oQ6Zsw=="
+  }
+}
