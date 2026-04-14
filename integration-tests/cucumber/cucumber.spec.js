@@ -2528,11 +2528,21 @@ describe(`cucumber@${version} commonJS`, () => {
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                     assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   }
+                  // Final status: quarantined/disabled always reports 'skip' regardless of result;
+                  // otherwise pass only when every attempt passed, fail otherwise
+                  const expectedFinalStatus = (isQuarantined || isDisabled)
+                    ? 'skip'
+                    : (shouldAlwaysPass ? 'pass' : 'fail')
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
+                } else {
+                  // Intermediate ATF executions must not carry a final status tag
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
                 }
               } else {
                 assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
                 assert.ok(!(TEST_IS_RETRY in test.meta))
                 assert.ok(!(TEST_RETRY_REASON in test.meta))
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
               }
             }
           })

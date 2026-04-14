@@ -241,6 +241,7 @@ function getFinalStatus ({
   isLastAtrRetry,
   isLastEfdRetry,
   isLastAttemptToFix,
+  hasPassedAllRetries,
   isQuarantined,
   isDisabled,
 }) {
@@ -256,10 +257,17 @@ function getFinalStatus ({
   if (!isLastAtrRetry && !isLastEfdRetry && !isLastAttemptToFix) {
     return status
   }
+
+  // Branch for ATR and EFD
   if ( // hasFailedAllRetries is filled according to the retry mechanism
-    isLastAtrRetry || isLastEfdRetry || isLastAttemptToFix
+    (isLastAtrRetry || isLastEfdRetry) && !isLastAttemptToFix
   ) {
     return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+
+  // Branch for ATF (We need to check hasPassedAllRetries)
+  if (!(isLastAtrRetry || isLastEfdRetry) && isLastAttemptToFix) {
+    return hasPassedAllRetries ? 'pass' : 'fail'
   }
 }
 
@@ -458,6 +466,7 @@ function wrapRun (pl, isLatestVersion, version) {
             isLastAtrRetry,
             isLastEfdRetry,
             isLastAttemptToFix: isLastAttemptToFixRetry,
+            hasPassedAllRetries,
             isQuarantined,
             isDisabled,
           })
