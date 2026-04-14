@@ -1116,6 +1116,50 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           once(childProcess, 'exit'),
         ])
       })
+
+      // ---- SUITE REPORTING BUG REPRODUCTION ----
+      // Delete this context block once the bug is understood or fixed.
+      context('suite reporting - tests with no describe wrapper', () => {
+        // When a test file uses only top-level it() calls (no describe() block),
+        // mocha never emits a non-root 'suite' event for that file.
+        //
+        // The 'suite' handler in packages/datadog-instrumentations/src/mocha/main.js
+        // only fires testSuiteStartCh when it encounters a non-root suite with
+        // suite.tests.length > 0. With no non-root suites at all, the condition is
+        // never met: no suite context is stored in testFileToSuiteCtx, no suite
+        // span is created by the plugin, and no test_suite_end event is emitted.
+        //
+        // Meanwhile tests run and report normally as mocha.test spans.
+        it.only('reports a test_suite_end event for a file whose tests have no describe wrapper', async () => {
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(e => e.content)
+              const suiteEvents = events.filter(event => event.type === 'test_suite_end').map(e => e.content)
+
+              // Test events are reported regardless of the bug — this passes
+              assert.strictEqual(tests.length, 2, 'Expected 2 test events')
+
+              // Suite event must be reported exactly once for the file.
+              // This assertion FAILS when the bug is present (suiteEvents.length === 0).
+              assert.strictEqual(suiteEvents.length, 1, 'Expected 1 test_suite_end event for the test file')
+            })
+
+          childProcess = exec(
+            'node node_modules/mocha/bin/mocha ./ci-visibility/mocha-plugin-tests/top-level-it-no-describe.js',
+            {
+              cwd,
+              env: envVars,
+            }
+          )
+
+          await Promise.all([
+            eventsPromise,
+            once(childProcess, 'exit'),
+          ])
+        })
+      })
+      // ---- END SUITE REPORTING BUG REPRODUCTION ----
     })
   })
 
