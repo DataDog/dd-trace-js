@@ -6,6 +6,10 @@ stages:
   - macrobenchmarks
   - macrobenchmarks-gate
   - macrobenchmarks-notify
+  - node-express-realworld-parallel
+  - node-express-realworld-parallel-slo
+  - node-hapi-redis-parallel
+  - node-hapi-redis-parallel-slo
 
 # Config Registry CI jobs
 validate_supported_configurations_v2_local_file:
@@ -26,6 +30,12 @@ include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
+  - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
+    file: '.gitlab/ci-node-express-realworld-parallel.yml'
+    ref: 'fayssal/integrate'
+  - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
+    file: '.gitlab/ci-node-hapi-redis-parallel.yml'
+    ref: 'fayssal/integrate'
 
 workflow:
   auto_cancel:
