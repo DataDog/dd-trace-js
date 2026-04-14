@@ -13,6 +13,7 @@ const {
   AI_GUARD_TARGET_TAG_KEY,
   AI_GUARD_REASON_TAG_KEY,
   AI_GUARD_ACTION_TAG_KEY,
+  AI_GUARD_EVENT_TAG_KEY,
   AI_GUARD_BLOCKED_TAG_KEY,
   AI_GUARD_META_STRUCT_KEY,
   AI_GUARD_TOOL_NAME_TAG_KEY,
@@ -165,6 +166,7 @@ class AIGuard extends NoopAIGuard {
         // keepTrace must be called before executeRequest so the sampling decision
         // is propagated correctly to outgoing HTTP client calls.
         keepTrace(rootSpan, AI_GUARD)
+        rootSpan.setTag(AI_GUARD_EVENT_TAG_KEY, 'true')
       }
       let response
       try {

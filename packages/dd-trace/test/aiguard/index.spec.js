@@ -17,6 +17,7 @@ const telemetryMetrics = require('../../src/telemetry/metrics')
 const appsecNamespace = telemetryMetrics.manager.namespace('appsec')
 const { USER_KEEP } = require('../../../../ext/priority')
 const { SAMPLING_MECHANISM_AI_GUARD, DECISION_MAKER_KEY } = require('../../src/constants')
+const { AI_GUARD_EVENT_TAG_KEY } = require('../../src/aiguard/tags')
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -466,6 +467,19 @@ describe('AIGuard SDK', () => {
     const result = await client.evaluate(toolCall)
     assert.strictEqual(result.action, 'ALLOW')
     assert.strictEqual(result.reason, 'AI Guard is not enabled')
+  })
+
+  it('test ai_guard.event tag on root span', async () => {
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+    await tracer.trace('root', async () => {
+      await aiguard.evaluate(prompt, { block: false })
+    })
+    await agent.assertSomeTraces(traces => {
+      const rootSpan = traces[0][0]
+      assert.strictEqual(rootSpan.meta[AI_GUARD_EVENT_TAG_KEY], 'true')
+    })
   })
 
   const sites = [
