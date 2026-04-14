@@ -39,7 +39,7 @@ class PublicSpan {
   }
 
   addTags (tags) {
-    if (tags[SERVICE_KEY] || tags[SERVICE_NAME_KEY]) {
+    if (tags && (tags[SERVICE_KEY] || tags[SERVICE_NAME_KEY])) {
       this._span.setTag(SVC_SRC_KEY, 'm')
     }
     this._span.addTags(tags)
