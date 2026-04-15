@@ -24,11 +24,10 @@ await container.items.create({
 
 const deleteQuery = {
   query: 'SELECT * FROM testContainer p WHERE p.productModel = "Model 1"',
-};
+}
 const { resources: toDelete } = await container.items
   .query(deleteQuery, { enableCrossPartitionQuery: true })
-  .fetchAll();
+  .fetchAll()
 for (const item of toDelete) {
-  await container.item(item.id, 'Test Product').delete();
+  await container.item(item.id, 'Test Product').delete()
 }
-

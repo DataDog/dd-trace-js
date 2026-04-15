@@ -3,20 +3,18 @@
 const assert = require('node:assert/strict')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { ANY_STRING, assertObjectContains } = require('../../../integration-tests/helpers')
 const { setup, teardown } = require('./cosmos-helpers')
 
 describe('Plugin', () => {
   describe('azure-cosmos', () => {
     withVersions('azure-cosmos', '@azure/cosmos', (version) => {
       let client
-      let database
       let container
 
       beforeEach(async () => {
         // Provision DB/container without emitting azure-cosmos spans (plugin subscriptions stay off).
         await agent.load('azure-cosmos', { enabled: false })
-          ; ({ client, database, container } = await setup())
+        ; ({ client, container } = await setup())
         agent.reload('azure-cosmos', { enabled: true })
       })
 
@@ -51,7 +49,10 @@ describe('Plugin', () => {
       })
 
       it('should create spans with callback assertion', async () => {
-        const expectedResources = ['upsert /dbs/testDatabase/colls/testContainer/docs', 'read /dbs/testDatabase/colls/testContainer/docs', 'query /dbs/testDatabase/colls/testContainer/docs', 'delete /dbs/testDatabase/colls/testContainer/docs/item1']
+        const expectedResources = ['upsert /dbs/testDatabase/colls/testContainer/docs',
+          'read /dbs/testDatabase/colls/testContainer/docs',
+          'query /dbs/testDatabase/colls/testContainer/docs',
+          'delete /dbs/testDatabase/colls/testContainer/docs/item1']
         // Callback-based assertion — for complex multi-span assertions
         const expectedSpanPromise = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
@@ -69,26 +70,26 @@ describe('Plugin', () => {
 
           assert(span.meta['http.useragent'].includes('azure-cosmos-js/'))
           assert(parseInt(span.meta['http.status_code']) >= 200 && parseInt(span.meta['http.status_code']) < 300)
-
         })
 
         container.items.upsert({ id: 'item1', productName: 'Test Product', productModel: 'Model 1' })
 
         const deleteQuery = {
           query: 'SELECT * FROM testContainer p WHERE p.productModel = "Model 1"',
-        };
+        }
         const { resources: toDelete } = await container.items
           .query(deleteQuery, { enableCrossPartitionQuery: true })
-          .fetchAll();
+          .fetchAll()
         for (const item of toDelete) {
-          await container.item(item.id, 'Test Product').delete();
+          await container.item(item.id, 'Test Product').delete()
         }
 
         await expectedSpanPromise
       })
 
       it('should create spans if an error occurs', async () => {
-        const expectedResources = ['create /dbs/testDatabase/colls/testContainer/docs', 'upsert /dbs/testDatabase/colls/testContainer/docs']
+        const expectedResources = ['create /dbs/testDatabase/colls/testContainer/docs',
+          'upsert /dbs/testDatabase/colls/testContainer/docs']
         // Callback-based assertion — for complex multi-span assertions
         const expectedSpanPromise = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
@@ -111,7 +112,6 @@ describe('Plugin', () => {
             assert(span.meta['http.useragent'].includes('azure-cosmos-js/'))
           }
         })
-
 
         container.items.upsert({ id: 'item1', productName: 'Test Product', productModel: 'Model 1' })
 

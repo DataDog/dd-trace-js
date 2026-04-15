@@ -1,3 +1,5 @@
+'use strict'
+
 async function setup() {
   const { CosmosClient } = require('@azure/cosmos')
   const client = new CosmosClient({
@@ -11,7 +13,7 @@ async function setup() {
     partitionKey: { paths: ['/productName'], kind: 'Hash' },
   })
 
-  return { client, database, container }
+  return { client, container }
 }
 
 async function teardown(client) {
