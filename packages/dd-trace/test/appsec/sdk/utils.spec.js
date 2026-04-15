@@ -19,7 +19,6 @@ describe('Appsec SDK utils', () => {
     it('should return root span if there are no childs', () => {
       tracer.trace('parent', {}, parent => {
         const root = getRootSpan()
-        const root = getRootSpan()
 
         assert.strictEqual(root, parent._span)
       })
