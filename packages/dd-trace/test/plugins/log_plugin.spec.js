@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 const { channel } = require('dc-polyfill')
+const { storage } = require('../../../datadog-core')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
@@ -53,14 +54,14 @@ describe('LogPlugin', () => {
   it('should include trace_id and span_id when a span is active', () => {
     const span = tracer.startSpan('test')
 
-    tracer.scope().activate(span, () => {
+    storage('legacy').run({ span }, () => {
       const data = { message: {} }
       testLogChannel.publish(data)
       const { message } = data
 
       assertObjectContains(message.dd, config)
 
-      // Should have trace/span data when none is active
+      // Should have trace/span data when a span is active
       assert.strictEqual(message.dd.trace_id, span.context().toTraceId(true))
       assert.strictEqual(message.dd.span_id, span.context().toSpanId())
     })

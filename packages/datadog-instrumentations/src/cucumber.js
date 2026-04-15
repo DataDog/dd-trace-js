@@ -235,6 +235,40 @@ function getPickleByFile (runtimeOrCoodinator) {
   }, {})
 }
 
+function getFinalStatus ({
+  status,
+  hasFailedAllRetries,
+  isLastAtrRetry,
+  isLastEfdRetry,
+  isLastAttemptToFix,
+  hasPassedAllRetries,
+  isQuarantined,
+  isDisabled,
+}) {
+  // Note that intermediate executions DO NOT report a final status tag
+
+  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
+  // the final status of its last execution should be reported as 'skip'.
+  if (isQuarantined || isDisabled || status === 'skip') {
+    return 'skip'
+  }
+
+  // When no retry feature is active, every execution is final
+  if (!isLastAtrRetry && !isLastEfdRetry && !isLastAttemptToFix) {
+    return status
+  }
+
+  // ATR and EFD: pass unless every attempt failed
+  if (isLastAtrRetry || isLastEfdRetry) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+
+  // Branch for ATF (We need to check hasPassedAllRetries)
+  if (isLastAttemptToFix) {
+    return hasPassedAllRetries ? 'pass' : 'fail'
+  }
+}
+
 function wrapRun (pl, isLatestVersion, version) {
   if (patched.has(pl)) return
 
@@ -262,7 +296,7 @@ function wrapRun (pl, isLatestVersion, version) {
     testStartCh.runStores(ctx, () => {})
     const promises = {}
     try {
-      this.eventBroadcaster.on('envelope', async (testCase) => {
+      const onEnvelope = async (testCase) => {
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
@@ -280,7 +314,7 @@ function wrapRun (pl, isLatestVersion, version) {
             const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
 
             // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
-            if (isFlakyTestRetriesEnabled && isAtrRetry === false) {
+            if (isFlakyTestRetriesEnabled) {
               const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
               const atrKey = `${this.pickle.uri}:${nameForKey}`
               if (atrStatusesByScenarioKey.has(atrKey)) {
@@ -303,13 +337,15 @@ function wrapRun (pl, isLatestVersion, version) {
             testStartCh.runStores(newCtx, () => {})
           }
         }
-      })
+      }
+      this.eventBroadcaster.on('envelope', onEnvelope)
       let promise
 
       testFnCh.runStores(ctx, () => {
         promise = run.apply(this, arguments)
       })
       promise.finally(async () => {
+        this.eventBroadcaster.removeListener('envelope', onEnvelope)
         const result = this.getWorstStepResult()
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
@@ -408,6 +444,31 @@ function wrapRun (pl, isLatestVersion, version) {
         if (promises.hitBreakpointPromise) {
           await promises.hitBreakpointPromise
         }
+
+        // Notice that ATR is handled using cucumber native retries features.
+        // Therefore, if we reach this point, we are certain that it's the last ATR execution
+        const isLastAtrRetry = isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0
+
+        const statuses = lastStatusByPickleId.get(this.pickle.id)
+        const isLastEfdRetry = isEfdRetry && statuses?.length === earlyFlakeDetectionNumRetries + 1
+        const isLastAttemptToFixRetry = isAttemptToFix && statuses?.length === testManagementAttemptToFixRetries + 1
+
+        // Intermediate (non-last EFD or ATF retries) executions do not report a final status
+        const isIntermediateExecution = (isEfdRetry && !isLastEfdRetry) || (isAttemptToFix && !isLastAttemptToFixRetry)
+
+        const finalStatus = isIntermediateExecution
+          ? undefined
+          : getFinalStatus({
+            status,
+            hasFailedAllRetries,
+            isLastAtrRetry,
+            isLastEfdRetry,
+            isLastAttemptToFix: isLastAttemptToFixRetry,
+            hasPassedAllRetries,
+            isQuarantined,
+            isDisabled,
+          })
+
         testFinishCh.publish({
           status,
           skipReason,
@@ -424,6 +485,7 @@ function wrapRun (pl, isLatestVersion, version) {
           isQuarantined,
           isModified,
           ...attemptCtx.currentStore,
+          finalStatus,
         })
       })
       return promise
