@@ -2461,6 +2461,16 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.enabled, false)
   })
 
+  it('should not disable remoteConfig for Azure App Services (WEBSITE_SITE_NAME without FUNCTIONS env vars)', () => {
+    // App Services sets WEBSITE_SITE_NAME but not FUNCTIONS_WORKER_RUNTIME or FUNCTIONS_EXTENSION_VERSION.
+    // IS_SERVERLESS must remain false so RC and DI work normally via the agent sidecar.
+    process.env.WEBSITE_SITE_NAME = 'my-app-service'
+
+    const config = getConfig()
+
+    assert.strictEqual(config.remoteConfig.enabled, true)
+  })
+
   it('should send empty array when remote config is called on empty options', () => {
     const config = getConfig()
 
