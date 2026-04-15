@@ -6,6 +6,11 @@
   "iterations": 5,
   "instructions": true,
   "variants": {
+    "control": {
+      "env": {
+        "PROFILER": ""
+      }
+    },
     "with-cpu-profiler": {
       "env": {
         "PROFILER": "wall"
