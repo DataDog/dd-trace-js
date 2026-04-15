@@ -5,6 +5,7 @@ module.exports = {
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
   'apollo-server-core': () => require('../apollo-server-core'),
+  '@aws/durable-execution-sdk-js': () => require('../aws-durable-execution'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@azure/event-hubs': () => require('../azure-event-hubs'),
   '@azure/functions': () => require('../azure-functions'),
