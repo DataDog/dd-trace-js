@@ -398,6 +398,43 @@ describe('blocking', () => {
       sinon.assert.calledOnce(res.constructor.prototype.end)
     })
   })
+
+  describe('security response ID', () => {
+    it('should block with security response id in custom redirect url', () => {
+      const actionParameters = {
+        status_code: 301,
+        location: '/you-have-been-blocked?sec_id=[security_response_id]',
+        security_response_id: '1337',
+      }
+      setTemplates(config)
+
+      const blocked = block(req, res, rootSpan, null, actionParameters)
+
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithExactly(res.writeHead, 301, {
+        Location: '/you-have-been-blocked?sec_id=1337',
+      })
+      sinon.assert.calledOnce(res.constructor.prototype.end)
+    })
+
+    it('should block with security response id in custom template', () => {
+      const actionParameters = {
+        type: 'html',
+        security_response_id: '1337',
+      }
+      setTemplates({
+        appsec: {
+          blockedTemplateHtml: 'sec_id: [security_response_id]',
+        },
+      })
+
+      const blocked = block(req, res, rootSpan, null, actionParameters)
+
+      assert.strictEqual(blocked, true)
+      sinon.assert.calledOnceWithMatch(res.writeHead, 403)
+      sinon.assert.calledOnceWithExactly(res.constructor.prototype.end, 'sec_id: 1337')
+    })
+  })
 })
 
 describe('waf actions', () => {
