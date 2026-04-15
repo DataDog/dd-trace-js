@@ -1,6 +1,6 @@
 'use strict'
 
-/* const {
+const {
   FakeAgent,
   hookFile,
   createSandbox,
@@ -38,50 +38,48 @@ describe('esm', () => {
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
+      await agent.load('azure-cosmos', { enabled: false })
+      await setup()
+      await agent.reload('azure-cosmos', { enabled: true })
     })
 
     afterEach(async () => {
       proc && proc.kill('SIGINT')
+      await teardown()
       await agent.stop()
     })
 
-    it('propagates eventdata through an event hub with a cardinality of one', async () => {
+    it('propagates cosmosdb writes to azure function trigger', async () => {
       const envArgs = {
         PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
       }
       proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
 
-      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-eventdata', ({ headers, payload }) => {
+      return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/writeToCosmos', ({ headers, payload }) => {
+        console.log(payload)
         assert.strictEqual(payload.length, 3)
         assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[1][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[1][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[1][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[1][0].meta['span.kind'], 'consumer')
-        assert.strictEqual(parseLinks(payload[1][0]).length, 1)
+        assert.strictEqual(payload[1][0].resource, 'CosmosDB cosmosDBTrigger1')
+        assert.strictEqual(payload[1][0].meta['aas.function.trigger'], 'CosmosDB')
+        assert.strictEqual(payload[1][0].type, 'serverless')
         assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
         assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
         assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
         assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
         assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
         assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
-        assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
 
   })
 })
 
-function parseLinks(span) {
-  return JSON.parse(span.meta['_dd.span_links'] || '[]')
-}
 
 async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
-    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net'
+    //DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net'
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {
@@ -123,4 +121,4 @@ function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
     })
   })
 }
-*/
+

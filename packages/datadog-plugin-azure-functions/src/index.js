@@ -13,6 +13,7 @@ const triggerMap = {
   serviceBusQueue: 'ServiceBus',
   serviceBusTopic: 'ServiceBus',
   eventHub: 'EventHubs',
+  cosmosDB: 'CosmosDB'
 }
 
 class AzureFunctionsPlugin extends TracingPlugin {
@@ -22,7 +23,7 @@ class AzureFunctionsPlugin extends TracingPlugin {
   static type = 'serverless'
   static prefix = 'tracing:datadog:azure:functions:invoke'
 
-  bindStart (ctx) {
+  bindStart(ctx) {
     const meta = getMetaForTrigger(ctx)
     const triggerType = triggerMap[ctx.methodName]
     const isHttpTrigger = triggerType === 'Http'
@@ -74,12 +75,12 @@ class AzureFunctionsPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
-  error (ctx) {
+  error(ctx) {
     this.addError(ctx.error)
     ctx.currentStore.span.setTag('error.message', ctx.error)
   }
 
-  asyncStart (ctx) {
+  asyncStart(ctx) {
     const { methodName, result = {}, webContext } = ctx
     const triggerType = triggerMap[methodName]
 
@@ -94,12 +95,12 @@ class AzureFunctionsPlugin extends TracingPlugin {
     }
   }
 
-  configure (config) {
+  configure(config) {
     return super.configure(web.normalizeConfig(config))
   }
 }
 
-function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
+function getMetaForTrigger({ functionName, methodName, invocationContext }) {
   let meta = {
     'aas.function.name': functionName,
     'aas.function.trigger': mapTriggerTag(methodName),
@@ -127,18 +128,23 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'resource.name': `EventHubs ${functionName}`,
       'span.kind': 'consumer',
     }
+  } else if (triggerMap[methodName] === 'CosmosDB') {
+    meta = {
+      ...meta,
+      'resource.name': `CosmosDB ${functionName}`,
+    }
   }
 
   return meta
 }
 
-function mapTriggerTag (methodName) {
+function mapTriggerTag(methodName) {
   return triggerMap[methodName] || 'Unknown'
 }
 
 // message & messages & batch with cardinality of 1 == applicationProperties
 // messages with cardinality of many == applicationPropertiesArray
-function setSpanLinks (triggerType, tracer, span, ctx) {
+function setSpanLinks(triggerType, tracer, span, ctx) {
   const cardinality = ctx.invocationContext.options.trigger.cardinality
   const triggerMetadata = ctx.invocationContext.triggerMetadata
   const isServiceBus = triggerType === 'ServiceBus'

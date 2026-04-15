@@ -38,7 +38,7 @@ lineReader.on('close', () => {
   }
 })
 
-function getProdDeps() {
+function getProdDeps () {
   // Add root package (dd-trace) to the set of dependencies manually as it is not included in the yarn list output.
   const deps = new Set([normalizeDepName(rootPackageName)])
 
@@ -51,7 +51,7 @@ function getProdDeps() {
   return deps
 }
 
-function addYarnProdDeps(deps, cwd) {
+function addYarnProdDeps (deps, cwd) {
   // Use yarn to get full tree of production (non-dev) dependencies (format is ndjson)
   const stdout = execSync('yarn list --production --json', {
     encoding: 'utf8',
@@ -68,7 +68,7 @@ function addYarnProdDeps(deps, cwd) {
   }
 }
 
-function addNpmProdDeps(deps, cwd) {
+function addNpmProdDeps (deps, cwd) {
   // Use npm to get full tree of production (non-dev) dependencies
   const stdout = execSync('npm list --omit=dev --json --depth=10', {
     encoding: 'utf8',
@@ -81,7 +81,7 @@ function addNpmProdDeps(deps, cwd) {
   collectDependencies(deps, parsed)
 }
 
-function collectDependencies(deps, obj) {
+function collectDependencies (deps, obj) {
   if (!obj.dependencies) return
 
   for (const dep of Object.keys(obj.dependencies)) {
@@ -98,7 +98,7 @@ function collectDependencies(deps, obj) {
   }
 }
 
-function collectFromTrees(trees, deps) {
+function collectFromTrees (trees, deps) {
   for (const node of trees) {
     if (typeof node?.name !== 'string') continue
 
@@ -111,7 +111,7 @@ function collectFromTrees(trees, deps) {
   }
 }
 
-function addVendoredDeps(deps) {
+function addVendoredDeps (deps) {
   const vendoredDepsPath = join(__dirname, '..', '.github', 'vendored-dependencies.csv')
 
   // If the vendored dependencies file doesn't exist, skip
@@ -134,7 +134,7 @@ function addVendoredDeps(deps) {
   }
 }
 
-function getAliasMap() {
+function getAliasMap () {
   const rootPackagePath = join(__dirname, '..', 'package.json')
   const vendorPackagePath = join(__dirname, '..', 'vendor', 'package.json')
   const map = new Map()
@@ -145,7 +145,7 @@ function getAliasMap() {
   return map
 }
 
-function collectAliasesFromPackageJson(packagePath, map) {
+function collectAliasesFromPackageJson (packagePath, map) {
   if (!existsSync(packagePath)) return
 
   const packageJson = require(packagePath)
@@ -156,7 +156,7 @@ function collectAliasesFromPackageJson(packagePath, map) {
   collectAliasesFromDeps(optionalDeps, map)
 }
 
-function collectAliasesFromDeps(deps, map) {
+function collectAliasesFromDeps (deps, map) {
   for (const [alias, spec] of Object.entries(deps)) {
     if (typeof spec !== 'string' || !spec.startsWith('npm:')) continue
 
@@ -170,11 +170,11 @@ function collectAliasesFromDeps(deps, map) {
   }
 }
 
-function normalizeDepName(name) {
+function normalizeDepName (name) {
   return aliasMap.get(name) ?? name
 }
 
-function checkLicenses(typeDeps) {
+function checkLicenses (typeDeps) {
   const missing = []
   const extraneous = []
 
