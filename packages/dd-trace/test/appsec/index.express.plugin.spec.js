@@ -11,10 +11,11 @@ const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
 const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const { json } = require('../../src/appsec/blocked_templates')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
+
+const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {
@@ -78,6 +79,7 @@ withVersions('express', 'express', version => {
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
@@ -228,6 +230,7 @@ withVersions('express', 'express', version => {
           rules: path.join(__dirname, 'rules-example.json'),
         },
       }))
+      setTestBlockingTemplates()
     })
 
     afterEach(() => {
