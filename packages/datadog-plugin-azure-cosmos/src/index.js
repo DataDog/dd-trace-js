@@ -15,60 +15,60 @@ class AzureCosmosPlugin extends DatabasePlugin {
   static prefix = 'tracing:orchestrion:@azure/cosmos:executePlugins'
   static peerServicePrecursors = ['db.name']
 
-  operationName() {
+  operationName () {
     return 'cosmosdb.query'
   }
 
-  asyncEnd(ctx) {
-    var span = ctx.currentStore?.span;
+  asyncEnd (ctx) {
+    const span = ctx.currentStore?.span
     if (span != null) {
-      const result = ctx.result;
+      const result = ctx.result
       if (result != null) {
         if (result.code != null) {
-          span.setTag("http.status_code", result.code);
+          span.setTag('http.status_code', result.code)
         }
-        if (result.substatus != undefined) {
-          span.setTag("http.status_subcode", result.substatus);
+        if (result.substatus !== undefined) {
+          span.setTag('http.status_subcode', result.substatus)
         }
       }
-      span.finish();
+      span.finish()
     }
   }
 
-  error(ctx) {
-    var span = ctx.currentStore?.span;
-    this.addError(ctx.error, span);
+  error (ctx) {
+    const span = ctx.currentStore?.span
+    this.addError(ctx.error, span)
     if (span != null) {
-      const error = ctx.error;
+      const error = ctx.error
       if (error != null) {
         if (error.code != null) {
-          span.setTag("http.status_code", error.code);
+          span.setTag('http.status_code', error.code)
         }
-        if (error.substatus != undefined) {
-          span.setTag("http.status_subcode", error.substatus);
+        if (error.substatus !== undefined) {
+          span.setTag('http.status_subcode', error.substatus)
         }
       }
     }
   }
 
-  bindStart(ctx) {
+  bindStart (ctx) {
     // executePlugins(diagnosticNode, requestContext, next, on) — `on` is PluginOn.request | PluginOn.operation
-    const pluginOn = ctx.arguments?.[3];
+    const pluginOn = ctx.arguments?.[3]
 
-
-    const requestContext = ctx.arguments?.[1];
-    const resource = this.getResource(requestContext);
-    const { dbName, containerName } = this.getDbInfo(requestContext);
-    const connectionMode = this.getConnectionMode(requestContext);
-    const { outHost, userAgent } = this.getHttpInfo(requestContext);
+    const requestContext = ctx.arguments?.[1]
+    const resource = this.getResource(requestContext)
+    const { dbName, containerName } = this.getDbInfo(requestContext)
+    const connectionMode = this.getConnectionMode(requestContext)
+    const { outHost, userAgent } = this.getHttpInfo(requestContext)
     // getting really specific here but otherwise we get doubled up read spans
-    if (pluginOn === "request" && ((!resource.includes("read") && !resource.includes("query")) || (resource.includes("read") && requestContext.resourceType != "docs"))) {
-      ctx.currentStore = { ...(storage('legacy').getStore() || {}) };
-      return ctx.currentStore;
+    if (pluginOn === 'request' && ((!resource.includes('read') && !resource.includes('query')) ||
+      (resource.includes('read') && requestContext.resourceType !== 'docs'))) {
+      ctx.currentStore = { ...storage('legacy').getStore() }
+      return ctx.currentStore
     }
 
     this.startSpan(this.operationName(), {
-      resource: resource,
+      resource,
       type: 'cosmosdb',
       kind: 'client',
       meta: {
@@ -79,79 +79,73 @@ class AzureCosmosPlugin extends DatabasePlugin {
         'cosmosdb.connection.mode': connectionMode,
         'http.useragent': userAgent,
         'out.host': outHost,
-      }
-    }, ctx);
+      },
+    }, ctx)
 
-    return ctx.currentStore;
+    return ctx.currentStore
   }
 
-  getResource(requestContext) {
+  getResource (requestContext) {
     if (requestContext != null) {
-      const operationType = requestContext.operationType;
-      const resourceLink = requestContext.path;
-      return operationType + " " + resourceLink;
+      const operationType = requestContext.operationType
+      const resourceLink = requestContext.path
+      return operationType + ' ' + resourceLink
     }
-    return null;
+    return null
   }
 
-
-  getDbInfo(requestContext) {
-    var dbName = null;
-    var containerName = null;
+  getDbInfo (requestContext) {
+    let dbName = null
+    let containerName = null
     if (requestContext != null) {
-      if (requestContext.operationType === "create" && requestContext.resourceType === "dbs" && requestContext.body != null) {
-        if (requestContext.body.id != null) {
-          dbName = requestContext.body.id;
-        }
+      if (requestContext.operationType === 'create' && requestContext.resourceType === 'dbs' &&
+        requestContext.body != null && requestContext.body.id != null) {
+        dbName = requestContext.body.id
       }
 
-      var resourceLink = requestContext.path;
+      let resourceLink = requestContext.path
       if (resourceLink != null) {
-        if (resourceLink.startsWith("/") && resourceLink.length > 1) {
-          resourceLink = resourceLink.slice(1);
+        if (resourceLink.startsWith('/') && resourceLink.length > 1) {
+          resourceLink = resourceLink.slice(1)
         }
-        const parts = resourceLink.split("/");
-        if (parts.length > 0 && parts[0].toLowerCase() === "dbs" && parts.length >= 2) {
-          dbName = parts[1];
-          if (parts.length >= 4) {
-            if (parts[2].toLowerCase() === "colls" && parts[3].toLowerCase() !== "") {
-              containerName = parts[3];
-            }
+        const parts = resourceLink.split('/')
+        if (parts.length > 0 && parts[0].toLowerCase() === 'dbs' && parts.length >= 2) {
+          dbName = parts[1]
+          if (parts.length >= 4 && parts[2].toLowerCase() === 'colls' && parts[3].toLowerCase() !== '') {
+            containerName = parts[3]
           }
         }
       }
     }
 
-    return { dbName, containerName };
+    return { dbName, containerName }
   }
 
-  getConnectionMode(requestContext) {
+  getConnectionMode (requestContext) {
     if (requestContext != null) {
-      const mode = requestContext.client?.connectionPolicy?.connectionMode;
-      if (mode == 0) {
-        return "gateway";
-      } else if (mode == 1) {
-        return "direct";
-      } else {
-        return "other";
+      const mode = requestContext.client?.connectionPolicy?.connectionMode
+      if (mode === 0) {
+        return 'gateway'
+      } else if (mode === 1) {
+        return 'direct'
       }
+      return 'other'
     }
-    return null;
+    return null
   }
 
-  getHttpInfo(requestContext) {
-    var outHost = null;
-    var userAgent = null;
+  getHttpInfo (requestContext) {
+    let outHost = null
+    let userAgent = null
     if (requestContext != null) {
-      outHost = requestContext.client?.cosmosClientOptions?.endpoint;
-      const headers = requestContext.headers;
+      outHost = requestContext.client?.cosmosClientOptions?.endpoint
+      const headers = requestContext.headers
       if (headers != null) {
-        userAgent = headers['User-Agent'];
+        userAgent = headers['User-Agent']
       }
     }
-    return { outHost, userAgent };
+    return { outHost, userAgent }
   }
-
 }
 
 module.exports = AzureCosmosPlugin

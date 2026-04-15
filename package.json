@@ -140,7 +140,6 @@
     "version.js"
   ],
   "dependencies": {
-    "@azure/cosmos": "^4.9.2",
     "dc-polyfill": "^0.1.10",
     "import-in-the-middle": "^3.0.1"
   },

@@ -1,8 +1,6 @@
 import 'dd-trace/init.js'
 import { app } from '@azure/functions'
 
-
-
 app.cosmosDB('cosmosDBTrigger1', {
   connection: process.env.MyCosmosDB,
   databaseName: 'TestDatabase',
@@ -13,4 +11,4 @@ app.cosmosDB('cosmosDBTrigger1', {
       status: 200,
     }
   },
-});
+})

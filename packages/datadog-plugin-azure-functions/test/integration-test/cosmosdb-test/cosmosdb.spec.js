@@ -1,6 +1,6 @@
 'use strict'
 
-/*const {
+/* const {
   FakeAgent,
   hookFile,
   createSandbox,
@@ -69,7 +69,6 @@ describe('esm', () => {
         assert.strictEqual(parseLinks(payload[2][0]).length, 1)
       })
     }).timeout(60000)
-
 
   })
 })
