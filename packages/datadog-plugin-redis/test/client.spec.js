@@ -209,6 +209,63 @@ describe('Plugin', () => {
         )
       })
 
+      describe.only('with splitByInstance configuration', () => {
+        before(() => {
+          return agent.load('redis', {
+            service: 'custom',
+            splitByInstance: true,
+            allowlist: ['GET'],
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+          client = redis.createClient({ name: 'test' })
+
+          await client.connect()
+        })
+
+        afterEach(async () => {
+          await client.quit()
+        })
+
+        it('should set service name based on connection name', async () => {
+          const promise = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].service, 'custom-test')
+          })
+
+          await client.get('foo')
+          await promise
+        })
+
+        it('should set service source tag to split-by-instance', async () => {
+          const promise = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.split_by_instance')
+          })
+
+          await client.get('foo')
+          await promise
+        })
+
+        withNamingSchema(
+          async () => client.get('foo'),
+          {
+            v0: {
+              opName: 'redis.command',
+              serviceName: 'custom-test',
+            },
+            v1: {
+              opName: 'redis.command',
+              serviceName: 'custom',
+            },
+          }
+        )
+      })
+
       describe('with blocklist', () => {
         before(() => {
           return agent.load('redis', {
