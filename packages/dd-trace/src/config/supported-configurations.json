@@ -1580,6 +1580,16 @@
         "default": "10000"
       }
     ],
+    "DD_RUNTIME_METRICS_NATIVE": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "runtimeMetrics.native"
+        ],
+        "default": "true"
+      }
+    ],
     "DD_RUNTIME_METRICS_GC_ENABLED": [
       {
         "implementation": "A",

@@ -666,7 +666,15 @@ declare namespace tracer {
        * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      eventLoop?: boolean
+      eventLoop?: boolean,
+
+       /**
+       * Whether to use native metrics. When set to false, forces the JS implementation
+       * @default true
+       * @env DD_RUNTIME_METRICS_NATIVE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      native?: boolean
     }
 
     /**
@@ -1849,6 +1857,10 @@ declare namespace tracer {
        */
       tags: string[];
       /**
+       * Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })
+       */
+      tagProbabilities: { [key: string]: number }
+      /**
        * Sensitive Data Scanner findings from the evaluation.
        */
       sds: Object[];
@@ -1867,6 +1879,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })
+       */
+      tagProbabilities: { [key: string]: number }
       /**
        * Sensitive Data Scanner findings from the evaluation.
        */

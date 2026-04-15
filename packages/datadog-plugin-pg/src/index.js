@@ -32,7 +32,7 @@ class PGPlugin extends DatabasePlugin {
       span.setTag('db.stream', 1)
     }
 
-    query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service, !!query.name)
+    query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service.name, !!query.name)
 
     return ctx.currentStore
   }
