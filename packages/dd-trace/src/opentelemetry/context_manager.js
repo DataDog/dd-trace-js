@@ -59,7 +59,6 @@ class ContextManager {
   // converts otel to dd
   with (context, fn, thisArg, ...args) {
     const span = trace.getSpan(context)
-    const ddScope = tracer.scope()
     const run = () => {
       const cb = thisArg == null ? fn : fn.bind(thisArg)
       return this._store.run(context, cb, ...args)
