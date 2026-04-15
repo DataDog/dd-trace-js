@@ -209,7 +209,7 @@ describe('Plugin', () => {
         )
       })
 
-      describe.only('with splitByInstance configuration', () => {
+      describe('with splitByInstance configuration', () => {
         before(() => {
           return agent.load('redis', {
             service: 'custom',
