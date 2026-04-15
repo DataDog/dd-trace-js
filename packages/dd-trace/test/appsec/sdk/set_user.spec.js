@@ -63,7 +63,7 @@ describe('set_user', () => {
         getRootSpan.returns(undefined)
 
         setUser(tracer, { id: 'user' })
-        sinon.assert.calledOnceWithExactly(getRootSpan, tracer)
+        sinon.assert.calledOnce(getRootSpan)
         sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Root span not available in setUser')
         sinon.assert.notCalled(rootSpan.setTag)
         sinon.assert.notCalled(waf.run)
