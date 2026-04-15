@@ -26,12 +26,15 @@ addHook({ name: '@azure/functions', versions: ['>=4'], patchDefault: false }, (a
   // Event Hub triggers
   shimmer.wrap(app, 'eventHub', wrapHandler)
 
+  // CosmosDB triggers
+  shimmer.wrap(app, 'cosmosDB', wrapHandler)
+
   return azureFunction
 })
 
 // The http methods are overloaded so we need to check which type of argument was passed in order to wrap the handler
 // The arguments are either an object with a handler property or the handler function itself
-function wrapHandler (method) {
+function wrapHandler(method) {
   return function (name, arg) {
     if (arg !== null && typeof arg === 'object' && arg.hasOwnProperty('handler')) {
       const options = arg
@@ -44,7 +47,7 @@ function wrapHandler (method) {
   }
 }
 
-function traceHandler (handler, functionName, methodName) {
+function traceHandler(handler, functionName, methodName) {
   return function (...args) {
     const httpRequest = args[0]
     const invocationContext = args[1]

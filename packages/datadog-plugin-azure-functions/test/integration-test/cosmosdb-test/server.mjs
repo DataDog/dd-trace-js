@@ -2,44 +2,27 @@ import 'dd-trace/init.js'
 import { app } from '@azure/functions'
 import { CosmosClient } from '@azure/cosmos'
 
-let client
-let container
-let database
-
-async function setup() {
-  client = new CosmosClient(process.env.MyCosmosDB)
-
-  database = await client.databases.createIfNotExists({ id: 'testDatabase' })
-  container = await database.containers.createIfNotExists({
-    id: 'testContainer',
-    partitionKey: { paths: ['/productName'], kind: 'Hash' },
-  })
-}
-
-async function teardown() {
-  await client.database('testDatabase').delete()
-}
+const client = new CosmosClient(process.env.MyCosmosDB)
+const database = client.database('testDatabase')
+const container = database.container('testContainer')
 
 app.http('writeToCosmos', {
   methods: ['GET', 'POST'],
   authLevel: 'function',
   route: 'writeToCosmos',
   handler: async (request, context) => {
-    context.log('Node HTTP trigger processed a request (Cosmos parity with function_app.py).');
-
-    container.items.upsert({
+    await container.items.upsert({
       id: 'item1',
       productName: 'Test Product',
       productModel: 'Model 1',
     })
 
-    return { status: 200, body: 'Success: ' };
-
+    return { status: 200, body: 'Success: ' }
   },
-});
+})
 
 app.cosmosDB('cosmosDBTrigger1', {
-  connection: process.env.MyCosmosDB,
+  connection: 'MyCosmosDB',
   databaseName: 'testDatabase',
   containerName: 'testContainer',
   createLeaseContainerIfNotExists: true,
@@ -49,5 +32,3 @@ app.cosmosDB('cosmosDBTrigger1', {
     }
   },
 })
-
-export { setup, teardown }

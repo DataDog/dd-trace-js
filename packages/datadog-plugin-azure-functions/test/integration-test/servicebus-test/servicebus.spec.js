@@ -24,9 +24,9 @@ describe('esm', () => {
       'azure-functions-core-tools@4',
       '@azure/service-bus@7.9.5',
     ],
-    false,
-    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-      './packages/datadog-plugin-azure-functions/test/integration-test/servicebus-test/*'])
+      false,
+      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+        './packages/datadog-plugin-azure-functions/test/integration-test/servicebus-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -318,11 +318,11 @@ describe('esm', () => {
   })
 })
 
-function parseLinks (span) {
+function parseLinks(span) {
   return JSON.parse(span.meta['_dd.span_links'] || '[]')
 }
 
-async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
@@ -335,7 +335,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   }, stdioHandler)
 }
 
-function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
+function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc

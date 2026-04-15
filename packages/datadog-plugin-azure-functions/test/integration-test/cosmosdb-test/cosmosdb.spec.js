@@ -1,73 +1,70 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const {
   FakeAgent,
   hookFile,
-  createSandbox,
+  sandboxCwd,
+  useSandbox,
   curlAndAssertMessage,
+  assertObjectContains,
+  stopProc,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
 const { spawn } = require('child_process')
-const { expect, assert } = require('chai')
-const { NODE_MAJOR } = require('../../../../../version')
+const { setup, teardown } = require('./cosmosdb-helpers')
+
 
 describe('esm', () => {
   let agent
   let proc
-  let sandbox
 
-  // TODO: Allow newer versions in Node.js 18 when their breaking change is reverted.
-  // See https://github.com/Azure/azure-functions-nodejs-library/pull/357
-  withVersions('azure-functions', '@azure/functions', NODE_MAJOR < 20 ? '<4.7.3' : '*', version => {
-    before(async function () {
-      this.timeout(60000)
-      sandbox = await createSandbox([
-        `@azure/functions@${version}`,
-        'azure-functions-core-tools@4',
-        '@azure/cosmos@4.9.2',
-      ],
-        false,
-        ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-          './packages/datadog-plugin-azure-functions/test/integration-test/cosmos-test/*'])
-    })
+  withVersions('azure-functions', '@azure/functions', version => {
+    useSandbox([
+      `@azure/functions@${version}`,
+      'azure-functions-core-tools@4',
+      '@azure/event-hubs@6.0.0',
+      '@azure/cosmos@4.9.2',
+    ],
+      false,
+      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+        './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
-    after(async function () {
-      this.timeout(50000)
-      await sandbox.remove()
-    })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
-      await agent.load('azure-cosmos', { enabled: false })
       await setup()
-      await agent.reload('azure-cosmos', { enabled: true })
     })
 
     afterEach(async () => {
-      proc && proc.kill('SIGINT')
+      await stopProc(proc, { signal: 'SIGINT' })
       await teardown()
       await agent.stop()
     })
 
     it('propagates cosmosdb writes to azure function trigger', async () => {
       const envArgs = {
-        PATH: `${sandbox.folder}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`
+        PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
-      proc = await spawnPluginIntegrationTestProc(sandbox.folder, 'func', ['start'], agent.port, undefined, envArgs)
+      proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/writeToCosmos', ({ headers, payload }) => {
-        console.log(payload)
-        assert.strictEqual(payload.length, 3)
-        assert.strictEqual(payload[1][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[1][0].resource, 'CosmosDB cosmosDBTrigger1')
-        assert.strictEqual(payload[1][0].meta['aas.function.trigger'], 'CosmosDB')
-        assert.strictEqual(payload[1][0].type, 'serverless')
-        assert.strictEqual(payload[2][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[2][0].resource, 'EventHubs eventHubTest1')
-        assert.strictEqual(payload[2][0].meta['messaging.operation'], 'receive')
-        assert.strictEqual(payload[2][0].meta['messaging.system'], 'eventhubs')
-        assert.strictEqual(payload[2][0].meta['messaging.destination.name'], 'eh1')
-        assert.strictEqual(payload[2][0].meta['span.kind'], 'consumer')
+        assert.strictEqual(payload.length, 2)
+        assert.strictEqual(payload[0].length, 4)
+        assert.strictEqual(payload[0][0].name, 'azure.functions.invoke')
+        assert.strictEqual(payload[0][1].name, 'cosmosdb.query')
+        assert.strictEqual(payload[0][2].name, 'cosmosdb.query')
+        assert.strictEqual(payload[0][3].name, 'cosmosdb.query')
+        assertObjectContains(payload[1][0], {
+          name: 'azure.functions.invoke',
+          resource: 'CosmosDB cosmosDBTrigger1',
+          type: 'serverless',
+          meta: {
+            'aas.function.trigger': 'CosmosDB',
+            'aas.function.name': 'cosmosDBTrigger1',
+          },
+        })
       })
     }).timeout(60000)
 
@@ -79,12 +76,12 @@ async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, std
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
-    //DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net'
+    DD_TRACE_DISABLED_PLUGINS: 'http,dns,net',
   }
   env = { ...env, ...additionalEnvArgs }
   return spawnProc(command, args, {
     cwd,
-    env
+    env,
   }, stdioHandler)
 }
 
@@ -121,4 +118,3 @@ function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
     })
   })
 }
-
