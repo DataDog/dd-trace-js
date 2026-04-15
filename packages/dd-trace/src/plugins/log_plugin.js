@@ -13,6 +13,9 @@ function messageProxy (message, holder) {
 
       return target[key]
     },
+    set (target, key, value) {
+      return Reflect.set(target, key, value)
+    },
     ownKeys (target) {
       const ownKeys = Reflect.ownKeys(target)
       if (!Object.hasOwn(target, 'dd') && Reflect.isExtensible(target)) {
