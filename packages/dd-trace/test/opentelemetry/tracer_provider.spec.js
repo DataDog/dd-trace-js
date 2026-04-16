@@ -86,17 +86,15 @@ describe('TracerProvider getter without @opentelemetry/api', () => {
     const TracerProxy = proxyquire.noPreserveCache()('../../src/proxy', {
       './opentelemetry/check_peer_deps': noopCheckPeerDeps,
     })
-    const getter = Object.getOwnPropertyDescriptor(TracerProxy.prototype, 'TracerProvider').get
-    const NoopClass = getter.call({})
-    assert.throws(() => new NoopClass(), { message: expectedMessage })
+    const instance = new TracerProxy()
+    assert.throws(() => new instance.TracerProvider(), { message: expectedMessage })
   })
 
   it('should throw when instantiated via noop proxy', () => {
     const NoopProxy = proxyquire.noPreserveCache()('../../src/noop/proxy', {
       '../opentelemetry/check_peer_deps': noopCheckPeerDeps,
     })
-    const getter = Object.getOwnPropertyDescriptor(NoopProxy.prototype, 'TracerProvider').get
-    const NoopClass = getter.call({})
-    assert.throws(() => new NoopClass(), { message: expectedMessage })
+    const instance = new NoopProxy()
+    assert.throws(() => new instance.TracerProvider(), { message: expectedMessage })
   })
 })
