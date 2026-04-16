@@ -8,6 +8,7 @@ const sinon = require('sinon')
 const api = require('@opentelemetry/api')
 
 const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
+const { storage } = require('../../../datadog-core')
 require('../setup/core')
 require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
@@ -125,7 +126,7 @@ describe('OTel Tracer', () => {
 
     otelTracer.startActiveSpan('name', (span) => {
       assert.ok(span instanceof Span)
-      assert.strictEqual(span._ddSpan, tracer.scope().active())
+      assert.strictEqual(span._ddSpan, storage('legacy').getStore()?.span)
     })
   })
 

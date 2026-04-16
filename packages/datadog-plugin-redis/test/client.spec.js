@@ -4,6 +4,7 @@ const assert = require('node:assert')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
+const { storage } = require('../../datadog-core')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
@@ -108,7 +109,7 @@ describe('Plugin', () => {
           })
 
           const commandPromise = client.sendCommand('invalid').then(
-            () => {},
+            () => { },
             (e) => { error = e }
           )
 
@@ -144,10 +145,10 @@ describe('Plugin', () => {
         )
 
         it('should restore the parent context in the callback', async () => {
-          const span = {}
-          tracer.scope().activate(span, () => {
+          const span = tracer._tracer.startSpan('test')
+          storage('legacy').run({ span }, () => {
             client.get('foo', () => {
-              assert.strictEqual(span.context().active(), span)
+              assert.strictEqual(storage('legacy').getStore()?.span, span)
             })
           })
         })
