@@ -79,8 +79,7 @@ describe('Plugin', () => {
               assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
             })
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withPeerService(
@@ -101,13 +100,12 @@ describe('Plugin', () => {
             // stack trace is not available in newer versions
           })
 
-          try {
-            await client.sendCommand('invalid')
-          } catch (e) {
-            error = e
-          }
+          const commandPromise = client.sendCommand('invalid').then(
+            () => {},
+            (e) => { error = e }
+          )
 
-          await promise
+          await Promise.all([commandPromise, promise])
         })
 
         it('should work with userland promises', async () => {
@@ -126,8 +124,7 @@ describe('Plugin', () => {
 
           breakThen(Promise.prototype)
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withNamingSchema(
@@ -175,8 +172,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
           })
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withPeerService(
@@ -190,8 +186,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].resource, 'GET')
           })
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withNamingSchema(
@@ -238,8 +233,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].service, 'custom-test')
           })
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         it('should set service source tag to split-by-instance', async () => {
@@ -247,8 +241,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.split_by_instance')
           })
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withNamingSchema(
@@ -297,8 +290,7 @@ describe('Plugin', () => {
           })
 
           await client.set('turtle', 'like')
-          await client.get('turtle')
-          await promise
+          await Promise.all([client.get('turtle'), promise])
         })
       })
 
