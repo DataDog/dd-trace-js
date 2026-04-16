@@ -79,7 +79,7 @@ describe('OpenFeature Remote Config', () => {
       sinon.assert.calledOnceWithExactly(openfeatureProxy._setConfiguration, flagConfig)
     })
 
-    it('should not call _setConfiguration on unapply action', () => {
+    it('should call _setConfiguration(null) on unapply action to clear config', () => {
       enable(rc, config, getOpenfeatureProxy)
 
       const flagConfig = { flags: { 'test-flag': {} } }
@@ -87,7 +87,7 @@ describe('OpenFeature Remote Config', () => {
 
       handler('unapply', flagConfig)
 
-      sinon.assert.notCalled(openfeatureProxy._setConfiguration)
+      sinon.assert.calledOnceWithExactly(openfeatureProxy._setConfiguration, null)
     })
 
     it('should not call _setConfiguration on unknown action', () => {
