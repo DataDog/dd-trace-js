@@ -32,11 +32,9 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
   end (ctx) {
     this.finish(ctx)
   }
-
-  // tracingChannel fires both asyncEnd and end; only finish the span when result or error is present
+  
+  // tracingChannel fires both asyncEnd and end; Need to call finish in both cases to ensure the span is finished regardless of how the tracingChannel is configured.
   finish (ctx) {
-    if (!ctx.hasOwnProperty('result') && !ctx.hasOwnProperty('error')) return
-
     super.finish(ctx)
   }
 }
