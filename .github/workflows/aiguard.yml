@@ -102,7 +102,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:aiguard
+      - run: yarn test:integration:aiguard:coverage
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

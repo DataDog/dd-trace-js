@@ -15,6 +15,11 @@ const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
+const finalizeSandboxCoverage = require('../coverage/finalize-sandbox')
+const {
+  applyCoverageEnv,
+  resolveCoverageRoot,
+} = require('../coverage/runtime')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
@@ -37,7 +42,11 @@ const defaultStopProcTimeoutMs = 2_000
  * @param {string} expectedSource
  */
 async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
-  const proc = spawn(process.execPath, [filename], { cwd, stdio: 'pipe' })
+  const proc = spawn(process.execPath, [filename], {
+    cwd,
+    env: applyCoverageEnv(undefined, { cwd, scriptPath: filename }),
+    stdio: 'pipe',
+  })
   assert(proc.pid !== undefined, 'Process PID is not available')
   const pid = proc.pid
   let out = await new Promise((resolve, reject) => {
@@ -330,8 +339,18 @@ function waitForProcExit (proc, timeoutMs) {
  * @returns {SpawnedProcess}
  */
 function spawnProcImpl (filename, options, stdioHandler, stderrHandler) {
+  const cwd = typeof options.cwd === 'string' ? options.cwd : undefined
+  const scriptPath = typeof filename === 'string' ? filename : undefined
   // Cast to SpawnedProcess type - when stdio is 'pipe', stdout/stderr are guaranteed non-null
-  const proc = /** @type {SpawnedProcess} */ (fork(filename, { ...options, stdio: 'pipe' }))
+  const proc = /** @type {SpawnedProcess} */ (fork(filename, {
+    ...options,
+    env: applyCoverageEnv(options.env, {
+      cwd,
+      scriptPath,
+    }),
+    execArgv: options.execArgv,
+    stdio: 'pipe',
+  }))
 
   proc.stdout.on('data', data => {
     if (stdioHandler) {
@@ -483,7 +502,11 @@ async function createSandbox (
     execHelper('yarn link')
     execHelper('yarn link dd-trace')
     // ... run the tests in the current directory.
-    return { folder: path.join(process.cwd(), 'integration-tests'), remove: async () => {} }
+    return {
+      coverageRoot: resolveCoverageRoot({ cwd: process.cwd() }),
+      folder: path.join(process.cwd(), 'integration-tests'),
+      remove: async () => {},
+    }
   }
   const folder = path.join(sandboxRoot, id().toString())
   const tarballEnv = process.env.DD_TEST_SANDBOX_TARBALL_PATH
@@ -553,8 +576,11 @@ async function createSandbox (
   }
 
   return {
+    coverageRoot: resolveCoverageRoot({ cwd: folder }),
     folder,
-    remove: () => {
+    remove: async () => {
+      await finalizeSandboxCoverage(folder, resolveCoverageRoot({ cwd: folder }))
+
       // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
       // our `integration-guardrails` GitHub Actions workflow
       if (process.platform === 'win32') {
@@ -811,17 +837,19 @@ function preparePluginIntegrationTestSpawnOptions (
     delete additionalEnvArgs.NODE_OPTIONS
   }
 
+  const scriptPath = path.join(cwd, serverFile)
+
   return {
-    filename: path.join(cwd, serverFile),
+    filename: scriptPath,
     options: {
       cwd,
-      env: {
+      env: applyCoverageEnv({
         ...process.env,
         NODE_OPTIONS,
         DD_TRACE_AGENT_PORT: String(agentPort),
         DD_TRACE_FLUSH_INTERVAL: '0',
         ...additionalEnvArgs,
-      },
+      }, { cwd, scriptPath }),
       execArgv,
     },
     stdioHandler,
@@ -898,7 +926,7 @@ function useSandbox (...args) {
 
   after(function () {
     this.timeout(30_000)
-    return sandbox.remove()
+    return sandbox?.remove()
   })
 }
 

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const { spawn } = require('child_process')
 const { describe, it } = require('mocha')
@@ -13,6 +14,7 @@ const {
   assertObjectContains,
   stopProc,
 } = require('../../../../integration-tests/helpers')
+const { buildManualCoverageEnv } = require('../../../../integration-tests/coverage/manual-process')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 describe('esm', () => {
@@ -101,12 +103,16 @@ describe('esm', () => {
  */
 async function spawnPluginIntegrationTestProc (agentPort) {
   const cwd = sandboxCwd()
-  const env = {
+  const env = buildManualCoverageEnv({
+    cwd,
+    env: {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
     DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
     PATH: `${cwd}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
-  }
+    },
+    scriptPath: path.join(cwd, 'node_modules', 'dd-trace', 'loader-hook.mjs'),
+  })
 
   const options = { cwd, env }
 

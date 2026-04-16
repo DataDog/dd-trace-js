@@ -494,7 +494,7 @@ jobs:
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration
+      - run: yarn test:integration:coverage
       - run: yarn test:integration:esbuild
       - run: yarn test:integration:webpack
       - uses: ./.github/actions/push_to_test_optimization

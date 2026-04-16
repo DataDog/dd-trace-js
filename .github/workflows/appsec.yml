@@ -468,7 +468,7 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:appsec
+      - run: yarn test:integration:appsec:coverage
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

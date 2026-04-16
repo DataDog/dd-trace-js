@@ -7,6 +7,11 @@ const {
 } = require('../../packages/dd-trace/src/debugger/devtools_client/snapshot/constants')
 const { setup } = require('./utils')
 
+// Budget covers spawning fastify, installing a probe, and collecting one snapshot. NYC
+// preloaded into the sandbox child inflates startup enough to blow past 2s, so we bump it
+// just enough to stay reliable while still catching a crashed debugger worker thread.
+const FUZZ_TEST_TIMEOUT_MS = process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT ? 4000 : 2000
+
 describe('Dynamic Instrumentation', function () {
   describe('input messages', function () {
     describe('with snapshot under time budget', function () {
@@ -156,7 +161,7 @@ describe('Dynamic Instrumentation', function () {
           context(`graceful handling with time budget of ${budget}ms`, function () {
             // Anything longer than this, and the debugger worker thread most likely crashed.
             // Run test with `DD_TRACE_DEBUG=true` to see more.
-            this.timeout(2000)
+            this.timeout(FUZZ_TEST_TIMEOUT_MS)
 
             const t = setup({
               testApp: 'target-app/time-budget.js',

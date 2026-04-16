@@ -27,6 +27,20 @@ if (process.platform !== 'win32') {
 const TIMEOUT = 30000
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 
+// When the integration-test coverage harness preloads NYC into forked children, both startup
+// latency and heap footprint increase. The knobs below keep the profiler scenarios exercising
+// the same failure modes (timeline events inside the process lifetime; OOM under a tight heap
+// budget) without disabling coverage for the child.
+const COVERAGE_ACTIVE = Boolean(process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT)
+// Slack on each side of [procStart, procEnd] that absorbs NYC's require-hook + module-transform
+// overhead, which can otherwise push early timeline samples before `procStart`.
+const TIMELINE_WINDOW_SLACK_NS = COVERAGE_ACTIVE ? 3_000_000_000n : 0n
+// NYC's instrumented require cache eats ~40-50MB before any user code runs. Values tuned to
+// keep both OOM scenarios reliable: tight-extension tests (+10MB) still OOM once NYC+user
+// exceed budget+extension; generous-extension tests (+45MB) still recover.
+const OOM_HEAP_MB = COVERAGE_ACTIVE ? 85 : 50
+const OOM_SIZE_QUANTUM_BYTES = (COVERAGE_ACTIVE ? 7 : 5) * 1024 * 1024
+
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true
 ) {
@@ -270,11 +284,11 @@ async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, 
           }
       }
     }
-    // Timestamp must be defined and be between process start and end time
+    // Timestamp must be defined and within the process lifetime (plus coverage slack).
     assert.notStrictEqual(ts, undefined, encoded)
     assert.strictEqual(typeof ts, 'bigint', encoded)
-    assert.ok(ts <= procEnd, encoded)
-    assert.ok(ts >= procStart, encoded)
+    assert.ok(ts <= procEnd + TIMELINE_WINDOW_SLACK_NS, encoded)
+    assert.ok(ts >= procStart - TIMELINE_WINDOW_SLACK_NS, encoded)
     // Gather only tested events
     if (event === eventValue) {
       if (process.platform !== 'win32') {
@@ -330,7 +344,7 @@ describe('profiler', () => {
     profilerTestFile = path.join(cwd, 'profiler/index.js')
     ssiTestFile = path.join(cwd, 'profiler/ssi.js')
     oomTestFile = path.join(cwd, 'profiler/oom.js')
-    oomExecArgv = ['--max-old-space-size=50']
+    oomExecArgv = [`--max-old-space-size=${OOM_HEAP_MB}`]
   })
 
   beforeEach(async () => {
@@ -564,6 +578,7 @@ describe('profiler', () => {
         DD_PROFILING_ENABLED: '1',
         DD_TRACE_DEBUG: '1',
         DD_TRACE_LOG_LEVEL: 'warn',
+        OOM_SIZE_QUANTUM_BYTES: String(OOM_SIZE_QUANTUM_BYTES),
       }
     })
 
@@ -602,7 +617,7 @@ describe('profiler', () => {
       })
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
-        proc = fork(oomTestFile, [1, 50], {
+        proc = fork(oomTestFile, [1, OOM_HEAP_MB], {
           cwd,
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })
