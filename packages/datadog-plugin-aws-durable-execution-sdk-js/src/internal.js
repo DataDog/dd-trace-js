@@ -7,7 +7,7 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
   static type = 'serverless'
   static kind = 'internal'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_step'
-  static spanName = 'workflow.step.execute'
+  static spanName = 'aws.durable_functions.step'
 
   bindStart (ctx) {
     const meta = this.getTags(ctx)
@@ -43,37 +43,37 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
 
 class DurableContextImplRunInChildContextPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_runInChildContext'
-  static spanName = 'workflow.child_context.execute'
+  static spanName = 'aws.durable_functions.child_context'
 }
 
 class DurableContextImplWaitPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_wait'
-  static spanName = 'workflow.wait'
+  static spanName = 'aws.durable_functions.wait'
 }
 
 class DurableContextImplWaitForConditionPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_waitForCondition'
-  static spanName = 'workflow.wait_for_condition'
+  static spanName = 'aws.durable_functions.wait_for_condition'
 }
 
 class DurableContextImplWaitForCallbackPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_waitForCallback'
-  static spanName = 'workflow.wait_for_callback'
+  static spanName = 'aws.durable_functions.wait_for_callback'
 }
 
 class DurableContextImplCreateCallbackPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_createCallback'
-  static spanName = 'workflow.create_callback'
+  static spanName = 'aws.durable_functions.create_callback'
 }
 
 class DurableContextImplMapPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_map'
-  static spanName = 'workflow.map'
+  static spanName = 'aws.durable_functions.map'
 }
 
 class DurableContextImplParallelPlugin extends BaseAwsDurableExecutionSdkJsInternalPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_parallel'
-  static spanName = 'workflow.parallel'
+  static spanName = 'aws.durable_functions.parallel'
 }
 
 module.exports = {
