@@ -393,3 +393,4 @@ class PrioritySampler {
 }
 
 module.exports = PrioritySampler
+module.exports.formatKnuthRate = formatKnuthRate

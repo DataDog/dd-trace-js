@@ -614,6 +614,29 @@ describe('PrioritySampler', () => {
     })
   })
 
+  describe('formatKnuthRate', () => {
+    // JS Number.prototype.toFixed() is locale-independent per ECMAScript spec
+    // (ECMA-262, sec 21.1.3.3) — it always uses '.' as the decimal separator.
+    // This test documents that contract.
+    const { formatKnuthRate } = require('../src/priority_sampler')
+
+    it('should format 0.3 as "0.3"', () => {
+      assert.strictEqual(formatKnuthRate(0.3), '0.3')
+    })
+
+    it('should format 1.0 as "1"', () => {
+      assert.strictEqual(formatKnuthRate(1.0), '1')
+    })
+
+    it('should format 0.000001 as "0.000001"', () => {
+      assert.strictEqual(formatKnuthRate(0.000001), '0.000001')
+    })
+
+    it('should round 0.0000001 to "0"', () => {
+      assert.strictEqual(formatKnuthRate(0.0000001), '0')
+    })
+  })
+
   describe('keepTrace', () => {
     it('should not fail if no _prioritySampler', () => {
       PrioritySampler.keepTrace(span, SAMPLING_MECHANISM_APPSEC)
