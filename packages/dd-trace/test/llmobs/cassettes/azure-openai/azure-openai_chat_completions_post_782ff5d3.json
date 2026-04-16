@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://dd.openai.azure.com/chat/completions",
+    "headers": {
+      "Content-Length": "297",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/JS 4.0.0",
+      "X-Stainless-Lang": "js",
+      "X-Stainless-Package-Version": "4.0.0",
+      "X-Stainless-OS": "MacOS",
+      "X-Stainless-Arch": "arm64",
+      "X-Stainless-Runtime": "node",
+      "X-Stainless-Runtime-Version": "v22.17.0",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"gpt-4.1\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are a helpful assistant.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Hello, OpenAI!\"\n    }\n  ],\n  \"temperature\": 0.5,\n  \"stream\": false,\n  \"max_tokens\": 100,\n  \"n\": 1,\n  \"user\": \"dd-trace-test\"\n}"
+  },
+  "response": {
+    "status": {
+      "code": 404,
+      "message": "Resource Not Found"
+    },
+    "headers": {
+      "Content-Length": "56",
+      "Content-Type": "application/json",
+      "Date": "Wed, 20 Aug 2025 13:52:23 GMT",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "apim-request-id": "49a7f7ae-f881-4784-816e-855d03e730d8",
+      "x-content-type-options": "nosniff"
+    },
+    "body": "{\"error\":{\"code\":\"404\",\"message\": \"Resource not found\"}}"
+  }
+}

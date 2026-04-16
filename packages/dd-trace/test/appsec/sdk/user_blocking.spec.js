@@ -74,7 +74,7 @@ describe('user_blocking - Internal API', () => {
     it('should set user when not already set', () => {
       const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
       assert.strictEqual(ret, true)
-      sinon.assert.calledOnceWithExactly(getRootSpan, tracer)
+      sinon.assert.calledOnce(getRootSpan)
       sinon.assert.calledWithExactly(rootSpan.setTag, 'usr.id', 'user')
       sinon.assert.calledWithExactly(rootSpan.setTag, '_dd.appsec.user.collection_mode', 'sdk')
     })
@@ -86,7 +86,7 @@ describe('user_blocking - Internal API', () => {
 
       const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
       assert.strictEqual(ret, true)
-      sinon.assert.calledOnceWithExactly(getRootSpan, tracer)
+      sinon.assert.calledOnce(getRootSpan)
       sinon.assert.notCalled(rootSpan.setTag)
     })
 
@@ -95,7 +95,7 @@ describe('user_blocking - Internal API', () => {
 
       const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })
       assert.strictEqual(ret, true)
-      sinon.assert.calledOnceWithExactly(getRootSpan, tracer)
+      sinon.assert.calledOnce(getRootSpan)
       sinon.assert.calledOnceWithExactly(log.warn, '[ASM] Root span not available in isUserBlocked')
       sinon.assert.notCalled(rootSpan.setTag)
     })

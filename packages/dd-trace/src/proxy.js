@@ -257,10 +257,10 @@ class Tracer extends NoopProxy {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
       return require('./profiler').start(config)
-    } catch (e) {
+    } catch (error) {
       log.error(
         'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
-        e
+        error
       )
       return false
     }

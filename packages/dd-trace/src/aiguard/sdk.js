@@ -25,11 +25,12 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 const ALLOW = 'ALLOW'
 
 class AIGuardAbortError extends Error {
-  constructor (reason, tags, sds) {
+  constructor (reason, tags, tagProbs, sds) {
     super(reason)
     this.name = 'AIGuardAbortError'
     this.reason = reason
     this.tags = tags
+    this.tagProbabilities = tagProbs
     this.sds = sds || []
   }
 }
@@ -188,38 +189,37 @@ class AIGuard extends NoopAIGuard {
           `AI Guard service call failed, status ${response.status}`,
           { errors: response.body?.errors })
       }
-      let action, reason, tags, sdsFindings, blockingEnabled
-      try {
-        const attr = response.body.data.attributes
-        if (!attr.action) {
-          throw new Error('Action missing from response')
-        }
-        action = attr.action
-        reason = attr.reason
-        tags = attr.tags
-        sdsFindings = attr.sds_findings || []
-        blockingEnabled = attr.is_blocking_enabled ?? false
-      } catch (e) {
+      const attr = response.body?.data?.attributes
+      if (!attr?.action) {
         appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
-        throw new AIGuardClientError(`AI Guard service returned unexpected response : ${response.body}`, { cause: e })
+        throw new AIGuardClientError(`AI Guard service returned unexpected response : ${response.body}`)
       }
+      const action = attr.action
+      const reason = attr.reason
+      const tags = attr.tags ?? []
+      if (tags.length > 0) {
+        metaStruct.attack_categories = tags
+      }
+      const sdsFindings = attr.sds_findings ?? []
+      if (sdsFindings.length > 0) {
+        metaStruct.sds = sdsFindings
+      }
+      const tagProbabilities = attr.tag_probs ?? {}
+      if (attr.tag_probs) {
+        metaStruct.tag_probs = tagProbabilities
+      }
+      const blockingEnabled = attr.is_blocking_enabled ?? false
       const shouldBlock = block && blockingEnabled && action !== ALLOW
       appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { action, error: false, block: shouldBlock }).inc(1)
       span.setTag(AI_GUARD_ACTION_TAG_KEY, action)
       if (reason) {
         span.setTag(AI_GUARD_REASON_TAG_KEY, reason)
       }
-      if (tags?.length > 0) {
-        metaStruct.attack_categories = tags
-      }
-      if (sdsFindings?.length > 0) {
-        metaStruct.sds = sdsFindings
-      }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
-        throw new AIGuardAbortError(reason, tags, sdsFindings)
+        throw new AIGuardAbortError(reason, tags, tagProbabilities, sdsFindings)
       }
-      return { action, reason, tags, sds: sdsFindings }
+      return { action, reason, tags, tagProbabilities, sds: sdsFindings }
     })
   }
 }
