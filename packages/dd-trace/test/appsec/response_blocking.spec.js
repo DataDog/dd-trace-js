@@ -12,7 +12,9 @@ const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
 const { getConfigFresh } = require('../helpers/config')
 const WafContext = require('../../src/appsec/waf/waf_context_wrapper')
-const blockingResponse = JSON.parse(require('../../src/appsec/blocked_templates').json)
+
+const { blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
+const blockingResponse = JSON.parse(blockedTemplateJson)
 
 describe('HTTP Response Blocking', () => {
   let server
@@ -65,6 +67,7 @@ describe('HTTP Response Blocking', () => {
         },
       },
     }))
+    setTestBlockingTemplates()
   })
 
   beforeEach(() => {

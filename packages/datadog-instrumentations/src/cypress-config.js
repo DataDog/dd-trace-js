@@ -4,8 +4,20 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
+const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol('dd-trace.cypress.config.wrapped')
+
+const setupNodeEventsCh = channel('ci:cypress:setup-node-events')
+
+// Ensure the cypress plugin is loaded so it can subscribe to our channel.
+// Normally, plugins are loaded when their npm module is required (via addHook),
+// but plain-object configs don't require('cypress'), so the plugin would never
+// be instantiated in the Cypress Config Manager child process.
+const loadCh = channel('dd-trace:instrumentation:load')
+if (loadCh.hasSubscribers) {
+  loadCh.publish({ name: 'cypress' })
+}
 
 const noopTask = {
   'dd:testSuiteStart': () => null,
@@ -93,8 +105,9 @@ function injectSupportFile (config) {
 
 /**
  * Registers dd-trace's Cypress hooks (before:run, after:spec, after:run, tasks)
- * and injects the support file. Handles chaining with user-registered handlers
- * for after:spec/after:run so both the user's code and dd-trace's run in sequence.
+ * and injects the support file. Communicates with the plugin layer via
+ * the `ci:cypress:setup-node-events` diagnostic channel, avoiding direct
+ * tracer references in the instrumentation layer.
  *
  * @param {Function} on Cypress event registration function
  * @param {object} config Cypress resolved config object
@@ -110,8 +123,6 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
       try { fs.unlinkSync(wrapperFile) } catch { /* best effort */ }
     }
   }
-
-  const tracer = global._ddtrace
 
   const registerAfterRunWithCleanup = () => {
     on('after:run', (results) => {
@@ -129,49 +140,32 @@ function registerDdTraceHooks (on, config, userAfterSpecHandlers, userAfterRunHa
     on('task', noopTask)
   }
 
-  if (!tracer || !tracer._initialized) {
+  if (!setupNodeEventsCh.hasSubscribers) {
     registerNoopHandlers()
     return config
   }
 
-  const NoopTracer = require('../../../packages/dd-trace/src/noop/tracer')
+  // Publish to the plugin layer via diagnostic channel.
+  // The subscriber sets `payload.registered = true` and optionally
+  // `payload.configPromise` when it handles the event.
+  const payload = {
+    on,
+    config,
+    userAfterSpecHandlers,
+    userAfterRunHandlers,
+    cleanupWrapper,
+    registered: false,
+    configPromise: undefined,
+  }
 
-  if (tracer._tracer instanceof NoopTracer) {
+  setupNodeEventsCh.publish(payload)
+
+  if (!payload.registered) {
     registerNoopHandlers()
     return config
   }
 
-  const cypressPlugin = require('../../../packages/datadog-plugin-cypress/src/cypress-plugin')
-
-  if (cypressPlugin._isInit) {
-    for (const h of userAfterSpecHandlers) on('after:spec', h)
-    registerAfterRunWithCleanup()
-    return config
-  }
-
-  on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
-
-  on('after:spec', (spec, results) => {
-    const chain = userAfterSpecHandlers.reduce(
-      (p, h) => p.then(() => h(spec, results)),
-      Promise.resolve()
-    )
-    return chain.then(() => cypressPlugin.afterSpec(spec, results))
-  })
-
-  on('after:run', (results) => {
-    const chain = userAfterRunHandlers.reduce(
-      (p, h) => p.then(() => h(results)),
-      Promise.resolve()
-    )
-    return chain
-      .then(() => cypressPlugin.afterRun(results))
-      .finally(cleanupWrapper)
-  })
-
-  on('task', cypressPlugin.getTasks())
-
-  return Promise.resolve(cypressPlugin.init(tracer, config)).then(() => config)
+  return payload.configPromise || config
 }
 
 /**

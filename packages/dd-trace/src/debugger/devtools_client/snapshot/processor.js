@@ -105,10 +105,13 @@ function getObjectValue (obj, maxLength) {
     // case 'node': // TODO: What does this subtype represent?
     case 'regexp':
       return { type: obj.className, value: obj.description }
-    case 'date':
+    case 'date': {
       // TODO: This looses millisecond resolution, as that's not retained in the `.toString()` representation contained
       // in the `description` field. Unfortunately that's all we get from the Chrome DevTools Protocol.
-      return { type: obj.className, value: `${new Date(obj.description).toISOString().slice(0, -5)}Z` }
+      const date = new Date(obj.description)
+      const value = Number.isNaN(date.getTime()) ? obj.description : `${date.toISOString().slice(0, -5)}Z`
+      return { type: obj.className, value }
+    }
     case 'map':
       return toMap(obj.className, obj.properties, maxLength, timeBudgetReached)
     case 'set':

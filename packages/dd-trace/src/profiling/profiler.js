@@ -12,12 +12,6 @@ const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./we
 const profileSubmittedChannel = dc.channel('datadog:profiling:profile-submitted')
 const spanFinishedChannel = dc.channel('dd-trace:span:finish')
 
-function logError (logger, ...args) {
-  if (logger) {
-    logger.error(...args)
-  }
-}
-
 function findWebSpan (startedSpans, spanId) {
   for (let i = startedSpans.length; --i >= 0;) {
     const ispan = startedSpans[i]
@@ -71,33 +65,6 @@ class Profiler extends EventEmitter {
     return this.#config?.flushInterval
   }
 
-  /**
-   * @param {import('../config/config-base')} config - Tracer configuration
-   */
-  start (config) {
-    // TODO: Unify with main logger and rewrite template strings to use printf formatting.
-    const logger = {
-      debug: log.debug.bind(log),
-      info: log.info.bind(log),
-      warn: log.warn.bind(log),
-      error: log.error.bind(log),
-    }
-
-    // TODO: Rewrite this to not need to copy the config.
-    const options = {
-      ...config,
-      logger,
-    }
-
-    try {
-      return this._start(options)
-    } catch (err) {
-      logError(logger, 'Error starting profiler. For troubleshooting tips, see ' +
-        '<https://dtdg.co/nodejs-profiler-troubleshooting>', err)
-      return false
-    }
-  }
-
   get enabled () {
     return this.#enabled
   }
@@ -141,10 +108,6 @@ class Profiler extends EventEmitter {
     return fn()
   }
 
-  #logError (err) {
-    logError(this.#logger, err)
-  }
-
   #getCompressionFn () {
     if (!this.#compressionFnInitialized) {
       this.#compressionFnInitialized = true
@@ -181,8 +144,8 @@ class Profiler extends EventEmitter {
             }
             break
         }
-      } catch (err) {
-        this.#logError(err)
+      } catch (error) {
+        log.error(error)
       }
     }
     return this.#compressionFn
@@ -191,41 +154,36 @@ class Profiler extends EventEmitter {
   /**
    * @param {import('../config/config-base')} options - Tracer configuration
    */
-  _start (options) {
+  start (options) {
     if (this.enabled) return true
+    this.#enabled = true
 
     const config = this.#config = new Config(options)
-
     this.#logger = config.logger
-    this.#enabled = true
-    this._setInterval()
 
+    this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest
     // of the profiler from running without source maps.
     let mapper
-    try {
-      const { setLogger, SourceMapper } = require('@datadog/pprof')
-      setLogger(config.logger)
+    const { setLogger, SourceMapper } = require('@datadog/pprof')
+    setLogger(config.logger)
 
-      if (config.sourceMap) {
-        mapper = new SourceMapper(config.debugSourceMaps)
-        mapper.loadDirectory(process.cwd())
-          .then(() => {
-            if (config.debugSourceMaps) {
-              const count = mapper.infoMap.size
-              this.#logger.debug(() => {
-                return count === 0
-                  ? 'Found no source maps'
-                  : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
-              })
-            }
-          })
-          .catch((err) => {
-            this.#logError(err)
-          })
-      }
-    } catch (err) {
-      this.#logError(err)
+    if (config.sourceMap) {
+      mapper = new SourceMapper(config.debugSourceMaps)
+      mapper.loadDirectory(process.cwd())
+        .then(() => {
+          if (config.debugSourceMaps) {
+            const count = mapper.infoMap.size
+            this.#logger.debug(() => {
+              return count === 0
+                ? 'Found no source maps'
+                : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
+            })
+          }
+        })
+        .catch((error) => {
+          log.error(error)
+        })
     }
 
     try {
@@ -246,12 +204,13 @@ class Profiler extends EventEmitter {
       }
 
       this._capture(this._timeoutInterval, start)
-      return true
-    } catch (e) {
-      this.#logError(e)
+    } catch (error) {
+      log.error(error)
       this.#stop()
       return false
     }
+
+    return true
   }
 
   #nearOOMExport (profileType, encodedProfile, info) {
@@ -389,10 +348,10 @@ class Profiler extends EventEmitter {
             return `Collected ${profiler.type} profile: ` + profileJson
           })
           hasEncoded = true
-        } catch (err) {
+        } catch (error) {
           // If encoding one of the profile types fails, we should still try to
           // encode and submit the other profile types.
-          this.#logError(err)
+          log.error(error)
         }
       }))
 
@@ -401,8 +360,8 @@ class Profiler extends EventEmitter {
         profileSubmittedChannel.publish()
         this.#logger.debug('Submitted profiles')
       }
-    } catch (err) {
-      this.#logError(err)
+    } catch (error) {
+      log.error(error)
       this.#stop()
     }
   }
@@ -424,10 +383,8 @@ class Profiler extends EventEmitter {
       : undefined
     const exportSpec = { profiles, infos, start, end, tags, endpointCounts, customAttributes }
     const tasks = this.#config.exporters.map(exporter =>
-      exporter.export(exportSpec).catch(err => {
-        if (this.#logger) {
-          this.#logger.warn(err)
-        }
+      exporter.export(exportSpec).catch(error => {
+        log.warn(error)
       })
     )
 

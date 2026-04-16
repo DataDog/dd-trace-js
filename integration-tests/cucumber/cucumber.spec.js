@@ -73,6 +73,7 @@ const {
   CI_APP_ORIGIN,
   TEST_SKIP_REASON,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { SAMPLING_PRIORITY } = require('../../ext/tags')
 const { AUTO_KEEP } = require('../../ext/priority')
@@ -97,7 +98,7 @@ describe(`cucumber@${version} commonJS`, () => {
 
   let cwd, receiver, childProcess, testOutput
 
-  useSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc'], true)
+  useSandbox([`@cucumber/cucumber@${version}`, 'assert', 'nyc', 'sinon'], true)
 
   before(function () {
     cwd = sandboxCwd()
@@ -2160,6 +2161,36 @@ describe(`cucumber@${version} commonJS`, () => {
           })
         })
 
+        onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 2)
+              const retriedTests = tests.filter(
+                t => t.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+              )
+              assert.strictEqual(retriedTests.length, 1)
+            })
+
+          const featurePath = 'ci-visibility/features-di-fake-timers/test-hit-breakpoint.feature'
+          childProcess = exec(
+            `./node_modules/.bin/cucumber-js ${featurePath} --retry 1`,
+            {
+              cwd,
+              env: envVars,
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+          assert.strictEqual(exitCode, 1)
+        })
+
         onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
@@ -2497,11 +2528,21 @@ describe(`cucumber@${version} commonJS`, () => {
                     assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                     assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   }
+                  // Final status: quarantined/disabled always reports 'skip' regardless of result;
+                  // otherwise pass only when every attempt passed, fail otherwise
+                  const expectedFinalStatus = (isQuarantined || isDisabled)
+                    ? 'skip'
+                    : (shouldAlwaysPass ? 'pass' : 'fail')
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
+                } else {
+                  // Intermediate ATF executions must not carry a final status tag
+                  assert.ok(!(TEST_FINAL_STATUS in test.meta))
                 }
               } else {
                 assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
                 assert.ok(!(TEST_IS_RETRY in test.meta))
                 assert.ok(!(TEST_RETRY_REASON in test.meta))
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
               }
             }
           })
@@ -2594,6 +2635,54 @@ describe(`cucumber@${version} commonJS`, () => {
         runTest(done, {
           extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' },
         })
+      })
+
+      it('does not tag known attempt to fix tests as new', async () => {
+        receiver.setKnownTests({
+          cucumber: {
+            'ci-visibility/features-test-management/attempt-to-fix.feature': [
+              'Say attempt to fix',
+            ],
+          },
+        })
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 2 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const atfTests = tests.filter(
+              t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+            )
+            assert.ok(atfTests.length > 0)
+            for (const test of atfTests) {
+              assert.ok(
+                !(TEST_IS_NEW in test.meta),
+                'ATF test that is in known tests should not be tagged as new'
+              )
+            }
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-test-management/attempt-to-fix.feature',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
 
       it('does not fail retry if a test is quarantined', (done) => {
@@ -3319,6 +3408,362 @@ describe(`cucumber@${version} commonJS`, () => {
       await once(childProcess, 'exit')
 
       assert.strictEqual(coverageReportUploaded, false, 'coverage report should not be uploaded')
+    })
+  })
+
+  context('final status tag', function () {
+    it('sets final_status tag to test status on regular tests without retry features', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: { enabled: false },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          tests.forEach(test => {
+            assert.strictEqual(
+              test.meta[TEST_FINAL_STATUS],
+              test.meta[TEST_STATUS],
+              `Expected TEST_FINAL_STATUS to match TEST_STATUS for test "${test.meta[TEST_NAME]}"`
+            )
+          })
+
+          const skippedTest = tests.find(test => test.meta[TEST_NAME] === 'Say skip')
+          assert.ok(skippedTest, 'Expected to find the skipped test')
+          assert.strictEqual(skippedTest.meta[TEST_FINAL_STATUS], 'skip')
+
+          const passedTest = tests.find(test => test.meta[TEST_NAME] === 'Say pass')
+          assert.ok(passedTest, 'Expected to find the passing test')
+          assert.strictEqual(passedTest.meta[TEST_FINAL_STATUS], 'pass')
+
+          const failedTest = tests.find(test => test.meta[TEST_NAME] === 'Say fail')
+          assert.ok(failedTest, 'Expected to find the failing test')
+          assert.strictEqual(failedTest.meta[TEST_FINAL_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js ci-visibility/features-cucumber/*.feature',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    onlyLatestIt('sets tag only on last ATR retry when EFD is enabled but not active and ATR is active', async () => {
+      // All features-cucumber tests are known, so EFD will be enabled but not active for them
+      receiver.setKnownTests({
+        cucumber: {
+          'ci-visibility/features-cucumber/test-suite.feature': [
+            'Say pass', 'Say skip', 'Say fail', 'Say flaky',
+            'Say pass with hooks', 'Say fail with hooks', 'Say flaky with hooks',
+          ],
+        },
+      })
+      receiver.setSettings({
+        flaky_test_retries_enabled: true, // ATR enabled
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': 3 },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const suiteTests = events
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === 'ci-visibility/features-cucumber/test-suite.feature')
+
+          const sortByStart = arr => arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+          // Always passes: single execution, TEST_FINAL_STATUS = 'pass'
+          for (const name of ['Say pass', 'Say pass with hooks']) {
+            const group = suiteTests.filter(t => t.meta[TEST_NAME] === name)
+            assert.strictEqual(group.length, 1, `Expected exactly 1 execution for "${name}"`)
+            assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], 'pass')
+          }
+
+          // Skipped: TEST_FINAL_STATUS = 'skip'
+          const skippedTest = suiteTests.filter(test => test.meta[TEST_NAME] === 'Say skip')
+          assert.ok(skippedTest, 'Expected to find the skipped test')
+          assert.strictEqual(skippedTest.length, 1, 'Expected exactly 1 execution for "Say skip"')
+          assert.strictEqual(skippedTest[0].meta[TEST_FINAL_STATUS], 'skip')
+
+          // Always fails: ATR retries all fail, only last has TEST_FINAL_STATUS = 'fail'
+          for (const name of ['Say fail', 'Say fail with hooks']) {
+            const group = sortByStart(suiteTests.filter(t => t.meta[TEST_NAME] === name))
+            assert.ok(group.length > 1, `Expected retries for "${name}"`)
+            group.forEach((test, idx) => {
+              if (idx < group.length - 1) {
+                assert.ok(
+                  !(TEST_FINAL_STATUS in test.meta),
+                  `TEST_FINAL_STATUS should not be set on intermediate runs of "${name}"`
+                )
+              } else {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+              }
+            })
+          }
+
+          // Flaky: fails twice, passes on 3rd attempt. Only last has TEST_FINAL_STATUS = 'pass'
+          for (const name of ['Say flaky', 'Say flaky with hooks']) {
+            const group = sortByStart(suiteTests.filter(t => t.meta[TEST_NAME] === name))
+            assert.strictEqual(group.length, 3, `Expected 3 executions for "${name}"`)
+            group.forEach((test, idx) => {
+              if (idx < group.length - 1) {
+                assert.ok(
+                  !(TEST_FINAL_STATUS in test.meta),
+                  `TEST_FINAL_STATUS should not be set on intermediate runs of "${name}"`
+                )
+              } else {
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+              }
+            })
+          }
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js ci-visibility/features-cucumber/*.feature',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('sets final_status tag to test status reported to test framework on last retry (EFD active only)', async () => {
+      // 'Say flaky' and 'Say flaky with hooks' are not listed as known → EFD will retry them
+      const suitePath = 'ci-visibility/features-cucumber/test-suite.feature'
+      receiver.setKnownTests({
+        cucumber: {
+          [suitePath]: [
+            'Say pass', 'Say skip', 'Say fail',
+            'Say pass with hooks', 'Say fail with hooks',
+          ],
+        },
+      })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: { '5s': NUM_RETRIES_EFD },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const suiteTests = events
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SUITE] === suitePath)
+
+          // Known tests: single execution, TEST_FINAL_STATUS = TEST_STATUS directly (no EFD retry)
+          for (const name of ['Say pass', 'Say skip', 'Say fail', 'Say pass with hooks', 'Say fail with hooks']) {
+            const group = suiteTests.filter(t => t.meta[TEST_NAME] === name)
+            assert.strictEqual(group.length, 1, `Expected exactly 1 execution for "${name}"`)
+            assert.ok(!(TEST_IS_NEW in group[0].meta))
+            assert.ok(!(TEST_IS_RETRY in group[0].meta))
+            assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], group[0].meta[TEST_STATUS])
+          }
+
+          // New tests: EFD retries NUM_RETRIES_EFD times — only the last execution matters for final status
+          for (const name of ['Say flaky', 'Say flaky with hooks']) {
+            const group = suiteTests.filter(t => t.meta[TEST_NAME] === name)
+            assert.strictEqual(
+              group.length, NUM_RETRIES_EFD + 1, `Expected ${NUM_RETRIES_EFD + 1} executions for "${name}"`
+            )
+            const lastTest = group.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0)).at(-1)
+            assert.strictEqual(lastTest.meta[TEST_FINAL_STATUS], 'pass')
+          }
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js ci-visibility/features-cucumber/*.feature',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    onlyLatestIt(
+      'sets final_status tag to test status reported to test framework on last retry (ATR active only)',
+      async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: { enabled: false },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suiteTests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_SUITE] === 'ci-visibility/features-cucumber/test-suite.feature')
+
+            const sortByStart = arr => arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            // Always passes: single execution, TEST_FINAL_STATUS = 'pass'
+            for (const name of ['Say pass', 'Say pass with hooks']) {
+              const group = suiteTests.filter(t => t.meta[TEST_NAME] === name)
+              assert.strictEqual(group.length, 1, `Expected exactly 1 execution for "${name}"`)
+              assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], 'pass')
+            }
+
+            // Skipped: TEST_FINAL_STATUS = 'skip'
+            const skippedTest = suiteTests.filter(test => test.meta[TEST_NAME] === 'Say skip')
+            assert.ok(skippedTest, 'Expected to find the skipped test')
+            assert.strictEqual(skippedTest.length, 1, 'Expected exactly 1 execution for "Say skip"')
+            assert.strictEqual(skippedTest[0].meta[TEST_FINAL_STATUS], 'skip')
+
+            // Always fails: ATR retries all fail, only last has TEST_FINAL_STATUS = 'fail'
+            for (const name of ['Say fail', 'Say fail with hooks']) {
+              const group = sortByStart(suiteTests.filter(t => t.meta[TEST_NAME] === name))
+              assert.ok(group.length > 1, `Expected retries for "${name}"`)
+              group.forEach((test, idx) => {
+                if (idx < group.length - 1) {
+                  assert.ok(
+                    !(TEST_FINAL_STATUS in test.meta),
+                    `TEST_FINAL_STATUS should not be set on intermediate runs of "${name}"`
+                  )
+                } else {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+                }
+              })
+            }
+
+            // Flaky: fails twice, passes on 3rd attempt — only last has TEST_FINAL_STATUS = 'pass'
+            for (const name of ['Say flaky', 'Say flaky with hooks']) {
+              const group = sortByStart(suiteTests.filter(t => t.meta[TEST_NAME] === name))
+              assert.strictEqual(group.length, 3, `Expected 3 executions for "${name}"`)
+              group.forEach((test, idx) => {
+                if (idx < group.length - 1) {
+                  assert.ok(
+                    !(TEST_FINAL_STATUS in test.meta),
+                    `TEST_FINAL_STATUS should not be set on intermediate runs of "${name}"`
+                  )
+                } else {
+                  assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+                }
+              })
+            }
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/cucumber-js ci-visibility/features-cucumber/*.feature',
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      }
+    )
+
+    it('sets final_status tag to skip for disabled tests', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        cucumber: {
+          suites: {
+            'ci-visibility/features-test-management/disabled.feature': {
+              tests: {
+                'Say disabled': {
+                  properties: { disabled: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const disabledTest = tests.find(test => test.meta[TEST_NAME] === 'Say disabled')
+          assert.ok(disabledTest)
+          assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+          assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js ci-visibility/features-test-management/disabled.feature',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
+
+    it('sets final_status tag to skip for quarantined tests', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        cucumber: {
+          suites: {
+            'ci-visibility/features-test-management/quarantine.feature': {
+              tests: {
+                'Say quarantine': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+          const quarantinedTest = tests.find(test => test.meta[TEST_NAME] === 'Say quarantine')
+          assert.ok(quarantinedTest)
+
+          // Quarantined tests still run and report their actual status.
+          // However, the final status tag must be reported as 'skip'
+          // because test errors are suppressed
+          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+        })
+
+      childProcess = exec(
+        './node_modules/.bin/cucumber-js ci-visibility/features-test-management/quarantine.feature',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
     })
   })
 })
