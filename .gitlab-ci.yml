@@ -6,6 +6,8 @@ stages:
   - macrobenchmarks
   - macrobenchmarks-gate
   - macrobenchmarks-notify
+  # These benchmarks ultimately will replace the legacy ones
+  # They will run alongside them at first before replacing them all together
   - node-express-realworld-parallel
   - node-express-realworld-parallel-slo
   - node-hapi-redis-parallel
@@ -30,12 +32,12 @@ include:
   - local: ".gitlab/one-pipeline.locked.yml"
   - local: ".gitlab/benchmarks.yml"
   - local: ".gitlab/macrobenchmarks.yml"
-  - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
-    file: '.gitlab/ci-node-express-realworld-parallel.yml'
-    ref: 'fayssal/integrate'
-  - project: 'DataDog/apm-reliability/apm-sdks-benchmarks'
-    file: '.gitlab/ci-node-hapi-redis-parallel.yml'
-    ref: 'fayssal/integrate'
+  - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
+    file: ".gitlab/ci-node-express-realworld-parallel.yml"
+    ref: "fayssal/integrate"
+  - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
+    file: ".gitlab/ci-node-hapi-redis-parallel.yml"
+    ref: "fayssal/integrate"
 
 workflow:
   auto_cancel:
@@ -66,4 +68,3 @@ requirements_json_test:
   variables:
     REQUIREMENTS_BLOCK_JSON_PATH: ".gitlab/requirements_block.json"
     REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"
-
