@@ -10,7 +10,7 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
   bindStart (ctx) {
     const meta = this.getTags(ctx)
 
-    this.startSpan('workflow.execute', {
+    this.startSpan('aws.durable_functions.execute', {
       service: this.serviceName({ pluginService: this.config.service }),
       meta,
     }, ctx)

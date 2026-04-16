@@ -11,9 +11,9 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   bindStart (ctx) {
     const meta = this.getTags(ctx)
 
-    this.startSpan('lambda.invoke', {
+    this.startSpan('aws.durable_functions.invoke', {
       service: this.serviceName({ pluginService: this.config.service }),
-      resource: meta.functionname || 'lambda.invoke',
+      resource: meta.functionname || 'aws.durable_functions.invoke',
       meta,
     }, ctx)
 
