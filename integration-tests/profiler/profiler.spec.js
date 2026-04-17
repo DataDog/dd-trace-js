@@ -35,11 +35,12 @@ const COVERAGE_ACTIVE = Boolean(process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT)
 // Slack on each side of [procStart, procEnd] that absorbs NYC's require-hook + module-transform
 // overhead, which can otherwise push early timeline samples before `procStart`.
 const TIMELINE_WINDOW_SLACK_NS = COVERAGE_ACTIVE ? 3_000_000_000n : 0n
-// NYC's instrumented require cache eats ~40-50MB before any user code runs. Values tuned to
-// keep both OOM scenarios reliable: tight-extension tests (+10MB) still OOM once NYC+user
-// exceed budget+extension; generous-extension tests (+45MB) still recover.
-const OOM_HEAP_MB = COVERAGE_ACTIVE ? 85 : 50
-const OOM_SIZE_QUANTUM_BYTES = (COVERAGE_ACTIVE ? 7 : 5) * 1024 * 1024
+// NYC's instrumented require cache eats ~40-50MB before any user code runs. The budget needs to
+// leave enough headroom for the extension-based recovery tests (+45MB in aggregate) to complete
+// before the kernel/V8 reap the child, while still being tight enough for the fail-fast tests
+// (+10MB) to exceed the budget once user allocations land on top of NYC's instrumented graph.
+const OOM_HEAP_MB = COVERAGE_ACTIVE ? 110 : 50
+const OOM_SIZE_QUANTUM_BYTES = (COVERAGE_ACTIVE ? 8 : 5) * 1024 * 1024
 
 function checkProfiles (agent, proc, timeout,
   expectedProfileTypes = DEFAULT_PROFILE_TYPES, expectBadExit = false, expectSeq = true

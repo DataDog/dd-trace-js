@@ -106,10 +106,10 @@ async function spawnPluginIntegrationTestProc (agentPort) {
   const env = buildManualCoverageEnv({
     cwd,
     env: {
-    NODE_OPTIONS: `--loader=${hookFile}`,
-    DD_TRACE_AGENT_PORT: agentPort,
-    DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
-    PATH: `${cwd}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
+      NODE_OPTIONS: `--loader=${hookFile}`,
+      DD_TRACE_AGENT_PORT: agentPort,
+      DD_TRACE_DISABLED_PLUGINS: 'amqplib,amqp10,rhea,net',
+      PATH: `${cwd}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
     },
     scriptPath: path.join(cwd, 'node_modules', 'dd-trace', 'loader-hook.mjs'),
   })

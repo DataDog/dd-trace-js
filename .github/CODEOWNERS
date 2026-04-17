@@ -230,7 +230,12 @@
 # Language Platform
 /* @DataDog/lang-platform-js
 
+/.github/actions/ @DataDog/lang-platform-js
+
 /integration-tests/bun/ @DataDog/lang-platform-js
+/integration-tests/coverage/ @DataDog/lang-platform-js
+/integration-tests/coverage-child-process.spec.js @DataDog/lang-platform-js
+/integration-tests/coverage-manual-process.spec.js @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js

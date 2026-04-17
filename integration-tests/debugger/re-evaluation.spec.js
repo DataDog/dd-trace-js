@@ -24,14 +24,10 @@ const { generateProbeConfig } = require('../../packages/dd-trace/test/debugger/d
 // purely a CommonJS application, this race condition will probably never be triggered.
 //
 // This test tries to trigger the race condition. However, it doesn't always happen, so it runs multiple times.
-describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
-  // NYC preloaded into the sandbox child injects a `node_modules/ms/index.js` that deterministically
-  // defeats the suffix-match picker in `findScriptFromPartialPath`. Skip under the coverage harness.
-  if (process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT) {
-    it.skip('incompatible with the integration-test coverage harness (NYC alters the sandbox require graph)')
-    return
-  }
-
+// NYC preloaded into the sandbox child injects a `node_modules/ms/index.js` that deterministically defeats the
+// suffix-match picker in `findScriptFromPartialPath`, so the suite is skipped under the coverage harness.
+const describeOrSkip = process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT ? describe.skip : describe
+describeOrSkip('Dynamic Instrumentation Probe Re-Evaluation', function () {
   useSandbox(
     undefined,
     undefined,

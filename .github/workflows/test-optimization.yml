@@ -132,6 +132,10 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           MOCHA_VERSION: ${{ matrix.mocha-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-jest:
     strategy:

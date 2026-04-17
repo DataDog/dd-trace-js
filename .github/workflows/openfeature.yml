@@ -58,6 +58,10 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-macos
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -81,6 +85,10 @@ jobs:
       - run: yarn test:integration:openfeature:coverage
       - uses: ./.github/actions/node/latest
       - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-ubuntu
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
@@ -100,6 +108,10 @@ jobs:
         with:
           cache: "true"
       - run: yarn test:integration:openfeature:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: openfeature-windows
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:

@@ -37,15 +37,11 @@ for (const dirAbs of reportDirsAbs) {
   let lcovContent
   try {
     lcovContent = fs.readFileSync(lcovPath, 'utf8')
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   // Consider it empty unless we see at least one `SF:` record.
   const isMissingOrEmpty = lcovContent === undefined || !/(^|\n)SF:/.test(lcovContent)
-  if (!isMissingOrEmpty) {
-    continue
-  }
+  if (!isMissingOrEmpty) continue
 
   emptyReportDirs.push(dirAbs)
 
@@ -53,20 +49,13 @@ for (const dirAbs of reportDirsAbs) {
   if (lcovContent !== undefined) {
     try {
       fs.unlinkSync(lcovPath)
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
   // If we deleted the last artifact, avoid leaving an empty coverage directory behind.
   try {
-    const entries = fs.readdirSync(dirAbs)
-    if (entries.length === 0) {
-      fs.rmdirSync(dirAbs)
-    }
-  } catch {
-    // ignore
-  }
+    if (fs.readdirSync(dirAbs).length === 0) fs.rmdirSync(dirAbs)
+  } catch {}
 }
 
 if (emptyReportDirs.length > 0) {
