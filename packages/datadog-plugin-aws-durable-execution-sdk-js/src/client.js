@@ -12,7 +12,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     const meta = this.getTags(ctx)
 
     this.startSpan('aws.durable_functions.invoke', {
-      service: this.serviceName({ pluginService: this.config.service }),
+      service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable_functions',
       resource: meta.functionname || 'aws.durable_functions.invoke',
       meta,
     }, ctx)
