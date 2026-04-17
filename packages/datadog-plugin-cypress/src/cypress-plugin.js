@@ -57,6 +57,7 @@ const {
   DYNAMIC_NAME_RE,
   logDynamicNamesWarning,
   getPullRequestBaseBranch,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -242,6 +243,40 @@ function getSuiteStatus (suiteStats) {
     return 'skip'
   }
   return 'pass'
+}
+
+function getFinalStatus ({
+  status,
+  hasFailedAllRetries,
+  isAtrActive,
+  isEfdActive,
+  isAtfActive,
+  hasPassedAllAtfRetries,
+  isQuarantined,
+  isDisabled,
+}) {
+  // Note that intermediate executions DO NOT report a final status tag
+
+  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
+  // the final status of its last execution should be reported as 'skip'.
+  if (isQuarantined || isDisabled || status === 'skip') {
+    return 'skip'
+  }
+
+  // When no retry feature is active, every execution is final
+  if (!isAtrActive && !isEfdActive && !isAtfActive) {
+    return status
+  }
+
+  // ATR and EFD: pass unless every attempt failed
+  if (isAtrActive || isEfdActive) {
+    return hasFailedAllRetries ? 'fail' : 'pass'
+  }
+
+  // Branch for ATF (We need to check hasPassedAllRetries)
+  if (isAtfActive) {
+    return hasPassedAllAtfRetries ? 'pass' : 'fail'
+  }
 }
 
 class CypressPlugin {
@@ -908,6 +943,34 @@ class CypressPlugin {
 
         if (codeOwners) {
           finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
+        }
+
+        // We can check if this is the last attempt regardless of the retry mechanism
+        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
+        if (isLastAttempt) {
+          const hasFailedAllRetries = finishedTest.testSpan.context()._tags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+          const isAtfActive = finishedTest.isAttemptToFix
+          const isEfdActive = finishedTestAttempts.some(t => t.isEfdRetry)
+          const isAtrActive = this.isFlakyTestRetriesEnabled && !isAtfActive && !isEfdActive
+          const hasPassedAllAtfRetries =
+          finishedTest.testSpan.context()._tags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
+          const isQuarantined = finishedTest.testSpan.context()._tags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+          const isDisabled = finishedTest.testSpan.context()._tags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+
+          const finalStatus = getFinalStatus({
+            status: cypressTestStatus,
+            hasFailedAllRetries,
+            isAtrActive,
+            isEfdActive,
+            isAtfActive,
+            hasPassedAllAtfRetries,
+            isQuarantined,
+            isDisabled,
+          })
+
+          if (finalStatus) {
+            finishedTest.testSpan.setTag(TEST_FINAL_STATUS, finalStatus)
+          }
         }
 
         finishedTest.testSpan.finish(finishedTest.finishTime)
