@@ -11,7 +11,7 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
     const meta = this.getTags(ctx)
 
     this.startSpan('aws.durable_functions.execute', {
-      service: this.serviceName({ pluginService: this.config.service }),
+      service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable_functions',
       meta,
     }, ctx)
 
