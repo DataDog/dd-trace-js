@@ -74,6 +74,21 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     this.addSub('datadog:mquery:filter:prepare', onStart('mquery:filter:prepare'))
     this.addSub('tracing:datadog:mquery:filter:start', onStartAndEnterWithStore('mquery:filter:start'))
     this.addSub('tracing:datadog:mquery:filter:asyncEnd', onFinish)
+
+    // TEMP DEBUG: raw subscriptions to bypass IastPlugin/noop checks and verify whether the
+    // tracing channels are actually publishing in Node 18 CI.
+    const dc = require('dc-polyfill')
+    const rawLog = (name) => (message) => {
+      const store = storage('legacy').getStore()
+      // eslint-disable-next-line no-console
+      console.log('[NOSQL DBG RAW] ch=%s nosqlAnalyzed=%s noop=%s hasStore=%s keys=%j',
+        name, store?.nosqlAnalyzed, store?.noop, !!store, message && Object.keys(message))
+    }
+    dc.channel('tracing:datadog:mquery:filter:start').subscribe(rawLog('raw:mquery:filter:start'))
+    dc.channel('tracing:datadog:mquery:filter:asyncEnd').subscribe(rawLog('raw:mquery:filter:asyncEnd'))
+    dc.channel('tracing:datadog:mquery:filter:end').subscribe(rawLog('raw:mquery:filter:end'))
+    dc.channel('tracing:datadog:mquery:filter:error').subscribe(rawLog('raw:mquery:filter:error'))
+    dc.channel('datadog:mquery:filter:prepare').subscribe(rawLog('raw:mquery:filter:prepare'))
   }
 
   configureSanitizers () {
