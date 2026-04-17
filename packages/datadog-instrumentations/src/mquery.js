@@ -55,8 +55,15 @@ addHook({
     })
   }
 
+  // TEMP DEBUG: verify whether the wrapped exec is actually invoked in Node 18 CI.
+  // eslint-disable-next-line no-console
+  console.log('[MQUERY DBG] shimmer.wrap exec applied hasExec=%s typeof=%s',
+    'exec' in Query.prototype, typeof Query.prototype.exec)
   shimmer.wrap(Query.prototype, 'exec', originalExec => {
     return function wrappedExec () {
+      // eslint-disable-next-line no-console
+      console.log('[MQUERY DBG] wrappedExec called op=%s hasTracingStartSubs=%s hasPrepareSubs=%s',
+        this?.op, tracingCh.start?.hasSubscribers, prepareCh.hasSubscribers)
       return tracingCh.tracePromise(originalExec, {}, this, arguments)
     }
   })
