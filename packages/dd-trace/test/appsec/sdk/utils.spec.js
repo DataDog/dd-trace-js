@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { getRootSpan } = require('../../../src/appsec/sdk/utils')
 const DatadogTracer = require('../../../src/tracer')
 const { getConfigFresh } = require('../../helpers/config')
+const { storage } = require('../../../../datadog-core')
 const id = require('../../../src/id')
 
 describe('Appsec SDK utils', () => {
@@ -17,17 +18,18 @@ describe('Appsec SDK utils', () => {
 
   describe('getRootSpan', () => {
     it('should return root span if there are no childs', () => {
-      tracer.trace('parent', {}, parent => {
+      const parent = tracer.startSpan('parent')
+      storage('legacy').run({ span: parent }, () => {
         const root = getRootSpan()
 
-        assert.strictEqual(root, parent._span)
+        assert.strictEqual(root, parent)
       })
     })
 
     it('should return root span of single child', () => {
       const childOf = tracer.startSpan('parent')
-
-      tracer.trace('child1', { childOf }, child1 => {
+      const child1 = tracer.startSpan('child1', { childOf })
+      storage('legacy').run({ span: child1 }, () => {
         const root = getRootSpan()
 
         assert.strictEqual(root, childOf)
@@ -38,7 +40,8 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
       childOf.context()._parentId = id()
 
-      tracer.trace('child1', { childOf }, child1 => {
+      const child1 = tracer.startSpan('child1', { childOf })
+      storage('legacy').run({ span: child1 }, () => {
         const root = getRootSpan()
 
         assert.strictEqual(root, childOf)
@@ -48,10 +51,11 @@ describe('Appsec SDK utils', () => {
     it('should return root span of multiple child', () => {
       const childOf = tracer.startSpan('parent')
 
-      tracer.trace('child1.1', { childOf }, child11 => {
-        tracer.trace('child1.1.2', { childOf: child11 }, child112 => { })
-      })
-      tracer.trace('child1.2', { childOf }, child12 => {
+      const child11 = tracer.startSpan('child1.1', { childOf })
+      tracer.startSpan('child1.1.2', { childOf: child11 })
+
+      const child12 = tracer.startSpan('child1.2', { childOf })
+      storage('legacy').run({ span: child12 }, () => {
         const root = getRootSpan()
 
         assert.strictEqual(root, childOf)
@@ -62,17 +66,19 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
       childOf.setTag('_inferred_span', {})
 
-      tracer.trace('child1', { childOf }, child1 => {
+      const child1 = tracer.startSpan('child1', { childOf })
+      storage('legacy').run({ span: child1 }, () => {
         const root = getRootSpan()
 
-        assert.strictEqual(root, child1._span)
+        assert.strictEqual(root, child1)
       })
     })
 
     it('should return root span of an inferred span', () => {
       const childOf = tracer.startSpan('parent')
 
-      tracer.trace('child1', { childOf }, child1 => {
+      const child1 = tracer.startSpan('child1', { childOf })
+      storage('legacy').run({ span: child1 }, () => {
         child1.setTag('_inferred_span', {})
 
         const root = getRootSpan()
@@ -85,12 +91,13 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
       childOf.setTag('_inferred_span', {})
 
-      tracer.trace('child1', { childOf }, child1 => {
+      const child1 = tracer.startSpan('child1', { childOf })
+      storage('legacy').run({ span: child1 }, () => {
         child1.setTag('_inferred_span', {})
 
         const root = getRootSpan()
 
-        assert.strictEqual(root, child1._span)
+        assert.strictEqual(root, child1)
       })
     })
 
@@ -98,46 +105,45 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
       childOf.setTag('_inferred_span', {})
 
-      tracer.trace('child1.1', { childOf }, child11 => { })
-      tracer.trace('child1.2', { childOf }, child12 => {
-        tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
-          const root = getRootSpan()
-          assert.strictEqual(root, child12._span)
-        })
+      tracer.startSpan('child1.1', { childOf })
+      const child12 = tracer.startSpan('child1.2', { childOf })
+      const child121 = tracer.startSpan('child1.2.1', { childOf: child12 })
+      storage('legacy').run({ span: child121 }, () => {
+        const root = getRootSpan()
+        assert.strictEqual(root, child12)
       })
     })
 
     it('should return root span discarding inferred spans if it is direct parent (mutiple childs)', () => {
       const childOf = tracer.startSpan('parent')
 
-      tracer.trace('child1.1', { childOf }, child11 => { })
-      tracer.trace('child1.2', { childOf }, child12 => {
-        child12.setTag('_inferred_span', {})
+      tracer.startSpan('child1.1', { childOf })
+      const child12 = tracer.startSpan('child1.2', { childOf })
+      child12.setTag('_inferred_span', {})
 
-        tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
-          const root = getRootSpan()
+      const child121 = tracer.startSpan('child1.2.1', { childOf: child12 })
+      storage('legacy').run({ span: child121 }, () => {
+        const root = getRootSpan()
 
-          assert.strictEqual(root, childOf)
-        })
+        assert.strictEqual(root, childOf)
       })
     })
 
     it('should return root span discarding multiple inferred spans', () => {
       const childOf = tracer.startSpan('parent')
 
-      tracer.trace('child1.1', { childOf }, child11 => { })
-      tracer.trace('child1.2', { childOf }, child12 => {
-        child12.setTag('_inferred_span', {})
+      tracer.startSpan('child1.1', { childOf })
+      const child12 = tracer.startSpan('child1.2', { childOf })
+      child12.setTag('_inferred_span', {})
 
-        tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
-          child121.setTag('_inferred_span', {})
+      const child121 = tracer.startSpan('child1.2.1', { childOf: child12 })
+      child121.setTag('_inferred_span', {})
 
-          tracer.trace('child1.2.1.1', { childOf: child121 }, child1211 => {
-            const root = getRootSpan()
+      const child1211 = tracer.startSpan('child1.2.1.1', { childOf: child121 })
+      storage('legacy').run({ span: child1211 }, () => {
+        const root = getRootSpan()
 
-            assert.strictEqual(root, childOf)
-          })
-        })
+        assert.strictEqual(root, childOf)
       })
     })
 
@@ -145,19 +151,18 @@ describe('Appsec SDK utils', () => {
       const childOf = tracer.startSpan('parent')
       childOf.setTag('_inferred_span', {})
 
-      tracer.trace('child1.1', { childOf }, child11 => { })
-      tracer.trace('child1.2', { childOf }, child12 => {
-        child12.setTag('_inferred_span', {})
+      tracer.startSpan('child1.1', { childOf })
+      const child12 = tracer.startSpan('child1.2', { childOf })
+      child12.setTag('_inferred_span', {})
 
-        tracer.trace('child1.2.1', { childOf: child12 }, child121 => {
-          child121.setTag('_inferred_span', {})
+      const child121 = tracer.startSpan('child1.2.1', { childOf: child12 })
+      child121.setTag('_inferred_span', {})
 
-          tracer.trace('child1.2.1.1', { childOf: child121 }, child1211 => {
-            const root = getRootSpan()
+      const child1211 = tracer.startSpan('child1.2.1.1', { childOf: child121 })
+      storage('legacy').run({ span: child1211 }, () => {
+        const root = getRootSpan()
 
-            assert.strictEqual(root, child1211._span)
-          })
-        })
+        assert.strictEqual(root, child1211)
       })
     })
   })
