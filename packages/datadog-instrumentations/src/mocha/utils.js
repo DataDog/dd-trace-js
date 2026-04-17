@@ -264,6 +264,14 @@ function getFinalStatus ({
 }) {
   // Note that intermediate executions DO NOT report a final status tag
 
+  // Intermediate EFD and ATF executions must not carry a final status, regardless of quarantine/disabled state
+  const isIntermediateExecution =
+    (isEfdRetry && !isLastEfdRetry) ||
+    (isAttemptToFix && !isLastAttemptToFix)
+  if (isIntermediateExecution) {
+    return
+  }
+
   // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
   // the final status of its last execution should be reported as 'skip'.
   if (isQuarantined || isDisabled) {

@@ -7,13 +7,11 @@ const http = require('node:http')
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
-const web = require('../../dd-trace/src/plugins/util/web')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
-  let tracer
   let Router
   let appListener
 
@@ -26,20 +24,12 @@ describe('Plugin', () => {
 
   function server (router, errorHandler = defaultErrorHandler) {
     return http.createServer((req, res) => {
-      const config = web.normalizeConfig({})
-
-      web.instrument(tracer, config, req, res, 'web.request')
-
       return router(req, res, errorHandler(req, res))
     })
   }
 
   describe('router', () => {
     withVersions('router', 'router', version => {
-      beforeEach(() => {
-        tracer = require('../../dd-trace')
-      })
-
       afterEach(() => {
         appListener && appListener.close()
       })

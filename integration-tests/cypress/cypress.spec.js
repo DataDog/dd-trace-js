@@ -398,6 +398,79 @@ moduleTypes.forEach(({
       ])
     })
 
+    over10It('reports tests with old manual plugin approach without NODE_OPTIONS', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          // Verify full span hierarchy: session, module, suites, and tests
+          const sessionEvents = events.filter(event => event.type === 'test_session_end')
+          const moduleEvents = events.filter(event => event.type === 'test_module_end')
+          const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+          const testEvents = events.filter(event => event.type === 'test')
+
+          assert.strictEqual(sessionEvents.length, 1)
+          assert.strictEqual(moduleEvents.length, 1)
+          assert.strictEqual(suiteEvents.length, 2, 'one suite per spec file')
+          assert.ok(testEvents.length >= 2, 'at least one pass and one fail test')
+
+          const passedTest = testEvents.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          const failedTest = testEvents.find(event =>
+            event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail'
+          )
+
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+              [TEST_TYPE]: 'browser',
+            },
+          })
+          assert.ok(passedTest?.content.meta[TEST_SOURCE_FILE])
+          assert.ok(passedTest?.content.meta[COMPONENT])
+
+          // Sanity-check _now() time tracking: duration should be positive and under 60s
+          assert.ok(passedTest.content.duration > 0, 'test duration should be positive')
+          assert.ok(passedTest.content.duration < 60_000_000_000, 'test duration should be under 60s')
+
+          assertObjectContains(failedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'fail',
+              [TEST_FRAMEWORK]: 'cypress',
+              [TEST_TYPE]: 'browser',
+            },
+          })
+          assert.ok(failedTest?.content.meta[ERROR_MESSAGE])
+        }, 60000)
+
+      // Use EVP proxy config but strip NODE_OPTIONS so the tracer is NOT preloaded.
+      // The legacy config file initializes dd-trace itself via require('dd-trace/ci/cypress/plugin').
+      const { NODE_OPTIONS, ...envVars } = getCiVisEvpProxyConfig(receiver.port)
+
+      const legacyConfigFile = type === 'esm'
+        ? 'cypress-legacy-plugin.config.mjs'
+        : 'cypress-legacy-plugin.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-*.js',
+          },
+        }
+      )
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
     over10It('reports tests when using cypress.config.mjs with NODE_OPTIONS', async () => {
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -860,6 +933,115 @@ moduleTypes.forEach(({
         once(childProcess, 'exit'),
         receiverPromise,
       ])
+    })
+
+    // Exercises the _isInit=true channel path: NODE_OPTIONS activates auto-instrumentation
+    // (wrapSetupNodeEvents), the manual plugin sets _isInit=true, and the channel subscriber
+    // chains the after:spec/after:run handlers intercepted by wrappedOn.
+    // Differs from the backwards-compat test (APM protocol, single pass) by validating
+    // the full citestcycle span hierarchy through the channel's _isInit=true branch.
+    over10It('correctly chains hooks when auto-instrumentation and manual plugin are both active', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const sessionEvents = events.filter(event => event.type === 'test_session_end')
+          const testEvents = events.filter(event => event.type === 'test')
+
+          assert.strictEqual(sessionEvents.length, 1, 'should have one test session')
+          assert.ok(testEvents.length >= 1, 'should have at least one test')
+
+          const passedTest = testEvents.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      const legacyConfigFile = type === 'esm'
+        ? 'cypress-legacy-plugin.config.mjs'
+        : 'cypress-legacy-plugin.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    // Exercises the manual plugin path without NODE_OPTIONS when users also register
+    // custom after:spec and after:run handlers. Without auto-instrumentation, there is
+    // no wrappedOn to intercept and chain handlers — the manual plugin's on() calls
+    // replace earlier registrations. This test verifies the system does not crash and
+    // spans are still correctly reported through the manual plugin's own hooks.
+    over10It('manual plugin with custom after hooks works without NODE_OPTIONS', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const sessionEvents = events.filter(event => event.type === 'test_session_end')
+          const testEvents = events.filter(event => event.type === 'test')
+
+          assert.strictEqual(sessionEvents.length, 1, 'should have one test session')
+          assert.ok(testEvents.length >= 1, 'should have at least one test')
+
+          const passedTest = testEvents.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 60000)
+
+      // Strip NODE_OPTIONS — the manual plugin initializes dd-trace itself.
+      const { NODE_OPTIONS, ...envVars } = getCiVisEvpProxyConfig(receiver.port)
+
+      const legacyConfigFile = type === 'esm'
+        ? 'cypress-legacy-plugin.config.mjs'
+        : 'cypress-legacy-plugin.config.js'
+
+      childProcess = exec(
+        `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            CYPRESS_ENABLE_AFTER_RUN_CUSTOM: '1',
+            CYPRESS_ENABLE_AFTER_SPEC_CUSTOM: '1',
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
     over12It('reports correct source file and line for pre-compiled typescript test files', async function () {
