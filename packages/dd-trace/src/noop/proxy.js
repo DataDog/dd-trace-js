@@ -97,6 +97,11 @@ class NoopProxy {
         [SVC_SRC_KEY]: 'm',
       }
     }
+
+    if (options?.childOf instanceof PublicSpan) {
+      options.childOf = options.childOf._span
+    }
+
     return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 

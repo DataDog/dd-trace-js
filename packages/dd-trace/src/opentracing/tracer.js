@@ -115,7 +115,7 @@ class DatadogTracer {
  * @returns {SpanContext}
  */
 function getContext (spanContext) {
-  if (spanContext instanceof Span || spanContext instanceof PublicSpan) {
+  if (spanContext instanceof Span) {
     spanContext = spanContext.context()
   }
 
