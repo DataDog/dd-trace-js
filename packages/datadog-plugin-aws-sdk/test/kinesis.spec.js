@@ -156,6 +156,7 @@ describe('Kinesis', function () {
           const span = traces[0][0]
           assertObjectContains(span.meta, {
             streamname: streamName,
+            'messaging.system': 'aws_kinesis',
             aws_service: 'Kinesis',
             region: 'us-east-1',
           })

@@ -202,9 +202,9 @@
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
-/integration-tests/openfeature/ @DataDog/feature-flagging
-/packages/dd-trace/src/openfeature/ @DataDog/feature-flagging
-/packages/dd-trace/test/openfeature/ @DataDog/feature-flagging
+/integration-tests/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
 /.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
