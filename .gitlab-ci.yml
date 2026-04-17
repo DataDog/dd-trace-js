@@ -34,10 +34,10 @@ include:
   - local: ".gitlab/macrobenchmarks.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
-    ref: "fayssal/integrate"
+    ref: "main"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-hapi-redis-parallel.yml"
-    ref: "fayssal/integrate"
+    ref: "main"
 
 workflow:
   auto_cancel:
