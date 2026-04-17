@@ -207,7 +207,40 @@ function checkVulnerabilityInRequest (
 
       assert.ok(((vulnerabilitiesCount.get(vulnerability)) > (0)))
       if (occurrences) {
-        assert.strictEqual(vulnerabilitiesCount.get(vulnerability), occurrences)
+        const actualCount = vulnerabilitiesCount.get(vulnerability)
+        if (actualCount !== occurrences) {
+          const matchingVulns = vulnerabilitiesTrace.vulnerabilities.filter(v => v.type === vulnerability)
+          // eslint-disable-next-line no-console
+          console.error(
+            '[FLAKY DEBUG] Batch has %d trace(s), first trace has %d span(s)',
+            traces.length,
+            traces[0].length
+          )
+          // eslint-disable-next-line no-console
+          console.error(
+            '[FLAKY DEBUG] Expected %d occurrences of %s but found %d.\n' +
+            'All vulnerabilities in span:\n%s',
+            occurrences, vulnerability, actualCount,
+            JSON.stringify(vulnerabilitiesTrace.vulnerabilities.map(v => ({
+              type: v.type,
+              location: v.location,
+              evidence: v.evidence?.value,
+            })), null, 2)
+          )
+          // eslint-disable-next-line no-console
+          console.error(
+            '[FLAKY DEBUG] Matching vulnerability stack traces:\n%s',
+            JSON.stringify(matchingVulns.map(v => v.stackId), null, 2)
+          )
+          // eslint-disable-next-line no-console
+          console.error(
+            '[FLAKY DEBUG] Span resource: %s, spanId: %s, traceId: %s',
+            traces[0][0].resource,
+            traces[0][0].span_id,
+            traces[0][0].trace_id
+          )
+        }
+        assert.strictEqual(actualCount, occurrences)
       }
 
       if (location) {
