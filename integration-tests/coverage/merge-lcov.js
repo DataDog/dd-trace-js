@@ -7,7 +7,7 @@ const libCoverage = require('istanbul-lib-coverage')
 const libReport = require('istanbul-lib-report')
 const reports = require('istanbul-reports')
 
-const { REPO_ROOT, getCollectorRoot } = require('./runtime')
+const { REPO_ROOT, getCollectorRoot, getMergedReportDir } = require('./runtime')
 
 /**
  * Loads every per-sandbox `coverage-final.json` emitted by `finalize-sandbox.js` and merges them
@@ -58,9 +58,8 @@ async function readSandboxJson (jsonPath) {
 }
 
 async function main () {
-  const collectorRoot = getCollectorRoot()
-  const sandboxesDir = path.join(collectorRoot, 'sandboxes')
-  const outputDir = path.join(collectorRoot, 'merged')
+  const sandboxesDir = path.join(getCollectorRoot(), 'sandboxes')
+  const outputDir = getMergedReportDir()
 
   await fs.mkdir(outputDir, { recursive: true })
 

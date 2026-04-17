@@ -7,6 +7,16 @@ const { join } = require('path')
 const axios = require('axios')
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
 
+// NYC instrumentation slows child-process bootstrap (dd-trace init, OTel provider
+// registration, Express `listen`), so the three tests below need longer waits for
+// telemetry and for the fixture HTTP server to be reachable. All other tests in this
+// file already pass with the default timeouts and are left untouched.
+const COVERAGE_ACTIVE = Boolean(process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT)
+// Chosen empirically as the smallest multiplier that keeps the failing tests stable on
+// both local runs and CI (observed overhead ~2x wall-clock). Prefer reusing this constant
+// when making other tests coverage-aware so the safety margin stays uniform and minimal.
+const COVERAGE_SLOWDOWN = COVERAGE_ACTIVE ? 2 : 1
+
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics
     ? agent.assertTelemetryReceived(onMessage, 'generate-metrics', timeout)
@@ -51,7 +61,7 @@ function nearNow (ts, now = Date.now(), range = 1000) {
 }
 
 describe('opentelemetry', function () {
-  this.timeout(20000)
+  this.timeout(20_000 * COVERAGE_SLOWDOWN)
 
   let agent = /** @type {FakeAgent | null} */ (null)
   let proc
@@ -242,17 +252,20 @@ describe('opentelemetry', function () {
   })
 
   it('should capture telemetry', async () => {
+    // Under coverage, dd-trace/OTel init in the child pushes the first telemetry
+    // heartbeat past the default 5s `check` timeout; give `timeout` and the child's
+    // hold window the same uniform slowdown so a heartbeat with `spans_*` lands in time.
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent?.port,
         DD_TRACE_OTEL_ENABLED: '1',
         DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
-        TIMEOUT: '1500',
+        TIMEOUT: String(1500 * COVERAGE_SLOWDOWN),
       },
     })
 
-    await check(agent, proc, timeout, ({ payload }) => {
+    await check(agent, proc, timeout * COVERAGE_SLOWDOWN, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
@@ -294,10 +307,13 @@ describe('opentelemetry', function () {
         DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
       },
     })
-    await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
+    // 1s isn't enough for the NYC-instrumented child to finish `require` chains and
+    // reach `app.listen()` before axios connects — bump the wait uniformly under coverage
+    // so `axios.get` doesn't hit ECONNREFUSED.
+    await new Promise(resolve => setTimeout(resolve, 1000 * COVERAGE_SLOWDOWN))
     await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
 
-    await check(agent, proc, 10000, ({ payload }) => {
+    await check(agent, proc, 10_000 * COVERAGE_SLOWDOWN, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
 
       const metrics = payload.payload
@@ -366,10 +382,12 @@ describe('opentelemetry', function () {
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
       },
     })
-    await new Promise(resolve => setTimeout(resolve, 1000)) // Adjust the delay as necessary
+    // See note in "should capture auto-instrumentation telemetry": coverage-instrumented
+    // child boot is too slow for the 1s default before `app.listen()` is ready.
+    await new Promise(resolve => setTimeout(resolve, 1000 * COVERAGE_SLOWDOWN))
     await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
 
-    await check(agent, proc, 10000, ({ payload }) => {
+    await check(agent, proc, 10_000 * COVERAGE_SLOWDOWN, ({ payload }) => {
       assert.strictEqual(payload.length, 2)
       // combine the traces
       const trace = payload.flat()

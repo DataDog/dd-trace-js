@@ -11,7 +11,10 @@ const COLLECTOR_ENV = 'DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR'
 // child's resolved dd-trace root so grandchildren inherit the correct root automatically.
 const ROOT_ENV = 'DD_TRACE_INTEGRATION_COVERAGE_ROOT'
 const REPO_ROOT = path.resolve(__dirname, '..', '..')
-const DEFAULT_COLLECTOR_ROOT = path.join(REPO_ROOT, 'coverage', 'integration-tests')
+// Per-script scratch space kept outside `coverage/` so parallel integration runs in the same
+// job don't clobber each other's final merged report (e.g. the platform integration matrix
+// runs `test:integration:coverage`, `:esbuild:coverage`, and `:webpack:coverage` sequentially).
+const DEFAULT_COLLECTOR_ROOT = path.join(REPO_ROOT, '.nyc_output', 'integration-tests-collector')
 const CHILD_BOOTSTRAP_PATH = path.join(__dirname, 'child-bootstrap.js')
 const BOOTSTRAP_REQUIRE_ARG = `--require=${CHILD_BOOTSTRAP_PATH}`
 
@@ -71,6 +74,21 @@ async function ensureCollectorRoot () {
  */
 function getSandboxCollectorDir (folder) {
   return path.join(getCollectorRoot(), 'sandboxes', path.basename(folder))
+}
+
+/**
+ * Final report directory for the merged integration coverage. Mirrors the nyc layout
+ * (`coverage/node-${version}${label}`) so Codecov discovery and `scripts/verify-coverage.js`
+ * treat integration and unit reports identically, and so distinct `npm_lifecycle_event`s
+ * (e.g. `test:integration:debugger:coverage` vs `test:integration:esbuild:coverage`) never
+ * collide in the same job.
+ *
+ * @returns {string}
+ */
+function getMergedReportDir () {
+  const event = process.env.npm_lifecycle_event ?? ''
+  const label = `-${event.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')}`
+  return path.join(REPO_ROOT, 'coverage', `node-${process.version}${label}`)
 }
 
 /**
@@ -216,6 +234,7 @@ module.exports = {
   canonicalizePath,
   ensureCollectorRoot,
   getCollectorRoot,
+  getMergedReportDir,
   getSandboxCollectorDir,
   getSandboxNycPaths,
   isCoverageActive,

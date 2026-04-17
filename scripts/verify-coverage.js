@@ -14,20 +14,32 @@ const { values } = parseArgs({
 })
 
 const cwd = process.cwd()
+const coverageDir = path.join(cwd, 'coverage')
 
 /** @type {string[]} */
 const reportDirsAbs = []
 
-// If the default report dir is being used, prefer checking all top-level `coverage-node-*` directories.
+// Match `nyc.config.js` and `integration-tests/coverage/runtime.js` (`getMergedReportDir()`),
+// which both emit `coverage/node-${version}${label}` directories so Codecov can attribute each
+// test script/Node.js combination independently.
 try {
-  const entries = fs.readdirSync(cwd, { withFileTypes: true })
-  for (const entry of entries) {
-    if (entry.isDirectory() && entry.name.startsWith('coverage-node-')) {
-      reportDirsAbs.push(path.join(cwd, entry.name))
+  for (const entry of fs.readdirSync(coverageDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.startsWith('node-')) {
+      reportDirsAbs.push(path.join(coverageDir, entry.name))
     }
   }
-} catch {
-  // ignore
+} catch {}
+
+if (reportDirsAbs.length === 0) {
+  throw new Error(
+    format(
+      'No coverage report directories found under %s. ' +
+      'Expected at least one `node-<version>-<script>` subdirectory with an `lcov.info` ' +
+      '(check that the test step produced coverage and that no later step wiped it). Flags: %s.',
+      path.relative(cwd, coverageDir) || '.',
+      values.flags
+    )
+  )
 }
 
 const emptyReportDirs = []

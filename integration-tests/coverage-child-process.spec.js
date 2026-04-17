@@ -9,7 +9,12 @@ const path = require('node:path')
 
 const { installPatch } = require('./coverage/patch-child-process')
 const finalizeSandboxCoverage = require('./coverage/finalize-sandbox')
-const { ROOT_ENV } = require('./coverage/runtime')
+const {
+  ROOT_ENV,
+  getCollectorRoot,
+  getMergedReportDir,
+  getSandboxCollectorDir,
+} = require('./coverage/runtime')
 
 describe('integration coverage child process hook', () => {
   let appRoot
@@ -108,8 +113,9 @@ process.send('ready')
       stdio: 'pipe',
     })
 
-    const parentDebug = JSON.parse(fs.readFileSync(path.join(appRoot, 'coverage-fixtures', 'parent-debug.json'), 'utf8'))
-    const workerDebug = JSON.parse(fs.readFileSync(path.join(appRoot, 'coverage-fixtures', 'worker-debug.json'), 'utf8'))
+    const fixturesDir = path.join(appRoot, 'coverage-fixtures')
+    const parentDebug = JSON.parse(fs.readFileSync(path.join(fixturesDir, 'parent-debug.json'), 'utf8'))
+    const workerDebug = JSON.parse(fs.readFileSync(path.join(fixturesDir, 'worker-debug.json'), 'utf8'))
     assert.strictEqual(parentDebug.hasNycConfig, true)
     assert.strictEqual(workerDebug.hasNycConfig, true)
     assert.ok(parentDebug.nodeOptions.includes('child-bootstrap.js'))
@@ -127,17 +133,16 @@ process.send('ready')
 
     await finalizeSandboxCoverage(appRoot, coverageRoot)
 
-    childProcess.execFileSync(process.execPath, [path.join(process.cwd(), 'integration-tests', 'coverage', 'merge-lcov.js')], {
-      stdio: 'pipe',
-    })
+    const mergeScript = path.join(process.cwd(), 'integration-tests', 'coverage', 'merge-lcov.js')
+    childProcess.execFileSync(process.execPath, [mergeScript], { stdio: 'pipe' })
 
-    const collectorRoot = path.join(process.cwd(), 'coverage', 'integration-tests')
-    const sandboxDir = path.join(collectorRoot, 'sandboxes', path.basename(appRoot))
-    const lcovPath = path.join(sandboxDir, 'lcov.info')
-    const mergedLcovPath = path.join(collectorRoot, 'merged', 'lcov.info')
+    const lcovPath = path.join(getSandboxCollectorDir(appRoot), 'lcov.info')
+    const mergedLcovPath = path.join(getMergedReportDir(), 'lcov.info')
 
     assert.ok(fs.existsSync(lcovPath), `expected coverage report at ${lcovPath}`)
     assert.ok(fs.existsSync(mergedLcovPath), `expected merged coverage report at ${mergedLcovPath}`)
+    assert.ok(getCollectorRoot().includes(path.join('.nyc_output', 'integration-tests-collector')),
+      'collector scratch should live under .nyc_output/ so it does not collide with final reports in coverage/')
 
     const lcov = fs.readFileSync(lcovPath, 'utf8')
     assert.match(lcov, /SF:packages\/dd-trace\/src\/id\.js/)

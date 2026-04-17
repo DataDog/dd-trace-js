@@ -13,13 +13,13 @@ const { inspect } = require('util')
 
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
-const FakeAgent = require('./fake-agent')
-const { BUN, withBun } = require('./bun')
 const finalizeSandboxCoverage = require('../coverage/finalize-sandbox')
 const {
   applyCoverageEnv,
   resolveCoverageRoot,
 } = require('../coverage/runtime')
+const FakeAgent = require('./fake-agent')
+const { BUN, withBun } = require('./bun')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
