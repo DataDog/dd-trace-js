@@ -13,7 +13,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
 
     this.startSpan('aws.durable_functions.invoke', {
       service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable_functions',
-      resource: meta.functionname || 'aws.durable_functions.invoke',
+      resource: meta.operationname || meta.functionname || 'aws.durable_functions.invoke',
       meta,
     }, ctx)
 
@@ -22,19 +22,26 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
 
   /**
    * Extracts tags from the invoke method arguments.
-   * ctx.arguments: [name, functionIdentifier, input, options?]
+   * invoke has two overloads:
+   *   invoke(name, funcId, input?, config?)  — args[1] is a string (funcId)
+   *   invoke(funcId, input?, config?)        — args[1] is an object or undefined
    * @param {{ arguments?: ArrayLike<unknown> }} ctx
    * @returns {Record<string, string>}
    */
   getTags (ctx) {
     const args = ctx.arguments || []
-    const functionname = args[1] ? String(args[1]) : undefined
+    const hasName = typeof args[0] === 'string' && typeof args[1] === 'string'
+    const operationname = hasName ? args[0] : undefined
+    const functionname = hasName ? args[1] : (typeof args[0] === 'string' ? args[0] : undefined)
 
     const tags = {
       component: 'aws-durable-execution-sdk-js',
       'span.kind': 'client',
     }
 
+    if (operationname) {
+      tags.operationname = operationname
+    }
     if (functionname) {
       tags.functionname = functionname
     }

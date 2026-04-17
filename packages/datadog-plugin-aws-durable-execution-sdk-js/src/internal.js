@@ -11,13 +11,27 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const meta = this.getTags(ctx)
+    const operationName = this.getOperationName(ctx)
 
     this.startSpan(this.constructor.spanName, {
       service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable_functions',
+      resource: operationName || this.constructor.spanName,
       meta,
     }, ctx)
 
     return ctx.currentStore
+  }
+
+  /**
+   * Extracts the operation name from arguments.
+   * Most SDK methods use the pattern: (name?: string, ...rest) where
+   * args[0] is the user-provided name if it's a string.
+   * @param {{ arguments?: ArrayLike<unknown> }} ctx
+   * @returns {string|undefined}
+   */
+  getOperationName (ctx) {
+    const args = ctx.arguments || []
+    return typeof args[0] === 'string' ? args[0] : undefined
   }
 
   getTags (ctx) {

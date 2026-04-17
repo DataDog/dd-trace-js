@@ -38,12 +38,12 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     await testSetup.teardown()
   })
 
-  describe('withDurableExecution() - workflow.execute', () => {
+  describe('withDurableExecution() - aws.durable_functions.execute', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.execute',
-          service: 'test',
+          name: 'aws.durable_functions.execute',
+          service: 'aws.durable_functions',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'server',
@@ -60,7 +60,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span even when handler errors (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.execute',
+          name: 'aws.durable_functions.execute',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'server',
@@ -79,12 +79,13 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.step() - workflow.step.execute', () => {
+  describe('DurableContextImpl.step() - aws.durable_functions.step', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.step.execute',
-          service: 'test',
+          name: 'aws.durable_functions.step',
+          service: 'aws.durable_functions',
+          resource: 'test-step',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -101,7 +102,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.step.execute',
+          name: 'aws.durable_functions.step',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -122,11 +123,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.runInChildContext() - workflow.child_context.execute', () => {
+  describe('DurableContextImpl.runInChildContext() - aws.durable_functions.child_context', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.child_context.execute',
+          name: 'aws.durable_functions.child_context',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -142,7 +143,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.child_context.execute',
+          name: 'aws.durable_functions.child_context',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -163,11 +164,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.waitForCondition() - workflow.wait_for_condition', () => {
+  describe('DurableContextImpl.waitForCondition() - aws.durable_functions.wait_for_condition', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.wait_for_condition',
+          name: 'aws.durable_functions.wait_for_condition',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -183,7 +184,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.wait_for_condition',
+          name: 'aws.durable_functions.wait_for_condition',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -203,11 +204,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.waitForCallback() - workflow.wait_for_callback', () => {
+  describe('DurableContextImpl.waitForCallback() - aws.durable_functions.wait_for_callback', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.wait_for_callback',
+          name: 'aws.durable_functions.wait_for_callback',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -223,7 +224,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.wait_for_callback',
+          name: 'aws.durable_functions.wait_for_callback',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -243,11 +244,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.createCallback() - workflow.create_callback', () => {
+  describe('DurableContextImpl.createCallback() - aws.durable_functions.create_callback', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.create_callback',
+          name: 'aws.durable_functions.create_callback',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -263,7 +264,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.create_callback',
+          name: 'aws.durable_functions.create_callback',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -283,11 +284,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.map() - workflow.map', () => {
+  describe('DurableContextImpl.map() - aws.durable_functions.map', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.map',
+          name: 'aws.durable_functions.map',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -303,7 +304,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span even when callback errors (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.map',
+          name: 'aws.durable_functions.map',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -321,11 +322,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.parallel() - workflow.parallel', () => {
+  describe('DurableContextImpl.parallel() - aws.durable_functions.parallel', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.parallel',
+          name: 'aws.durable_functions.parallel',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -341,7 +342,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span even when branch errors (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.parallel',
+          name: 'aws.durable_functions.parallel',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -359,12 +360,13 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.invoke() - lambda.invoke', () => {
+  describe('DurableContextImpl.invoke() - aws.durable_functions.invoke', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'lambda.invoke',
-          service: 'test',
+          name: 'aws.durable_functions.invoke',
+          service: 'aws.durable_functions',
+          resource: 'test-func',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'client',
@@ -381,7 +383,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'lambda.invoke',
+          name: 'aws.durable_functions.invoke',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'client',
@@ -415,21 +417,22 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       computePeerServiceSpy.restore()
     })
 
-    it('should set peer.service from functionname on lambda.invoke spans', async () => {
+    it('should set peer.service from functionname on aws.durable_functions.invoke spans', async () => {
       const expectedArn = 'arn:aws:lambda:us-east-1:123456789012:function:target'
       const traceAssertion = agent.assertSomeTraces((traces) => {
         const allSpans = traces.flat()
-        const invokeSpan = allSpans.find(s => s.name === 'lambda.invoke')
+        const invokeSpan = allSpans.find(s => s.name === 'aws.durable_functions.invoke')
         if (!invokeSpan) {
           const available = JSON.stringify(allSpans.map(s => s.name))
-          throw new Error(`Expected span "lambda.invoke" not found. Available: ${available}`)
+          throw new Error(`Expected span "aws.durable_functions.invoke" not found. Available: ${available}`)
         }
         assertObjectContains(invokeSpan, {
-          name: 'lambda.invoke',
-          resource: expectedArn,
+          name: 'aws.durable_functions.invoke',
+          resource: 'test-func',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'client',
+            operationname: 'test-func',
             functionname: expectedArn,
             'peer.service': expectedArn,
             '_dd.peer.service.source': 'functionname',
@@ -443,11 +446,11 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  describe('DurableContextImpl.wait() - workflow.wait', () => {
+  describe('DurableContextImpl.wait() - aws.durable_functions.wait', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.wait',
+          name: 'aws.durable_functions.wait',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',
@@ -463,7 +466,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
         assertSpanByName(traces, {
-          name: 'workflow.wait',
+          name: 'aws.durable_functions.wait',
           meta: {
             component: 'aws-durable-execution-sdk-js',
             'span.kind': 'internal',

@@ -12,6 +12,7 @@ class AwsDurableExecutionSdkJsServerPlugin extends ServerPlugin {
 
     this.startSpan('aws.durable_functions.execute', {
       service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable_functions',
+      resource: 'aws.durable_functions.execute',
       meta,
     }, ctx)
 
