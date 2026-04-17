@@ -153,8 +153,8 @@ class AwsDurableExecutionSdkJsTestSetup {
 
   async withDurableExecution () {
     // The orchestrion rewriter wraps the internal runHandler function which
-    // executes when the returned handler is called. The workflow.execute span
-    // covers the full handler execution lifecycle.
+    // executes when the returned handler is called. The aws.durable_execution.execute
+    // span covers the full handler execution lifecycle.
     const client = new ImmediateCompletionMockClient()
     return this._invokeHandler(async (event, ctx) => {
       return { status: 'completed' }
