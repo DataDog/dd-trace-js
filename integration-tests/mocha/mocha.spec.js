@@ -4061,6 +4061,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
                 assert.ok(!(TEST_IS_RETRY in test.meta))
                 assert.ok(!(TEST_RETRY_REASON in test.meta))
+                const expectedFinalStatus = (isQuarantined || isDisabled) ? 'skip' : test.meta[TEST_STATUS]
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
                 continue
               }
 
@@ -4092,6 +4094,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 }
+                // Final status: quarantined/disabled always report 'skip';
+                // pass only if all attempts passed, fail otherwise
+                const expectedFinalStatus = (isQuarantined || isDisabled)
+                  ? 'skip'
+                  : (shouldAlwaysPass ? 'pass' : 'fail')
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
+              } else {
+                // Intermediate ATF executions must not carry a final status tag
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
               }
             }
           })

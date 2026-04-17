@@ -5,6 +5,7 @@ const assert = require('node:assert')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { storage } = require('../../datadog-core')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
@@ -66,22 +67,27 @@ describe('Plugin', () => {
         it('should do automatic instrumentation when using callbacks', async () => {
           const promise = agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-              assert.strictEqual(traces[0][0].resource, 'GET')
-              assert.strictEqual(traces[0][0].type, 'redis')
-              assert.strictEqual(traces[0][0].meta['db.name'], '0')
-              assert.strictEqual(traces[0][0].meta['db.type'], 'redis')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'GET foo')
-              assert.strictEqual(traces[0][0].meta.component, 'redis')
-              assert.strictEqual(traces[0][0].meta['_dd.integration'], 'redis')
-              assert.strictEqual(traces[0][0].meta['out.host'], '127.0.0.1')
-              assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: 'GET',
+                type: 'redis',
+                meta: {
+                  'db.name': '0',
+                  'db.type': 'redis',
+                  'span.kind': 'client',
+                  'redis.raw_command': 'GET foo',
+                  component: 'redis',
+                  '_dd.integration': 'redis',
+                  'out.host': '127.0.0.1',
+                },
+                metrics: {
+                  'network.destination.port': 6379,
+                },
+              })
             })
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withPeerService(
@@ -102,33 +108,35 @@ describe('Plugin', () => {
             // stack trace is not available in newer versions
           })
 
-          try {
-            await client.sendCommand('invalid')
-          } catch (e) {
-            error = e
-          }
+          const commandPromise = client.sendCommand('invalid').then(
+            () => { },
+            (e) => { error = e }
+          )
 
-          await promise
+          await Promise.all([commandPromise, promise])
         })
 
         it('should work with userland promises', async () => {
           const promise = agent
             .assertSomeTraces(traces => {
-              assert.strictEqual(traces[0][0].name, expectedSchema.outbound.opName)
-              assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
-              assert.strictEqual(traces[0][0].resource, 'GET')
-              assert.strictEqual(traces[0][0].type, 'redis')
-              assert.strictEqual(traces[0][0].meta['db.name'], '0')
-              assert.strictEqual(traces[0][0].meta['db.type'], 'redis')
-              assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
-              assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'GET foo')
-              assert.strictEqual(traces[0][0].meta.component, 'redis')
+              assertObjectContains(traces[0][0], {
+                name: expectedSchema.outbound.opName,
+                service: expectedSchema.outbound.serviceName,
+                resource: 'GET',
+                type: 'redis',
+                meta: {
+                  'db.name': '0',
+                  'db.type': 'redis',
+                  'span.kind': 'client',
+                  'redis.raw_command': 'GET foo',
+                  component: 'redis',
+                },
+              })
             })
 
           breakThen(Promise.prototype)
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withNamingSchema(
@@ -176,8 +184,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].metrics['network.destination.port'], 6379)
           })
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withPeerService(
@@ -191,8 +198,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].resource, 'GET')
           })
 
-          await client.get('foo')
-          await promise
+          await Promise.all([client.get('foo'), promise])
         })
 
         withNamingSchema(
@@ -201,6 +207,61 @@ describe('Plugin', () => {
             v0: {
               opName: 'redis.command',
               serviceName: 'custom',
+            },
+            v1: {
+              opName: 'redis.command',
+              serviceName: 'custom',
+            },
+          }
+        )
+      })
+
+      describe('with splitByInstance configuration', () => {
+        before(() => {
+          return agent.load('redis', {
+            service: 'custom',
+            splitByInstance: true,
+            allowlist: ['GET'],
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          redis = require(`../../../versions/${moduleName}@${version}`).get()
+          client = redis.createClient({ name: 'test' })
+
+          await client.connect()
+        })
+
+        afterEach(async () => {
+          await client.quit()
+        })
+
+        it('should set service name based on connection name', async () => {
+          const promise = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].service, 'custom-test')
+          })
+
+          await Promise.all([client.get('foo'), promise])
+        })
+
+        it('should set service source tag to split-by-instance', async () => {
+          const promise = agent.assertSomeTraces(traces => {
+            assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.split_by_instance')
+          })
+
+          await Promise.all([client.get('foo'), promise])
+        })
+
+        withNamingSchema(
+          async () => client.get('foo'),
+          {
+            v0: {
+              opName: 'redis.command',
+              serviceName: 'custom-test',
             },
             v1: {
               opName: 'redis.command',
@@ -241,8 +302,7 @@ describe('Plugin', () => {
           })
 
           await client.set('turtle', 'like')
-          await client.get('turtle')
-          await promise
+          await Promise.all([client.get('turtle'), promise])
         })
       })
 

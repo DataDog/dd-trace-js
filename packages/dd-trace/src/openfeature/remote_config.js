@@ -19,9 +19,14 @@ function enable (rc, config, getOpenfeatureProxy) {
 
   // Set product handler for FFE_FLAGS
   rc.setProductHandler('FFE_FLAGS', (action, conf) => {
-    // Feed UFC config directly to OpenFeature provider
     if (action === 'apply' || action === 'modify') {
+      // Feed UFC config directly to OpenFeature provider
       getOpenfeatureProxy()._setConfiguration(conf)
+    } else if (action === 'unapply') {
+      // Clear the configuration so evaluations return PROVIDER_NOT_READY,
+      // consistent with Go and Python which also set config to null on RC deletion.
+      // The evaluator returns PROVIDER_NOT_READY when config is null/undefined.
+      getOpenfeatureProxy()._setConfiguration(null)
     }
   })
 }
