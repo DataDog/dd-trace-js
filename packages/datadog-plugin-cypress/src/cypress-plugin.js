@@ -1,5 +1,9 @@
 'use strict'
 
+// Capture real timers at module load, before any test can install fake timers.
+const { performance } = require('perf_hooks')
+const dateNow = Date.now
+
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
@@ -349,6 +353,19 @@ class CypressPlugin {
     this.rumFlushWaitMillis = undefined
     this._pendingRequestErrorTags = []
     this.libraryConfigurationPromise = undefined
+    this._timeOrigin = 0
+    this._perfOrigin = 0
+  }
+
+  /**
+   * Returns the current time in the same coordinate system used by span
+   * start/finish. Captured at session span creation so it shares the same
+   * epoch as the trace without reaching into span internals.
+   *
+   * @returns {number}
+   */
+  _now () {
+    return this._timeOrigin + performance.now() - this._perfOrigin
   }
 
   // Init function returns a promise that resolves with the Cypress configuration
@@ -664,6 +681,13 @@ class CypressPlugin {
 
       this.tracer._tracer._exporter.addMetadataTags(metadataTags)
     }
+
+    // Capture time references that match what startSpan records internally
+    // (trace.startTime = Date.now(), trace.ticks = performance.now()).
+    // This lets _now() produce values in the same coordinate system as
+    // span._startTime without accessing span internals.
+    this._timeOrigin = dateNow()
+    this._perfOrigin = performance.now()
 
     this.testSessionSpan = this.tracer.startSpan(`${TEST_FRAMEWORK_NAME}.test_session`, {
       childOf,
@@ -1103,7 +1127,7 @@ class CypressPlugin {
         const finishedTest = {
           testName,
           testStatus,
-          finishTime: this.activeTestSpan._getTime(), // we store the finish time here
+          finishTime: this._now(),
           testSpan: this.activeTestSpan,
           isEfdRetry,
           isAttemptToFix,
