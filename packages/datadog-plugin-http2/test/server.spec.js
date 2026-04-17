@@ -6,6 +6,7 @@ const { setImmediate } = require('node:timers/promises')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -450,6 +451,44 @@ describe('Plugin', () => {
 
             request(http2, `http://localhost:${port}/user?secret=password&foo=bar`).catch(done)
           })
+        })
+      })
+
+      describe('with hooks configuration', () => {
+        beforeEach(() => {
+          return agent.load('http2', {
+            client: false,
+            server: {
+              hooks: {
+                request: (span, req, res) => {
+                  assert.ok(span instanceof PublicSpan)
+                  span.setTag('hook.tag', 'test')
+                },
+              },
+            },
+          })
+            .then(() => {
+              http2 = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          const server = http2.createServer(listener)
+          appListener = server.listen(0, 'localhost', () => {
+            port = appListener.address().port
+            done()
+          })
+        })
+
+        it('should run the request hook before the span is finished', done => {
+          agent
+            .assertSomeTraces(traces => {
+              assert.strictEqual(traces[0][0].meta['hook.tag'], 'test')
+            })
+            .then(done)
+            .catch(done)
+
+          request(http2, `http://localhost:${port}/user`).catch(done)
         })
       })
     })

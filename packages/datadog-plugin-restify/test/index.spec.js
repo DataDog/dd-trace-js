@@ -9,6 +9,8 @@ const semver = require('semver')
 const sinon = require('sinon')
 
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
+const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
@@ -289,6 +291,45 @@ describe('Plugin', () => {
               .get(`http://localhost:${port}/error`, {
                 validateStatus: status => status === 599,
               })
+              .catch(done)
+          })
+        })
+      })
+
+      describe('with hooks configuration', () => {
+        before(() => {
+          return agent.load(['restify', 'find-my-way', 'http'], [{
+            hooks: {
+              request: (span, req, res) => {
+                span.setTag('hook.tag', 'test')
+                assert.ok(span instanceof PublicSpan)
+              },
+            },
+          }, {}, { client: false }])
+        })
+
+        after(() => agent.close({ ritmReset: false }))
+
+        it('should run the request hook before the span is finished', done => {
+          const server = restify.createServer()
+
+          server.get('/user', (req, res, next) => {
+            res.send(200)
+            return next()
+          })
+
+          appListener = server.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                assert.strictEqual(traces[0][0].meta['hook.tag'], 'test')
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://localhost:${port}/user`)
               .catch(done)
           })
         })
