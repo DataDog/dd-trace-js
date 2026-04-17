@@ -8,6 +8,8 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
+const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
+
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withExports, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -580,6 +582,49 @@ describe('Plugin', () => {
               })
             })
           }
+        })
+
+        describe('with hooks configuration', () => {
+          before(() => {
+            return agent.load(['fastify', 'find-my-way', 'http'], [{
+              hooks: {
+                request: (span, req, res) => {
+                  span.setTag('hook.tag', 'test')
+                  assert.ok(span instanceof PublicSpan)
+                },
+              },
+            }, {}, { client: false }])
+          })
+
+          after(() => {
+            return agent.close({ ritmReset: false })
+          })
+
+          beforeEach(() => {
+            fastify = getExport()
+            app = fastify()
+          })
+
+          it('should run the request hook before the span is finished', done => {
+            app.get('/user', (request, reply) => {
+              reply.send()
+            })
+
+            app.listen({ host, port: 0 }, () => {
+              const port = app.server.address().port
+
+              agent
+                .assertSomeTraces(traces => {
+                  assert.strictEqual(traces[0][0].meta['hook.tag'], 'test')
+                })
+                .then(done)
+                .catch(done)
+
+              axios
+                .get(`http://localhost:${port}/user`)
+                .catch(done)
+            })
+          })
         })
       })
     })
