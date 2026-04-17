@@ -13,7 +13,7 @@ class BaseAwsDurableExecutionSdkJsInternalPlugin extends TracingPlugin {
     const meta = this.getTags(ctx)
 
     this.startSpan(this.constructor.spanName, {
-      service: this.serviceName({ pluginService: this.config.service }),
+      service: process.env.DD_DURABLE_EXECUTION_SERVICE || 'aws.durable_functions',
       meta,
     }, ctx)
 
