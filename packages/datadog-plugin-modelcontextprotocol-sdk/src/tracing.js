@@ -10,7 +10,7 @@ class McpToolCallPlugin extends TracingPlugin {
     const params = ctx.arguments?.[0]
     const toolName = params?.name
 
-    this.startSpan('mcp.tool.call', {
+    this.startSpan('mcp.client.tool.call', {
       resource: toolName,
       type: 'mcp',
       kind: 'client',
@@ -20,6 +20,12 @@ class McpToolCallPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
+    const result = ctx.result
+    if (result?.isError) {
+      const span = ctx.currentStore?.span
+      const errorText = result.content?.find?.(c => c.type === 'text')?.text || 'Tool call returned isError: true'
+      span?.setTag('error', new Error(errorText))
+    }
     super.finish(ctx)
   }
 }
@@ -29,7 +35,7 @@ class McpListToolsPlugin extends TracingPlugin {
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listTools'
 
   bindStart (ctx) {
-    this.startSpan('mcp.list_tools', {
+    this.startSpan('mcp.tools.list', {
       resource: 'tools/list',
       type: 'mcp',
       kind: 'client',

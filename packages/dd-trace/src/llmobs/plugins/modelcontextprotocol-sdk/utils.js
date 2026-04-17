@@ -21,28 +21,37 @@ function formatInput (toolName, toolArguments) {
 }
 
 /**
- * Formats MCP tool call result as a text string.
+ * Formats MCP tool call result as a structured object matching Python's output format.
  * MCP tool results contain a `content` array with items like:
  * `[{ type: 'text', text: '...' }, { type: 'image', data: '...', mimeType: '...' }]`
  * @param {object} result - The MCP CallToolResult
- * @returns {string} Formatted output string
+ * @returns {string} JSON string of `{ content: Array<{type, text, annotations, meta}>, isError: boolean }`
  */
 function formatOutput (result) {
   if (!result) return ''
 
   const content = result.content
-  if (!Array.isArray(content) || content.length === 0) return ''
+  const isError = result.isError || false
 
-  const parts = []
-  for (const item of content) {
-    if (item.type === 'text' && item.text) {
-      parts.push(item.text)
-    } else if (item.type === 'resource' && item.resource?.text) {
-      parts.push(item.resource.text)
+  const processed = []
+  if (Array.isArray(content)) {
+    for (const item of content) {
+      if (item.type !== 'text') continue
+      const contentBlock = {
+        type: item.type,
+        text: item.text || '',
+        annotations: item.annotations || {},
+        meta: item.meta || {},
+      }
+      processed.push(contentBlock)
     }
   }
 
-  return parts.join('\n') || ''
+  try {
+    return JSON.stringify({ content: processed, isError })
+  } catch {
+    return ''
+  }
 }
 
 module.exports = { formatInput, formatOutput }

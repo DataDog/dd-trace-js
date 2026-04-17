@@ -13,17 +13,17 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
   const { agent } = meta
 
   before(async () => {
-    await testSetup.setup(meta.mod)
+    await testSetup.setup(meta.mod, meta.versionMod)
   })
 
   after(async () => {
     await testSetup.teardown()
   })
 
-  describe('Client.callTool() - mcp.tool.call', () => {
+  describe('Client.callTool() - mcp.client.tool.call', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.tool.call',
+        name: 'mcp.client.tool.call',
         type: 'mcp',
         resource: 'test-tool',
         meta: {
@@ -44,7 +44,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
 
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.tool.call',
+        name: 'mcp.client.tool.call',
         type: 'mcp',
         resource: 'error-tool',
         error: 1,
@@ -55,23 +55,19 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
         },
       })
 
-      let caughtError
-      try {
-        await testSetup.clientCallToolError()
-      } catch (err) {
-        caughtError = err
-      }
-      assert.ok(caughtError, 'callTool should throw an error')
-      assert.ok(caughtError.message.includes('Intentional test error'), 'error message should contain expected text')
+      // In MCP SDK 1.27+, tool errors are returned as isError:true results, not thrown exceptions
+      const result = await testSetup.clientCallToolError()
+      assert.ok(result.isError, 'callTool result should have isError: true')
+      assert.ok(result.content?.[0]?.text?.includes('Intentional test error'), 'error text should be in content')
 
       return traceAssertion
     })
   })
 
-  describe('Client.listTools() - mcp.list_tools', () => {
+  describe('Client.listTools() - mcp.tools.list', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.list_tools',
+        name: 'mcp.tools.list',
         type: 'mcp',
         resource: 'tools/list',
         meta: {

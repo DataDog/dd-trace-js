@@ -1,41 +1,38 @@
 'use strict'
 
 class ModelcontextprotocolSdkTestSetup {
-  async setup (clientModule) {
+  async setup (clientModule, versionMod) {
+    const path = require('path')
     const { Client } = clientModule
-    const { Server } = require('@modelcontextprotocol/sdk/server')
-    const { InMemoryTransport } = require('@modelcontextprotocol/sdk/inMemory.js')
-    const { CallToolRequestSchema, ListToolsRequestSchema } = require('@modelcontextprotocol/sdk/types.js')
+    // Use versionMod.getPath to resolve the SDK root since the package exports map
+    // remaps @modelcontextprotocol/sdk/package.json to dist/cjs/package.json
+    const clientEntryPath = versionMod.getPath('@modelcontextprotocol/sdk/client')
+    const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
+    const { McpServer } = require(path.join(sdkDir, 'dist/cjs/server/mcp.js'))
+    const { InMemoryTransport } = versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
 
     this._Client = Client
-    this._Server = Server
+    this._McpServer = McpServer
     this._InMemoryTransport = InMemoryTransport
-    this._CallToolRequestSchema = CallToolRequestSchema
-    this._ListToolsRequestSchema = ListToolsRequestSchema
+    this._sdkDir = sdkDir
 
-    this._server = new Server(
-      { name: 'test-server', version: '1.0.0' },
-      { capabilities: { tools: {} } }
+    this._server = new McpServer({ name: 'test-server', version: '1.0.0' })
+
+    this._server.registerTool(
+      'test-tool',
+      { description: 'A test tool', inputSchema: {} },
+      async () => ({
+        content: [{ type: 'text', text: 'Result from test-tool' }],
+      })
     )
 
-    this._server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const toolName = request.params.name
-      if (toolName === 'error-tool') {
+    this._server.registerTool(
+      'error-tool',
+      { description: 'A tool that errors', inputSchema: {} },
+      async () => {
         throw new Error('Intentional test error')
       }
-      return {
-        content: [{ type: 'text', text: `Result from ${toolName}` }],
-      }
-    })
-
-    this._server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return {
-        tools: [
-          { name: 'test-tool', description: 'A test tool', inputSchema: { type: 'object' } },
-          { name: 'error-tool', description: 'A tool that errors', inputSchema: { type: 'object' } },
-        ],
-      }
-    })
+    )
 
     const [clientTransport, serverTransport] = this._InMemoryTransport.createLinkedPair()
 
@@ -74,8 +71,10 @@ class ModelcontextprotocolSdkTestSetup {
   }
 
   async clientReconnect () {
+    const path = require('path')
+    const { McpServer } = require(path.join(this._sdkDir, 'dist/cjs/server/mcp.js'))
     const [clientTransport, serverTransport] = this._InMemoryTransport.createLinkedPair()
-    const server = new this._Server({ name: 'test-server', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const server = new McpServer({ name: 'test-server', version: '1.0.0' })
     await server.connect(serverTransport)
     const client = new this._Client({ name: 'test-client', version: '1.0.0' })
     await client.connect(clientTransport)

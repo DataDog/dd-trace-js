@@ -12,70 +12,59 @@ const {
 
 describe('integrations', () => {
   let Client
-  let Server
+  let McpServer
   let InMemoryTransport
-  let CallToolRequestSchema
-  let ListToolsRequestSchema
 
   let client
   let server
 
   describe('modelcontextprotocol-sdk', () => {
-    const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
+    const { getEvents, drainSetupSpans } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
+        const path = require('path')
+        const versionModule = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+
         // Require the client submodule first so RITM patches it before the server loads it transitively
-        Client = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
-          .get('@modelcontextprotocol/sdk/client').Client
+        Client = versionModule.get('@modelcontextprotocol/sdk/client').Client
 
-        Server = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
-          .get('@modelcontextprotocol/sdk/server').Server
+        // The package exports map remaps package.json to dist/cjs/package.json, so navigate
+        // up from the resolved client entry path to find the SDK root directory
+        const clientEntryPath = versionModule.getPath('@modelcontextprotocol/sdk/client')
+        const sdkDir = path.resolve(path.dirname(clientEntryPath), '..', '..', '..')
+        McpServer = require(path.join(sdkDir, 'dist/cjs/server/mcp.js')).McpServer
 
-        InMemoryTransport = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
-          .get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
+        InMemoryTransport = versionModule.get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
 
-        const typesMod = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
-          .get('@modelcontextprotocol/sdk/types.js')
-        CallToolRequestSchema = typesMod.CallToolRequestSchema
-        ListToolsRequestSchema = typesMod.ListToolsRequestSchema
+        server = new McpServer({ name: 'test-server', version: '1.0.0' })
 
-        server = new Server(
-          { name: 'test-server', version: '1.0.0' },
-          { capabilities: { tools: {} } }
+        server.registerTool(
+          'test-tool',
+          { description: 'A test tool', inputSchema: {} },
+          async () => ({
+            content: [{ type: 'text', text: 'Result from test-tool' }],
+          })
         )
 
-        server.setRequestHandler(CallToolRequestSchema, async (request) => {
-          const toolName = request.params.name
-          if (toolName === 'error-tool') {
+        server.registerTool(
+          'error-tool',
+          { description: 'A tool that errors', inputSchema: {} },
+          async () => {
             throw new Error('Intentional test error')
           }
-          if (toolName === 'multi-content-tool') {
-            return {
-              content: [
-                { type: 'text', text: 'First part' },
-                { type: 'text', text: 'Second part' },
-              ],
-            }
-          }
-          return {
-            content: [{ type: 'text', text: `Result from ${toolName}` }],
-          }
-        })
+        )
 
-        server.setRequestHandler(ListToolsRequestSchema, async () => {
-          return {
-            tools: [
-              { name: 'test-tool', description: 'A test tool', inputSchema: { type: 'object' } },
-              { name: 'error-tool', description: 'A tool that errors', inputSchema: { type: 'object' } },
-              {
-                name: 'multi-content-tool',
-                description: 'Returns multiple content parts',
-                inputSchema: { type: 'object' },
-              },
+        server.registerTool(
+          'multi-content-tool',
+          { description: 'Returns multiple content parts', inputSchema: {} },
+          async () => ({
+            content: [
+              { type: 'text', text: 'First part' },
+              { type: 'text', text: 'Second part' },
             ],
-          }
-        })
+          })
+        )
 
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
         await server.connect(serverTransport)
@@ -84,7 +73,7 @@ describe('integrations', () => {
         await client.connect(clientTransport)
 
         // Drain any spans generated during setup (e.g. mcp.connect workflow span)
-        await getEvents()
+        await drainSetupSpans()
       })
 
       after(async () => {
@@ -106,8 +95,17 @@ describe('integrations', () => {
             spanKind: 'tool',
             name: 'MCP Client Tool Call: test-tool',
             inputValue: JSON.stringify({ name: 'test-tool', arguments: {} }),
-            outputValue: 'Result from test-tool',
-            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
+            outputValue: JSON.stringify({
+              content: [{ type: 'text', text: 'Result from test-tool', annotations: {}, meta: {} }],
+              isError: false,
+            }),
+            tags: {
+              ml_app: 'test',
+              integration: 'modelcontextprotocol-sdk',
+              mcp_tool_kind: 'client',
+              mcp_server_name: 'test-server',
+              mcp_server_version: '1.0.0',
+            },
           })
         })
 
@@ -129,8 +127,17 @@ describe('integrations', () => {
               name: 'test-tool',
               arguments: { query: 'hello world', limit: 10 },
             }),
-            outputValue: 'Result from test-tool',
-            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
+            outputValue: JSON.stringify({
+              content: [{ type: 'text', text: 'Result from test-tool', annotations: {}, meta: {} }],
+              isError: false,
+            }),
+            tags: {
+              ml_app: 'test',
+              integration: 'modelcontextprotocol-sdk',
+              mcp_tool_kind: 'client',
+              mcp_server_name: 'test-server',
+              mcp_server_version: '1.0.0',
+            },
           })
         })
 
@@ -147,18 +154,28 @@ describe('integrations', () => {
             spanKind: 'tool',
             name: 'MCP Client Tool Call: multi-content-tool',
             inputValue: JSON.stringify({ name: 'multi-content-tool', arguments: {} }),
-            outputValue: 'First part\nSecond part',
-            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
+            outputValue: JSON.stringify({
+              content: [
+                { type: 'text', text: 'First part', annotations: {}, meta: {} },
+                { type: 'text', text: 'Second part', annotations: {}, meta: {} },
+              ],
+              isError: false,
+            }),
+            tags: {
+              ml_app: 'test',
+              integration: 'modelcontextprotocol-sdk',
+              mcp_tool_kind: 'client',
+              mcp_server_name: 'test-server',
+              mcp_server_version: '1.0.0',
+            },
           })
         })
 
         it('creates a tool span with error on failure', async () => {
-          try {
-            await client.callTool({ name: 'error-tool', arguments: {} })
-            assert.fail('Expected error to be thrown')
-          } catch (err) {
-            assert.ok(err.message.includes('Intentional test error'))
-          }
+          // In MCP SDK 1.27+, tool errors are returned as isError:true results, not thrown exceptions
+          const result = await client.callTool({ name: 'error-tool', arguments: {} })
+          assert.ok(result.isError, 'callTool result should have isError: true')
+          assert.ok(result.content?.[0]?.text?.includes('Intentional test error'))
 
           const { apmSpans, llmobsSpans } = await getEvents()
 
@@ -172,7 +189,13 @@ describe('integrations', () => {
               message: MOCK_STRING,
               stack: MOCK_STRING,
             },
-            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
+            tags: {
+              ml_app: 'test',
+              integration: 'modelcontextprotocol-sdk',
+              mcp_tool_kind: 'client',
+              mcp_server_name: 'test-server',
+              mcp_server_version: '1.0.0',
+            },
           })
         })
       })
@@ -189,7 +212,7 @@ describe('integrations', () => {
           assertLlmObsSpanEvent(llmobsSpans[0], {
             span: apmSpans[0],
             spanKind: 'task',
-            name: 'MCP Client list Tools',
+            name: 'MCP Client List Tools',
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
         })
@@ -198,7 +221,7 @@ describe('integrations', () => {
       describe('Client.connect', () => {
         it('creates a workflow span for connecting', async () => {
           const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-          const newServer = new Server({ name: 'test-server', version: '1.0.0' }, { capabilities: { tools: {} } })
+          const newServer = new McpServer({ name: 'test-server', version: '1.0.0' })
           await newServer.connect(serverTransport)
 
           const newClient = new Client({ name: 'test-client', version: '1.0.0' })

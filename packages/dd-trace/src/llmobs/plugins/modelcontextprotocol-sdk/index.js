@@ -26,8 +26,20 @@ class McpToolCallLLMObsPlugin extends LLMObsPlugin {
     const toolName = params?.name
     const toolArguments = params?.arguments
 
+    const spanTags = { mcp_tool_kind: 'client' }
+
+    const serverVersion = ctx.self?._serverVersion
+    if (serverVersion) {
+      if (serverVersion.name) spanTags.mcp_server_name = serverVersion.name
+      if (serverVersion.version) spanTags.mcp_server_version = serverVersion.version
+      if (serverVersion.title) spanTags.mcp_server_title = serverVersion.title
+    }
+
+    this._tagger.tagSpanTags(span, spanTags)
+
+    const hasError = ctx.error || ctx.result?.isError
     const input = formatInput(toolName, toolArguments)
-    const output = ctx.error ? undefined : formatOutput(ctx.result)
+    const output = hasError ? undefined : formatOutput(ctx.result)
 
     this._tagger.tagTextIO(span, input, output)
   }
@@ -41,21 +53,12 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
   getLLMObsSpanRegisterOptions () {
     return {
       kind: 'task',
-      name: 'MCP Client list Tools',
+      name: 'MCP Client List Tools',
     }
   }
 
-  setLLMObsTags (ctx) {
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    const params = ctx.arguments?.[0]
-    const cursor = params?.cursor
-
-    const input = cursor === undefined ? '' : JSON.stringify({ cursor })
-    const output = ctx.error ? undefined : JSON.stringify(ctx.result)
-
-    this._tagger.tagTextIO(span, input, output)
+  setLLMObsTags () {
+    // No meaningful I/O to capture for a list tools span
   }
 }
 
