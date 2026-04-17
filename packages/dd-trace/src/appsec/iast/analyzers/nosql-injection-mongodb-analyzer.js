@@ -24,9 +24,23 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.configureSanitizers()
 
+    // TEMP DEBUG: assign a short id to each filter object to trace duplicate analyses across channels
+    let __filterSeq = 0
+    const __getFilterId = (filter) => {
+      if (!filter || typeof filter !== 'object') return 'n/a'
+      if (!filter.__nosqlDbgId) {
+        Object.defineProperty(filter, '__nosqlDbgId', { value: ++__filterSeq, enumerable: false })
+      }
+      return filter.__nosqlDbgId
+    }
+
     // Anything that accesses the storage is context dependent
-    const onStart = ({ filters }) => {
+    const onStart = (channelName) => ({ filters }) => {
       const store = storage('legacy').getStore()
+      const ids = filters?.map(__getFilterId).join(',')
+      // eslint-disable-next-line no-console
+      console.log('[NOSQL DBG] ch=%s nosqlAnalyzed=%s noop=%s filterIds=%s',
+        channelName, store?.nosqlAnalyzed, store?.noop, ids)
       if (store && !store.nosqlAnalyzed && filters?.length) {
         for (const filter of filters) {
           this.analyze({ filter }, store)
@@ -36,8 +50,8 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       return store
     }
 
-    const onStartAndEnterWithStore = (message) => {
-      const store = onStart(message || {})
+    const onStartAndEnterWithStore = (channelName) => (message) => {
+      const store = onStart(channelName)(message || {})
       if (store) {
         storage('legacy').enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
       }
@@ -52,13 +66,13 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       }
     }
 
-    this.addSub('datadog:mongodb:collection:filter:start', onStart)
+    this.addSub('datadog:mongodb:collection:filter:start', onStart('mongodb:collection:filter:start'))
 
-    this.addSub('datadog:mongoose:model:filter:start', onStartAndEnterWithStore)
+    this.addSub('datadog:mongoose:model:filter:start', onStartAndEnterWithStore('mongoose:model:filter:start'))
     this.addSub('datadog:mongoose:model:filter:finish', onFinish)
 
-    this.addSub('datadog:mquery:filter:prepare', onStart)
-    this.addSub('tracing:datadog:mquery:filter:start', onStartAndEnterWithStore)
+    this.addSub('datadog:mquery:filter:prepare', onStart('mquery:filter:prepare'))
+    this.addSub('tracing:datadog:mquery:filter:start', onStartAndEnterWithStore('mquery:filter:start'))
     this.addSub('tracing:datadog:mquery:filter:asyncEnd', onFinish)
   }
 
