@@ -7,58 +7,28 @@ const { applyCoverageEnv, isCoverageActive, resolveCoverageRoot } = require('./r
 
 const PATCHED = Symbol.for('dd-trace.integration-coverage.child-process-patched')
 
-/**
- * @param {string} command
- * @returns {boolean}
- */
 function isNodeCommand (command) {
   if (!command) return false
-
   const normalized = command.toLowerCase()
   if (normalized === process.execPath.toLowerCase()) return true
-
   const basename = path.basename(normalized)
   return basename === 'node' || basename === 'node.exe'
 }
 
-/**
- * Mirror Node's own `fork`/`spawn` arg normalization: a nullish `args` means `options` is still
- * the third positional; a non-array object `args` is actually the options bag.
- *
- * @param {unknown} args
- * @param {unknown} options
- * @returns {{ args: unknown[], options: object }}
- */
+// Mirrors Node's own `fork`/`spawn` arg normalization.
 function normalizeArgs (args, options) {
   if (args == null) return { args: [], options: options || {} }
   if (Array.isArray(args)) return { args, options: options || {} }
   return { args: [], options: args }
 }
 
-/**
- * @param {childProcess.ForkOptions} options
- * @param {string | URL} modulePath
- * @returns {childProcess.ForkOptions}
- */
 function patchForkOptions (options, modulePath) {
-  const coverageRoot = resolveCoverageRoot({ cwd: options.cwd, scriptPath: modulePath })
-  if (!coverageRoot) return options
-
-  return {
-    ...options,
-    env: applyCoverageEnv(options.env, { cwd: options.cwd, scriptPath: modulePath }),
-  }
+  if (!resolveCoverageRoot({ cwd: options.cwd, scriptPath: modulePath })) return options
+  return { ...options, env: applyCoverageEnv(options.env, { cwd: options.cwd, scriptPath: modulePath }) }
 }
 
-/**
- * @param {object} options
- * @param {string} command
- * @param {unknown[]} args
- * @returns {object}
- */
 function patchSpawnOptions (options, command, args) {
   if (!isNodeCommand(command)) return options
-
   let scriptPath
   for (const arg of args) {
     if (typeof arg === 'string' && !arg.startsWith('-')) {
@@ -66,15 +36,25 @@ function patchSpawnOptions (options, command, args) {
       break
     }
   }
-  const coverageRoot = resolveCoverageRoot({ cwd: options.cwd, scriptPath })
-  if (!coverageRoot) return options
-
-  return {
-    ...options,
-    env: applyCoverageEnv(options.env, { cwd: options.cwd, scriptPath }),
-  }
+  if (!resolveCoverageRoot({ cwd: options.cwd, scriptPath })) return options
+  return { ...options, env: applyCoverageEnv(options.env, { cwd: options.cwd, scriptPath }) }
 }
 
+// `exec`/`execSync` run through a shell, so argv[0] is the shell. Overlay unconditionally;
+// `NODE_OPTIONS` only affects Node descendants.
+function patchExecOptions (options) {
+  const base = options || {}
+  const env = applyCoverageEnv(base.env, { cwd: base.cwd })
+  if (env === base.env) return options
+  return { ...base, env }
+}
+
+/**
+ * Installs monkey-patches on `child_process` so every Node.js descendant inherits the
+ * coverage bootstrap. Idempotent.
+ *
+ * @returns {void}
+ */
 function installPatch () {
   if (!isCoverageActive() || childProcess[PATCHED]) return
 
@@ -83,26 +63,23 @@ function installPatch () {
   const originalSpawnSync = childProcess.spawnSync
   const originalExecFile = childProcess.execFile
   const originalExecFileSync = childProcess.execFileSync
+  const originalExec = childProcess.exec
+  const originalExecSync = childProcess.execSync
 
   childProcess.fork = function (modulePath, args, options) {
-    const normalized = normalizeArgs(args, options)
-    return originalFork.call(this, modulePath, normalized.args, patchForkOptions(normalized.options, modulePath))
+    const n = normalizeArgs(args, options)
+    return originalFork.call(this, modulePath, n.args, patchForkOptions(n.options, modulePath))
   }
 
-  function wrapSpawnLike (original) {
-    return function (command, args, options) {
-      const normalized = normalizeArgs(args, options)
-      return original.call(
-        this, command, normalized.args, patchSpawnOptions(normalized.options, command, normalized.args)
-      )
-    }
+  const wrapSpawnLike = original => function (command, args, options) {
+    const n = normalizeArgs(args, options)
+    return original.call(this, command, n.args, patchSpawnOptions(n.options, command, n.args))
   }
 
   childProcess.spawn = wrapSpawnLike(originalSpawn)
   childProcess.spawnSync = wrapSpawnLike(originalSpawnSync)
   childProcess.execFileSync = wrapSpawnLike(originalExecFileSync)
 
-  // `execFile` differs from `spawn` in that its last argument may be a callback.
   childProcess.execFile = function (file, args, options, callback) {
     if (typeof args === 'function') {
       callback = args
@@ -112,16 +89,23 @@ function installPatch () {
       callback = options
       options = {}
     }
+    const n = normalizeArgs(args, options)
+    return originalExecFile.call(this, file, n.args, patchSpawnOptions(n.options, file, n.args), callback)
+  }
 
-    const normalized = normalizeArgs(args, options)
-    return originalExecFile.call(
-      this, file, normalized.args, patchSpawnOptions(normalized.options, file, normalized.args), callback
-    )
+  childProcess.exec = function (command, options, callback) {
+    if (typeof options === 'function') {
+      callback = options
+      options = undefined
+    }
+    return originalExec.call(this, command, patchExecOptions(options), callback)
+  }
+
+  childProcess.execSync = function (command, options) {
+    return originalExecSync.call(this, command, patchExecOptions(options))
   }
 
   childProcess[PATCHED] = true
 }
 
-module.exports = {
-  installPatch,
-}
+module.exports = { installPatch }

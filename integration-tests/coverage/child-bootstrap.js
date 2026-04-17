@@ -7,19 +7,21 @@ const NYC = require('nyc')
 const preloadList = require('node-preload')
 
 const {
+  DISABLE_ENV,
+  FLUSH_SIGNAL_KEY,
   ROOT_ENV,
-  appendBootstrapRequire,
   canonicalizePath,
   isCoverageActive,
+  prependBootstrapRequire,
   resolveCoverageRoot,
 } = require('./runtime')
 
 const BOOTSTRAPPED = Symbol.for('dd-trace.integration-coverage.bootstrapped')
-// Our NYC tempDirs always live under this path segment. If the inherited NYC_CONFIG points
-// somewhere else, an external NYC already owns this process tree and we must not re-wrap.
+// Our NYC tempDirs live under this segment. An inherited NYC_CONFIG pointing elsewhere means
+// an external NYC owns the tree — bail out.
 const OWN_TEMPDIR_MARKER = `${path.sep}.nyc_output${path.sep}integration-tests`
 
-if (isCoverageActive() && !globalThis[BOOTSTRAPPED]) {
+if (isCoverageActive() && !process.env[DISABLE_ENV] && !globalThis[BOOTSTRAPPED]) {
   globalThis[BOOTSTRAPPED] = true
   if (!hasForeignNyc()) bootstrapCoverage()
 }
@@ -27,7 +29,6 @@ if (isCoverageActive() && !globalThis[BOOTSTRAPPED]) {
 function hasForeignNyc () {
   const config = process.env.NYC_CONFIG
   if (!config) return false
-
   try {
     const parsed = JSON.parse(config)
     return typeof parsed.tempDir !== 'string' || !parsed.tempDir.includes(OWN_TEMPDIR_MARKER)
@@ -58,15 +59,26 @@ function bootstrapCoverage () {
 
   process.env[ROOT_ENV] = canonicalizePath(coverageRoot)
   process.env.NYC_CONFIG = JSON.stringify(config)
-  process.env.NYC_CWD = coverageRoot
-  process.env.NODE_OPTIONS = appendBootstrapRequire(process.env.NODE_OPTIONS)
+  process.env.NODE_OPTIONS = prependBootstrapRequire(process.env.NODE_OPTIONS)
 
-  // Re-preload NYC's env registration and this bootstrap in every grandchild Node process
-  // so coverage keeps propagating down the tree (via node-preload's NODE_OPTIONS handling).
+  // Propagate NYC's env registration and this bootstrap into every grandchild Node process.
   const registerEnvPath = require.resolve('nyc/lib/register-env.js')
   if (!preloadList.includes(registerEnvPath)) preloadList.push(registerEnvPath)
   if (!preloadList.includes(__filename)) preloadList.push(__filename)
 
   require(registerEnvPath)('NYC_PROCESS_ID')
   nyc.wrap()
+
+  // Windows `proc.kill('SIGTERM')` is forceful, so nyc's exit hook never runs. Listen for
+  // the explicit sentinel `helpers#stopProc` sends so coverage flushes before we exit.
+  // Only install the listener on Windows: adding any `message` listener on POSIX keeps
+  // Node's IPC channel refed, which prevents forked one-shot fixtures (e.g.
+  // `ci-visibility/run-mocha.js`) from exiting naturally after their script completes.
+  if (process.platform === 'win32') {
+    process.on('message', message => {
+      if (message && typeof message === 'object' && message[FLUSH_SIGNAL_KEY] === true) {
+        process.exit(0)
+      }
+    })
+  }
 }

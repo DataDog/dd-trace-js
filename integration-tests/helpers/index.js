@@ -15,7 +15,9 @@ const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
 const finalizeSandboxCoverage = require('../coverage/finalize-sandbox')
 const {
+  FLUSH_SIGNAL_KEY,
   applyCoverageEnv,
+  isCoverageActive,
   resolveCoverageRoot,
 } = require('../coverage/runtime')
 const FakeAgent = require('./fake-agent')
@@ -288,6 +290,13 @@ async function stopProc (proc, options = {}) {
 
   const signal = options.signal ?? 'SIGTERM'
   const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
+
+  // Windows `proc.kill('SIGTERM')` is forceful, so nyc's exit hook never runs. Ask the
+  // bootstrap to flush via the explicit sentinel; POSIX SIGTERM flushes on its own.
+  if (process.platform === 'win32' && isCoverageActive() && proc.connected) {
+    proc.send({ [FLUSH_SIGNAL_KEY]: true }, () => {})
+    if (await waitForProcExit(proc, timeoutMs)) return
+  }
 
   proc.kill(signal)
 
@@ -710,7 +719,7 @@ function telemetryForwarder (shouldExpectTelemetryPoints = true) {
         if (!data && retries < 10) {
           return tryAgain()
         }
-        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`)
+        throw new SyntaxError(`error parsing data: ${e.message}\n${data}`, { cause: e })
       }
       msgs.push([telemetryType, parsed])
     }

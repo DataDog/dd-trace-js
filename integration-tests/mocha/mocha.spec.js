@@ -7,6 +7,7 @@ const { once } = require('node:events')
 const path = require('path')
 const { assertObjectContains } = require('../helpers')
 
+const { COVERAGE_SLOWDOWN } = require('../coverage/runtime')
 const {
   sandboxCwd,
   useSandbox,
@@ -93,6 +94,8 @@ const MOCHA_VERSION = process.env.MOCHA_VERSION || 'latest'
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
 
 describe(`mocha@${MOCHA_VERSION}`, function () {
+  this.timeout(this.timeout() * COVERAGE_SLOWDOWN)
+
   let receiver
   let childProcess
   let cwd
@@ -3747,6 +3750,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
               './dynamic-instrumentation/test-hit-breakpoint',
             ]),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            // DI breakpoints arm asynchronously via Inspector. nyc's require-hook slows
+            // child startup enough that the single retry finishes before the probe is
+            // live, so we opt this child out of the coverage harness.
+            DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
           },
         }
       )

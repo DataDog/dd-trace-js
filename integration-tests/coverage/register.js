@@ -1,16 +1,14 @@
 'use strict'
 
-const { installPatch } = require('./patch-child-process')
-const { REPO_ROOT, ROOT_ENV, canonicalizePath, ensureCollectorRoot, resetCollectorRoot } = require('./runtime')
+// Seed the coverage-active flag before any `./runtime` consumer is loaded so module-scope
+// `COVERAGE_SLOWDOWN` checks observe coverage as active. `applyCoverageEnv` overrides this
+// per child.
+const { realpathSync } = require('node:fs')
+const path = require('node:path')
+process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT = realpathSync(path.resolve(__dirname, '..', '..'))
 
-// Seed the coverage-active signal for the Mocha process itself. `applyCoverageEnv` then
-// replaces this with each child's resolved dd-trace root for every spawn.
-process.env[ROOT_ENV] = canonicalizePath(REPO_ROOT)
+const { installPatch } = require('./patch-child-process')
+const { resetCollectorRoot } = require('./runtime')
+
 resetCollectorRoot()
 installPatch()
-
-exports.mochaHooks = {
-  async beforeAll () {
-    await ensureCollectorRoot()
-  },
-}

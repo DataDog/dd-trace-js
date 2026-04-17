@@ -9,6 +9,7 @@ const multer = require('multer')
 const upload = multer()
 
 const { FakeAgent } = require('./helpers')
+const { COVERAGE_SLOWDOWN } = require('./coverage/runtime')
 
 const DEFAULT_SETTINGS = {
   code_coverage: true,
@@ -363,6 +364,7 @@ class FakeCiVisIntake extends FakeAgent {
   // to make the assertions pass. It times out after maxGatheringTime so it should
   // always be faster or as fast as gatherPayloads
   gatherPayloadsMaxTimeout (payloadMatch, onPayload, maxGatheringTime = 15000) {
+    maxGatheringTime *= COVERAGE_SLOWDOWN
     const payloads = []
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {

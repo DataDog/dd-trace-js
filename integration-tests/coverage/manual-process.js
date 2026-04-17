@@ -5,8 +5,8 @@ const path = require('node:path')
 const { applyCoverageEnv } = require('./runtime')
 
 /**
- * Builds an env for wrappers that spawn Node.js indirectly (e.g. `func`, `cypress`, `playwright`)
- * where `child_process` patching can't reach the inner Node process.
+ * For wrappers that spawn Node indirectly (e.g. `func`, `cypress`, `playwright`) where
+ * `child_process` patching can't reach the inner Node process.
  *
  * @param {object} options
  * @param {string} options.cwd
@@ -19,6 +19,4 @@ function buildManualCoverageEnv ({ cwd, env = {}, scriptPath }) {
   return applyCoverageEnv(env, { cwd, scriptPath: resolved }) || { ...env }
 }
 
-module.exports = {
-  buildManualCoverageEnv,
-}
+module.exports = { buildManualCoverageEnv }

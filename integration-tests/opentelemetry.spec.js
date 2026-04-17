@@ -6,16 +6,7 @@ const { fork } = require('child_process')
 const { join } = require('path')
 const axios = require('axios')
 const { FakeAgent, sandboxCwd, useSandbox, stopProc } = require('./helpers')
-
-// NYC instrumentation slows child-process bootstrap (dd-trace init, OTel provider
-// registration, Express `listen`), so the three tests below need longer waits for
-// telemetry and for the fixture HTTP server to be reachable. All other tests in this
-// file already pass with the default timeouts and are left untouched.
-const COVERAGE_ACTIVE = Boolean(process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT)
-// Chosen empirically as the smallest multiplier that keeps the failing tests stable on
-// both local runs and CI (observed overhead ~2x wall-clock). Prefer reusing this constant
-// when making other tests coverage-aware so the safety margin stays uniform and minimal.
-const COVERAGE_SLOWDOWN = COVERAGE_ACTIVE ? 2 : 1
+const { COVERAGE_SLOWDOWN } = require('./coverage/runtime')
 
 async function check (agent, proc, timeout, onMessage = () => { }, isMetrics) {
   const messageReceiver = isMetrics

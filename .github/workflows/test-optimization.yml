@@ -41,8 +41,12 @@ jobs:
         version: [oldest, maintenance, active, latest]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -58,7 +62,11 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-      - run: yarn test:integration:testopt
+      - run: yarn test:integration:testopt:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-testopt-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-playwright:
     strategy:
@@ -156,11 +164,15 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:jest
+      - run: yarn test:integration:jest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           JEST_VERSION: ${{ matrix.jest-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cucumber:
     strategy:
@@ -181,11 +193,15 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:cucumber
+      - run: yarn test:integration:cucumber:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           CUCUMBER_VERSION: ${{ matrix.cucumber-version }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-selenium:
     strategy:
@@ -223,10 +239,14 @@ jobs:
           sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
           sudo chmod +x /usr/bin/chromedriver
       - uses: ./.github/actions/install
-      - run: yarn test:integration:selenium
+      - run: yarn test:integration:selenium:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-selenium-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cypress:
     strategy:
@@ -261,13 +281,17 @@ jobs:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ matrix.cypress-version }}
       - run: yarn config set ignore-engines true
-      - run: yarn test:integration:cypress --ignore-engines
+      - run: yarn test:integration:cypress:coverage --ignore-engines
         env:
           CYPRESS_VERSION: ${{ matrix.cypress-version }}
           NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:
     runs-on: ubuntu-latest
@@ -288,7 +312,11 @@ jobs:
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      - run: yarn test:integration:vitest
+      - run: yarn test:integration:vitest:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-vitest-${{ matrix.version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

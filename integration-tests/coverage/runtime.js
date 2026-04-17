@@ -1,22 +1,26 @@
 'use strict'
 
 const { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } = require('node:fs')
-const fs = require('node:fs/promises')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 
+// IPC sentinel `helpers#stopProc` sends on Windows to trigger nyc's exit hook.
+const FLUSH_SIGNAL_KEY = '__ddCovFlush'
 const COLLECTOR_ENV = 'DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR'
-// Presence of ROOT_ENV is the sole activation signal: the top-level Mocha process seeds it
-// with REPO_ROOT; every spawn routed through `applyCoverageEnv` overwrites it with the
-// child's resolved dd-trace root so grandchildren inherit the correct root automatically.
+// Per-spawn opt-out. Callers set this in the child env they pass to `fork`/`exec`/`spawn`
+// when the child must not carry the coverage bootstrap (e.g. timing-sensitive fixtures
+// whose semantics break once nyc's require-hook doubles child startup time).
+const DISABLE_ENV = 'DD_TRACE_INTEGRATION_COVERAGE_DISABLE'
+// Presence of ROOT_ENV activates the coverage harness for a process tree.
 const ROOT_ENV = 'DD_TRACE_INTEGRATION_COVERAGE_ROOT'
 const REPO_ROOT = path.resolve(__dirname, '..', '..')
-// Per-script scratch space kept outside `coverage/` so parallel integration runs in the same
-// job don't clobber each other's final merged report (e.g. the platform integration matrix
-// runs `test:integration:coverage`, `:esbuild:coverage`, and `:webpack:coverage` sequentially).
-const DEFAULT_COLLECTOR_ROOT = path.join(REPO_ROOT, '.nyc_output', 'integration-tests-collector')
 const CHILD_BOOTSTRAP_PATH = path.join(__dirname, 'child-bootstrap.js')
 const BOOTSTRAP_REQUIRE_ARG = `--require=${CHILD_BOOTSTRAP_PATH}`
+
+// Multiply test timeouts by this factor when running under coverage. 3x is the smallest
+// value that stayed green across all known coverage-sensitive tests on GitHub runners
+// (OpenTelemetry telemetry heartbeats, Mocha telemetry intake payloads, DI probe logs).
+const COVERAGE_SLOWDOWN = process.env[ROOT_ENV] ? 3 : 1
 
 const packageNameCache = new Map()
 const rootCache = new Map()
@@ -26,11 +30,7 @@ const rootCache = new Map()
  * @returns {string}
  */
 function canonicalizePath (value) {
-  try {
-    return realpathSync(value)
-  } catch {
-    return value
-  }
+  try { return realpathSync(value) } catch { return value }
 }
 
 /**
@@ -42,30 +42,35 @@ function isCoverageActive (env = process.env) {
 }
 
 /**
+ * Slug of the active `npm_lifecycle_event`. Used to scope every per-run artifact so parallel
+ * `*:coverage` scripts never share scratch or final output.
+ *
+ * @returns {string}
+ */
+function scriptLabel () {
+  const event = process.env.npm_lifecycle_event ?? ''
+  return event.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')
+}
+
+/**
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {string}
  */
 function getCollectorRoot (env = process.env) {
-  return env[COLLECTOR_ENV] || DEFAULT_COLLECTOR_ROOT
+  if (env[COLLECTOR_ENV]) return env[COLLECTOR_ENV]
+  const label = scriptLabel()
+  const name = label ? `integration-tests-collector-${label}` : 'integration-tests-collector'
+  return path.join(REPO_ROOT, '.nyc_output', name)
 }
 
 /**
  * @returns {string}
  */
 function resetCollectorRoot () {
-  const collectorRoot = getCollectorRoot()
-  rmSync(collectorRoot, { force: true, recursive: true })
-  mkdirSync(path.join(collectorRoot, 'sandboxes'), { recursive: true })
-  return collectorRoot
-}
-
-/**
- * @returns {Promise<string>}
- */
-async function ensureCollectorRoot () {
-  const collectorRoot = getCollectorRoot()
-  await fs.mkdir(path.join(collectorRoot, 'sandboxes'), { recursive: true })
-  return collectorRoot
+  const root = getCollectorRoot()
+  rmSync(root, { force: true, recursive: true })
+  mkdirSync(path.join(root, 'sandboxes'), { recursive: true })
+  return root
 }
 
 /**
@@ -77,18 +82,15 @@ function getSandboxCollectorDir (folder) {
 }
 
 /**
- * Final report directory for the merged integration coverage. Mirrors the nyc layout
- * (`coverage/node-${version}${label}`) so Codecov discovery and `scripts/verify-coverage.js`
- * treat integration and unit reports identically, and so distinct `npm_lifecycle_event`s
- * (e.g. `test:integration:debugger:coverage` vs `test:integration:esbuild:coverage`) never
- * collide in the same job.
+ * Mirrors `nyc.config.js` (`coverage/node-${version}${label}`) so Codecov discovery and
+ * `scripts/verify-coverage.js` treat integration and unit reports identically.
  *
  * @returns {string}
  */
 function getMergedReportDir () {
-  const event = process.env.npm_lifecycle_event ?? ''
-  const label = `-${event.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')}`
-  return path.join(REPO_ROOT, 'coverage', `node-${process.version}${label}`)
+  const label = scriptLabel()
+  const suffix = label ? `-${label}` : ''
+  return path.join(REPO_ROOT, 'coverage', `node-${process.version}${suffix}`)
 }
 
 /**
@@ -120,49 +122,43 @@ function toPath (value, cwd) {
  */
 function readPackageName (filename) {
   if (packageNameCache.has(filename)) return packageNameCache.get(filename)
-
   let name
-  try {
-    name = JSON.parse(readFileSync(filename, 'utf8')).name
-  } catch {}
-
+  try { name = JSON.parse(readFileSync(filename, 'utf8')).name } catch {}
   packageNameCache.set(filename, name)
   return name
 }
 
 /**
- * Walks up the directory tree looking for a `dd-trace` package root, either at `<dir>/` itself
- * or nested as `<dir>/node_modules/dd-trace/`.
+ * Walks up from `directory` looking for a `dd-trace` package root, either at the directory
+ * itself or nested as `<dir>/node_modules/dd-trace/`. Only positive results are cached —
+ * `execSync` patching re-enters here during sandbox bring-up before dd-trace is installed,
+ * and caching that miss would blind later tear-down lookups.
  *
  * @param {string} directory
  * @returns {string | undefined}
  */
 function findDdTraceRoot (directory) {
   const normalized = canonicalizePath(directory)
-  if (rootCache.has(normalized)) return rootCache.get(normalized)
+  const cached = rootCache.get(normalized)
+  if (cached) return cached
 
-  let result
   let current = normalized
   while (true) {
     const nested = path.join(current, 'node_modules', 'dd-trace', 'package.json')
     if (existsSync(nested) && readPackageName(nested) === 'dd-trace') {
-      result = path.dirname(nested)
-      break
+      const result = path.dirname(nested)
+      rootCache.set(normalized, result)
+      return result
     }
-
     const own = path.join(current, 'package.json')
     if (existsSync(own) && readPackageName(own) === 'dd-trace') {
-      result = current
-      break
+      rootCache.set(normalized, current)
+      return current
     }
-
     const parent = path.dirname(current)
-    if (parent === current) break
+    if (parent === current) return
     current = parent
   }
-
-  rootCache.set(normalized, result)
-  return result
 }
 
 /**
@@ -184,25 +180,28 @@ function resolveCoverageRoot (options = {}) {
   for (const candidate of candidates) {
     if (!candidate || seen.has(candidate)) continue
     seen.add(candidate)
-
-    const coverageRoot = findDdTraceRoot(candidate)
-    if (coverageRoot) return coverageRoot
+    const root = findDdTraceRoot(candidate)
+    if (root) return root
   }
 }
 
 /**
+ * Must be Node's FIRST `--require`. Otherwise a caller-provided preloader (e.g.
+ * `-r dd-trace/ci/init`) runs before nyc's require hook, leaving its module graph
+ * uninstrumented.
+ *
  * @param {string | undefined} nodeOptions
  * @returns {string}
  */
-function appendBootstrapRequire (nodeOptions) {
+function prependBootstrapRequire (nodeOptions) {
   if (nodeOptions?.includes(CHILD_BOOTSTRAP_PATH)) return nodeOptions
-  return nodeOptions ? `${nodeOptions} ${BOOTSTRAP_REQUIRE_ARG}` : BOOTSTRAP_REQUIRE_ARG
+  return nodeOptions ? `${BOOTSTRAP_REQUIRE_ARG} ${nodeOptions}` : BOOTSTRAP_REQUIRE_ARG
 }
 
 /**
- * Returns a new env carrying the coverage activation flags plus a `NODE_OPTIONS` that preloads
- * `child-bootstrap.js`. Returns the original env unchanged when coverage is off or the dd-trace
- * root can't be resolved from the given context.
+ * Returns a new env with the coverage activation flags + a `NODE_OPTIONS` that preloads
+ * `child-bootstrap.js`. Returns the original env unchanged when coverage is off or the
+ * dd-trace root can't be resolved from the given context.
  *
  * @param {NodeJS.ProcessEnv | undefined} env
  * @param {object} [options]
@@ -212,32 +211,39 @@ function appendBootstrapRequire (nodeOptions) {
  */
 function applyCoverageEnv (env, options = {}) {
   if (!isCoverageActive()) return env
-
-  const coverageRoot = resolveCoverageRoot(options)
-  if (!coverageRoot) return env
-
   const baseEnv = env || process.env
+  if (baseEnv[DISABLE_ENV]) {
+    // Strip any inherited `ROOT_ENV` so `child-bootstrap.js` (if it somehow still loads)
+    // short-circuits and grandchildren stay untouched.
+    const { [ROOT_ENV]: _omit, ...rest } = baseEnv
+    return rest
+  }
+  const root = resolveCoverageRoot(options)
+  if (!root) return env
   return {
     ...baseEnv,
-    [ROOT_ENV]: canonicalizePath(coverageRoot),
-    NODE_OPTIONS: appendBootstrapRequire(baseEnv.NODE_OPTIONS),
+    [ROOT_ENV]: canonicalizePath(root),
+    NODE_OPTIONS: prependBootstrapRequire(baseEnv.NODE_OPTIONS),
   }
 }
 
 module.exports = {
   CHILD_BOOTSTRAP_PATH,
   COLLECTOR_ENV,
+  COVERAGE_SLOWDOWN,
+  DISABLE_ENV,
+  FLUSH_SIGNAL_KEY,
   REPO_ROOT,
   ROOT_ENV,
-  appendBootstrapRequire,
   applyCoverageEnv,
   canonicalizePath,
-  ensureCollectorRoot,
   getCollectorRoot,
   getMergedReportDir,
   getSandboxCollectorDir,
   getSandboxNycPaths,
   isCoverageActive,
+  prependBootstrapRequire,
   resetCollectorRoot,
   resolveCoverageRoot,
+  scriptLabel,
 }

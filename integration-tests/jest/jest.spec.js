@@ -2250,6 +2250,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             TESTS_TO_RUN: 'ci-visibility/test-total-code-coverage/test-',
             COLLECT_COVERAGE_FROM: '**/test-total-code-coverage/**',
             ENABLE_CODE_COVERAGE: '1',
+            // NYC and jest share `global.__coverage__`, so running this child under the integration
+            // coverage harness inflates jest's coverage map with dd-trace internals and skews the
+            // asserted percentage. Opt this child out to keep the assertion meaningful.
+            DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
           },
         }
       )

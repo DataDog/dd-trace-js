@@ -6,15 +6,18 @@ const { spawnSync } = require('node:child_process')
 const os = require('node:os')
 const path = require('node:path')
 
+const { scriptLabel } = require('./runtime')
+
 const repoRoot = path.resolve(__dirname, '..', '..')
 const mochaBin = path.join(repoRoot, 'node_modules', 'mocha', 'bin', 'mocha.js')
 const mergeScript = path.join(__dirname, 'merge-lcov.js')
 const registerScript = path.join(__dirname, 'register.js')
 
-// Share a single cached dd-trace tarball across every sandbox: `createSandbox` reuses the tarball
-// if it exists, eliminating the repeated multi-second `bun pm pack` step.
+// Per-script tarball cache so two `*:coverage` runs in the same checkout don't race on a
+// single `/tmp` file; `createSandbox` reuses the tarball if it exists, skipping `bun pm pack`.
 if (!process.env.DD_TEST_SANDBOX_TARBALL_PATH) {
-  process.env.DD_TEST_SANDBOX_TARBALL_PATH = path.join(os.tmpdir(), 'dd-trace-coverage-sandbox.tgz')
+  const label = scriptLabel() || 'default'
+  process.env.DD_TEST_SANDBOX_TARBALL_PATH = path.join(os.tmpdir(), `dd-trace-coverage-sandbox-${label}.tgz`)
 }
 
 const spawnOptions = { cwd: repoRoot, env: process.env, stdio: 'inherit' }

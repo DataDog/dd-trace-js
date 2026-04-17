@@ -9,13 +9,6 @@ const reports = require('istanbul-reports')
 
 const { REPO_ROOT, getCollectorRoot, getMergedReportDir } = require('./runtime')
 
-/**
- * Loads every per-sandbox `coverage-final.json` emitted by `finalize-sandbox.js` and merges them
- * into a single `CoverageMap` keyed by repo-relative paths.
- *
- * @param {string} sandboxesDir
- * @returns {Promise<{ coverageMap: import('istanbul-lib-coverage').CoverageMap, sandboxCount: number }>}
- */
 async function loadMergedCoverage (sandboxesDir) {
   const merged = libCoverage.createCoverageMap({})
 
@@ -47,10 +40,6 @@ async function loadMergedCoverage (sandboxesDir) {
   return { coverageMap: merged, sandboxCount }
 }
 
-/**
- * @param {string} jsonPath
- * @returns {Promise<{ jsonPath: string, content: string } | undefined>}
- */
 async function readSandboxJson (jsonPath) {
   try {
     return { jsonPath, content: await fs.readFile(jsonPath, 'utf8') }
@@ -74,8 +63,8 @@ async function main () {
     return
   }
 
-  // The merged CoverageMap uses absolute repo paths, so the HTML reporter resolves sources
-  // directly; `lcovonly`'s `projectRoot` strips the prefix to produce repo-relative `SF:` lines.
+  // The merged CoverageMap uses absolute repo paths, so HTML resolves sources directly;
+  // `lcovonly`'s `projectRoot` strips the prefix to produce repo-relative `SF:` lines.
   const context = libReport.createContext({ coverageMap, dir: outputDir, defaultSummarizer: 'nested' })
   reports.create('lcovonly', { file: 'lcov.info', projectRoot: REPO_ROOT }).execute(context)
   reports.create('html', { subdir: 'html' }).execute(context)
@@ -89,13 +78,7 @@ async function main () {
   )
 }
 
-async function run () {
-  try {
-    await main()
-  } catch (err) {
-    process.stderr.write(`${err.stack || err.message}\n`)
-    process.exitCode = 1
-  }
-}
-
-run()
+main().catch(err => {
+  process.stderr.write(`${err.stack || err.message}\n`)
+  process.exitCode = 1
+})

@@ -10,10 +10,14 @@ const path = require('node:path')
 const { installPatch } = require('./coverage/patch-child-process')
 const finalizeSandboxCoverage = require('./coverage/finalize-sandbox')
 const {
+  DISABLE_ENV,
+  FLUSH_SIGNAL_KEY,
   ROOT_ENV,
+  canonicalizePath,
   getCollectorRoot,
   getMergedReportDir,
   getSandboxCollectorDir,
+  resolveCoverageRoot,
 } = require('./coverage/runtime')
 
 describe('integration coverage child process hook', () => {
@@ -66,8 +70,7 @@ const child = fork(path.join(__dirname, 'worker.js'), { stdio: 'pipe' })
 child.on('message', message => {
   if (message === 'ready') {
     process.exitCode = 0
-    child.disconnect()
-    child.kill()
+    child.send({ ${JSON.stringify(FLUSH_SIGNAL_KEY)}: true })
   }
 })
 
@@ -163,6 +166,10 @@ require('node:fs').writeFileSync(${JSON.stringify(outputPath)}, JSON.stringify({
   marker: process.env.FORK_MARKER || null,
   bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
 }))
+// Close the IPC channel so the child exits naturally once its top-level script is done.
+// The bootstrap intentionally no longer \`unref()\`s the channel — doing so broke fork-based
+// worker pools (mocha \`--parallel\`) by letting idle workers die mid-run.
+process.disconnect()
 `)
 
     const runFork = (args) => new Promise((resolve, reject) => {
@@ -182,5 +189,217 @@ require('node:fs').writeFileSync(${JSON.stringify(outputPath)}, JSON.stringify({
       JSON.parse(fs.readFileSync(outputPath, 'utf8')),
       { marker: 'two-arg', bootstrap: true }
     )
+  })
+
+  // Regression: `exec`/`execSync` run the command through `/bin/sh -c`, so our `argv[0] === node`
+  // detection in `patchSpawnOptions` misses them entirely. The mocha integration suite relies on
+  // this path (every `node node_modules/mocha/bin/mocha …` spawn goes through `exec`), so we
+  // overlay `NODE_OPTIONS` unconditionally and rely on the fact that only Node descendants
+  // consume it. Without the patch, the asserts below fail with `bootstrap: false`.
+  it('propagates the bootstrap through exec/execSync shell commands', async () => {
+    const fixtureDir = path.join(appRoot, 'exec-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const asyncOut = path.join(fixtureDir, 'async.json')
+    const syncOut = path.join(fixtureDir, 'sync.json')
+    const fixturePath = path.join(fixtureDir, 'print-env.js')
+    await fsp.writeFile(fixturePath, `
+'use strict'
+require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
+  bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
+  hasNycConfig: Boolean(process.env.NYC_CONFIG),
+}))
+`)
+
+    await new Promise(/** @type {(resolve: (value?: void) => void, reject: (reason?: Error) => void) => void} */
+      (resolve, reject) => {
+        childProcess.exec(
+          `node ${JSON.stringify(fixturePath)} ${JSON.stringify(asyncOut)}`,
+          { cwd: appRoot },
+          err => err ? reject(err) : resolve()
+        )
+      })
+    childProcess.execSync(
+      `node ${JSON.stringify(fixturePath)} ${JSON.stringify(syncOut)}`,
+      { cwd: appRoot, stdio: 'pipe' }
+    )
+
+    assert.deepStrictEqual(
+      JSON.parse(fs.readFileSync(asyncOut, 'utf8')),
+      { bootstrap: true, hasNycConfig: true }
+    )
+    assert.deepStrictEqual(
+      JSON.parse(fs.readFileSync(syncOut, 'utf8')),
+      { bootstrap: true, hasNycConfig: true }
+    )
+  })
+
+  // Regression: during sandbox bring-up we patch `execSync` (used by `bun add`, `cp`, etc.), so
+  // `resolveCoverageRoot` gets called with the sandbox folder _before_ dd-trace has been
+  // installed into it. We must NOT cache that miss — otherwise every later lookup (including
+  // the teardown one that locates the sandbox's NYC output) returns the cached miss and falls
+  // back to the repo root, and the sandbox's coverage JSON files are silently orphaned.
+  it('probes fresh when a sandbox path has no dd-trace yet', async () => {
+    const sandbox = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-late-install-'))
+    try {
+      assert.strictEqual(
+        resolveCoverageRoot({ cwd: sandbox }),
+        canonicalizePath(coverageRoot),
+        'empty sandbox should fall back to the seeded ROOT_ENV, not cache the miss'
+      )
+
+      const installedRoot = path.join(sandbox, 'node_modules', 'dd-trace')
+      await fsp.mkdir(installedRoot, { recursive: true })
+      await fsp.copyFile(
+        path.join(coverageRoot, 'package.json'),
+        path.join(installedRoot, 'package.json')
+      )
+
+      assert.strictEqual(resolveCoverageRoot({ cwd: sandbox }), canonicalizePath(installedRoot))
+    } finally {
+      await fsp.rm(sandbox, { force: true, recursive: true })
+    }
+  })
+
+  // Regression: the bootstrap must not force fork'd children to exit early. An earlier
+  // attempt called `process.channel?.unref()` + `process.once('disconnect', process.exit)`,
+  // which yanked idle workers out of mocha's `--parallel` pool mid-run.
+  it('keeps fork children alive while the parent holds the IPC channel', async () => {
+    const fixtureDir = path.join(appRoot, 'idle-fork-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const fixturePath = path.join(fixtureDir, 'idle-worker.js')
+    await fsp.writeFile(fixturePath,
+      "'use strict'\nprocess.on('message', msg => process.send({ echo: msg }))\n")
+
+    const child = childProcess.fork(fixturePath)
+    try {
+      await new Promise(resolve => setTimeout(resolve, 150))
+      assert.strictEqual(child.exitCode, null,
+        'child must not exit while parent still holds the channel')
+
+      const reply = await new Promise(resolve => {
+        child.once('message', resolve)
+        child.send('ping')
+      })
+      assert.deepStrictEqual(reply, { echo: 'ping' })
+    } finally {
+      if (child.exitCode === null) child.kill()
+    }
+  })
+
+  // Windows `proc.kill('SIGTERM')` is forceful and skips nyc's exit hook, so the bootstrap
+  // listens for an IPC sentinel from `helpers#stopProc` to flush coverage gracefully. On
+  // POSIX the listener is intentionally absent (any `message` listener refs the IPC channel
+  // and keeps mocha `--parallel` workers alive after their pool is drained).
+  const ifWin32 = process.platform === 'win32' ? it : it.skip
+  ifWin32('flushes coverage when the parent sends FLUSH_SIGNAL_KEY (Windows only)', async () => {
+    const fixtureDir = path.join(appRoot, 'flush-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const fixturePath = path.join(fixtureDir, 'idle.js')
+    await fsp.writeFile(fixturePath, "'use strict'\nsetInterval(() => {}, 1000)\n")
+
+    const child = childProcess.fork(fixturePath)
+    try {
+      const exitCode = await new Promise(resolve => {
+        child.once('exit', resolve)
+        setTimeout(() => child.send({ [FLUSH_SIGNAL_KEY]: true }), 50)
+      })
+      assert.strictEqual(exitCode, 0, 'flush sentinel must trigger a clean exit')
+    } finally {
+      if (child.exitCode === null) child.kill()
+    }
+  })
+
+  // Regression: the bootstrap used to assign `process.env.NYC_CWD = coverageRoot`. nyc's
+  // `register-env.js` propagates `NYC_CWD` to every grandchild, so this leaked into any
+  // nested `nyc` CLI in a fixture (e.g. mocha fixtures calling `nyc --all`). Those nested
+  // instances then `guessCWD()`'d our sandbox root and globbed for sources in the wrong
+  // place, reporting zero coverage and breaking `nyc --all` fixture tests.
+  it('does not inject NYC_CWD — nested nyc CLIs would misuse it', async () => {
+    const fixtureDir = path.join(appRoot, 'nyc-cwd-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const outputPath = path.join(fixtureDir, 'env.json')
+    const fixturePath = path.join(fixtureDir, 'dump-env.js')
+    await fsp.writeFile(fixturePath, "'use strict'\n" +
+      "require('node:fs').writeFileSync(process.argv[2], JSON.stringify({\n" +
+      '  nycCwd: process.env.NYC_CWD ?? null,\n' +
+      '  hasNycConfig: Boolean(process.env.NYC_CONFIG),\n' +
+      "  bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),\n" +
+      '}))\n')
+
+    const env = { ...process.env }
+    delete env.NYC_CWD
+    delete env.NYC_CONFIG
+
+    await new Promise(/** @type {(resolve: (value?: void) => void, reject: (reason?: Error) => void) => void} */
+      (resolve, reject) => {
+        childProcess.execFile(process.execPath, [fixturePath, outputPath], { cwd: appRoot, env },
+          err => err ? reject(err) : resolve())
+      })
+
+    assert.deepStrictEqual(
+      JSON.parse(fs.readFileSync(outputPath, 'utf8')),
+      { nycCwd: null, hasNycConfig: true, bootstrap: true }
+    )
+  })
+
+  // Regression: tests whose semantics depend on child startup latency (e.g. DI's Inspector
+  // breakpoint race) must be able to opt their children out. Setting `DISABLE_ENV` on the
+  // child env must strip `NODE_OPTIONS=-r child-bootstrap.js` and any inherited ROOT_ENV so
+  // the child runs without nyc instrumentation.
+  it('honors the per-spawn opt-out env var', async () => {
+    const fixtureDir = path.join(appRoot, 'disable-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const outputPath = path.join(fixtureDir, 'env.json')
+    const fixturePath = path.join(fixtureDir, 'dump-env.js')
+    await fsp.writeFile(fixturePath, "'use strict'\n" +
+      "require('node:fs').writeFileSync(process.argv[2], JSON.stringify({\n" +
+      '  hasRoot: Boolean(process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT),\n' +
+      '  hasNycConfig: Boolean(process.env.NYC_CONFIG),\n' +
+      "  bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),\n" +
+      '}))\n')
+
+    /** @type {NodeJS.ProcessEnv} */
+    const env = { ...process.env, [DISABLE_ENV]: '1' }
+    delete env.NYC_CONFIG
+
+    await new Promise(/** @type {(resolve: (value?: void) => void, reject: (reason?: Error) => void) => void} */
+      (resolve, reject) => {
+        childProcess.execFile(process.execPath, [fixturePath, outputPath], { cwd: appRoot, env },
+          err => err ? reject(err) : resolve())
+      })
+
+    assert.deepStrictEqual(
+      JSON.parse(fs.readFileSync(outputPath, 'utf8')),
+      { hasRoot: false, hasNycConfig: false, bootstrap: false }
+    )
+  })
+
+  // Two `*:coverage` runs in the same checkout must not clobber each other's scratch dirs
+  // or final reports. Everything per-run is keyed on `npm_lifecycle_event` (both the
+  // collector root and the merged report dir) so a single env var change isolates them.
+  it('isolates collector and report paths per npm_lifecycle_event', () => {
+    const originalEvent = process.env.npm_lifecycle_event
+    const originalCollector = process.env.DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR
+    delete process.env.DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR
+    try {
+      process.env.npm_lifecycle_event = 'test:integration:foo:coverage'
+      const foo = { collector: getCollectorRoot(), merged: getMergedReportDir() }
+
+      process.env.npm_lifecycle_event = 'test:integration:bar:coverage'
+      const bar = { collector: getCollectorRoot(), merged: getMergedReportDir() }
+
+      assert.notStrictEqual(foo.collector, bar.collector)
+      assert.notStrictEqual(foo.merged, bar.merged)
+      assert.match(foo.collector, /integration-tests-collector-test-integration-foo-coverage$/)
+      assert.match(bar.collector, /integration-tests-collector-test-integration-bar-coverage$/)
+
+      delete process.env.npm_lifecycle_event
+      assert.match(getCollectorRoot(), /integration-tests-collector$/)
+    } finally {
+      if (originalEvent === undefined) delete process.env.npm_lifecycle_event
+      else process.env.npm_lifecycle_event = originalEvent
+      if (originalCollector === undefined) delete process.env.DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR
+      else process.env.DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR = originalCollector
+    }
   })
 })
