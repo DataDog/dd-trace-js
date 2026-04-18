@@ -79,7 +79,8 @@ addHook({
       const chByTcStart = tracingCh.start
       // eslint-disable-next-line no-console
       console.log('[MQUERY DBG] wrappedExec op=%s hasTracingStartSubs=%s hasPrepareSubs=%s ' +
-        'startIdentityEq=%s startSubsCount=%s byNameSubsCount=%s ownHasSubsDesc=%s byNameHasSubs=%s',
+        'startIdentityEq=%s startSubsCount=%s byNameSubsCount=%s ownHasSubsDesc=%s byNameHasSubs=%s ' +
+        'startWrapped=%s byNameWrapped=%s subName=%s unsubName=%s',
         this?.op,
         chByTcStart?.hasSubscribers,
         prepareCh.hasSubscribers,
@@ -87,7 +88,11 @@ addHook({
         chByTcStart?._subscribers?.length,
         chByName?._subscribers?.length,
         !!Object.getOwnPropertyDescriptor(chByTcStart || {}, 'hasSubscribers'),
-        chByName?.hasSubscribers)
+        chByName?.hasSubscribers,
+        !!chByTcStart?.__nosqlDbgWrapped,
+        !!chByName?.__nosqlDbgWrapped,
+        chByTcStart?.subscribe?.name,
+        chByTcStart?.unsubscribe?.name)
       return tracingCh.tracePromise(originalExec, {}, this, arguments)
     }
   })

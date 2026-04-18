@@ -107,9 +107,15 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       Object.defineProperty(startCh, '__nosqlDbgWrapped', { value: true, enumerable: false })
       const origSub = startCh.subscribe.bind(startCh)
       const origUnsub = startCh.unsubscribe.bind(startCh)
+
+      // Module-level marker so the mutation tracker below can distinguish expected mutations
+      // (those triggered from our wrapped subscribe/unsubscribe) from unexpected ones.
+      let inKnownPath = 0
       Object.defineProperty(startCh, 'subscribe', {
         value: function dbgSubscribe (h) {
-          const r = origSub(h)
+          inKnownPath++
+          let r
+          try { r = origSub(h) } finally { inKnownPath-- }
           // eslint-disable-next-line no-console
           console.log('[NOSQL DBG SUB] start handler=%s subsAfter=%s',
             h?.name || 'anon', readSubs(startCh))
@@ -120,7 +126,9 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       })
       Object.defineProperty(startCh, 'unsubscribe', {
         value: function dbgUnsubscribe (h) {
-          const r = origUnsub(h)
+          inKnownPath++
+          let r
+          try { r = origUnsub(h) } finally { inKnownPath-- }
           // eslint-disable-next-line no-console
           console.log('[NOSQL DBG UNSUB] start handler=%s result=%s subsAfter=%s',
             h?.name || 'anon', r, readSubs(startCh))
@@ -128,6 +136,49 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         },
         configurable: true,
         writable: true,
+      })
+
+      // TEMP DEBUG: monitor direct mutations of _subscribers on the start channel.
+      // If the array length changes without going through our wrapped subscribe/unsubscribe,
+      // we log it with `known=false` — this is the smoking gun for silent removal.
+      const installMutationTracker = (arr) => {
+        if (!Array.isArray(arr) || arr.__nosqlDbgMutWrapped) return
+        Object.defineProperty(arr, '__nosqlDbgMutWrapped', { value: true, enumerable: false })
+        for (const method of ['push', 'pop', 'shift', 'unshift', 'splice', 'copyWithin', 'fill']) {
+          const orig = arr[method]
+          if (typeof orig !== 'function') continue
+          Object.defineProperty(arr, method, {
+            value: function dbgMut (...args) {
+              const before = arr.length
+              const r = orig.apply(this, args)
+              const after = arr.length
+              if (before !== after) {
+                // eslint-disable-next-line no-console
+                console.log('[NOSQL DBG MUT] channel=start method=%s before=%d after=%d known=%d',
+                  method, before, after, inKnownPath)
+              }
+              return r
+            },
+            configurable: true,
+            writable: true,
+          })
+        }
+      }
+
+      let currentSubs = startCh._subscribers
+      installMutationTracker(currentSubs)
+      Object.defineProperty(startCh, '_subscribers', {
+        configurable: true,
+        enumerable: true,
+        get () { return currentSubs },
+        set (v) {
+          // eslint-disable-next-line no-console
+          console.log('[NOSQL DBG MUT] channel=start _subscribers=REASSIGNED prevLen=%d newLen=%d known=%d',
+            Array.isArray(currentSubs) ? currentSubs.length : -1,
+            Array.isArray(v) ? v.length : -1, inKnownPath)
+          currentSubs = v
+          installMutationTracker(currentSubs)
+        },
       })
     }
 
