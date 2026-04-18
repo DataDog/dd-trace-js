@@ -30,8 +30,8 @@ function installDelegatesIfNeeded () {
     if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
       continue
     }
-    PublicSpan.prototype[method] = function (...args) {
-      const result = this._span[method](...args)
+    PublicSpan.prototype[method] = function () {
+      const result = this._span[method].apply(this._span, arguments)
       // always return wrapper span when the result is the span itself
       return result === this._span ? this : result
     }
@@ -54,9 +54,7 @@ class PublicSpan {
       return cached
     }
     this._span = span
-    try {
-      cache.set(span, this)
-    } catch {}
+    cache.set(span, this)
   }
 
   setTag (key, value) {
