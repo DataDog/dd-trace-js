@@ -21,6 +21,8 @@ const BOOTSTRAPPED = Symbol.for('dd-trace.integration-coverage.bootstrapped')
 // an external NYC owns the tree — bail out.
 const OWN_TEMPDIR_MARKER = `${path.sep}.nyc_output${path.sep}integration-tests`
 
+/** @typedef {{ unrefCounted?: () => void } | null | undefined} RefCountedChannel */
+
 if (isCoverageActive() && !process.env[DISABLE_ENV] && !globalThis[BOOTSTRAPPED]) {
   globalThis[BOOTSTRAPPED] = true
   if (!hasForeignNyc()) bootstrapCoverage()
@@ -70,13 +72,16 @@ function bootstrapCoverage () {
   nyc.wrap()
 
   // Windows only: `proc.kill('SIGTERM')` is forceful and skips nyc's exit hook, so flush on an
-  // explicit IPC sentinel from `helpers#stopProc`. POSIX intentionally omits this — any
-  // `message` listener refs the IPC channel and keeps one-shot forked fixtures alive.
+  // explicit IPC sentinel from `helpers#stopProc`. `unrefCounted` decrements Node's internal
+  // listener ref so our handler doesn't keep otherwise-idle fixtures alive while still allowing
+  // user-code listeners to re-ref the channel normally. POSIX omits this entirely.
   if (process.platform === 'win32') {
     process.on('message', message => {
       if (message?.[FLUSH_SIGNAL_KEY] === true) {
         process.exit(0)
       }
     })
+    const channel = /** @type {RefCountedChannel} */ (/** @type {unknown} */ (process.channel))
+    channel?.unrefCounted?.()
   }
 }

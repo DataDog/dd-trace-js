@@ -309,6 +309,28 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     }
   })
 
+  // Regression: the Windows flush listener must not keep short-lived fork'd fixtures alive.
+  // `unrefCounted` is what allows the bootstrap to register a `message` handler without
+  // blocking natural exit; dropping it stranded every profiler/SSI fixture on Windows.
+  ifWin32('does not keep listener-free fork children alive (Windows only)', async () => {
+    const fixtureDir = path.join(appRoot, 'short-lived-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const fixturePath = path.join(fixtureDir, 'short-lived.js')
+    await fsp.writeFile(fixturePath, "'use strict'\nsetTimeout(() => {}, 100)\n")
+
+    const child = childProcess.fork(fixturePath)
+    const start = Date.now()
+    try {
+      const exitCode = await new Promise(resolve => {
+        child.once('exit', resolve)
+        setTimeout(() => resolve('timeout'), 5000)
+      })
+      assert.strictEqual(exitCode, 0, `child must exit naturally (${Date.now() - start}ms)`)
+    } finally {
+      if (child.exitCode === null) child.kill()
+    }
+  })
+
   // Regression: the bootstrap used to assign `process.env.NYC_CWD = coverageRoot`. nyc's
   // `register-env.js` propagates `NYC_CWD` to every grandchild, so this leaked into any
   // nested `nyc` CLI in a fixture (e.g. mocha fixtures calling `nyc --all`). Those nested
