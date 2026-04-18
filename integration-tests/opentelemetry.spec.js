@@ -51,6 +51,20 @@ function nearNow (ts, now = Date.now(), range = 1000) {
   return delta < range && delta >= 0
 }
 
+async function getWithRetry (url, timeoutMs) {
+  const deadline = Date.now() + timeoutMs
+  let lastErr
+  while (Date.now() < deadline) {
+    try {
+      return await axios.get(url)
+    } catch (err) {
+      lastErr = err
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }
+  throw lastErr
+}
+
 describe('opentelemetry', function () {
   this.timeout(20_000 * COVERAGE_SLOWDOWN)
 
@@ -297,11 +311,8 @@ describe('opentelemetry', function () {
         DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
       },
     })
-    // 1s isn't enough for the NYC-instrumented child to finish `require` chains and
-    // reach `app.listen()` before axios connects — bump the wait uniformly under coverage
-    // so `axios.get` doesn't hit ECONNREFUSED.
-    await new Promise(resolve => setTimeout(resolve, 1000 * COVERAGE_SLOWDOWN))
-    await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
+    // Wait for the child to bind; coverage-instrumented boots can exceed a fixed timeout.
+    await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000 * COVERAGE_SLOWDOWN)
 
     await check(agent, proc, 10_000 * COVERAGE_SLOWDOWN, ({ payload }) => {
       assert.strictEqual(payload.request_type, 'generate-metrics')
@@ -372,10 +383,7 @@ describe('opentelemetry', function () {
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
       },
     })
-    // See note in "should capture auto-instrumentation telemetry": coverage-instrumented
-    // child boot is too slow for the 1s default before `app.listen()` is ready.
-    await new Promise(resolve => setTimeout(resolve, 1000 * COVERAGE_SLOWDOWN))
-    await axios.get(`http://localhost:${SERVER_PORT}/first-endpoint`)
+    await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000 * COVERAGE_SLOWDOWN)
 
     await check(agent, proc, 10_000 * COVERAGE_SLOWDOWN, ({ payload }) => {
       assert.strictEqual(payload.length, 2)
