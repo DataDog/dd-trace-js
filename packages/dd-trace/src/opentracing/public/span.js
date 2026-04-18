@@ -6,10 +6,37 @@
 const cache = new WeakMap()
 
 const { SVC_SRC_KEY } = require('../../constants')
-const DatadogSpan = require('../span')
 
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
+
+/** @type {boolean} */
+let delegatesInstalled = false
+
+/**
+ * DatadogSpan and delegate methods are installed on first wrap. Requiring this
+ * module stays cheap (e.g. scope hot paths that load the file but never wrap a
+ * span avoid loading ../span.js and building dozens of prototype forwarders).
+ */
+function installDelegatesIfNeeded () {
+  if (delegatesInstalled) return
+  delegatesInstalled = true
+
+  const DatadogSpan = require('../span')
+
+  // Whenever a method needs to be modified to have a unique public behavior, it
+  // should be implemented on `PublicSpan` directly so it is skipped here.
+  for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
+    if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
+      continue
+    }
+    PublicSpan.prototype[method] = function (...args) {
+      const result = this._span[method](...args)
+      // always return wrapper span when the result is the span itself
+      return result === this._span ? this : result
+    }
+  }
+}
 
 /**
  * This is a public wrapper of Span, this allows distinguishing internal usage from
@@ -20,6 +47,8 @@ class PublicSpan {
     if (span instanceof PublicSpan) {
       return span
     }
+    installDelegatesIfNeeded()
+
     const cached = cache.get(span)
     if (cached !== undefined) {
       return cached
@@ -44,19 +73,6 @@ class PublicSpan {
     }
     this._span.addTags(tags)
     return this
-  }
-}
-
-// Whenever a method needs to be modified to have a unique public behavior, it
-// should be implemented on `PublicSpan` directly so it is skipped here.
-for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
-  if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
-    continue
-  }
-  PublicSpan.prototype[method] = function (...args) {
-    const result = this._span[method](...args)
-    // always return wrapper span when the result is the span itself
-    return result === this._span ? this : result
   }
 }
 
