@@ -142,6 +142,10 @@ benchmark-serverless-trigger:
   rules:
     - if: $CI_COMMIT_BRANCH == 'master'
       interruptible: false
+
+    # dont run on merges to release branches (vN.x where N is any integer)
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^v\d+\.x$/'
+      when: never
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools
