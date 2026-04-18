@@ -12,7 +12,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../version')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
-const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')

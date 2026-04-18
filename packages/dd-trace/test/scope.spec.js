@@ -6,7 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 
 const { Span } = require('../../../vendor/dist/opentracing')
-const PublicSpan = require('../src/opentracing/public/span')
+const { PublicSpan } = require('../src/opentracing/public/span')
 require('./setup/core')
 const Scope = require('../src/scope')
 

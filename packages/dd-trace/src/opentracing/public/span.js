@@ -74,4 +74,19 @@ class PublicSpan {
   }
 }
 
-module.exports = PublicSpan
+// Skip the identity cache. `Scope#activate` promotes the wrapper when given
+// one, so `scope.active()` still returns this instance within the activation.
+function fresh (span) {
+  installDelegatesIfNeeded()
+  const wrapper = Object.create(PublicSpan.prototype)
+  wrapper._span = span
+  return wrapper
+}
+
+function cacheWrapper (wrapper) {
+  if (!cache.has(wrapper._span)) {
+    cache.set(wrapper._span, wrapper)
+  }
+}
+
+module.exports = { PublicSpan, fresh, cacheWrapper }

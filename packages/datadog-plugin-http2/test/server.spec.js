@@ -6,7 +6,7 @@ const { setImmediate } = require('node:timers/promises')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')

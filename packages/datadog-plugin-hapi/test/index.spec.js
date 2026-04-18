@@ -8,7 +8,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
-const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')

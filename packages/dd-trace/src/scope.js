@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-const PublicSpan = require('./opentracing/public/span')
+const { PublicSpan, cacheWrapper } = require('./opentracing/public/span')
 
 // TODO: refactor bind to use shimmer once the new internal tracer lands
 
@@ -18,7 +18,12 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    span = span?._span
+    if (span instanceof PublicSpan) {
+      cacheWrapper(span)
+      span = span._span
+    } else {
+      span = undefined
+    }
 
     const oldStore = storage('legacy').getStore()
     const newStore = span ? storage('legacy').getStore(span._store) : oldStore
