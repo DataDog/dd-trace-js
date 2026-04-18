@@ -2,6 +2,7 @@
 
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { setTimeout } = require('node:timers/promises')
 
 const libCoverage = require('istanbul-lib-coverage')
 const libReport = require('istanbul-lib-report')
@@ -30,9 +31,11 @@ async function readCoverageJsonWhenStable (filePath) {
       throw err
     }
     if (content.length > 0) {
-      try { return JSON.parse(content) } catch {}
+      try {
+        return JSON.parse(content)
+      } catch {}
     }
-    await new Promise(resolve => setTimeout(resolve, READ_RETRY_DELAY_MS))
+    await setTimeout(READ_RETRY_DELAY_MS)
   }
 }
 

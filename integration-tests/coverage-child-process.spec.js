@@ -374,6 +374,30 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     )
   })
 
+  // Matrix combinations can legitimately filter every spec at runtime (e.g. cucumber's
+  // `NODE_MAJOR`/`version` guard). `merge-lcov.js` drops a `.skipped` sentinel when it
+  // finds no sandboxes, and `verify-coverage.js` honors it so CI jobs with 0 specs don't
+  // fail on "non-empty lcov required".
+  it('treats a .skipped sentinel as a no-op coverage report', async () => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-skip-'))
+    try {
+      const reportDir = path.join(root, 'coverage', 'node-v18.0.0-test-example')
+      await fsp.mkdir(reportDir, { recursive: true })
+      await fsp.writeFile(path.join(reportDir, '.skipped'), '')
+
+      const verifyScript = path.join(process.cwd(), 'scripts', 'verify-coverage.js')
+      const { status } = childProcess.spawnSync(process.execPath, [verifyScript, '--flags', 'test'], {
+        cwd: root,
+        stdio: 'pipe',
+      })
+
+      assert.strictEqual(status, 0)
+      assert.strictEqual(fs.existsSync(reportDir), false, 'skipped report dir should be cleaned up')
+    } finally {
+      await fsp.rm(root, { force: true, recursive: true })
+    }
+  })
+
   // Two `*:coverage` runs in the same checkout must not clobber each other's scratch dirs
   // or final reports. Everything per-run is keyed on `npm_lifecycle_event` (both the
   // collector root and the merged report dir) so a single env var change isolates them.

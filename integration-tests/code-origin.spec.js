@@ -20,6 +20,9 @@ describe('Code Origin for Spans', function () {
     proc = await spawnProc(appFile, {
       cwd,
       env: {
+        // NYC rewrites the compiled JS which breaks --enable-source-maps resolution
+        // back to typescript.ts, so opt the child out of the coverage harness.
+        DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
         NODE_OPTIONS: '--enable-source-maps',
         DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
       },

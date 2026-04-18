@@ -22,9 +22,10 @@ function normalizeArgs (args, options) {
   return { args: [], options: args }
 }
 
-function patchForkOptions (options, modulePath) {
-  if (!resolveCoverageRoot({ cwd: options.cwd, scriptPath: modulePath })) return options
-  return { ...options, env: applyCoverageEnv(options.env, { cwd: options.cwd, scriptPath: modulePath }) }
+function patchOptions (options, scriptPath) {
+  const ctx = { cwd: options.cwd, scriptPath }
+  if (!resolveCoverageRoot(ctx)) return options
+  return { ...options, env: applyCoverageEnv(options.env, ctx) }
 }
 
 function patchSpawnOptions (options, command, args) {
@@ -36,8 +37,7 @@ function patchSpawnOptions (options, command, args) {
       break
     }
   }
-  if (!resolveCoverageRoot({ cwd: options.cwd, scriptPath })) return options
-  return { ...options, env: applyCoverageEnv(options.env, { cwd: options.cwd, scriptPath }) }
+  return patchOptions(options, scriptPath)
 }
 
 // `exec`/`execSync` run through a shell, so argv[0] is the shell. Overlay unconditionally;
@@ -68,7 +68,7 @@ function installPatch () {
 
   childProcess.fork = function (modulePath, args, options) {
     const n = normalizeArgs(args, options)
-    return originalFork.call(this, modulePath, n.args, patchForkOptions(n.options, modulePath))
+    return originalFork.call(this, modulePath, n.args, patchOptions(n.options, modulePath))
   }
 
   const wrapSpawnLike = original => function (command, args, options) {
@@ -79,8 +79,7 @@ function installPatch () {
   childProcess.spawn = wrapSpawnLike(originalSpawn)
   childProcess.spawnSync = wrapSpawnLike(originalSpawnSync)
   childProcess.execFileSync = wrapSpawnLike(originalExecFileSync)
-
-  childProcess.execFile = function (file, args, options, callback) {
+  function execFile (file, args, options, callback) {
     if (typeof args === 'function') {
       callback = args
       args = []
@@ -92,14 +91,17 @@ function installPatch () {
     const n = normalizeArgs(args, options)
     return originalExecFile.call(this, file, n.args, patchSpawnOptions(n.options, file, n.args), callback)
   }
-
-  childProcess.exec = function (command, options, callback) {
+  execFile.__promisify__ = originalExecFile.__promisify__
+  childProcess.execFile = execFile
+  function exec (command, options, callback) {
     if (typeof options === 'function') {
       callback = options
       options = undefined
     }
     return originalExec.call(this, command, patchExecOptions(options), callback)
   }
+  exec.__promisify__ = originalExec.__promisify__
+  childProcess.exec = exec
 
   childProcess.execSync = function (command, options) {
     return originalExecSync.call(this, command, patchExecOptions(options))

@@ -22,28 +22,31 @@ async function loadMergedCoverage (sandboxesDir) {
   const reads = []
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
-    const jsonPath = path.join(sandboxesDir, entry.name, 'coverage-final.json')
-    reads.push(readSandboxJson(jsonPath))
+    reads.push(readSandboxCoverage(path.join(sandboxesDir, entry.name, 'coverage-final.json')))
   }
 
   let sandboxCount = 0
-  for (const item of await Promise.all(reads)) {
-    if (!item) continue
-    try {
-      merged.merge(JSON.parse(item.content))
-      sandboxCount++
-    } catch (err) {
-      process.stderr.write(`Skipping unreadable coverage file ${item.jsonPath}: ${err.message}\n`)
-    }
+  for (const data of await Promise.all(reads)) {
+    if (!data) continue
+    merged.merge(data)
+    sandboxCount++
   }
 
   return { coverageMap: merged, sandboxCount }
 }
 
-async function readSandboxJson (jsonPath) {
+async function readSandboxCoverage (jsonPath) {
+  let content
   try {
-    return { jsonPath, content: await fs.readFile(jsonPath, 'utf8') }
-  } catch {}
+    content = await fs.readFile(jsonPath, 'utf8')
+  } catch {
+    return
+  }
+  try {
+    return JSON.parse(content)
+  } catch (err) {
+    process.stderr.write(`Skipping unreadable coverage file ${jsonPath}: ${err.message}\n`)
+  }
 }
 
 async function main () {
@@ -55,10 +58,10 @@ async function main () {
   const { coverageMap, sandboxCount } = await loadMergedCoverage(sandboxesDir)
 
   if (sandboxCount === 0) {
-    await Promise.all([
-      fs.writeFile(path.join(outputDir, 'lcov.info'), ''),
-      fs.writeFile(path.join(outputDir, 'coverage-final.json'), '{}'),
-    ])
+    // Matrix combinations may filter out every test at runtime (e.g. cucumber/cypress
+    // version guards). Drop the sentinel so `verify-coverage.js` can skip upload cleanly
+    // instead of failing on an empty lcov report.
+    await fs.writeFile(path.join(outputDir, '.skipped'), '')
     process.stdout.write('No sandbox coverage reports found to merge.\n')
     return
   }

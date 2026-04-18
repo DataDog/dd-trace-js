@@ -11,6 +11,7 @@ const net = require('net')
 const zlib = require('zlib')
 const satisfies = require('semifies')
 const { Profile } = require('../../vendor/dist/pprof-format')
+const { COVERAGE_SLOWDOWN } = require('../coverage/runtime')
 const {
   FakeAgent,
   sandboxCwd,
@@ -24,14 +25,16 @@ if (process.platform !== 'win32') {
   DEFAULT_PROFILE_TYPES.push('events')
 }
 
-const TIMEOUT = 30000
+// NYC instrumentation roughly doubles child-process startup cost; Windows adds even more
+// overhead. Scale the baseline timeout so the same scenarios have headroom under coverage.
+const TIMEOUT = 30000 * COVERAGE_SLOWDOWN
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 
 // When the integration-test coverage harness preloads NYC into forked children, both startup
 // latency and heap footprint increase. The knobs below keep the profiler scenarios exercising
 // the same failure modes (timeline events inside the process lifetime; OOM under a tight heap
 // budget) without disabling coverage for the child.
-const COVERAGE_ACTIVE = Boolean(process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT)
+const COVERAGE_ACTIVE = COVERAGE_SLOWDOWN > 1
 // Slack on each side of [procStart, procEnd] that absorbs NYC's require-hook + module-transform
 // overhead, which can otherwise push early timeline samples before `procStart`.
 const TIMELINE_WINDOW_SLACK_NS = COVERAGE_ACTIVE ? 3_000_000_000n : 0n

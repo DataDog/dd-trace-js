@@ -28,4 +28,5 @@ const mochaResult = spawnSync(
 )
 const mergeResult = spawnSync(process.execPath, [mergeScript], spawnOptions)
 
-process.exitCode = mochaResult.status !== 0 ? mochaResult.status ?? 1 : mergeResult.status ?? 1
+// Fall through to the merger's status only when mocha passed cleanly; preserve signal deaths as 1.
+process.exitCode = (mochaResult.status ?? 1) || (mergeResult.status ?? 1)

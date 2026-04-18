@@ -243,15 +243,14 @@ describe('opentelemetry', function () {
   })
 
   it('should capture telemetry', async () => {
-    // Under coverage, dd-trace/OTel init in the child pushes the first telemetry
-    // heartbeat past the default 5s `check` timeout; give `timeout` and the child's
-    // hold window the same uniform slowdown so a heartbeat with `spans_*` lands in time.
+    // Coverage slows child boot/OTel init; delay the first heartbeat so it lands after
+    // span creation and scale the child's hold window + `check` timeout accordingly.
     proc = fork(join(cwd, 'opentelemetry/basic.js'), {
       cwd,
       env: {
         DD_TRACE_AGENT_PORT: agent?.port,
         DD_TRACE_OTEL_ENABLED: '1',
-        DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: String(COVERAGE_SLOWDOWN),
         TIMEOUT: String(1500 * COVERAGE_SLOWDOWN),
       },
     })

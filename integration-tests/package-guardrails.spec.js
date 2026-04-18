@@ -24,7 +24,9 @@ delete process.env.DD_INJECTION_ENABLED
 delete process.env.DD_INJECT_FORCE
 
 describe('package guardrails', () => {
-  useEnv({ NODE_OPTIONS })
+  // NYC's signal-exit hook can beat our `beforeExit` handlers, dropping the abort.integration
+  // telemetry / log output these assertions rely on. Opt children out of the coverage harness.
+  useEnv({ NODE_OPTIONS, DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1' })
   const runTest = (expectedOut, expectedTelemetryPoints, expectedSource = '') =>
     testFile('package-guardrails/index.js', expectedOut, expectedTelemetryPoints, expectedSource)
 

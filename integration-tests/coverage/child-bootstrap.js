@@ -69,14 +69,12 @@ function bootstrapCoverage () {
   require(registerEnvPath)('NYC_PROCESS_ID')
   nyc.wrap()
 
-  // Windows `proc.kill('SIGTERM')` is forceful, so nyc's exit hook never runs. Listen for
-  // the explicit sentinel `helpers#stopProc` sends so coverage flushes before we exit.
-  // Only install the listener on Windows: adding any `message` listener on POSIX keeps
-  // Node's IPC channel refed, which prevents forked one-shot fixtures (e.g.
-  // `ci-visibility/run-mocha.js`) from exiting naturally after their script completes.
+  // Windows only: `proc.kill('SIGTERM')` is forceful and skips nyc's exit hook, so flush on an
+  // explicit IPC sentinel from `helpers#stopProc`. POSIX intentionally omits this — any
+  // `message` listener refs the IPC channel and keeps one-shot forked fixtures alive.
   if (process.platform === 'win32') {
     process.on('message', message => {
-      if (message && typeof message === 'object' && message[FLUSH_SIGNAL_KEY] === true) {
+      if (message?.[FLUSH_SIGNAL_KEY] === true) {
         process.exit(0)
       }
     })

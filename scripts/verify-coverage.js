@@ -45,6 +45,16 @@ if (reportDirsAbs.length === 0) {
 const emptyReportDirs = []
 
 for (const dirAbs of reportDirsAbs) {
+  // Runtime matrix filters (e.g. cucumber/cypress version guards) can legitimately skip
+  // every test. `merge-lcov.js` drops a `.skipped` sentinel in that case so we stay silent
+  // instead of failing on an empty report.
+  if (fs.existsSync(path.join(dirAbs, '.skipped'))) {
+    try {
+      fs.rmSync(dirAbs, { recursive: true, force: true })
+    } catch {}
+    continue
+  }
+
   const lcovPath = path.join(dirAbs, 'lcov.info')
   let lcovContent
   try {

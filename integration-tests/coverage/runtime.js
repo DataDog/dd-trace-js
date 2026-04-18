@@ -17,9 +17,8 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..')
 const CHILD_BOOTSTRAP_PATH = path.join(__dirname, 'child-bootstrap.js')
 const BOOTSTRAP_REQUIRE_ARG = `--require=${CHILD_BOOTSTRAP_PATH}`
 
-// Multiply test timeouts by this factor when running under coverage. 3x is the smallest
-// value that stayed green across all known coverage-sensitive tests on GitHub runners
-// (OpenTelemetry telemetry heartbeats, Mocha telemetry intake payloads, DI probe logs).
+// Multiplier applied to coverage-sensitive test timeouts. 3x is the smallest factor that
+// stays green for NYC-instrumented children on the GitHub runners we target.
 const COVERAGE_SLOWDOWN = process.env[ROOT_ENV] ? 3 : 1
 
 const packageNameCache = new Map()
@@ -53,14 +52,22 @@ function scriptLabel () {
 }
 
 /**
+ * `"-<label>"` when `npm_lifecycle_event` is set, `""` otherwise. Used to suffix per-run paths.
+ *
+ * @returns {string}
+ */
+function labelSuffix () {
+  const label = scriptLabel()
+  return label ? `-${label}` : ''
+}
+
+/**
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {string}
  */
 function getCollectorRoot (env = process.env) {
   if (env[COLLECTOR_ENV]) return env[COLLECTOR_ENV]
-  const label = scriptLabel()
-  const name = label ? `integration-tests-collector-${label}` : 'integration-tests-collector'
-  return path.join(REPO_ROOT, '.nyc_output', name)
+  return path.join(REPO_ROOT, '.nyc_output', `integration-tests-collector${labelSuffix()}`)
 }
 
 /**
@@ -88,9 +95,7 @@ function getSandboxCollectorDir (folder) {
  * @returns {string}
  */
 function getMergedReportDir () {
-  const label = scriptLabel()
-  const suffix = label ? `-${label}` : ''
-  return path.join(REPO_ROOT, 'coverage', `node-${process.version}${suffix}`)
+  return path.join(REPO_ROOT, 'coverage', `node-${process.version}${labelSuffix()}`)
 }
 
 /**
@@ -171,7 +176,7 @@ function resolveCoverageRoot (options = {}) {
   const scriptPath = toPath(options.scriptPath, options.cwd)
   const candidates = [
     scriptPath ? path.dirname(scriptPath) : undefined,
-    options.cwd ? toPath(options.cwd) : undefined,
+    toPath(options.cwd),
     process.env[ROOT_ENV],
     process.cwd(),
   ]
@@ -213,8 +218,7 @@ function applyCoverageEnv (env, options = {}) {
   if (!isCoverageActive()) return env
   const baseEnv = env || process.env
   if (baseEnv[DISABLE_ENV]) {
-    // Strip any inherited `ROOT_ENV` so `child-bootstrap.js` (if it somehow still loads)
-    // short-circuits and grandchildren stay untouched.
+    // Strip any inherited ROOT_ENV so a stray bootstrap load short-circuits for grandchildren.
     const { [ROOT_ENV]: _omit, ...rest } = baseEnv
     return rest
   }

@@ -396,6 +396,7 @@ class FakeCiVisIntake extends FakeAgent {
   }
 
   gatherPayloads (payloadMatch, gatheringTime = 15000) {
+    gatheringTime *= COVERAGE_SLOWDOWN
     const payloads = []
     return new Promise((resolve, reject) => {
       setTimeout(() => {

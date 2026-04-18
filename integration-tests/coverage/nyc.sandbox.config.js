@@ -1,9 +1,7 @@
 'use strict'
 
-const { realpathSync } = require('node:fs')
-
 const baseConfig = require('../../nyc.config')
-const { getSandboxNycPaths } = require('./runtime')
+const { canonicalizePath, getSandboxNycPaths } = require('./runtime')
 
 /**
  * Sandbox NYC config inheriting `include`/`exclude` from the top-level `nyc.config.js` so
@@ -13,8 +11,7 @@ const { getSandboxNycPaths } = require('./runtime')
  * @returns {Record<string, unknown>}
  */
 function createConfig (coverageRoot = process.env.DD_TRACE_INTEGRATION_COVERAGE_ROOT || process.cwd()) {
-  try { coverageRoot = realpathSync(coverageRoot) } catch {}
-  const { reportDir, tempDir } = getSandboxNycPaths(coverageRoot)
+  const { reportDir, tempDir } = getSandboxNycPaths(canonicalizePath(coverageRoot))
   return {
     ...baseConfig,
     cache: false,
