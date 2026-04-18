@@ -7,6 +7,7 @@ const NYC = require('nyc')
 const preloadList = require('node-preload')
 
 const {
+  BOOTSTRAP_REQUIRE_ARG,
   DISABLE_ENV,
   FLUSH_SIGNAL_KEY,
   ROOT_ENV,
@@ -70,6 +71,7 @@ function bootstrapCoverage () {
 
   require(registerEnvPath)('NYC_PROCESS_ID')
   nyc.wrap()
+  patchWorkerThreads()
 
   // Windows only: `proc.kill('SIGTERM')` is forceful and skips nyc's exit hook, so flush on an
   // explicit IPC sentinel from `helpers#stopProc`. `unrefCounted` decrements Node's internal
@@ -83,5 +85,26 @@ function bootstrapCoverage () {
     })
     const channel = /** @type {RefCountedChannel} */ (/** @type {unknown} */ (process.channel))
     channel?.unrefCounted?.()
+  }
+}
+
+/**
+ * Re-inject the bootstrap `-r` into Worker options when the caller stripped `NODE_OPTIONS`
+ * (e.g. dd-trace's debugger worker). Only our own bootstrap is added — never inherited
+ * foreign `-r` hooks.
+ *
+ * @returns {void}
+ */
+function patchWorkerThreads () {
+  const workerThreads = require('node:worker_threads')
+  const OriginalWorker = workerThreads.Worker
+  workerThreads.Worker = class extends OriginalWorker {
+    constructor (filename, options) {
+      const env = options?.env
+      if (!env?.NODE_OPTIONS) {
+        options = { ...options, env: { ...env, NODE_OPTIONS: BOOTSTRAP_REQUIRE_ARG } }
+      }
+      super(filename, options)
+    }
   }
 }

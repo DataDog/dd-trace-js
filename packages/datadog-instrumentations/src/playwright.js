@@ -52,6 +52,9 @@ let applyRepeatEachIndex = null
 
 let startedSuites = []
 
+// Browser-side callbacks live in a NYC-excluded file so counter bumps can't reach chromium.
+const { detectRum, stopRumSession } = require('./playwright-browser-scripts')
+
 const STATUS_TO_TEST_STATUS = {
   passed: 'pass',
   failed: 'fail',
@@ -1117,16 +1120,7 @@ addHook({
 
     try {
       if (page) {
-        const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(() => {
-          const isRumInstrumented = !!window.DD_RUM
-          const isRumActive = window.DD_RUM && window.DD_RUM.getInternalContext
-            ? !!window.DD_RUM.getInternalContext()
-            : false
-          const rumSamplingRate = window.DD_RUM && window.DD_RUM.getInitConfiguration
-            ? window.DD_RUM.getInitConfiguration().sessionSampleRate
-            : null
-          return { isRumInstrumented, isRumActive, rumSamplingRate }
-        })
+        const { isRumInstrumented, isRumActive, rumSamplingRate } = await page.evaluate(detectRum)
         if (isRumInstrumented && rumSamplingRate < 100 && !isRumActive) {
           log.debug("RUM was detected on the page, but it isn't active because the sampling rate is below 100%")
         }
@@ -1209,13 +1203,7 @@ addHook({
           fn: async function ({ page }) {
             try {
               if (page) {
-                const isRumActive = await page.evaluate(() => {
-                  if (window.DD_RUM && window.DD_RUM.stopSession) {
-                    window.DD_RUM.stopSession()
-                    return true
-                  }
-                  return false
-                })
+                const isRumActive = await page.evaluate(stopRumSession)
 
                 if (isRumActive) {
                   // Give some time RUM to flush data, similar to what we do in selenium

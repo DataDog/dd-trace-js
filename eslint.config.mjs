@@ -463,6 +463,18 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
 
+      // Inline `.evaluate(<fn>)` callbacks (Playwright/Puppeteer) are serialized with
+      // `toString()` and run in chromium — NYC counter bumps inside would ReferenceError.
+      // Import the helper from a `*-browser-scripts.js` file (excluded from NYC) instead.
+      'no-restricted-syntax': ['error', {
+        selector:
+          "CallExpression[callee.property.name='evaluate']" +
+          ":matches([arguments.0.type='ArrowFunctionExpression'], [arguments.0.type='FunctionExpression'])",
+        message:
+          'Move the inline `.evaluate(...)` callback into a `*-browser-scripts.js` file ' +
+          '(NYC-excluded in nyc.config.js) and import it here.',
+      }],
+
       'n/no-restricted-require': ['error', [
         ...GLOBAL_RESTRICTED_REQUIRES,
         {

@@ -232,6 +232,7 @@ function applyCoverageEnv (env, options = {}) {
 }
 
 module.exports = {
+  BOOTSTRAP_REQUIRE_ARG,
   CHILD_BOOTSTRAP_PATH,
   COLLECTOR_ENV,
   COVERAGE_SLOWDOWN,

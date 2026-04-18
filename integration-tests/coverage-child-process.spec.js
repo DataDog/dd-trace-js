@@ -331,6 +331,55 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     }
   })
 
+  // Debugger-worker style: caller strips NODE_OPTIONS to block foreign `-r` hooks. The bootstrap
+  // re-adds only its own `-r`, so NYC reaches the worker without leaking customer preloads.
+  it('injects only the coverage bootstrap into Worker NODE_OPTIONS, not customer `-r`', async () => {
+    const fixtureDir = path.join(appRoot, 'worker-env-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const outPath = path.join(fixtureDir, 'worker-env.json')
+    const customerHookPath = path.join(fixtureDir, 'customer-hook.js')
+    const workerPath = path.join(fixtureDir, 'worker.js')
+    const parentPath = path.join(fixtureDir, 'parent.js')
+
+    await fsp.writeFile(customerHookPath, "'use strict'\n")
+    await fsp.writeFile(workerPath, `
+'use strict'
+require('node:fs').writeFileSync(${JSON.stringify(outPath)}, JSON.stringify({
+  nodeOptions: process.env.NODE_OPTIONS || '',
+  stripped: process.env.STRIPPED_MARKER || '',
+}))
+`)
+    await fsp.writeFile(parentPath, `
+'use strict'
+const { Worker } = require('node:worker_threads')
+const w = new Worker(${JSON.stringify(workerPath)}, {
+  execArgv: [],
+  env: { STRIPPED_MARKER: 'yes' },
+})
+w.once('exit', code => process.exit(code))
+`)
+    const bootstrapPath = path.join(process.cwd(), 'integration-tests', 'coverage', 'child-bootstrap.js')
+    childProcess.execFileSync(process.execPath, [parentPath], {
+      cwd: appRoot,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: `--require=${bootstrapPath} --require=${customerHookPath}`,
+      },
+      stdio: 'pipe',
+    })
+
+    const workerEnv = JSON.parse(fs.readFileSync(outPath, 'utf8'))
+    assert.strictEqual(workerEnv.stripped, 'yes', 'caller-provided env entries must be preserved')
+    assert.ok(
+      workerEnv.nodeOptions.includes('child-bootstrap.js'),
+      `Worker should get the coverage bootstrap (got: ${workerEnv.nodeOptions})`
+    )
+    assert.ok(
+      !workerEnv.nodeOptions.includes('customer-hook.js'),
+      `Worker must not inherit customer \`-r\` hooks from the parent (got: ${workerEnv.nodeOptions})`
+    )
+  })
+
   // Regression: the bootstrap used to assign `process.env.NYC_CWD = coverageRoot`. nyc's
   // `register-env.js` propagates `NYC_CWD` to every grandchild, so this leaked into any
   // nested `nyc` CLI in a fixture (e.g. mocha fixtures calling `nyc --all`). Those nested
