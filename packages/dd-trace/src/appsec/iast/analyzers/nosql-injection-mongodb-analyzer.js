@@ -84,11 +84,27 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
       console.log('[NOSQL DBG RAW] ch=%s nosqlAnalyzed=%s noop=%s hasStore=%s keys=%j',
         name, store?.nosqlAnalyzed, store?.noop, !!store, message && Object.keys(message))
     }
-    dc.channel('tracing:datadog:mquery:filter:start').subscribe(rawLog('raw:mquery:filter:start'))
+
+    // TEMP DEBUG: log subscriber state before/after each subscribe on the tracing start channel
+    // to understand whether subscriptions are actually registered on the channel mquery publishes on.
+    const startCh = dc.channel('tracing:datadog:mquery:filter:start')
+    const prepareChDbg = dc.channel('datadog:mquery:filter:prepare')
+    // eslint-disable-next-line no-console
+    console.log('[NOSQL DBG INIT] nodeVersion=%s startChHas=%s prepareChHas=%s startSubs=%s prepareSubs=%s',
+      process.versions.node,
+      startCh?.hasSubscribers, prepareChDbg?.hasSubscribers,
+      startCh?._subscribers?.length, prepareChDbg?._subscribers?.length)
+
+    startCh.subscribe(rawLog('raw:mquery:filter:start'))
     dc.channel('tracing:datadog:mquery:filter:asyncEnd').subscribe(rawLog('raw:mquery:filter:asyncEnd'))
     dc.channel('tracing:datadog:mquery:filter:end').subscribe(rawLog('raw:mquery:filter:end'))
     dc.channel('tracing:datadog:mquery:filter:error').subscribe(rawLog('raw:mquery:filter:error'))
-    dc.channel('datadog:mquery:filter:prepare').subscribe(rawLog('raw:mquery:filter:prepare'))
+    prepareChDbg.subscribe(rawLog('raw:mquery:filter:prepare'))
+
+    // eslint-disable-next-line no-console
+    console.log('[NOSQL DBG INIT] AFTER SUBSCRIBE startChHas=%s prepareChHas=%s startSubs=%s prepareSubs=%s',
+      startCh?.hasSubscribers, prepareChDbg?.hasSubscribers,
+      startCh?._subscribers?.length, prepareChDbg?._subscribers?.length)
   }
 
   configureSanitizers () {
