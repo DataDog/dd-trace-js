@@ -85,26 +85,73 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
         name, store?.nosqlAnalyzed, store?.noop, !!store, message && Object.keys(message))
     }
 
-    // TEMP DEBUG: log subscriber state before/after each subscribe on the tracing start channel
-    // to understand whether subscriptions are actually registered on the channel mquery publishes on.
     const startCh = dc.channel('tracing:datadog:mquery:filter:start')
     const prepareChDbg = dc.channel('datadog:mquery:filter:prepare')
+
+    // TEMP DEBUG: intercept subscribe/unsubscribe on the tracing start channel to identify who
+    // subscribes/unsubscribes and whether handlers disappear silently between configure and exec.
+    if (!startCh.__nosqlDbgWrapped) {
+      Object.defineProperty(startCh, '__nosqlDbgWrapped', { value: true, enumerable: false })
+      const origSub = startCh.subscribe.bind(startCh)
+      const origUnsub = startCh.unsubscribe.bind(startCh)
+      startCh.subscribe = (h) => {
+        const stack = new Error('dbg-sub').stack?.split('\n').slice(1, 6).join(' | ')
+        const r = origSub(h)
+        // eslint-disable-next-line no-console
+        console.log('[NOSQL DBG SUB] start subscribe handler=%s subsAfter=%s stack=%s',
+          h?.name || 'anon', startCh._subscribers?.length, stack)
+        return r
+      }
+      startCh.unsubscribe = (h) => {
+        const stack = new Error('dbg-unsub').stack?.split('\n').slice(1, 6).join(' | ')
+        const r = origUnsub(h)
+        // eslint-disable-next-line no-console
+        console.log('[NOSQL DBG UNSUB] start unsubscribe handler=%s result=%s subsAfter=%s stack=%s',
+          h?.name || 'anon', r, startCh._subscribers?.length, stack)
+        return r
+      }
+    }
+
     // eslint-disable-next-line no-console
     console.log('[NOSQL DBG INIT] nodeVersion=%s startChHas=%s prepareChHas=%s startSubs=%s prepareSubs=%s',
       process.versions.node,
       startCh?.hasSubscribers, prepareChDbg?.hasSubscribers,
       startCh?._subscribers?.length, prepareChDbg?._subscribers?.length)
 
-    startCh.subscribe(rawLog('raw:mquery:filter:start'))
+    // TEMP DEBUG: keep strong module-level refs to the raw handlers so they cannot be GCed.
+    // If GC was collecting handlers, the module-level one should survive while any others may not.
+    const strongStartHandler = rawLog('raw:strong:mquery:filter:start')
+    const strongPrepareHandler = rawLog('raw:strong:mquery:filter:prepare')
+    globalThis.__nosqlDbgStrongRefs = globalThis.__nosqlDbgStrongRefs || []
+    globalThis.__nosqlDbgStrongRefs.push(strongStartHandler, strongPrepareHandler)
+
+    startCh.subscribe(strongStartHandler)
+    startCh.subscribe(rawLog('raw:inline:mquery:filter:start'))
     dc.channel('tracing:datadog:mquery:filter:asyncEnd').subscribe(rawLog('raw:mquery:filter:asyncEnd'))
     dc.channel('tracing:datadog:mquery:filter:end').subscribe(rawLog('raw:mquery:filter:end'))
     dc.channel('tracing:datadog:mquery:filter:error').subscribe(rawLog('raw:mquery:filter:error'))
-    prepareChDbg.subscribe(rawLog('raw:mquery:filter:prepare'))
+    prepareChDbg.subscribe(strongPrepareHandler)
 
     // eslint-disable-next-line no-console
     console.log('[NOSQL DBG INIT] AFTER SUBSCRIBE startChHas=%s prepareChHas=%s startSubs=%s prepareSubs=%s',
       startCh?.hasSubscribers, prepareChDbg?.hasSubscribers,
       startCh?._subscribers?.length, prepareChDbg?._subscribers?.length)
+
+    // TEMP DEBUG: log subscriber state AFTER super.configure has run (scheduled on nextTick so it
+    // runs after the full configure flow completes). If IastPlugin subs are properly enabled, we
+    // should see startSubs increase from what we see right after onConfigure.
+    process.nextTick(() => {
+      // eslint-disable-next-line no-console
+      console.log('[NOSQL DBG POST-CONFIGURE] startChHas=%s prepareChHas=%s startSubs=%s prepareSubs=%s',
+        startCh?.hasSubscribers, prepareChDbg?.hasSubscribers,
+        startCh?._subscribers?.length, prepareChDbg?._subscribers?.length)
+    })
+    setImmediate(() => {
+      // eslint-disable-next-line no-console
+      console.log('[NOSQL DBG POST-IMMEDIATE] startChHas=%s prepareChHas=%s startSubs=%s prepareSubs=%s',
+        startCh?.hasSubscribers, prepareChDbg?.hasSubscribers,
+        startCh?._subscribers?.length, prepareChDbg?._subscribers?.length)
+    })
   }
 
   configureSanitizers () {
