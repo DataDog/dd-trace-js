@@ -111,10 +111,14 @@ jobs:
         with:
           path: /github/home/.cache/ms-playwright
           key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
-      - run: yarn test:integration:playwright
+      - run: yarn test:integration:playwright:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - uses: ./.github/actions/coverage
+        with:
+          flags: test-optimization-playwright-${{ matrix.node-version }}-${{ matrix.playwright-version }}
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-mocha:
     strategy:

@@ -2,6 +2,7 @@
 
 // Playwright config file for integration tests
 const { devices } = require('@playwright/test')
+const { COVERAGE_SLOWDOWN } = require('./coverage/runtime')
 
 const projects = [
   {
@@ -26,7 +27,7 @@ if (process.env.ADD_EXTRA_PLAYWRIGHT_PROJECT) {
 const config = {
   baseURL: process.env.PW_BASE_URL,
   testDir: process.env.TEST_DIR || './ci-visibility/playwright-tests',
-  timeout: Number(process.env.TEST_TIMEOUT) || 30000,
+  timeout: Number(process.env.TEST_TIMEOUT) || 30000 * COVERAGE_SLOWDOWN,
   fullyParallel: process.env.FULLY_PARALLEL === 'true',
   workers: process.env.PLAYWRIGHT_WORKERS ? Number(process.env.PLAYWRIGHT_WORKERS) : undefined,
   reporter: 'line',

@@ -144,7 +144,6 @@ moduleTypes.forEach(({
       return
     }
 
-    this.retries(2)
     this.timeout(80000)
     let cwd, receiver, childProcess, webAppPort, webAppServer, secondWebAppServer
 

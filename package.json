@@ -85,6 +85,7 @@
     "test:integration:mocha": "mocha --timeout 60000 \"integration-tests/mocha/*.spec.js\"",
     "test:integration:mocha:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/mocha/*.spec.js\"",
     "test:integration:playwright": "mocha --timeout 60000 \"integration-tests/playwright/*.spec.js\"",
+    "test:integration:playwright:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/playwright/*.spec.js\"",
     "test:integration:selenium": "mocha --timeout 60000 \"integration-tests/selenium/*.spec.js\"",
     "test:integration:selenium:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/selenium/*.spec.js\"",
     "test:integration:vitest": "mocha --timeout 60000 \"integration-tests/vitest/*.spec.js\"",

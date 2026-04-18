@@ -14,6 +14,7 @@ const {
   getCiVisEvpProxyConfig,
   assertObjectContains,
 } = require('../helpers')
+const { COVERAGE_SLOWDOWN } = require('../coverage/runtime')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const { createWebAppServerWithRedirect } = require('../ci-visibility/web-app-server-with-redirect')
@@ -81,15 +82,14 @@ versions.forEach((version) => {
   describe(`playwright@${version}`, function () {
     let cwd, receiver, childProcess, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
-    this.retries(2)
-    this.timeout(80000)
+    this.timeout(80000 * COVERAGE_SLOWDOWN)
 
     // TODO: Update tests files accordingly and test with different TS versions
     useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript@5'], true)
 
     before(function (done) {
       // Increase timeout for this hook specifically to account for slow chromium installation in CI
-      this.timeout(120000)
+      this.timeout(120000 * COVERAGE_SLOWDOWN)
 
       cwd = sandboxCwd()
       const { NODE_OPTIONS, ...restOfEnv } = process.env
