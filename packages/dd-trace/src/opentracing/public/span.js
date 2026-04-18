@@ -5,8 +5,8 @@
 // checks (===) in user code remain stable.
 const cache = new WeakMap()
 
-const { SVC_SRC_KEY } = require('../../constants')
 const DatadogSpan = require('../span')
+const { SVC_SRC_KEY } = require('../../constants')
 
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
@@ -20,14 +20,12 @@ class PublicSpan {
     if (span instanceof PublicSpan) {
       return span
     }
+
     const cached = cache.get(span)
-    if (cached !== undefined) {
-      return cached
-    }
+    if (cached) return cached
+
     this._span = span
-    try {
-      cache.set(span, this)
-    } catch {}
+    cache.set(span, this)
   }
 
   setTag (key, value) {
@@ -47,6 +45,20 @@ class PublicSpan {
   }
 }
 
+// This is only used for startSpan which is guarenteed to not been activated.
+function uncachedWrapper (span) {
+  // This skips the cache at init
+  const wrapper = Object.create(PublicSpan.prototype)
+  wrapper._span = span
+  return wrapper
+}
+
+function cacheWrapper (wrapper) {
+  if (!cache.has(wrapper._span)) {
+    cache.set(wrapper._span, wrapper)
+  }
+}
+
 // Whenever a method needs to be modified to have a unique public behavior, it
 // should be implemented on `PublicSpan` directly so it is skipped here.
 for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
@@ -54,10 +66,10 @@ for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
     continue
   }
   PublicSpan.prototype[method] = function (...args) {
-    const result = this._span[method](...args)
+    const result = this._span[method].apply(this._span, arguments)
     // always return wrapper span when the result is the span itself
     return result === this._span ? this : result
   }
 }
 
-module.exports = PublicSpan
+module.exports = { PublicSpan, uncachedWrapper, cacheWrapper }

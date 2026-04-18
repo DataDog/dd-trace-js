@@ -9,7 +9,7 @@ const semver = require('semver')
 const sinon = require('sinon')
 
 const { ERROR_MESSAGE } = require('../../dd-trace/src/constants')
-const PublicSpan = require('../../dd-trace/src/opentracing/public/span')
+const { PublicSpan } = require('../../dd-trace/src/opentracing/public/span')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
