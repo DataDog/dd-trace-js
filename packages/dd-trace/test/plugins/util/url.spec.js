@@ -54,7 +54,13 @@ describe('plugins/util/url', () => {
       assert.strictEqual(result, 'https://secure.example.com/secure/path')
     })
 
-    it('should extract full URL from HTTPS request with connection.encrypted', () => {
+    // Regression guard: `IncomingMessage.connection` is a deprecated alias for `.socket` (see
+    // https://nodejs.org/docs/latest-v18.x/api/http.html#messageconnection) — accessing it
+    // emits DEP0163 on every supported Node.js version. Real http[2] request objects always
+    // have `socket === connection` (same reference), so a mock with `socket: null` and a
+    // standalone `connection` object cannot occur in practice. We only inspect `.socket` to
+    // avoid triggering the deprecation warning on each request.
+    it('should not read `connection.encrypted` (deprecated alias for `socket.encrypted`)', () => {
       const req = {
         headers: {
           host: 'secure.example.com',
@@ -65,7 +71,7 @@ describe('plugins/util/url', () => {
       }
 
       const result = url.extractURL(req)
-      assert.strictEqual(result, 'https://secure.example.com/secure/path')
+      assert.strictEqual(result, 'http://secure.example.com/secure/path')
     })
 
     it('should extract full URL from HTTP/2 request', () => {

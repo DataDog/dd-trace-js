@@ -31,7 +31,10 @@ function extractURL (req) {
 }
 
 function getProtocol (req) {
-  return (req.socket?.encrypted || req.connection?.encrypted) ? 'https' : 'http'
+  // `req.connection` is just a deprecated alias for `req.socket` in IncomingMessage, so we
+  // only check the non-deprecated property. Accessing `req.connection` triggers
+  // DeprecationWarnings in Node.js and in light-my-request's request mock.
+  return req.socket?.encrypted ? 'https' : 'http'
 }
 
 /**
