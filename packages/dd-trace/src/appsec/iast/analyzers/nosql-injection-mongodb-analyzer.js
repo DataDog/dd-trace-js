@@ -101,9 +101,12 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
     // TEMP DEBUG: intercept subscribe/unsubscribe on the tracing start channel to identify who
     // subscribes/unsubscribes and whether handlers disappear silently between configure and exec.
-    // IMPORTANT: do NOT use new Error().stack here — in Node 24+ the stack prepare callback can
-    // re-enter diagnostics_channel and cause infinite recursion. Use a cheap marker instead.
-    if (!startCh.__nosqlDbgWrapped) {
+    // IMPORTANT: limit to Node 18. On Node 20+, Channel.prototype.subscribe uses lazy activation
+    // (markActive swaps prototype to ActiveChannel and then calls this.subscribe again), which
+    // creates an infinite recursion with our instance-level subscribe override. The flaky we are
+    // investigating reproduces on Node 18, so scope the instrumentation to that version.
+    const nodeMajor = parseInt(process.versions.node, 10)
+    if (nodeMajor < 20 && !startCh.__nosqlDbgWrapped) {
       Object.defineProperty(startCh, '__nosqlDbgWrapped', { value: true, enumerable: false })
       const origSub = startCh.subscribe.bind(startCh)
       const origUnsub = startCh.unsubscribe.bind(startCh)
