@@ -40,6 +40,7 @@ const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecuritySampler = require('./api_security_sampler')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
+const { getActiveRequest, getRequest } = require('./store')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
@@ -117,7 +118,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
 
   if (!req) {
     const store = storage('legacy').getStore()
-    req = store?.req
+    req = getRequest(store)
   }
 
   const rootSpan = web.root(req)
@@ -258,8 +259,8 @@ function incomingHttpEndTranslator ({ req, res }) {
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
-  const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+  const req = getActiveRequest()
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportVerify')
@@ -268,12 +269,12 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 
   const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
 
-  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, req, web.getContext(req)?.res, rootSpan, abortController)
 }
 
 function onPassportDeserializeUser ({ user, abortController }) {
-  const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+  const req = getActiveRequest()
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportDeserializeUser')
@@ -282,7 +283,7 @@ function onPassportDeserializeUser ({ user, abortController }) {
 
   const results = UserTracking.trackUser(user, rootSpan)
 
-  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, req, web.getContext(req)?.res, rootSpan, abortController)
 }
 
 function onExpressSession ({ req, res, sessionId, abortController }) {
@@ -309,7 +310,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
 
   if (!req) {
     const store = storage('legacy').getStore()
-    req = store?.req
+    req = getRequest(store)
   }
 
   const rootSpan = web.root(req)

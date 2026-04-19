@@ -3,8 +3,9 @@
 const { USER_ID } = require('../addresses')
 const waf = require('../waf')
 const { block, getBlockingAction } = require('../blocking')
-const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
+const web = require('../../plugins/util/web')
+const { getActiveRequest } = require('../store')
 const { setUserTags } = require('./set_user')
 const { getRootSpan } = require('./utils')
 
@@ -32,13 +33,8 @@ function checkUserAndSetUser (tracer, user) {
 }
 
 function blockRequest (tracer, req, res) {
-  if (!req || !res) {
-    const store = storage('legacy').getStore()
-    if (store) {
-      req = req || store.req
-      res = res || store.res
-    }
-  }
+  req ||= getActiveRequest()
+  res ||= req && web.getContext(req)?.res
 
   if (!req || !res) {
     log.warn('[ASM] Requests or response object not available in blockRequest')

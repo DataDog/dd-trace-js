@@ -5,8 +5,9 @@ const {
   httpClientRequestStart,
   httpClientResponseFinish,
 } = require('../channels')
-const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
+const web = require('../../plugins/util/web')
+const { getActiveRequest } = require('../store')
 const waf = require('../waf')
 const downstream = require('../downstream_requests')
 const { updateRaspRuleMatchMetricTags } = require('../telemetry')
@@ -30,8 +31,7 @@ function disable () {
 }
 
 function analyzeSsrf (ctx) {
-  const store = storage('legacy').getStore()
-  const req = store?.req
+  const req = getActiveRequest()
   const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
 
   if (!req || !outgoingUrl) return
@@ -50,7 +50,7 @@ function analyzeSsrf (ctx) {
 
   const result = waf.run({ ephemeral }, req, raspRule)
 
-  handleResult(result, req, store?.res, ctx.abortController, config, raspRule)
+  handleResult(result, req, web.getContext(req)?.res, ctx.abortController, config, raspRule)
 
   downstream.incrementDownstreamAnalysisCount(req)
 }
@@ -67,8 +67,7 @@ function handleResponseFinish ({ ctx, res, body }) {
   // downstream response object
   if (!res) return
 
-  const store = storage('legacy').getStore()
-  const originatingRequest = store?.req
+  const originatingRequest = getActiveRequest()
   if (!originatingRequest) return
 
   // Skip body analysis for redirect responses

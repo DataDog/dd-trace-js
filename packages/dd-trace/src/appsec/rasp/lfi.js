@@ -4,7 +4,9 @@ const { isAbsolute } = require('path')
 
 const { fsOperationStart, incomingHttpRequestStart, expressResponseRenderStart } = require('../channels')
 const { storage } = require('../../../../datadog-core')
+const web = require('../../plugins/util/web')
 const { FS_OPERATION_PATH } = require('../addresses')
+const { getRequest } = require('../store')
 const waf = require('../waf')
 const { enable: enableFsPlugin, disable: disableFsPlugin, RASP_MODULE } = require('./fs-plugin')
 const { RULE_TYPES, handleResult } = require('./utils')
@@ -53,16 +55,18 @@ function analyzeLfiInResponseRender (ctx) {
   const store = storage('legacy').getStore()
   if (!store) return
 
-  analyzeLfiPath(ctx.view, ctx.req, store.res, ctx.abortController)
+  analyzeLfiPath(ctx.view, ctx.req, web.getContext(ctx.req)?.res, ctx.abortController)
 }
 
 function analyzeLfi (ctx) {
   const store = storage('legacy').getStore()
   if (!store) return
 
-  const { req, fs, res } = store
+  const req = getRequest(store)
+  const fs = store.fs
   if (!req || !fs) return
 
+  const res = web.getContext(req)?.res
   for (const path of getPaths(ctx, fs)) {
     analyzeLfiPath(path, req, res, ctx.abortController)
   }
