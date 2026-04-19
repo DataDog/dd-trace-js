@@ -101,7 +101,9 @@ function patchWorkerThreads () {
   workerThreads.Worker = class extends OriginalWorker {
     constructor (filename, options) {
       const env = options?.env
-      if (!env?.NODE_OPTIONS) {
+      // Only patch an explicitly stripped env; leave undefined alone so the worker inherits
+      // the parent's `process.env` (with NODE_OPTIONS already carrying our bootstrap).
+      if (env && typeof env === 'object' && !env.NODE_OPTIONS) {
         options = { ...options, env: { ...env, NODE_OPTIONS: BOOTSTRAP_REQUIRE_ARG } }
       }
       super(filename, options)

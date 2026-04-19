@@ -380,6 +380,48 @@ w.once('exit', code => process.exit(code))
     )
   })
 
+  // Jest-worker style: caller creates `new Worker(..., { workerData, ... })` with no `env`
+  // option. Node inherits the parent's `process.env` automatically — the patch must NOT step
+  // in and replace it with a stripped `{ NODE_OPTIONS: bootstrap }` (which would lose
+  // `-r dd-trace/ci/init` and any other parent env variables the worker needs).
+  it('leaves Worker env untouched when the caller did not set options.env', async () => {
+    const fixtureDir = path.join(appRoot, 'worker-inherit-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const outPath = path.join(fixtureDir, 'worker-env.json')
+    const workerPath = path.join(fixtureDir, 'worker.js')
+    const parentPath = path.join(fixtureDir, 'parent.js')
+
+    await fsp.writeFile(workerPath, `
+'use strict'
+require('node:fs').writeFileSync(${JSON.stringify(outPath)}, JSON.stringify({
+  nodeOptions: process.env.NODE_OPTIONS || '',
+  parentMarker: process.env.PARENT_MARKER || '',
+}))
+`)
+    await fsp.writeFile(parentPath, `
+'use strict'
+const { Worker } = require('node:worker_threads')
+const w = new Worker(${JSON.stringify(workerPath)})
+w.once('exit', code => process.exit(code))
+`)
+    const bootstrapPath = path.join(process.cwd(), 'integration-tests', 'coverage', 'child-bootstrap.js')
+    childProcess.execFileSync(process.execPath, [parentPath], {
+      cwd: appRoot,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: `--require=${bootstrapPath}`,
+        PARENT_MARKER: 'inherited',
+      },
+      stdio: 'pipe',
+    })
+
+    const workerEnv = JSON.parse(fs.readFileSync(outPath, 'utf8'))
+    assert.strictEqual(workerEnv.parentMarker, 'inherited',
+      'worker must inherit the parent env when options.env is undefined')
+    assert.ok(workerEnv.nodeOptions.includes('child-bootstrap.js'),
+      `worker must inherit full parent NODE_OPTIONS (got: ${workerEnv.nodeOptions})`)
+  })
+
   // Regression: the bootstrap used to assign `process.env.NYC_CWD = coverageRoot`. nyc's
   // `register-env.js` propagates `NYC_CWD` to every grandchild, so this leaked into any
   // nested `nyc` CLI in a fixture (e.g. mocha fixtures calling `nyc --all`). Those nested

@@ -72,7 +72,7 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider)
-      sinon.assert.calledWith(log.debug, 'FlaggingProvider created with timeout: 30000ms')
+      sinon.assert.calledWith(log.debug, '%s created with timeout: %dms', 'FlaggingProvider', 30000)
     })
   })
 
@@ -85,7 +85,7 @@ describe('FlaggingProvider', () => {
       provider._setConfiguration(ufc)
 
       sinon.assert.calledOnceWithExactly(setConfigSpy, ufc)
-      sinon.assert.calledWith(log.debug, 'FlaggingProvider provider configuration updated')
+      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
     })
 
     it('should handle null/undefined configuration gracefully', () => {
