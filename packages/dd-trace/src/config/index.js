@@ -374,6 +374,23 @@ class Config extends ConfigBase {
       setAndTrack(this, 'otelMetricsEnabled', false)
     }
 
+    const otelTracesEnabled = trackedConfigOrigins.has('OTEL_TRACES_EXPORTER') &&
+      this.OTEL_TRACES_EXPORTER === 'otlp'
+    if (this.protocolVersion && this.protocolVersion !== '0.4' && otelTracesEnabled) {
+      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
+      setAndTrack(this, 'otelTracesEnabled', false)
+    } else {
+      setAndTrack(this, 'otelTracesEnabled', otelTracesEnabled)
+    }
+
+    if (this.otelTracesProtocol && this.otelTracesProtocol !== 'http/json') {
+      log.warn(
+        'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
+        this.otelTracesProtocol
+      )
+      setAndTrack(this, 'otelTracesProtocol', 'http/json')
+    }
+
     if (this.telemetry.heartbeatInterval) {
       setAndTrack(this, 'telemetry.heartbeatInterval', Math.floor(this.telemetry.heartbeatInterval * 1000))
     }
@@ -440,8 +457,16 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
-    if (!trackedConfigOrigins.has('sampleRate') && trackedConfigOrigins.has('OTEL_TRACES_SAMPLER')) {
-      setAndTrack(this, 'sampleRate', getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
+    if (!trackedConfigOrigins.has('sampleRate')) {
+      const effectiveSampler = (trackedConfigOrigins.has('OTEL_TRACES_EXPORTER') &&
+        this.OTEL_TRACES_EXPORTER === 'otlp' &&
+        !trackedConfigOrigins.has('OTEL_TRACES_SAMPLER'))
+        ? 'parentbased_always_on'
+        : this.OTEL_TRACES_SAMPLER
+      if (effectiveSampler && (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
+          trackedConfigOrigins.has('OTEL_TRACES_EXPORTER'))) {
+        setAndTrack(this, 'sampleRate', getFromOtelSamplerMap(effectiveSampler, this.OTEL_TRACES_SAMPLER_ARG))
+      }
     }
 
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
@@ -603,6 +628,13 @@ class Config extends ConfigBase {
     if (!this.otelMetricsUrl) {
       setAndTrack(this, 'otelMetricsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`)
     }
+    if (!trackedConfigOrigins.has('otelTracesUrl') && this.OTEL_EXPORTER_OTLP_ENDPOINT) {
+      // Generic OTLP endpoint: per spec, append /v1/traces signal-specific subpath
+      setAndTrack(this, 'otelTracesUrl', this.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/traces')
+    } else if (!this.otelTracesUrl) {
+      const tracesHostname = agentHostname === '127.0.0.1' ? 'localhost' : agentHostname
+      setAndTrack(this, 'otelTracesUrl', `http://${tracesHostname}:${DEFAULT_OTLP_PORT}/v1/traces`)
+    }
 
     if (process.platform === 'win32') {
       // OOM monitoring does not work properly on Windows, so it will be disabled.
@@ -694,11 +726,23 @@ function increaseCounter (event, ddVar, otelVar) {
 }
 
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
+  const NON_PARENTBASED_TO_PARENTBASED = {
+    always_on: 'parentbased_always_on',
+    always_off: 'parentbased_always_off',
+    traceidratio: 'parentbased_traceidratio',
+  }
   const OTEL_TRACES_SAMPLER_MAPPING = {
-    always_on: 1,
-    always_off: 0,
     parentbased_always_on: 1,
     parentbased_always_off: 0,
+  }
+
+  const parentBasedEquivalent = NON_PARENTBASED_TO_PARENTBASED[otelTracesSampler]
+  if (parentBasedEquivalent) {
+    log.info(
+      'OTEL_TRACES_SAMPLER=%s does not respect upstream sampling decisions; using parent-based equivalent %s instead',
+      otelTracesSampler, parentBasedEquivalent
+    )
+    otelTracesSampler = parentBasedEquivalent
   }
 
   const result = OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler] ?? otelTracesSamplerArg
