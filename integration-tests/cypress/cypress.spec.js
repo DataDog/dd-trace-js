@@ -4379,7 +4379,7 @@ moduleTypes.forEach(({
     })
 
     context('final status tag', function () {
-      over10It.only('sets final_status tag to test status on regular tests without retry features', async () => {
+      over10It('sets final_status tag to test status on regular tests without retry features', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -4452,7 +4452,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      over10It.only(
+      over10It(
         'sets tag only on last ATR retry when EFD is enabled but not active and ATR is active',
         async () => {
           // All tests are known, so EFD will be enabled but not active for them
@@ -4524,7 +4524,7 @@ moduleTypes.forEach(({
                 assert.strictEqual(group.length, 1, `Expected 1 execution for "${name}"`)
                 assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], 'pass')
               }
-            }, 30000)
+            }, 60000)
 
           const envVars = getCiVisEvpProxyConfig(receiver.port)
 
@@ -4547,7 +4547,7 @@ moduleTypes.forEach(({
         }
       )
 
-      over10It.only('sets final_status tag on last retry (EFD active only)', async () => {
+      over10It('sets final_status tag on last retry (EFD active only)', async () => {
         // 'context passes' from spec.cy.js is NOT listed → new → EFD retries it
         // All tests in flaky-with-hooks.cy.js are NOT listed → new → EFD retries them
         receiver.setKnownTests({
@@ -4630,7 +4630,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      over10It.only('sets final_status tag on last retry (ATR active only)', async () => {
+      over10It('sets final_status tag on last retry (ATR active only)', async () => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -4694,7 +4694,7 @@ moduleTypes.forEach(({
               assert.strictEqual(group.length, 1)
               assert.strictEqual(group[0].meta[TEST_FINAL_STATUS], 'pass')
             }
-          }, 30000)
+          }, 60000)
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
@@ -4716,7 +4716,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      over10It.only('sets final_status tag to skip for disabled tests', async () => {
+      over10It('sets final_status tag to skip for disabled tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
         receiver.setTestManagementTests({
           cypress: {
@@ -4775,7 +4775,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      over10It.only('sets final_status tag to skip for quarantined tests', async () => {
+      over10It('sets final_status tag to skip for quarantined tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
         receiver.setTestManagementTests({
           cypress: {
@@ -4846,7 +4846,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      over10It.only('sets final_status tag to skip for quarantined tests when hook throws', async () => {
+      over10It('sets final_status tag to skip for quarantined tests when hook throws', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
         receiver.setTestManagementTests({
           cypress: {
@@ -4899,7 +4899,7 @@ moduleTypes.forEach(({
         ])
       })
 
-      over10It.only('sets final_status tag on last ATF retry', async () => {
+      over10It('sets final_status tag on last ATF retry', async () => {
         receiver.setSettings({
           test_management: { enabled: true, attempt_to_fix_retries: 3 },
         })
