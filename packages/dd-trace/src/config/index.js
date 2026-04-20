@@ -541,7 +541,10 @@ class Config extends ConfigBase {
         isServiceNameInferred = true
       }
     }
-    setAndTrack(this, 'isServiceNameInferred', isServiceNameInferred)
+
+    // This should not be tracked.
+    // TODO: Consider moving this outside of the config.
+    set(this, 'isServiceNameInferred', isServiceNameInferred)
 
     // Add missing tags, in case they are defined otherwise.
     if (this.service) {
