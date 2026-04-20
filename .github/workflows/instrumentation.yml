@@ -402,7 +402,7 @@ jobs:
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration:${{ bundler }}
+      - run: yarn test:integration:${{ matrix.bundler }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
