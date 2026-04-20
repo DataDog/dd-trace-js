@@ -19,7 +19,7 @@ describe('integrations', () => {
   let server
 
   describe('modelcontextprotocol-sdk', () => {
-    const { getEvents, drainSetupSpans } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
+    const { getEvents } = useLlmObs({ plugin: 'modelcontextprotocol-sdk' })
 
     withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
       before(async () => {
@@ -71,9 +71,6 @@ describe('integrations', () => {
 
         client = new Client({ name: 'test-client', version: '1.0.0' })
         await client.connect(clientTransport)
-
-        // Drain any spans generated during setup (e.g. mcp.connect workflow span)
-        await drainSetupSpans()
       })
 
       after(async () => {
@@ -213,28 +210,6 @@ describe('integrations', () => {
             span: apmSpans[0],
             spanKind: 'task',
             name: 'MCP Client List Tools',
-            tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
-          })
-        })
-      })
-
-      describe('Client.connect', () => {
-        it('creates a workflow span for connecting', async () => {
-          const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
-          const newServer = new McpServer({ name: 'test-server', version: '1.0.0' })
-          await newServer.connect(serverTransport)
-
-          const newClient = new Client({ name: 'test-client', version: '1.0.0' })
-          await newClient.connect(clientTransport)
-          await newClient.close()
-          await newServer.close()
-
-          const { apmSpans, llmobsSpans } = await getEvents()
-
-          assertLlmObsSpanEvent(llmobsSpans[0], {
-            span: apmSpans[0],
-            spanKind: 'workflow',
-            name: 'MCP Client Session',
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
         })

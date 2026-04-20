@@ -429,21 +429,6 @@ function useLlmObs ({
   })
 
   return {
-    drainSetupSpans: async function () {
-      // Drain any LLMObs spans generated during test setup (e.g., mcp.connect workflow span)
-      // Uses a retry loop to wait for spans to be flushed without blocking on apmTracesPromise,
-      // which may be stale from a previous version's test suite when withVersions is used.
-      for (let i = 0; i < 10; i++) {
-        await new Promise(resolve => setImmediate(resolve))
-        const requests = agent.getLlmObsSpanEventsRequests(false)
-        if (requests.length > 0) {
-          agent.getLlmObsSpanEventsRequests(true) // clear
-          return
-        }
-      }
-      agent.getLlmObsSpanEventsRequests(true) // final drain (may be a no-op)
-    },
-
     getEvents: async function (numLlmObsSpans = 1) {
       // get apm spans from the agent
       const apmSpans = await apmTracesPromise

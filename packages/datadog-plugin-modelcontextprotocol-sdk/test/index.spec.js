@@ -84,23 +84,4 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       return traceAssertion
     })
   })
-
-  describe('Client.connect() - mcp.connect', () => {
-    it('should generate span with correct tags', async () => {
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.connect',
-        type: 'mcp',
-        resource: 'connect',
-        meta: {
-          component: 'modelcontextprotocol_connect',
-          '_dd.integration': 'modelcontextprotocol_connect',
-          'span.kind': 'client',
-        },
-      })
-
-      await testSetup.clientReconnect()
-
-      return traceAssertion
-    })
-  })
 })

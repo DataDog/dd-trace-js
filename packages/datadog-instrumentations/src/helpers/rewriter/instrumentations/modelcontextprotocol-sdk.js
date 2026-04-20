@@ -56,30 +56,4 @@ module.exports = [
     },
     channelName: 'Client_listTools',
   },
-  {
-    module: {
-      name: '@modelcontextprotocol/sdk',
-      versionRange: '>=1.27.1',
-      filePath: 'dist/esm/client/index.js',
-    },
-    functionQuery: {
-      methodName: 'connect',
-      className: 'Client',
-      kind: 'Async',
-    },
-    channelName: 'Client_connect',
-  },
-  {
-    module: {
-      name: '@modelcontextprotocol/sdk',
-      versionRange: '>=1.27.1',
-      filePath: 'dist/cjs/client/index.js',
-    },
-    functionQuery: {
-      methodName: 'connect',
-      className: 'Client',
-      kind: 'Async',
-    },
-    channelName: 'Client_connect',
-  },
 ]

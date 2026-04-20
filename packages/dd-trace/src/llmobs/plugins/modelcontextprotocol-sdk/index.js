@@ -62,21 +62,4 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
   }
 }
 
-class McpConnectLLMObsPlugin extends LLMObsPlugin {
-  static id = 'llmobs_mcp_connect'
-  static integration = 'modelcontextprotocol-sdk'
-  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_connect'
-
-  getLLMObsSpanRegisterOptions () {
-    return {
-      kind: 'workflow',
-      name: 'MCP Client Session',
-    }
-  }
-
-  setLLMObsTags () {
-    // No meaningful I/O to capture for a connection lifecycle span
-  }
-}
-
-module.exports = [McpToolCallLLMObsPlugin, McpListToolsLLMObsPlugin, McpConnectLLMObsPlugin]
+module.exports = [McpToolCallLLMObsPlugin, McpListToolsLLMObsPlugin]

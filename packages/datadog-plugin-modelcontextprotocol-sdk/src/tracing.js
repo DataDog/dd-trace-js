@@ -49,27 +49,7 @@ class McpListToolsPlugin extends TracingPlugin {
   }
 }
 
-class McpConnectPlugin extends TracingPlugin {
-  static id = 'modelcontextprotocol_connect'
-  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_connect'
-
-  bindStart (ctx) {
-    this.startSpan('mcp.connect', {
-      resource: 'connect',
-      type: 'mcp',
-      kind: 'client',
-    }, ctx)
-
-    return ctx.currentStore
-  }
-
-  asyncEnd (ctx) {
-    super.finish(ctx)
-  }
-}
-
 module.exports = [
   McpToolCallPlugin,
   McpListToolsPlugin,
-  McpConnectPlugin,
 ]
