@@ -40,6 +40,11 @@ class GraphQLResolvePlugin extends TracingPlugin {
     const fieldDef = getFieldDef(exeContext.schema, parentType, fieldNode)
     if (!fieldDef) return
 
+    // Match master's wrapFieldResolve semantics: only create a graphql.resolve span
+    // when the field has a user-defined resolver. Fields using graphql's default
+    // resolver (plain property reads on scalars) are not meaningful resolver work.
+    if (!fieldDef.resolve) return
+
     const returnType = fieldDef.type
 
     // Build info-like object from executeField arguments
