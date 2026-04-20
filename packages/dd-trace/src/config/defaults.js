@@ -60,7 +60,6 @@ setWarnInvalidValue(warnInvalidValue)
 const defaults = {
   instrumentationSource: 'manual',
   isServiceUserProvided: false,
-  isServiceNameInferred: true,
   plugins: true,
   isCiVisibility: false,
   lookup: dns.lookup,

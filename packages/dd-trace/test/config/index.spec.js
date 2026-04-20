@@ -1518,11 +1518,21 @@ describe('Config', () => {
 
     sinon.assert.calledOnce(updateConfig)
 
-    assert.ok(
-      updateConfig.getCall(0).args[0].every(
-        entry => entry.name !== 'DD_TRACE_STATS_COMPUTATION_ENABLED' || entry.origin !== 'calculated'
-      ),
-    )
+    const internalDetails = new Map([
+      ['isServiceNameInferred', null],
+      ['DD_TRACE_STATS_COMPUTATION_ENABLED', 'calculated'],
+    ])
+
+    for (const entry of updateConfig.getCall(0).args[0]) {
+      const origin = internalDetails.get(entry.name)
+      if (origin !== undefined) {
+        if (origin === null) {
+          assert.fail(`Expected ${entry.name} to have origin ${origin} but got ${entry.origin}`)
+        } else {
+          assert.notStrictEqual(origin, entry.origin)
+        }
+      }
+    }
 
     assertConfigUpdateContains(updateConfig.getCall(0).args[0], [
       { name: 'DD_APPSEC_ENABLED', value: false, origin: 'code' },
