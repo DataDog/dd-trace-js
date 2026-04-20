@@ -32,7 +32,6 @@ const compiler = {
     } catch (e) {
       log.error(e)
 
-      // Fallback for when OXC is not available.
       const meriyah = require('../../../../../vendor/dist/meriyah')
 
       compiler.parse = (sourceText, { range, sourceType } = {}) => {
