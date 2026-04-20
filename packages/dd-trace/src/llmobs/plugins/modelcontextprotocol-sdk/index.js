@@ -28,7 +28,7 @@ class McpToolCallLLMObsPlugin extends LLMObsPlugin {
 
     const spanTags = { mcp_tool_kind: 'client' }
 
-    const serverVersion = ctx.self?._serverVersion
+    const serverVersion = ctx.self?.getServerVersion?.()
     if (serverVersion) {
       if (serverVersion.name) spanTags.mcp_server_name = serverVersion.name
       if (serverVersion.version) spanTags.mcp_server_version = serverVersion.version

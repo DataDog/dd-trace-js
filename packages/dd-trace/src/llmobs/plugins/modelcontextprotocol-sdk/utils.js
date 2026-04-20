@@ -41,7 +41,7 @@ function formatOutput (result) {
         type: item.type,
         text: item.text || '',
         annotations: item.annotations || {},
-        meta: item.meta || {},
+        meta: item._meta || {},
       }
       processed.push(contentBlock)
     }
