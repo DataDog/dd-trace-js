@@ -533,13 +533,6 @@
         "default": "false"
       }
     ],
-    "DD_ENABLE_LAGE_PACKAGE_NAME": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false"
-      }
-    ],
     "DD_CIVISIBILITY_MANUAL_API_ENABLED": [
       {
         "implementation": "A",
@@ -776,9 +769,7 @@
         "implementation": "B",
         "type": "boolean",
         "default": "true",
-        "configurationNames": [
-          "propagateProcessTags.enabled"
-        ]
+        "internalPropertyName": "propagateProcessTags.enabled"
       }
     ],
     "DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE": [
