@@ -8,28 +8,13 @@
   "variants": {
     "base": {
       "env": {
-        "DD_TRACE_SCOPE": "noop",
         "COUNT": "250000"
       }
     },
-    "async_hooks": {
+    "scope_enabled": {
       "baseline": "base",
       "env": {
-        "DD_TRACE_SCOPE": "async_hooks",
-        "COUNT": "250000"
-      }
-    },
-    "async_local_storage": {
-      "baseline": "base",
-      "env": {
-        "DD_TRACE_SCOPE": "async_local_storage",
-        "COUNT": "250000"
-      }
-    },
-    "async_resource": {
-      "baseline": "base",
-      "env": {
-        "DD_TRACE_SCOPE": "async_resource",
+        "SCOPE_ENABLED": "true",
         "COUNT": "250000"
       }
     }

@@ -1,11 +1,11 @@
 'use strict'
 
 const {
-  DD_TRACE_SCOPE,
+  SCOPE_ENABLED,
   COUNT,
 } = process.env
 
-if (DD_TRACE_SCOPE) {
+if (SCOPE_ENABLED === 'true') {
   const Scope = require('../../../packages/dd-trace/src/scope')
   const scope = new Scope()
   if (scope.enable) {
