@@ -329,6 +329,7 @@ describe('request', function () {
         host: 'test',
         port: 123,
         method: 'POST',
+        path: '/',
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       },
       (err, res) => {

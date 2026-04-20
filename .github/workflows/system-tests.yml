@@ -10,10 +10,8 @@ on:
 
 concurrency:
   # this ensures that only one workflow runs at a time for a given branch on pull requests
-  # as the group key is the workflow name and the branch name
-  # for scheduled runs and pushes to master, we use the run id to ensure that all runs are executed
-  group: ${{ (github.event_name == 'pull_request' && format('{0}-{1}', github.workflow, github.ref)) || format('{0}-{1}', github.workflow, github.run_id) }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   build-artifacts:
@@ -26,7 +24,7 @@ jobs:
       - name: Pack dd-trace-js
         run: mkdir -p ./binaries && echo /binaries/$(npm pack --silent --pack-destination ./binaries ./dd-trace-js) > ./binaries/nodejs-load-from-npm
       - name: Upload artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: system_tests_binaries
           path: ./binaries/**/*

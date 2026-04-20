@@ -46,12 +46,12 @@
     ],
     "DD_AI_GUARD_BLOCK": [
       {
-        "implementation": "B",
+        "implementation": "C",
         "type": "boolean",
         "configurationNames": [
           "experimental.aiguard.block"
         ],
-        "default": "false"
+        "default": "true"
       }
     ],
     "DD_AI_GUARD_ENABLED": [
@@ -1571,6 +1571,16 @@
         "implementation": "A",
         "type": "int",
         "default": "10000"
+      }
+    ],
+    "DD_RUNTIME_METRICS_NATIVE": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "runtimeMetrics.native"
+        ],
+        "default": "true"
       }
     ],
     "DD_RUNTIME_METRICS_GC_ENABLED": [

@@ -56,7 +56,6 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
       const meta = {
         'span.kind': 'client',
-        'service.name': this.serviceName(),
         'aws.operation': operation,
         'aws.region': awsRegion,
         region: awsRegion,
@@ -70,6 +69,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
       const span = this.startSpan(this.operationFromRequest(request), {
         childOf,
         meta,
+        service: this.serviceName(),
         integrationName: 'aws-sdk',
       }, ctx)
 

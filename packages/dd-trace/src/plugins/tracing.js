@@ -2,7 +2,7 @@
 
 const { storage } = require('../../../datadog-core')
 const analyticsSampler = require('../analytics_sampler')
-const { COMPONENT } = require('../constants')
+const { COMPONENT, SVC_SRC_KEY } = require('../constants')
 const Plugin = require('./plugin')
 
 class TracingPlugin extends Plugin {
@@ -26,7 +26,7 @@ class TracingPlugin extends Plugin {
    * @param {string} [opts.type]
    * @param {string} [opts.id]
    * @param {string} [opts.kind]
-   * @returns {string}
+   * @returns {{ name: string, source: string | undefined }}
    */
   serviceName (opts = {}) {
     const {
@@ -157,7 +157,8 @@ class TracingPlugin extends Plugin {
    * @param {string} [options.kind] - The kind of the span.
    * @param {object} [options.meta] - The meta data for the span.
    * @param {object} [options.metrics] - The metrics for the span.
-   * @param {string} [options.service] - The service name.
+   * @param {string | { name: string, source?: string }} [options.service] - The service name, or an object with
+   *   name and source.
    * @param {number} [options.startTime] - The start time of the span.
    * @param {string} [options.resource] - The resource name.
    * @param {string} [options.type] - The type of the span.
@@ -180,13 +181,28 @@ class TracingPlugin extends Plugin {
       resource,
       type,
     } = options
-
+    let serviceSource
     const tracer = options.tracer || this.tracer
     const config = options.config || this.config
+
+    if (service && typeof service === 'object') {
+      serviceSource = service.source
+      service = service.name
+    } else if (service !== undefined) {
+      // service is a plain value returned by service naming/config logic
+      serviceSource = service ? 'opt.plugin' : undefined
+    }
 
     const store = storage('legacy').getStore()
     if (store && childOf === undefined) {
       childOf = /** @type {import('../opentracing/span') | undefined} */ (store.span)
+    }
+
+    // clear service source if service is the same as tracer._service
+    const serviceName = service || meta?.service
+
+    if (!serviceName || serviceName === tracer._service) {
+      serviceSource = undefined
     }
 
     const span = tracer.startSpan(name, {
@@ -194,10 +210,11 @@ class TracingPlugin extends Plugin {
       childOf,
       tags: {
         [COMPONENT]: component,
-        'service.name': service || meta?.service || tracer._service,
+        'service.name': serviceName || tracer._service,
         'resource.name': resource,
         'span.kind': kind,
         'span.type': type,
+        ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
         ...meta,
         ...metrics,
       },

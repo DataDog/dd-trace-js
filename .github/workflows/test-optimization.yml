@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
@@ -70,7 +70,7 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: rochdev/playwright-tools@sha256:99a8e8df71996aa7797f83e98df50bc550c7c6eaf0b701f19fa4f928f2cf93b2 # 1.54.1-3
+      image: ghcr.io/rochdev/playwright-tools@sha256:f36c96b0a8f6899692798f77e01df78bd920e272d66f7f0bf153896a9135aa91 # 1.54.1-4
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1

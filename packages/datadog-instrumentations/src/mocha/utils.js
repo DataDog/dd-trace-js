@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const { getTestSuitePath, DYNAMIC_NAME_RE } = require('../../../dd-trace/src/plugins/util/test')
 const { channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
@@ -261,6 +264,14 @@ function getFinalStatus ({
 }) {
   // Note that intermediate executions DO NOT report a final status tag
 
+  // Intermediate EFD and ATF executions must not carry a final status, regardless of quarantine/disabled state
+  const isIntermediateExecution =
+    (isEfdRetry && !isLastEfdRetry) ||
+    (isAttemptToFix && !isLastAttemptToFix)
+  if (isIntermediateExecution) {
+    return
+  }
+
   // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
   // the final status of its last execution should be reported as 'skip'.
   if (isQuarantined || isDisabled) {
@@ -293,7 +304,7 @@ function getOnTestEndHandler (config) {
     // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
     if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
       await new Promise((resolve) => {
-        setTimeout(() => {
+        realSetTimeout(() => {
           resolve()
         }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
       })

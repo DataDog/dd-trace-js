@@ -238,7 +238,7 @@ describe('GraphQL', () => {
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphqlJson', blockParameters)
 
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
       sinon.assert.notCalled(telemetry.updateBlockFailureMetric)
@@ -270,7 +270,7 @@ describe('GraphQL', () => {
       const abortData = {}
       apolloChannel.asyncEnd.publish({ abortController, abortData })
 
-      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphql', blockParameters)
+      sinon.assert.calledOnceWithExactly(blocking.getBlockingData, req, 'graphqlJson', blockParameters)
 
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
       sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)

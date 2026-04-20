@@ -1,5 +1,8 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+
 const path = require('path')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -8,6 +11,7 @@ const {
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
+  JEST_WORKER_QUARANTINE_PAYLOAD_CODE,
   getTestLineStart,
   getTestSuitePath,
   getTestParametersString,
@@ -119,6 +123,38 @@ const testSuiteJestObjects = new Map()
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
 const atrSuppressedErrors = new Map()
+
+// Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
+const quarantinedFailingTests = new Set()
+
+/**
+ * Sends suppressed quarantine test names from a worker process to the main process.
+ * Supports both child_process (process.send) and worker_threads (parentPort.postMessage).
+ * Returns true if the data was sent (worker mode), false if in main process (runInBand).
+ *
+ * @param {string[]} testNames
+ * @returns {boolean}
+ */
+function sendQuarantineInfoToMainProcess (testNames) {
+  const payload = [JEST_WORKER_QUARANTINE_PAYLOAD_CODE, JSON.stringify(testNames)]
+
+  if (process.send) {
+    process.send(payload)
+    return true
+  }
+
+  try {
+    const { isMainThread, parentPort } = require('node:worker_threads')
+    if (!isMainThread && parentPort) {
+      parentPort.postMessage(payload)
+      return true
+    }
+  } catch {
+    // Not in a worker context
+  }
+
+  return false
+}
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -753,6 +789,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const willBeRetriedByFailedTestReplay = numRetries > 0 && numTestExecutions - 1 < numRetries
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
+        // For quarantined tests, suppress errors so Jest doesn't count them as failures.
+        // This prevents --bail from stopping the test run on quarantined test failures.
+        // The actual status ('fail') is already captured above for dd-trace reporting.
+        // Only suppress on the final execution — not when ATR/EFD/ATF will retry the test.
+        if (!event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && !willBeRetriedByFailedTestReplay) {
+          const quarantineCtx = testContexts.get(event.test)
+          if (quarantineCtx?.isQuarantined && event.test.errors?.length) {
+            quarantinedFailingTests.add(`${quarantineCtx.suite} › ${quarantineCtx.name}`)
+            event.test.errors = []
+          }
+        }
+
         const ctx = testContexts.get(event.test)
         if (!ctx) {
           log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
@@ -781,7 +829,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
         if (status === 'fail' && mightHitBreakpoint) {
           await new Promise(resolve => {
-            setTimeout(() => {
+            realSetTimeout(() => {
               resolve()
             }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
           })
@@ -810,9 +858,25 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       if (event.name === 'run_finish') {
         for (const [test, errors] of atrSuppressedErrors) {
-          test.errors = errors
+          // Do not restore errors for quarantined tests — they should stay suppressed
+          // so Jest doesn't see the failure (prevents --bail from stopping the run).
+          const ctx = testContexts.get(test)
+          if (ctx?.isQuarantined) {
+            const testName = getJestTestName(test, this.getShouldStripSeedFromTestName())
+            quarantinedFailingTests.add(`${ctx.suite} › ${testName}`)
+          } else {
+            test.errors = errors
+          }
         }
         atrSuppressedErrors.clear()
+
+        // In parallel mode, send suppressed quarantine info to the main process
+        // so it can include them in the session summary.
+        // In runInBand mode, keep the set — it will be consumed by the session-level code directly.
+        if (quarantinedFailingTests.size > 0 && sendQuarantineInfoToMainProcess([...quarantinedFailingTests])) {
+          quarantinedFailingTests.clear()
+        }
+
         efdDeterminedRetries.clear()
         efdSlowAbortedTests.clear()
         efdNewTestCandidates.clear()
@@ -1252,6 +1316,7 @@ function getCliWrapper (isNewJestVersion) {
 
       let numFailedQuarantinedTests = 0
       let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
+      let numSuppressedQuarantinedTests = 0
       if (isTestManagementTestsEnabled) {
         const failedTests = result
           .results
@@ -1288,45 +1353,69 @@ function getCliWrapper (isNewJestVersion) {
           }
         }
 
+        // Include quarantined tests whose errors were suppressed at test_done time.
+        // These tests don't appear as failed in Jest's results because their errors were cleared
+        // to prevent --bail from stopping the run, but they should still be counted for the summary.
+        for (const name of quarantinedFailingTests) {
+          if (!quarantineIgnoredNames.includes(name)) {
+            numSuppressedQuarantinedTests++
+            quarantineIgnoredNames.push(name)
+          }
+        }
+        quarantinedFailingTests.clear()
+
         // If every test that failed was quarantined, we'll consider the suite passed
         // Note that if a test is attempted to fix,
         // it's considered quarantined both if it's disabled and if it's quarantined
         // (it'll run but its status is ignored)
         // Skip if EFD block already flipped (to avoid logging twice)
+        // Only use visible failures (from Jest results) for the flip check.
+        // Suppressed quarantine failures are not in numFailedTests.
+        const visibleQuarantineFailures = numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
         if (
           !result.results.success &&
           !mustNotFlipSuccess &&
-          (numFailedQuarantinedOrDisabledAttemptedToFixTests !== 0 || numFailedQuarantinedTests !== 0) &&
-          result.results.numFailedTests ===
-            numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+          visibleQuarantineFailures !== 0 &&
+          result.results.numFailedTests === visibleQuarantineFailures
         ) {
           result.results.success = true
-          ignoredFailuresSummary = {
-            efdNames: [],
-            quarantineNames: quarantineIgnoredNames,
-            totalCount: numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests,
+        }
+
+        const totalQuarantineFailures = visibleQuarantineFailures + numSuppressedQuarantinedTests
+        if (totalQuarantineFailures > 0) {
+          if (ignoredFailuresSummary) {
+            ignoredFailuresSummary.quarantineNames = quarantineIgnoredNames
+            ignoredFailuresSummary.totalCount += totalQuarantineFailures
+          } else {
+            ignoredFailuresSummary = {
+              efdNames: [],
+              quarantineNames: quarantineIgnoredNames,
+              totalCount: totalQuarantineFailures,
+            }
           }
         }
       }
 
       // Combined check: if all failed tests are accounted for by EFD (flaky retries) and/or quarantine,
       // we should consider the suite passed even when neither check alone covers all failures.
+      // Only visible failures (in Jest results) are compared — suppressed quarantine failures
+      // are already removed from numFailedTests at test_done time.
       if (
         !result.results.success &&
         !mustNotFlipSuccess &&
         (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)
       ) {
-        const totalIgnoredFailures =
+        const visibleIgnoredFailures =
           numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
         if (
-          totalIgnoredFailures !== 0 &&
-          result.results.numFailedTests === totalIgnoredFailures
+          visibleIgnoredFailures !== 0 &&
+          result.results.numFailedTests === visibleIgnoredFailures
         ) {
           result.results.success = true
           ignoredFailuresSummary = {
             efdNames: efdIgnoredNames,
             quarantineNames: quarantineIgnoredNames,
-            totalCount: totalIgnoredFailures,
+            totalCount: visibleIgnoredFailures + numSuppressedQuarantinedTests,
           }
         }
       }
@@ -1351,7 +1440,7 @@ function getCliWrapper (isNewJestVersion) {
       })
 
       const timeoutPromise = new Promise((resolve) => {
-        timeoutId = setTimeout(() => {
+        timeoutId = realSetTimeout(() => {
           resolve('timeout')
         }, FLUSH_TIMEOUT).unref()
       })
@@ -1860,6 +1949,12 @@ function onMessageWrapper (onMessage) {
     }
     if (code === JEST_WORKER_TELEMETRY_PAYLOAD_CODE) { // datadog telemetry payload
       workerReportTelemetryCh.publish(data)
+      return
+    }
+    if (code === JEST_WORKER_QUARANTINE_PAYLOAD_CODE) { // quarantined test failures suppressed in worker
+      for (const name of JSON.parse(data)) {
+        quarantinedFailingTests.add(name)
+      }
       return
     }
     return onMessage.apply(this, arguments)

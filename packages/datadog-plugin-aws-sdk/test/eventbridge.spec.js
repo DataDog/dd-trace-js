@@ -60,6 +60,7 @@ describe('EventBridge', () => {
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {
         'aws.eventbridge.source': 'my.event',
+        'messaging.system': 'aws_eventbridge',
         'resource.name': 'putEvent my.event',
         rulename: 'my-rule-name',
       })
@@ -146,6 +147,7 @@ describe('EventBridge', () => {
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {
         'aws.eventbridge.source': 'my.event',
+        'messaging.system': 'aws_eventbridge',
         'resource.name': 'putEvent my.event',
         rulename: '',
       })
@@ -159,6 +161,7 @@ describe('EventBridge', () => {
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, null, {}), {
         'aws.eventbridge.source': 'my.event',
+        'messaging.system': 'aws_eventbridge',
         'resource.name': 'my.event',
         rulename: 'my-rule-name',
       })
@@ -171,6 +174,7 @@ describe('EventBridge', () => {
       }
       assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', null), {
         'aws.eventbridge.source': 'my.event',
+        'messaging.system': 'aws_eventbridge',
         'resource.name': 'putEvent my.event',
         rulename: 'my-rule-name',
       })

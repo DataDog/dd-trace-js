@@ -105,6 +105,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       'nyc',
       'mocha-each',
       'workerpool',
+      'sinon',
     ],
     true
   )
@@ -3811,6 +3812,41 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          assert.strictEqual(tests.length, 2)
+          const retriedTests = tests.filter(
+            t => t.meta[TEST_IS_RETRY] === 'true'
+          )
+          assert.strictEqual(retriedTests.length, 1)
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/fake-timers-test-hit-breakpoint',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0)
+    })
+
     it('tags new tests with dynamic names and logs a warning', async () => {
       receiver.setKnownTests({ mocha: {} })
       receiver.setSettings({
@@ -4025,6 +4061,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                 assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
                 assert.ok(!(TEST_IS_RETRY in test.meta))
                 assert.ok(!(TEST_RETRY_REASON in test.meta))
+                const expectedFinalStatus = (isQuarantined || isDisabled) ? 'skip' : test.meta[TEST_STATUS]
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
                 continue
               }
 
@@ -4056,6 +4094,15 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
                   assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                   assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                 }
+                // Final status: quarantined/disabled always report 'skip';
+                // pass only if all attempts passed, fail otherwise
+                const expectedFinalStatus = (isQuarantined || isDisabled)
+                  ? 'skip'
+                  : (shouldAlwaysPass ? 'pass' : 'fail')
+                assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
+              } else {
+                // Intermediate ATF executions must not carry a final status tag
+                assert.ok(!(TEST_FINAL_STATUS in test.meta))
               }
             }
           })
@@ -4151,6 +4198,59 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
         runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+      })
+
+      onlyLatestIt('does not tag known attempt to fix tests as new', async () => {
+        receiver.setKnownTests({
+          mocha: {
+            'ci-visibility/test-management/test-attempt-to-fix-1.js': [
+              'attempt to fix tests can attempt to fix a test',
+            ],
+          },
+        })
+        receiver.setSettings({
+          test_management: { enabled: true, attempt_to_fix_retries: 2 },
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 2 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const atfTests = tests.filter(
+              t => t.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+            )
+            assert.ok(atfTests.length > 0)
+            for (const test of atfTests) {
+              assert.ok(
+                !(TEST_IS_NEW in test.meta),
+                'ATF test that is in known tests should not be tagged as new'
+              )
+            }
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: JSON.stringify([
+                './test-management/test-attempt-to-fix-1.js',
+              ]),
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
       })
 
       onlyLatestIt('does not fail retry if a test is quarantined', (done) => {
