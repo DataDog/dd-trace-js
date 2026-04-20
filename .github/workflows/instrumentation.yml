@@ -58,7 +58,7 @@ jobs:
           flags: platform-webpack
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
-  bluebird:
+  instrumentation-bluebird:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -68,7 +68,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  body-parser:
+  instrumentation-body-parser:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -78,7 +78,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  child_process:
+  instrumentation-child_process:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  cookie-parser:
+  instrumentation-cookie-parser:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -98,7 +98,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  express-mongo-sanitize:
+  instrumentation-express-mongo-sanitize:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -114,7 +114,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  express-session:
+  instrumentation-express-session:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -124,7 +124,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  express:
+  instrumentation-express:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -134,7 +134,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  fs:
+  instrumentation-fs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -144,7 +144,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  generic-pool:
+  instrumentation-generic-pool:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -154,7 +154,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  # TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
+  instrumentation-# TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
   # ./.github/actions/instrumentations/test once fixed upstream.
   http:
     runs-on: ubuntu-latest
@@ -192,7 +192,7 @@ jobs:
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
-  knex:
+  instrumentation-knex:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -202,7 +202,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  mongoose:
+  instrumentation-mongoose:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -218,7 +218,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  multer:
+  instrumentation-multer:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -228,7 +228,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  mysql2:
+  instrumentation-mysql2:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -247,7 +247,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  passport:
+  instrumentation-passport:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -257,7 +257,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  passport-http:
+  instrumentation-passport-http:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -267,7 +267,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  passport-local:
+  instrumentation-passport-local:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -277,7 +277,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  pg:
+  instrumentation-pg:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -296,7 +296,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  promise-js:
+  instrumentation-promise-js:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -306,7 +306,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  promise:
+  instrumentation-promise:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -316,7 +316,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  q:
+  instrumentation-q:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -326,7 +326,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  url:
+  instrumentation-url:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -336,7 +336,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  when:
+  instrumentation-when:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -346,7 +346,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  misc:
+  instrumentations-misc:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
