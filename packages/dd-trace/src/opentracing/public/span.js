@@ -5,11 +5,11 @@
 // checks (===) in user code remain stable.
 const cache = new WeakMap()
 
-const DatadogSpan = require('../span')
 const { SVC_SRC_KEY } = require('../../constants')
 
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
+let init = false
 
 /**
  * This is a public wrapper of Span, this allows distinguishing internal usage from
@@ -20,6 +20,10 @@ class PublicSpan {
     if (span instanceof PublicSpan) {
       return span
     }
+
+    // Defers loading DatadogSpan until the first span is created, avoiding
+    // eager loading of its dependency tree in code paths that never create spans.
+    lazyInit()
 
     const cached = cache.get(span)
     if (cached) return cached
@@ -45,9 +49,29 @@ class PublicSpan {
   }
 }
 
+function lazyInit () {
+  if (init) return
+  init = true
+  const DatadogSpan = require('../span')
+
+  // Whenever a method needs to be modified to have a unique public behavior, it
+  // should be implemented on `PublicSpan` directly so it is skipped here.
+  for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
+    if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
+      continue
+    }
+    PublicSpan.prototype[method] = function (...args) {
+      const result = this._span[method].apply(this._span, arguments)
+      // always return wrapper span when the result is the span itself
+      return result === this._span ? this : result
+    }
+  }
+}
+
 // This is only used for startSpan which is guarenteed to not been activated.
 function uncachedWrapper (span) {
-  // This skips the cache at init
+  lazyInit()
+  // This skips the add cache init
   const wrapper = Object.create(PublicSpan.prototype)
   wrapper._span = span
   return wrapper
@@ -56,19 +80,6 @@ function uncachedWrapper (span) {
 function cacheWrapper (wrapper) {
   if (!cache.has(wrapper._span)) {
     cache.set(wrapper._span, wrapper)
-  }
-}
-
-// Whenever a method needs to be modified to have a unique public behavior, it
-// should be implemented on `PublicSpan` directly so it is skipped here.
-for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
-  if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
-    continue
-  }
-  PublicSpan.prototype[method] = function (...args) {
-    const result = this._span[method].apply(this._span, arguments)
-    // always return wrapper span when the result is the span itself
-    return result === this._span ? this : result
   }
 }
 
