@@ -293,6 +293,8 @@ jobs:
 
   modelcontextprotocol-sdk:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     env:
       PLUGINS: modelcontextprotocol-sdk
     steps:
