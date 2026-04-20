@@ -29,7 +29,6 @@ const {
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
-  getValueFromEnvSources,
 } = require('./helper')
 const {
   defaults,
@@ -229,22 +228,6 @@ class Config extends ConfigBase {
   #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
       const entry = configurationsTable[name]
-      // TracePropagationStyle is a special case. It is a single option that is used to set both inject and extract.
-      // TODO: Consider what to do with this later
-      if (name === 'DD_TRACE_PROPAGATION_STYLE') {
-        if (
-          getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE_INJECT') !== undefined ||
-          getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE_EXTRACT') !== undefined
-        ) {
-          log.warn(
-            // eslint-disable-next-line @stylistic/max-len
-            'Use either DD_TRACE_PROPAGATION_STYLE or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
-          )
-          continue
-        }
-        this.#applyEnvs({ DD_TRACE_PROPAGATION_STYLE_INJECT: value, DD_TRACE_PROPAGATION_STYLE_EXTRACT: value }, source)
-        continue
-      }
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
       const rawValue = transformed !== null && typeof transformed === 'object' ? value : parsed
@@ -293,6 +276,7 @@ class Config extends ConfigBase {
         } else {
           if (fullName === 'tracePropagationStyle') {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
+            // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
             this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
           } else {
@@ -759,7 +743,7 @@ function warnWrongOtelSettings () {
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE'],
+    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE', 'DD_TRACE_PROPAGATION_STYLE'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_SERVICE_NAME', 'DD_SERVICE', 'service'],
     ['OTEL_TRACES_SAMPLER', 'DD_TRACE_SAMPLE_RATE'],
@@ -780,11 +764,7 @@ function warnWrongOtelSettings () {
         increaseCounter('otel.env.hiding', ddEnvVar, otelEnvVar)
       }
 
-      // eslint-disable-next-line eslint-rules/eslint-env-aliases
-      const invalidOtelValue = otelEnvVar === 'OTEL_PROPAGATORS'
-        ? trackedConfigOrigins.get(/** @type {ConfigPath} */ ('tracePropagationStyle.inject')) !== otelSource &&
-          !envs[ddEnvVar]
-        : !otelSource
+      const invalidOtelValue = !otelSource
       if (invalidOtelValue) {
         increaseCounter('otel.env.invalid', ddEnvVar, otelEnvVar)
       }
