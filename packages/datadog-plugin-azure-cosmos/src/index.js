@@ -59,22 +59,25 @@ class AzureCosmosPlugin extends DatabasePlugin {
     const { outHost, userAgent } = this.getHttpInfo(requestContext)
     const pluginOn = ctx.arguments?.[3]
 
-    // getting really specific here but otherwise we get doubled up read spans
-    // for the most part, only trace operations not requests (pluginOn)
+    // only trace operations not requests (pluginOn)
     // trace requests only if they are read or query operations not on docs
-    if (pluginOn === 'request' && ((!resource.includes('read') && !resource.includes('query')) ||
-      (resource.includes('read') && requestContext.resourceType !== 'docs'))) {
-      ctx.currentStore = { ...storage('legacy').getStore() }
-      return ctx.currentStore
-    }
+    // prevents doubled read spans for createIfNotExists calls
+    if (pluginOn != null && requestContext.operationType != null && requestContext.resourceType != null) {
+      const operationType = requestContext.operationType
+      const resourceType = requestContext.resourceType
+      if (pluginOn === 'request' && ((operationType !== 'read' && operationType !== 'query') ||
+        (operationType === 'read' && resourceType !== 'docs'))) {
+        ctx.currentStore = { ...storage('legacy').getStore() }
+        return ctx.currentStore
+      }
 
-    // separately, skip tracing read requests without a path, these don't
-    // respresent CRUD operations on a resource we care about
-    if (requestContext.operationType == 'read' && requestContext.path === '') {
-      ctx.currentStore = { ...storage('legacy').getStore() }
-      return ctx.currentStore
+      // separately, skip tracing read requests without a path, these don't
+      // represent CRUD operations on a resource we care about
+      if (operationType === 'read' && requestContext.path === '') {
+        ctx.currentStore = { ...storage('legacy').getStore() }
+        return ctx.currentStore
+      }
     }
-
 
     this.startSpan(this.operationName(), {
       resource,
