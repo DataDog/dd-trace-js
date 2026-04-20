@@ -154,9 +154,9 @@ module.exports = [
     functionQuery: {
       methodName: 'getStreamedResponse',
       className: 'OpenAIResponsesModel',
-      kind: 'AsyncIterator',
     },
     channelName: 'getStreamedResponse',
+    transform: 'traceAsyncIterator',
   },
   {
     module: {
@@ -195,9 +195,9 @@ module.exports = [
     functionQuery: {
       methodName: 'getStreamedResponse',
       className: 'OpenAIResponsesModel',
-      kind: 'AsyncIterator',
     },
     channelName: 'getStreamedResponse',
+    transform: 'traceAsyncIterator',
   },
   {
     module: {
