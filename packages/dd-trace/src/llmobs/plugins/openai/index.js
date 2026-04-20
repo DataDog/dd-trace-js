@@ -6,13 +6,13 @@ const {
   PROMPT_MULTIMODAL,
   INSTRUMENTATION_METHOD_AUTO,
 } = require('../../constants/tags')
+const { getOpenAIModelProvider } = require('../utils')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
   hasMultimodalInputs,
 } = require('./utils')
-const { getOpenAIModelProvider } = require('../utils')
 
 const allowedParamKeys = new Set([
   'max_output_tokens',
