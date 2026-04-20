@@ -1,4 +1,4 @@
-name: Platform
+name: Instrumentation
 
 on:
   pull_request:
@@ -21,97 +21,7 @@ env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
-# TODO: upstream jobs
-
 jobs:
-  package-manager:
-    strategy:
-      fail-fast: false
-      matrix:
-        manager:
-          - name: npm
-            install: npm install
-          - name: pnpm
-            install: pnpm add
-          - name: yarn
-            install: yarn add
-          - name: yarn-berry
-            install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
-          - name: bun
-            install: bun add
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
-      - run: mkdir -p /tmp/app
-      - run: npm i -g pnpm
-        if: matrix.manager.name == 'pnpm'
-      - run: cd /tmp/app && ${{ matrix.manager.install }} /tmp/dd-trace.tgz
-      - run: echo "require('dd-trace').init()" >> /tmp/app/index.js
-      - run: node /tmp/app
-
-  bun-pack:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: mkdir npm bun
-      - run: FILENAME=$(npm pack --silent) && tar -zxf $FILENAME -C npm
-      - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
-      - run: diff -r npm bun
-
-  bun-runtime:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:integration:bun
-      - uses: DataDog/junit-upload-github-action@24449d01fc01e721fa36ccd2caa3caae6922f0e8  # v3.0.0
-        if: always() && github.actor != 'dependabot[bot]'
-        with:
-          api_key: ${{ steps.dd-sts.outputs.api_key }}
-          service: dd-trace-js-tests
-
-  core:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:core:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:core:ci
-      - uses: ./.github/actions/coverage
-        with:
-          flags: platform-core
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-
-  dd-trace-api:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    env:
-      PLUGINS: dd-trace-api
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/plugins/test
-
   esbuild:
     runs-on: ubuntu-latest
     permissions:
@@ -148,7 +58,7 @@ jobs:
           flags: platform-webpack
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
-  instrumentation-bluebird:
+  bluebird:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -158,7 +68,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-body-parser:
+  body-parser:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -168,7 +78,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-child_process:
+  child_process:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -178,7 +88,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-cookie-parser:
+  cookie-parser:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -188,7 +98,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-express-mongo-sanitize:
+  express-mongo-sanitize:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -204,7 +114,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-express-session:
+  express-session:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -214,7 +124,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-express:
+  express:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -224,7 +134,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-fs:
+  fs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -234,7 +144,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-generic-pool:
+  generic-pool:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -246,7 +156,7 @@ jobs:
 
   # TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
   # ./.github/actions/instrumentations/test once fixed upstream.
-  instrumentation-http:
+  http:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -282,7 +192,7 @@ jobs:
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
-  instrumentation-knex:
+  knex:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -292,17 +202,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-light-my-request:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    env:
-      PLUGINS: light-my-request
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/instrumentations/test
-
-  instrumentation-mongoose:
+  mongoose:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -318,7 +218,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-multer:
+  multer:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -328,7 +228,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-mysql2:
+  mysql2:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -347,7 +247,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-passport:
+  passport:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -357,7 +257,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-passport-http:
+  passport-http:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -367,7 +267,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-passport-local:
+  passport-local:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -377,7 +277,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-pg:
+  pg:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -396,7 +296,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-promise-js:
+  promise-js:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -406,7 +306,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-promise:
+  promise:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -416,7 +316,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-q:
+  q:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -426,7 +326,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-url:
+  url:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -436,7 +336,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentation-when:
+  when:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -446,7 +346,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/instrumentations/test
 
-  instrumentations-misc:
+  misc:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -481,14 +381,12 @@ jobs:
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
-  # TODO: Split this up as it runs tests for multiple different teams.
-  integration:
+  integration-bundler:
     strategy:
-      # when one version fails, say 14, all the other versions are stopped
-      # setting fail-fast to false in an attempt to prevent this from happening
       fail-fast: false
       matrix:
         version: [oldest, maintenance, active, latest]
+        bundler: [esbuild, webpack]
     name: ${{ github.workflow }} / integration (node-${{ matrix.version }})
     runs-on: ubuntu-latest
     permissions:
@@ -504,94 +402,7 @@ jobs:
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-
-  unit-guardrails:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/node/latest
-      - uses: ./.github/actions/install
-      - run: yarn test:trace:guardrails:ci
-      - uses: ./.github/actions/coverage
-        with:
-          flags: platform-unit-guardrails
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-
-  # We'll run these separately for earlier (i.e. unsupported) versions
-  integration-guardrails:
-    strategy:
-      fail-fast: false
-      matrix:
-        version: [16.0.0, 18.0.0, 20.0.0, 22.0.0, 24.0.0, 25]
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/node/active-lts
-      - uses: ./.github/actions/install
-      - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
-      - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
-      - uses: ./.github/actions/node
-        with:
-          version: ${{ matrix.version }}
-      - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-
-  integration-guardrails-unsupported:
-    strategy:
-      fail-fast: false
-      matrix:
-        version:
-          ["0.8", "0.10", "0.12", "4", "6", "8", "10", "12", "14.0.0", "14"]
-    runs-on: ubuntu-latest
-    env:
-      DD_TRACE_DEBUG: "true" # This exercises more of the guardrails code
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/node
-        with:
-          version: ${{ matrix.version }}
-      - run: node ./init
-      - run: node ./init
-        env:
-          DD_INJECTION_ENABLED: "true"
-
-  shimmer:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:shimmer:ci
-      - uses: ./.github/actions/node/latest
-      - run: yarn test:shimmer:ci
-      - uses: ./.github/actions/coverage
-        with:
-          flags: platform-shimmer
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+      - run: yarn test:integration:${{ bundler }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
         with:
