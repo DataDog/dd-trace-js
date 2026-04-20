@@ -55,6 +55,7 @@ describe('Config', () => {
   // Reload the config module with each call to getConfig to ensure we get a new instance of the config.
   const getConfig = (options) => {
     log = proxyquire('../../src/log', {})
+    sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
     sinon.spy(log, 'error')
     const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})
@@ -349,6 +350,23 @@ describe('Config', () => {
     })
   })
 
+  // TODO: update default when adding grpc support
+  it('should set default otelTracesUrl to localhost', () => {
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.DD_AGENT_HOST
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesUrl, 'http://localhost:4318/v1/traces')
+  })
+
+  it('should set otelTracesUrl using DD_AGENT_HOST', () => {
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    process.env.DD_AGENT_HOST = 'myHostName'
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesUrl, `http://${process.env.DD_AGENT_HOST}:4318/v1/traces`)
+  })
+
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
     process.env.OTEL_TRACES_SAMPLER = 'always_on'
     process.env.OTEL_TRACES_SAMPLER_ARG = '0.1'
@@ -374,6 +392,94 @@ describe('Config', () => {
     process.env.OTEL_TRACES_SAMPLER = 'parentbased_traceidratio'
     config = getConfig()
     assert.strictEqual(config.sampleRate, 0.1)
+  })
+
+  it('should log when a non-parentbased sampler is upgraded to its parentbased equivalent', () => {
+    for (const [sampler, parentBased] of [
+      ['always_on', 'parentbased_always_on'],
+      ['always_off', 'parentbased_always_off'],
+      ['traceidratio', 'parentbased_traceidratio'],
+    ]) {
+      log.info.resetHistory()
+      process.env.OTEL_TRACES_SAMPLER = sampler
+      process.env.OTEL_TRACES_SAMPLER_ARG = '0.5'
+      getConfig()
+      sinon.assert.calledWith(
+        log.info,
+        'OTEL_TRACES_SAMPLER=%s does not respect upstream sampling decisions; using parent-based equivalent %s instead',
+        sampler,
+        parentBased
+      )
+    }
+  })
+
+  it('should not log a sampler upgrade for parentbased samplers', () => {
+    for (const sampler of ['parentbased_always_on', 'parentbased_always_off', 'parentbased_traceidratio']) {
+      log.info.resetHistory()
+      process.env.OTEL_TRACES_SAMPLER = sampler
+      process.env.OTEL_TRACES_SAMPLER_ARG = '0.5'
+      getConfig()
+      const upgradeCall = log.info.getCalls().find(
+        (call) => call.args[0]?.includes?.('does not respect upstream sampling decisions')
+      )
+      assert.strictEqual(upgradeCall, undefined)
+    }
+  })
+
+  it('should default OTEL_TRACES_SAMPLER to parentbased_always_on when OTEL_TRACES_EXPORTER is otlp', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig()
+    assert.strictEqual(config.sampleRate, 1.0)
+  })
+
+  it('should not default OTEL_TRACES_SAMPLER when OTEL_TRACES_EXPORTER is not otlp', () => {
+    const config = getConfig()
+    assert.strictEqual(config.sampleRate, undefined)
+  })
+
+  it('should enable OTLP traces export when OTEL_TRACES_EXPORTER is set to otlp', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesEnabled, true)
+  })
+
+  it('should not enable OTLP traces export when OTEL_TRACES_EXPORTER is not set', () => {
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesEnabled, false)
+  })
+
+  it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesEnabled, false)
+  })
+
+  it('should warn and fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
+    const config = getConfig()
+    assert.strictEqual(config.otelTracesProtocol, 'http/json')
+    sinon.assert.calledWith(
+      log.warn,
+      'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
+      'grpc'
+    )
+  })
+
+  it('should not warn when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is http/json', () => {
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/json'
+    getConfig()
+    const warnCall = log.warn.getCalls().find(
+      (call) => call.args[0]?.includes?.('OTEL_EXPORTER_OTLP_TRACES_PROTOCOL')
+    )
+    assert.strictEqual(warnCall, undefined)
+  })
+
+  it('should use DD_TRACE_SAMPLE_RATE over the parentbased_always_on default when OTEL_TRACES_EXPORTER is otlp', () => {
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+    process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+    const config = getConfig()
+    assert.strictEqual(config.sampleRate, 0.5)
   })
 
   it('should initialize with the correct defaults', () => {
