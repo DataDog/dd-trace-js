@@ -1,7 +1,7 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-
+require('../src/opentracing/span')
 // TODO: refactor bind to use shimmer once the new internal tracer lands
 
 const originals = new WeakMap()
