@@ -1,5 +1,13 @@
 'use strict'
 
+/**
+ * This file is meant to be only thin wrappers over core
+ * parsing/traversing/generating functionality with the goal to eventually move
+ * them out of the project. No other code should be added to this file such as
+ * helpers etc, and the API should be kept exactly as an external API would be
+ * expected to be.
+ */
+
 const log = require('../../../../dd-trace/src/log')
 
 // eslint-disable-next-line camelcase, no-undef
@@ -24,7 +32,6 @@ const compiler = {
     } catch (e) {
       log.error(e)
 
-      // Fallback for when OXC is not available.
       const meriyah = require('../../../../../vendor/dist/meriyah')
 
       compiler.parse = (sourceText, { range, sourceType } = {}) => {
