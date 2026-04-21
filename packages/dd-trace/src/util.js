@@ -2,6 +2,39 @@
 
 const path = require('path')
 
+const createPrivateSymbol = probeCreatePrivateSymbol()
+
+function probeCreatePrivateSymbol () {
+  try {
+    // eslint-disable-next-line no-new-func
+    return new Function('name', 'return %CreatePrivateSymbol(name)')
+  } catch {}
+
+  try {
+    const v8 = require('v8')
+    v8.setFlagsFromString('--allow-natives-syntax')
+    try {
+      // eslint-disable-next-line no-new-func
+      return new Function('name', 'return %CreatePrivateSymbol(name)')
+    } finally {
+      v8.setFlagsFromString('--no-allow-natives-syntax')
+    }
+  } catch {
+    return null
+  }
+}
+
+function createPrivateMap (name) {
+  const sym = createPrivateSymbol?.(name)
+  if (!sym) return new WeakMap()
+
+  return {
+    get (target) { return target?.[sym] },
+    set (target, value) { if (target) target[sym] = value },
+    has (target) { return !!target && sym in target },
+  }
+}
+
 function isTrue (str) {
   str = String(str).toLowerCase()
   return str === 'true' || str === '1'
@@ -80,6 +113,7 @@ module.exports = {
   isFalse,
   isError,
   globMatch,
+  createPrivateMap,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
   normalizePluginEnvName,
 }

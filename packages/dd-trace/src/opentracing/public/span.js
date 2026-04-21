@@ -1,21 +1,13 @@
 'use strict'
 
 const { SVC_SRC_KEY } = require('../../constants')
+const { createPrivateMap } = require('../../util')
 const DatadogSpan = require('../span')
 
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
 
-let key
-try {
-  const v8 = require('v8')
-  v8.setFlagsFromString('--allow-natives-syntax')
-  // eslint-disable-next-line no-new-func
-  key = new Function('name', 'return %CreatePrivateSymbol(name)')('dd.publicSpan')
-  v8.setFlagsFromString('--no-allow-natives-syntax')
-} catch {
-  key = Symbol('dd.publicSpan')
-}
+const cache = createPrivateMap('dd.publicSpan')
 
 /**
  * This is a public wrapper of Span, this allows distinguishing internal usage from
@@ -27,11 +19,11 @@ class PublicSpan {
       return span
     }
 
-    const cached = span[key]
+    const cached = cache.get(span)
     if (cached) return cached
 
     this._span = span
-    span[key] = this
+    cache.set(span, this)
   }
 
   setTag (key, value) {
@@ -60,8 +52,8 @@ function uncachedWrapper (span) {
 }
 
 function cacheWrapper (wrapper) {
-  if (!wrapper._span[key]) {
-    wrapper._span[key] = wrapper
+  if (!cache.has(wrapper._span)) {
+    cache.set(wrapper._span, wrapper)
   }
 }
 
