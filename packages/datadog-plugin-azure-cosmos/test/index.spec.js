@@ -3,8 +3,8 @@
 const assert = require('node:assert/strict')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup, teardown } = require('./cosmos-helpers')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { setup, teardown } = require('./cosmos-helpers')
 
 describe('Plugin', () => {
   describe('azure-cosmos', () => {
@@ -15,7 +15,7 @@ describe('Plugin', () => {
       beforeEach(async () => {
         // Provision DB/container without emitting azure-cosmos spans (plugin subscriptions stay off).
         await agent.load('azure-cosmos', { enabled: false })
-          ; ({ client, container } = await setup())
+        ; ({ client, container } = await setup())
         agent.reload('azure-cosmos', { enabled: true })
       })
 
@@ -67,8 +67,8 @@ describe('Plugin', () => {
               'db.system': 'cosmosdb',
               'db.name': 'testDatabase',
               'cosmosdb.container': 'testContainer',
-              'cosmosdb.connection.mode': 'gateway'
-            }
+              'cosmosdb.connection.mode': 'gateway',
+            },
           })
 
           assert(expectedResources.includes(span.resource))
@@ -111,7 +111,7 @@ describe('Plugin', () => {
                 'db.name': 'testDatabase',
                 'cosmosdb.container': 'testContainer',
                 'cosmosdb.connection.mode': 'gateway',
-              }
+              },
             })
 
             assert.strictEqual(span.error, 1)
