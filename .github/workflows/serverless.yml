@@ -297,6 +297,8 @@ jobs:
 
   azure-cosmos:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     services:
       azurite:
         image: mcr.microsoft.com/azure-storage/azurite:3.35.0
