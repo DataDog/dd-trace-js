@@ -6,7 +6,6 @@ const DatadogSpan = require('../span')
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
 
-
 let key
 try {
   const v8 = require('v8')
@@ -78,6 +77,5 @@ for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
     return result === this._span ? this : result
   }
 }
-
 
 module.exports = { PublicSpan, uncachedWrapper, cacheWrapper }
