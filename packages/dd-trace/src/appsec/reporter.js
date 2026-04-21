@@ -3,6 +3,7 @@
 const zlib = require('zlib')
 const dc = require('dc-polyfill')
 
+const { NETWORK_CLIENT_IP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
@@ -363,7 +364,7 @@ function reportAttack ({ events: attackData, actions }, req) {
     : '{"triggers":' + attackDataStr + '}'
 
   if (req.socket) {
-    newTags['network.client.ip'] = req.socket.remoteAddress
+    newTags[NETWORK_CLIENT_IP] = req.socket.remoteAddress
   }
 
   rootSpan.addTags(newTags)
