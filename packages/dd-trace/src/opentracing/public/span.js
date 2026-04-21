@@ -1,15 +1,22 @@
 'use strict'
 
-// A WeakMap cache at module scope ensures the same wrapper instance is returned
-// for the same underlying span across all subclasses, so reference equality
-// checks (===) in user code remain stable.
-const cache = new WeakMap()
-
 const { SVC_SRC_KEY } = require('../../constants')
+const DatadogSpan = require('../span')
 
 const SERVICE_KEY = 'service'
 const SERVICE_NAME_KEY = 'service.name'
-let init = false
+
+
+let key
+try {
+  const v8 = require('v8')
+  v8.setFlagsFromString('--allow-natives-syntax')
+  // eslint-disable-next-line no-new-func
+  key = new Function('name', 'return %CreatePrivateSymbol(name)')('dd.publicSpan')
+  v8.setFlagsFromString('--no-allow-natives-syntax')
+} catch {
+  key = Symbol('dd.publicSpan')
+}
 
 /**
  * This is a public wrapper of Span, this allows distinguishing internal usage from
@@ -21,15 +28,11 @@ class PublicSpan {
       return span
     }
 
-    // Defers loading DatadogSpan until the first span is created, avoiding
-    // eager loading of its dependency tree in code paths that never create spans.
-    lazyInit()
-
-    const cached = cache.get(span)
+    const cached = span[key]
     if (cached) return cached
 
     this._span = span
-    cache.set(span, this)
+    span[key] = this
   }
 
   setTag (key, value) {
@@ -49,38 +52,32 @@ class PublicSpan {
   }
 }
 
-function lazyInit () {
-  if (init) return
-  init = true
-  const DatadogSpan = require('../span')
-
-  // Whenever a method needs to be modified to have a unique public behavior, it
-  // should be implemented on `PublicSpan` directly so it is skipped here.
-  for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
-    if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
-      continue
-    }
-    PublicSpan.prototype[method] = function (...args) {
-      const result = this._span[method].apply(this._span, arguments)
-      // always return wrapper span when the result is the span itself
-      return result === this._span ? this : result
-    }
-  }
-}
-
-// This is only used for startSpan which is guarenteed to not been activated.
+// This is only used for startSpan which is guaranteed to not be activated.
 function uncachedWrapper (span) {
-  lazyInit()
-  // This skips the add cache init
+  // Skips the cache entirely — intentional for startSpan.
   const wrapper = Object.create(PublicSpan.prototype)
   wrapper._span = span
   return wrapper
 }
 
 function cacheWrapper (wrapper) {
-  if (!cache.has(wrapper._span)) {
-    cache.set(wrapper._span, wrapper)
+  if (!wrapper._span[key]) {
+    wrapper._span[key] = wrapper
   }
 }
+
+// Whenever a method needs to be modified to have a unique public behavior, it
+// should be implemented on `PublicSpan` directly so it is skipped here.
+for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
+  if (method === 'constructor' || method.startsWith('_') || PublicSpan.prototype[method]) {
+    continue
+  }
+  PublicSpan.prototype[method] = function (...args) {
+    const result = this._span[method].apply(this._span, arguments)
+    // always return wrapper span when the result is the span itself
+    return result === this._span ? this : result
+  }
+}
+
 
 module.exports = { PublicSpan, uncachedWrapper, cacheWrapper }
