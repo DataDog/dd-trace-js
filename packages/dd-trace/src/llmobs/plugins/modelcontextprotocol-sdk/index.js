@@ -57,8 +57,11 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
-  setLLMObsTags () {
-    // No meaningful I/O to capture for a list tools span
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span || ctx.error) return
+
+    this._tagger.tagTextIO(span, null, JSON.stringify(ctx.result))
   }
 }
 

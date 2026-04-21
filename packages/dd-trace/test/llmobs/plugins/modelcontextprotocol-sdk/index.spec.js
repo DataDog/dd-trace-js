@@ -210,6 +210,7 @@ describe('integrations', () => {
             span: apmSpans[0],
             spanKind: 'task',
             name: 'MCP Client List Tools',
+            outputValue: JSON.stringify(result),
             tags: { ml_app: 'test', integration: 'modelcontextprotocol-sdk' },
           })
         })

@@ -11,7 +11,6 @@ class ModelcontextprotocolSdkTestSetup {
     const { McpServer } = require(path.join(sdkDir, 'dist/cjs/server/mcp.js'))
     const { InMemoryTransport } = versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
 
-    this._McpServer = McpServer
     this._InMemoryTransport = InMemoryTransport
 
     this._server = new McpServer({ name: 'test-server', version: '1.0.0' })
@@ -40,9 +39,6 @@ class ModelcontextprotocolSdkTestSetup {
       { name: 'test-client', version: '1.0.0' }
     )
     await this._client.connect(clientTransport)
-
-    this._clientTransport = clientTransport
-    this._serverTransport = serverTransport
   }
 
   async teardown () {
