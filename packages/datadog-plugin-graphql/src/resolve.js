@@ -76,7 +76,13 @@ class GraphQLResolvePlugin extends TracingPlugin {
       execContextFields.set(exeContext, rootCtx)
     }
 
-    const computedPath = getPath(info, this.config)
+    // Walk the path linked-list exactly once per field. The un-collapsed array is
+    // used as the parent-lookup basis; the (possibly collapsed) computedPath feeds
+    // shouldInstrument, the field key, and the span tag.
+    const pathArr = pathToArray(path)
+    const computedPath = this.config.collapse
+      ? pathArr.map(segment => typeof segment === 'number' ? '*' : segment)
+      : pathArr
 
     if (!shouldInstrument(this.config, computedPath)) return
 
@@ -94,8 +100,9 @@ class GraphQLResolvePlugin extends TracingPlugin {
       rootCtx[collapsedPathSym][computedPathString] = true
     }
 
-    // Get parent field span for correct nesting
-    const parentField = getParentField(rootCtx, pathToArray(path), this.config.collapse)
+    // Get parent field span for correct nesting. computedPath already matches
+    // the collapsed-form field keys, so it doubles as the lookup basis.
+    const parentField = getParentField(rootCtx, computedPath)
     const childOf = parentField?.ctx?.currentStore?.span
 
     const document = rootCtx.source
@@ -275,13 +282,6 @@ function shouldInstrument (config, path) {
   return config.depth < 0 || config.depth >= depth
 }
 
-function getPath (info, config) {
-  const responsePathAsArray = config.collapse
-    ? withCollapse(pathToArray)
-    : pathToArray
-  return responsePathAsArray(info.path)
-}
-
 function pathToArray (path) {
   const flattened = []
   let curr = path
@@ -290,13 +290,6 @@ function pathToArray (path) {
     curr = curr.prev
   }
   return flattened.reverse()
-}
-
-function withCollapse (responsePathAsArray) {
-  return function () {
-    return responsePathAsArray.apply(this, arguments)
-      .map(segment => typeof segment === 'number' ? '*' : segment)
-  }
 }
 
 function getResolverArgs (fieldDef, fieldNode, variableValues) {
@@ -351,12 +344,8 @@ function getResolverInfo (info, args) {
   return resolverInfo
 }
 
-function getParentField (parentCtx, path, collapse) {
-  // When collapse is enabled, field keys use '*' for numeric indices
-  // (e.g., 'friends.*.pets'), so we must also collapse the lookup path.
-  const lookupPath = collapse
-    ? path.map(segment => typeof segment === 'number' ? '*' : segment)
-    : path
+function getParentField (parentCtx, lookupPath) {
+  // lookupPath already matches the collapsed-form field keys used at insertion.
   for (let i = lookupPath.length - 1; i > 0; i--) {
     const key = lookupPath.slice(0, i).join('.')
     const field = parentCtx.fields[key]
