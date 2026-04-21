@@ -126,14 +126,16 @@ class GraphQLResolvePlugin extends TracingPlugin {
       ctx,
     }
 
-    // Stash for end handler
-    ctx._ddFieldName = fieldName
-    ctx._ddRootCtx = rootCtx
-    ctx._ddComputedPathString = computedPathString
-    ctx._ddSpanCreated = true
-    ctx._ddExecuteSpan = rootCtx.executeSpan
-    ctx._ddExeContext = exeContext
-    ctx._ddErrorCountBefore = getErrorCount(exeContext)
+    // Stash for end handler as a single object: one hidden-class transition on ctx
+    // instead of seven, one GC entry to free, one truthiness check to gate end().
+    ctx._ddState = {
+      fieldName,
+      rootCtx,
+      computedPathString,
+      executeSpan: rootCtx.executeSpan,
+      exeContext,
+      errorCountBefore: getErrorCount(exeContext),
+    }
 
     // The info-like object and resolver args are only consumed by the AppSec
     // (resolverStartCh) and IAST (iastResolveCh) channels. For the APM-only
@@ -183,20 +185,21 @@ class GraphQLResolvePlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    if (!ctx._ddSpanCreated) return
+    const state = ctx._ddState
+    if (!state) return
 
     const span = ctx?.currentStore?.span || this.activeSpan
     if (!span) return
+
+    const { exeContext, errorCountBefore, rootCtx, computedPathString, executeSpan, fieldName } = state
 
     // Detect resolver errors. executeField/resolveField catch resolver exceptions
     // internally (try-catch in graphql's execute.js), so the traceSync error channel
     // never fires. Instead, detect errors by checking if the error collection grew.
     let resolverError = ctx.error
-    if (!resolverError && ctx._ddExeContext) {
-      const exeContext = ctx._ddExeContext
-      const errorsBefore = ctx._ddErrorCountBefore || 0
+    if (!resolverError && exeContext) {
       const errorsNow = getErrorCount(exeContext)
-      if (errorsNow > errorsBefore) {
+      if (errorsNow > errorCountBefore) {
         const gqlError = getErrorAt(exeContext, errorsNow - 1)
         // Unwrap GraphQLError to get the original resolver error for accurate error tags.
         resolverError = gqlError?.originalError || gqlError
@@ -210,27 +213,22 @@ class GraphQLResolvePlugin extends TracingPlugin {
       // are caught internally by executeField's .then(undefined, handler) and added
       // to exeContext.errors/collectedErrors. The promise itself resolves (to null),
       // so we observe resolution and check if new errors were added.
+      // Capture the refs in locals so the .then() closure doesn't retain ctx.
       ctx.result.then(() => {
-        const exeContext = ctx._ddExeContext
-        if (exeContext) {
-          const errorsNow = getErrorCount(exeContext)
-          const errorsBefore = ctx._ddErrorCountBefore || 0
-          if (errorsNow > errorsBefore) {
-            const gqlError = getErrorAt(exeContext, errorsNow - 1)
-            const origError = gqlError?.originalError || gqlError
-            if (origError) {
-              span.setTag('error', origError)
-            }
+        const errorsNow = getErrorCount(exeContext)
+        if (errorsNow > errorCountBefore) {
+          const gqlError = getErrorAt(exeContext, errorsNow - 1)
+          const origError = gqlError?.originalError || gqlError
+          if (origError) {
+            span.setTag('error', origError)
           }
         }
       }, () => {})
     }
 
     // Update field error info if there was an error
-    const rootCtx = ctx._ddRootCtx
-    const pathString = ctx._ddComputedPathString
-    if (rootCtx && pathString && rootCtx.fields[pathString]) {
-      const field = rootCtx.fields[pathString]
+    if (rootCtx && computedPathString && rootCtx.fields[computedPathString]) {
+      const field = rootCtx.fields[computedPathString]
       if (resolverError) {
         field.error = resolverError
       }
@@ -238,8 +236,8 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     this.config.hooks.resolve(span, {
-      fieldName: ctx._ddFieldName,
-      path: ctx._ddComputedPathString,
+      fieldName,
+      path: computedPathString,
       error: resolverError || null,
       result: ctx.result instanceof Promise ? undefined : ctx.result,
     })
@@ -247,7 +245,6 @@ class GraphQLResolvePlugin extends TracingPlugin {
     // Defer span.finish() to execute plugin's asyncEnd so all spans
     // are flushed in the same trace payload.
     const finishTime = span._getTime ? span._getTime() : 0
-    const executeSpan = ctx._ddExecuteSpan
     if (executeSpan) {
       registerPendingResolveSpan(executeSpan, span, finishTime)
     } else {
