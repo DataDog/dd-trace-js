@@ -9,6 +9,12 @@ let tools
 
 const types = new Set(['query', 'mutation', 'subscription'])
 
+// Re-entrant execute() short-circuit: when graphql re-enters execute with an
+// already-traced contextValue (e.g. during subscription delivery or @defer /
+// @stream flows), skip the wrap pipeline entirely — the outer execute span
+// already covers the work. Mirrors master's contexts.has(contextValue) check.
+const seenContextValues = new WeakMap()
+
 class GraphQLExecutePlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'execute'
@@ -47,6 +53,15 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const args = normalizeArgs(ctx.arguments)
+
+    // Skip re-entrant execute() calls sharing the same contextValue.
+    // The outer execute span already covers the work.
+    const contextValue = args.contextValue
+    if (contextValue && typeof contextValue === 'object' && seenContextValues.has(contextValue)) {
+      ctx._ddSkipped = true
+      return ctx.currentStore
+    }
+
     const document = args.document
     const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
     const operation = getOperation(document, args.operationName)
@@ -71,10 +86,18 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     ctx._ddArgs = args
 
+    // Mark this contextValue as being traced. Further re-entrant execute() calls
+    // with the same contextValue will short-circuit above.
+    if (contextValue && typeof contextValue === 'object') {
+      seenContextValues.set(contextValue, span)
+    }
+
     return ctx.currentStore
   }
 
   end (ctx) {
+    if (ctx._ddSkipped) return ctx.parentStore
+
     const span = ctx?.currentStore?.span || this.activeSpan
     if (!span) return
 
@@ -83,6 +106,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (ctx.error) {
       finishAllPendingResolveSpans(span)
       span.finish()
+      releaseContextValue(ctx._ddArgs)
       return ctx.parentStore
     }
 
@@ -96,6 +120,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
           span.setTag('error', err)
           finishAllPendingResolveSpans(span)
           span.finish()
+          releaseContextValue(ctx._ddArgs)
         }
       )
     } else {
@@ -126,6 +151,17 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     finishAllPendingResolveSpans(span)
     span.finish()
+    releaseContextValue(args)
+  }
+}
+
+// Release a contextValue from the short-circuit map. WeakMap handles GC when the
+// contextValue object itself is dropped, but callers that reuse the same object
+// across sequential unrelated queries need explicit cleanup.
+function releaseContextValue (args) {
+  const contextValue = args?.contextValue
+  if (contextValue && typeof contextValue === 'object') {
+    seenContextValues.delete(contextValue)
   }
 }
 
