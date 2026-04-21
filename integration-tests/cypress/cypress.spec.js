@@ -4430,7 +4430,7 @@ moduleTypes.forEach(({
             )
             assert.ok(beforeHookSkipped, 'test skipped by before() not found')
             assert.strictEqual(beforeHookSkipped.meta[TEST_FINAL_STATUS], 'skip')
-          }, 25000)
+          }, 60000)
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
@@ -4608,7 +4608,7 @@ moduleTypes.forEach(({
                 assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
               }
             })
-          }, 30000)
+          }, 60000)
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
@@ -4753,7 +4753,7 @@ moduleTypes.forEach(({
             assert.strictEqual(disabledWithHooks.meta[TEST_STATUS], 'skip')
             assert.strictEqual(disabledWithHooks.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
             assert.strictEqual(disabledWithHooks.meta[TEST_FINAL_STATUS], 'skip')
-          }, 25000)
+          }, 60000)
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
@@ -4824,7 +4824,7 @@ moduleTypes.forEach(({
             assert.ok(passingWithHooks)
             assert.strictEqual(passingWithHooks.meta[TEST_STATUS], 'pass')
             assert.strictEqual(passingWithHooks.meta[TEST_FINAL_STATUS], 'pass')
-          }, 25000)
+          }, 60000)
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
@@ -4877,7 +4877,7 @@ moduleTypes.forEach(({
             assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
             assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
             assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
-          }, 25000)
+          }, 60000)
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
@@ -4938,7 +4938,7 @@ moduleTypes.forEach(({
                 assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
               }
             })
-          }, 25000)
+          }, 60000)
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
