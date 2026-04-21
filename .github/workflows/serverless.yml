@@ -319,6 +319,7 @@ jobs:
     env:
       PLUGINS: azure-cosmos
       SERVICES: azurite,azurecosmosemulator
+      NODE_OPTIONS: '--experimental-global-webcrypto'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
