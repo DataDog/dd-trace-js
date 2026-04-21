@@ -115,7 +115,7 @@ services:
     ports:
       - "127.0.0.1:9042:9042"
   limitd:
-    image: rochdev/limitd
+    image: ghcr.io/rochdev/limitd
     environment:
       - BUCKET_1_NAME=user
       - BUCKET_1_SIZE=10

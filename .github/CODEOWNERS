@@ -162,6 +162,7 @@
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry-logs.spec.js @DataDog/apm-sdk-capabilities-js
+/integration-tests/opentelemetry-traces.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities-js
@@ -265,3 +266,6 @@
 /packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/setup @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
+
+# Multiple teams
+/eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js

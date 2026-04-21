@@ -1,11 +1,11 @@
 'use strict'
 
 const {
-  DD_TRACE_SCOPE,
+  SCOPE_ENABLED,
   COUNT,
 } = process.env
 
-if (DD_TRACE_SCOPE) {
+if (SCOPE_ENABLED === 'true') {
   const Scope = require('../../../packages/dd-trace/src/scope')
   const scope = new Scope()
   if (scope.enable) {
@@ -37,19 +37,9 @@ function immediates (n, cb) {
   setImmediate(immediates, n - 1, cb)
 }
 
-function timeouts (n, cb) {
-  if (n === 0) {
-    cb()
-    return
-  }
-  setTimeout(timeouts, 0, n - 1, cb)
-}
-
 promises(COUNT, () => {
   awaits(COUNT, () => {
     immediates(COUNT, () => {
-      timeouts(COUNT, () => {
-      })
     })
   })
 })
