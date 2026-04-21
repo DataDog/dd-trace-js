@@ -3,7 +3,6 @@
 const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
 const { isTrue } = require('../util')
-const { memoize } = require('../log/utils')
 const { getValueFromEnvSources } = require('../config/helper')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
@@ -338,11 +337,13 @@ class AgentEncoder {
   }
 }
 
-const memoizedLogDebug = memoize((key, message) => {
-  log.debug(message)
-  // return something to store in memoize cache
-  return true
-})
+const seenKeys = new Set()
+const memoizedLogDebug = (key, message) => {
+  if (!seenKeys.has(key)) {
+    seenKeys.add(key)
+    log.debug(message)
+  }
+}
 
 function formatSpanEvents (span) {
   for (const spanEvent of span.span_events) {
