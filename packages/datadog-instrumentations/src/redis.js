@@ -11,6 +11,8 @@ const finishCh = channel('apm:redis:command:finish')
 const errorCh = channel('apm:redis:command:error')
 
 let createClientUrl
+let createClientName
+const instanceInfo = new WeakMap()
 
 function wrapAddCommand (addCommand) {
   return function (command) {
@@ -21,7 +23,7 @@ function wrapAddCommand (addCommand) {
     const name = command[0]
     const args = command.slice(1)
 
-    const ctx = getStartCtx(this, name, args, this._url)
+    const ctx = getStartCtx(this, name, args)
     return startCh.runStores(ctx, () => {
       const res = addCommand.apply(this, arguments)
 
@@ -36,17 +38,16 @@ function wrapCommandQueueClass (cls) {
   const ret = class RedisCommandQueue extends cls {
     constructor (...args) {
       super(...args)
+      let url = { host: 'localhost', port: 6379 }
       if (createClientUrl) {
         try {
           const parsed = new URL(createClientUrl)
-          if (parsed) {
-            this._url = { host: parsed.hostname, port: Number(parsed.port) || 6379 }
-          }
+          url = { host: parsed.hostname, port: Number(parsed.port) || 6379 }
         } catch {
           // ignore
         }
       }
-      this._url = this._url || { host: 'localhost', port: 6379 }
+      instanceInfo.set(this, { connectionName: createClientName, url })
     }
   }
   return ret
@@ -55,8 +56,10 @@ function wrapCommandQueueClass (cls) {
 function wrapCreateClient (request) {
   return function (opts) {
     createClientUrl = opts && opts.url
+    createClientName = opts && opts.name
     const ret = request.apply(this, arguments)
     createClientUrl = undefined
+    createClientName = undefined
     return ret
   }
 }
@@ -134,12 +137,15 @@ addHook({ name: 'redis', versions: ['>=0.12 <2.6'] }, redis => {
   return redis
 })
 
-function getStartCtx (client, command, args, url = {}) {
+function getStartCtx (client, command, args) {
+  const { url, connectionName } = instanceInfo.get(client) || {}
+
   return {
     db: client.selected_db,
     command,
     args,
     connectionOptions: client.connection_options || client.connection_option || client.connectionOption || url,
+    connectionName,
   }
 }
 

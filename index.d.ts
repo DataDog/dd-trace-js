@@ -3071,6 +3071,14 @@ declare namespace tracer {
        * @returns true to instrument the command, false to skip it
        */
       filter?: (command: string) => boolean;
+
+      /**
+       * Whether to use a different service name for each Redis instance based
+       * on the configured connection name of the client.
+       *
+       * @default false
+       */
+      splitByInstance?: boolean;
     }
 
     /**

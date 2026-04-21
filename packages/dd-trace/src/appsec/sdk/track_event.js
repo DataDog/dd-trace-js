@@ -21,7 +21,7 @@ function trackUserLoginSuccessEvent (tracer, user, metadata) {
 
   incrementSdkEventMetric('login_success', 'v1')
 
-  const rootSpan = getRootSpan(tracer)
+  const rootSpan = getRootSpan()
   if (!rootSpan) {
     log.warn('[ASM] Root span not available in trackUserLoginSuccessEvent')
     return
@@ -54,7 +54,7 @@ function trackUserLoginFailureEvent (tracer, userId, exists, metadata) {
     ...metadata,
   }
 
-  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan(tracer))
+  trackEvent('users.login.failure', fields, 'trackUserLoginFailureEvent', getRootSpan())
 
   runWaf('users.login.failure', { login: userId })
 
@@ -67,7 +67,7 @@ function trackCustomEvent (tracer, eventName, metadata) {
     return
   }
 
-  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan(tracer))
+  trackEvent(eventName, metadata, 'trackCustomEvent', getRootSpan())
 
   incrementSdkEventMetric('custom', 'v1')
 
@@ -84,7 +84,7 @@ function trackUserLoginSuccessV2 (tracer, login, user, metadata) {
 
   incrementSdkEventMetric('login_success', 'v2')
 
-  const rootSpan = getRootSpan(tracer)
+  const rootSpan = getRootSpan()
   if (!rootSpan) {
     log.warn('[ASM] Root span not available in eventTrackingV2.trackUserLoginSuccess')
     return
@@ -122,7 +122,7 @@ function trackUserLoginFailureV2 (tracer, login, exists, metadata) {
 
   incrementSdkEventMetric('login_failure', 'v2')
 
-  const rootSpan = getRootSpan(tracer)
+  const rootSpan = getRootSpan()
   if (!rootSpan) {
     log.warn('[ASM] Root span not available in eventTrackingV2.trackUserLoginFailure')
     return
