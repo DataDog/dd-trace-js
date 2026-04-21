@@ -40,6 +40,7 @@ describe('AIGuard SDK integration tests', () => {
         DD_SERVICE: 'ai_guard_integration_test',
         DD_ENV: 'test',
         DD_TRACE_ENABLED: 'true',
+        DD_TRACE_CLIENT_IP_ENABLED: 'false',
         DD_TRACE_AGENT_PORT: String(agent.port),
         DD_AI_GUARD_ENABLED: 'true',
         DD_AI_GUARD_BLOCK: 'true',
@@ -66,6 +67,43 @@ describe('AIGuard SDK integration tests', () => {
       assert.notStrictEqual(span, undefined)
       assert.strictEqual(span.meta['ai_guard.action'], 'DENY')
       assert.strictEqual(span.meta['ai_guard.blocked'], 'true')
+    })
+  })
+
+  it('adds client ip tags to the request root span when AI Guard runs', async () => {
+    const response = await executeRequest(`${url}/allow`, 'GET', {
+      'x-forwarded-for': '203.0.113.10, 10.0.0.1',
+    })
+
+    assert.strictEqual(response.status, 200)
+
+    await agent.assertMessageReceived(({ payload }) => {
+      const requestSpan = payload[0].find(span => span.name === 'express.request')
+      const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+
+      assert.notStrictEqual(requestSpan, undefined)
+      assert.notStrictEqual(guardSpan, undefined)
+      assert.strictEqual(requestSpan.meta['http.client_ip'], '203.0.113.10')
+      assert.ok(requestSpan.meta['network.client.ip'])
+    })
+  })
+
+  it('does not add client ip tags when no AI Guard span is created', async () => {
+    const response = await executeRequest(`${url}/no-aiguard`, 'GET', {
+      'x-forwarded-for': '203.0.113.10, 10.0.0.1',
+    })
+
+    assert.strictEqual(response.status, 200)
+    assert.deepStrictEqual(response.body, { ok: true })
+
+    await agent.assertMessageReceived(({ payload }) => {
+      const requestSpan = payload[0].find(span => span.name === 'express.request')
+      const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+
+      assert.notStrictEqual(requestSpan, undefined)
+      assert.strictEqual(guardSpan, undefined)
+      assert.strictEqual(requestSpan.meta['http.client_ip'], undefined)
+      assert.strictEqual(requestSpan.meta['network.client.ip'], undefined)
     })
   })
 

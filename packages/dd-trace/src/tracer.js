@@ -18,8 +18,8 @@ const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
-  constructor (config, prioritySampler) {
-    super(config, prioritySampler)
+  constructor (config, prioritySampler, exporter) {
+    super(config, prioritySampler, exporter)
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
