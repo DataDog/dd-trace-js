@@ -21,10 +21,12 @@
 - ❌ modelName, modelProvider fields (this isn't an LLM API)
 
 **REQUIRED:**
+- ✅ `withVersions()` wrapper (required for orchestrion rewriter — no exceptions)
 - ✅ Pure function tests using library's native APIs (StateGraph, invoke, stream)
 - ✅ Mock LLM responses as simple return values
 - ✅ spanKind: 'workflow' or 'agent'
 - ✅ Test orchestration logic, not API calls
+- ✅ `beforeEach()` for fresh module state per test
 
 ### LLM_CLIENT (openai, anthropic, google-genai)
 
@@ -33,6 +35,7 @@
 - ❌ spanKind: 'workflow' (use 'llm' instead)
 
 **REQUIRED:**
+- ✅ `withVersions()` wrapper (required for orchestrion rewriter — no exceptions)
 - ✅ VCR cassettes with proxy baseURL
 - ✅ Real API calls (recorded once)
 - ✅ spanKind: 'llm'
@@ -42,7 +45,23 @@
 
 Same as LLM_CLIENT.
 
-### INFRASTRUCTURE (MCP)
+### TOOL_CLIENT (modelcontextprotocol-sdk)
+
+**FORBIDDEN:**
+- ❌ VCR cassettes (tool protocol clients use mock servers, not recorded HTTP)
+- ❌ spanKind: 'llm' (use 'tool' or 'retrieval')
+- ❌ modelName, modelProvider fields (not an LLM API)
+- ❌ Module require outside `withVersions()` callback
+
+**REQUIRED:**
+- ✅ `withVersions()` wrapper (required for orchestrion rewriter — no exceptions)
+- ✅ In-process mock server (e.g., MCP `InMemoryTransport`) — no external services
+- ✅ Load all submodules via versioned require inside `withVersions()` callback
+- ✅ spanKind: 'tool' or 'retrieval'
+- ✅ Validate protocol-specific metadata (tool names, server names, resource URIs)
+- ✅ `before()` / `after()` for server setup/teardown
+
+### INFRASTRUCTURE (generic protocol packages with no LLMObs operations)
 
 **REQUIRED:**
 - ✅ Mock server tests
@@ -54,14 +73,17 @@ Same as LLM_CLIENT.
 
 Test strategy depends on package category:
 
-| LlmObsCategory | VCR | Real APIs | Mock LLMs | Strategy |
-|----------------|-----|-----------|-----------|----------|
-| LLM_CLIENT | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
-| MULTI_PROVIDER | ✅ Yes | ✅ Yes | ❌ No | VCR with real API calls |
-| ORCHESTRATION | ❌ No | ❌ No | ✅ Yes | Pure functions, mock responses |
-| INFRASTRUCTURE | ❌ No | ❌ No | ✅ Yes | Mock servers |
+| LlmObsCategory | VCR | Real APIs | Mock Server | withVersions | Strategy |
+|----------------|-----|-----------|-------------|--------------|----------|
+| LLM_CLIENT | ✅ Yes | ✅ Yes | ❌ No | ✅ Required | VCR with real API calls |
+| MULTI_PROVIDER | ✅ Yes | ✅ Yes | ❌ No | ✅ Required | VCR with real API calls |
+| ORCHESTRATION | ❌ No | ❌ No | ❌ No | ✅ Required | Pure functions, mock responses |
+| TOOL_CLIENT | ❌ No | ❌ No | ✅ Yes | ✅ Required | In-process mock server |
+| INFRASTRUCTURE | ❌ No | ❌ No | ✅ Yes | ✅ Required | Mock servers |
 
 **Enum location:** `anubis_apm/workflows/analyze/models.py`
+
+**`withVersions()` is required for ALL categories.** It configures `NODE_PATH` for the orchestrion rewriter. Without it, no APM spans are produced regardless of category.
 
 **IF YOU USE THE WRONG STRATEGY, THE TEST WILL FAIL. ALWAYS CHECK THE CATEGORY FIRST.**
 
@@ -193,44 +215,124 @@ it('instruments graph invoke', async () => {
 
 Orchestration tools don't make HTTP calls themselves - they coordinate other libraries that do. Testing them requires testing the orchestration logic, not API interactions.
 
-## Category 4: Infrastructure
+## LlmObsCategory.TOOL_CLIENT (e.g., modelcontextprotocol-sdk)
 
-**Strategy:** Mock server tests
+**Strategy:** In-process mock server with `withVersions()` + versioned submodule requires
 
 ### Setup
 
+MCP SDK uses `InMemoryTransport` — no external server process needed. All submodules must be loaded via `require(...versions/...).get(subpath)` **inside** the `withVersions()` callback.
+
 ```javascript
-const mockServer = new MockMCPServer()
-await mockServer.start()
+withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
+  let Client, Server, InMemoryTransport, CallToolRequestSchema
+  let client, server
+
+  before(async () => {
+    // Load each submodule via the versioned require path
+    Client = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/client').Client
+    Server = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/server').Server
+    InMemoryTransport = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
+    CallToolRequestSchema = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/types.js').CallToolRequestSchema
+
+    server = new Server({ name: 'test-server', version: '1.0.0' }, { capabilities: { tools: {} } })
+
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      return { content: [{ type: 'text', text: `Result from ${request.params.name}` }] }
+    })
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await server.connect(serverTransport)
+    client = new Client({ name: 'test-client', version: '1.0.0' })
+    await client.connect(clientTransport)
+  })
+
+  after(async () => {
+    await client?.close()
+    await server?.close()
+  })
+
+  // tests here
+})
 ```
 
 ### Test Pattern
 
 ```javascript
-it('instruments MCP protocol', async () => {
-  const client = new MCPClient({
-    serverUrl: mockServer.url
-  })
+it('creates a tool span for a tool call', async () => {
+  const result = await client.callTool({ name: 'my-tool', arguments: { key: 'value' } })
 
-  await client.connect()
-  const response = await client.call('method', params)
+  assert.ok(result.content)
 
-  const events = getEvents()
+  const { apmSpans, llmobsSpans } = await getEvents()
 
-  assertLlmObsSpanEvent(events[0], {
-    spanKind: 'task',  // Or appropriate kind
-    name: 'mcp.call'
+  assertLlmObsSpanEvent(llmobsSpans[0], {
+    span: apmSpans[0],
+    spanKind: 'tool',
+    name: 'mcp.tool.my-tool',
+    inputValue: JSON.stringify({ name: 'my-tool', arguments: { key: 'value' } }),
+    outputValue: 'Result from my-tool',
+    metadata: {
+      'mcp.tool.name': 'my-tool',
+      'mcp.server.name': 'test-server',
+    },
   })
 })
 ```
 
 ### Key Points
 
+- ✅ `withVersions()` wraps all setup and tests
+- ✅ All submodule requires use versioned path inside `withVersions` callback
+- ✅ `InMemoryTransport.createLinkedPair()` for in-process client/server
+- ✅ spanKind: 'tool' (not 'llm')
+- ✅ Validate `mcp.tool.name` and `mcp.server.name` in metadata
 - ❌ NO VCR
+- ❌ NO external server processes
+
+### Common TOOL_CLIENT Mistake: Submodule Require Order
+
+If the MCP SDK client and server share internal modules, require the client submodule first so RITM patches it before the server loads it transitively:
+
+```javascript
+// ✅ Require client first so RITM patches it before server loads it
+Client = require(`.../@modelcontextprotocol/sdk@${version}`).get('@modelcontextprotocol/sdk/client').Client
+Server = require(`.../@modelcontextprotocol/sdk@${version}`).get('@modelcontextprotocol/sdk/server').Server
+```
+
+## Category 5: Infrastructure
+
+**Strategy:** Mock server tests (for packages that implement protocols but have no LLMObs operations)
+
+### Setup
+
+```javascript
+withVersions('my-protocol', 'my-protocol-pkg', (version) => {
+  let client, server
+
+  before(async () => {
+    const { Server, Client } = require(`../../../../../../versions/my-protocol-pkg@${version}`).get()
+    server = new Server()
+    await server.start()
+    client = new Client({ url: server.url })
+  })
+
+  after(async () => server?.stop())
+
+  // tests here
+})
+```
+
+### Key Points
+
+- ✅ `withVersions()` required
 - ✅ Mock server instances
 - ✅ Test protocol compliance
-- ✅ Test message passing
-- ✅ Validate transport behavior
+- ❌ NO VCR
 
 ## Decision Matrix
 
@@ -238,54 +340,83 @@ Use this to choose strategy:
 
 ### Does package make HTTP calls to LLM APIs?
 
-**YES** → Use VCR (Category 1 or 2)
-- Configure baseURL to VCR proxy
-- Make real API calls
+**YES** → Use VCR (LLM_CLIENT or MULTI_PROVIDER)
+- `withVersions()` + configure baseURL to VCR proxy
+- Make real API calls (recorded once)
 - Validate real responses
 
 **NO** → Check next question
 
 ### Does it orchestrate workflows/graphs?
 
-**YES** → Pure functions (Category 3)
-- No VCR proxy
-- Mock LLM responses
+**YES** → Pure functions (ORCHESTRATION)
+- `withVersions()` + no VCR proxy
+- Mock LLM responses as simple return values
 - Test state management
 
-**NO** → Mock servers (Category 4)
-- Create mock server
-- Test protocol/transport
+**NO** → Check next question
+
+### Does it implement a tool/resource protocol (e.g., MCP)?
+
+**YES** → In-process mock server (TOOL_CLIENT)
+- `withVersions()` + `InMemoryTransport` or equivalent
+- Test protocol execution (tool calls, resource reads)
+- spanKind: 'tool' or 'retrieval'
+
+**NO** → Generic mock server (INFRASTRUCTURE)
+- `withVersions()` + mock server instance
+- Test protocol/transport compliance
 
 ## Common Mistakes
 
-### Mistake 1: Using VCR for Orchestration
+### Mistake 1: Missing `withVersions()` → silent timeouts (ALL categories)
 
 ```javascript
-// ❌ WRONG - LangGraph with VCR
-const client = new StateGraph({
-  baseURL: 'http://127.0.0.1:9126/vcr/langgraph'
+// ❌ WRONG - no withVersions, orchestrion can't instrument the module
+before(async () => {
+  const mod = require('../../../../../../versions/@modelcontextprotocol/sdk@>=1.27.1')
+    .get('@modelcontextprotocol/sdk/client')
+  Client = mod.Client
 })
 ```
 
-**Why wrong:** LangGraph doesn't make HTTP calls itself.
+**Why wrong:** Without `withVersions()`, `NODE_PATH` is never updated and the orchestrion rewriter can't find the module. No APM spans are produced, `getEvents()` hangs forever, and all tests timeout with no useful error.
 
-**Fix:** Use pure functions with mock responses.
+**Fix:** Wrap everything in `withVersions()` and use the `version` parameter in the require path.
 
-### Mistake 2: Not Using VCR for API Clients
+```javascript
+// ✅ CORRECT
+withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
+  before(async () => {
+    Client = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/client').Client
+  })
+})
+```
+
+### Mistake 2: Using VCR for Orchestration or Tool Clients
+
+```javascript
+// ❌ WRONG - LangGraph with VCR
+const client = new StateGraph({ baseURL: 'http://127.0.0.1:9126/vcr/langgraph' })
+```
+
+**Why wrong:** Orchestration and tool-client libraries don't make HTTP calls themselves.
+
+**Fix:** Use pure functions (orchestration) or `InMemoryTransport` (tool clients).
+
+### Mistake 3: Not Using VCR for LLM API Clients
 
 ```javascript
 // ❌ WRONG - OpenAI without VCR
-const client = new OpenAI({
-  apiKey: 'real-key',
-  baseURL: 'https://api.openai.com'  // Direct to API
-})
+const client = new OpenAI({ apiKey: 'real-key', baseURL: 'https://api.openai.com' })
 ```
 
 **Why wrong:** Tests will fail without API key, hit rate limits, be non-deterministic.
 
 **Fix:** Use VCR proxy URL.
 
-### Mistake 3: Making Real API Calls in Orchestration Tests
+### Mistake 4: Making Real API Calls in Orchestration Tests
 
 ```javascript
 // ❌ WRONG - Real OpenAI in LangGraph test
@@ -297,52 +428,70 @@ graph.addNode('agent', async (state) => {
 
 **Why wrong:** Orchestration tests should be pure functions.
 
-**Fix:** Mock LLM responses directly.
+**Fix:** Mock LLM responses as simple return values.
 
 ## Examples by Category
 
-### Category 1: OpenAI (VCR)
+### LLM_CLIENT: Anthropic (withVersions + VCR)
 
 ```javascript
-const openai = new OpenAI({
-  apiKey: 'test',
-  baseURL: 'http://127.0.0.1:9126/vcr/openai'
+withVersions('anthropic', '@anthropic-ai/sdk', (version) => {
+  before(() => {
+    const { Anthropic } = require(`../../../../../../versions/@anthropic-ai/sdk@${version}`).get()
+    client = new Anthropic({ baseURL: 'http://127.0.0.1:9126/vcr/anthropic' })
+  })
 })
-await openai.chat.completions.create({ ... })
 ```
 
-### Category 2: Vercel AI SDK (VCR)
+### MULTI_PROVIDER: Vercel AI SDK (withVersions + VCR)
 
 ```javascript
-const model = createOpenAI({
-  apiKey: 'test',
-  baseURL: 'http://127.0.0.1:9126/vcr/openai'
+withVersions('ai', 'ai', (version) => {
+  before(() => {
+    const { generateText } = require(`../../../../../../versions/ai@${version}`).get()
+    // use VCR-backed model
+  })
 })
-await generateText({ model, prompt: '...' })
 ```
 
-### Category 3: LangGraph (Pure Functions)
+### ORCHESTRATION: LangGraph (withVersions + pure functions)
 
 ```javascript
-graph.addNode('agent', async (state) => ({
-  messages: [{ role: 'assistant', content: 'Mock' }]
-}))
-await graph.invoke({ ... })
+withVersions('langgraph', '@langchain/langgraph', (version) => {
+  beforeEach(() => {
+    const { StateGraph, Annotation } = require(`../../../../../../versions/@langchain/langgraph@${version}`).get()
+    // build graph with mock node responses
+  })
+})
 ```
 
-### Category 4: MCP (Mock Server)
+### TOOL_CLIENT: MCP SDK (withVersions + InMemoryTransport)
 
 ```javascript
-const mockServer = new MockServer()
-const client = new MCPClient({ url: mockServer.url })
-await client.call('method', {})
+withVersions('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', (version) => {
+  before(async () => {
+    Client = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/client').Client
+    Server = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/server').Server
+    InMemoryTransport = require(`../../../../../../versions/@modelcontextprotocol/sdk@${version}`)
+      .get('@modelcontextprotocol/sdk/inMemory.js').InMemoryTransport
+
+    server = new Server({ name: 'test-server', version: '1.0.0' }, { capabilities: { tools: {} } })
+    const [ct, st] = InMemoryTransport.createLinkedPair()
+    await server.connect(st)
+    client = new Client({ name: 'test-client', version: '1.0.0' })
+    await client.connect(ct)
+  })
+})
 ```
 
 ## Summary
 
-- **API clients**: Use VCR, test real APIs
-- **Multi-provider**: Use VCR, test provider switching
-- **Orchestration**: Pure functions, mock responses
-- **Infrastructure**: Mock servers, test protocols
+- **LLM_CLIENT / MULTI_PROVIDER**: `withVersions()` + VCR, test real API calls
+- **ORCHESTRATION**: `withVersions()` + pure functions, mock LLM responses
+- **TOOL_CLIENT**: `withVersions()` + `InMemoryTransport`, test tool execution
+- **INFRASTRUCTURE**: `withVersions()` + mock server, test protocol compliance
+- **ALL categories**: `withVersions()` is mandatory — without it, no spans are produced
 
 Choose strategy based on what the package does, not what it's called.
