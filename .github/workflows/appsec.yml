@@ -292,6 +292,10 @@ jobs:
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/newest-maintenance-lts
+      - run: yarn test:appsec:plugins:ci
+      - uses: ./.github/actions/node/active-lts
+      - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/latest
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/coverage
