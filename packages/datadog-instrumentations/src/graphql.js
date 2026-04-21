@@ -26,6 +26,16 @@ for (const hook of getHooks('@graphql-tools/executor')) {
 // These are NOT function wraps — they capture module exports at load time for use
 // by @apollo/gateway and other plugins that may load after graphql.
 
+// Capture graphql's default field resolver so the execute plugin can wrap it at
+// runtime. Required for tracing fields that have no explicit .resolve (SDL-built
+// schemas where resolvers live on rootValue).
+addHook({ name: 'graphql', file: 'execution/execute.js', versions: ['>=0.10'] }, execute => {
+  if (execute.defaultFieldResolver) {
+    ddGlobal.graphql_defaultFieldResolver = execute.defaultFieldResolver
+  }
+  return execute
+})
+
 addHook({ name: 'graphql', file: 'language/printer.js', versions: ['>=0.10'] }, printer => {
   ddGlobal.graphql_printer = printer
   return printer

@@ -73,54 +73,11 @@ module.exports = [
     },
     channelName: 'apm:graphql:validate',
   },
-  {
-    module: {
-      name: 'graphql',
-      versionRange: '>=0.10',
-      filePath: 'execution/execute.js',
-    },
-    functionQuery: {
-      functionName: 'executeField',
-      kind: 'Sync',
-    },
-    channelName: 'apm:graphql:resolve',
-  },
-  {
-    module: {
-      name: 'graphql',
-      versionRange: '>=0.10',
-      filePath: 'execution/execute.mjs',
-    },
-    functionQuery: {
-      functionName: 'executeField',
-      kind: 'Sync',
-    },
-    channelName: 'apm:graphql:resolve',
-  },
-  {
-    module: {
-      name: 'graphql',
-      versionRange: '>=0.10',
-      filePath: 'execution/execute.js',
-    },
-    functionQuery: {
-      functionName: 'resolveField',
-      kind: 'Sync',
-    },
-    channelName: 'apm:graphql:resolve',
-  },
-  {
-    module: {
-      name: 'graphql',
-      versionRange: '>=0.10',
-      filePath: 'execution/execute.mjs',
-    },
-    functionQuery: {
-      functionName: 'resolveField',
-      kind: 'Sync',
-    },
-    channelName: 'apm:graphql:resolve',
-  },
+  // executeField / resolveField intentionally NOT instrumented here. Resolve spans
+  // are produced by wrapping user resolvers + the default field resolver at execute
+  // time (see packages/datadog-plugin-graphql/src/execute.js). That gives a zero-cost
+  // fast path when no subscribers are active, which per-field orchestrion hooks
+  // cannot offer (the publish is baked into graphql's compiled code).
   {
     module: {
       name: '@graphql-tools/executor',
