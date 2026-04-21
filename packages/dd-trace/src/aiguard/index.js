@@ -8,7 +8,9 @@ let isEnabled = false
 let aiguard
 let block
 
-function onIncomingHttpRequestStart () {}
+function onIncomingHttpRequestStart () {
+  // No-op: subscribing ensures the HTTP plugin spreads req onto the store
+}
 
 function enable (tracer, config) {
   if (isEnabled) return

@@ -1,7 +1,7 @@
 'use strict'
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
-const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
+const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
 const { storage } = require('../../../datadog-core')
 const log = require('../log')
 const { extractIp } = require('../plugins/util/ip_extractor')
@@ -26,7 +26,6 @@ const {
 const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 
 const ALLOW = 'ALLOW'
-const NETWORK_CLIENT_IP = 'network.client.ip'
 
 class AIGuardAbortError extends Error {
   constructor (reason, tags, tagProbs, sds) {
