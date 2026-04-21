@@ -85,6 +85,24 @@ class OpenaiAgentsTestSetup {
     return this.module.run(this.agent, 'hello', { maxTurns: 2 })
   }
 
+  /**
+   * Simulate a multi-agent handoff by composing agents-core's span helpers
+   * directly. Verifies the new agent-span plugin parents each agent correctly
+   * via the SDK's own parentId chain. Produces:
+   *   trace → agent_a → handoff → agent_b
+   */
+  async multiAgentHandoff () {
+    return this.module.withTrace('handoff-test', async () => {
+      return this.module.withAgentSpan(async () => {
+        return this.module.withHandoffSpan(async () => {
+          return this.module.withAgentSpan(async () => {
+            // terminal agent body
+          }, { data: { name: 'agent_b' } })
+        }, { data: { from_agent: 'agent_a', to_agent: 'agent_b' } })
+      }, { data: { name: 'agent_a' } })
+    })
+  }
+
   async runError () {
     return this.module.run(this.errorAgent, 'hello', { maxTurns: 1 })
   }

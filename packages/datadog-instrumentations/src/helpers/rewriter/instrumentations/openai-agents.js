@@ -1,12 +1,37 @@
 'use strict'
 
-// TODO: Add agent-level LLMObs span (kind: 'agent') wrapping per-agent async execution.
-// Python achieves this via add_trace_processor(LLMObsTraceProcessor) which hooks
-// Span.start() / Span.end() on the SDK's internal Span class (dist/tracing/spans.js).
-// The equivalent here would be hooking Span.prototype.start / Span.prototype.end via
-// orchestrion. Requires team sign-off before implementation.
-
 module.exports = [
+  // @openai/agents-core — MultiTracingProcessor lifecycle (CJS)
+  // Used by the agent-span plugin to emit a dd-trace span per agent execution
+  // with correct parenting via agents-core's own spanId/parentId chain. Fills
+  // the multi-agent handoff gap that the function-level `run` hook cannot cover.
+  {
+    module: {
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/tracing/processor.js',
+    },
+    functionQuery: {
+      methodName: 'onSpanStart',
+      className: 'MultiTracingProcessor',
+      kind: 'Async',
+    },
+    channelName: 'multiProcessorSpanStart',
+  },
+  {
+    module: {
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/tracing/processor.js',
+    },
+    functionQuery: {
+      methodName: 'onSpanEnd',
+      className: 'MultiTracingProcessor',
+      kind: 'Async',
+    },
+    channelName: 'multiProcessorSpanEnd',
+  },
+
   // @openai/agents-core — CJS
   {
     module: {
@@ -67,6 +92,34 @@ module.exports = [
       kind: 'Async',
     },
     channelName: 'runToolOutputGuardrails',
+  },
+
+  // @openai/agents-core — MultiTracingProcessor lifecycle (ESM)
+  {
+    module: {
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/tracing/processor.mjs',
+    },
+    functionQuery: {
+      methodName: 'onSpanStart',
+      className: 'MultiTracingProcessor',
+      kind: 'Async',
+    },
+    channelName: 'multiProcessorSpanStart',
+  },
+  {
+    module: {
+      name: '@openai/agents-core',
+      versionRange: '>=0.7.0',
+      filePath: 'dist/tracing/processor.mjs',
+    },
+    functionQuery: {
+      methodName: 'onSpanEnd',
+      className: 'MultiTracingProcessor',
+      kind: 'Async',
+    },
+    channelName: 'multiProcessorSpanEnd',
   },
 
   // @openai/agents-core — ESM
