@@ -47,20 +47,6 @@ class GraphQLResolvePlugin extends TracingPlugin {
 
     const returnType = fieldDef.type
 
-    // Build info-like object from executeField arguments
-    const info = {
-      fieldName,
-      fieldNodes,
-      returnType,
-      parentType,
-      path,
-      schema: exeContext.schema,
-      fragments: exeContext.fragments,
-      rootValue: exeContext.rootValue,
-      operation: exeContext.operation,
-      variableValues: exeContext.variableValues,
-    }
-
     // Get or create field tracking for this execution
     let rootCtx = execContextFields.get(exeContext)
     if (!rootCtx) {
@@ -124,7 +110,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }, ctx)
 
     if (fieldNodeForSource && this.config.variables && fieldNodeForSource.arguments) {
-      const variables = this.config.variables(info.variableValues)
+      const variables = this.config.variables(exeContext.variableValues)
 
       for (const arg of fieldNodeForSource.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
@@ -141,7 +127,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     // Stash for end handler
-    ctx._ddInfo = info
+    ctx._ddFieldName = fieldName
     ctx._ddRootCtx = rootCtx
     ctx._ddComputedPathString = computedPathString
     ctx._ddSpanCreated = true
@@ -149,10 +135,29 @@ class GraphQLResolvePlugin extends TracingPlugin {
     ctx._ddExeContext = exeContext
     ctx._ddErrorCountBefore = getErrorCount(exeContext)
 
-    // Resolve arguments from the exeContext (field-level args)
-    const resolverArgs = getResolverArgs(fieldDef, fieldNode, exeContext.variableValues)
+    // The info-like object and resolver args are only consumed by the AppSec
+    // (resolverStartCh) and IAST (iastResolveCh) channels. For the APM-only
+    // hot path (no subscribers), skip these allocations entirely.
+    const needsSubscriberData = this.resolverStartCh.hasSubscribers ||
+      (this.iastResolveCh.hasSubscribers && fieldDef.resolve)
+
+    if (!needsSubscriberData) return ctx.currentStore
+
+    const info = {
+      fieldName,
+      fieldNodes,
+      returnType,
+      parentType,
+      path,
+      schema: exeContext.schema,
+      fragments: exeContext.fragments,
+      rootValue: exeContext.rootValue,
+      operation: exeContext.operation,
+      variableValues: exeContext.variableValues,
+    }
 
     if (this.resolverStartCh.hasSubscribers) {
+      const resolverArgs = getResolverArgs(fieldDef, fieldNode, exeContext.variableValues)
       const abortController = new AbortController()
       this.resolverStartCh.publish({ abortController, resolverInfo: getResolverInfo(info, resolverArgs) })
     }
@@ -233,7 +238,7 @@ class GraphQLResolvePlugin extends TracingPlugin {
     }
 
     this.config.hooks.resolve(span, {
-      fieldName: ctx._ddInfo.fieldName,
+      fieldName: ctx._ddFieldName,
       path: ctx._ddComputedPathString,
       error: resolverError || null,
       result: ctx.result instanceof Promise ? undefined : ctx.result,
