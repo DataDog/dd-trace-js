@@ -322,6 +322,8 @@ jobs:
       NODE_OPTIONS: '--experimental-global-webcrypto'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Wait for Cosmos emulator to be ready
+        run: timeout 120 bash -c 'until nc -z localhost 8081; do sleep 3; done'
       - uses: ./.github/actions/plugins/test
 
 
