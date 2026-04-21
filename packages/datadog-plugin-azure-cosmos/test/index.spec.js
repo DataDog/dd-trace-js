@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { setup, teardown } = require('./cosmos-helpers')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 
 describe('Plugin', () => {
   describe('azure-cosmos', () => {
@@ -14,7 +15,7 @@ describe('Plugin', () => {
       beforeEach(async () => {
         // Provision DB/container without emitting azure-cosmos spans (plugin subscriptions stay off).
         await agent.load('azure-cosmos', { enabled: false })
-        ; ({ client, container } = await setup())
+          ; ({ client, container } = await setup())
         agent.reload('azure-cosmos', { enabled: true })
       })
 
@@ -57,14 +58,18 @@ describe('Plugin', () => {
         const expectedSpanPromise = agent.assertSomeTraces(traces => {
           const span = traces[0][0]
 
-          assert.strictEqual(span.name, 'cosmosdb.query')
-          assert.strictEqual(span.service, 'test-azure-cosmos')
-          assert.strictEqual(span.type, 'cosmosdb')
-          assert.strictEqual(span.meta.component, 'azure_cosmos')
-          assert.strictEqual(span.meta['db.system'], 'cosmosdb')
-          assert.strictEqual(span.meta['db.name'], 'testDatabase')
-          assert.strictEqual(span.meta['cosmosdb.container'], 'testContainer')
-          assert.strictEqual(span.meta['cosmosdb.connection.mode'], 'gateway')
+          assertObjectContains(span, {
+            name: 'cosmosdb.query',
+            service: 'test-azure-cosmos',
+            type: 'cosmosdb',
+            meta: {
+              component: 'azure_cosmos',
+              'db.system': 'cosmosdb',
+              'db.name': 'testDatabase',
+              'cosmosdb.container': 'testContainer',
+              'cosmosdb.connection.mode': 'gateway'
+            }
+          })
 
           assert(expectedResources.includes(span.resource))
 
@@ -95,15 +100,20 @@ describe('Plugin', () => {
           const span = traces[0][0]
           assert(expectedResources.includes(span.resource))
           if (span.resource === 'create /dbs/testDatabase/colls/testContainer/docs') {
-            assert.strictEqual(span.name, 'cosmosdb.query')
-            assert.strictEqual(span.service, 'test-azure-cosmos')
-            assert.strictEqual(span.type, 'cosmosdb')
-            assert.strictEqual(span.resource, 'create /dbs/testDatabase/colls/testContainer/docs')
-            assert.strictEqual(span.meta.component, 'azure_cosmos')
-            assert.strictEqual(span.meta['db.system'], 'cosmosdb')
-            assert.strictEqual(span.meta['db.name'], 'testDatabase')
-            assert.strictEqual(span.meta['cosmosdb.container'], 'testContainer')
-            assert.strictEqual(span.meta['cosmosdb.connection.mode'], 'gateway')
+            assertObjectContains(span, {
+              name: 'cosmosdb.query',
+              service: 'test-azure-cosmos',
+              type: 'cosmosdb',
+              resource: 'create /dbs/testDatabase/colls/testContainer/docs',
+              meta: {
+                component: 'azure_cosmos',
+                'db.system': 'cosmosdb',
+                'db.name': 'testDatabase',
+                'cosmosdb.container': 'testContainer',
+                'cosmosdb.connection.mode': 'gateway',
+              }
+            })
+
             assert.strictEqual(span.error, 1)
             assert.strictEqual(span.meta['error.message'], 'The document already exists in the collection.')
             assert.strictEqual(span.meta['error.type'], 'Error')
