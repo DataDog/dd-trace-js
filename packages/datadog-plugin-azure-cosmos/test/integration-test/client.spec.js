@@ -17,6 +17,7 @@ describe('esm', () => {
   let agent
   let proc
   let variants
+  let spawnEnv
 
   withVersions('azure-cosmos', '@azure/cosmos', (version) => {
     useSandbox([`'@azure/cosmos@${version}'`], false, [
@@ -28,6 +29,7 @@ describe('esm', () => {
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
+      spawnEnv = { NODE_OPTIONS: '--experimental-global-webcrypto' }
     })
 
     afterEach(async () => {
@@ -46,7 +48,8 @@ describe('esm', () => {
         proc = await spawnPluginIntegrationTestProcAndExpectExit(
           sandboxCwd(),
           variants[variant],
-          agent.port
+          agent.port,
+          spawnEnv
         )
 
         await res
