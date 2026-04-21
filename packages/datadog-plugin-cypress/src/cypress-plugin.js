@@ -245,37 +245,55 @@ function getSuiteStatus (suiteStats) {
   return 'pass'
 }
 
+const FINAL_STATUS_RETRY_KIND = {
+  none: 'none',
+  atr: 'atr',
+  efd: 'efd',
+  atf: 'atf',
+}
+
+function getFinalStatusRetryKind ({ finishedTest, finishedTestAttempts, flakyTestRetriesCount }) {
+  // Infer retry kind from the executions we actually saw so ATR enabled with
+  // a retry count of 0 is still treated as a single final execution.
+  if (finishedTest.isAttemptToFix) {
+    return FINAL_STATUS_RETRY_KIND.atf
+  }
+
+  if (finishedTestAttempts.some(testAttempt => testAttempt.isEfdRetry)) {
+    return FINAL_STATUS_RETRY_KIND.efd
+  }
+
+  if (finishedTestAttempts.length > 1 && flakyTestRetriesCount > 0) {
+    return FINAL_STATUS_RETRY_KIND.atr
+  }
+
+  return FINAL_STATUS_RETRY_KIND.none
+}
+
 function getFinalStatus ({
   status,
+  retryKind,
   hasFailedAllRetries,
-  isAtrActive,
-  isEfdActive,
-  isAtfActive,
   hasPassedAllAtfRetries,
   isQuarantined,
   isDisabled,
 }) {
-  // Note that intermediate executions DO NOT report a final status tag
-
   // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
   // the final status of its last execution should be reported as 'skip'.
   if (isQuarantined || isDisabled || status === 'skip') {
     return 'skip'
   }
 
-  // When no retry feature is active, every execution is final
-  if (!isAtrActive && !isEfdActive && !isAtfActive) {
-    return status
-  }
-
-  // ATR and EFD: pass unless every attempt failed
-  if (isAtrActive || isEfdActive) {
-    return hasFailedAllRetries ? 'fail' : 'pass'
-  }
-
-  // Branch for ATF (We need to check hasPassedAllRetries)
-  if (isAtfActive) {
-    return hasPassedAllAtfRetries ? 'pass' : 'fail'
+  switch (retryKind) {
+    case FINAL_STATUS_RETRY_KIND.atr:
+    case FINAL_STATUS_RETRY_KIND.efd:
+      // These modes report the aggregate result across attempts.
+      return hasFailedAllRetries ? 'fail' : 'pass'
+    case FINAL_STATUS_RETRY_KIND.atf:
+      // Attempt-to-fix only passes if every execution passed.
+      return hasPassedAllAtfRetries ? 'pass' : 'fail'
+    default:
+      return status
   }
 }
 
@@ -949,21 +967,23 @@ class CypressPlugin {
         // We can check if this is the last attempt regardless of the retry mechanism
         const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
         if (isLastAttempt) {
-          const hasFailedAllRetries = finishedTest.testSpan.context()._tags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
-          const isAtfActive = finishedTest.isAttemptToFix
-          const isEfdActive = finishedTestAttempts.some(t => t.isEfdRetry)
-          const isAtrActive = this.isFlakyTestRetriesEnabled && !isAtfActive && !isEfdActive
+          const testSpanTags = finishedTest.testSpan.context()._tags
+          const retryKind = getFinalStatusRetryKind({
+            finishedTest,
+            finishedTestAttempts,
+            flakyTestRetriesCount: this.flakyTestRetriesCount,
+          })
+
+          const hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
           const hasPassedAllAtfRetries =
-          finishedTest.testSpan.context()._tags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
-          const isQuarantined = finishedTest.testSpan.context()._tags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
-          const isDisabled = finishedTest.testSpan.context()._tags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+            testSpanTags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
+          const isQuarantined = testSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+          const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
 
           const finalStatus = getFinalStatus({
             status: cypressTestStatus,
+            retryKind,
             hasFailedAllRetries,
-            isAtrActive,
-            isEfdActive,
-            isAtfActive,
             hasPassedAllAtfRetries,
             isQuarantined,
             isDisabled,

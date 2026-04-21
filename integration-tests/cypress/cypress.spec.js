@@ -4716,6 +4716,56 @@ moduleTypes.forEach(({
         ])
       })
 
+      over10It('keeps failing final_status when ATR is enabled with zero retries', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: { enabled: false },
+        })
+
+        const specToRun = 'cypress/e2e/spec.cy.js'
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            assert.strictEqual(tests.length, 2, 'Expected no retries when flaky retry count is 0')
+
+            const passingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.context passes')
+            assert.ok(passingTest, 'passing test not found')
+            assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+
+            const failingTest = tests.find(t => t.resource === 'cypress/e2e/spec.cy.js.other context fails')
+            assert.ok(failingTest, 'failing test not found')
+            assert.strictEqual(failingTest.meta[TEST_STATUS], 'fail')
+            assert.ok(!(TEST_IS_RETRY in failingTest.meta), 'failing test should not be marked as a retry')
+            assert.strictEqual(failingTest.meta[TEST_FINAL_STATUS], 'fail')
+          }, 60000)
+
+        const envVars = getCiVisEvpProxyConfig(receiver.port)
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec "${specToRun}"`,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '0',
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+      })
+
       over10It('sets final_status tag to skip for disabled tests', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
         receiver.setTestManagementTests({
