@@ -37,8 +37,8 @@ class AzureCosmosPlugin extends DatabasePlugin {
 
   error(ctx) {
     const span = ctx.currentStore?.span
-    this.addError(ctx.error, span)
     if (span != null) {
+      this.addError(ctx.error, span)
       const error = ctx.error
       if (error != null) {
         if (error.code != null) {
