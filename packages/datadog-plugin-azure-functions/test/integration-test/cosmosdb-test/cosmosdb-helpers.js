@@ -2,7 +2,7 @@
 
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
-
+const { CosmosClient } = require('@azure/cosmos')
 
 function getMyCosmosDbConnection() {
   const settingsPath = join(__dirname, '../../fixtures/local.settings.json')
@@ -10,9 +10,7 @@ function getMyCosmosDbConnection() {
   return settings.Values.MyCosmosDB
 }
 
-
 async function setup() {
-  const { CosmosClient } = require('@azure/cosmos')
   const client = new CosmosClient(getMyCosmosDbConnection())
   await client.databases.createIfNotExists({ id: 'testDatabase' })
   await client.database('testDatabase').containers.createIfNotExists({
@@ -21,9 +19,7 @@ async function setup() {
   })
 }
 
-
 async function teardown() {
-  const { CosmosClient } = require('@azure/cosmos')
   const client = new CosmosClient(getMyCosmosDbConnection())
   await client.database('testDatabase').delete()
 }

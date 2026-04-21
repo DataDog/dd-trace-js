@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const { spawn } = require('child_process')
 const {
   FakeAgent,
   hookFile,
@@ -12,9 +13,7 @@ const {
   stopProc,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { spawn } = require('child_process')
 const { setup, teardown } = require('./cosmosdb-helpers')
-
 
 describe('esm', () => {
   let agent
@@ -27,10 +26,9 @@ describe('esm', () => {
       '@azure/event-hubs@6.0.0',
       '@azure/cosmos@4.9.2',
     ],
-      false,
-      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-        './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
-
+    false,
+    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+      './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -67,12 +65,10 @@ describe('esm', () => {
         })
       })
     }).timeout(60000)
-
   })
 })
 
-
-async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
@@ -85,7 +81,7 @@ async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, std
   }, stdioHandler)
 }
 
-function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
+function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc

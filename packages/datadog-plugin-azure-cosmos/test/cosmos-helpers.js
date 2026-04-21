@@ -1,6 +1,6 @@
 'use strict'
 
-async function setup() {
+async function setup () {
   const { CosmosClient } = require('@azure/cosmos')
   const client = new CosmosClient({
     endpoint: 'http://localhost:8081',
@@ -16,7 +16,7 @@ async function setup() {
   return { client, container }
 }
 
-async function teardown(client) {
+async function teardown (client) {
   await client.database('testDatabase').delete()
 }
 
