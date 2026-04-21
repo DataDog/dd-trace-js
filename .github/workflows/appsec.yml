@@ -293,11 +293,17 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
       - uses: ./.github/actions/node/newest-maintenance-lts
+        if: "!cancelled()"
       - run: yarn test:appsec:plugins:ci
+        if: "!cancelled()"
       - uses: ./.github/actions/node/active-lts
+        if: "!cancelled()"
       - run: yarn test:appsec:plugins:ci
+        if: "!cancelled()"
       - uses: ./.github/actions/node/latest
+        if: "!cancelled()"
       - run: yarn test:appsec:plugins:ci
+        if: "!cancelled()"
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
