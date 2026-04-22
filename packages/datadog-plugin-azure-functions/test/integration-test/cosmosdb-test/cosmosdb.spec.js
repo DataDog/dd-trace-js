@@ -70,7 +70,7 @@ describe('esm', () => {
         )
         assert.ok(
           writeTrace,
-          `expected HTTP write trace (invoke + 3 cosmosdb.query); had ${payload.length} top-level traces`
+          `expected HTTP write trace (invoke + 3 cosmosdb.query); had ${payload.length} top-level traces ${JSON.stringify(payload)}`
         )
 
         const triggerTrace = payload.find(
