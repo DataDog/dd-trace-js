@@ -57,6 +57,7 @@ const {
   DYNAMIC_NAME_RE,
   logDynamicNamesWarning,
   getPullRequestBaseBranch,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
@@ -242,6 +243,58 @@ function getSuiteStatus (suiteStats) {
     return 'skip'
   }
   return 'pass'
+}
+
+const FINAL_STATUS_RETRY_KIND = {
+  none: 'none',
+  atr: 'atr',
+  efd: 'efd',
+  atf: 'atf',
+}
+
+function getFinalStatusRetryKind ({ finishedTest, finishedTestAttempts, flakyTestRetriesCount }) {
+  // Infer retry kind from the executions we actually saw so ATR enabled with
+  // a retry count of 0 is still treated as a single final execution.
+  if (finishedTest.isAttemptToFix) {
+    return FINAL_STATUS_RETRY_KIND.atf
+  }
+
+  if (finishedTestAttempts.some(testAttempt => testAttempt.isEfdRetry)) {
+    return FINAL_STATUS_RETRY_KIND.efd
+  }
+
+  if (finishedTestAttempts.length > 1 && flakyTestRetriesCount > 0) {
+    return FINAL_STATUS_RETRY_KIND.atr
+  }
+
+  return FINAL_STATUS_RETRY_KIND.none
+}
+
+function getFinalStatus ({
+  status,
+  retryKind,
+  hasFailedAllRetries,
+  hasPassedAllAtfRetries,
+  isQuarantined,
+  isDisabled,
+}) {
+  // If the test is quarantined or disabled, regardless of its actual execution result or active retry features,
+  // the final status of its last execution should be reported as 'skip'.
+  if (isQuarantined || isDisabled || status === 'skip') {
+    return 'skip'
+  }
+
+  switch (retryKind) {
+    case FINAL_STATUS_RETRY_KIND.atr:
+    case FINAL_STATUS_RETRY_KIND.efd:
+      // These modes report the aggregate result across attempts.
+      return hasFailedAllRetries ? 'fail' : 'pass'
+    case FINAL_STATUS_RETRY_KIND.atf:
+      // Attempt-to-fix only passes if every execution passed.
+      return hasPassedAllAtfRetries ? 'pass' : 'fail'
+    default:
+      return status
+  }
 }
 
 class CypressPlugin {
@@ -821,6 +874,7 @@ class CypressPlugin {
         : spec.relative
 
       const skippedTestSpan = this.getTestSpan({ testName: cypressTestName, testSuite: spec.relative, testSourceFile })
+      skippedTestSpan.setTag(TEST_FINAL_STATUS, 'skip')
 
       skippedTestSpan.setTag(TEST_STATUS, 'skip')
       if (isSkippedByItr) {
@@ -908,6 +962,36 @@ class CypressPlugin {
 
         if (codeOwners) {
           finishedTest.testSpan.setTag(TEST_CODE_OWNERS, codeOwners)
+        }
+
+        // We can check if this is the last attempt regardless of the retry mechanism
+        const isLastAttempt = attemptIndex === finishedTestAttempts.length - 1
+        if (isLastAttempt) {
+          const testSpanTags = finishedTest.testSpan.context()._tags
+          const retryKind = getFinalStatusRetryKind({
+            finishedTest,
+            finishedTestAttempts,
+            flakyTestRetriesCount: this.flakyTestRetriesCount,
+          })
+
+          const hasFailedAllRetries = testSpanTags[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+          const hasPassedAllAtfRetries =
+            testSpanTags[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED] === 'true'
+          const isQuarantined = testSpanTags[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+          const isDisabled = testSpanTags[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+
+          const finalStatus = getFinalStatus({
+            status: cypressTestStatus,
+            retryKind,
+            hasFailedAllRetries,
+            hasPassedAllAtfRetries,
+            isQuarantined,
+            isDisabled,
+          })
+
+          if (finalStatus) {
+            finishedTest.testSpan.setTag(TEST_FINAL_STATUS, finalStatus)
+          }
         }
 
         finishedTest.testSpan.finish(finishedTest.finishTime)
