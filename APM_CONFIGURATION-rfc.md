@@ -55,8 +55,6 @@ Backward compatibility is negotiated via the capability bit: the backend inspect
 
 ### 2. Payload shape
 
-Comparison to today's payload (see `[rc-sample.json](rc-sample.json)` for a real sample triggered by changing `tracing_tags`):
-
 Today, each `target_files` entry for `APM_TRACING` looks like:
 
 ```json
