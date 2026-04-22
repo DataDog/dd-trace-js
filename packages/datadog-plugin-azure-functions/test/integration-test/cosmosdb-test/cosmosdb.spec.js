@@ -1,6 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const { spawn } = require('child_process')
 const {
@@ -13,11 +15,12 @@ const {
   stopProc,
 } = require('../../../../../integration-tests/helpers')
 const { withVersions } = require('../../../../dd-trace/test/setup/mocha')
-const { setup, teardown } = require('./cosmosdb-helpers')
 
 describe('esm', () => {
   let agent
   let proc
+  let setup
+  let teardown
 
   withVersions('azure-functions', '@azure/functions', version => {
     useSandbox([
@@ -29,6 +32,12 @@ describe('esm', () => {
     false,
     ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
       './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
+
+    before(async function () {
+      const helpers = await import(pathToFileURL(path.join(__dirname, 'cosmosdb-helpers.mjs')).href)
+      setup = helpers.setup
+      teardown = helpers.teardown
+    })
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()

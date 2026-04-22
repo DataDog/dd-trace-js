@@ -1,8 +1,9 @@
-'use strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { CosmosClient } from '@azure/cosmos'
 
-const { readFileSync } = require('node:fs')
-const { join } = require('node:path')
-const { CosmosClient } = require('@azure/cosmos')
+const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 function getMyCosmosDbConnection () {
   const settingsPath = join(__dirname, '../../fixtures/local.settings.json')
@@ -10,7 +11,7 @@ function getMyCosmosDbConnection () {
   return settings.Values.MyCosmosDB
 }
 
-async function setup () {
+export async function setup () {
   const client = new CosmosClient(getMyCosmosDbConnection())
   await client.databases.createIfNotExists({ id: 'testDatabase' })
   await client.database('testDatabase').containers.createIfNotExists({
@@ -19,9 +20,7 @@ async function setup () {
   })
 }
 
-async function teardown () {
+export async function teardown () {
   const client = new CosmosClient(getMyCosmosDbConnection())
   await client.database('testDatabase').delete()
 }
-
-module.exports = { setup, teardown }
