@@ -61,13 +61,13 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   })
 
   it('should mark properties with timeout when deadline is exceeded', async function () {
-    // Override the hrtime stub to advance time on each call
-    // This simulates time passing during collection
+    // Drive process.hrtime.bigint() with a plain monotonic counter instead of reading
+    // `clock.now`. This works around a sinon fake-timers regression.
     sinon.restore()
-    clock = sinon.useFakeTimers()
+    let nowNs = 0n
     sinon.stub(process.hrtime, 'bigint').callsFake(() => {
-      const time = BigInt(clock.now) * 1_000_000n
-      clock.tick(50) // Advance by 50ms after each call
+      const time = nowNs
+      nowNs += 50_000_000n // advance 50ms per call
       return time
     })
 
@@ -107,13 +107,13 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   it('should cache deadline reached state in ctx', async function () {
     let hrtimeCallCount = 0
 
-    // Override the hrtime stub to track calls and advance time
+    // Same workaround as the previous test: avoid the fake-timers clock for `process.hrtime.bigint()`.
     sinon.restore()
-    clock = sinon.useFakeTimers()
+    let nowNs = 0n
     sinon.stub(process.hrtime, 'bigint').callsFake(() => {
-      const time = BigInt(clock.now) * 1_000_000n
+      const time = nowNs
       hrtimeCallCount++
-      clock.tick(30) // Advance by 30ms after each call
+      nowNs += 30_000_000n // advance 30ms per call
       return time
     })
 
