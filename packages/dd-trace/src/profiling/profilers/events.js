@@ -205,9 +205,30 @@ class ZlibDecorator {
   }
 }
 
+class CryptoDecorator {
+  constructor (stringTable) {
+    this.stringTable = stringTable
+  }
+
+  decorateSample (sampleInput, item) {
+    const labels = sampleInput.label
+    const stringTable = this.stringTable
+    for (const [key, value] of Object.entries(item.detail)) {
+      switch (typeof value) {
+        case 'string':
+          labels.push(labelFromStrStr(stringTable, key, value))
+          break
+        case 'number':
+          labels.push(new Label({ key: stringTable.dedup(key), num: value }))
+      }
+    }
+  }
+}
+
 // Keys correspond to PerformanceEntry.entryType, values are constructor
 // functions for type-specific decorators.
 const decoratorTypes = {
+  crypto: CryptoDecorator,
   fs: FilesystemDecorator,
   dns: DNSDecorator,
   gc: GCDecorator,
@@ -360,6 +381,7 @@ class DatadogInstrumentationEventSource {
   constructor (eventHandler, eventFilter) {
     // List all entries explicitly for bundlers to pick up the require calls correctly.
     const plugins = [
+      require('./event_plugins/crypto'),
       require('./event_plugins/dns_lookup'),
       require('./event_plugins/dns_lookupservice'),
       require('./event_plugins/dns_resolve'),
