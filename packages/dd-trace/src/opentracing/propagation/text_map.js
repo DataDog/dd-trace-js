@@ -802,18 +802,25 @@ class TextMapPropagator {
     return spanContext._traceId.toString(16)
   }
 
-  static _getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin = null) {
+  /**
+   * @param {number} traceparentSampled
+   * @param {number|undefined} tracestateSamplingPriority
+   * @param {string|null} origin
+   * @returns {import('../../priority_sampler').SamplingPriority}
+   */
+  static _getSamplingPriority (traceparentSampled, tracestateSamplingPriority, origin) {
     const fromRumWithoutPriority = !tracestateSamplingPriority && origin === 'rum'
 
-    let samplingPriority
-    if (!fromRumWithoutPriority && traceparentSampled === 0 &&
-    (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
-      samplingPriority = 0
-    } else if (!fromRumWithoutPriority && traceparentSampled === 1 &&
-    (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
-      samplingPriority = 1
-    } else {
-      samplingPriority = tracestateSamplingPriority
+    let samplingPriority =
+      /** @type {import('../../priority_sampler').SamplingPriority} */ (tracestateSamplingPriority ?? AUTO_KEEP)
+    if (!fromRumWithoutPriority) {
+      if (traceparentSampled === 0 &&
+          (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
+        samplingPriority = AUTO_REJECT
+      } else if (traceparentSampled === 1 &&
+                 (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
+        samplingPriority = AUTO_KEEP
+      }
     }
 
     return samplingPriority
