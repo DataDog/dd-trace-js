@@ -24,6 +24,7 @@
     "@azure/cosmos": "4.9.2",
     "@azure/event-hubs": "6.0.2",
     "@azure/functions": "4.11.0",
+    "@modelcontextprotocol/sdk": "1.27.1",
     "durable-functions": "3.3.0",
     "@azure/service-bus": "7.9.5",
     "@confluentinc/kafka-javascript": "1.8.0",

@@ -7,6 +7,7 @@ const plugins = {
   get '@azure/cosmos' () { return require('../../../datadog-plugin-azure-cosmos/src') },
   get '@azure/event-hubs' () { return require('../../../datadog-plugin-azure-event-hubs/src') },
   get '@azure/functions' () { return require('../../../datadog-plugin-azure-functions/src') },
+  get '@modelcontextprotocol/sdk' () { return require('../../../datadog-plugin-modelcontextprotocol-sdk/src') },
   get 'durable-functions' () { return require('../../../datadog-plugin-azure-durable-functions/src') },
   get '@azure/service-bus' () { return require('../../../datadog-plugin-azure-service-bus/src') },
   get '@cucumber/cucumber' () { return require('../../../datadog-plugin-cucumber/src') },

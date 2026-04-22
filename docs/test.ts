@@ -383,6 +383,7 @@ tracer.use('microgateway-core', httpServerOptions);
 tracer.use('mocha');
 tracer.use('mocha', { service: 'mocha-service' });
 tracer.use('moleculer', moleculerOptions);
+tracer.use('modelcontextprotocol-sdk');
 tracer.use('mongodb-core');
 tracer.use('mongoose');
 tracer.use('mysql');

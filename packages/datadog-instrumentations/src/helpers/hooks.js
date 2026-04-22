@@ -17,6 +17,7 @@ module.exports = {
   '@apollo/server': () => require('../apollo-server'),
   '@apollo/gateway': () => require('../apollo'),
   '@langchain/langgraph': { esmFirst: true, fn: () => require('../langgraph') },
+  '@modelcontextprotocol/sdk': () => require('../modelcontextprotocol-sdk'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
   '@azure/cosmos': { esmFirst: true, fn: () => require('../azure-cosmos') },
