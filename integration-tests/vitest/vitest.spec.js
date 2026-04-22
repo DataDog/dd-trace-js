@@ -60,6 +60,7 @@ const {
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
+  TEST_FINAL_STATUS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
@@ -1842,6 +1843,7 @@ versions.forEach((version) => {
                     if (isFirstAttempt) {
                       assert.ok(!(TEST_IS_RETRY in test.meta))
                       assert.ok(!(TEST_RETRY_REASON in test.meta))
+                      assert.ok(!(TEST_FINAL_STATUS in test.meta))
                       continue
                     }
                     assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
@@ -1856,6 +1858,16 @@ versions.forEach((version) => {
                         assert.strictEqual(test.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
                         assert.strictEqual(test.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
                       }
+                      if (shouldAlwaysPass) {
+                        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'pass')
+                      } else if (isQuarantining || isDisabling) {
+                        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+                      } else {
+                        assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'fail')
+                      }
+                    } else {
+                      // Intermediate ATF executions must not carry a final status tag
+                      assert.ok(!(TEST_FINAL_STATUS in test.meta))
                     }
                   } else {
                     assert.ok(!(TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX in test.meta))
@@ -2729,5 +2741,437 @@ versions.forEach((version) => {
         })
       })
     }
+
+    context('final status tag', () => {
+      it('sets final_status tag to test status on regular tests without retry features', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            tests.forEach(test => {
+              assert.strictEqual(
+                test.meta[TEST_FINAL_STATUS],
+                test.meta[TEST_STATUS],
+                `Expected TEST_FINAL_STATUS to match TEST_STATUS for test "${test.meta[TEST_NAME]}"`
+              )
+            })
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              // Runs test-visibility-passed-suite (pass/skip), test-visibility-failed-suite
+              // (fail/pass with hooks), and test-visibility-failed-hooks (fail due to hook throws)
+              TEST_DIR: 'ci-visibility/vitest-tests/test-visibility*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      })
+
+      it('sets final_status tag to test status reported to test framework on last retry (ATR active only)',
+        async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const assertAtrFinalStatus = (testName, expectedFinalStatus) => {
+                const group = tests.filter(t => t.meta[TEST_NAME] === testName)
+                group.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+                  .forEach((test, index) => {
+                    if (index < group.length - 1) {
+                      assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                        `TEST_FINAL_STATUS should not be set on attempt ${index} of "${testName}"`
+                      )
+                    } else {
+                      assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
+                    }
+                  })
+              }
+
+              // Test that always passes on the first try: final_status is set immediately
+              const alwaysPassingTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'flaky test retries does not retry if unnecessary'
+              )
+              assert.strictEqual(alwaysPassingTests.length, 1)
+              assert.strictEqual(alwaysPassingTests[0].meta[TEST_FINAL_STATUS], 'pass')
+
+              assertAtrFinalStatus('flaky test retries can retry tests that eventually pass', 'pass')
+              assertAtrFinalStatus('flaky test retries can retry tests that never pass', 'fail')
+
+              // With hooks: same behavior
+              const alwaysPassingTestsWithHooks = tests.filter(
+                test => test.meta[TEST_NAME] === 'flaky test retries with hooks does not retry if unnecessary'
+              )
+              assert.strictEqual(alwaysPassingTestsWithHooks.length, 1)
+              assert.strictEqual(alwaysPassingTestsWithHooks[0].meta[TEST_FINAL_STATUS], 'pass')
+
+              assertAtrFinalStatus('flaky test retries with hooks can retry tests that eventually pass', 'pass')
+              assertAtrFinalStatus('flaky test retries with hooks can retry tests that never pass', 'fail')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/{flaky-test-retries,hooks-flaky-test-retries}.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
+      it('sets final_status tag to test status reported to test framework on last retry (EFD active only)',
+        async () => {
+          receiver.setKnownTests({
+            vitest: {
+              'ci-visibility/vitest-tests/early-flake-detection.mjs': [
+                'early flake detection does not retry if it is not new',
+              ],
+              'ci-visibility/vitest-tests/hooks-flaky-test-retries.mjs': [
+                'flaky test retries with hooks does not retry if unnecessary',
+              ],
+            },
+          })
+          receiver.setSettings({
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': NUM_RETRIES_EFD },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // Known test: not retried, every execution is already the final one
+              const knownTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'early flake detection does not retry if it is not new'
+              )
+              assert.strictEqual(knownTests.length, 1)
+              assert.ok(!(TEST_IS_NEW in knownTests[0].meta))
+              assert.ok(!(TEST_IS_RETRY in knownTests[0].meta))
+              assert.strictEqual(knownTests[0].meta[TEST_FINAL_STATUS], knownTests[0].meta[TEST_STATUS])
+
+              const assertEfdFinalStatus = (testName, expectedFinalStatus) => {
+                const group = tests.filter(t => t.meta[TEST_NAME] === testName)
+                group.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+                  .forEach((test, index) => {
+                    if (index < group.length - 1) {
+                      assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                    } else {
+                      assert.strictEqual(test.meta[TEST_FINAL_STATUS], expectedFinalStatus)
+                    }
+                  })
+              }
+
+              assertEfdFinalStatus('early flake detection can retry tests that eventually pass', 'pass')
+              assertEfdFinalStatus('early flake detection can retry tests that always pass', 'pass')
+
+              // With hooks: same behavior
+              const knownTestsWithHooks = tests.filter(
+                test => test.meta[TEST_NAME] === 'flaky test retries with hooks does not retry if unnecessary'
+              )
+              assert.strictEqual(knownTestsWithHooks.length, 1)
+              assert.ok(!(TEST_IS_NEW in knownTestsWithHooks[0].meta))
+              assert.ok(!(TEST_IS_RETRY in knownTestsWithHooks[0].meta))
+              assert.strictEqual(knownTestsWithHooks[0].meta[TEST_FINAL_STATUS], knownTestsWithHooks[0].meta[TEST_STATUS])
+
+              assertEfdFinalStatus('flaky test retries with hooks can retry tests that eventually pass', 'pass')
+              assertEfdFinalStatus('flaky test retries with hooks can retry tests that never pass', 'fail')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/{early-flake-detection,hooks-flaky-test-retries}.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
+      it('sets final_status tag only on last ATR retry when EFD is enabled but not active and ATR is active',
+        async () => {
+          // All tests are known so EFD will be enabled but not active for them
+          receiver.setKnownTests({
+            vitest: {
+              'ci-visibility/vitest-tests/flaky-test-retries.mjs': [
+                'flaky test retries can retry tests that eventually pass',
+                'flaky test retries can retry tests that never pass',
+                'flaky test retries does not retry if unnecessary',
+              ],
+              'ci-visibility/vitest-tests/hooks-flaky-test-retries.mjs': [
+                'flaky test retries with hooks can retry tests that eventually pass',
+                'flaky test retries with hooks can retry tests that never pass',
+                'flaky test retries with hooks does not retry if unnecessary',
+              ],
+            },
+          })
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: { '5s': 3 },
+              faulty_session_threshold: 100,
+            },
+            known_tests_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const eventuallyPassingTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'flaky test retries can retry tests that eventually pass'
+              )
+              eventuallyPassingTests.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+                .forEach((test, idx) => {
+                  if (idx < eventuallyPassingTests.length - 1) {
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                      'TEST_FINAL_STATUS should not be set on previous ATR runs'
+                    )
+                  } else {
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+                    assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+                  }
+                })
+
+              const alwaysPassingTests = tests.filter(
+                test => test.meta[TEST_NAME] === 'flaky test retries does not retry if unnecessary'
+              )
+              assert.strictEqual(alwaysPassingTests.length, 1)
+              assert.strictEqual(alwaysPassingTests[0].meta[TEST_FINAL_STATUS], 'pass')
+
+              // With hooks: same behavior
+              const eventuallyPassingTestsWithHooks = tests.filter(
+                test => test.meta[TEST_NAME] === 'flaky test retries with hooks can retry tests that eventually pass'
+              )
+              eventuallyPassingTestsWithHooks.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+                .forEach((test, idx) => {
+                  if (idx < eventuallyPassingTestsWithHooks.length - 1) {
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta),
+                      'TEST_FINAL_STATUS should not be set on previous ATR runs'
+                    )
+                  } else {
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], test.meta[TEST_STATUS])
+                    assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+                  }
+                })
+
+              const alwaysPassingTestsWithHooks = tests.filter(
+                test => test.meta[TEST_NAME] === 'flaky test retries with hooks does not retry if unnecessary'
+              )
+              assert.strictEqual(alwaysPassingTestsWithHooks.length, 1)
+              assert.strictEqual(alwaysPassingTestsWithHooks[0].meta[TEST_FINAL_STATUS], 'pass')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/{flaky-test-retries,hooks-flaky-test-retries}.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
+      if (version === 'latest') {
+        it('sets final_status tag to skip for disabled tests', async () => {
+          receiver.setSettings({ test_management: { enabled: true } })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-disabled.mjs': {
+                  tests: {
+                    'disable tests can disable a test': {
+                      properties: { disabled: true },
+                    },
+                  },
+                },
+                'ci-visibility/vitest-tests/hooks-test-management.mjs': {
+                  tests: {
+                    'test management with hooks can apply management to a failing test with hooks': {
+                      properties: { disabled: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const disabledTest = tests.find(test => test.meta[TEST_NAME] === 'disable tests can disable a test')
+              assert.ok(disabledTest, 'Expected to find the disabled test')
+              assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+
+              // With hooks: same behavior
+              const disabledTestWithHooks = tests.find(
+                test => test.meta[TEST_NAME] ===
+                  'test management with hooks can apply management to a failing test with hooks'
+              )
+              assert.ok(disabledTestWithHooks, 'Expected to find the disabled test with hooks')
+              assert.strictEqual(disabledTestWithHooks.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(disabledTestWithHooks.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+              assert.strictEqual(disabledTestWithHooks.meta[TEST_FINAL_STATUS], 'skip')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/{test-disabled,hooks-test-management}.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
+        it('sets final_status tag to skip for quarantined tests', async () => {
+          receiver.setSettings({ test_management: { enabled: true } })
+          receiver.setTestManagementTests({
+            vitest: {
+              suites: {
+                'ci-visibility/vitest-tests/test-quarantine.mjs': {
+                  tests: {
+                    'quarantine tests can quarantine a test': {
+                      properties: { quarantined: true },
+                    },
+                  },
+                },
+                'ci-visibility/vitest-tests/hooks-test-management.mjs': {
+                  tests: {
+                    'test management with hooks can apply management to a failing test with hooks': {
+                      properties: { quarantined: true },
+                    },
+                  },
+                },
+                'ci-visibility/vitest-tests/hooks-test-quarantine-failing-after-each.mjs': {
+                  tests: {
+                    'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails': {
+                      properties: { quarantined: true },
+                    },
+                  },
+                },
+              },
+            },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const quarantinedTest = tests.find(
+                test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test'
+              )
+              assert.ok(quarantinedTest, 'Expected to find the quarantined test')
+              // Quarantined test still runs and reports its actual status,
+              // but the final status must be 'skip' (errors are suppressed)
+              assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+
+              const passingTest = tests.find(test => test.meta[TEST_NAME] === 'quarantine tests can pass normally')
+              assert.ok(passingTest, 'Expected to find the passing test')
+              assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+
+              // With hooks: same behavior
+              const quarantinedTestWithHooks = tests.find(
+                test => test.meta[TEST_NAME] ===
+                  'test management with hooks can apply management to a failing test with hooks'
+              )
+              assert.ok(quarantinedTestWithHooks, 'Expected to find the quarantined test with hooks')
+              assert.strictEqual(quarantinedTestWithHooks.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(quarantinedTestWithHooks.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(quarantinedTestWithHooks.meta[TEST_FINAL_STATUS], 'skip')
+
+              const passingTestWithHooks = tests.find(
+                test => test.meta[TEST_NAME] === 'test management with hooks can pass normally with hooks'
+              )
+              assert.ok(passingTestWithHooks, 'Expected to find the passing test with hooks')
+              assert.strictEqual(passingTestWithHooks.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(passingTestWithHooks.meta[TEST_FINAL_STATUS], 'pass')
+
+              // With hooks where afterEach throws: test body passes but hook causes failure — still skip
+              const quarantinedTestFailingAfterEach = tests.find(
+                test => test.meta[TEST_NAME] ===
+                  'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails'
+              )
+              assert.ok(quarantinedTestFailingAfterEach, 'Expected to find the quarantined test with failing afterEach')
+              assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_STATUS], 'fail')
+              assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(quarantinedTestFailingAfterEach.meta[TEST_FINAL_STATUS], 'skip')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/' +
+                  '{test-quarantine,hooks-test-management,hooks-test-quarantine-failing-after-each}.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+      }
+    })
   })
 })
