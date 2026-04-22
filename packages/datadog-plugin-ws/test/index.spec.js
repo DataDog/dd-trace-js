@@ -31,6 +31,27 @@ describe('Plugin', () => {
           WebSocket = require(`../../../versions/ws@${version}`).get()
         })
 
+        it('should not crash when sending on a socket without spanContext', async () => {
+          const server = new WebSocket.Server({ port: 16015 })
+          const connectionPromise = once(server, 'connection')
+
+          const socket = new WebSocket('ws://localhost:16015')
+          const [serverSocket] = await connectionPromise
+          await once(socket, 'open')
+
+          assert.strictEqual(socket.spanContext, undefined)
+
+          const messagePromise = once(serverSocket, 'message')
+          await new Promise((resolve, reject) => {
+            socket.send('test message', {}, (err) => err ? reject(err) : resolve())
+          })
+          await messagePromise
+
+          socket.close()
+          await once(socket, 'close')
+          server.close()
+        })
+
         it('should emit original error in case close is called before connection is established', async () => {
           const socket = new WebSocket('wss://localhost:12345')
 
