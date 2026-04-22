@@ -611,7 +611,8 @@ describe('config', () => {
       })
 
       if (warning) {
-        assert.match(compressionWarnings.join('\n'), new RegExp(RegExp.escape(warning)))
+        const joined = compressionWarnings.join('\n')
+        assert.ok(joined.includes(warning), `Expected warning "${warning}" in:\n${joined}`)
       } else {
         assert.deepStrictEqual(compressionWarnings, [])
       }
