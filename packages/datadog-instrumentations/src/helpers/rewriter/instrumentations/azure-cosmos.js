@@ -3,7 +3,7 @@
 module.exports = [{
   module: {
     name: '@azure/cosmos',
-    versionRange: '>=4.4.1',
+    versionRange: '>=4.5.0',
     filePath: 'dist/browser/plugins/Plugin.js',
   },
   functionQuery: {
@@ -15,7 +15,7 @@ module.exports = [{
 {
   module: {
     name: '@azure/cosmos',
-    versionRange: '>=4.4.1',
+    versionRange: '>=4.5.0',
     filePath: 'dist/commonjs/plugins/Plugin.js',
   },
   functionQuery: {

@@ -169,6 +169,7 @@ jobs:
           - eventhubs
           - client
           - servicebus
+          - cosmosdb
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -204,9 +205,19 @@ jobs:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: "Localtestpass1!"
           SQL_SERVER: azuresqledge
+      azurecosmosemulator:
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:vnext-preview
+        ports:
+          - "127.0.0.1:8081:8081"
+          - "127.0.0.1:8080:8080"
+          - "127.0.0.1:1234:1234"
+        env:
+          ACCEPT_EULA: "Y"
+          BLOB_SERVER: azurite
+          METADATA_SERVER: azurite
     env:
       PLUGINS: azure-functions
-      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
+      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator,azurecosmosemulator
       SPEC: ${{ matrix.spec }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
