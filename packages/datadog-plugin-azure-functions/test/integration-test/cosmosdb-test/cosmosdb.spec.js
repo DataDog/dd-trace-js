@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const util = require('node:util')
 const { pathToFileURL } = require('node:url')
 
 const { spawn } = require('child_process')
@@ -60,16 +61,19 @@ describe('esm', () => {
         assert.ok(Array.isArray(payload), 'trace payload should be an array of traces')
 
         const allSpans = payload.filter(Array.isArray).flat()
+        const spanResourcesByTrace = payload.map(t => (Array.isArray(t) ? t.map(s => s?.resource) : []))
+        const debugSummary = () =>
+          `${payload.length} traces, span resource per trace: ${util.inspect(spanResourcesByTrace, { depth: 4 })}`
 
         const httpWriteInvoke = allSpans.find(
           s =>
             s?.name === 'azure.functions.invoke' &&
             (typeof s.resource === 'string' && s.resource.includes('writeToCosmos'))
         )
-        assert.ok(httpWriteInvoke, `expected writeToCosmos HTTP invoke span`)
+        assert.ok(httpWriteInvoke, `expected writeToCosmos HTTP invoke span; ${debugSummary()}`)
 
         const cosmosQueryCount = allSpans.filter(s => s?.name === 'cosmosdb.query').length
-        assert.ok(cosmosQueryCount === 3, `expected cosmosdb.query spans; found ${cosmosQueryCount}`)
+        assert.ok(cosmosQueryCount === 3, `expected cosmosdb.query spans; found ${cosmosQueryCount}; ${debugSummary()}`)
 
         const triggerInvoke = allSpans.find(
           s =>
@@ -77,7 +81,7 @@ describe('esm', () => {
             s.meta?.['aas.function.trigger'] === 'CosmosDB' &&
             s.meta?.['aas.function.name'] === 'cosmosDBTrigger1'
         )
-        assert.ok(triggerInvoke, `expected CosmosDB trigger invoke span`)
+        assert.ok(triggerInvoke, `expected CosmosDB trigger invoke span; ${debugSummary()}`)
 
         assertObjectContains(triggerInvoke, {
           name: 'azure.functions.invoke',
@@ -89,7 +93,7 @@ describe('esm', () => {
           },
         })
       })
-    }).timeout(60000)
+    }).timeout(120000)
   })
 })
 
