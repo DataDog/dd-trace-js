@@ -31,7 +31,8 @@ function extractURL (req) {
 }
 
 function getProtocol (req) {
-  return (req.socket?.encrypted || req.connection?.encrypted) ? 'https' : 'http'
+  // Do not check deprecated `req.connection` property.
+  return req.socket?.encrypted ? 'https' : 'http'
 }
 
 /**
