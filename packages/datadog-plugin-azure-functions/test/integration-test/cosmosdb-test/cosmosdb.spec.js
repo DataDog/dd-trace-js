@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const util = require('node:util')
 const { pathToFileURL } = require('node:url')
 
 const { spawn } = require('child_process')
@@ -61,21 +60,16 @@ describe('esm', () => {
         assert.ok(Array.isArray(payload), 'trace payload should be an array of traces')
 
         const allSpans = payload.filter(Array.isArray).flat()
-        const spanNamesByTrace = payload.map(t => (Array.isArray(t) ? t.map(s => s?.name) : []))
-        const debugSummary = () =>
-          `${payload.length} traces, span names per trace: ${util.inspect(spanNamesByTrace, { depth: 4 })}`
 
         const httpWriteInvoke = allSpans.find(
           s =>
             s?.name === 'azure.functions.invoke' &&
-            (s.meta?.['aas.function.name'] === 'writeToCosmos' ||
-              s.meta?.['http.route'] === '/api/writeToCosmos' ||
-              (typeof s.resource === 'string' && s.resource.includes('writeToCosmos')))
+            (typeof s.resource === 'string' && s.resource.includes('writeToCosmos'))
         )
-        assert.ok(httpWriteInvoke, `expected writeToCosmos HTTP invoke span; ${debugSummary()}`)
+        assert.ok(httpWriteInvoke, `expected writeToCosmos HTTP invoke span`)
 
         const cosmosQueryCount = allSpans.filter(s => s?.name === 'cosmosdb.query').length
-        assert.ok(cosmosQueryCount >= 1, `expected cosmosdb.query spans; found ${cosmosQueryCount}; ${debugSummary()}`)
+        assert.ok(cosmosQueryCount === 3, `expected cosmosdb.query spans; found ${cosmosQueryCount}`)
 
         const triggerInvoke = allSpans.find(
           s =>
@@ -83,7 +77,7 @@ describe('esm', () => {
             s.meta?.['aas.function.trigger'] === 'CosmosDB' &&
             s.meta?.['aas.function.name'] === 'cosmosDBTrigger1'
         )
-        assert.ok(triggerInvoke, `expected CosmosDB trigger invoke span; ${debugSummary()}`)
+        assert.ok(triggerInvoke, `expected CosmosDB trigger invoke span`)
 
         assertObjectContains(triggerInvoke, {
           name: 'azure.functions.invoke',
@@ -95,7 +89,7 @@ describe('esm', () => {
           },
         })
       })
-    }).timeout(120000)
+    }).timeout(60000)
   })
 })
 
