@@ -115,6 +115,8 @@ function assertOnBreakpoint (done, snapshotConfig, callback) {
   if (typeof snapshotConfig === 'function') {
     callback = snapshotConfig
     snapshotConfig = DEFAULT_CAPTURE_LIMITS
+  } else {
+    snapshotConfig = { ...DEFAULT_CAPTURE_LIMITS, ...snapshotConfig }
   }
 
   session.once('Debugger.paused', ({ params }) => {
