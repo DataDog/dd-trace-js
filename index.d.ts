@@ -272,6 +272,7 @@ interface Plugins {
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
   "mocha": tracer.plugins.mocha;
+  "modelcontextprotocol-sdk": tracer.plugins.modelcontextprotocol_sdk;
   "moleculer": tracer.plugins.moleculer;
   "mongodb-core": tracer.plugins.mongodb_core;
   "mongoose": tracer.plugins.mongoose;
@@ -665,7 +666,15 @@ declare namespace tracer {
        * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      eventLoop?: boolean
+      eventLoop?: boolean,
+
+       /**
+       * Whether to use native metrics. When set to false, forces the JS implementation
+       * @default true
+       * @env DD_RUNTIME_METRICS_NATIVE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      native?: boolean
     }
 
     /**
@@ -795,7 +804,7 @@ declare namespace tracer {
          * Whether to request blocking mode when evaluating prompts via auto-instrumentation.
          * When `true`, AI Guard will block requests that violate security policies.
          * When `false`, AI Guard evaluates but never blocks (monitor-only mode).
-         * @default false
+         * @default true
          * @env DD_AI_GUARD_BLOCK
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
@@ -1848,6 +1857,10 @@ declare namespace tracer {
        */
       tags: string[];
       /**
+       * Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })
+       */
+      tagProbabilities: { [key: string]: number }
+      /**
        * Sensitive Data Scanner findings from the evaluation.
        */
       sds: Object[];
@@ -1866,6 +1879,10 @@ declare namespace tracer {
        * List of tags associated with the evaluation (e.g. indirect-prompt-injection)
        */
       tags: string[];
+      /**
+       * Dictionary of tag probabilities (e.g. { indirect-prompt-injection: 0.2, jailbreak-attempt: 0.8 })
+       */
+      tagProbabilities: { [key: string]: number }
       /**
        * Sensitive Data Scanner findings from the evaluation.
        */
@@ -2832,11 +2849,18 @@ declare namespace tracer {
      * [mocha](https://mochajs.org/) module.
      */
     interface mocha extends Integration {}
-
+    
+    /**
+     * This plugin automatically instruments the
+     * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
+     */
+    interface modelcontextprotocol_sdk extends Instrumentation {}
+    
     /**
      * This plugin automatically instruments the
      * [moleculer](https://moleculer.services/) module.
      */
+
     interface moleculer extends Moleculer {
       /**
        * Configuration for Moleculer clients. Set to false to disable client
@@ -3048,6 +3072,14 @@ declare namespace tracer {
        * @returns true to instrument the command, false to skip it
        */
       filter?: (command: string) => boolean;
+
+      /**
+       * Whether to use a different service name for each Redis instance based
+       * on the configured connection name of the client.
+       *
+       * @default false
+       */
+      splitByInstance?: boolean;
     }
 
     /**

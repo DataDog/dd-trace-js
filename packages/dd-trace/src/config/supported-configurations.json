@@ -46,12 +46,12 @@
     ],
     "DD_AI_GUARD_BLOCK": [
       {
-        "implementation": "B",
+        "implementation": "C",
         "type": "boolean",
         "configurationNames": [
           "experimental.aiguard.block"
         ],
-        "default": "false"
+        "default": "true"
       }
     ],
     "DD_AI_GUARD_ENABLED": [
@@ -1571,6 +1571,16 @@
         "implementation": "A",
         "type": "int",
         "default": "10000"
+      }
+    ],
+    "DD_RUNTIME_METRICS_NATIVE": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "runtimeMetrics.native"
+        ],
+        "default": "true"
       }
     ],
     "DD_RUNTIME_METRICS_GC_ENABLED": [
@@ -3100,6 +3110,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_MODELCONTEXTPROTOCOL_SDK_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_MOLECULER_ENABLED": [
       {
         "implementation": "A",
@@ -3442,7 +3459,10 @@
           "tracePropagationStyle.extract"
         ],
         "default": "datadog, tracecontext, baggage",
-        "transform": "toLowerCase"
+        "transform": "toLowerCase",
+        "aliases": [
+          "DD_TRACE_PROPAGATION_STYLE"
+        ]
       }
     ],
     "DD_TRACE_PROPAGATION_STYLE_INJECT": [
@@ -3453,7 +3473,10 @@
           "tracePropagationStyle.inject"
         ],
         "default": "datadog, tracecontext, baggage",
-        "transform": "toLowerCase"
+        "transform": "toLowerCase",
+        "aliases": [
+          "DD_TRACE_PROPAGATION_STYLE"
+        ]
       }
     ],
     "DD_TRACE_PROTOBUFJS_ENABLED": [
@@ -3884,6 +3907,47 @@
         "type": "string",
         "default": null,
         "internalPropertyName": "otelHeaders"
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": [
+      {
+        "implementation": "A",
+        "type": "string",
+        "default": null,
+        "internalPropertyName": "otelTracesUrl"
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_TRACES_HEADERS": [
+      {
+        "implementation": "B",
+        "type": "map",
+        "default": null,
+        "internalPropertyName": "otelTracesHeaders",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_HEADERS"
+        ]
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
+      {
+        "implementation": "B",
+        "type": "string",
+        "default": "http/json",
+        "internalPropertyName": "otelTracesProtocol",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_PROTOCOL"
+        ]
+      }
+    ],
+    "OTEL_EXPORTER_OTLP_TRACES_TIMEOUT": [
+      {
+        "implementation": "B",
+        "type": "int",
+        "internalPropertyName": "otelTracesTimeout",
+        "default": "10000",
+        "aliases": [
+          "OTEL_EXPORTER_OTLP_TIMEOUT"
+        ]
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": [

@@ -255,10 +255,10 @@ class Tracer extends NoopProxy {
     // do not stop tracer initialization if the profiler fails to be imported
     try {
       return require('./profiler').start(config)
-    } catch (e) {
+    } catch (error) {
       log.error(
         'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
-        e
+        error
       )
       return false
     }
@@ -279,7 +279,12 @@ class Tracer extends NoopProxy {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
-        this._tracer = new DatadogTracer(config, prioritySampler)
+        let otlpExporter
+        if (config.otelTracesEnabled) {
+          const { buildResourceAttributes, createOtlpTraceExporter } = require('./opentelemetry/trace')
+          otlpExporter = createOtlpTraceExporter(config, buildResourceAttributes(config))
+        }
+        this._tracer = new DatadogTracer(config, prioritySampler, otlpExporter)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)

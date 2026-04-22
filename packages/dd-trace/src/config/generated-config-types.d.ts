@@ -297,6 +297,7 @@ export interface GeneratedConfig {
   DD_TRACE_MIDDIE_ENABLED: boolean;
   DD_TRACE_MOCHA_EACH_ENABLED: boolean;
   DD_TRACE_MOCHA_ENABLED: boolean;
+  DD_TRACE_MODELCONTEXTPROTOCOL_SDK_ENABLED: boolean;
   DD_TRACE_MOLECULER_ENABLED: boolean;
   DD_TRACE_MONGODB_CORE_ENABLED: boolean;
   DD_TRACE_MONGODB_ENABLED: boolean;
@@ -504,6 +505,10 @@ export interface GeneratedConfig {
   otelMetricsUrl: string | undefined;
   otelProtocol: string;
   otelTimeout: number;
+  otelTracesHeaders: Record<string, string> | undefined;
+  otelTracesProtocol: string;
+  otelTracesTimeout: number;
+  otelTracesUrl: string | undefined;
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {
@@ -526,6 +531,7 @@ export interface GeneratedConfig {
     enabled: boolean;
     eventLoop: boolean;
     gc: boolean;
+    native: boolean;
   };
   runtimeMetricsRuntimeId: boolean;
   sampleRate: number | undefined;

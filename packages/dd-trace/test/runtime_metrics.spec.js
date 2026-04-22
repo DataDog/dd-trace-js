@@ -212,6 +212,9 @@ function createGarbage (count = 50) {
             obj: {},
             invalid: 't{e*s#t5-:./',
           },
+          getOrigin: () => {
+            return 'default'
+          },
         }
 
         clock = sinon.useFakeTimers({
@@ -466,6 +469,59 @@ function createGarbage (count = 50) {
           sinon.assert.calledWith(client.gauge, 'runtime.node.gc.pause.95percentile')
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.utilization')
           sinon.assert.neverCalledWith(client.gauge, 'runtime.node.event_loop.delay.95percentile')
+        })
+
+        it('should not load native metrics when native is false, even if eventLoop or gc are enabled', () => {
+          // Stop the default runtimeMetrics instance started in beforeEach
+          runtimeMetrics.stop()
+
+          const nativeMetricsStart = sinon.spy()
+          const nativeMetricsModule = {
+            start: nativeMetricsStart,
+            stop: sinon.spy(),
+            stats: sinon.stub().returns({ cpu: { user: 0, system: 0 }, heap: { spaces: [] }, eventLoop: {}, gc: {} }),
+          }
+
+          const localClient = {
+            gauge: sinon.spy(),
+            increment: sinon.spy(),
+            histogram: sinon.spy(),
+            flush: sinon.spy(),
+          }
+
+          const LocalClient = sinon.spy(function () {
+            return {
+              gauge: localClient.gauge,
+              increment: localClient.increment,
+              histogram: localClient.histogram,
+              flush: localClient.flush,
+            }
+          })
+          LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+            '../dogstatsd': {
+              DogStatsDClient: LocalClient,
+            },
+            '@datadog/native-metrics': nativeMetricsModule,
+          })
+
+          const configNativeDisabled = {
+            ...config,
+            runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, native: false },
+          }
+
+          localRuntimeMetrics.start(configNativeDisabled)
+
+          // Native metrics should not have been started despite eventLoop and gc being enabled
+          sinon.assert.notCalled(nativeMetricsStart)
+
+          // Should still collect basic metrics via the JS fallback path
+          clock.tick(10000)
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
+          sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
+
+          localRuntimeMetrics.stop()
         })
       })
 

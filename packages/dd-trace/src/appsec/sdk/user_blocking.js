@@ -19,7 +19,7 @@ function checkUserAndSetUser (tracer, user) {
     return false
   }
 
-  const rootSpan = getRootSpan(tracer)
+  const rootSpan = getRootSpan()
   if (rootSpan) {
     if (!rootSpan.context()._tags['usr.id']) {
       setUserTags(user, rootSpan)
@@ -45,7 +45,7 @@ function blockRequest (tracer, req, res) {
     return false
   }
 
-  const rootSpan = getRootSpan(tracer)
+  const rootSpan = getRootSpan()
   if (!rootSpan) {
     log.warn('[ASM] Root span not available in blockRequest')
     return false

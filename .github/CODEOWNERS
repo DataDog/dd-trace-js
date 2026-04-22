@@ -157,9 +157,12 @@
 /packages/**/*.dsm.spec.js @DataDog/data-streams-monitoring
 
 # API SDK Capabilities
+/eslint-rules/ @DataDog/apm-sdk-capabilities-js
+
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry-logs.spec.js @DataDog/apm-sdk-capabilities-js
+/integration-tests/opentelemetry-traces.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities-js
@@ -200,9 +203,9 @@
 /scripts/generate-config-types.js @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
-/integration-tests/openfeature/ @DataDog/feature-flagging
-/packages/dd-trace/src/openfeature/ @DataDog/feature-flagging
-/packages/dd-trace/test/openfeature/ @DataDog/feature-flagging
+/integration-tests/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
 /.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
@@ -231,6 +234,7 @@
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
+/integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
 
 /packages/datadog-core @DataDog/lang-platform-js
@@ -262,3 +266,6 @@
 /packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/setup @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
+
+# Multiple teams
+/eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js

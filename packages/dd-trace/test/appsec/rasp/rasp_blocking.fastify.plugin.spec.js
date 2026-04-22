@@ -11,7 +11,7 @@ const { getConfigFresh } = require('../../helpers/config')
 const appsec = require('../../../src/appsec')
 
 const { withVersions } = require('../../setup/mocha')
-const { json: blockedJson } = require('../../../src/appsec/blocked_templates')
+const { blockedTemplateJson: blockedJson, setTestBlockingTemplates } = require('../utils')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - fastify blocking', () => {
@@ -28,6 +28,8 @@ describe('RASP - fastify blocking', () => {
           rasp: { enabled: true },
         },
       }))
+
+      setTestBlockingTemplates()
 
       const fastify = require(`../../../../../versions/fastify@${version}`).get()
       app = fastify()

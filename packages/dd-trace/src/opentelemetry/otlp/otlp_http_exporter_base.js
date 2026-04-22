@@ -116,11 +116,26 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Parses additional HTTP headers from a comma-separated string.
-   * @param {string} [headersString=''] - Comma-separated key=value pairs
+   * Parses additional HTTP headers from a comma-separated string or pre-parsed map.
+   * @param {string|Record<string, string>} [headersString=''] - Comma-separated key=value pairs or map
    * @returns {Record<string, string>} Parsed headers object
    */
   #parseAdditionalHeaders (headersString = '') {
+    if (headersString !== null && typeof headersString === 'object') {
+      // The config MAP parser uses tagger.add (which splits on ':'), so OTEL-format
+      // headers ('key=value') arrive with the full 'key=value' string as the map key
+      // and an empty string as the value. Re-split on '=' to get the correct pairs.
+      const result = {}
+      for (const [k, v] of Object.entries(headersString)) {
+        if (v === '' && k.includes('=')) {
+          const idx = k.indexOf('=')
+          result[k.slice(0, idx).trim()] = k.slice(idx + 1).trim()
+        } else {
+          result[k] = v
+        }
+      }
+      return result
+    }
     const headers = {}
     let key = ''
     let value = ''

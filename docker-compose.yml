@@ -6,13 +6,13 @@ services:
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite:3.35.0
     ports:
-        - "127.0.0.1:10000:10000"
-        - "127.0.0.1:10001:10001"
-        - "127.0.0.1:10002:10002"
+      - "127.0.0.1:10000:10000"
+      - "127.0.0.1:10001:10001"
+      - "127.0.0.1:10002:10002"
   azureeventhubsemulator:
     image: mcr.microsoft.com/azure-messaging/eventhubs-emulator:2.1.0
     volumes:
-       - "./packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
+      - "./packages/datadog-plugin-azure-functions/test/fixtures/eventhub-emulator-config.json:/Eventhubs_Emulator/ConfigFiles/Config.json"
     ports:
       - "127.0.0.1:5673:5672"
       - "127.0.0.1:9092:9092"
@@ -23,7 +23,7 @@ services:
   azureservicebusemulator:
     image: mcr.microsoft.com/azure-messaging/servicebus-emulator:1.1.2
     volumes:
-       - "./packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
+      - "./packages/datadog-plugin-azure-functions/test/fixtures/servicebus-emulator-config.json:/ServiceBus_Emulator/ConfigFiles/Config.json"
     ports:
       - "127.0.0.1:5672:5672"
       - "127.0.0.1:5300:5300"
@@ -37,8 +37,8 @@ services:
     ports:
       - "127.0.0.1:1433:1433"
     environment:
-        ACCEPT_EULA: "Y"
-        MSSQL_SA_PASSWORD: "Localtestpass1!"
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Localtestpass1!"
   couchbase:
     image: ghcr.io/datadog/couchbase-server-sandbox:latest
     ports:
@@ -51,9 +51,9 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
   mssql:
-  # A working MSSQL server is not available on ARM.
-  # This image provides _most_ of sqlserver functionalities, but
-  # does not support stored procedures (corresponding tests will fail)
+    # A working MSSQL server is not available on ARM.
+    # This image provides _most_ of sqlserver functionalities, but
+    # does not support stored procedures (corresponding tests will fail)
     image: mcr.microsoft.com/azure-sql-edge
     environment:
       - "ACCEPT_EULA=Y"
@@ -76,7 +76,7 @@ services:
     platform: linux/amd64
     command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
-       - "127.0.0.1:27017:27017"
+      - "127.0.0.1:27017:27017"
   mongo-prisma:
     image: prismagraphql/mongo-single-replica:4.4.3-bionic
     platform: linux/amd64
@@ -85,8 +85,8 @@ services:
   oracledb:
     image: quillbuilduser/oracle-18-xe
     ports:
-      - '127.0.0.1:1521:1521'
-      - '127.0.0.1:5500:5500'
+      - "127.0.0.1:1521:1521"
+      - "127.0.0.1:5500:5500"
   elasticsearch:
     image: elasticsearch:7.17.22
     environment:
@@ -115,7 +115,7 @@ services:
     ports:
       - "127.0.0.1:9042:9042"
   limitd:
-    image: rochdev/limitd
+    image: ghcr.io/rochdev/limitd
     environment:
       - BUCKET_1_NAME=user
       - BUCKET_1_SIZE=10
@@ -187,8 +187,8 @@ services:
   openldap:
     image: bitnami/openldap:latest
     ports:
-      - '127.0.0.1:1389:1389'
-      - '127.0.0.1:1636:1636'
+      - "127.0.0.1:1389:1389"
+      - "127.0.0.1:1636:1636"
     environment:
       - LDAP_ADMIN_USERNAME=admin
       - LDAP_ADMIN_PASSWORD=adminpassword
@@ -196,7 +196,7 @@ services:
       - LDAP_PASSWORDS=password1,password2
 
   testagent:
-    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.1
+    image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.47.0
     ports:
       - "127.0.0.1:9126:9126"
       - "127.0.0.1:4318:4318"

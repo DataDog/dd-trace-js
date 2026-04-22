@@ -1,7 +1,10 @@
 'use strict'
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
+const { storage } = require('../../../datadog-core')
 const log = require('../log')
+const { extractIp } = require('../plugins/util/ip_extractor')
 const telemetryMetrics = require('../telemetry/metrics')
 const tracerVersion = require('../../../../package.json').version
 const { keepTrace } = require('../priority_sampler')
@@ -25,11 +28,12 @@ const appsecMetrics = telemetryMetrics.manager.namespace('appsec')
 const ALLOW = 'ALLOW'
 
 class AIGuardAbortError extends Error {
-  constructor (reason, tags, sds) {
+  constructor (reason, tags, tagProbs, sds) {
     super(reason)
     this.name = 'AIGuardAbortError'
     this.reason = reason
     this.tags = tags
+    this.tagProbabilities = tagProbs
     this.sds = sds || []
   }
 }
@@ -56,6 +60,7 @@ class AIGuard extends NoopAIGuard {
   #maxMessagesLength
   #maxContentSize
   #meta
+  #config
 
   /**
    * @param {import('../tracer')} tracer - Tracer instance
@@ -83,6 +88,7 @@ class AIGuard extends NoopAIGuard {
     this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
     this.#maxContentSize = config.experimental.aiguard.maxContentSize
     this.#meta = { service: config.service, env: config.env }
+    this.#config = config
     this.#initialized = true
   }
 
@@ -138,6 +144,42 @@ class AIGuard extends NoopAIGuard {
     return null
   }
 
+  #setRootSpanClientIpTags (rootSpan) {
+    if (!rootSpan) return
+
+    const currentTags = rootSpan.context()._tags
+    const needsHttpClientIp = !Object.hasOwn(currentTags, HTTP_CLIENT_IP)
+    const needsNetworkClientIp = !Object.hasOwn(currentTags, NETWORK_CLIENT_IP)
+
+    if (!needsHttpClientIp && !needsNetworkClientIp) return
+
+    const req = storage('legacy').getStore()?.req
+
+    if (!req) return
+
+    const newTags = {}
+
+    if (needsHttpClientIp) {
+      const clientIp = extractIp(this.#config, req)
+
+      if (clientIp) {
+        newTags[HTTP_CLIENT_IP] = clientIp
+      }
+    }
+
+    if (needsNetworkClientIp) {
+      const networkClientIp = req.socket?.remoteAddress
+
+      if (networkClientIp) {
+        newTags[NETWORK_CLIENT_IP] = networkClientIp
+      }
+    }
+
+    if (Object.keys(newTags).length > 0) {
+      rootSpan.addTags(newTags)
+    }
+  }
+
   evaluate (messages, opts) {
     if (!this.#initialized) {
       return super.evaluate(messages, opts)
@@ -161,6 +203,7 @@ class AIGuard extends NoopAIGuard {
       }
       const rootSpan = span.context()?._trace?.started?.[0]
       if (rootSpan) {
+        this.#setRootSpanClientIpTags(rootSpan)
         // keepTrace must be called before executeRequest so the sampling decision
         // is propagated correctly to outgoing HTTP client calls.
         keepTrace(rootSpan, AI_GUARD)
@@ -188,38 +231,37 @@ class AIGuard extends NoopAIGuard {
           `AI Guard service call failed, status ${response.status}`,
           { errors: response.body?.errors })
       }
-      let action, reason, tags, sdsFindings, blockingEnabled
-      try {
-        const attr = response.body.data.attributes
-        if (!attr.action) {
-          throw new Error('Action missing from response')
-        }
-        action = attr.action
-        reason = attr.reason
-        tags = attr.tags
-        sdsFindings = attr.sds_findings || []
-        blockingEnabled = attr.is_blocking_enabled ?? false
-      } catch (e) {
+      const attr = response.body?.data?.attributes
+      if (!attr?.action) {
         appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { error: true }).inc(1)
-        throw new AIGuardClientError(`AI Guard service returned unexpected response : ${response.body}`, { cause: e })
+        throw new AIGuardClientError(`AI Guard service returned unexpected response : ${response.body}`)
       }
+      const action = attr.action
+      const reason = attr.reason
+      const tags = attr.tags ?? []
+      if (tags.length > 0) {
+        metaStruct.attack_categories = tags
+      }
+      const sdsFindings = attr.sds_findings ?? []
+      if (sdsFindings.length > 0) {
+        metaStruct.sds = sdsFindings
+      }
+      const tagProbabilities = attr.tag_probs ?? {}
+      if (attr.tag_probs) {
+        metaStruct.tag_probs = tagProbabilities
+      }
+      const blockingEnabled = attr.is_blocking_enabled ?? false
       const shouldBlock = block && blockingEnabled && action !== ALLOW
       appsecMetrics.count(AI_GUARD_TELEMETRY_REQUESTS, { action, error: false, block: shouldBlock }).inc(1)
       span.setTag(AI_GUARD_ACTION_TAG_KEY, action)
       if (reason) {
         span.setTag(AI_GUARD_REASON_TAG_KEY, reason)
       }
-      if (tags?.length > 0) {
-        metaStruct.attack_categories = tags
-      }
-      if (sdsFindings?.length > 0) {
-        metaStruct.sds = sdsFindings
-      }
       if (shouldBlock) {
         span.setTag(AI_GUARD_BLOCKED_TAG_KEY, 'true')
-        throw new AIGuardAbortError(reason, tags, sdsFindings)
+        throw new AIGuardAbortError(reason, tags, tagProbabilities, sdsFindings)
       }
-      return { action, reason, tags, sds: sdsFindings }
+      return { action, reason, tags, tagProbabilities, sds: sdsFindings }
     })
   }
 }
