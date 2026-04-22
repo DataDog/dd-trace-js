@@ -233,4 +233,14 @@ module.exports = {
     lastCpuUsage = null
     lastTime = 0
   },
+
+  // Noop methods expected by the rest of the tracer (e.g. agent writer)
+  // when this module replaces the DogStatsD runtime_metrics module.
+  track () {},
+  boolean () {},
+  histogram () {},
+  count () {},
+  gauge () {},
+  increment () {},
+  decrement () {},
 }
