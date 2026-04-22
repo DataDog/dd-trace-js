@@ -152,7 +152,7 @@ benchmark-serverless-trigger:
     - interruptible: true
   trigger:
     project: DataDog/serverless-tools
-    branch: onzia/add-back-checks-by-increase
+    branch: onzia/test-noble
     strategy: depend
   allow_failure: true
   variables:
