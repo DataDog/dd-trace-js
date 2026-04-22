@@ -81,10 +81,10 @@ class Tracer {
   }
 
   _convertOtelContextToDatadog (traceId, spanId, traceFlag, ts, meta = {}) {
-    const origin = null
+    let origin = null
     let samplingPriority = traceFlag
 
-    ts = ts?.traceparent || null
+    ts = ts?.traceparent
 
     if (ts) {
       // Use TraceState.fromString to parse the tracestate header
@@ -101,19 +101,17 @@ class Tracer {
         // Assuming ddTraceStateData is now a Map or similar structure containing Datadog trace state data
         // Extract values as needed, similar to the original logic
         const samplingPriorityTs = ddTraceStateData.get('s')
-        const origin = ddTraceStateData.get('o')
+        origin = ddTraceStateData.get('o') ?? null
         // Convert Map to object for meta
         const otherPropagatedTags = Object.fromEntries(ddTraceStateData.entries())
 
         // Update meta and samplingPriority based on extracted values
         Object.assign(meta, otherPropagatedTags)
-        samplingPriority = TextMapPropagator._getSamplingPriority(
-          traceFlag,
-          Number.parseInt(samplingPriorityTs, 10),
-          origin
-        )
+        // Guard against an undefined/empty `s:` field that would result in NaN.
+        const tracestateSamplingPriority = samplingPriorityTs ? Math.trunc(samplingPriorityTs) : undefined
+        samplingPriority = TextMapPropagator._getSamplingPriority(traceFlag, tracestateSamplingPriority, origin)
       } else {
-        log.debug('no dd list member in tracestate from incoming request:', ts)
+        log.debug('No dd list member in tracestate from incoming request:', ts)
       }
     }
 
@@ -121,8 +119,8 @@ class Tracer {
       traceId: id(traceId, 16), spanId: id(), tags: meta, parentId: id(spanId, 16),
     })
 
-    spanContext._sampling = { priority: samplingPriority }
-    spanContext._trace = { origin }
+    spanContext._ddContext._sampling = { priority: samplingPriority }
+    spanContext._ddContext._trace = { ...spanContext._ddContext._trace, origin }
     return spanContext
   }
 
