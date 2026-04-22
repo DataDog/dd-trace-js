@@ -120,9 +120,11 @@ async function benchPureGraphql () {
       1 /* pets */ + 20 /* pets */ * (1 /* type */ + 1 /* name */ + 1 /* owner */ + 1 /* owner.name */))
   const totalFields = fieldsPerQuery * queriesPerIter
 
+  const perQuery = (minMs / queriesPerIter).toFixed(2).padStart(10)
+  const perField = ((minMs * 1e6) / totalFields).toFixed(1).padStart(10)
   console.log(`  6-query batch                                    ${minMs.toFixed(2).padStart(10)} ms`)
-  console.log(`  per-query                                        ${(minMs / queriesPerIter).toFixed(2).padStart(10)} ms`)
-  console.log(`  per-field                                        ${((minMs * 1e6) / totalFields).toFixed(1).padStart(10)} ns  (~${totalFields} fields/batch)`)
+  console.log(`  per-query                                        ${perQuery} ms`)
+  console.log(`  per-field                                        ${perField} ns  (~${totalFields} fields/batch)`)
 
   results.push({ name: 'graphql 6-query batch (ms)', ops: queriesPerIter, ns: minMs * 1e6 })
 }
@@ -141,7 +143,7 @@ function benchChannelPublish () {
   const payload = { a: 1 }
 
   bench('publish with zero subscribers', 1e6, () => ch.publish(payload))
-  bench('publish with one subscriber',   1e6, () => chWith.publish(payload))
+  bench('publish with one subscriber', 1e6, () => chWith.publish(payload))
 }
 
 // ----------------------------------------------------------------------------
@@ -166,7 +168,7 @@ function benchWrapResolveFastPath () {
   const resolver = function (source, args) { return args }
   const wrapped = makeWrappedResolver(resolver)
 
-  bench('direct resolver call',      1e7, () => resolver({}, { n: 1 }))
+  bench('direct resolver call', 1e7, () => resolver({}, { n: 1 }))
   bench('wrapped resolver (no subs)', 1e7, () => wrapped({}, { n: 1 }, {}, {}))
 }
 
@@ -204,11 +206,13 @@ function benchAssertField () {
   }
 
   // Deep path to exercise the linked-list walk: friends.0.pets.0.owner.name
+  const friendsNode = { key: 'friends' }
+  const pets0Node = { key: 0, prev: { key: 'pets', prev: { key: 0, prev: friendsNode } } }
   const info = {
     fieldName: 'name',
     path: {
       key: 'name',
-      prev: { key: 0, prev: { key: 'owner', prev: { key: 0, prev: { key: 'pets', prev: { key: 0, prev: { key: 'friends' } } } } } }
+      prev: { key: 0, prev: { key: 'owner', prev: pets0Node } },
     },
   }
 
@@ -249,15 +253,16 @@ function benchCallInAsyncScope () {
   }
 
   const ac = new AbortController()
-  const asyncResolver = async () => 'world'
+  const asyncResolver = () => Promise.resolve('world')
   const syncResolver = () => 'world'
   const cb = () => {}
 
-  bench('direct sync resolver call',           1e7, () => syncResolver())
-  bench('callInAsyncScope(sync resolver)',     1e7, () => callInAsyncScope(syncResolver, null, [], ac, cb))
+  bench('direct sync resolver call', 1e7, () => syncResolver())
+  bench('callInAsyncScope(sync resolver)', 1e7, () => callInAsyncScope(syncResolver, null, [], ac, cb))
   return (async () => {
-    await benchAsync('direct async resolver call (awaited)', 2e4, async () => { await asyncResolver() })
-    await benchAsync('callInAsyncScope(async resolver)',    2e4, async () => { await callInAsyncScope(asyncResolver, null, [], ac, cb) })
+    await benchAsync('direct async resolver call (awaited)', 2e4, () => asyncResolver())
+    await benchAsync('callInAsyncScope(async resolver)', 2e4,
+      () => callInAsyncScope(asyncResolver, null, [], ac, cb))
   })()
 }
 
@@ -325,10 +330,10 @@ async function benchPhaseBreakdown () {
 
   const subs = [
     ['tracing:orchestrion:graphql:apm:graphql:execute:start', 'executeStart'],
-    ['tracing:orchestrion:graphql:apm:graphql:execute:end',   'executeEnd'],
-    ['apm:graphql:resolve:start',                             'resolveStart'],
-    ['apm:graphql:resolve:finish',                            'resolveFinish'],
-    ['apm:graphql:resolve:updateField',                       'resolveUpdateField'],
+    ['tracing:orchestrion:graphql:apm:graphql:execute:end', 'executeEnd'],
+    ['apm:graphql:resolve:start', 'resolveStart'],
+    ['apm:graphql:resolve:finish', 'resolveFinish'],
+    ['apm:graphql:resolve:updateField', 'resolveUpdateField'],
   ]
 
   // Hook each channel to measure handler wall time. We install before-publish
