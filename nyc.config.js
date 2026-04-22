@@ -30,6 +30,7 @@ module.exports = {
   ],
   exclude: [
     '**/.bun/**',
+    '**/*-browser-scripts.js', // Serialized into browsers; coverage counters would ReferenceError.
     '**/*.spec.*',
     '**/fixtures/**',
     '**/integration-tests/**',
