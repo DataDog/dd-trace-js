@@ -3110,6 +3110,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_MODELCONTEXTPROTOCOL_SDK_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_MOLECULER_ENABLED": [
       {
         "implementation": "A",
