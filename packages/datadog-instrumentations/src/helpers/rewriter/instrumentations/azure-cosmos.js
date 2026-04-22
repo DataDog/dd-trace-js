@@ -27,7 +27,7 @@ module.exports = [{
 {
   module: {
     name: '@azure/cosmos',
-    versionRange: '>=4.4.1',
+    versionRange: '>=4.5.0',
     filePath: 'dist/esm/plugins/Plugin.js',
   },
   functionQuery: {
@@ -39,7 +39,7 @@ module.exports = [{
 {
   module: {
     name: '@azure/cosmos',
-    versionRange: '>=4.4.1',
+    versionRange: '>=4.5.0',
     filePath: 'dist/react-native/plugins/Plugin.js',
   },
   functionQuery: {
