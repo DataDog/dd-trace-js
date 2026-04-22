@@ -35,6 +35,10 @@ const web = {
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
       serviceSource: optionServiceSource,
     },
+    'modelcontextprotocol-sdk': {
+      opName: () => 'mcp.tool.call',
+      serviceName: ({ pluginService, tracerService }) => pluginService || tracerService,
+    },
     aws: {
       opName: () => 'aws.request',
       serviceName: awsServiceV0,

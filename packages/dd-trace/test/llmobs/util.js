@@ -258,6 +258,9 @@ function assertLlmObsSpanEvent (actual, expected) {
     expectedMeta.input = { documents: inputDocuments }
   } else if (inputValue) {
     expectedMeta.input = { value: inputValue }
+  } else {
+    // span_processor.js always sets meta.input = {} even when no input is tagged
+    expectedMeta.input = {}
   }
 
   const expectedSpanEvent = {
