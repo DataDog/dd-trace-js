@@ -8,6 +8,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { assertObjectContains } = require('../helpers')
 const startApiMock = require('./api-mock')
+const startOpenAIMock = require('./openai-mock')
 const { executeRequest } = require('./util')
 
 function assertHasGuardSpan (payload, predicate) {
@@ -18,18 +19,20 @@ function assertHasGuardSpan (payload, predicate) {
 }
 
 describe('AIGuard SDK integration tests', () => {
-  let cwd, appFile, agent, proc, api, url
+  let cwd, appFile, agent, proc, api, openaiApi, url
 
-  useSandbox(['express', 'ai@6.0.39'])
+  useSandbox(['express', 'ai@6.0.39', 'openai@5'])
 
   before(async function () {
     cwd = sandboxCwd()
     appFile = path.join(cwd, 'aiguard/server.js')
     api = await startApiMock()
+    openaiApi = await startOpenAIMock()
   })
 
   after(async () => {
     await api.close()
+    await openaiApi.close()
   })
 
   beforeEach(async () => {
@@ -47,6 +50,7 @@ describe('AIGuard SDK integration tests', () => {
         DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
         DD_API_KEY: 'DD_API_KEY',
         DD_APP_KEY: 'DD_APP_KEY',
+        OPENAI_BASE_URL: `http://127.0.0.1:${openaiApi.address().port}/v1`,
       },
     })
     url = `${proc.url}`
@@ -183,6 +187,41 @@ describe('AIGuard SDK integration tests', () => {
       await agent.assertMessageReceived(({ payload }) => {
         assertHasGuardSpan(payload, span =>
           span.meta['ai_guard.target'] === target &&
+          span.meta['ai_guard.action'] === 'DENY' &&
+          span.meta['ai_guard.blocked'] === 'true'
+        )
+      })
+    })
+  }
+
+  const openaiSuite = [
+    { endpoint: '/openai-chat', name: 'chat.completions.create' },
+    { endpoint: '/openai-responses', name: 'responses.create' },
+  ]
+
+  for (const { endpoint, name } of openaiSuite) {
+    it(`allows safe OpenAI ${name} requests`, async () => {
+      const response = await executeRequest(`${url}${endpoint}?deny=false`)
+      assert.strictEqual(response.status, 200)
+      assert.strictEqual(response.body.blocked, false)
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+        // One span for Before Model, one for After Model.
+        assert.strictEqual(guardSpans.length, 2)
+        for (const span of guardSpans) {
+          assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+        }
+      })
+    })
+
+    it(`blocks dangerous OpenAI ${name} requests at Before Model`, async () => {
+      const response = await executeRequest(`${url}${endpoint}?deny=true`)
+      assert.strictEqual(response.status, 403)
+      assert.deepStrictEqual(JSON.parse(response.body), { blocked: true, reason: 'Blocked by policy' })
+
+      await agent.assertMessageReceived(({ payload }) => {
+        assertHasGuardSpan(payload, span =>
           span.meta['ai_guard.action'] === 'DENY' &&
           span.meta['ai_guard.blocked'] === 'true'
         )

@@ -3,9 +3,44 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
+const {
+  buildChatCompletionOutputMessages,
+  buildResponsesOutputMessages,
+  convertChatCompletionMessages,
+  convertResponsesInput,
+} = require('./helpers/ai-messages')
+const { isAIGuardContextActive } = require('./helpers/ai-guard-context')
+const { aiguardChannel, publishToAIGuard } = require('./helpers/ai-guard-publish')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
+
+const AIGUARD_CONVERSATIONAL_RESOURCES = new Set(['chat.completions', 'responses'])
+
+/**
+ * Wraps `apiProm.parse` so that when the response body resolves, AI Guard "after model"
+ * evaluation runs and the caller's promise waits for both the Before Model evaluation
+ * (`inputEval`, already in flight) and the After Model evaluation to succeed before
+ * yielding the body. When either evaluation rejects with `AIGuardAbortError`, the
+ * caller's `.parse()` promise rejects with the same error.
+ *
+ * @param {object} apiProm - APIPromise returned from the OpenAI SDK method
+ * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
+ * @param {Array<object>} inputMessages - Already-converted AI Guard style input messages
+ * @param {Promise<void>} inputEval - Promise for the Before Model evaluation
+ */
+function wrapAPIPromiseForAIGuard (apiProm, baseResource, inputMessages, inputEval) {
+  shimmer.wrap(apiProm, 'parse', origParse => function () {
+    const parsed = origParse.apply(this, arguments)
+    return Promise.all([inputEval, parsed]).then(([, body]) => {
+      const outputMessages = baseResource === 'chat.completions'
+        ? buildChatCompletionOutputMessages(inputMessages, body?.choices?.[0]?.message)
+        : buildResponsesOutputMessages(inputMessages, body?.output)
+      if (!outputMessages) return body
+      return publishToAIGuard(outputMessages).then(() => body)
+    })
+  })
+}
 
 const V4_PACKAGE_SHIMS = [
   {
@@ -216,14 +251,21 @@ for (const extension of extensions) {
 
       for (const methodName of methods) {
         shimmer.wrap(targetPrototype, methodName, methodFn => function () {
-          if (!ch.start.hasSubscribers) {
-            return methodFn.apply(this, arguments)
-          }
-
           // The OpenAI library lets you set `stream: true` on the options arg to any method
           // However, we only want to handle streamed responses in specific cases
           // chat.completions and completions
           const stream = streamedResponse && getOption(arguments, 'stream', false)
+
+          // Streaming AI Guard support lands in a follow-up PR. For now, provider-level AI
+          // Guard only evaluates non-streaming responses.
+          const aiguardApplicable = !stream &&
+            AIGUARD_CONVERSATIONAL_RESOURCES.has(baseResource) &&
+            aiguardChannel.hasSubscribers &&
+            !isAIGuardContextActive()
+
+          if (!ch.start.hasSubscribers && !aiguardApplicable) {
+            return methodFn.apply(this, arguments)
+          }
 
           const client = this._client || this.client
 
@@ -233,8 +275,30 @@ for (const extension of extensions) {
             basePath: client.baseURL,
           }
 
+          // Compute AI Guard input messages before we start the LLM call so Before Model
+          // evaluation can run in parallel with it.
+          let aiguardInputMessages
+          if (aiguardApplicable) {
+            const callArgs = arguments[0]
+            const messages = baseResource === 'chat.completions'
+              ? convertChatCompletionMessages(callArgs?.messages)
+              : convertResponsesInput(callArgs?.input)
+            if (messages.length) aiguardInputMessages = messages
+          }
+
           return ch.start.runStores(ctx, () => {
             const apiProm = methodFn.apply(this, arguments)
+
+            // Kick off AI Guard Before Model evaluation in parallel with the LLM call.
+            // The LLM has no side effects, so it is safe to discard its response if AI Guard blocks.
+            let aiguardInputEval
+            if (aiguardInputMessages) {
+              aiguardInputEval = publishToAIGuard(aiguardInputMessages)
+              // Silence the unhandled rejection in the edge case where `.parse()` is never
+              // called; `wrapAPIPromiseForAIGuard` re-awaits the same promise and propagates
+              // the rejection to the caller when it is.
+              aiguardInputEval.catch(() => {})
+            }
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
               // this should only ever be invoked from a client.beta.chat.completions.parse call
@@ -264,6 +328,12 @@ for (const extension of extensions) {
 
               return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
             })
+
+            // AI Guard layer wraps `.parse` on top of the tracing layer so it sees the fully
+            // parsed response body and can publish the After Model evaluation.
+            if (aiguardInputEval) {
+              wrapAPIPromiseForAIGuard(apiProm, baseResource, aiguardInputMessages, aiguardInputEval)
+            }
 
             ch.end.publish(ctx)
 

@@ -4,25 +4,14 @@ const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
 const { convertVercelPromptToMessages, buildOutputMessages } = require('./helpers/ai-messages')
+const { runWithAIGuardContext } = require('./helpers/ai-guard-context')
+const { publishToAIGuard, aiguardChannel } = require('./helpers/ai-guard-publish')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
-const aiguardChannel = channel('dd-trace:ai:aiguard')
 
 const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
-
-/**
- * Publishes already-converted AI guard style messages to the AIGuard channel.
- *
- * @param {Array<object>} messages - AI guard style messages to evaluate
- * @returns {Promise<void>}
- */
-function publishToAIGuard (messages) {
-  return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, resolve, reject })
-  })
-}
 
 /**
  * Wraps a Vercel AI language model's doGenerate and doStream methods to evaluate
@@ -45,14 +34,19 @@ function wrapModelWithAIGuard (model) {
         const inputMessages = convertVercelPromptToMessages(options.prompt)
         if (!inputMessages.length) return originalResult
 
-        // Run AI Guard input evaluation and LLM call in parallel.
-        // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
-          .then(([, result]) => {
-            if (!result.content?.length) return result
-            return publishToAIGuard(buildOutputMessages(inputMessages, result.content))
-              .then(() => result)
-          })
+        // Set the collision-handling flag so provider-SDK integrations (e.g. openai)
+        // reached by this call skip their own AI Guard evaluation. Only the framework
+        // layer should own the evaluation when both are present.
+        return runWithAIGuardContext(() =>
+          // Run AI Guard input evaluation and LLM call in parallel.
+          // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
+          Promise.all([publishToAIGuard(inputMessages), originalResult])
+            .then(([, result]) => {
+              if (!result.content?.length) return result
+              return publishToAIGuard(buildOutputMessages(inputMessages, result.content))
+                .then(() => result)
+            })
+        )
       }
     })
   }
@@ -68,44 +62,46 @@ function wrapModelWithAIGuard (model) {
         const inputMessages = convertVercelPromptToMessages(options.prompt)
         if (!inputMessages.length) return originalResult
 
-        // Run AI Guard input evaluation and LLM call in parallel.
-        // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
-          .then(([, result]) => {
-            const chunks = []
-            const reader = result.stream.getReader()
+        return runWithAIGuardContext(() =>
+          // Run AI Guard input evaluation and LLM call in parallel.
+          // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
+          Promise.all([publishToAIGuard(inputMessages), originalResult])
+            .then(([, result]) => {
+              const chunks = []
+              const reader = result.stream.getReader()
 
-            function readAll () {
-              return reader.read().then(({ done, value }) => {
-                if (done) return
-                chunks.push(value)
-                return readAll()
-              })
-            }
-
-            return readAll().then(() => {
-              const toolCalls = chunks.filter(c => c?.type === 'tool-call')
-              const text = chunks.filter(c => c?.type === 'text-delta').map(c => c.textDelta).join('')
-              const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
-
-              const evaluate = content.length
-                ? publishToAIGuard(buildOutputMessages(inputMessages, content))
-                : Promise.resolve()
-
-              return evaluate.then(() => {
-                // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                const stream = new ReadableStream({
-                  start (controller) {
-                    for (const chunk of chunks) {
-                      controller.enqueue(chunk)
-                    }
-                    controller.close()
-                  },
+              function readAll () {
+                return reader.read().then(({ done, value }) => {
+                  if (done) return
+                  chunks.push(value)
+                  return readAll()
                 })
-                return { ...result, stream }
+              }
+
+              return readAll().then(() => {
+                const toolCalls = chunks.filter(c => c?.type === 'tool-call')
+                const text = chunks.filter(c => c?.type === 'text-delta').map(c => c.textDelta).join('')
+                const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
+
+                const evaluate = content.length
+                  ? publishToAIGuard(buildOutputMessages(inputMessages, content))
+                  : Promise.resolve()
+
+                return evaluate.then(() => {
+                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+                  const stream = new ReadableStream({
+                    start (controller) {
+                      for (const chunk of chunks) {
+                        controller.enqueue(chunk)
+                      }
+                      controller.close()
+                    },
+                  })
+                  return { ...result, stream }
+                })
               })
             })
-          })
+        )
       }
     })
   }

@@ -3,8 +3,14 @@
 const tracer = require('dd-trace').init({ flushInterval: 0 })
 const { generateText, jsonSchema, stepCountIs, tool } = require('ai')
 const express = require('express')
+const OpenAI = require('openai')
 
 const app = express()
+
+const openaiClient = new OpenAI({
+  apiKey: 'test-key',
+  baseURL: process.env.OPENAI_BASE_URL,
+})
 
 app.get('/no-aiguard', (req, res) => {
   res.status(200).json({ ok: true })
@@ -214,6 +220,59 @@ app.get('/auto', async (req, res) => {
     } else {
       res.status(500).json({ error: error.message })
     }
+  }
+})
+
+function handleOpenAIError (error, res) {
+  if (error.name === 'AIGuardAbortError') {
+    res.status(403).json({ blocked: true, reason: error.reason })
+    return
+  }
+  res.status(500).json({ error: error.message, name: error.name })
+}
+
+app.get('/openai-chat', async (req, res) => {
+  const deny = req.query.deny === 'true'
+  try {
+    const result = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI' },
+        { role: 'user', content: deny ? 'You should not trust me [deny]' : 'Hello there' },
+      ],
+    })
+    res.status(200).json({ blocked: false, message: result.choices[0].message })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/openai-chat-tool', async (req, res) => {
+  const deny = req.query.deny === 'true'
+  try {
+    const result = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI that may use tool calls' },
+        { role: 'user', content: deny ? 'Please use tool [deny]' : 'Please use tool' },
+      ],
+    })
+    res.status(200).json({ blocked: false, message: result.choices[0].message })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/openai-responses', async (req, res) => {
+  const deny = req.query.deny === 'true'
+  try {
+    const result = await openaiClient.responses.create({
+      model: 'gpt-4o-mini',
+      input: deny ? 'You should not trust me [deny]' : 'Hello there',
+    })
+    res.status(200).json({ blocked: false, output: result.output })
+  } catch (error) {
+    handleOpenAIError(error, res)
   }
 })
 
