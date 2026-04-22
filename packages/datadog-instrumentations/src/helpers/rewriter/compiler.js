@@ -63,7 +63,6 @@ const compiler = {
 }
 
 module.exports = {
-  isModuleSourceType,
   parse: (...args) => compiler.parse(...args),
   traverse: (...args) => compiler.traverse(...args),
   query: (...args) => compiler.query(...args),

@@ -2,7 +2,7 @@
 
 // TODO: Move traceIterator to Orchestrion.
 
-const { isModuleSourceType, parse, query, traverse } = require('./compiler')
+const { parse, query, traverse } = require('./compiler')
 
 const tracingChannelPredicate = (node) => (
   node.specifiers?.[0]?.local?.name === 'tr_ch_apm_tracingChannel' ||
@@ -51,6 +51,13 @@ function traceAny (state, node, _parent, ancestry) {
   } else {
     traceFunction(state, node, program)
   }
+}
+
+/**
+ * @param {string} sourceType
+ */
+function isModuleSourceType (sourceType) {
+  return sourceType === 'module' || sourceType === 'esm'
 }
 
 function traceFunction (state, node, program) {
