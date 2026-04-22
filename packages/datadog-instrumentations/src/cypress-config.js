@@ -234,16 +234,26 @@ function wrapConfig (config) {
  * @returns {string} path to the generated wrapper file
  */
 function createConfigWrapper (originalConfigFile) {
+  // Preserve the original extension so Cypress keeps the loader it would have
+  // used for the user's config. In particular for `.ts` configs, Cypress
+  // registers a ts-node ESM loader on the child process based on the config
+  // file extension; replacing it with `.mjs` loses that registration and the
+  // wrapper can no longer dynamic-import the `.ts` original. For `.js`
+  // configs we still use `.mjs` to force ESM semantics (the body uses
+  // top-level `import` which wouldn't parse as CJS).
+  const originalExt = path.extname(originalConfigFile)
+  const wrapperExt = originalExt === '.ts' || originalExt === '.cts' || originalExt === '.mts'
+    ? originalExt
+    : '.mjs'
   const wrapperFile = path.join(
     path.dirname(originalConfigFile),
-    `.dd-cypress-config-${process.pid}.mjs`
+    `.dd-cypress-config-${process.pid}${wrapperExt}`
   )
 
   const cypressConfigPath = require.resolve('./cypress-config')
 
-  // Always use ESM: it can import both CJS and ESM configs, so it works
-  // regardless of the original file's extension or "type": "module" in package.json.
-  // Import cypress-config.js directly (CJS default = module.exports object).
+  // ESM body: works for both CJS and ESM modules. Default-importing the CJS
+  // `cypress-config.js` via ESM interop yields its `module.exports` object.
   fs.writeFileSync(wrapperFile, [
     `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
     `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
@@ -291,10 +301,7 @@ function wrapCliConfigFileOptions (options) {
     }
   }
 
-  // Skip .ts files — Cypress transpiles them internally via its own loader.
-  // The ESM wrapper can't import .ts directly. The defineConfig shimmer
-  // handles .ts configs since they're transpiled to CJS by Cypress.
-  if (!configFilePath || !fs.existsSync(configFilePath) || path.extname(configFilePath) === '.ts') return noop
+  if (!configFilePath || !fs.existsSync(configFilePath)) return noop
 
   try {
     const wrapperFile = createConfigWrapper(configFilePath)
