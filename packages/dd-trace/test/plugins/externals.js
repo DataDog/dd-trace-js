@@ -413,6 +413,12 @@ module.exports = {
       versions: ['>=2.0.1'],
     },
   ],
+  modelcontextprotocol_sdk: [
+    {
+      name: '@modelcontextprotocol/sdk',
+      versions: ['>=1.27.1'],
+    },
+  ],
   moleculer: [
     {
       name: 'bluebird',
