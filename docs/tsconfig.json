@@ -7,6 +7,7 @@
     "types": ["node"]
   },
   "files": [
-    "../index.d.ts"
+    "../index.d.ts",
+    "test.ts"
   ]
 }

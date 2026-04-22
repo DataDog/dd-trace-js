@@ -4,7 +4,7 @@
   "main": "typedoc.js",
   "scripts": {
     "build": "typedoc ../index.d.ts",
-    "pretest": "tsc -p . && tsc --types node test",
+    "pretest": "tsc -p .",
     "test": "node test"
   },
   "license": "BSD-3-Clause",
