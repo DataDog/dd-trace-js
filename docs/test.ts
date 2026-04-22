@@ -391,6 +391,7 @@ tracer.use('mysql2', { service: () => `my-custom-mysql2` });
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
+tracer.use('openai-agents');
 tracer.use('opensearch');
 tracer.use('opensearch', openSearchOptions);
 tracer.use('oracledb');
