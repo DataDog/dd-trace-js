@@ -125,7 +125,6 @@ describe('Plugin', () => {
 
         container.items.upsert({ id: 'item1', productName: 'Test Product', productModel: 'Model 1' })
 
-        // trigger the instrumented operation with an error
         container.items.create({ id: 'item1', productName: 'Test Product', productModel: 'Model 1' })
 
         await expectedSpanPromise
