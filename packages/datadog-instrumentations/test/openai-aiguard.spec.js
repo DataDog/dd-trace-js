@@ -27,6 +27,16 @@ class FakeAPIPromise {
   }
 }
 
+// Variant that exposes `_thenUnwrap`, used by the `client.beta.chat.completions.parse`
+// structured-output code path. `_thenUnwrap(cb)` returns a new APIPromise whose `parse`
+// yields the transformed body; users await this inner promise, not the outer one.
+class FakeUnwrappableAPIPromise extends FakeAPIPromise {
+  _thenUnwrap (cb) {
+    const inner = new FakeAPIPromise(cb(this._body))
+    return inner
+  }
+}
+
 // Mirrors the shape of the target classes that openai.js patches so we can require the
 // instrumentation and then reach in to the wrapped prototype methods directly.
 class FakeChatCompletions {
@@ -253,6 +263,78 @@ describe('openai AI Guard instrumentation', () => {
         .then(() => assert.strictEqual(observed.llmCalledBeforeGuard, true))
         .finally(unsubscribe)
     })
+
+    it('skips AI Guard for streaming chat.completions', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }], stream: true }).parse()
+        .then(() => assert.strictEqual(calls.length, 0))
+        .finally(unsubscribe)
+    })
+  })
+
+  describe('chat.completions structured outputs (_thenUnwrap)', () => {
+    let Completions
+
+    beforeEach(() => {
+      Completions = class extends FakeChatCompletions {}
+      Completions.prototype._client = { baseURL: 'https://api.openai.com' }
+      applyShim(hookCallbacks, 'resources/chat/completions', 'Completions', Completions)
+    })
+
+    function schemaCallback (body) {
+      return { ...body, parsed: { ok: true } }
+    }
+
+    it('runs Before Model and After Model when awaiting the unwrapped promise', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const assistant = { role: 'assistant', content: '{"ok":true}' }
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeUnwrappableAPIPromise({ choices: [{ message: assistant }] })
+
+      const apiProm = completions.create({ messages: [{ role: 'user', content: 'Hi' }] })
+      return apiProm._thenUnwrap(schemaCallback).parse()
+        .then(body => {
+          assert.strictEqual(body.parsed.ok, true)
+          assert.strictEqual(calls.length, 2)
+          assert.deepStrictEqual(calls[1].messages[1], { role: 'assistant', content: '{"ok":true}' })
+        })
+        .finally(unsubscribe)
+    })
+
+    it('rejects with AI Guard error when Before Model denies on the unwrapped promise', () => {
+      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+      const completions = new Completions()
+      const body = { choices: [{ message: { role: 'assistant', content: 'x' } }] }
+      completions._nextApiPromise = new FakeUnwrappableAPIPromise(body)
+
+      const apiProm = completions.create({ messages: [{ role: 'user', content: 'Hi' }] })
+      return assert.rejects(
+        () => apiProm._thenUnwrap(schemaCallback).parse(),
+        e => e === err
+      ).finally(unsubscribe)
+    })
+
+    it('rejects with AI Guard error when After Model denies on the unwrapped promise', () => {
+      let count = 0
+      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const unsubscribe = subscribeWithHandler(ctx => {
+        count++
+        count === 1 ? ctx.resolve() : ctx.reject(err)
+      })
+      const completions = new Completions()
+      const body = { choices: [{ message: { role: 'assistant', content: 'leaked pii' } }] }
+      completions._nextApiPromise = new FakeUnwrappableAPIPromise(body)
+
+      const apiProm = completions.create({ messages: [{ role: 'user', content: 'Hi' }] })
+      return assert.rejects(
+        () => apiProm._thenUnwrap(schemaCallback).parse(),
+        e => e === err
+      ).finally(unsubscribe)
+    })
   })
 
   describe('responses.create', () => {
@@ -314,6 +396,68 @@ describe('openai AI Guard instrumentation', () => {
 
       return responses.create({ input: 'hi', stream: true }).parse()
         .then(() => assert.strictEqual(calls.length, 0))
+        .finally(unsubscribe)
+    })
+
+    it('calls original directly when under an active AI Guard context', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return runWithAIGuardContext(() => responses.create({ input: 'hi' }).parse())
+        .then(() => assert.strictEqual(calls.length, 0))
+        .finally(unsubscribe)
+    })
+
+    it('calls original directly when input is missing', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return responses.create({}).parse()
+        .then(() => assert.strictEqual(calls.length, 0))
+        .finally(unsubscribe)
+    })
+
+    it('rejects with AI Guard error when Before Model denies', () => {
+      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({
+        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'x' }] }],
+      })
+
+      return assert.rejects(
+        () => responses.create({ input: 'hi' }).parse(),
+        e => e === err
+      ).finally(unsubscribe)
+    })
+
+    it('rejects with AI Guard error when After Model denies', () => {
+      let count = 0
+      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const unsubscribe = subscribeWithHandler(ctx => {
+        count++
+        count === 1 ? ctx.resolve() : ctx.reject(err)
+      })
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({
+        output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'leaked' }] }],
+      })
+
+      return assert.rejects(
+        () => responses.create({ input: 'hi' }).parse(),
+        e => e === err
+      ).finally(unsubscribe)
+    })
+
+    it('skips After Model when response has no output items', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return responses.create({ input: 'hi' }).parse()
+        .then(() => assert.strictEqual(calls.length, 1))
         .finally(unsubscribe)
     })
   })

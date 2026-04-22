@@ -316,6 +316,13 @@ for (const extension of extensions) {
                   return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
                 })
 
+                // Users of client.beta.chat.completions.parse() await the unwrapped promise, so
+                // the outer apiProm.parse AI Guard wrap below would never fire for them. Layer
+                // the same AI Guard evaluation onto the inner unwrappedPromise.parse too.
+                if (aiguardInputEval) {
+                  wrapAPIPromiseForAIGuard(unwrappedPromise, baseResource, aiguardInputMessages, aiguardInputEval)
+                }
+
                 return unwrappedPromise
               })
             }

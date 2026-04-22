@@ -228,4 +228,19 @@ describe('AIGuard SDK integration tests', () => {
       })
     })
   }
+
+  it('evaluates tool_calls in the After Model span for chat.completions', async () => {
+    const response = await executeRequest(`${url}/openai-chat-tool?deny=false`)
+    assert.strictEqual(response.status, 200)
+    assert.strictEqual(response.body.blocked, false)
+    assert.ok(Array.isArray(response.body.message.tool_calls))
+
+    await agent.assertMessageReceived(({ payload }) => {
+      const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+      assert.strictEqual(guardSpans.length, 2)
+      for (const span of guardSpans) {
+        assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
+      }
+    })
+  })
 })
