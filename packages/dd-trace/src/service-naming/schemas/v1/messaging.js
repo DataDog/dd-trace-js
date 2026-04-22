@@ -65,6 +65,10 @@ const messaging = {
       opName: () => 'electron.main.receive',
       serviceName: identityService,
     },
+    'electron:ipc:main:handle': {
+      opName: () => 'electron.main.handle',
+      serviceName: identityService,
+    },
     'electron:ipc:renderer:receive': {
       opName: () => 'electron.renderer.receive',
       serviceName: identityService,

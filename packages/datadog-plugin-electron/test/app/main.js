@@ -21,6 +21,7 @@ app.on('ready', () => {
         case 'request': return onRequest(msg)
         case 'send': return onSend(msg)
         case 'receive': return onReceive(msg)
+        case 'handle': return onHandle(msg)
       }
     } catch (e) {
       console.error(e)
@@ -63,6 +64,14 @@ function onReceive () {
 
   loadWindow(win => {
     win.webContents.send('datadog:test:send')
+  })
+}
+
+function onHandle () {
+  ipcMain.handleOnce('get-data', () => 'test')
+
+  loadWindow(win => {
+    win.webContents.send('datadog:test:invoke')
   })
 }
 

@@ -19,6 +19,7 @@ class ElectronMainPlugin extends CompositePlugin {
   static get plugins () {
     return {
       receive: ElectronMainReceivePlugin,
+      handle: ElectronMainHandlePlugin,
       send: ElectronMainSendPlugin,
     }
   }
@@ -112,6 +113,11 @@ class ElectronRendererSendPlugin extends ProducerPlugin {
 class ElectronMainReceivePlugin extends ElectronRendererReceivePlugin {
   static id = 'electron:ipc:main:receive'
   static prefix = 'tracing:apm:electron:ipc:main:receive'
+}
+
+class ElectronMainHandlePlugin extends ElectronMainReceivePlugin {
+  static id = 'electron:ipc:main:handle'
+  static prefix = 'tracing:apm:electron:ipc:main:handle'
 }
 
 class ElectronMainSendPlugin extends ElectronRendererSendPlugin {

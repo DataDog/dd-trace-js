@@ -128,6 +128,27 @@ describe('Plugin', () => {
           child.send({ name: 'receive' })
         })
 
+        it('should do automatic instrumentation for main IPC when handling', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const { meta } = span
+
+              assert.strictEqual(span.type, 'worker')
+              assert.strictEqual(span.name, 'electron.main.handle')
+              assert.strictEqual(span.resource, 'get-data')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.error, 0)
+
+              assert.strictEqual(meta.component, 'electron')
+              assert.strictEqual(meta['span.kind'], 'consumer')
+            })
+            .then(done)
+            .catch(done)
+
+          child.send({ name: 'handle' })
+        })
+
         it('should do automatic instrumentation for main IPC when sending', done => {
           agent
             .assertSomeTraces(traces => {
