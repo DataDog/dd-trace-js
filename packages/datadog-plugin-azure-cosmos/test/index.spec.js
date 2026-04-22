@@ -15,7 +15,7 @@ describe('Plugin', () => {
       beforeEach(async () => {
         // Provision DB/container without emitting azure-cosmos spans (plugin subscriptions stay off).
         await agent.load('azure-cosmos', { enabled: false })
-          ; ({ client, container } = await setup())
+        ; ({ client, container } = await setup())
         agent.reload('azure-cosmos', { enabled: true })
       })
 

@@ -24,9 +24,9 @@ describe('esm', () => {
       'azure-functions-core-tools@4',
       '@azure/event-hubs@6.0.0',
     ],
-      false,
-      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-        './packages/datadog-plugin-azure-functions/test/integration-test/eventhubs-test/*'])
+    false,
+    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+      './packages/datadog-plugin-azure-functions/test/integration-test/eventhubs-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -37,7 +37,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    /*it('propagates eventdata through an event hub with a cardinality of one', async () => {
+    it('propagates eventdata through an event hub with a cardinality of one', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
@@ -385,15 +385,15 @@ describe('esm', () => {
         assert.strictEqual(hasCreateSpan, false)
         assert.ok(!('_dd.span_links' in payload[1][0].meta))
       })
-    }).timeout(60000)*/
+    }).timeout(60000)
   })
 })
 
-function parseLinks(span) {
+function parseLinks (span) {
   return JSON.parse(span.meta['_dd.span_links'] || '[]')
 }
 
-async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
@@ -406,7 +406,7 @@ async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, std
   }, stdioHandler)
 }
 
-function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
+function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc

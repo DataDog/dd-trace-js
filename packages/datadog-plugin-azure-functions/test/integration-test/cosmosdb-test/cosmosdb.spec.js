@@ -29,9 +29,9 @@ describe('esm', () => {
       '@azure/event-hubs@6.0.0',
       '@azure/cosmos@4.9.2',
     ],
-      false,
-      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-        './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
+    false,
+    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+      './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
     before(async function () {
       const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
@@ -66,7 +66,7 @@ describe('esm', () => {
             s?.name === 'azure.functions.invoke' &&
             (typeof s.resource === 'string' && s.resource === 'azure.functions.invoke')
         )
-        assert.ok(httpWriteInvoke, `expected writeToCosmos HTTP invoke span`)
+        assert.ok(httpWriteInvoke, 'expected writeToCosmos HTTP invoke span')
 
         const cosmosQueryCount = allSpans.filter(s => s?.name === 'cosmosdb.query').length
         assert.ok(cosmosQueryCount >= 2, `expected cosmosdb.query spans; found ${cosmosQueryCount}`)
@@ -76,7 +76,7 @@ describe('esm', () => {
             s?.name === 'azure.functions.invoke' &&
             (typeof s.resource === 'string' && s.resource === 'CosmosDB cosmosDBTrigger1')
         )
-        assert.ok(triggerInvoke, `expected CosmosDB trigger invoke span`)
+        assert.ok(triggerInvoke, 'expected CosmosDB trigger invoke span')
 
         assertObjectContains(triggerInvoke, {
           name: 'azure.functions.invoke',
@@ -92,7 +92,7 @@ describe('esm', () => {
   })
 })
 
-async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
@@ -105,7 +105,7 @@ async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, std
   }, stdioHandler)
 }
 
-function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
+function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
