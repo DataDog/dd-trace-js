@@ -116,32 +116,21 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Parses additional HTTP headers from a comma-separated string or pre-parsed map.
-   * @param {string|Record<string, string>} [headersString=''] - Comma-separated key=value pairs or map
-   * @returns {Record<string, string>} Parsed headers object
+   * Parses additional HTTP headers. Accepts either a pre-parsed map (produced by the OTEL-aware
+   * MAP parser in config/parsers.js for `OTEL_EXPORTER_OTLP_TRACES_HEADERS`) or a
+   * comma-separated `key=value` string for signals whose headers config is a plain string.
+   * @param {string|Record<string, string>} [input=''] - Raw headers map or string
+   * @returns {Record<string, string>} Parsed headers map
    */
-  #parseAdditionalHeaders (headersString = '') {
-    if (headersString !== null && typeof headersString === 'object') {
-      // The config MAP parser uses tagger.add (which splits on ':'), so OTEL-format
-      // headers ('key=value') arrive with the full 'key=value' string as the map key
-      // and an empty string as the value. Re-split on '=' to get the correct pairs.
-      const result = {}
-      for (const [k, v] of Object.entries(headersString)) {
-        if (v === '' && k.includes('=')) {
-          const idx = k.indexOf('=')
-          result[k.slice(0, idx).trim()] = k.slice(idx + 1).trim()
-        } else {
-          result[k] = v
-        }
-      }
-      return result
+  #parseAdditionalHeaders (input = '') {
+    if (input !== null && typeof input === 'object') {
+      return input
     }
     const headers = {}
     let key = ''
     let value = ''
     let readingKey = true
-
-    for (const char of headersString) {
+    for (const char of input) {
       if (readingKey) {
         if (char === '=') {
           readingKey = false
@@ -161,26 +150,30 @@ class OtlpHttpExporterBase {
         value += char
       }
     }
-
-    // Add the last pair if present
     if (!readingKey) {
       value = value.trim()
       if (value) {
         headers[key] = value
       }
     }
-
     return headers
   }
 
   /**
-   * Updates the target URL used by this exporter. Called by the tracer when
-   * the agent URL changes at runtime (e.g. via `tracer.setUrl(...)`).
+   * Updates the target URL used by this exporter. Called at construction time and by the tracer
+   * when the agent URL changes at runtime (e.g. via `tracer.setUrl(...)`).
+   *
+   * The signal-specific subpath (`/v1/traces`, `/v1/metrics`, `/v1/logs`) is appended if not
+   * already present, so callers can pass a bare base URL (default host, or the generic
+   * `OTEL_EXPORTER_OTLP_ENDPOINT`) and still land on the right OTLP path.
    * @param {string} url - New OTLP endpoint URL
    */
   setUrl (url) {
     const parsedUrl = new URL(url)
-    const path = parsedUrl.pathname === '/' ? this.#defaultPath : parsedUrl.pathname
+    let path = parsedUrl.pathname
+    if (!path.endsWith(this.#defaultPath)) {
+      path = path === '/' ? this.#defaultPath : path.replace(/\/$/, '') + this.#defaultPath
+    }
     this.options.hostname = parsedUrl.hostname
     this.options.port = parsedUrl.port
     this.options.path = path + parsedUrl.search

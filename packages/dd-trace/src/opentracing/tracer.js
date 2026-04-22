@@ -20,7 +20,7 @@ const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
 class DatadogTracer {
-  constructor (config, prioritySampler, exporter) {
+  constructor (config, prioritySampler) {
     this._config = config
     this._service = config.service
     this._version = config.version
@@ -29,8 +29,15 @@ class DatadogTracer {
     this._debug = config.debug
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
 
-    if (exporter) {
-      this._exporter = exporter
+    // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
+    // exporter when the tracer is running in Test Optimization mode. Test spans
+    // (test_session/test_module/ test_suite/test) belong on the citestcycle
+    // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
+    // vars set in their environment (e.g. for a separate telemetry integration)
+    // silently lose all test spans.
+    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
+      const { createOtlpTraceExporter } = require('../opentelemetry/trace')
+      this._exporter = createOtlpTraceExporter(config)
     } else {
       const Exporter = getExporter(config.experimental.exporter)
       this._exporter = new Exporter(config, this._prioritySampler)

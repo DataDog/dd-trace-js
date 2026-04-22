@@ -225,6 +225,22 @@ const parsers = {
     if (!raw) {
       return entries
     }
+    // OTEL spec uses `key=value,key=value`
+    // (https://opentelemetry.io/docs/specs/otel/protocol/exporter/#specifying-headers-via-environment-variables),
+    // while DD uses `key:value,key:value`. Parse OTEL-prefixed options that still contain `=` with
+    // the OTEL separator so downstream code receives a proper map and telemetry reports the parsed
+    // entries. Values that already went through `parseOtelTags` have `=` rewritten to `:` and fall
+    // through to the DD parser below.
+    if (optionName.startsWith('OTEL_') && raw.includes('=')) {
+      for (const pair of raw.split(',')) {
+        const idx = pair.indexOf('=')
+        if (idx === -1) continue
+        const key = pair.slice(0, idx).trim()
+        const value = pair.slice(idx + 1).trim()
+        if (key !== '') entries[key] = value
+      }
+      return entries
+    }
     // DD_TAGS is a special case. It may be a map of key-value pairs separated by spaces.
     if (optionName === 'DD_TAGS' && !raw.includes(',')) {
       raw = raw.replaceAll(/\s+/g, ',')

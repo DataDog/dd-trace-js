@@ -8,12 +8,19 @@ const OtlpTraceTransformer = require('./otlp_transformer')
 /**
  * OtlpHttpTraceExporter exports DD-formatted spans via OTLP over HTTP/JSON.
  *
- * This implementation follows the OTLP HTTP v1.7.0 specification:
+ * This implementation follows the OTLP HTTP specification:
  * https://opentelemetry.io/docs/specs/otlp/#otlphttp
  *
  * It receives DD-formatted spans (from span_format.js), transforms them
  * to OTLP ExportTraceServiceRequest JSON format, and sends them to the
  * configured OTLP endpoint via HTTP POST.
+ *
+ * TODO: Add batch handling similar to the OpenTelemetry SDK Batch Processor
+ * (https://opentelemetry.io/docs/specs/otel/trace/sdk/#batching-processor).
+ * Currently each finished trace is sent as its own HTTP request, which is
+ * unsuitable for high-traffic production environments. The config values
+ * `otelBatchTimeout`, `otelMaxExportBatchSize`, and `otelMaxQueueSize`
+ * (OTEL_BSP_*) are already defined and should drive that implementation.
  *
  * @class OtlpHttpTraceExporter
  * @augments OtlpHttpExporterBase
