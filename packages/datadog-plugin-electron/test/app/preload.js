@@ -18,3 +18,7 @@ ipcRenderer.on('update-counter', updateCounter)
 ipcRenderer.on('datadog:test:send', () => {
   setImmediate(() => ipcRenderer.send('set-title', 'Test'))
 })
+
+ipcRenderer.on('datadog:test:invoke', () => {
+  setImmediate(() => ipcRenderer.invoke('get-data'))
+})
