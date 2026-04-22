@@ -24,7 +24,7 @@
     "release:proposal": "node scripts/release/proposal",
     "services": "node ./scripts/install_plugin_modules && node packages/dd-trace/test/setup/services",
     "test": "echo '\nError: The root \"npm test\" command is intentionally disabled.\n\nInstead, run specific test suites:\n  - npm run test:trace:core\n  - npm run test:appsec\n  - etc.\n\nOr run individual test files:\n  npx mocha path/to/test.spec.js\n\nSee CONTRIBUTING.md (Testing section) for more details.\n' && exit 1",
-    "test:aiguard": "mocha packages/dd-trace/test/aiguard/**/*.spec.js",
+    "test:aiguard": "mocha packages/dd-trace/test/aiguard/**/*.spec.js packages/datadog-instrumentations/test/ai.spec.js packages/datadog-instrumentations/test/openai-aiguard.spec.js packages/datadog-instrumentations/test/helpers/ai-guard-context.spec.js packages/datadog-instrumentations/test/helpers/ai-guard-publish.spec.js packages/datadog-instrumentations/test/helpers/ai-messages.spec.js",
     "test:aiguard:ci": "nyc -- npm run test:aiguard",
     "test:appsec": "mocha --exclude \"packages/dd-trace/test/appsec/**/*.plugin.spec.js\" \"packages/dd-trace/test/appsec/**/*.spec.js\"",
     "test:appsec:ci": "nyc -- npm run test:appsec",
