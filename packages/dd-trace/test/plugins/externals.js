@@ -391,6 +391,12 @@ module.exports = {
       versions: ['>=2'],
     },
   ],
+  'light-my-request': [
+    {
+      name: 'fastify',
+      versions: ['>=3'],
+    },
+  ],
   lodash: [
     {
       name: 'lodash',
