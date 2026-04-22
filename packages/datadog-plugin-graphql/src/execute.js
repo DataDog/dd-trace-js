@@ -129,7 +129,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // Normalize contextValue to an object for WeakMap keying (matches master).
     const cv = normalizeContextValue(ctx.arguments)
     const rootCtx = {
-      source,
+      // Raw document source text, used by:
+      //  (a) the graphql.source span tag on resolve spans (when this.config.source
+      //      is enabled — gated when the span is materialized, not here), and
+      //  (b) the IAST taint-tracking subscriber, which looks up tainted ranges
+      //      against this source string to detect hardcoded-literal injection.
+      source: docSource,
       config: this.config,
       fields: Object.create(null),
       abortController: new AbortController(),
