@@ -51,6 +51,7 @@ const MOCK_NOT_NULLISH = Symbol('not-nullish')
  *   timestamp?: number,
  *   value: string | number,
  *   tags?: { [key: string]: string },
+ *   evalScope?: 'trace' | 'span'
  * }} ExpectedLLMObsEvaluationMetrics
  */
 
@@ -297,6 +298,7 @@ function assertLlmObsEvaluationMetric (actual, expected) {
     timestamp = MOCK_NUMBER,
     value,
     tags,
+    evalScope,
   } = expected
 
   const actualTags = actual.tags
@@ -339,6 +341,7 @@ function assertLlmObsEvaluationMetric (actual, expected) {
     metric_type: metricType,
     ml_app: mlApp,
     [`${metricType}_value`]: value,
+    eval_scope: evalScope,
   }
 
   assert.deepStrictEqual(actual, expectedEvaluationMetric)
