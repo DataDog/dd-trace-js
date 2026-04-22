@@ -57,13 +57,33 @@ describe('esm', () => {
       proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, envArgs)
 
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/writeToCosmos', ({ headers, payload }) => {
-        assert.strictEqual(payload.length, 2)
-        assert.strictEqual(payload[0].length, 4)
-        assert.strictEqual(payload[0][0].name, 'azure.functions.invoke')
-        assert.strictEqual(payload[0][1].name, 'cosmosdb.query')
-        assert.strictEqual(payload[0][2].name, 'cosmosdb.query')
-        assert.strictEqual(payload[0][3].name, 'cosmosdb.query')
-        assertObjectContains(payload[1][0], {
+        assert.ok(Array.isArray(payload), 'trace payload should be an array of traces')
+
+        const writeTrace = payload.find(
+          trace =>
+            Array.isArray(trace) &&
+            trace.length === 4 &&
+            trace[0]?.name === 'azure.functions.invoke' &&
+            trace[1]?.name === 'cosmosdb.query' &&
+            trace[2]?.name === 'cosmosdb.query' &&
+            trace[3]?.name === 'cosmosdb.query'
+        )
+        assert.ok(
+          writeTrace,
+          `expected HTTP write trace (invoke + 3 cosmosdb.query); had ${payload.length} top-level traces`
+        )
+
+        const triggerTrace = payload.find(
+          trace =>
+            Array.isArray(trace) &&
+            trace.length >= 1 &&
+            trace[0]?.name === 'azure.functions.invoke' &&
+            trace[0]?.meta?.['aas.function.trigger'] === 'CosmosDB' &&
+            trace[0]?.meta?.['aas.function.name'] === 'cosmosDBTrigger1'
+        )
+        assert.ok(triggerTrace, 'expected CosmosDB trigger invoke trace')
+
+        assertObjectContains(triggerTrace[0], {
           name: 'azure.functions.invoke',
           resource: 'CosmosDB cosmosDBTrigger1',
           type: 'serverless',
