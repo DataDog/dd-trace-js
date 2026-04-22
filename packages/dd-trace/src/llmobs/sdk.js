@@ -7,7 +7,7 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
-const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
+const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE, ALLOWED_EVAL_SCOPES } = require('./constants/tags')
 const {
   getFunctionArguments,
   validateKind,
@@ -401,7 +401,7 @@ class LLMObs extends NoopLLMObs {
         err = 'invalid_metadata'
         throw new Error('metadata must be a JSON object')
       }
-      if (!['trace', 'span'].includes(evalScope)) {
+      if (!ALLOWED_EVAL_SCOPES.has(evalScope)) {
         err = 'invalid_eval_scope'
         throw new Error('evalScope must be one of `span` or `trace`.')
       }

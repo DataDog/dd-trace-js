@@ -2,6 +2,7 @@
 
 module.exports = {
   SPAN_KINDS: ['llm', 'agent', 'workflow', 'task', 'tool', 'embedding', 'retrieval'],
+  ALLOWED_EVAL_SCOPES: new Set(['span', 'trace']),
   SPAN_KIND: '_ml_obs.meta.span.kind',
   SESSION_ID: '_ml_obs.session_id',
   DECORATOR: '_ml_obs.decorator',
