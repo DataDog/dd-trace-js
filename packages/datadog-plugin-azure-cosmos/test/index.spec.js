@@ -25,9 +25,6 @@ describe('Plugin', () => {
       })
 
       it('should create a span', async () => {
-        if (process.versions.node === '18.20.8') {
-          return
-        }
         const expectedSpanPromise = agent.assertFirstTraceSpan({
           name: 'cosmosdb.query',
           service: 'test-azure-cosmos',
@@ -53,9 +50,6 @@ describe('Plugin', () => {
       })
 
       it('should create spans with callback assertion', async () => {
-        if (process.versions.node === '18.20.8') {
-          return
-        }
         const expectedResources = ['upsert /dbs/testDatabase/colls/testContainer/docs',
           'read /dbs/testDatabase/colls/testContainer/docs',
           'query /dbs/testDatabase/colls/testContainer/docs',
@@ -99,9 +93,6 @@ describe('Plugin', () => {
       })
 
       it('should create spans if an error occurs', async () => {
-        if (process.versions.node === '18.20.8') {
-          return
-        }
         const expectedResources = ['create /dbs/testDatabase/colls/testContainer/docs',
           'upsert /dbs/testDatabase/colls/testContainer/docs']
         // Callback-based assertion — for complex multi-span assertions
