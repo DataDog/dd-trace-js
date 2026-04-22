@@ -16,6 +16,8 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
+  #defaultPath
+
   /**
    * Creates a new OtlpHttpExporterBase instance.
    *
@@ -27,20 +29,14 @@ class OtlpHttpExporterBase {
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
    */
   constructor (url, headers, timeout, protocol, defaultPath, signalType) {
-    const parsedUrl = new URL(url)
-
     this.protocol = protocol
     this.signalType = signalType
-    this._defaultPath = defaultPath
+    this.#defaultPath = defaultPath
 
-    // If no path is provided, use default path
-    const path = parsedUrl.pathname === '/' ? defaultPath : parsedUrl.pathname
     const isJson = protocol === 'http/json'
 
+    // Initialize fields setUrl doesn't touch; it fills in hostname/port/path below.
     this.options = {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port,
-      path: path + parsedUrl.search,
       method: 'POST',
       timeout,
       headers: {
@@ -48,6 +44,9 @@ class OtlpHttpExporterBase {
         ...this.#parseAdditionalHeaders(headers),
       },
     }
+
+    this.setUrl(url)
+
     this.telemetryTags = [
       'protocol:http',
       `encoding:${isJson ? 'json' : 'protobuf'}`,
@@ -181,7 +180,7 @@ class OtlpHttpExporterBase {
    */
   setUrl (url) {
     const parsedUrl = new URL(url)
-    const path = parsedUrl.pathname === '/' ? this._defaultPath : parsedUrl.pathname
+    const path = parsedUrl.pathname === '/' ? this.#defaultPath : parsedUrl.pathname
     this.options.hostname = parsedUrl.hostname
     this.options.port = parsedUrl.port
     this.options.path = path + parsedUrl.search
