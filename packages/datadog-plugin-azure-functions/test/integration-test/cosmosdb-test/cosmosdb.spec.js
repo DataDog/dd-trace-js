@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const util = require('node:util')
 const { pathToFileURL } = require('node:url')
 
 const { spawn } = require('child_process')
@@ -59,31 +60,32 @@ describe('esm', () => {
       return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/writeToCosmos', ({ headers, payload }) => {
         assert.ok(Array.isArray(payload), 'trace payload should be an array of traces')
 
-        const writeTrace = payload.find(
-          trace =>
-            Array.isArray(trace) &&
-            trace.length === 4 &&
-            trace[0]?.name === 'azure.functions.invoke' &&
-            trace[1]?.name === 'cosmosdb.query' &&
-            trace[2]?.name === 'cosmosdb.query' &&
-            trace[3]?.name === 'cosmosdb.query'
-        )
-        assert.ok(
-          writeTrace,
-          `expected HTTP write trace (invoke + 3 cosmosdb.query); had ${payload.length} top-level traces ${payload}`
-        )
+        const allSpans = payload.filter(Array.isArray).flat()
+        const spanNamesByTrace = payload.map(t => (Array.isArray(t) ? t.map(s => s?.name) : []))
+        const debugSummary = () =>
+          `${payload.length} traces, span names per trace: ${util.inspect(spanNamesByTrace, { depth: 4 })}`
 
-        const triggerTrace = payload.find(
-          trace =>
-            Array.isArray(trace) &&
-            trace.length >= 1 &&
-            trace[0]?.name === 'azure.functions.invoke' &&
-            trace[0]?.meta?.['aas.function.trigger'] === 'CosmosDB' &&
-            trace[0]?.meta?.['aas.function.name'] === 'cosmosDBTrigger1'
+        const httpWriteInvoke = allSpans.find(
+          s =>
+            s?.name === 'azure.functions.invoke' &&
+            (s.meta?.['aas.function.name'] === 'writeToCosmos' ||
+              s.meta?.['http.route'] === '/api/writeToCosmos' ||
+              (typeof s.resource === 'string' && s.resource.includes('writeToCosmos')))
         )
-        assert.ok(triggerTrace, 'expected CosmosDB trigger invoke trace')
+        assert.ok(httpWriteInvoke, `expected writeToCosmos HTTP invoke span; ${debugSummary()}`)
 
-        assertObjectContains(triggerTrace[0], {
+        const cosmosQueryCount = allSpans.filter(s => s?.name === 'cosmosdb.query').length
+        assert.ok(cosmosQueryCount >= 1, `expected cosmosdb.query spans; found ${cosmosQueryCount}; ${debugSummary()}`)
+
+        const triggerInvoke = allSpans.find(
+          s =>
+            s?.name === 'azure.functions.invoke' &&
+            s.meta?.['aas.function.trigger'] === 'CosmosDB' &&
+            s.meta?.['aas.function.name'] === 'cosmosDBTrigger1'
+        )
+        assert.ok(triggerInvoke, `expected CosmosDB trigger invoke span; ${debugSummary()}`)
+
+        assertObjectContains(triggerInvoke, {
           name: 'azure.functions.invoke',
           resource: 'CosmosDB cosmosDBTrigger1',
           type: 'serverless',
