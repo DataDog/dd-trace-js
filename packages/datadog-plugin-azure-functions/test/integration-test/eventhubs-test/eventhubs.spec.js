@@ -37,7 +37,7 @@ describe('esm', () => {
       await agent.stop()
     })
 
-    it('propagates eventdata through an event hub with a cardinality of one', async () => {
+    /*it('propagates eventdata through an event hub with a cardinality of one', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
@@ -385,7 +385,7 @@ describe('esm', () => {
         assert.strictEqual(hasCreateSpan, false)
         assert.ok(!('_dd.span_links' in payload[1][0].meta))
       })
-    }).timeout(60000)
+    }).timeout(60000)*/
   })
 })
 

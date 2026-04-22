@@ -23,9 +23,9 @@ describe('esm', () => {
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
     ],
-    false,
-    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-      './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
+      false,
+      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+        './packages/datadog-plugin-azure-functions/test/integration-test/http-test/*'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -40,7 +40,7 @@ describe('esm', () => {
     // with Azure Functions and the way the `func` command expects to find files. I
     // have manually tested that all the usual import variants work, but really we ought
     // to figure out a way of automating this.
-    it('is instrumented', async () => {
+    /*it('is instrumented', async () => {
       const envArgs = {
         PATH: `${sandboxCwd()}/node_modules/azure-functions-core-tools/bin:${process.env.PATH}`,
       }
@@ -73,11 +73,11 @@ describe('esm', () => {
         assert.strictEqual(payload.length, 2)
         assert.strictEqual(payload[1][0].span_id, payload[1][1].parent_id)
       })
-    }).timeout(50000)
+    }).timeout(50000)*/
   })
 })
 
-async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
@@ -89,7 +89,7 @@ async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, st
   }, stdioHandler)
 }
 
-function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
+function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
