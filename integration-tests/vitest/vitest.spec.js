@@ -2905,7 +2905,8 @@ versions.forEach((version) => {
               assert.strictEqual(knownTestsWithHooks.length, 1)
               assert.ok(!(TEST_IS_NEW in knownTestsWithHooks[0].meta))
               assert.ok(!(TEST_IS_RETRY in knownTestsWithHooks[0].meta))
-              assert.strictEqual(knownTestsWithHooks[0].meta[TEST_FINAL_STATUS], knownTestsWithHooks[0].meta[TEST_STATUS])
+              assert.strictEqual(
+                knownTestsWithHooks[0].meta[TEST_FINAL_STATUS], knownTestsWithHooks[0].meta[TEST_STATUS])
 
               assertEfdFinalStatus('flaky test retries with hooks can retry tests that eventually pass', 'pass')
               assertEfdFinalStatus('flaky test retries with hooks can retry tests that never pass', 'fail')

@@ -1200,7 +1200,8 @@ addHook({
 
           // Check if all EFD retries failed
           const providedContext = getProvidedContext()
-          const isEfdRetry = providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))
+          const isEfdRetry =
+            providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))
           if (isEfdRetry) {
             const statuses = taskToStatuses.get(task)
             // statuses only includes repetitions (not the initial run), so we check against numRepeats (not +1)
@@ -1225,21 +1226,18 @@ addHook({
             // `duration` is the duration of all the retries, so it can't be used if there are retries
 
             let finalStatus
-            if(!isSwitchedStatus) {
-              finalStatus = 'fail'
-            } else {
+            if (isSwitchedStatus) {
               if (disabledTasks.has(task) || quarantinedTasks.has(task)) {
                 finalStatus = 'skip'
-              }
-              else if(isAtrRetry || isEfdRetry) {
-                finalStatus = hasFailedAllRetries? 'fail' : 'pass'
-              }
-              else if(attemptToFixTasks.has(task)) {
-                finalStatus = attemptToFixFailed? 'fail' : 'pass'
-              }
-              else {
+              } else if (isAtrRetry || isEfdRetry) {
+                finalStatus = hasFailedAllRetries ? 'fail' : 'pass'
+              } else if (attemptToFixTasks.has(task)) {
+                finalStatus = attemptToFixFailed ? 'fail' : 'pass'
+              } else {
                 finalStatus = undefined
               }
+            } else {
+              finalStatus = 'fail'
             }
 
             testErrorCh.publish({

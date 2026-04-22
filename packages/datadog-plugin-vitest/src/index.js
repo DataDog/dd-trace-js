@@ -260,7 +260,7 @@ class VitestPlugin extends CiPlugin {
       if (attemptToFixFailed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
-      if(finalStatus) {
+      if (finalStatus) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
       }
       if (duration) {
