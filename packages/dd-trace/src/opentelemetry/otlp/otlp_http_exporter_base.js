@@ -31,6 +31,7 @@ class OtlpHttpExporterBase {
 
     this.protocol = protocol
     this.signalType = signalType
+    this._defaultPath = defaultPath
 
     // If no path is provided, use default path
     const path = parsedUrl.pathname === '/' ? defaultPath : parsedUrl.pathname
@@ -171,6 +172,19 @@ class OtlpHttpExporterBase {
     }
 
     return headers
+  }
+
+  /**
+   * Updates the target URL used by this exporter. Called by the tracer when
+   * the agent URL changes at runtime (e.g. via `tracer.setUrl(...)`).
+   * @param {string} url - New OTLP endpoint URL
+   */
+  setUrl (url) {
+    const parsedUrl = new URL(url)
+    const path = parsedUrl.pathname === '/' ? this._defaultPath : parsedUrl.pathname
+    this.options.hostname = parsedUrl.hostname
+    this.options.port = parsedUrl.port
+    this.options.path = path + parsedUrl.search
   }
 
   /**
