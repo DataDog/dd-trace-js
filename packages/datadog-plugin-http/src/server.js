@@ -45,9 +45,8 @@ class HttpServerPlugin extends ServerPlugin {
       context.parentStore = store
     }
 
-    // Only AppSec needs the request scope to be active for any async work that
-    // may be scheduled after the synchronous `request` event returns (e.g.
-    // Fastify).
+    // AppSec, IAST, and AI Guard need req/res on the store so downstream
+    // subscribers can access them from the async context.
     if (incomingHttpRequestStart.hasSubscribers) {
       store = { ...store, req, res }
     }
