@@ -184,15 +184,22 @@ if (Object.keys(flaky).length === 0) {
     if (!reported.has(workflow)) continue
 
     markdown += `* ${workflow}\n`
-    slack += String.raw`  ●   ${workflow}\n`
 
-    for (const [job, urls] of Object.entries(jobs).sort()) {
-      if (urls.length < OCCURRENCES) continue
+    const reportedJobs = Object.entries(jobs).filter(([, urls]) => urls.length >= OCCURRENCES)
+    const failedJobCount = reportedJobs.length
+    const totalFailedRuns = reportedJobs.reduce((sum, [, urls]) => sum + urls.length, 0)
+    const maxJobFailures = Math.max(...reportedJobs.map(([, urls]) => urls.length))
+    const workflowBadge = (failedJobCount > 3 || maxJobFailures > 3)
+      ? ' 🔴'
+      : (failedJobCount >= 2 || maxJobFailures >= 2) ? ' 🟡' : ''
+
+    slack += String.raw`  ●   ${workflow} (${failedJobCount} jobs, ${totalFailedRuns} flakes)${workflowBadge}\n`
+
+    for (const [job, urls] of reportedJobs.sort()) {
       // Padding is needed because Slack doesn't show single digits as links.
       const markdownLinks = urls.map((url, idx) => `[${String(idx + 1).padStart(2, '0')}](${url})`)
       const runsBadge = urls.length >= 3 ? ' 🔴' : urls.length === 2 ? ' 🟡' : ''
       markdown += `    * ${job} (${markdownLinks.join(', ')})${runsBadge}\n`
-      slack += String.raw`         ○   ${job} (${urls.length})${runsBadge}\n`
     }
   }
 
