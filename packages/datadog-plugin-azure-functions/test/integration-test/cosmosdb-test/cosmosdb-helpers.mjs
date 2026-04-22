@@ -6,7 +6,7 @@ import { CosmosClient } from '@azure/cosmos'
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 
 function getMyCosmosDbConnection () {
-  const settingsPath = join(__dirname, '../../fixtures/local.settings.json')
+  const settingsPath = join(__dirname, 'local.settings.json')
   const settings = JSON.parse(readFileSync(settingsPath, 'utf8'))
   return settings.Values.MyCosmosDB
 }
