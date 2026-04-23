@@ -1,5 +1,9 @@
 'use strict'
 
+function _dbgInit (label) {
+  const t = process._tracerInitStart || Date.now()
+  process.stderr.write(`[proxy.init +${Date.now() - t}ms] ${label}\n`)
+}
 const NoopProxy = require('./noop/proxy')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
@@ -103,24 +107,22 @@ class Tracer extends NoopProxy {
 
     this._initialized = true
 
-    const initStart = Date.now()
-    const dbg = (label) => process.stderr.write(`[proxy.init +${Date.now() - initStart}ms] ${label}\n`)
-    process._tracerInitStart = initStart
+    process._tracerInitStart = Date.now()
 
-    dbg('start')
+    _dbgInit('start')
 
     try {
       const config = getConfig(options) // TODO: support dynamic code config
-      dbg('after getConfig')
+      _dbgInit('after getConfig')
 
       // Add config dependent process tags
       processTags.initialize(config)
-      dbg('after processTags.initialize')
+      _dbgInit('after processTags.initialize')
 
       // Configure propagation hash manager for process tags + container tags
       const propagationHash = require('./propagation-hash')
       propagationHash.configure(config)
-      dbg('after propagationHash.configure')
+      _dbgInit('after propagationHash.configure')
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
@@ -131,13 +133,13 @@ class Tracer extends NoopProxy {
       }
 
       telemetry.start(config, this._pluginManager)
-      dbg('after telemetry.start')
+      _dbgInit('after telemetry.start')
 
       if (config.dogstatsd) {
         // Custom Metrics
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
-      dbg('after dogstatsd setup')
+      _dbgInit('after dogstatsd setup')
 
       if (config.spanLeakDebug > 0) {
         const spanleak = require('./spanleak')
@@ -150,11 +152,11 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
-        dbg('remoteConfig: require start')
+        _dbgInit('remoteConfig: require start')
         const RemoteConfig = require('./remote_config')
-        dbg('remoteConfig: new RemoteConfig start')
+        _dbgInit('remoteConfig: new RemoteConfig start')
         const rc = new RemoteConfig(config)
-        dbg('remoteConfig: new RemoteConfig done')
+        _dbgInit('remoteConfig: new RemoteConfig done')
 
         const tracingRemoteConfig = require('./config/remote_config')
         tracingRemoteConfig.enable(rc, config, () => {
@@ -192,7 +194,7 @@ class Tracer extends NoopProxy {
 
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
         openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
-        dbg('remoteConfig: done')
+        _dbgInit('remoteConfig: done')
       }
 
       if (config.profiling.enabled === 'true') {
@@ -200,31 +202,31 @@ class Tracer extends NoopProxy {
       } else {
         this._profilerStarted = false
         if (config.profiling.enabled === 'auto') {
-          dbg('SSIHeuristics: start')
+          _dbgInit('SSIHeuristics: start')
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
-          dbg('SSIHeuristics: done')
+          _dbgInit('SSIHeuristics: done')
           ssiHeuristics.onTriggered(() => {
             this._startProfiler(config)
             ssiHeuristics.onTriggered() // deregister this callback
           })
         }
       }
-      dbg('after profiling setup')
+      _dbgInit('after profiling setup')
 
       if (config.runtimeMetrics.enabled) {
-        dbg('runtimeMetrics.start: start')
+        _dbgInit('runtimeMetrics.start: start')
         runtimeMetrics.start(config)
-        dbg('runtimeMetrics.start: done')
+        _dbgInit('runtimeMetrics.start: done')
       }
 
-      dbg('before #updateTracing')
+      _dbgInit('before #updateTracing')
       this.#updateTracing(config)
-      dbg('after #updateTracing')
+      _dbgInit('after #updateTracing')
 
       this._modules.rewriter.enable(config)
-      dbg('after rewriter.enable')
+      _dbgInit('after rewriter.enable')
 
       if (config.tracing && config.isManualApiEnabled) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
@@ -263,7 +265,7 @@ class Tracer extends NoopProxy {
         getDynamicInstrumentationClient(config)
       }
 
-      dbg('done')
+      _dbgInit('done')
     } catch (e) {
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
@@ -300,17 +302,16 @@ class Tracer extends NoopProxy {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {
-        const _dbg2 = (label) => process.stderr.write(`[proxy.init +${Date.now() - (process._tracerInitStart || Date.now())}ms] #updateTracing: ${label}\n`)
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
-        _dbg2('before new DatadogTracer')
+        _dbgInit('before new DatadogTracer')
         this._tracer = new DatadogTracer(config, prioritySampler)
-        _dbg2('after new DatadogTracer')
+        _dbgInit('after new DatadogTracer')
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
-        _dbg2('after lazyProxy appsec/llmobs')
+        _dbgInit('after lazyProxy appsec/llmobs')
 
         if (config.experimental?.aiguard?.enabled) {
           this._modules.aiguard.enable(this._tracer, config)
@@ -322,11 +323,11 @@ class Tracer extends NoopProxy {
         this._modules.openfeature.enable(config)
         lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
       }
-      _dbg2('after flaggingProvider')
+      _dbgInit('after flaggingProvider')
       if (config.iast.enabled) {
-        _dbg2('iast.enable start')
+        _dbgInit('iast.enable start')
         this._modules.iast.enable(config, this._tracer)
-        _dbg2('iast.enable done')
+        _dbgInit('iast.enable done')
       }
       // This needs to be after the IAST module is enabled
     } else if (this._tracingInitialized) {
@@ -338,15 +339,15 @@ class Tracer extends NoopProxy {
     }
 
     if (this._tracingInitialized) {
-      _dbg2('tracer.configure start')
+      _dbgInit('tracer.configure start')
       this._tracer.configure(config)
-      _dbg2('pluginManager.configure start')
+      _dbgInit('pluginManager.configure start')
       this._pluginManager.configure(config)
-      _dbg2('pluginManager.configure done')
+      _dbgInit('pluginManager.configure done')
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
-      _dbg2('done')
+      _dbgInit('done')
     }
   }
 

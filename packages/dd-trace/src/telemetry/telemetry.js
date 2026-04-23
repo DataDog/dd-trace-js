@@ -1,5 +1,10 @@
 'use strict'
 
+function _dbgInit (label) {
+  const t = process._tracerInitStart || Date.now()
+  process.stderr.write(`[proxy.init +${Date.now() - t}ms] ${label}\n`)
+}
+
 const os = require('os')
 const dc = require('dc-polyfill')
 
@@ -325,18 +330,17 @@ function start (aConfig, thePluginManager) {
   application = createAppObject(config)
   integrations = getIntegrations()
 
-  const _dbg = (label) => process.stderr.write(`[proxy.init +${Date.now() - (process._tracerInitStart || Date.now())}ms] telemetry.start: ${label}\n`)
-  _dbg('before dependencies.start')
+  _dbgInit('telemetry.start: before dependencies.start')
   dependencies.start(config, application, host, getRetryData, updateRetryData)
-  _dbg('after dependencies.start')
+  _dbgInit('telemetry.start: after dependencies.start')
   telemetryLogger.start(config)
-  _dbg('after telemetryLogger.start')
+  _dbgInit('telemetry.start: after telemetryLogger.start')
   endpoints.start(config, application, host, getRetryData, updateRetryData)
-  _dbg('after endpoints.start')
+  _dbgInit('telemetry.start: after endpoints.start')
   sessionPropagation.start(config)
 
   sendData(config, application, host, 'app-started', appStarted(config))
-  _dbg('after sendData app-started')
+  _dbgInit('telemetry.start: after sendData app-started')
 
   if (integrations.length > 0) {
     sendData(config, application, host, 'app-integrations-change', { integrations }, updateRetryData)

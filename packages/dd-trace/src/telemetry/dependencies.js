@@ -81,12 +81,17 @@ function waitAndSend (config, application, host) {
 function loadAllTheLoadedModules () {
   if (require.cache) {
     const filenames = Object.keys(require.cache)
+    const t0 = process._tracerInitStart || Date.now()
     const start = Date.now()
-    process.stderr.write(`[proxy.init +${Date.now() - (process._tracerInitStart || Date.now())}ms] loadAllTheLoadedModules: start require.cache size=${filenames.length}\n`)
+    process.stderr.write(`[proxy.init +${start - t0}ms] loadAllTheLoadedModules: start size=${filenames.length}\n`)
     for (const filename of filenames) {
       onModuleLoad({ filename })
     }
-    process.stderr.write(`[proxy.init +${Date.now() - (process._tracerInitStart || Date.now())}ms] loadAllTheLoadedModules: done in ${Date.now() - start}ms, detectedDependencyKeys.size=${detectedDependencyKeys.size}\n`)
+    const elapsed = Date.now() - start
+    process.stderr.write(
+      `[proxy.init +${Date.now() - t0}ms] loadAllTheLoadedModules: done in ${elapsed}ms` +
+      ` keys=${detectedDependencyKeys.size}\n`
+    )
   }
 }
 
