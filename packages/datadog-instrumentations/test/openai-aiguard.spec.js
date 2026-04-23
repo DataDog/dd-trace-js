@@ -4,8 +4,6 @@ const assert = require('node:assert/strict')
 const { channel } = require('dc-polyfill')
 const { before, beforeEach, describe, it } = require('mocha')
 
-const { runWithAIGuardContext } = require('../src/helpers/ai-guard-context')
-
 const aiguardChannel = channel('dd-trace:ai:aiguard')
 
 // Minimal APIPromise stand-in. The real SDK APIPromise has a `parse()` method that
@@ -131,16 +129,6 @@ describe('openai AI Guard instrumentation', () => {
 
       return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
         .then(body => assert.strictEqual(body.choices[0].message, assistant))
-    })
-
-    it('calls original directly when under an active AI Guard context', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
-      const completions = new Completions()
-      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
-
-      return runWithAIGuardContext(() => completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse())
-        .then(() => assert.strictEqual(calls.length, 0, 'should not publish when context active'))
-        .finally(unsubscribe)
     })
 
     it('calls original directly when messages are missing', () => {
@@ -395,16 +383,6 @@ describe('openai AI Guard instrumentation', () => {
       responses._nextApiPromise = new FakeAPIPromise({ output: [] })
 
       return responses.create({ input: 'hi', stream: true }).parse()
-        .then(() => assert.strictEqual(calls.length, 0))
-        .finally(unsubscribe)
-    })
-
-    it('calls original directly when under an active AI Guard context', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
-      const responses = new Responses()
-      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
-
-      return runWithAIGuardContext(() => responses.create({ input: 'hi' }).parse())
         .then(() => assert.strictEqual(calls.length, 0))
         .finally(unsubscribe)
     })

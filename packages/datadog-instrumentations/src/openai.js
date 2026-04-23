@@ -9,7 +9,6 @@ const {
   convertChatCompletionMessages,
   convertResponsesInput,
 } = require('./helpers/ai-messages')
-const { isAIGuardContextActive } = require('./helpers/ai-guard-context')
 const { aiguardChannel, publishToAIGuard } = require('./helpers/ai-guard-publish')
 
 const ch = dc.tracingChannel('apm:openai:request')
@@ -260,8 +259,7 @@ for (const extension of extensions) {
           // Guard only evaluates non-streaming responses.
           const aiguardApplicable = !stream &&
             AIGUARD_CONVERSATIONAL_RESOURCES.has(baseResource) &&
-            aiguardChannel.hasSubscribers &&
-            !isAIGuardContextActive()
+            aiguardChannel.hasSubscribers
 
           if (!ch.start.hasSubscribers && !aiguardApplicable) {
             return methodFn.apply(this, arguments)
