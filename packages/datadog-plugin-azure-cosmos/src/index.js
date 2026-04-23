@@ -15,11 +15,11 @@ class AzureCosmosPlugin extends DatabasePlugin {
   static prefix = 'tracing:orchestrion:@azure/cosmos:executePlugins'
   static peerServicePrecursors = ['db.name']
 
-  operationName() {
+  operationName () {
     return 'cosmosdb.query'
   }
 
-  asyncEnd(ctx) {
+  asyncEnd (ctx) {
     if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
     const span = ctx.currentStore?.span
     if (span != null) {
@@ -36,7 +36,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     }
   }
 
-  error(ctx) {
+  error (ctx) {
     if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
     const span = ctx.currentStore?.span
     if (span != null) {
@@ -53,7 +53,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     }
   }
 
-  bindStart(ctx) {
+  bindStart (ctx) {
     const requestContext = ctx.arguments?.[1]
     const resource = this.getResource(requestContext)
     const { dbName, containerName } = this.getDbInfo(requestContext)
@@ -71,15 +71,14 @@ class AzureCosmosPlugin extends DatabasePlugin {
         (operationType === 'read' && resourceType !== 'docs'))) {
         ctx.currentStore = { ...storage('legacy').getStore() }
         return ctx.currentStore
-        // return
       }
 
       // separately, skip tracing read requests without a path, these don't
       // represent CRUD operations on a resource we care about
+      // not returning current store because we don't want the child http.request spans
+      // to be created
       if (operationType === 'read' && requestContext.path === '') {
-        ctx.currentStore = { ...storage('legacy').getStore() }
-        return ctx.currentStore
-        // return
+        return
       }
     }
 
@@ -102,7 +101,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     return ctx.currentStore
   }
 
-  getResource(requestContext) {
+  getResource (requestContext) {
     if (requestContext != null) {
       const operationType = requestContext.operationType
       const resourceLink = requestContext.path
@@ -111,7 +110,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     return null
   }
 
-  getDbInfo(requestContext) {
+  getDbInfo (requestContext) {
     let dbName = null
     let containerName = null
     if (requestContext != null) {
@@ -138,7 +137,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     return { dbName, containerName }
   }
 
-  getConnectionMode(requestContext) {
+  getConnectionMode (requestContext) {
     if (requestContext != null) {
       const mode = requestContext.client?.connectionPolicy?.connectionMode
       if (mode === 0) {
@@ -151,7 +150,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
     return null
   }
 
-  getHttpInfo(requestContext) {
+  getHttpInfo (requestContext) {
     let outHost = null
     let userAgent = null
     if (requestContext != null) {
