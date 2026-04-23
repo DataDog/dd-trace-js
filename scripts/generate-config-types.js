@@ -73,10 +73,17 @@ function balancedEnd (s, start, open, close) {
   let i = start
   while (i < s.length) {
     const ch = s[i]
-    if (ch === open) { depth++; i++ }
-    else if (ch === close) { i++; if (--depth === 0) return i }
-    else if (ch === '"' || ch === '\'' || ch === '`') i = skipQuoted(s, i, ch)
-    else i++
+    if (ch === open) {
+      depth++
+      i++
+    } else if (ch === close) {
+      i++
+      if (--depth === 0) return i
+    } else if (ch === '"' || ch === '\'' || ch === '`') {
+      i = skipQuoted(s, i, ch)
+    } else {
+      i++
+    }
   }
   return -1
 }
