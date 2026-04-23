@@ -179,7 +179,8 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "100"
+        "default": "100",
+        "allowed": "\\d+"
       }
     ],
     "DD_APM_TRACING_ENABLED": [
