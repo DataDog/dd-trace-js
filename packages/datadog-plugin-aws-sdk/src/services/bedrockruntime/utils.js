@@ -525,7 +525,11 @@ function buildToolCall ({ name, input, toolUseId, inputStr }) {
 
 function buildToolResult ({ toolUseId, content }) {
   const result = (content || [])
-    .map(c => typeof c.text === 'string' ? c.text : c.json == null ? '' : JSON.stringify(c.json))
+    .map(c => typeof c.text === 'string'
+      ? c.text
+      : c.json == null
+        ? `[${Object.keys(c)[0] || 'unknown'} content]`
+        : JSON.stringify(c.json))
     .join('')
   return { name: '', result, toolId: toolUseId ?? '', type: 'tool_result' }
 }
@@ -603,10 +607,12 @@ function buildConverseStreamGeneration (chunks) {
       const { contentBlockIndex, delta } = chunk.contentBlockDelta
       if (typeof delta?.text === 'string') {
         textByIdx[contentBlockIndex] = (textByIdx[contentBlockIndex] || '') + delta.text
-      }
-      if (typeof delta?.toolUse?.input === 'string') {
+      } else if (typeof delta?.toolUse?.input === 'string') {
         toolByIdx[contentBlockIndex] = toolByIdx[contentBlockIndex] || { inputStr: '' }
         toolByIdx[contentBlockIndex].inputStr += delta.toolUse.input
+      } else {
+        const type = Object.keys(delta || {})[0] || 'unknown'
+        textByIdx[contentBlockIndex] = (textByIdx[contentBlockIndex] || '') + `[Unsupported delta: ${type}]`
       }
     } else if (chunk.messageStop) {
       stopReason = chunk.messageStop.stopReason || stopReason
