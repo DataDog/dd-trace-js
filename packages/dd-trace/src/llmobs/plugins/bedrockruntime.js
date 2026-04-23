@@ -7,12 +7,21 @@ const {
   extractTextAndResponseReason,
   parseModelId,
   extractTextAndResponseReasonFromStream,
+  extractRequestParamsConverse,
+  extractTextAndResponseReasonConverse,
+  buildConverseStreamGeneration,
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 const BaseLLMObsPlugin = require('./base')
 
 const llmobsStore = storage('llmobs')
 
-const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
+const ENABLED_OPERATIONS = new Set([
+  'invokeModel',
+  'invokeModelWithResponseStream',
+  'converse',
+  'converseStream',
+])
+const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
 
 const requestIdsToTokens = {}
 
@@ -62,6 +71,7 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
 
   setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName }) {
     const isStream = request?.operation?.toLowerCase().includes('stream')
+    const isConverse = CONVERSE_OPERATIONS.has(request?.operation)
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
 
     const parent = llmobsStore.getStore()?.span
@@ -76,29 +86,37 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       integration: 'bedrock',
     })
 
-    const requestParams = extractRequestParams(request.params, modelProvider)
+    const requestParams = isConverse
+      ? extractRequestParamsConverse(request.params)
+      : extractRequestParams(request.params, modelProvider)
     // for streamed responses, we'll use the coerced response object we formed in the stream handler
-    const textAndResponseReason = isStream
-      ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
-      : extractTextAndResponseReason(response, modelProvider, modelName)
+    let generation
+    if (isConverse) {
+      generation = isStream ? buildConverseStreamGeneration(ctx.chunks) : extractTextAndResponseReasonConverse(response)
+    } else {
+      generation = isStream
+        ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
+        : extractTextAndResponseReason(response, modelProvider, modelName)
+    }
 
     // add metadata tags
-    this._tagger.tagMetadata(span, {
+    const metadata = {
       temperature: Number.parseFloat(requestParams.temperature) || 0,
       max_tokens: Number.parseInt(requestParams.maxTokens) || 0,
-    })
+    }
+    if (generation.finishReason) metadata.stop_reason = generation.finishReason
+    this._tagger.tagMetadata(span, metadata)
 
     // add I/O tags
-    this._tagger.tagLLMIO(
-      span,
-      requestParams.prompt,
-      [{ content: textAndResponseReason.message, role: textAndResponseReason.role }]
-    )
+    const outputMessages = generation.messages && generation.messages.length > 0
+      ? generation.messages
+      : [{ content: generation.message, role: generation.role }]
+    this._tagger.tagLLMIO(span, requestParams.prompt, outputMessages)
 
     // add token metrics
     const { inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens } = extractTokens({
       requestId: response.$metadata.requestId,
-      usage: textAndResponseReason.usage,
+      usage: generation.usage,
     })
     this._tagger.tagMetrics(span, {
       inputTokens,

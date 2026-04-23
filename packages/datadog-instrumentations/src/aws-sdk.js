@@ -132,13 +132,14 @@ function handleCompletion (result, ctx, channelSuffix) {
   const completeChannel = channel(`apm:aws:request:complete:${channelSuffix}`)
   const streamedChunkChannel = channel(`apm:aws:response:streamed-chunk:${channelSuffix}`)
 
-  const iterator = result?.body?.[Symbol.asyncIterator]
+  const streamable = result?.body ?? result?.stream
+  const iterator = streamable?.[Symbol.asyncIterator]
   if (!iterator) {
     completeChannel.publish(ctx)
     return
   }
 
-  shimmer.wrap(result.body, Symbol.asyncIterator, function (asyncIterator) {
+  shimmer.wrap(streamable, Symbol.asyncIterator, function (asyncIterator) {
     return function () {
       const iterator = asyncIterator.apply(this, arguments)
       shimmer.wrap(iterator, 'next', function (next) {
