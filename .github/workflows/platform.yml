@@ -78,6 +78,7 @@ jobs:
         if: always() && github.actor != 'dependabot[bot]'
         with:
           api_key: ${{ steps.dd-sts.outputs.api_key }}
+          datadog-ci-version: 5.13.1
           service: dd-trace-js-tests
 
   core:
