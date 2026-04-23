@@ -192,6 +192,16 @@ class Tracer extends NoopProxy {
         }
       }
 
+      if (config.otelLogsEnabled) {
+        const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
+        initializeOpenTelemetryLogs(config)
+      }
+
+      if (config.otelMetricsEnabled) {
+        const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
+        initializeOpenTelemetryMetrics(config)
+      }
+
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
       }
@@ -219,16 +229,6 @@ class Tracer extends NoopProxy {
             'DD_AGENTLESS_LOG_SUBMISSION_ENABLED is set, but DD_API_KEY is undefined, so no automatic log submission will be performed.'
           )
         }
-      }
-
-      if (config.otelLogsEnabled) {
-        const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
-        initializeOpenTelemetryLogs(config)
-      }
-
-      if (config.otelMetricsEnabled) {
-        const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
-        initializeOpenTelemetryMetrics(config)
       }
 
       if (config.isTestDynamicInstrumentationEnabled) {
