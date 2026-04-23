@@ -103,15 +103,24 @@ class Tracer extends NoopProxy {
 
     this._initialized = true
 
+    const initStart = Date.now()
+    const dbg = (label) => process.stderr.write(`[proxy.init +${Date.now() - initStart}ms] ${label}\n`)
+    process._tracerInitStart = initStart
+
+    dbg('start')
+
     try {
       const config = getConfig(options) // TODO: support dynamic code config
+      dbg('after getConfig')
 
       // Add config dependent process tags
       processTags.initialize(config)
+      dbg('after processTags.initialize')
 
       // Configure propagation hash manager for process tags + container tags
       const propagationHash = require('./propagation-hash')
       propagationHash.configure(config)
+      dbg('after propagationHash.configure')
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
@@ -122,6 +131,7 @@ class Tracer extends NoopProxy {
       }
 
       telemetry.start(config, this._pluginManager)
+      dbg('after telemetry.start')
 
       if (config.dogstatsd) {
         // Custom Metrics
@@ -199,9 +209,12 @@ class Tracer extends NoopProxy {
         runtimeMetrics.start(config)
       }
 
+      dbg('before #updateTracing')
       this.#updateTracing(config)
+      dbg('after #updateTracing')
 
       this._modules.rewriter.enable(config)
+      dbg('after rewriter.enable')
 
       if (config.tracing && config.isManualApiEnabled) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
@@ -239,6 +252,8 @@ class Tracer extends NoopProxy {
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
       }
+
+      dbg('done')
     } catch (e) {
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
@@ -275,10 +290,13 @@ class Tracer extends NoopProxy {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {
+        const _dbg2 = (label) => process.stderr.write(`[proxy.init +${Date.now() - (process._tracerInitStart || Date.now())}ms] #updateTracing: ${label}\n`)
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
+        _dbg2('before new DatadogTracer')
         this._tracer = new DatadogTracer(config, prioritySampler)
+        _dbg2('after new DatadogTracer')
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)

@@ -18,24 +18,31 @@ const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
+    const _dbg = (label) => process.stderr.write(`[proxy.init +${Date.now() - (process._tracerInitStart || Date.now())}ms] DatadogTracer.constructor: ${label}\n`)
+    _dbg('start')
     super(config, prioritySampler)
+    _dbg('after super()')
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
+    _dbg('after flushStartupLogs')
 
     if (!IS_SERVERLESS) {
       const storeConfig = require('./tracer_metadata')
+      _dbg('before storeConfig')
       // Keep a reference to the handle, to keep the memfd alive in memory.
       // It is read by the service discovery feature.
       const metadata = storeConfig(config)
+      _dbg('after storeConfig')
       if (metadata === undefined) {
         log.warn('Could not store tracer configuration for service discovery')
       }
       this._inmem_cfg = metadata
     }
+    _dbg('done')
   }
 
   configure (config) {
