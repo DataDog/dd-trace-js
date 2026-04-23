@@ -529,7 +529,7 @@ function buildToolResult ({ toolUseId, content }) {
     .map(c => typeof c.text === 'string'
       ? c.text
       : c.json == null
-        ? `[${Object.keys(c)[0] || 'unknown'} content]`
+        ? `[Unsupported content type(s): ${Object.keys(c).join(',')}]`
         : JSON.stringify(c.json))
     .join('')
   return { name: '', result, toolId: toolUseId ?? '', type: 'tool_result' }
