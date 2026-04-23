@@ -592,7 +592,7 @@ class Config extends ConfigBase {
 
     // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
     // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
-    const defaultOtlpBase = `http://${agentHostname}:4318`
+    const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
     if (!this.otelLogsUrl) {
       setAndTrack(this, 'otelLogsUrl', `${defaultOtlpBase}/v1/logs`)
     }

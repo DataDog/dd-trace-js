@@ -549,7 +549,7 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.export([])
       assert(!exportCalled, 'No HTTP request should be made for empty span arrays')
@@ -562,7 +562,7 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: 0 } })])
       assert(!exportCalled, 'No HTTP request should be made for rejected traces')
@@ -575,7 +575,7 @@ describe('OpenTelemetry Traces', () => {
         return { write: () => {}, end: () => {}, on: () => {}, once: () => {}, setTimeout: () => {} }
       })
 
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.export([createMockSpan({ metrics: { _sampling_priority_v1: -1 } })])
       assert(!exportCalled, 'No HTTP request should be made for user-rejected traces')
@@ -619,11 +619,11 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://custom-collector:9999')
     })
 
-    it('falls back to generic OTEL_EXPORTER_OTLP_ENDPOINT via alias', () => {
+    it('appends /v1/traces to the generic OTEL_EXPORTER_OTLP_ENDPOINT base URL', () => {
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318/custom'
 
       const config = getConfigFresh()
-      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://collector:4318/custom')
+      assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://collector:4318/custom/v1/traces')
     })
 
     it('traces-specific endpoint takes precedence over generic endpoint', () => {
@@ -634,18 +634,23 @@ describe('OpenTelemetry Traces', () => {
       assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://traces-specific:9999')
     })
 
-    it('exporter setUrl appends /v1/traces for a base URL', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector:4318', '', 1000, {})
-      assert.strictEqual(exporter.options.path, '/v1/traces')
+    it('exporter setUrl preserves a bare URL as-is without adding a signal path', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318', {}, 1000, {})
+      assert.strictEqual(exporter.options.path, '/')
     })
 
-    it('exporter setUrl appends /v1/traces when a custom path prefix is given', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector:4318/custom', '', 1000, {})
-      assert.strictEqual(exporter.options.path, '/custom/v1/traces')
+    it('exporter setUrl preserves an explicit signal-specific path as-is', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/custom', {}, 1000, {})
+      assert.strictEqual(exporter.options.path, '/custom')
+    })
+
+    it('exporter setUrl preserves a trailing-slash signal-specific path', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces/', {}, 1000, {})
+      assert.strictEqual(exporter.options.path, '/v1/traces/')
     })
 
     it('exporter setUrl keeps /v1/traces when already present', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces', '', 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://collector:4318/v1/traces', {}, 1000, {})
       assert.strictEqual(exporter.options.path, '/v1/traces')
     })
 
@@ -698,7 +703,7 @@ describe('OpenTelemetry Traces', () => {
         }),
       })
 
-      const exporter = new MockedExporter('http://localhost:4318/v1/traces', '', 1000, {})
+      const exporter = new MockedExporter('http://localhost:4318/v1/traces', {}, 1000, {})
       exporter.export([createMockSpan()])
 
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
@@ -706,26 +711,26 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('setUrl', () => {
-    it('retargets hostname and port and appends /v1/traces to a custom path', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+    it('retargets hostname and port and preserves an explicit custom path as-is', () => {
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.setUrl('http://otel-collector:9999/custom/path')
 
       assert.strictEqual(exporter.options.hostname, 'otel-collector')
       assert.strictEqual(exporter.options.port, '9999')
-      assert.strictEqual(exporter.options.path, '/custom/path/v1/traces')
+      assert.strictEqual(exporter.options.path, '/custom/path')
     })
 
-    it('appends /v1/traces when the URL has no path', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+    it('uses a bare URL as-is without adding a signal path', () => {
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.setUrl('http://otel-collector:9999')
 
-      assert.strictEqual(exporter.options.path, '/v1/traces')
+      assert.strictEqual(exporter.options.path, '/')
     })
 
     it('keeps /v1/traces when already present and preserves the query string', () => {
-      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', {}, 1000, {})
 
       exporter.setUrl('http://otel-collector:9999/v1/traces?token=abc')
 

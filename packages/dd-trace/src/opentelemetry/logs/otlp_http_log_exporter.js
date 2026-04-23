@@ -29,7 +29,7 @@ class OtlpHttpLogExporter extends OtlpHttpExporterBase {
    * @param {Resource} resource - Resource attributes
    */
   constructor (url, headers, timeout, protocol, resource) {
-    super(url, headers, timeout, protocol, '/v1/logs', 'logs')
+    super(url, headers, timeout, protocol, 'logs')
     this.transformer = new OtlpTransformer(resource, protocol)
   }
 

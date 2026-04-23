@@ -320,8 +320,9 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318',
-      otelLogsUrl: 'http://collector:4318',
-      otelMetricsUrl: 'http://collector:4318',
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://collector:4318/v1/traces',
+      otelLogsUrl: 'http://collector:4318/v1/logs',
+      otelMetricsUrl: 'http://collector:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_TRACES_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_HEADERS: { 'x-test': 'value' },
       OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },

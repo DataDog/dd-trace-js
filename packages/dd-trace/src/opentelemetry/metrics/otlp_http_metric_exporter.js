@@ -25,7 +25,7 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
    * @param {Resource} resource - Resource attributes
    */
   constructor (url, headers, timeout, protocol, resource) {
-    super(url, headers, timeout, protocol, '/v1/metrics', 'metrics')
+    super(url, headers, timeout, protocol, 'metrics')
     this.transformer = new OtlpTransformer(resource, protocol)
   }
 

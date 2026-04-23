@@ -38,7 +38,7 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    */
   constructor (url, headers, timeout, resourceAttributes) {
-    super(url, headers, timeout, 'http/json', '/v1/traces', 'traces')
+    super(url, headers, timeout, 'http/json', 'traces')
     this.#transformer = new OtlpTraceTransformer(resourceAttributes)
   }
 

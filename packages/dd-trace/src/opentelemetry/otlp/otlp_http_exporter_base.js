@@ -16,23 +16,19 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
-  #defaultPath
-
   /**
    * Creates a new OtlpHttpExporterBase instance.
    *
-   * @param {string} url - OTLP endpoint URL
+   * @param {string} url - OTLP endpoint URL (callers are expected to supply the full signal URL)
    * @param {Record<string, string>|undefined} headers - Additional HTTP headers parsed from the
    *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   * @param {string} defaultPath - Default path to use if URL has no path
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
    */
-  constructor (url, headers, timeout, protocol, defaultPath, signalType) {
+  constructor (url, headers, timeout, protocol, signalType) {
     this.protocol = protocol
     this.signalType = signalType
-    this.#defaultPath = defaultPath
 
     const isJson = protocol === 'http/json'
 
@@ -119,23 +115,15 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Updates the target URL used by this exporter. Called at construction time and by the tracer
-   * when the agent URL changes at runtime (e.g. via `tracer.setUrl(...)`).
-   *
-   * The signal-specific subpath (`/v1/traces`, `/v1/metrics`, `/v1/logs`) is appended if not
-   * already present, so callers can pass a bare base URL (default host, or the generic
-   * `OTEL_EXPORTER_OTLP_ENDPOINT`) and still land on the right OTLP path.
+   * Updates the target URL used by this exporter. The URL is used as-is per the OTel spec: the
+   * caller is responsible for including the signal-specific path (`/v1/traces` etc.).
    * @param {string} url - New OTLP endpoint URL
    */
   setUrl (url) {
     const parsedUrl = new URL(url)
-    let path = parsedUrl.pathname
-    if (!path.endsWith(this.#defaultPath)) {
-      path = path === '/' ? this.#defaultPath : path.replace(/\/$/, '') + this.#defaultPath
-    }
     this.options.hostname = parsedUrl.hostname
     this.options.port = parsedUrl.port
-    this.options.path = path + parsedUrl.search
+    this.options.path = parsedUrl.pathname + parsedUrl.search
   }
 
   /**

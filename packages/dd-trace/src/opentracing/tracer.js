@@ -50,7 +50,7 @@ class DatadogTracer {
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
-      [formats.BINARY]: new BinaryPropagator(config),
+      [formats.BINARY]: new BinaryPropagator(),
       [formats.LOG]: new LogPropagator(config),
       [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config),
     }
@@ -123,7 +123,7 @@ class DatadogTracer {
  * Get the span context from a span or a span context.
  *
  * @param {Span|SpanContext} spanContext
- * @returns {SpanContext}
+ * @returns {SpanContext|null}
  */
 function getContext (spanContext) {
   if (spanContext instanceof Span) {

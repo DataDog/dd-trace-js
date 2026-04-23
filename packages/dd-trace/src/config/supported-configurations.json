@@ -3912,10 +3912,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "aliases": [
-          "OTEL_EXPORTER_OTLP_ENDPOINT"
-        ]
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_TRACES_HEADERS": [
@@ -3954,10 +3951,7 @@
         "implementation": "A",
         "type": "string",
         "default": null,
-        "internalPropertyName": "otelLogsUrl",
-        "aliases": [
-          "OTEL_EXPORTER_OTLP_ENDPOINT"
-        ]
+        "internalPropertyName": "otelLogsUrl"
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_HEADERS": [
@@ -3998,10 +3992,7 @@
         "implementation": "A",
         "type": "string",
         "default": null,
-        "internalPropertyName": "otelMetricsUrl",
-        "aliases": [
-          "OTEL_EXPORTER_OTLP_ENDPOINT"
-        ]
+        "internalPropertyName": "otelMetricsUrl"
       }
     ],
     "OTEL_EXPORTER_OTLP_METRICS_HEADERS": [
