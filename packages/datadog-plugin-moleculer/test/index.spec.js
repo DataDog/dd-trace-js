@@ -10,8 +10,8 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
 
-// The returned port could already be in use by another test that was running at
-// the same time. This race condition is not prevented by this function.
+// Caller must retry on EADDRINUSE since the port may be grabbed between
+// `close` and re-binding (see `startBroker`).
 function getPort () {
   return new Promise((resolve, reject) => {
     const server = net.createServer()
@@ -23,13 +23,29 @@ function getPort () {
   })
 }
 
+async function withPortRetry (fn, attempts = 5) {
+  let lastError
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn()
+    } catch (err) {
+      if (err && err.code === 'EADDRINUSE') {
+        lastError = err
+        continue
+      }
+      throw err
+    }
+  }
+  throw lastError
+}
+
 describe('Plugin', () => {
   let broker
   let port
 
   describe('moleculer', () => {
     withVersions('moleculer', 'moleculer', version => {
-      const startBroker = async () => {
+      const startBroker = () => withPortRetry(async () => {
         const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
 
         port = await getPort()
@@ -66,7 +82,7 @@ describe('Plugin', () => {
         })
 
         return broker.start()
-      }
+      })
 
       describe('server', () => {
         describe('without configuration', () => {

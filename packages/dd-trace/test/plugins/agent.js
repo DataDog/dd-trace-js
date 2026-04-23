@@ -178,7 +178,7 @@ function addEnvironmentVariablesToHeaders (headers) {
 function handleTraceRequest (req, res, sendToTestAgent) {
   // handles the received trace request and sends trace to Test Agent if bool enabled.
   if (sendToTestAgent) {
-    const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
+    const testAgentUrl = process.env.DD_TEST_AGENT_URL
     const replacer = (k, v) => typeof v === 'bigint' ? Number(v) : v
 
     // remove incorrect headers
@@ -226,35 +226,45 @@ function handleTraceRequest (req, res, sendToTestAgent) {
   })
 }
 
-function checkAgentStatus () {
-  return new Promise((resolve) => {
-    const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
-    const timeoutMs = 2000
+/** @type {Promise<boolean> | undefined} */
+let agentStatusPromise
 
+// Probe once per worker, and only when a test agent is expected to be up
+// (signalled by `DD_TEST_AGENT_URL`). `testagent/start` already waits for
+// the agent to answer `/info` before tests run, so a single generous
+// timeout is enough here.
+function checkAgentStatus () {
+  if (agentStatusPromise !== undefined) return agentStatusPromise
+
+  const agentUrl = process.env.DD_TEST_AGENT_URL
+  if (!agentUrl) {
+    agentStatusPromise = Promise.resolve(false)
+    return agentStatusPromise
+  }
+
+  agentStatusPromise = new Promise((resolve) => {
+    const timeoutMs = 1000
     const request = http.request(`${agentUrl}/info`, { method: 'GET', timeout: timeoutMs }, response => {
       resolve(response.statusCode === 200)
     })
 
     request.on('timeout', () => {
       // eslint-disable-next-line no-console
-      console.warn(
-        `checkAgentStatus: Timed out after ${timeoutMs}ms trying to reach test agent at ${agentUrl}. ` +
-        'Proceeding without test agent. If this happens frequently, investigate what is listening on that port.'
-      )
+      console.warn(`checkAgentStatus: test agent at ${agentUrl} did not respond within ${timeoutMs}ms`)
       request.destroy()
       resolve(false)
     })
 
     request.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
-      if (err.code !== 'ECONNREFUSED') {
-        // eslint-disable-next-line no-console
-        console.warn(`checkAgentStatus: Unexpected error reaching test agent at ${agentUrl}`, err)
-      }
+      // eslint-disable-next-line no-console
+      console.warn(`checkAgentStatus: error reaching test agent at ${agentUrl}`, err)
       resolve(false)
     })
 
     request.end()
   })
+
+  return agentStatusPromise
 }
 
 function getDsmStats () {
@@ -454,7 +464,10 @@ module.exports = {
 
     const innerAgent = agent
 
-    const useTestAgent = await checkAgentStatus()
+    // Start the probe now, but don't block `load()` on it. The trace
+    // handler below awaits the result only when a trace actually arrives,
+    // which in practice is well after the probe has already resolved.
+    const useTestAgent = checkAgentStatus()
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
@@ -470,8 +483,8 @@ module.exports = {
       res.status(404).end()
     })
 
-    agent.put('/v0.4/traces', (req, res) => {
-      handleTraceRequest(req, res, useTestAgent)
+    agent.put('/v0.4/traces', async (req, res) => {
+      handleTraceRequest(req, res, await useTestAgent)
     })
 
     // CI Visibility Agentless intake
