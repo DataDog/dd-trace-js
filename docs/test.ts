@@ -197,9 +197,9 @@ tracer.dogstatsd.flush()
 
 const httpOptions = {
   service: 'test',
-  allowlist: ['url', /url/, url => true],
-  blocklist: ['url', /url/, url => true],
-  validateStatus: code => code < 400,
+  allowlist: ['url', /url/, (url: string) => true],
+  blocklist: ['url', /url/, (url: string) => true],
+  validateStatus: (code: number) => code < 400,
   headers: ['host'],
   middleware: true
 };
