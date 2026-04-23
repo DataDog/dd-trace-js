@@ -4,7 +4,7 @@ module.exports = {
   allowUncaught: true,
   color: true,
   exit: true,
-  timeout: 10000,
+  timeout: 10_000,
   require: ['packages/dd-trace/test/setup/mocha.js'],
   reporter: 'mocha-multi-reporters',
   reporterOption: [
