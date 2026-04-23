@@ -583,7 +583,7 @@ export interface GeneratedConfig {
   traceWebsocketMessagesSeparateTraces: boolean;
   tracing: boolean;
   url: string | URL;
-  version: string;
+  version: string | undefined;
   vertexai: {
     spanCharLimit: number;
     spanPromptCompletionSampleRate: number;

@@ -59,44 +59,61 @@ function getPropertyName (canonicalName, entry) {
   return configurationNames?.[0] ?? canonicalName
 }
 
-/**
- * Scans `packages/dd-trace/src/config/index.js` for `if (!this.X) { setAndTrack(this, 'X', ...) }`
- * fallback patterns inside the `#applyCalculated()` method. Any matching property name is
- * guaranteed to be non-null after calculation, so we remove `| undefined` from the generated type.
- *
- * Scope: only `#applyCalculated()` — other assignment sites (env resolution, user options) are not
- * considered. This keeps the heuristic narrow and prevents false narrowing from conditional
- * setAndTrack calls elsewhere.
- *
- * @returns {Set<string>}
- */
-function findCalculatedFallbackProperties () {
-  const source = readFileSync(CONFIG_INDEX_PATH, 'utf8')
+const FALLBACK_PATTERN =
+  /if\s*\(\s*!\s*this\.([\w.]+)\s*\)\s*\{[\s\S]*?setAndTrack\s*\(\s*this\s*,\s*['"]([\w.]+)['"]\s*,/g
 
-  // Locate `#applyCalculated () {` and extract its body by balancing braces.
-  const methodMarker = /#applyCalculated\s*\(\s*\)\s*\{/.exec(source)
-  if (!methodMarker) {
-    throw new Error('Could not locate #applyCalculated() in config/index.js')
-  }
+// Expression whose tail (after any top-level `||`/`??`, or the whole expression) is a string or
+// template literal — i.e. the result is guaranteed defined at runtime.
+const GUARANTEED_DEFINED = /(?:^|\|\||\?\?)\s*(?:'[^']*'|"[^"]*"|`(?:\$\{[^}`]*\}|[^`])*`)\s*$/
+
+// Returns the index right after the `close` that balances the `open` preceding `start`, or -1 if
+// unbalanced. Skips over string and template literals so their contents don't affect depth.
+function balancedEnd (s, start, open, close) {
   let depth = 1
-  let i = methodMarker.index + methodMarker[0].length
-  while (i < source.length && depth > 0) {
-    const ch = source[i]
-    if (ch === '{') depth++
-    else if (ch === '}') depth--
+  let i = start
+  while (i < s.length) {
+    const ch = s[i]
+    if (ch === open) { depth++; i++ }
+    else if (ch === close) { i++; if (--depth === 0) return i }
+    else if (ch === '"' || ch === '\'' || ch === '`') i = skipQuoted(s, i, ch)
+    else i++
+  }
+  return -1
+}
+
+function skipQuoted (s, i, quote) {
+  const isTemplate = quote === '`'
+  i++
+  while (i < s.length) {
+    if (s[i] === '\\') { i += 2; continue }
+    if (s[i] === quote) return i + 1
+    if (isTemplate && s[i] === '$' && s[i + 1] === '{') {
+      i = balancedEnd(s, i + 2, '{', '}')
+      if (i === -1) return s.length
+      continue
+    }
     i++
   }
-  const body = source.slice(methodMarker.index + methodMarker[0].length, i - 1)
+  return i
+}
 
-  // Match `if (!this.NAME) {` followed (after any amount of code) by `setAndTrack(this, 'NAME',`
-  // where the two NAMEs match. The `[\s\S]*?` is lazy so we catch the nearest setAndTrack.
-  const pattern = /if\s*\(\s*!\s*this\.([\w.]+)\s*\)\s*\{[\s\S]*?setAndTrack\s*\(\s*this\s*,\s*['"]([\w.]+)['"]/g
+function findCalculatedFallbackProperties () {
+  const source = readFileSync(CONFIG_INDEX_PATH, 'utf8')
+  const marker = /#applyCalculated\s*\(\s*\)\s*\{/.exec(source)
+  if (!marker) throw new Error('Could not locate #applyCalculated() in config/index.js')
+
+  const bodyStart = marker.index + marker[0].length
+  const body = source.slice(bodyStart, balancedEnd(source, bodyStart, '{', '}') - 1)
+
   const properties = new Set()
   let match
-  while ((match = pattern.exec(body)) !== null) {
-    if (match[1] === match[2]) {
-      properties.add(match[1])
-    }
+  while ((match = FALLBACK_PATTERN.exec(body)) !== null) {
+    if (match[1] !== match[2]) continue
+    const valueStart = match.index + match[0].length
+    const valueEnd = balancedEnd(body, valueStart, '(', ')')
+    if (valueEnd === -1) continue
+    const value = body.slice(valueStart, valueEnd - 1).trim()
+    if (GUARANTEED_DEFINED.test(value)) properties.add(match[1])
   }
   return properties
 }
