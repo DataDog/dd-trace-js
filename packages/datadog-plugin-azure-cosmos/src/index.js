@@ -20,7 +20,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   asyncEnd (ctx) {
-    if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
+    if (!ctx.span) return
     const span = ctx.currentStore?.span
     if (span != null) {
       const result = ctx.result
@@ -37,7 +37,7 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   error (ctx) {
-    if (!Object.hasOwn(ctx, 'result') || !ctx.span) return
+    if (!ctx.span) return
     const span = ctx.currentStore?.span
     if (span != null) {
       this.addError(ctx.error, span)
