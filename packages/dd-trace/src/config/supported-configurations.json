@@ -3903,7 +3903,7 @@
     ],
     "OTEL_EXPORTER_OTLP_HEADERS": [
       {
-        "implementation": "C",
+        "implementation": "B",
         "type": "map",
         "default": null
       }
@@ -3962,7 +3962,7 @@
     ],
     "OTEL_EXPORTER_OTLP_LOGS_HEADERS": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "map",
         "default": null,
         "aliases": [
@@ -4006,7 +4006,7 @@
     ],
     "OTEL_EXPORTER_OTLP_METRICS_HEADERS": [
       {
-        "implementation": "B",
+        "implementation": "C",
         "type": "map",
         "default": null,
         "aliases": [
@@ -4117,7 +4117,7 @@
     ],
     "OTEL_TRACES_EXPORTER": [
       {
-        "implementation": "F",
+        "implementation": "H",
         "type": "string",
         "default": null,
         "allowed": "none|otlp",
