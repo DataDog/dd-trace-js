@@ -144,7 +144,7 @@ class Generation {
       cacheReadTokens,
       cacheWriteTokens,
     }
-    this.messages = messages
+    this.messages = messages ?? [{ content: this.message, role: this.role }]
   }
 }
 
