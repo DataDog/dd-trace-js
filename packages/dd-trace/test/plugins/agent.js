@@ -236,6 +236,7 @@ function checkAgentStatus () {
 
     const request = http.request(`${agentUrl}/info`, { method: 'GET', timeout: timeoutMs }, response => {
       process.stderr.write(`[agent.load] checkAgentStatus: got ${response.statusCode} in ${Date.now() - start}ms\n`)
+      response.resume() // drain body so the socket closes and the timeout timer is cancelled
       resolve(response.statusCode === 200)
     })
 
