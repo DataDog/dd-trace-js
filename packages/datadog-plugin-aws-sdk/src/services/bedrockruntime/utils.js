@@ -626,12 +626,10 @@ function buildConverseStreamGeneration (chunks) {
       const { contentBlockIndex, delta } = chunk.contentBlockDelta
       if (typeof delta?.text === 'string') {
         textByIdx[contentBlockIndex] = (textByIdx[contentBlockIndex] || '') + delta.text
-      } else if (typeof delta?.toolUse?.input === 'string') {
+      }
+      if (typeof delta?.toolUse?.input === 'string') {
         toolByIdx[contentBlockIndex] = toolByIdx[contentBlockIndex] || { inputStr: '' }
         toolByIdx[contentBlockIndex].inputStr += delta.toolUse.input
-      } else {
-        const type = Object.keys(delta || {})[0] || 'unknown'
-        textByIdx[contentBlockIndex] = (textByIdx[contentBlockIndex] || '') + `[Unsupported delta: ${type}]`
       }
     } else if (chunk.messageStop) {
       stopReason = chunk.messageStop.stopReason || stopReason
