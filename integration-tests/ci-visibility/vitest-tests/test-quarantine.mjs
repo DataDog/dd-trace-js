@@ -10,4 +10,8 @@ describe('quarantine tests', () => {
   test('can pass normally', () => {
     expect(1 + 2).to.equal(3)
   })
+
+  test('can quarantine a passing test', () => {
+    expect(1 + 2).to.equal(3)
+  })
 })

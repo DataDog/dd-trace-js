@@ -3089,6 +3089,9 @@ versions.forEach((version) => {
                     'quarantine tests can quarantine a test': {
                       properties: { quarantined: true },
                     },
+                    'quarantine tests can quarantine a passing test': {
+                      properties: { quarantined: true },
+                    },
                   },
                 },
                 'ci-visibility/vitest-tests/hooks-test-management.mjs': {
@@ -3128,6 +3131,15 @@ versions.forEach((version) => {
               assert.ok(passingTest, 'Expected to find the passing test')
               assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
               assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
+
+              // Quarantined test that actually passes must still report final_status=skip
+              const quarantinedPassingTest = tests.find(
+                test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a passing test'
+              )
+              assert.ok(quarantinedPassingTest, 'Expected to find the quarantined passing test')
+              assert.strictEqual(quarantinedPassingTest.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(quarantinedPassingTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+              assert.strictEqual(quarantinedPassingTest.meta[TEST_FINAL_STATUS], 'skip')
 
               // With hooks: same behavior
               const quarantinedTestWithHooks = tests.find(

@@ -1177,7 +1177,12 @@ addHook({
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
-            testPassCh.publish({ task, finalStatus: 'pass', ...testCtx.currentStore })
+            testPassCh.publish({
+              task,
+              finalStatus:
+                disabledTasks.has(task) || quarantinedTasks.has(task) ? 'skip' : 'pass',
+              ...testCtx.currentStore,
+            })
           }
         } else if (state === 'fail' || isSwitchedStatus) {
           let testError
