@@ -866,6 +866,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
       }
+      if (shouldFlipStatus) {
+        task.result.state = 'pass'
+      }
     }
 
     const isRetryReasonAtr = numAttempt > 0 &&
@@ -1174,7 +1177,12 @@ addHook({
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
-            testPassCh.publish({ task, ...testCtx.currentStore })
+            testPassCh.publish({
+              task,
+              finalStatus:
+                disabledTasks.has(task) || quarantinedTasks.has(task) ? 'skip' : 'pass',
+              ...testCtx.currentStore,
+            })
           }
         } else if (state === 'fail' || isSwitchedStatus) {
           let testError
@@ -1197,7 +1205,9 @@ addHook({
 
           // Check if all EFD retries failed
           const providedContext = getProvidedContext()
-          if (providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))) {
+          const isEfdRetry =
+            providedContext.isEarlyFlakeDetectionEnabled && (newTasks.has(task) || modifiedTasks.has(task))
+          if (isEfdRetry) {
             const statuses = taskToStatuses.get(task)
             // statuses only includes repetitions (not the initial run), so we check against numRepeats (not +1)
             if (statuses && statuses.length === providedContext.numRepeats &&
@@ -1207,8 +1217,9 @@ addHook({
           }
 
           // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
-          if (providedContext.isFlakyTestRetriesEnabled && !attemptToFixTasks.has(task) &&
-            !newTasks.has(task) && !modifiedTasks.has(task)) {
+          const isAtrRetry = providedContext.isFlakyTestRetriesEnabled && !attemptToFixTasks.has(task) &&
+            !newTasks.has(task) && !modifiedTasks.has(task)
+          if (isAtrRetry) {
             const maxRetries = providedContext.flakyTestRetriesCount ?? 0
             if (maxRetries > 0 && task.result?.retryCount === maxRetries) {
               hasFailedAllRetries = true
@@ -1218,11 +1229,28 @@ addHook({
           if (testCtx) {
             const isRetry = task.result?.retryCount > 0
             // `duration` is the duration of all the retries, so it can't be used if there are retries
+
+            let finalStatus
+            if (isSwitchedStatus) {
+              if (disabledTasks.has(task) || quarantinedTasks.has(task)) {
+                finalStatus = 'skip'
+              } else if (isAtrRetry || isEfdRetry) {
+                finalStatus = hasFailedAllRetries ? 'fail' : 'pass'
+              } else if (attemptToFixTasks.has(task)) {
+                finalStatus = attemptToFixFailed ? 'fail' : 'pass'
+              } else {
+                finalStatus = undefined
+              }
+            } else {
+              finalStatus = 'fail'
+            }
+
             testErrorCh.publish({
               duration: isRetry ? undefined : duration,
               error: testError,
               hasFailedAllRetries,
               attemptToFixFailed,
+              finalStatus,
               ...testCtx.currentStore,
             })
           }

@@ -34,6 +34,7 @@ const {
   isModifiedTest,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -213,10 +214,13 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
+        if (finalStatus) {
+          span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
       }
@@ -230,6 +234,7 @@ class VitestPlugin extends CiPlugin {
       promises,
       hasFailedAllRetries,
       attemptToFixFailed,
+      finalStatus,
     }) => {
       if (!span) {
         return
@@ -255,6 +260,9 @@ class VitestPlugin extends CiPlugin {
       if (attemptToFixFailed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
       if (duration) {
         span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
       } else {
@@ -273,6 +281,7 @@ class VitestPlugin extends CiPlugin {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',
+          [TEST_FINAL_STATUS]: 'skip',
           ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
         }
