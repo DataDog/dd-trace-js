@@ -137,6 +137,7 @@ class Tracer extends NoopProxy {
         // Custom Metrics
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
       }
+      dbg('after dogstatsd setup')
 
       if (config.spanLeakDebug > 0) {
         const spanleak = require('./spanleak')
@@ -149,8 +150,11 @@ class Tracer extends NoopProxy {
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
+        dbg('remoteConfig: require start')
         const RemoteConfig = require('./remote_config')
+        dbg('remoteConfig: new RemoteConfig start')
         const rc = new RemoteConfig(config)
+        dbg('remoteConfig: new RemoteConfig done')
 
         const tracingRemoteConfig = require('./config/remote_config')
         tracingRemoteConfig.enable(rc, config, () => {
@@ -188,6 +192,7 @@ class Tracer extends NoopProxy {
 
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
         openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
+        dbg('remoteConfig: done')
       }
 
       if (config.profiling.enabled === 'true') {
@@ -195,18 +200,23 @@ class Tracer extends NoopProxy {
       } else {
         this._profilerStarted = false
         if (config.profiling.enabled === 'auto') {
+          dbg('SSIHeuristics: start')
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
+          dbg('SSIHeuristics: done')
           ssiHeuristics.onTriggered(() => {
             this._startProfiler(config)
             ssiHeuristics.onTriggered() // deregister this callback
           })
         }
       }
+      dbg('after profiling setup')
 
       if (config.runtimeMetrics.enabled) {
+        dbg('runtimeMetrics.start: start')
         runtimeMetrics.start(config)
+        dbg('runtimeMetrics.start: done')
       }
 
       dbg('before #updateTracing')
@@ -300,6 +310,7 @@ class Tracer extends NoopProxy {
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        _dbg2('after lazyProxy appsec/llmobs')
 
         if (config.experimental?.aiguard?.enabled) {
           this._modules.aiguard.enable(this._tracer, config)
@@ -311,8 +322,11 @@ class Tracer extends NoopProxy {
         this._modules.openfeature.enable(config)
         lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
       }
+      _dbg2('after flaggingProvider')
       if (config.iast.enabled) {
+        _dbg2('iast.enable start')
         this._modules.iast.enable(config, this._tracer)
+        _dbg2('iast.enable done')
       }
       // This needs to be after the IAST module is enabled
     } else if (this._tracingInitialized) {
@@ -324,11 +338,15 @@ class Tracer extends NoopProxy {
     }
 
     if (this._tracingInitialized) {
+      _dbg2('tracer.configure start')
       this._tracer.configure(config)
+      _dbg2('pluginManager.configure start')
       this._pluginManager.configure(config)
+      _dbg2('pluginManager.configure done')
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
+      _dbg2('done')
     }
   }
 
