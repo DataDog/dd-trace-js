@@ -422,11 +422,11 @@ module.exports = {
       config = [config]
     }
 
-    // Ensure any plugin instances from a prior `load()` are unsubscribed before building a new
-    // tracer. Otherwise their diagnostic-channel subscriptions stay active and pile up across
-    // tests, causing each event to be handled by every accumulated plugin instance (each with
-    // its own stale `_tracerConfig`). Skip the ritm reset so already-patched modules remain
-    // patched for the next tracer.
+    // Ensure any lifecycle state from a prior `load()` is cleaned up before building a new
+    // tracer: plugin subscriptions are disabled, the HTTP listener is closed, and the `tracer`
+    // module variable is reset. Otherwise plugin instances pile up across tests (each with its
+    // own stale `_tracerConfig`) and every diagnostic-channel event is handled by all of them.
+    // `ritmReset: false` keeps the previously-patched modules patched for the new tracer.
     if (listener !== null) {
       await this.close({ ritmReset: false })
     }
