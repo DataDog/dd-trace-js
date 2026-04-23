@@ -3913,7 +3913,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "http://localhost:4318",
+        "default": null,
         "aliases": [
           "OTEL_EXPORTER_OTLP_ENDPOINT"
         ]
@@ -3954,7 +3954,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "http://localhost:4318",
+        "default": null,
         "internalPropertyName": "otelLogsUrl",
         "aliases": [
           "OTEL_EXPORTER_OTLP_ENDPOINT"
@@ -3999,7 +3999,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": "http://localhost:4318",
+        "default": null,
         "internalPropertyName": "otelMetricsUrl",
         "aliases": [
           "OTEL_EXPORTER_OTLP_ENDPOINT"

@@ -590,6 +590,19 @@ class Config extends ConfigBase {
       }
     }
 
+    // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
+    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
+    const defaultOtlpBase = `http://${agentHostname}:4318`
+    if (!this.otelLogsUrl) {
+      setAndTrack(this, 'otelLogsUrl', `${defaultOtlpBase}/v1/logs`)
+    }
+    if (!this.otelMetricsUrl) {
+      setAndTrack(this, 'otelMetricsUrl', `${defaultOtlpBase}/v1/metrics`)
+    }
+    if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
+    }
+
     if (process.platform === 'win32') {
       // OOM monitoring does not work properly on Windows, so it will be disabled.
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED')

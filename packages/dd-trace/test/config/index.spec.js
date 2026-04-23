@@ -351,18 +351,32 @@ describe('Config', () => {
   })
 
   // TODO: update default when adding grpc support
-  it('should use the OTel-spec default base URL for OTLP endpoints', () => {
+  it('should default OTLP endpoints to the DD agent host with the signal subpath', () => {
     delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
-    // Per OTel spec the default is http://localhost:4318, independent of DD_AGENT_HOST.
-    // The exporter's setUrl appends the signal subpath (/v1/traces, /v1/metrics, /v1/logs).
+    delete process.env.DD_AGENT_HOST
+    const config = getConfig()
+    // Host follows the DD agent (default 127.0.0.1); the signal subpath is baked into the default
+    // so telemetry reports the full URL users will hit.
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
+    assert.strictEqual(config.otelMetricsUrl, 'http://127.0.0.1:4318/v1/metrics')
+    assert.strictEqual(config.otelLogsUrl, 'http://127.0.0.1:4318/v1/logs')
+  })
+
+  it('should default OTLP endpoints to the agent host when DD_AGENT_HOST is set', () => {
+    delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
     process.env.DD_AGENT_HOST = 'myHostName'
     const config = getConfig()
-    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://localhost:4318')
-    assert.strictEqual(config.otelMetricsUrl, 'http://localhost:4318')
-    assert.strictEqual(config.otelLogsUrl, 'http://localhost:4318')
+    // In the unified-agent model, OTLP lives on the same host as the DD agent (different port),
+    // so DD_AGENT_HOST drives the default OTLP host too.
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://myHostName:4318/v1/traces')
+    assert.strictEqual(config.otelMetricsUrl, 'http://myHostName:4318/v1/metrics')
+    assert.strictEqual(config.otelLogsUrl, 'http://myHostName:4318/v1/logs')
   })
 
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
