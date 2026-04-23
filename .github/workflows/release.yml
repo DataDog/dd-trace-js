@@ -164,20 +164,3 @@ jobs:
           git tag --force dev
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git :refs/tags/dev
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git --tags
-
-  status:
-    needs: ["publish-v3", "publish-v4", "publish-latest"]
-    if: always() && contains(needs.*.result, 'success')
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-      pull-requests: read
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          sparse-checkout: scripts/release/status.js
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-      - run: node scripts/release/status.js
