@@ -2204,7 +2204,7 @@ versions.forEach((version) => {
               .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
                 const tests = events.filter(event => event.type === 'test').map(event => event.content)
-                assert.strictEqual(tests.length, 2)
+                assert.strictEqual(tests.length, 3)
 
                 const testSession = events.find(event => event.type === 'test_session_end').content
 
@@ -2220,6 +2220,7 @@ versions.forEach((version) => {
                   [
                     'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a test',
                     'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can pass normally',
+                    'ci-visibility/vitest-tests/test-quarantine.mjs.quarantine tests can quarantine a passing test',
                   ]
                 )
 
