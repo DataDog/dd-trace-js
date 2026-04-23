@@ -422,13 +422,15 @@ module.exports = {
       config = [config]
     }
 
-    // Ensure any lifecycle state from a prior `load()` is cleaned up before building a new
-    // tracer: plugin subscriptions are disabled, the HTTP listener is closed, and the `tracer`
-    // module variable is reset. Otherwise plugin instances pile up across tests (each with its
-    // own stale `_tracerConfig`) and every diagnostic-channel event is handled by all of them.
-    // `ritmReset: false` keeps the previously-patched modules patched for the new tracer.
-    if (listener !== null) {
-      await this.close({ ritmReset: false })
+    // Before creating a new tracer, disable any prior plugin instances that are about to be
+    // re-loaded. Otherwise their old subscriptions keep firing on diagnostic channels with their
+    // stale `_tracerConfig`, which breaks tests that toggle env between loads. We only touch the
+    // plugins that this `load()` is replacing, so unrelated plugins (e.g., `http` kept subscribed
+    // across nested `agent.load()` calls) continue to work.
+    if (tracer !== null) {
+      for (const name of pluginNames) {
+        tracer.use(name, { enabled: false })
+      }
     }
 
     currentIntegrationName = getCurrentIntegrationName()
