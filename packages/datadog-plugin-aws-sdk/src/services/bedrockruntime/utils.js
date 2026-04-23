@@ -544,6 +544,23 @@ function buildUsage (usage = {}) {
 }
 
 /**
+ * Extract tool definitions from a Converse request's `toolConfig.tools`,
+ * mapping Bedrock's `toolSpec` shape to LLMObs `ToolDefinition` shape.
+ *
+ * @param {object} params - Converse request params with optional `toolConfig.tools[].toolSpec`.
+ * @returns {Array<{ name: string, description: string, schema: object }>}
+ */
+function extractConverseToolDefinitions (params) {
+  const defs = []
+  for (const tool of params.toolConfig?.tools || []) {
+    const spec = tool.toolSpec
+    if (!spec?.name) continue
+    defs.push({ name: spec.name, description: spec.description ?? '', schema: spec.inputSchema ?? {} })
+  }
+  return defs
+}
+
+/**
  * Extract request metadata + rendered input messages from a Converse /
  * ConverseStream request.
  *
@@ -651,6 +668,7 @@ module.exports = {
   extractRequestParams,
   extractTextAndResponseReason,
   extractMessagesFromConverseContent,
+  extractConverseToolDefinitions,
   extractRequestParamsConverse,
   extractTextAndResponseReasonConverse,
   buildConverseStreamGeneration,

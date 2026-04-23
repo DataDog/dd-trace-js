@@ -7,6 +7,7 @@ const {
   extractTextAndResponseReason,
   parseModelId,
   extractTextAndResponseReasonFromStream,
+  extractConverseToolDefinitions,
   extractRequestParamsConverse,
   extractTextAndResponseReasonConverse,
   buildConverseStreamGeneration,
@@ -89,6 +90,9 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
     const requestParams = isConverse
       ? extractRequestParamsConverse(request.params)
       : extractRequestParams(request.params, modelProvider)
+    if (isConverse) {
+      this._tagger.tagToolDefinitions(span, extractConverseToolDefinitions(request.params))
+    }
     // for streamed responses, we'll use the coerced response object we formed in the stream handler
     let generation
     if (isConverse) {

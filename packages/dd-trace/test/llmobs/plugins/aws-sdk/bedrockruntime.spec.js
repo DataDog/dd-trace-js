@@ -301,6 +301,11 @@ describe('Plugin', () => {
               type: 'toolUse',
             }],
           }],
+          toolDefinitions: converseRequest.request.toolConfig.tools.map(({ toolSpec }) => ({
+            name: toolSpec.name,
+            description: toolSpec.description,
+            schema: toolSpec.inputSchema,
+          })),
           metrics: {
             input_tokens: tokens.inputTokens,
             output_tokens: tokens.outputTokens,
