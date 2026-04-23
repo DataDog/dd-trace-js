@@ -479,6 +479,9 @@ export interface GeneratedConfig {
   };
   openAiLogsEnabled: boolean;
   OTEL_EXPORTER_OTLP_ENDPOINT: string | undefined;
+  OTEL_EXPORTER_OTLP_HEADERS: Record<string, string> | undefined;
+  OTEL_EXPORTER_OTLP_LOGS_HEADERS: Record<string, string> | undefined;
+  OTEL_EXPORTER_OTLP_METRICS_HEADERS: Record<string, string> | undefined;
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string | undefined;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;
   OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json";
@@ -491,9 +494,7 @@ export interface GeneratedConfig {
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
   otelBatchTimeout: number;
-  otelHeaders: string | undefined;
   otelLogsEnabled: boolean;
-  otelLogsHeaders: string | undefined;
   otelLogsProtocol: string;
   otelLogsTimeout: number;
   otelLogsUrl: string | undefined;
@@ -502,7 +503,6 @@ export interface GeneratedConfig {
   otelMetricsEnabled: boolean;
   otelMetricsExportInterval: number;
   otelMetricsExportTimeout: number;
-  otelMetricsHeaders: string | undefined;
   otelMetricsProtocol: string;
   otelMetricsTemporalityPreference: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
   otelMetricsTimeout: number;

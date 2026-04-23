@@ -22,7 +22,8 @@ class OtlpHttpExporterBase {
    * Creates a new OtlpHttpExporterBase instance.
    *
    * @param {string} url - OTLP endpoint URL
-   * @param {string|undefined} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {Record<string, string>|undefined} headers - Additional HTTP headers parsed from the
+   *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {string} defaultPath - Default path to use if URL has no path
@@ -41,7 +42,7 @@ class OtlpHttpExporterBase {
       timeout,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
-        ...this.#parseAdditionalHeaders(headers),
+        ...headers,
       },
     }
 
@@ -61,6 +62,7 @@ class OtlpHttpExporterBase {
    * @protected
    */
   recordTelemetry (metricName, count, additionalTags) {
+    // @ts-expect-error - additionalTags is optional and can be undefined
     if (additionalTags?.length > 0) {
       tracerMetrics.count(metricName, [...this.telemetryTags, ...additionalTags || []]).inc(count)
     } else {
@@ -91,6 +93,7 @@ class OtlpHttpExporterBase {
       })
 
       res.once('end', () => {
+        // @ts-expect-error - res.statusCode can be undefined
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resultCallback({ code: 0 })
         } else {
@@ -113,50 +116,6 @@ class OtlpHttpExporterBase {
 
     req.write(payload)
     req.end()
-  }
-
-  /**
-   * Parses additional HTTP headers. Accepts either a pre-parsed map (produced by the OTEL-aware
-   * MAP parser in config/parsers.js for `OTEL_EXPORTER_OTLP_TRACES_HEADERS`) or a
-   * comma-separated `key=value` string for signals whose headers config is a plain string.
-   * @param {string|Record<string, string>} [input=''] - Raw headers map or string
-   * @returns {Record<string, string>} Parsed headers map
-   */
-  #parseAdditionalHeaders (input = '') {
-    if (input !== null && typeof input === 'object') {
-      return input
-    }
-    const headers = {}
-    let key = ''
-    let value = ''
-    let readingKey = true
-    for (const char of input) {
-      if (readingKey) {
-        if (char === '=') {
-          readingKey = false
-          key = key.trim()
-        } else {
-          key += char
-        }
-      } else if (char === ',') {
-        value = value.trim()
-        if (key && value) {
-          headers[key] = value
-        }
-        key = ''
-        value = ''
-        readingKey = true
-      } else {
-        value += char
-      }
-    }
-    if (!readingKey) {
-      value = value.trim()
-      if (value) {
-        headers[key] = value
-      }
-    }
-    return headers
   }
 
   /**
