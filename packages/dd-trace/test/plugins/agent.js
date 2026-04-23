@@ -422,17 +422,6 @@ module.exports = {
       config = [config]
     }
 
-    // Before creating a new tracer, disable any prior plugin instances that are about to be
-    // re-loaded. Otherwise their old subscriptions keep firing on diagnostic channels with their
-    // stale `_tracerConfig`, which breaks tests that toggle env between loads. We only touch the
-    // plugins that this `load()` is replacing, so unrelated plugins (e.g., `http` kept subscribed
-    // across nested `agent.load()` calls) continue to work.
-    if (tracer !== null) {
-      for (const name of pluginNames) {
-        tracer.use(name, { enabled: false })
-      }
-    }
-
     currentIntegrationName = getCurrentIntegrationName()
 
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
