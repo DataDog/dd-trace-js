@@ -491,6 +491,7 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
   const toolResults = []
 
   for (const block of contentBlocks || []) {
+    if (block == null || typeof block !== 'object') continue
     if (typeof block.text === 'string') {
       content += block.text
     } else if (block.toolUse) {
@@ -553,7 +554,7 @@ function buildUsage (usage = {}) {
 function extractConverseToolDefinitions (params) {
   const defs = []
   for (const tool of params.toolConfig?.tools || []) {
-    const spec = tool.toolSpec
+    const spec = tool?.toolSpec
     if (!spec?.name) continue
     defs.push({ name: spec.name, description: spec.description ?? '', schema: spec.inputSchema ?? {} })
   }
@@ -570,9 +571,10 @@ function extractConverseToolDefinitions (params) {
 function extractRequestParamsConverse (params) {
   const prompt = []
   for (const block of params.system || []) {
-    if (typeof block.text === 'string') prompt.push({ content: block.text, role: 'system' })
+    if (typeof block?.text === 'string') prompt.push({ content: block.text, role: 'system' })
   }
   for (const msg of params.messages || []) {
+    if (msg == null || typeof msg !== 'object') continue
     prompt.push(...extractMessagesFromConverseContent(msg.role || 'user', msg.content))
   }
 
