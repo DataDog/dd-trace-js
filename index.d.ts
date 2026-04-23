@@ -272,6 +272,7 @@ interface Plugins {
   "memcached": tracer.plugins.memcached;
   "microgateway-core": tracer.plugins.microgateway_core;
   "mocha": tracer.plugins.mocha;
+  "modelcontextprotocol-sdk": tracer.plugins.modelcontextprotocol_sdk;
   "moleculer": tracer.plugins.moleculer;
   "mongodb-core": tracer.plugins.mongodb_core;
   "mongoose": tracer.plugins.mongoose;
@@ -2848,11 +2849,18 @@ declare namespace tracer {
      * [mocha](https://mochajs.org/) module.
      */
     interface mocha extends Integration {}
-
+    
+    /**
+     * This plugin automatically instruments the
+     * [modelcontextprotocol-sdk](https://github.com/npmjs/package/@modelcontextprotocol/sdk) library.
+     */
+    interface modelcontextprotocol_sdk extends Instrumentation {}
+    
     /**
      * This plugin automatically instruments the
      * [moleculer](https://moleculer.services/) module.
      */
+
     interface moleculer extends Moleculer {
       /**
        * Configuration for Moleculer clients. Set to false to disable client

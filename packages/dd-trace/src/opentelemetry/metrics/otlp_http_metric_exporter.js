@@ -18,13 +18,14 @@ class OtlpHttpMetricExporter extends OtlpHttpExporterBase {
    * Creates a new OtlpHttpMetricExporter instance.
    *
    * @param {string} url - OTLP endpoint URL
-   * @param {string} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {Record<string, string>|undefined} headers - Additional HTTP headers parsed from the
+   *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {Resource} resource - Resource attributes
    */
   constructor (url, headers, timeout, protocol, resource) {
-    super(url, headers, timeout, protocol, '/v1/metrics', 'metrics')
+    super(url, headers, timeout, protocol, 'metrics')
     this.transformer = new OtlpTransformer(resource, protocol)
   }
 

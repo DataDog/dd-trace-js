@@ -6,8 +6,9 @@ const { describe, it, before, after, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
-describe('light-my-request instrumentation', () => {
+withVersions('light-my-request', 'light-my-request', version => describe('light-my-request instrumentation', () => {
   const startServerCh = dc.channel('apm:http:server:request:start')
   const exitServerCh = dc.channel('apm:http:server:request:exit')
   const finishServerCh = dc.channel('apm:http:server:request:finish')
@@ -18,8 +19,8 @@ describe('light-my-request instrumentation', () => {
 
   before(async () => {
     await agent.load(['http', 'fastify', 'light-my-request'], { client: false })
-    inject = require('light-my-request')
-    Fastify = require('fastify')
+    inject = require(`../../../versions/light-my-request@${version}`).get()
+    Fastify = require('../../../versions/fastify').get()
   })
 
   after(() => {
@@ -275,4 +276,4 @@ describe('light-my-request instrumentation', () => {
       })
     })
   })
-})
+}))

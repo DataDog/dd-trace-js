@@ -3,6 +3,7 @@ import { sum } from './sum'
 
 let numAttempt = 0
 let numOtherAttempt = 0
+let numLastAttempt = 0
 
 describe('early flake detection', () => {
   test('can retry tests that eventually pass', { repeats: process.env.SHOULD_REPEAT && 2 }, () => {
@@ -28,6 +29,11 @@ describe('early flake detection', () => {
   if (process.env.SHOULD_ADD_EVENTUALLY_FAIL) {
     test('can retry tests that eventually fail', () => {
       expect(sum(1, 2)).to.equal(numOtherAttempt++ < 3 ? 3 : 4)
+    })
+  }
+  if (process.env.SHOULD_ADD_LAST_ATTEMPT_PASS) {
+    test('can retry tests that pass only on the last attempt', () => {
+      expect(sum(1, 2)).to.equal(numLastAttempt++ === 3 ? 3 : 4)
     })
   }
 })
