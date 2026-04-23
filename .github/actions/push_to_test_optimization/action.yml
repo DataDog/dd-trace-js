@@ -17,5 +17,7 @@ runs:
       uses: DataDog/junit-upload-github-action@24449d01fc01e721fa36ccd2caa3caae6922f0e8 # v3.0.0
       with:
         api_key: ${{ inputs.dd_api_key }}
+        # TODO: remove once https://github.com/DataDog/junit-upload-github-action/pull/54 lands
+        # and junit-upload-github-action releases are tied to datadog-ci releases.
         datadog-ci-version: 5.13.1
         service: dd-trace-js-tests
