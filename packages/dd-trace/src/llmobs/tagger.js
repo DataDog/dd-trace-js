@@ -13,6 +13,7 @@ const {
   OUTPUT_VALUE,
   METADATA,
   METRICS,
+  TOOL_DEFINITIONS,
   PARENT_ID_KEY,
   INPUT_MESSAGES,
   OUTPUT_MESSAGES,
@@ -157,6 +158,12 @@ class LLMObsTagger {
   tagTextIO (span, inputData, outputData) {
     this.#tagText(span, inputData, INPUT_VALUE)
     this.#tagText(span, outputData, OUTPUT_VALUE)
+  }
+
+  tagToolDefinitions (span, toolDefinitions) {
+    if (Array.isArray(toolDefinitions) && toolDefinitions.length > 0) {
+      this._setTag(span, TOOL_DEFINITIONS, toolDefinitions)
+    }
   }
 
   tagMetadata (span, metadata) {
