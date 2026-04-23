@@ -588,6 +588,43 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
 }
 
 /**
+ * Returns all combinations of matrix scalar/array values (ignores include/exclude).
+ * @param {Record<string, unknown>} matrix
+ * @returns {Record<string, string>[]}
+ */
+function getMatrixCombinations (matrix) {
+  const keys = Object.keys(matrix).filter(k => Array.isArray(matrix[k]))
+  if (keys.length === 0) return [{}]
+
+  /** @type {Record<string, string>[]} */
+  let combinations = [{}]
+  for (const key of keys) {
+    const values = /** @type {unknown[]} */ (matrix[key])
+    /** @type {Record<string, string>[]} */
+    const next = []
+    for (const combo of combinations) {
+      for (const val of values) {
+        next.push({ ...combo, [key]: String(val) })
+      }
+    }
+    combinations = next
+  }
+  return combinations
+}
+
+/**
+ * Expands `${{ matrix.X }}` expressions in a string using the given matrix values.
+ * @param {string} s
+ * @param {Record<string, string>} matrixValues
+ * @returns {string}
+ */
+function expandMatrixExpressions (s, matrixValues) {
+  return s.replaceAll(/\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (_m, name) => {
+    return Object.hasOwn(matrixValues, name) ? matrixValues[name] : _m
+  })
+}
+
+/**
  * @param {string} repoRoot
  * @returns {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]}
  */
@@ -608,6 +645,11 @@ function collectWorkflowRuns (repoRoot) {
       const jobEnv = isPlainObject(job.env) ? job.env : {}
       const steps = Array.isArray(job.steps) ? job.steps : []
 
+      const matrixData = isPlainObject(job.strategy) && isPlainObject(job.strategy.matrix)
+        ? /** @type {Record<string, unknown>} */ (job.strategy.matrix)
+        : {}
+      const matrixCombinations = getMatrixCombinations(matrixData)
+
       for (const stepVal of steps) {
         const step = isPlainObject(stepVal) ? stepVal : {}
 
@@ -621,20 +663,30 @@ function collectWorkflowRuns (repoRoot) {
         }
 
         if (typeof step.run === 'string') {
-          // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
-          const exports = parseExportAssignments(step.run)
-          for (const [k, v] of Object.entries(exports)) env[k] = v
+          // Expand matrix expressions and emit one entry per combination.
+          const seenRuns = new Set()
+          for (const combo of matrixCombinations) {
+            const run = expandMatrixExpressions(step.run, combo)
+            if (seenRuns.has(run)) continue
+            seenRuns.add(run)
 
-          const idxYarn = step.run.indexOf('yarn ')
-          const idxNpm = step.run.indexOf('npm ')
-          const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-          if (idx > 0) {
-            const prefix = step.run.slice(0, idx)
-            const assigns = parseInlineAssignments(prefix)
-            for (const [k, v] of Object.entries(assigns)) env[k] = v
+            const stepEnv = { ...env }
+
+            // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
+            const exports = parseExportAssignments(run)
+            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
+
+            const idxYarn = run.indexOf('yarn ')
+            const idxNpm = run.indexOf('npm ')
+            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+            if (idx > 0) {
+              const prefix = run.slice(0, idx)
+              const assigns = parseInlineAssignments(prefix)
+              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
+            }
+
+            out.push({ workflowFile: wf, jobId, run, env: stepEnv })
           }
-
-          out.push({ workflowFile: wf, jobId, run: step.run, env })
           continue
         }
 
