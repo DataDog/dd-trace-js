@@ -109,8 +109,9 @@ describe('OTLP Trace Export', () => {
     assertObjectContains(webSpan, {
       name: 'GET /api/test',
       kind: 2, // SERVER
-      status: { code: 0 },
     })
+    // Status.code should either be unset or zero
+    assert.ok(!webSpan.status?.code)
     assertObjectContains(dbSpan, {
       name: 'db.query',
       kind: 3, // CLIENT
