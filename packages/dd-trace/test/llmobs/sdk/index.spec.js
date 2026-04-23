@@ -1377,16 +1377,23 @@ describe('sdk', () => {
     })
 
     describe('with DD_TRACE_OTEL_ENABLED set', () => {
+      let otelLLMObs
+
       before(() => {
+        // DD_TRACE_OTEL_ENABLED is a launch-time env var that Config captures at tracer init.
         process.env.DD_TRACE_OTEL_ENABLED = 'true'
+        const config = getConfigFresh({ llmobs: { mlApp: 'mlApp', agentlessEnabled: false } })
+        delete process.env.DD_TRACE_OTEL_ENABLED
+        otelLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
+        otelLLMObs.enable({ mlApp: 'mlApp' })
       })
 
       after(() => {
-        delete process.env.DD_TRACE_OTEL_ENABLED
+        otelLLMObs.disable()
       })
 
       it('adds source:otel tag', () => {
-        llmobs.submitEvaluation(spanCtx, {
+        otelLLMObs.submitEvaluation(spanCtx, {
           mlApp: 'test',
           timestampMs: 1234,
           label: 'test',

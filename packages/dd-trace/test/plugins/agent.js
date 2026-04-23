@@ -422,6 +422,15 @@ module.exports = {
       config = [config]
     }
 
+    // Ensure any plugin instances from a prior `load()` are unsubscribed before building a new
+    // tracer. Otherwise their diagnostic-channel subscriptions stay active and pile up across
+    // tests, causing each event to be handled by every accumulated plugin instance (each with
+    // its own stale `_tracerConfig`). Skip the ritm reset so already-patched modules remain
+    // patched for the next tracer.
+    if (listener !== null) {
+      await this.close({ ritmReset: false })
+    }
+
     currentIntegrationName = getCurrentIntegrationName()
 
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
