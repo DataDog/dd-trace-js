@@ -1222,18 +1222,29 @@ describe('sdk', () => {
       assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].categorical_value, 'foo')
     })
 
-    it('defaults to the current time if no timestamp is provided', () => {
-      sinon.stub(Date, 'now').returns(1234)
-      llmobs.submitEvaluation(spanCtx, {
-        mlApp: 'test',
-        label: 'test',
-        metricType: 'score',
-        value: 0.6,
+    describe('with no timestamp provided', () => {
+      let prevTime
+
+      before(() => {
+        prevTime = clock.now
+        clock.setSystemTime(1234)
       })
 
-      assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
-      assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
-      Date.now.restore()
+      after(() => {
+        clock.setSystemTime(prevTime)
+      })
+
+      it('defaults to the current time', () => {
+        llmobs.submitEvaluation(spanCtx, {
+          mlApp: 'test',
+          label: 'test',
+          metricType: 'score',
+          value: 0.6,
+        })
+
+        assert.ok('timestamp_ms' in LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0])
+        assert.strictEqual(LLMObsEvalMetricsWriter.prototype.append.getCall(0).args[0].timestamp_ms, 1234)
+      })
     })
 
     it('submits a boolean evaluation metric', () => {
