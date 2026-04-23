@@ -15,6 +15,7 @@ const VALID_PROPAGATION_STYLES = new Set([
 
 const RENAMED_OTEL_TAGS = new Map(
   [
+    ['deployment.environment.name', 'env'],
     ['deployment.environment', 'env'],
     ['service.name', 'service'],
     ['service.version', 'version'],
