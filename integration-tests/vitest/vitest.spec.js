@@ -795,7 +795,8 @@ versions.forEach((version) => {
             // Without this reset, vitest keeps a stale 'fail' from prior repetitions and
             // incorrectly reports the last execution as failed even when it succeeds.
             const lastAttemptPassTests = tests
-              .filter(test => test.meta[TEST_NAME] === 'early flake detection can retry tests that pass only on the last attempt')
+              .filter(test =>
+                test.meta[TEST_NAME] === 'early flake detection can retry tests that pass only on the last attempt')
               .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
             assert.strictEqual(lastAttemptPassTests.length, NUM_RETRIES_EFD + 1)
             assert.strictEqual(
