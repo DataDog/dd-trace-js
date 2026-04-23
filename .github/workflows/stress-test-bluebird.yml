@@ -1,0 +1,48 @@
+name: Stress Test - Bluebird Instrumentation
+
+on:
+  push:
+    branches:
+      - 'stress-test/**'
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Number of test iterations'
+        default: '30'
+        type: string
+
+jobs:
+  stress-test:
+    runs-on: ubuntu-latest
+    env:
+      PLUGINS: bluebird
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node/oldest-maintenance-lts
+      - uses: ./.github/actions/install
+      - name: Install versioned bluebird packages
+        run: PLUGINS=bluebird node scripts/install_plugin_modules.js
+      - name: Stress test
+        run: |
+          ITERATIONS="${{ inputs.iterations || '30' }}"
+          PASS=0
+          FAIL=0
+          for i in $(seq 1 $ITERATIONS); do
+            START=$(date +%s%3N)
+            set +e
+            node --expose-gc ./node_modules/mocha/bin/mocha.js \
+              --require ./scripts/time-agent-load.js \
+              "packages/datadog-instrumentations/test/bluebird.spec.js"
+            EXIT=$?
+            set -e
+            ELAPSED=$(( $(date +%s%3N) - START ))
+            if [ $EXIT -eq 0 ]; then
+              PASS=$((PASS + 1))
+              echo "Run $i: PASS (${ELAPSED}ms total)"
+            else
+              FAIL=$((FAIL + 1))
+              echo "Run $i: FAIL (${ELAPSED}ms total)"
+            fi
+          done
+          echo ""
+          echo "=== Results: $PASS passed, $FAIL failed out of $ITERATIONS ==="
