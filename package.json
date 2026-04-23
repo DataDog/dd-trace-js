@@ -70,6 +70,7 @@
     "test:integration:cucumber": "mocha --timeout 60000 \"integration-tests/cucumber/*.spec.js\"",
     "test:integration:cypress": "mocha --timeout 60000 \"integration-tests/cypress/*.spec.js\"",
     "test:integration:debugger": "mocha --timeout 60000 \"integration-tests/debugger/*.spec.js\"",
+    "test:integration:electron": "mocha \"integration-tests/electron/*.spec.js\"",
     "test:integration:esbuild": "mocha --timeout 60000 \"integration-tests/esbuild/*.spec.js\"",
     "test:integration:webpack": "mocha --timeout 60000 \"integration-tests/webpack/*.spec.js\"",
     "test:integration:openfeature": "mocha --timeout 60000 \"integration-tests/openfeature/*.spec.js\"",

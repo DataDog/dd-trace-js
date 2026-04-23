@@ -63,7 +63,7 @@ function setCacheTTL () {
       // Clear cache a few seconds after it was last used
       cache.clear()
     }
-  }, 5000).unref()
+  }, 5000).unref?.()
 }
 
 function loadInlineSourceMap (data) {

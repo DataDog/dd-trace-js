@@ -31,6 +31,7 @@ const builtinModules = new Set(Module.builtinModules.map(stripNodePrefix))
 
 function isBuiltinModuleName (name) {
   if (typeof name !== 'string') return false
+  if (name === 'electron') return true
   return builtinModules.has(stripNodePrefix(name))
 }
 
