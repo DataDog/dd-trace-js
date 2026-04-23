@@ -714,4 +714,34 @@ describe('OpenTelemetry Traces', () => {
       assert(telemetryMetrics.manager.namespace().count().inc.calledWith(1))
     })
   })
+
+  describe('setUrl', () => {
+    const OtlpHttpTraceExporter = require('../../src/opentelemetry/trace/otlp_http_trace_exporter')
+
+    it('retargets hostname, port, and path when given a full URL', () => {
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+
+      exporter.setUrl('http://otel-collector:9999/custom/path')
+
+      assert.strictEqual(exporter.options.hostname, 'otel-collector')
+      assert.strictEqual(exporter.options.port, '9999')
+      assert.strictEqual(exporter.options.path, '/custom/path')
+    })
+
+    it('falls back to the default path when the URL has no path', () => {
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+
+      exporter.setUrl('http://otel-collector:9999')
+
+      assert.strictEqual(exporter.options.path, '/v1/traces')
+    })
+
+    it('preserves the URL query string', () => {
+      const exporter = new OtlpHttpTraceExporter('http://localhost:4318/v1/traces', '', 1000, {})
+
+      exporter.setUrl('http://otel-collector:9999/v1/traces?token=abc')
+
+      assert.strictEqual(exporter.options.path, '/v1/traces?token=abc')
+    })
+  })
 })
