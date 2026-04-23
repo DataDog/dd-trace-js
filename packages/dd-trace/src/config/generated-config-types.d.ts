@@ -482,7 +482,7 @@ export interface GeneratedConfig {
   OTEL_EXPORTER_OTLP_HEADERS: Record<string, string> | undefined;
   OTEL_EXPORTER_OTLP_LOGS_HEADERS: Record<string, string> | undefined;
   OTEL_EXPORTER_OTLP_METRICS_HEADERS: Record<string, string> | undefined;
-  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string | undefined;
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: string;
   OTEL_EXPORTER_OTLP_TRACES_HEADERS: Record<string, string> | undefined;
   OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/json";
   OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: number;
@@ -497,7 +497,7 @@ export interface GeneratedConfig {
   otelLogsEnabled: boolean;
   otelLogsProtocol: string;
   otelLogsTimeout: number;
-  otelLogsUrl: string | undefined;
+  otelLogsUrl: string;
   otelMaxExportBatchSize: number;
   otelMaxQueueSize: number;
   otelMetricsEnabled: boolean;
@@ -506,7 +506,7 @@ export interface GeneratedConfig {
   otelMetricsProtocol: string;
   otelMetricsTemporalityPreference: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
   otelMetricsTimeout: number;
-  otelMetricsUrl: string | undefined;
+  otelMetricsUrl: string;
   otelProtocol: string;
   otelTimeout: number;
   peerServiceMapping: Record<string, string>;
@@ -537,7 +537,7 @@ export interface GeneratedConfig {
   sampleRate: number | undefined;
   samplingRules: import('../../../../index').SamplingRule[];
   scope: string | undefined;
-  service: string | undefined;
+  service: string;
   serviceMapping: Record<string, string>;
   site: string;
   spanAttributeSchema: "v0" | "v1";
