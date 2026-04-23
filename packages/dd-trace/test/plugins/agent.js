@@ -15,15 +15,6 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { storage } = require('../../../datadog-core')
 const ritm = require('../../src/ritm')
 
-// Pre-warm the tracer module graph (datadog-instrumentations, config,
-// plugin_manager, proxy class, …) when this fake agent is first loaded by a
-// test file. We deliberately DO NOT require('../..') here: that would create
-// the `global._ddtrace` singleton against the still-cached config module and
-// prevent load() below from swapping in a fresh one. Pre-warming `src/proxy`
-// alone is enough to make the proxyquire chain in load() cheap because all
-// subdependencies end up in `require.cache` ahead of any mocha `before` hook.
-require('../../src/proxy')
-
 const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
 const traceHandlers = new Set()
 const statsHandlers = new Set()
@@ -435,22 +426,28 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    if (global._ddtrace) {
-      // Another test file already constructed the process-wide tracer (e.g.
-      // via `require('dd-trace')` or the eager require in
-      // llmobs/plugins/langchain). Reuse it so every reference to
-      // `require('dd-trace')` in tests points at the same instance.
-      tracer = require('../..')
-    } else {
-      // First `agent.load()` of the process. Drop the cached config
-      // singleton and rebind the tracer class to the fresh `getConfig`, so
-      // `tracer.init()` below observes the options we pass here (service,
-      // env, port, …) instead of whatever prior spec calls to
-      // `getConfig({...})` — e.g. from log_plugin.spec.js — left behind.
-      const configFresh = proxyquire.noPreserveCache()('../../src/config', {})
-      const TracerProxy = proxyquire('../../src/proxy', { './config': configFresh })
-      tracer = proxyquire('../..', { './src': TracerProxy })
-    }
+    // Rebuild the tracer on every `agent.load()`. Reusing a cached tracer
+    // from a previous test causes `tracer.init()` to no-op (its
+    // `_initialized` guard and the `configInstance` singleton in `./config`)
+    // so the `service`, `env`, `port`, ... options we pass below would be
+    // silently dropped. Reload `./config/defaults` and `./dogstatsd` too to
+    // avoid accumulating process listeners and stale defaults across loads.
+    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
+      './defaults': defaults,
+    })
+    // Reload dogstatsd to avoid adding new events to the global process object
+    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+    const proxy = proxyquire('../../src/proxy', {
+      './config': getConfigFresh,
+      './dogstatsd': dogstatsd,
+    })
+    const TracerProxy = proxyquire('../../src', {
+      './proxy': proxy,
+    })
+    tracer = proxyquire('../..', {
+      './src': TracerProxy,
+    })
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -751,13 +748,12 @@ module.exports = {
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
 
-    // Only remove the tracer's own beforeExit listener, not every listener
-    // registered by mocha or test/setup/core.js.
-    for (const listener of process.listeners('beforeExit')) {
-      if (listener.name === 'mainBeforeExit') {
-        process.removeListener('beforeExit', listener)
-      }
-    }
+    // Tracer initialisations across `agent.load()` cycles leave behind
+    // `exit` / `beforeExit` listeners from dogstatsd, telemetry, heap
+    // snapshots, etc. Without sweeping them here they accumulate and
+    // either leak memory (aws-sdk OOM) or fire against a torn-down tracer.
+    process.removeAllListeners('exit')
+    process.removeAllListeners('beforeExit')
 
     const basedir = path.join(__dirname, '..', '..', '..', '..', 'versions')
     const exceptions = ['/libpq/', '/grpc/', '/sqlite3/', '/couchbase/'] // wiping native modules results in errors
