@@ -280,12 +280,13 @@ class Tracer extends NoopProxy {
           ? require('./standalone').configure(config)
           : undefined
         let otlpExporter
-        // OTEL_TRACES_EXPORTER=otlp should not replace the CI Visibility
-        // exporter when the tracer is running in CI Visibility mode. Test
-        // spans (test_session/test_module/test_suite/test) belong on the
-        // citestcycle endpoint, not on an OTLP traces endpoint — otherwise
-        // users with OTEL_* vars set in their environment (e.g. for a
-        // separate telemetry integration) silently lose all test spans.
+        // OTEL_TRACES_EXPORTER=otlp should not replace the Test
+        // Optimization exporter when the tracer is running in Test
+        // Optimization mode. Test spans (test_session/test_module/
+        // test_suite/test) belong on the citestcycle endpoint, not on an
+        // OTLP traces endpoint — otherwise users with OTEL_* vars set in
+        // their environment (e.g. for a separate telemetry integration)
+        // silently lose all test spans.
         if (config.otelTracesEnabled && !config.isCiVisibility) {
           const { buildResourceAttributes, createOtlpTraceExporter } = require('./opentelemetry/trace')
           otlpExporter = createOtlpTraceExporter(config, buildResourceAttributes(config))
