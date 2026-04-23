@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert')
-const net = require('node:net')
 const os = require('node:os')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
@@ -10,51 +9,22 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
 
-// Caller must retry on EADDRINUSE since the port may be grabbed between
-// `close` and re-binding (see `startBroker`).
-function getPort () {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer()
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      server.close(() => resolve(port))
-    })
-  })
-}
-
-async function withPortRetry (fn, attempts = 5) {
-  let lastError
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn()
-    } catch (err) {
-      if (err && err.code === 'EADDRINUSE') {
-        lastError = err
-        continue
-      }
-      throw err
-    }
-  }
-  throw lastError
-}
-
 describe('Plugin', () => {
   let broker
   let port
 
   describe('moleculer', () => {
     withVersions('moleculer', 'moleculer', version => {
-      const startBroker = () => withPortRetry(async () => {
+      const startBroker = async () => {
         const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
-
-        port = await getPort()
 
         broker = new ServiceBroker({
           namespace: 'multi',
           nodeID: `server-${process.pid}`,
           logger: false,
-          transporter: `tcp://127.0.0.1:${port}/server-${process.pid}`,
+          // Port `0` tells the TCP transporter to ask the kernel for a free
+          // port; the actual port is read back from the broker after start.
+          transporter: `tcp://127.0.0.1:0/server-${process.pid}`,
         })
 
         broker.createService({
@@ -81,8 +51,9 @@ describe('Plugin', () => {
           },
         })
 
-        return broker.start()
-      })
+        await broker.start()
+        port = broker.transit.tx.opts.port
+      }
 
       describe('server', () => {
         describe('without configuration', () => {
