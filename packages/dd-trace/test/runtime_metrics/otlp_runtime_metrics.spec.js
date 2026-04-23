@@ -52,36 +52,35 @@ describe('otlp_runtime_metrics', () => {
     otlpMetrics.stop()
   })
 
-  it('should create OTel-native metric instruments', () => {
+  it('should create exactly 13 OTel-native metric instruments', () => {
     otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
 
-    // V8 heap metrics
-    assert.ok(createdGauges['v8js.memory.heap.used'], 'v8js.memory.heap.used should be created')
-    assert.ok(createdGauges['v8js.memory.heap.limit'], 'v8js.memory.heap.limit should be created')
-    assert.ok(
-      createdGauges['v8js.memory.heap.space.available_size'],
-      'v8js.memory.heap.space.available_size should be created'
-    )
-    assert.ok(
-      createdGauges['v8js.memory.heap.space.physical_size'],
-      'v8js.memory.heap.space.physical_size should be created'
-    )
+    const expectedMetrics = [
+      'v8js.memory.heap.used',
+      'v8js.memory.heap.limit',
+      'v8js.memory.heap.space.available_size',
+      'v8js.memory.heap.space.physical_size',
+      'process.memory.usage',
+      'process.cpu.utilization',
+      'nodejs.eventloop.delay.min',
+      'nodejs.eventloop.delay.max',
+      'nodejs.eventloop.delay.mean',
+      'nodejs.eventloop.delay.p50',
+      'nodejs.eventloop.delay.p90',
+      'nodejs.eventloop.delay.p99',
+      'nodejs.eventloop.utilization',
+    ]
 
-    // Process metrics
-    assert.ok(createdGauges['process.memory.usage'], 'process.memory.usage should be created')
-    assert.ok(createdGauges['process.cpu.utilization'], 'process.cpu.utilization should be created')
+    for (const name of expectedMetrics) {
+      assert.ok(createdGauges[name], `${name} should be created`)
+    }
 
-    // Event loop metrics
-    assert.ok(createdGauges['nodejs.eventloop.delay.min'], 'nodejs.eventloop.delay.min should be created')
-    assert.ok(createdGauges['nodejs.eventloop.delay.max'], 'nodejs.eventloop.delay.max should be created')
-    assert.ok(createdGauges['nodejs.eventloop.delay.mean'], 'nodejs.eventloop.delay.mean should be created')
-    assert.ok(createdGauges['nodejs.eventloop.delay.p50'], 'nodejs.eventloop.delay.p50 should be created')
-    assert.ok(createdGauges['nodejs.eventloop.delay.p90'], 'nodejs.eventloop.delay.p90 should be created')
-    assert.ok(createdGauges['nodejs.eventloop.delay.p99'], 'nodejs.eventloop.delay.p99 should be created')
-    assert.ok(
-      createdGauges['nodejs.eventloop.utilization'],
-      'nodejs.eventloop.utilization should be created'
-    )
+    assert.equal(Object.keys(createdGauges).length, 13, 'should create exactly 13 instruments')
+
+    // No DD-proprietary names should be present
+    for (const name of Object.keys(createdGauges)) {
+      assert.ok(!name.startsWith('runtime.node.'), `${name} should use OTel naming, not DD naming`)
+    }
   })
 
   it('should use correct units on instruments', () => {
