@@ -641,14 +641,16 @@ function buildConverseStreamGeneration (chunks) {
       })
     } else if (chunk.contentBlockDelta) {
       const { contentBlockIndex, delta } = chunk.contentBlockDelta
-      const block = blocksByIdx.get(contentBlockIndex) ?? {}
       if (typeof delta?.text === 'string') {
+        const block = blocksByIdx.get(contentBlockIndex) ?? {}
         block.text = (block.text ?? '') + delta.text
+        blocksByIdx.set(contentBlockIndex, block)
       } else if (typeof delta?.toolUse?.input === 'string') {
+        const block = blocksByIdx.get(contentBlockIndex) ?? { toolUse: { inputStr: '' } }
         block.toolUse ??= { inputStr: '' }
         block.toolUse.inputStr += delta.toolUse.input
+        blocksByIdx.set(contentBlockIndex, block)
       }
-      blocksByIdx.set(contentBlockIndex, block)
     }
   }
 
