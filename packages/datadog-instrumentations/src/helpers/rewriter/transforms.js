@@ -19,7 +19,7 @@ const transforms = module.exports = {
       : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
 
     node.body.splice(index + 1, 0, parse(code, {
-      sourceType: isModuleSourceType(sourceType) ? 'module' : 'script',
+      isModule: isModuleSourceType(sourceType),
     }).body[0])
   },
 

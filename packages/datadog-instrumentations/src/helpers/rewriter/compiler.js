@@ -5,10 +5,6 @@ const log = require('../../../../dd-trace/src/log')
 // eslint-disable-next-line camelcase, no-undef
 const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
 
-function isModuleSourceType (sourceType) {
-  return sourceType === 'module' || sourceType === 'esm'
-}
-
 const compiler = {
   parse: (sourceText, options) => {
     try {
@@ -31,11 +27,11 @@ const compiler = {
       // Fallback for when OXC is not available.
       const meriyah = require('../../../../../vendor/dist/meriyah')
 
-      compiler.parse = (sourceText, { range, sourceType } = {}) => {
+      compiler.parse = (sourceText, { range, isModule } = {}) => {
         return meriyah.parse(sourceText.toString(), {
           loc: range,
           ranges: range,
-          module: isModuleSourceType(sourceType),
+          module: isModule,
         })
       }
     }
