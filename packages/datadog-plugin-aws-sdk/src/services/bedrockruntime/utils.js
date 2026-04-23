@@ -403,10 +403,7 @@ function extractTextAndResponseReason (response, provider, modelName) {
             message: output.message?.content[0]?.text ?? 'Unsupported content type',
             finishReason: body.stopReason,
             role: output.message?.role,
-            inputTokens: body.usage?.inputTokens,
-            outputTokens: body.usage?.outputTokens,
-            cacheReadInputTokenCount: body.usage?.cacheReadInputTokenCount,
-            cacheWriteInputTokenCount: body.usage?.cacheWriteInputTokenCount,
+            ...buildUsage(body.usage),
           })
         }
         break
@@ -504,11 +501,19 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
     }
   }
 
+  if (!content && toolCalls.length === 0 && toolResults.length === 0) return []
+
   const message = { role }
   if (content) message.content = content
   if (toolCalls.length > 0) message.toolCalls = toolCalls
   if (toolResults.length > 0) message.toolResults = toolResults
-  return message.content || message.toolCalls || message.toolResults ? [message] : []
+  return [message]
+}
+
+// Always emit at least one output message so downstream tagging has a role to attach to.
+function toOutputMessages (role, contentBlocks) {
+  const messages = extractMessagesFromConverseContent(role, contentBlocks)
+  return messages.length > 0 ? messages : [{ role, content: '' }]
 }
 
 function buildToolCall ({ name, input, toolUseId, inputStr }) {
@@ -596,20 +601,22 @@ function extractRequestParamsConverse (params) {
 function extractTextAndResponseReasonConverse (response) {
   const outputMessage = response?.output?.message
   const role = outputMessage?.role || 'assistant'
-  const messages = extractMessagesFromConverseContent(role, outputMessage?.content)
-  if (messages.length === 0) messages.push({ role, content: '' })
 
   return new Generation({
     role,
     finishReason: response?.stopReason || '',
     ...buildUsage(response?.usage),
-    messages,
+    messages: toOutputMessages(role, outputMessage?.content),
   })
 }
 
 /**
  * Aggregate Converse stream events into a single output message + usage.
  * One messageStart / messageStop pair per response, so one message out.
+ *
+ * Stream events describe the same content-block structure as the non-stream
+ * response, spread across start/delta chunks. We reassemble those chunks
+ * into a normalized content-block array and reuse the non-stream extractor.
  *
  * @param {Array<object>} chunks - Ordered ConverseStreamOutput events.
  * @returns {Generation}
@@ -618,51 +625,41 @@ function buildConverseStreamGeneration (chunks) {
   let role = 'assistant'
   let stopReason = ''
   let usage = {}
-  const textByIdx = {}
-  const toolByIdx = {}
+  const blocksByIdx = new Map()
 
   for (const chunk of chunks || []) {
-    if (chunk.messageStart) {
-      role = chunk.messageStart.role || role
-    } else if (chunk.contentBlockStart?.start?.toolUse) {
-      const { contentBlockIndex, start: { toolUse } } = chunk.contentBlockStart
-      toolByIdx[contentBlockIndex] = { toolUseId: toolUse.toolUseId, name: toolUse.name, inputStr: '' }
-    } else if (chunk.contentBlockDelta) {
-      const { contentBlockIndex, delta } = chunk.contentBlockDelta
-      if (typeof delta?.text === 'string') {
-        textByIdx[contentBlockIndex] = (textByIdx[contentBlockIndex] || '') + delta.text
-      }
-      if (typeof delta?.toolUse?.input === 'string') {
-        toolByIdx[contentBlockIndex] = toolByIdx[contentBlockIndex] || { inputStr: '' }
-        toolByIdx[contentBlockIndex].inputStr += delta.toolUse.input
-      }
-    } else if (chunk.messageStop) {
-      stopReason = chunk.messageStop.stopReason || stopReason
+    if (chunk.messageStart?.role) {
+      role = chunk.messageStart.role
+    } else if (chunk.messageStop?.stopReason) {
+      stopReason = chunk.messageStop.stopReason
     } else if (chunk.metadata?.usage) {
       usage = chunk.metadata.usage
+    } else if (chunk.contentBlockStart?.start?.toolUse) {
+      const { contentBlockIndex, start: { toolUse } } = chunk.contentBlockStart
+      blocksByIdx.set(contentBlockIndex, {
+        toolUse: { toolUseId: toolUse.toolUseId, name: toolUse.name, inputStr: '' },
+      })
+    } else if (chunk.contentBlockDelta) {
+      const { contentBlockIndex, delta } = chunk.contentBlockDelta
+      const block = blocksByIdx.get(contentBlockIndex) ?? {}
+      if (typeof delta?.text === 'string') {
+        block.text = (block.text ?? '') + delta.text
+      } else if (typeof delta?.toolUse?.input === 'string') {
+        block.toolUse ??= { inputStr: '' }
+        block.toolUse.inputStr += delta.toolUse.input
+      }
+      blocksByIdx.set(contentBlockIndex, block)
     }
   }
+
+  const contentBlocks = [...blocksByIdx.keys()].sort((a, b) => a - b).map(i => blocksByIdx.get(i))
 
   return new Generation({
     role,
     finishReason: stopReason,
     ...buildUsage(usage),
-    messages: [assembleStreamMessage(role, textByIdx, toolByIdx)],
+    messages: toOutputMessages(role, contentBlocks),
   })
-}
-
-function assembleStreamMessage (role, textByIdx, toolByIdx) {
-  let content = ''
-  for (const i of Object.keys(textByIdx).sort((a, b) => a - b)) content += textByIdx[i]
-
-  const toolCalls = []
-  for (const i of Object.keys(toolByIdx).sort((a, b) => a - b)) toolCalls.push(buildToolCall(toolByIdx[i]))
-
-  const message = { role }
-  if (content) message.content = content
-  if (toolCalls.length > 0) message.toolCalls = toolCalls
-  if (!message.content && !message.toolCalls) message.content = ''
-  return message
 }
 
 module.exports = {
