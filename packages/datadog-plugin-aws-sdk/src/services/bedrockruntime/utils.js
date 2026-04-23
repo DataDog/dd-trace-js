@@ -512,27 +512,28 @@ function extractMessagesFromConverseContent (role, contentBlocks) {
 }
 
 function buildToolCall ({ name, input, toolUseId, inputStr }) {
-  let args = input ?? {}
-  if (inputStr) {
-    try {
-      args = JSON.parse(inputStr)
-    } catch {
-      log.warn('Failed to parse Converse stream toolUse.input JSON; emitting empty arguments')
-      args = {}
-    }
-  }
+  const args = inputStr ? parseToolInput(inputStr) : (input ?? {})
   return { name: name ?? '', arguments: args, toolId: toolUseId ?? '', type: 'toolUse' }
 }
 
+function parseToolInput (inputStr) {
+  try {
+    return JSON.parse(inputStr)
+  } catch {
+    log.warn('Failed to parse Converse stream toolUse.input JSON; emitting empty arguments')
+    return {}
+  }
+}
+
 function buildToolResult ({ toolUseId, content }) {
-  const result = (content || [])
-    .map(c => typeof c.text === 'string'
-      ? c.text
-      : c.json == null
-        ? `[Unsupported content type(s): ${Object.keys(c).join(',')}]`
-        : JSON.stringify(c.json))
-    .join('')
+  const result = (content || []).map(resolveToolResultItem).join('')
   return { name: '', result, toolId: toolUseId ?? '', type: 'tool_result' }
+}
+
+function resolveToolResultItem (item) {
+  if (typeof item.text === 'string') return item.text
+  if (item.json != null) return JSON.stringify(item.json)
+  return `[Unsupported content type(s): ${Object.keys(item).join(',')}]`
 }
 
 function buildUsage (usage = {}) {
@@ -552,13 +553,17 @@ function buildUsage (usage = {}) {
  * @returns {Array<{ name: string, description: string, schema: object }>}
  */
 function extractConverseToolDefinitions (params) {
-  const defs = []
+  const toolDefinitions = []
   for (const tool of params.toolConfig?.tools || []) {
-    const spec = tool?.toolSpec
-    if (!spec?.name) continue
-    defs.push({ name: spec.name, description: spec.description ?? '', schema: spec.inputSchema ?? {} })
+    const toolSpec = tool?.toolSpec
+    if (!toolSpec?.name) continue
+    toolDefinitions.push({
+      name: toolSpec.name,
+      description: toolSpec.description ?? '',
+      schema: toolSpec.inputSchema ?? {},
+    })
   }
-  return defs
+  return toolDefinitions
 }
 
 /**
@@ -589,9 +594,9 @@ function extractRequestParamsConverse (params) {
  * @returns {Generation}
  */
 function extractTextAndResponseReasonConverse (response) {
-  const message = response?.output?.message
-  const role = message?.role || 'assistant'
-  const messages = extractMessagesFromConverseContent(role, message?.content)
+  const outputMessage = response?.output?.message
+  const role = outputMessage?.role || 'assistant'
+  const messages = extractMessagesFromConverseContent(role, outputMessage?.content)
   if (messages.length === 0) messages.push({ role, content: '' })
 
   return new Generation({
