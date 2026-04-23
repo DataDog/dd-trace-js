@@ -15,6 +15,11 @@ const OUTPUT_PATH = path.join(
   '..',
   'packages/dd-trace/src/config/generated-config-types.d.ts'
 )
+const CONFIG_INDEX_PATH = path.join(
+  __dirname,
+  '..',
+  'packages/dd-trace/src/config/index.js'
+)
 
 const BASE_TYPES = {
   array: 'string[]',
@@ -54,8 +59,54 @@ function getPropertyName (canonicalName, entry) {
   return configurationNames?.[0] ?? canonicalName
 }
 
-function withUndefined (type, entry) {
-  return entry.default === null ? `${type} | undefined` : type
+/**
+ * Scans `packages/dd-trace/src/config/index.js` for `if (!this.X) { setAndTrack(this, 'X', ...) }`
+ * fallback patterns inside the `#applyCalculated()` method. Any matching property name is
+ * guaranteed to be non-null after calculation, so we remove `| undefined` from the generated type.
+ *
+ * Scope: only `#applyCalculated()` — other assignment sites (env resolution, user options) are not
+ * considered. This keeps the heuristic narrow and prevents false narrowing from conditional
+ * setAndTrack calls elsewhere.
+ *
+ * @returns {Set<string>}
+ */
+function findCalculatedFallbackProperties () {
+  const source = readFileSync(CONFIG_INDEX_PATH, 'utf8')
+
+  // Locate `#applyCalculated () {` and extract its body by balancing braces.
+  const methodMarker = /#applyCalculated\s*\(\s*\)\s*\{/.exec(source)
+  if (!methodMarker) {
+    throw new Error('Could not locate #applyCalculated() in config/index.js')
+  }
+  let depth = 1
+  let i = methodMarker.index + methodMarker[0].length
+  while (i < source.length && depth > 0) {
+    const ch = source[i]
+    if (ch === '{') depth++
+    else if (ch === '}') depth--
+    i++
+  }
+  const body = source.slice(methodMarker.index + methodMarker[0].length, i - 1)
+
+  // Match `if (!this.NAME) {` followed (after any amount of code) by `setAndTrack(this, 'NAME',`
+  // where the two NAMEs match. The `[\s\S]*?` is lazy so we catch the nearest setAndTrack.
+  const pattern = /if\s*\(\s*!\s*this\.([\w.]+)\s*\)\s*\{[\s\S]*?setAndTrack\s*\(\s*this\s*,\s*['"]([\w.]+)['"]/g
+  const properties = new Set()
+  let match
+  while ((match = pattern.exec(body)) !== null) {
+    if (match[1] === match[2]) {
+      properties.add(match[1])
+    }
+  }
+  return properties
+}
+
+const CALCULATED_FALLBACK_PROPERTIES = findCalculatedFallbackProperties()
+
+function withUndefined (type, entry, propertyName) {
+  if (entry.default !== null) return type
+  if (CALCULATED_FALLBACK_PROPERTIES.has(propertyName)) return type
+  return `${type} | undefined`
 }
 
 function getAllowedType (entry) {
@@ -93,7 +144,7 @@ function getTypeForEntry (propertyName, entry) {
     throw new Error(`Unsupported configuration type for ${propertyName}: ${entry.type}`)
   }
 
-  return withUndefined(override, entry)
+  return withUndefined(override, entry, propertyName)
 }
 
 function addProperty (root, propertyName, type) {
