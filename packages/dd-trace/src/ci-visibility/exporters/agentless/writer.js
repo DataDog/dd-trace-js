@@ -1,11 +1,11 @@
 'use strict'
-const request = require('../../../exporters/common/request')
 const { safeJSONStringify } = require('../../../exporters/common/util')
 const log = require('../../../log')
 const { getValueFromEnvSources } = require('../../../config/helper')
 
 const { AgentlessCiVisibilityEncoder } = require('../../../encode/agentless-ci-visibility')
 const BaseWriter = require('../../../exporters/common/writer')
+const PayloadRequestQueue = require('../payload-request-queue')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -23,6 +23,28 @@ class Writer extends BaseWriter {
     this._url = url
     this._encoder = new AgentlessCiVisibilityEncoder(this, { runtimeId, env, service })
     this._evpProxyPrefix = evpProxyPrefix
+    this._requestQueue = new PayloadRequestQueue()
+  }
+
+  // Override to skip the request.writable check from BaseWriter.
+  // The PayloadRequestQueue handles backpressure via queuing.
+  // Waits for all in-flight and queued requests to complete before calling done,
+  // so the final session flush does not race earlier payloads.
+  flush (done = () => {}) {
+    const count = this._encoder.count()
+    if (count > 0) {
+      const payload = this._encoder.makePayload()
+      this._sendPayload(payload, count, () => {
+        this._requestQueue.drain(done)
+      })
+    } else {
+      this._requestQueue.drain(done)
+    }
+  }
+
+  // Override to skip the request.writable check from BaseWriter.
+  append (payload) {
+    this._encode(payload)
   }
 
   _sendPayload (data, _, done) {
@@ -51,7 +73,7 @@ class Writer extends BaseWriter {
     incrementCountMetric(TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS, { endpoint: 'test_cycle' })
     distributionMetric(TELEMETRY_ENDPOINT_PAYLOAD_BYTES, { endpoint: 'test_cycle' }, Buffer.byteLength(data))
 
-    request(data, options, (err, res, statusCode) => {
+    this._requestQueue.send(data, options, (err, res, statusCode) => {
       distributionMetric(
         TELEMETRY_ENDPOINT_PAYLOAD_REQUESTS_MS,
         { endpoint: 'test_cycle' },
@@ -66,7 +88,7 @@ class Writer extends BaseWriter {
           TELEMETRY_ENDPOINT_PAYLOAD_DROPPED,
           { endpoint: 'test_cycle' }
         )
-        log.error('Error sending CI agentless payload', err)
+        log.error('Error sending Test Optimization agentless payload', err)
         done()
         return
       }

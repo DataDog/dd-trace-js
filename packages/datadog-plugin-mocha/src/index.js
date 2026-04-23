@@ -356,6 +356,7 @@ class MochaPlugin extends CiPlugin {
       isEarlyFlakeDetectionFaulty,
       isTestManagementEnabled,
       isParallel,
+      onFlushDone,
     }) => {
       if (this.testSessionSpan) {
         const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
@@ -410,7 +411,9 @@ class MochaPlugin extends CiPlugin {
         })
       }
       this.libraryConfig = null
-      this.tracer._exporter.flush()
+      this.tracer._exporter.flush(() => {
+        if (onFlushDone) onFlushDone()
+      })
     })
 
     this.addBind('ci:mocha:global:run', (ctx) => {

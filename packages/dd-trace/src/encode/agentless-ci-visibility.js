@@ -1,12 +1,13 @@
 'use strict'
 const { version: ddTraceVersion } = require('../../../../package.json')
-const { ITR_CORRELATION_ID } = require('../../src/plugins/util/test')
+const { ITR_CORRELATION_ID, TEST_COMMAND } = require('../../src/plugins/util/test')
 const id = require('../../src/id')
 const {
   distributionMetric,
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
+const log = require('../log')
 const { AgentEncoder } = require('./0.4')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
@@ -25,10 +26,14 @@ function formatSpan (span) {
   if (span.type === 'test' && span.meta && span.meta.test_session_id) {
     encodingVersion = 2
   }
+  const content = normalizeSpan(truncateSpan(span))
+  // Strip test.command from individual event meta — it is carried
+  // in the payload metadata section to avoid per-span duplication.
+  delete content.meta[TEST_COMMAND]
   return {
     type: ALLOWED_CONTENT_TYPES.has(span.type) ? span.type : 'span',
     version: encodingVersion,
-    content: normalizeSpan(truncateSpan(span)),
+    content,
   }
 }
 
@@ -258,19 +263,33 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
     }
   }
 
-  _encode (bytes, trace) {
-    if (this._isReset) {
-      this._encodePayloadStart(bytes)
-      this._isReset = false
-    }
-    const startTime = Date.now()
+  /**
+   * Overrides parent to check soft limit per event (not per trace).
+   * Skips the parent's post-trace check since we handle it here.
+   * @param {object} trace
+   */
+  encode (trace) {
+    const bytes = this._traceBytes
+    this._traceCount++
+    this._encode(bytes, trace)
+  }
 
+  _encode (bytes, trace) {
+    const startTime = Date.now()
     const events = trace.map(formatSpan)
 
-    this._eventCount += events.length
-
     for (const event of events) {
+      if (this._isReset) {
+        this._encodePayloadStart(bytes)
+        this._isReset = false
+      }
       this._encodeEvent(bytes, event)
+      this._eventCount++
+
+      if (bytes.length > this._limit) {
+        log.debug('Buffer went over soft limit, flushing')
+        this._writer.flush()
+      }
     }
     distributionMetric(
       TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,

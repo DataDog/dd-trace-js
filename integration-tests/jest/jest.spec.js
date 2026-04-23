@@ -463,6 +463,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             metadataDicts.forEach(metadata => {
               for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
                 assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+                assert.ok(metadata[testLevel][TEST_COMMAND])
               }
             })
 
@@ -585,7 +586,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.ok(testSessionEvent)
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testSessionEvent[TEST_SESSION_ID])
-            assert.ok(testSessionEvent.meta[TEST_COMMAND])
             assert.ok(testSessionEvent[TEST_SUITE_ID] == null)
             assert.ok(testSessionEvent[TEST_MODULE_ID] == null)
 
@@ -593,13 +593,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testModuleEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testModuleEvent[TEST_SESSION_ID])
             assert.ok(testModuleEvent[TEST_MODULE_ID])
-            assert.ok(testModuleEvent.meta[TEST_COMMAND])
             assert.ok(testModuleEvent[TEST_SUITE_ID] == null)
 
             assert.ok(testSuiteEvent)
             assert.strictEqual(testSuiteEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testSuiteEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-            assert.ok(testSuiteEvent.meta[TEST_COMMAND])
             assert.ok(testSuiteEvent.meta[TEST_MODULE])
             assert.ok(testSuiteEvent[TEST_SUITE_ID])
             assert.ok(testSuiteEvent[TEST_SESSION_ID])
@@ -609,7 +607,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testEvent.meta[TEST_NAME], 'jest-test-suite-visibility works')
             assert.strictEqual(testEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-            assert.ok(testEvent.meta[TEST_COMMAND])
             assert.ok(testEvent.meta[TEST_MODULE])
             assert.ok(testEvent[TEST_SUITE_ID])
             assert.ok(testEvent[TEST_SESSION_ID])

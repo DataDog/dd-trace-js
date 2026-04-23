@@ -1284,6 +1284,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         metadataDicts.forEach(metadata => {
           for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
             assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
+            assert.ok(metadata[testLevel][TEST_COMMAND])
           }
         })
 
@@ -1304,7 +1305,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId,
         }) => {
-          assert.ok(meta[TEST_COMMAND])
           assert.ok(meta[TEST_MODULE])
           assert.ok(testSuiteId)
           assert.strictEqual(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))
@@ -1318,7 +1318,6 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           test_module_id: testModuleId,
           test_session_id: testSessionId,
         }) => {
-          assert.ok(meta[TEST_COMMAND])
           assert.ok(meta[TEST_MODULE])
           assert.ok(testSuiteId)
           assert.strictEqual(testModuleId.toString(10), moduleEventContent.test_module_id.toString(10))

@@ -192,6 +192,7 @@ module.exports = class CiPlugin extends Plugin {
       for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
         metadataTags[testLevel] = {
           [TEST_SESSION_NAME]: testSessionName,
+          [TEST_COMMAND]: command,
         }
       }
       // tracer might not be initialized correctly
@@ -241,7 +242,7 @@ module.exports = class CiPlugin extends Plugin {
     })
 
     this.addSub(`ci:${this.constructor.id}:itr:skipped-suites`, ({ skippedSuites, frameworkVersion }) => {
-      const testCommand = this.testSessionSpan.context()._tags[TEST_COMMAND]
+      const testCommand = this.command
       for (const testSuite of skippedSuites) {
         const testSuiteMetadata = {
           ...getTestSuiteCommonTags(testCommand, frameworkVersion, testSuite, this.constructor.id),
