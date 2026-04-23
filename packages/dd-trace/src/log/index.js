@@ -8,18 +8,12 @@ const { getValueFromEnvSources } = require('../config/helper')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
-const { memoize } = require('./utils')
 
 const config = {
   enabled: defaults.DD_TRACE_DEBUG,
   logger: undefined,
   logLevel: defaults.logLevel,
 }
-
-const deprecate = memoize((code, message) => {
-  publishFormatted(errorChannel, null, message)
-  return true
-})
 
 // In most places where we know we want to mute a log we use log.error() directly
 const NO_TRANSMIT = new LogConfig(false)
@@ -80,10 +74,6 @@ const log = {
     args.push(NO_TRANSMIT)
     publishFormatted(errorChannel, null, ...args)
     return log
-  },
-
-  deprecate (code, message) {
-    return deprecate(code, message)
   },
 
   configure (options) {

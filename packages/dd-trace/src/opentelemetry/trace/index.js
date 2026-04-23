@@ -4,7 +4,7 @@ const { VERSION } = require('../../../../../version')
 const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
 
 /**
- * @typedef {import('../../config')} Config
+ * @typedef {import('../../config/config-base')} Config
  * @typedef {import('../../opentracing/tracer')} DatadogTracer
  */
 
@@ -33,21 +33,17 @@ const OtlpHttpTraceExporter = require('./otlp_http_trace_exporter')
  */
 function buildResourceAttributes (config) {
   const resourceAttributes = {
-    'service.name': config.service || config.tags.service,
+    'service.name': config.service,
     'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.version': VERSION,
     'telemetry.sdk.language': 'nodejs',
   }
 
-  const env = config.env || config.tags.env
-  if (env) resourceAttributes['deployment.environment'] = env
-  const version = config.version || config.tags.version
-  if (version) resourceAttributes['service.version'] = version
+  if (config.env) resourceAttributes['deployment.environment.name'] = config.env
+  if (config.version) resourceAttributes['service.version'] = config.version
 
-  if (config.tags) {
-    const { service, version, env, ...filteredTags } = config.tags
-    Object.assign(resourceAttributes, filteredTags)
-  }
+  const { service, version, env, ...filteredTags } = config.tags
+  Object.assign(resourceAttributes, filteredTags)
 
   return resourceAttributes
 }
@@ -56,15 +52,14 @@ function buildResourceAttributes (config) {
  * Creates the OTLP HTTP/JSON trace exporter.
  *
  * @param {Config} config - Tracer configuration instance
- * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
  * @returns {OtlpHttpTraceExporter} The OTLP HTTP/JSON exporter
  */
-function createOtlpTraceExporter (config, resourceAttributes) {
+function createOtlpTraceExporter (config) {
   return new OtlpHttpTraceExporter(
-    config.otelTracesUrl,
-    config.otelTracesHeaders,
-    config.otelTracesTimeout,
-    resourceAttributes
+    config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+    config.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
+    config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
+    buildResourceAttributes(config)
   )
 }
 

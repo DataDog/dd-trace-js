@@ -29,7 +29,6 @@ const {
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
-  getValueFromEnvSources,
 } = require('./helper')
 const {
   defaults,
@@ -229,22 +228,6 @@ class Config extends ConfigBase {
   #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
       const entry = configurationsTable[name]
-      // TracePropagationStyle is a special case. It is a single option that is used to set both inject and extract.
-      // TODO: Consider what to do with this later
-      if (name === 'DD_TRACE_PROPAGATION_STYLE') {
-        if (
-          getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE_INJECT') !== undefined ||
-          getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE_EXTRACT') !== undefined
-        ) {
-          log.warn(
-            // eslint-disable-next-line @stylistic/max-len
-            'Use either DD_TRACE_PROPAGATION_STYLE or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
-          )
-          continue
-        }
-        this.#applyEnvs({ DD_TRACE_PROPAGATION_STYLE_INJECT: value, DD_TRACE_PROPAGATION_STYLE_EXTRACT: value }, source)
-        continue
-      }
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
       const rawValue = transformed !== null && typeof transformed === 'object' ? value : parsed
@@ -293,6 +276,7 @@ class Config extends ConfigBase {
         } else {
           if (fullName === 'tracePropagationStyle') {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
+            // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
             this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
           } else {
@@ -374,21 +358,9 @@ class Config extends ConfigBase {
       setAndTrack(this, 'otelMetricsEnabled', false)
     }
 
-    const otelTracesEnabled = trackedConfigOrigins.has('OTEL_TRACES_EXPORTER') &&
-      this.OTEL_TRACES_EXPORTER === 'otlp'
-    if (this.protocolVersion && this.protocolVersion !== '0.4' && otelTracesEnabled) {
+    if (this.OTEL_TRACES_EXPORTER === 'otlp' && this.protocolVersion && this.protocolVersion !== '0.4') {
       log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
-      setAndTrack(this, 'otelTracesEnabled', false)
-    } else {
-      setAndTrack(this, 'otelTracesEnabled', otelTracesEnabled)
-    }
-
-    if (this.otelTracesProtocol && this.otelTracesProtocol !== 'http/json') {
-      log.warn(
-        'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
-        this.otelTracesProtocol
-      )
-      setAndTrack(this, 'otelTracesProtocol', 'http/json')
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
 
     if (this.telemetry.heartbeatInterval) {
@@ -457,16 +429,13 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
-    if (!trackedConfigOrigins.has('sampleRate')) {
-      const effectiveSampler = (trackedConfigOrigins.has('OTEL_TRACES_EXPORTER') &&
-        this.OTEL_TRACES_EXPORTER === 'otlp' &&
-        !trackedConfigOrigins.has('OTEL_TRACES_SAMPLER'))
-        ? 'parentbased_always_on'
-        : this.OTEL_TRACES_SAMPLER
-      if (effectiveSampler && (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') ||
-          trackedConfigOrigins.has('OTEL_TRACES_EXPORTER'))) {
-        setAndTrack(this, 'sampleRate', getFromOtelSamplerMap(effectiveSampler, this.OTEL_TRACES_SAMPLER_ARG))
-      }
+    // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
+    // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
+    // that don't set the sampler still get parent-based sampling.
+    if (!trackedConfigOrigins.has('sampleRate') &&
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || this.OTEL_TRACES_EXPORTER === 'otlp')) {
+      setAndTrack(this, 'sampleRate',
+        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
 
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
@@ -621,19 +590,18 @@ class Config extends ConfigBase {
       }
     }
 
-    const DEFAULT_OTLP_PORT = '4318'
+    // TODO: This could likely be moved to the base class and allow easier GRPC handling
+    // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
+    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
+    const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
     if (!this.otelLogsUrl) {
-      setAndTrack(this, 'otelLogsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}`)
+      setAndTrack(this, 'otelLogsUrl', `${defaultOtlpBase}/v1/logs`)
     }
     if (!this.otelMetricsUrl) {
-      setAndTrack(this, 'otelMetricsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`)
+      setAndTrack(this, 'otelMetricsUrl', `${defaultOtlpBase}/v1/metrics`)
     }
-    if (!trackedConfigOrigins.has('otelTracesUrl') && this.OTEL_EXPORTER_OTLP_ENDPOINT) {
-      // Generic OTLP endpoint: per spec, append /v1/traces signal-specific subpath
-      setAndTrack(this, 'otelTracesUrl', this.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, '') + '/v1/traces')
-    } else if (!this.otelTracesUrl) {
-      const tracesHostname = agentHostname === '127.0.0.1' ? 'localhost' : agentHostname
-      setAndTrack(this, 'otelTracesUrl', `http://${tracesHostname}:${DEFAULT_OTLP_PORT}/v1/traces`)
+    if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
 
     if (process.platform === 'win32') {
@@ -759,7 +727,7 @@ function warnWrongOtelSettings () {
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE'],
+    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE', 'DD_TRACE_PROPAGATION_STYLE'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_SERVICE_NAME', 'DD_SERVICE', 'service'],
     ['OTEL_TRACES_SAMPLER', 'DD_TRACE_SAMPLE_RATE'],
@@ -780,11 +748,7 @@ function warnWrongOtelSettings () {
         increaseCounter('otel.env.hiding', ddEnvVar, otelEnvVar)
       }
 
-      // eslint-disable-next-line eslint-rules/eslint-env-aliases
-      const invalidOtelValue = otelEnvVar === 'OTEL_PROPAGATORS'
-        ? trackedConfigOrigins.get(/** @type {ConfigPath} */ ('tracePropagationStyle.inject')) !== otelSource &&
-          !envs[ddEnvVar]
-        : !otelSource
+      const invalidOtelValue = !otelSource
       if (invalidOtelValue) {
         increaseCounter('otel.env.invalid', ddEnvVar, otelEnvVar)
       }

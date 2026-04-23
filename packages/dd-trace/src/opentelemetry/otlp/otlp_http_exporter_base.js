@@ -19,34 +19,31 @@ class OtlpHttpExporterBase {
   /**
    * Creates a new OtlpHttpExporterBase instance.
    *
-   * @param {string} url - OTLP endpoint URL
-   * @param {string|undefined} headers - Additional HTTP headers as comma-separated key=value string
+   * @param {string} url - OTLP endpoint URL (callers are expected to supply the full signal URL)
+   * @param {Record<string, string>|undefined} headers - Additional HTTP headers parsed from the
+   *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   * @param {string} defaultPath - Default path to use if URL has no path
    * @param {string} signalType - Signal type for error messages (e.g., 'logs', 'metrics')
    */
-  constructor (url, headers, timeout, protocol, defaultPath, signalType) {
-    const parsedUrl = new URL(url)
-
+  constructor (url, headers, timeout, protocol, signalType) {
     this.protocol = protocol
     this.signalType = signalType
 
-    // If no path is provided, use default path
-    const path = parsedUrl.pathname === '/' ? defaultPath : parsedUrl.pathname
     const isJson = protocol === 'http/json'
 
+    // Initialize fields setUrl doesn't touch; it fills in hostname/port/path below.
     this.options = {
-      hostname: parsedUrl.hostname,
-      port: parsedUrl.port,
-      path: path + parsedUrl.search,
       method: 'POST',
       timeout,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
-        ...this.#parseAdditionalHeaders(headers),
+        ...headers,
       },
     }
+
+    this.setUrl(url)
+
     this.telemetryTags = [
       'protocol:http',
       `encoding:${isJson ? 'json' : 'protobuf'}`,
@@ -61,6 +58,7 @@ class OtlpHttpExporterBase {
    * @protected
    */
   recordTelemetry (metricName, count, additionalTags) {
+    // @ts-expect-error - additionalTags is optional and can be undefined
     if (additionalTags?.length > 0) {
       tracerMetrics.count(metricName, [...this.telemetryTags, ...additionalTags || []]).inc(count)
     } else {
@@ -91,6 +89,7 @@ class OtlpHttpExporterBase {
       })
 
       res.once('end', () => {
+        // @ts-expect-error - res.statusCode can be undefined
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resultCallback({ code: 0 })
         } else {
@@ -116,61 +115,15 @@ class OtlpHttpExporterBase {
   }
 
   /**
-   * Parses additional HTTP headers from a comma-separated string or pre-parsed map.
-   * @param {string|Record<string, string>} [headersString=''] - Comma-separated key=value pairs or map
-   * @returns {Record<string, string>} Parsed headers object
+   * Updates the target URL used by this exporter. The URL is used as-is per the OTel spec: the
+   * caller is responsible for including the signal-specific path (`/v1/traces` etc.).
+   * @param {string} url - New OTLP endpoint URL
    */
-  #parseAdditionalHeaders (headersString = '') {
-    if (headersString !== null && typeof headersString === 'object') {
-      // The config MAP parser uses tagger.add (which splits on ':'), so OTEL-format
-      // headers ('key=value') arrive with the full 'key=value' string as the map key
-      // and an empty string as the value. Re-split on '=' to get the correct pairs.
-      const result = {}
-      for (const [k, v] of Object.entries(headersString)) {
-        if (v === '' && k.includes('=')) {
-          const idx = k.indexOf('=')
-          result[k.slice(0, idx).trim()] = k.slice(idx + 1).trim()
-        } else {
-          result[k] = v
-        }
-      }
-      return result
-    }
-    const headers = {}
-    let key = ''
-    let value = ''
-    let readingKey = true
-
-    for (const char of headersString) {
-      if (readingKey) {
-        if (char === '=') {
-          readingKey = false
-          key = key.trim()
-        } else {
-          key += char
-        }
-      } else if (char === ',') {
-        value = value.trim()
-        if (key && value) {
-          headers[key] = value
-        }
-        key = ''
-        value = ''
-        readingKey = true
-      } else {
-        value += char
-      }
-    }
-
-    // Add the last pair if present
-    if (!readingKey) {
-      value = value.trim()
-      if (value) {
-        headers[key] = value
-      }
-    }
-
-    return headers
+  setUrl (url) {
+    const parsedUrl = new URL(url)
+    this.options.hostname = parsedUrl.hostname
+    this.options.port = parsedUrl.port
+    this.options.path = parsedUrl.pathname + parsedUrl.search
   }
 
   /**

@@ -27,6 +27,7 @@ describe('getDebuggerConfig', function () {
       'runtimeId',
       'service',
       'url',
+      'inputPath',
     ])
     assertObjectContains(config, {
       commitSHA: tracerConfig.commitSHA,

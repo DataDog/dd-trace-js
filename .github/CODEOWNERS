@@ -216,6 +216,7 @@
 /.github/workflows/aiguard.yml @DataDog/asm-js
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
+/.github/workflows/instrumentation.yml @DataDog/apm-idm-js
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless
 /.github/workflows/llmobs.yml @DataDog/ml-observability
 /.github/workflows/profiling.yml @DataDog/profiling-js
@@ -266,3 +267,6 @@
 /packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/setup @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
+
+# Multiple teams
+/eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js
