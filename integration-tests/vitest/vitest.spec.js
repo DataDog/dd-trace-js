@@ -740,6 +740,7 @@ versions.forEach((version) => {
               // 'early flake detection can retry tests that eventually pass', // will be considered new
               // 'early flake detection can retry tests that always pass', // will be considered new
               // 'early flake detection can retry tests that eventually fail', // will be considered new
+              // 'early flake detection can retry tests that pass only on the last attempt', // will be considered new
               // 'early flake detection does not retry if the test is skipped', // skipped so not retried
               'early flake detection does not retry if it is not new',
             ],
@@ -752,7 +753,7 @@ versions.forEach((version) => {
 
             const tests = events.filter(event => event.type === 'test').map(test => test.content)
 
-            assert.strictEqual(tests.length, 14)
+            assert.strictEqual(tests.length, 18)
 
             assertObjectContains(tests.map(test => test.meta[TEST_NAME]), [
               'early flake detection can retry tests that eventually pass',
@@ -764,18 +765,22 @@ versions.forEach((version) => {
               'early flake detection can retry tests that eventually fail',
               'early flake detection can retry tests that eventually fail',
               'early flake detection can retry tests that eventually fail',
+              'early flake detection can retry tests that pass only on the last attempt',
+              'early flake detection can retry tests that pass only on the last attempt',
+              'early flake detection can retry tests that pass only on the last attempt',
               'early flake detection can retry tests that eventually pass',
               'early flake detection can retry tests that always pass',
               'early flake detection does not retry if it is not new',
               'early flake detection does not retry if the test is skipped',
               'early flake detection can retry tests that eventually fail',
+              'early flake detection can retry tests that pass only on the last attempt',
             ])
             const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            // 4 executions of the 3 new tests + 1 new skipped test (not retried)
-            assert.strictEqual(newTests.length, 13)
+            // 4 executions of the 4 new tests + 1 new skipped test (not retried)
+            assert.strictEqual(newTests.length, 17)
 
             const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 9) // 3 retries of the 3 new tests
+            assert.strictEqual(retriedTests.length, 12) // 3 retries of the 4 new tests
 
             retriedTests.forEach(test => {
               assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
@@ -784,7 +789,20 @@ versions.forEach((version) => {
             // exit code should be 0 and test session should be reported as passed,
             // even though there are some failing executions
             const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.strictEqual(failedTests.length, 3)
+            assert.strictEqual(failedTests.length, 6)
+
+            // Verifies that task.result.state is reset before the last repetition runs.
+            // Without this reset, vitest keeps a stale 'fail' from prior repetitions and
+            // incorrectly reports the last execution as failed even when it succeeds.
+            const lastAttemptPassTests = tests
+              .filter(test => test.meta[TEST_NAME] === 'early flake detection can retry tests that pass only on the last attempt')
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+            assert.strictEqual(lastAttemptPassTests.length, NUM_RETRIES_EFD + 1)
+            assert.strictEqual(
+              lastAttemptPassTests.filter(test => test.meta[TEST_STATUS] === 'fail').length,
+              NUM_RETRIES_EFD
+            )
+            assert.strictEqual(lastAttemptPassTests[lastAttemptPassTests.length - 1].meta[TEST_STATUS], 'pass')
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testSessionEvent.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
@@ -799,6 +817,7 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               SHOULD_ADD_EVENTUALLY_FAIL: '1',
+              SHOULD_ADD_LAST_ATTEMPT_PASS: '1',
             },
           }
         )
