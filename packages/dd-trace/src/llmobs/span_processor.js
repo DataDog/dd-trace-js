@@ -30,6 +30,11 @@ const {
   INPUT_PROMPT,
   ROUTING_API_KEY,
   ROUTING_SITE,
+  RUM_BAGGAGE_SESSION_ID_KEY,
+  RUM_BAGGAGE_USER_ID_KEY,
+  RUM_BAGGAGE_ACCOUNT_ID_KEY,
+  USER_ID_TAG_KEY,
+  USER_ACCOUNT_ID_TAG_KEY,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -151,7 +156,9 @@ class LLMObsSpanProcessor {
     const metrics = mlObsTags[METRICS] || {}
 
     const mlApp = mlObsTags[ML_APP]
-    const sessionId = mlObsTags[SESSION_ID]
+    // Fall back to the session.id baggage key propagated by the RUM browser SDK so that
+    // RUM sessions automatically correlate to LLMObs traces without a manual annotate call.
+    const sessionId = mlObsTags[SESSION_ID] || span.getBaggageItem?.(RUM_BAGGAGE_SESSION_ID_KEY)
     const parentId = mlObsTags[PARENT_ID_KEY]
 
     const name = mlObsTags[NAME] || span._name
@@ -269,6 +276,15 @@ class LLMObsSpanProcessor {
 
     const existingTags = LLMObsTagger.tagMap.get(span)?.[TAGS] || {}
     if (existingTags) tags = { ...tags, ...existingTags }
+
+    // RUM browser SDK propagates user/account identity via OTel baggage when
+    // `propagateTraceBaggage` is enabled. Map onto Datadog standard attribute
+    // names so RUM users correlate to LLMObs traces. Explicit annotate() tags win.
+    const userId = span.getBaggageItem?.(RUM_BAGGAGE_USER_ID_KEY)
+    if (userId && tags[USER_ID_TAG_KEY] === undefined) tags[USER_ID_TAG_KEY] = userId
+
+    const accountId = span.getBaggageItem?.(RUM_BAGGAGE_ACCOUNT_ID_KEY)
+    if (accountId && tags[USER_ACCOUNT_ID_TAG_KEY] === undefined) tags[USER_ACCOUNT_ID_TAG_KEY] = accountId
 
     return tags
   }

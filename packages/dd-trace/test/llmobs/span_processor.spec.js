@@ -335,6 +335,80 @@ describe('span processor', () => {
       assertObjectContains(payload.tags, ['session_id:1234'])
     })
 
+    describe('RUM baggage auto-tagging', () => {
+      // Simulates a request where the RUM browser SDK's `propagateTraceBaggage` has
+      // injected session/user/account identifiers into the inbound trace context.
+      function spanWithBaggage (baggage) {
+        return {
+          context () {
+            return {
+              _tags: {},
+              toTraceId () { return '123' },
+              toSpanId () { return '456' },
+            }
+          },
+          getBaggageItem (key) { return baggage[key] },
+        }
+      }
+
+      it('auto-tags session_id, usr.id and usr.account_id from RUM baggage', () => {
+        span = spanWithBaggage({
+          'session.id': 'rum-session-123',
+          'user.id': 'user-abc',
+          'account.id': 'acct-xyz',
+        })
+        LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+        processor.process(span)
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.strictEqual(payload.session_id, 'rum-session-123')
+        assertObjectContains(payload.tags, [
+          'session_id:rum-session-123',
+          'usr.id:user-abc',
+          'usr.account_id:acct-xyz',
+        ])
+      })
+
+      it('does not overwrite an explicit session id', () => {
+        span = spanWithBaggage({ 'session.id': 'rum-session-123' })
+        LLMObsTagger.tagMap.set(span, {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.session_id': 'explicit-session',
+        })
+
+        processor.process(span)
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.strictEqual(payload.session_id, 'explicit-session')
+      })
+
+      it('does not overwrite an annotated usr.id tag', () => {
+        span = spanWithBaggage({ 'user.id': 'rum-user' })
+        LLMObsTagger.tagMap.set(span, {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.tags': { 'usr.id': 'explicit-user' },
+        })
+
+        processor.process(span)
+        const payload = writer.append.getCall(0).firstArg
+
+        assertObjectContains(payload.tags, ['usr.id:explicit-user'])
+      })
+
+      it('only tags the baggage keys that are present', () => {
+        span = spanWithBaggage({ 'user.id': 'user-only' })
+        LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+        processor.process(span)
+        const payload = writer.append.getCall(0).firstArg
+
+        assert.strictEqual(payload.session_id, undefined)
+        assertObjectContains(payload.tags, ['usr.id:user-only'])
+        assert.ok(!payload.tags.some(t => t.startsWith('usr.account_id:')))
+      })
+    })
+
     it('sets span tags appropriately', () => {
       span = {
         context () {

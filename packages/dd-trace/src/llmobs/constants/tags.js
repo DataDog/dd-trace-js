@@ -53,4 +53,16 @@ module.exports = {
 
   ROUTING_API_KEY: '_dd.llmobs.routing.api_key',
   ROUTING_SITE: '_dd.llmobs.routing.site',
+
+  // OTel baggage keys propagated by the RUM browser SDK's `propagateTraceBaggage`
+  // option. When present on the active span context (typically extracted from an
+  // incoming HTTP request), these values are auto-applied to LLMObs spans so RUM
+  // sessions and users correlate to LLM traces without any manual tagging.
+  RUM_BAGGAGE_SESSION_ID_KEY: 'session.id',
+  RUM_BAGGAGE_USER_ID_KEY: 'user.id',
+  RUM_BAGGAGE_ACCOUNT_ID_KEY: 'account.id',
+
+  // LLMObs tag keys aligned with Datadog standard attributes for user identity.
+  USER_ID_TAG_KEY: 'usr.id',
+  USER_ACCOUNT_ID_TAG_KEY: 'usr.account_id',
 }
