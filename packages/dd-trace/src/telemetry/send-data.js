@@ -141,7 +141,10 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   } = config
 
   let url = config.url
-  if (isCiVisibility && DD_CIVISIBILITY_AGENTLESS_ENABLED) {
+
+  const isCiVisibilityAgentlessMode = isCiVisibility && DD_CIVISIBILITY_AGENTLESS_ENABLED
+
+  if (isCiVisibilityAgentlessMode) {
     try {
       url ||= new URL(getAgentlessTelemetryEndpoint(config.site))
     } catch (err) {
@@ -156,7 +159,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     hostname,
     port,
     method: 'POST',
-    path: DD_CIVISIBILITY_AGENTLESS_ENABLED ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
+    path: isCiVisibilityAgentlessMode ? '/api/v2/apmtelemetry' : '/telemetry/proxy/api/v2/apmtelemetry',
     headers: getHeaders(config, application, reqType),
   }
 
