@@ -58,7 +58,7 @@ function initializeOpenTelemetryMetrics (config) {
 
   const exporter = new OtlpHttpMetricExporter(
     config.otelMetricsUrl,
-    config.otelMetricsHeaders,
+    config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
     config.otelMetricsTimeout,
     config.otelMetricsProtocol,
     resourceAttributes

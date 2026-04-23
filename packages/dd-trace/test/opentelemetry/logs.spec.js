@@ -540,10 +540,16 @@ describe('OpenTelemetry Logs', () => {
       assert.strictEqual(loggerProvider.processor.exporter.options.port, '4318')
     })
 
-    it('appends /v1/logs to endpoint if not provided', () => {
-      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318'
+    it('appends /v1/logs when deriving the URL from the generic OTEL_EXPORTER_OTLP_ENDPOINT', () => {
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://custom:4318'
       const { loggerProvider } = setupLogs()
       assert.strictEqual(loggerProvider.processor.exporter.options.path, '/v1/logs')
+    })
+
+    it('uses a signal-specific endpoint as-is without appending /v1/logs', () => {
+      process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT = 'http://custom:4318'
+      const { loggerProvider } = setupLogs()
+      assert.strictEqual(loggerProvider.processor.exporter.options.path, '/')
     })
 
     it('configures OTLP headers from environment variable', () => {
