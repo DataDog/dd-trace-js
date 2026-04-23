@@ -230,12 +230,17 @@ function checkAgentStatus () {
   return new Promise((resolve) => {
     const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
     const timeoutMs = 2000
+    const start = Date.now()
+
+    process.stderr.write(`[agent.load] checkAgentStatus: requesting ${agentUrl}/info\n`)
 
     const request = http.request(`${agentUrl}/info`, { method: 'GET', timeout: timeoutMs }, response => {
+      process.stderr.write(`[agent.load] checkAgentStatus: got ${response.statusCode} in ${Date.now() - start}ms\n`)
       resolve(response.statusCode === 200)
     })
 
     request.on('timeout', () => {
+      process.stderr.write(`[agent.load] checkAgentStatus: timed out after ${Date.now() - start}ms\n`)
       // eslint-disable-next-line no-console
       console.warn(
         `checkAgentStatus: Timed out after ${timeoutMs}ms trying to reach test agent at ${agentUrl}. ` +
@@ -246,6 +251,7 @@ function checkAgentStatus () {
     })
 
     request.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+      process.stderr.write(`[agent.load] checkAgentStatus: error after ${Date.now() - start}ms: ${err.message}\n`)
       if (err.code !== 'ECONNREFUSED') {
         // eslint-disable-next-line no-console
         console.warn(`checkAgentStatus: Unexpected error reaching test agent at ${agentUrl}`, err)
@@ -414,6 +420,9 @@ module.exports = {
    * @returns Promise<void>
    */
   async load (pluginNames, config, tracerConfig = {}) {
+    const loadStart = Date.now()
+    const dbg = (label) => process.stderr.write(`[agent.load +${Date.now() - loadStart}ms] ${label}\n`)
+
     if (!Array.isArray(pluginNames)) {
       pluginNames = [pluginNames]
     }
@@ -422,24 +431,43 @@ module.exports = {
       config = [config]
     }
 
+    dbg(`start plugins=${pluginNames.join(',')}`)
+
     currentIntegrationName = getCurrentIntegrationName()
 
+    dbg('proxyquire:config/defaults start')
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+    dbg('proxyquire:config/defaults done')
+
+    dbg('proxyquire:config start')
     const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
       './defaults': defaults,
     })
+    dbg('proxyquire:config done')
+
     // Reload dogstatsd to avoid adding new events to the global process object
+    dbg('proxyquire:dogstatsd start')
     const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+    dbg('proxyquire:dogstatsd done')
+
+    dbg('proxyquire:proxy start')
     const proxy = proxyquire('../../src/proxy', {
       './config': getConfigFresh,
       './dogstatsd': dogstatsd,
     })
+    dbg('proxyquire:proxy done')
+
+    dbg('proxyquire:TracerProxy start')
     const TracerProxy = proxyquire('../../src', {
       './proxy': proxy,
     })
+    dbg('proxyquire:TracerProxy done')
+
+    dbg('proxyquire:tracer start')
     tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
+    dbg('proxyquire:tracer done')
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -454,7 +482,9 @@ module.exports = {
 
     const innerAgent = agent
 
+    dbg('checkAgentStatus start')
     const useTestAgent = await checkAgentStatus()
+    dbg(`checkAgentStatus done useTestAgent=${useTestAgent}`)
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
@@ -514,8 +544,10 @@ module.exports = {
 
     server.on('connection', socket => sockets.push(socket))
 
+    dbg('server.listen start')
     const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
+        dbg('server.listen callback: tracer.init start')
         const port = listener.address().port
 
         tracer.init({
@@ -527,12 +559,14 @@ module.exports = {
           ...tracerConfig,
         })
 
+        dbg('server.listen callback: tracer.init done')
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
         for (let i = 0, l = pluginNames.length; i < l; i++) {
           tracer.use(pluginNames[i], config[i])
         }
 
+        dbg('resolving')
         resolve()
       })
     }))
