@@ -64,7 +64,7 @@ describe('esm', () => {
         const httpWriteInvoke = allSpans.find(
           s =>
             s?.name === 'azure.functions.invoke' &&
-            (typeof s.resource === 'string' && s.resource === 'azure.functions.invoke')
+            (typeof s.resource === 'string' && s.resource === 'GET /api/writeToCosmos')
         )
         assert.ok(httpWriteInvoke, 'expected writeToCosmos HTTP invoke span')
 
