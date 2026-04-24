@@ -250,6 +250,14 @@ jobs:
           - cypress-test-management
           - cypress-impacted-tests
           - cypress-final-status
+        exclude:
+          # eol = Node 16: shouldTestsRun() always returns false for DD_MAJOR >= 6
+          - version: eol
+          # 6.7.0 is only supported for DD_MAJOR <= 5; never runs on this branch
+          - cypress-version: 6.7.0
+          # Node 18 (oldest) only supports 10.2.0 and 14.5.4, not latest
+          - version: oldest
+            cypress-version: latest
     name: integration-cypress (${{ matrix.cypress-version }}, node-${{ matrix.version }}, ${{ matrix.module-type }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
