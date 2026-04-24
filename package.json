@@ -75,7 +75,7 @@
     "test:integration:openfeature": "mocha --timeout 60000 \"integration-tests/openfeature/*.spec.js\"",
     "test:integration:jest": "mocha --timeout 60000 \"integration-tests/jest/*.spec.js\"",
     "test:integration:mocha": "mocha --timeout 60000 \"integration-tests/mocha/*.spec.js\"",
-    "test:integration:playwright": "mocha --timeout 60000 \"integration-tests/playwright/*.spec.js\"",
+    "test:integration:playwright": "mocha --timeout 60000 \"integration-tests/playwright/${SPEC:-playwright-*}.spec.js\"",
     "test:integration:selenium": "mocha --timeout 60000 \"integration-tests/selenium/*.spec.js\"",
     "test:integration:vitest": "mocha --timeout 60000 \"integration-tests/vitest/*.spec.js\"",
     "test:integration:testopt": "mocha --timeout 120000 \"integration-tests/ci-visibility/*.spec.js\"",

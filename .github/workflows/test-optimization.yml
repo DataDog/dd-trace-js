@@ -65,7 +65,14 @@ jobs:
       matrix:
         node-version: [oldest, latest]
         playwright-version: [oldest, latest]
-    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
+        spec:
+          - playwright-reporting
+          - playwright-efd
+          - playwright-atr
+          - playwright-test-management
+          - playwright-active-test-span
+          - playwright-impacted-tests
+    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -107,6 +114,7 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          SPEC: ${{ matrix.spec }}
 
   integration-mocha:
     strategy:
