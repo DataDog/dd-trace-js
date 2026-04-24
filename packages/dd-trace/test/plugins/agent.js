@@ -8,7 +8,6 @@ const util = require('util')
 const bodyParser = require('body-parser')
 const express = require('express')
 const msgpack = require('@msgpack/msgpack')
-const proxyquire = require('proxyquire')
 const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -424,22 +423,7 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
-    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
-      './defaults': defaults,
-    })
-    // Reload dogstatsd to avoid adding new events to the global process object
-    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-    const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh,
-      './dogstatsd': dogstatsd,
-    })
-    const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy,
-    })
-    tracer = proxyquire('../../', {
-      './src': TracerProxy,
-    })
+    tracer = require('../..')
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -730,12 +714,25 @@ module.exports = {
     availableEndpoints = newEndpoints
   },
 
-  // Wipe the require cache.
+  // Wipe the require cache so the next `require('../..')` rebuilds the tracer from scratch.
+  // The listed dd-trace modules carry module-level state that must be reset (Config singleton,
+  // process listeners, dogstatsd listeners, telemetry subscribers).
   wipe () {
     require('../..')._pluginManager.destroy()
 
-    delete require.cache[require.resolve('../..')]
+    const wipedIds = [
+      '../..',
+      '../../src',
+      '../../src/proxy',
+      '../../src/config',
+      '../../src/config/defaults',
+      '../../src/dogstatsd',
+    ]
+    for (const id of wipedIds) {
+      delete require.cache[require.resolve(id)]
+    }
     delete global._ddtrace
+    delete globalThis[Symbol.for('dd-trace')]
 
     process.removeAllListeners('exit')
     process.removeAllListeners('beforeExit')
