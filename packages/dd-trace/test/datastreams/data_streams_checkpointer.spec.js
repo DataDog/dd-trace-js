@@ -6,6 +6,7 @@ const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 
 require('../setup/core')
+const { storage } = require('../../../datadog-core')
 const agent = require('../plugins/agent')
 
 const { computePathwayHash, encodePathwayContextBase64 } = require('../../src/datastreams/pathway')
@@ -156,14 +157,11 @@ describe('data streams checkpointer manual api', () => {
     const mockTrackTransaction = sinon.stub()
     tracer._tracer._dataStreamsProcessor.trackTransaction = mockTrackTransaction
     const activeSpan = { setTag: sinon.stub() }
-    const scopeStub = sinon.stub(tracer._tracer, 'scope').returns({ active: () => activeSpan })
 
-    try {
+    storage('legacy').run({ span: activeSpan }, () => {
       tracer.dataStreamsCheckpointer.trackTransaction('msg-id-001', 'ingested')
       sinon.assert.calledWith(mockTrackTransaction, 'msg-id-001', 'ingested', activeSpan)
-    } finally {
-      scopeStub.restore()
-    }
+    })
   })
 
   it('trackTransaction is a no-op when dsmEnabled is false', function () {

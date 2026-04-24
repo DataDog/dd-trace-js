@@ -64,7 +64,7 @@ class TracingPlugin extends Plugin {
     const hooks = config.hooks || {}
     const wrappedHooks = {}
     for (const [name, hook] of Object.entries(hooks)) {
-      wrappedHooks[name] = (span, ...args) => hook(new PublicSpan(span), ...args)
+      wrappedHooks[name] = (span, ...args) => hook.call(hooks, new PublicSpan(span), ...args)
     }
 
     return super.configure({
