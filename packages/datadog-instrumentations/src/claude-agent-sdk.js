@@ -3,7 +3,6 @@
 const { tracingChannel } = require('dc-polyfill')
 const { addHook } = require('./helpers/instrument')
 
-const sessionCh = tracingChannel('apm:claude-agent-sdk:session')
 const turnCh = tracingChannel('apm:claude-agent-sdk:turn')
 const toolCh = tracingChannel('apm:claude-agent-sdk:tool')
 const subagentCh = tracingChannel('apm:claude-agent-sdk:subagent')
@@ -63,6 +62,13 @@ function buildTracerHooks (sessionCtx) {
           sessionId: input.session_id,
           prompt: input.prompt,
           turnId: sessionCtx.turnCount,
+          // Propagate session-level metadata so turn spans carry it
+          model: sessionCtx.model,
+          source: sessionCtx.source,
+          cwd: sessionCtx.cwd,
+          agentType: sessionCtx.agentType,
+          permissionMode: sessionCtx.permissionMode,
+          transcriptPath: sessionCtx.transcriptPath,
         }
 
         sessionCtx.currentTurn = turnCtx
@@ -172,12 +178,11 @@ function buildTracerHooks (sessionCtx) {
   }
 }
 
-// Publish asyncEnd exactly once — SessionEnd hook or iterator completion race.
+// Close any pending spans when the session ends (iterator exhaustion or abort).
 function finishSession (sessionCtx) {
   if (sessionCtx._finished) return
   sessionCtx._finished = true
 
-  // Close pending child spans so SpanProcessor can flush the trace.
   if (sessionCtx.currentTurn) {
     turnCh.asyncEnd.publish(sessionCtx.currentTurn)
     sessionCtx.currentTurn = null
@@ -190,8 +195,6 @@ function finishSession (sessionCtx) {
     subagentCh.asyncEnd.publish(subCtx)
   }
   sessionCtx.pendingSubagents.clear()
-
-  sessionCh.asyncEnd.publish(sessionCtx)
 }
 
 // Wrap async iterable to finish the session span on break, return, or exhaustion.
@@ -208,10 +211,7 @@ function wrapAsyncIterable (iterable, sessionCtx) {
           try {
             result = await origIterator.next()
           } catch (err) {
-            // for-await-of does NOT call return() when next() rejects,
-            // so we must finish the session here.
             sessionCtx.error = err
-            sessionCh.error.publish(sessionCtx)
             finishSession(sessionCtx)
             throw err
           }
@@ -227,7 +227,6 @@ function wrapAsyncIterable (iterable, sessionCtx) {
         },
         async throw (error) {
           sessionCtx.error = error
-          sessionCh.error.publish(sessionCtx)
           finishSession(sessionCtx)
           if (origIterator.throw) return await origIterator.throw(error)
           throw error
@@ -244,7 +243,7 @@ function wrapAsyncIterable (iterable, sessionCtx) {
 let _intercepting = false
 
 function interceptQuery (prompt, options, callOriginal) {
-  if (!sessionCh.start.hasSubscribers) {
+  if (!turnCh.start.hasSubscribers) {
     return callOriginal(prompt, options)
   }
   _intercepting = true
@@ -267,35 +266,17 @@ function interceptQuery (prompt, options, callOriginal) {
     hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
   }
 
+  _intercepting = false
+
+  let result
   try {
-    return sessionCh.start.runStores(sessionCtx, () => {
-      let result
-      try {
-        result = callOriginal(prompt, mergedOptions)
-      } catch (err) {
-        sessionCtx.error = err
-        sessionCh.error.publish(sessionCtx)
-        finishSession(sessionCtx)
-        throw err
-      }
-
-      sessionCh.end.publish(sessionCtx)
-
-      result = wrapAsyncIterable(result, sessionCtx)
-
-      if (result && typeof result.then === 'function') {
-        result.then(null, (err) => {
-          sessionCtx.error = err
-          sessionCh.error.publish(sessionCtx)
-          finishSession(sessionCtx)
-        })
-      }
-
-      return result
-    })
-  } finally {
-    _intercepting = false
+    result = callOriginal(prompt, mergedOptions)
+  } catch (err) {
+    finishSession(sessionCtx)
+    throw err
   }
+
+  return wrapAsyncIterable(result, sessionCtx)
 }
 
 // --- Orchestrion path ---
@@ -304,13 +285,12 @@ function interceptQuery (prompt, options, callOriginal) {
 const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
 queryChannel.subscribe({
   start (ctx) {
-    // Skip if the RITM path is already handling this call.
     if (_intercepting) return
 
     const { arguments: args } = ctx
 
     const queryArg = args[0]
-    if (!queryArg || !sessionCh.start.hasSubscribers) return
+    if (!queryArg || !turnCh.start.hasSubscribers) return
 
     const prompt = queryArg.prompt
     const resolvedOptions = queryArg.options || {}
@@ -337,29 +317,6 @@ queryChannel.subscribe({
     }
 
     ctx._sessionCtx = sessionCtx
-    sessionCh.start.publish(sessionCtx)
-  },
-
-  end (ctx) {
-    const sessionCtx = ctx._sessionCtx
-    if (sessionCtx) {
-      sessionCh.end.publish(sessionCtx)
-    }
-  },
-
-  asyncEnd (ctx) {
-    const sessionCtx = ctx._sessionCtx
-    if (sessionCtx) {
-      sessionCh.asyncEnd.publish(sessionCtx)
-    }
-  },
-
-  error (ctx) {
-    const sessionCtx = ctx._sessionCtx
-    if (sessionCtx) {
-      sessionCtx.error = ctx.error
-      sessionCh.error.publish(sessionCtx)
-    }
   },
 })
 
