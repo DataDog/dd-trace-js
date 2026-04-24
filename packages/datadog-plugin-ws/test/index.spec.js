@@ -79,7 +79,7 @@ describe('Plugin', () => {
         })
 
         after(async () => {
-          agent.close({ ritmReset: false, wipe: true })
+          await agent.close({ ritmReset: false, wipe: true })
         })
       })
 
@@ -100,11 +100,12 @@ describe('Plugin', () => {
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
           wsServer = new WebSocket.Server({ port: clientPort })
+          await once(wsServer, 'listening')
         })
 
         afterEach(async () => {
           clientPort++
-          agent.close({ ritmReset: false, wipe: true })
+          await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should not retain the connection span during socket setup', async () => {
@@ -451,11 +452,12 @@ describe('Plugin', () => {
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
           wsServer = new WebSocket.Server({ port: clientPort })
+          await once(wsServer, 'listening')
         })
 
         afterEach(async () => {
           clientPort++
-          agent.close({ ritmReset: false, wipe: true })
+          await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should work with custom service configuration', () => {
@@ -557,11 +559,12 @@ describe('Plugin', () => {
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
           wsServer = new WebSocket.Server({ port: clientPort })
+          await once(wsServer, 'listening')
         })
 
         afterEach(async () => {
           clientPort++
-          agent.close({ ritmReset: false, wipe: true })
+          await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should not initialize sub-plugins when traceWebsocketMessagesEnabled is false', () => {
@@ -600,11 +603,12 @@ describe('Plugin', () => {
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
           wsServer = new WebSocket.Server({ port: clientPort })
+          await once(wsServer, 'listening')
         })
 
         afterEach(async () => {
           clientPort++
-          agent.close({ ritmReset: false, wipe: true })
+          await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should not inherit sampling decisions from root trace', () => {
@@ -690,6 +694,7 @@ describe('Plugin', () => {
           WebSocket = require(`../../../versions/ws@${version}`).get()
 
           wsServer = new WebSocket.Server({ port: clientPort })
+          await once(wsServer, 'listening')
 
           parentHeaders = {}
           tracer.trace('test.parent', parentSpan => {
@@ -699,7 +704,7 @@ describe('Plugin', () => {
 
         afterEach(async () => {
           clientPort++
-          agent.close({ ritmReset: false, wipe: true })
+          await agent.close({ ritmReset: false, wipe: true })
         })
 
         it('should add span pointers to producer spans', async () => {
