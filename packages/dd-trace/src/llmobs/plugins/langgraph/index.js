@@ -1,35 +1,10 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
+const { formatIO } = require('../shared/messages')
 const { spanHasError } = require('../../util')
 
 const streamDataMap = new WeakMap()
-
-function formatIO (data) {
-  if (data == null) return ''
-
-  if (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
-    return data
-  }
-
-  if (data.constructor?.name === 'Object') {
-    const formatted = {}
-    for (const [key, value] of Object.entries(data)) {
-      formatted[key] = formatIO(value)
-    }
-    return formatted
-  }
-
-  if (Array.isArray(data)) {
-    return data.map(item => formatIO(item))
-  }
-
-  try {
-    return JSON.stringify(data)
-  } catch {
-    return String(data)
-  }
-}
 
 class PregelStreamLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_langgraph_pregel_stream'
