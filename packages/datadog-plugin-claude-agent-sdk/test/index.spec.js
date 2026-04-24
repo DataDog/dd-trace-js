@@ -54,7 +54,7 @@ if (NODE_MAJOR >= 22) {
 
           const tracesPromise = agent.assertSomeTraces(traces => {
             const spans = traces[0]
-            const turnSpan = spans.find(s => s.name.startsWith('turn-'))
+            const turnSpan = spans.find(s => s.name === 'turn')
             assert.ok(turnSpan, 'should have a turn span')
           })
 

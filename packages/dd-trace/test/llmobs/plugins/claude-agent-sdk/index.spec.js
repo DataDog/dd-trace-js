@@ -39,7 +39,7 @@ if (NODE_MAJOR >= 22) {
         _DD_LLMOBS_FLUSH_INTERVAL: '0',
       })
 
-      withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', '>=0.2.1', (version) => {
+      withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', '0.2.98', (version) => {
         let query
 
         before(async function () {
@@ -60,7 +60,7 @@ if (NODE_MAJOR >= 22) {
 
           const tracesPromise = agent.assertSomeTraces(traces => {
             const spans = traces[0]
-            const turnSpan = spans.find(s => s.name.startsWith('turn-'))
+            const turnSpan = spans.find(s => s.name === 'turn')
             assert.ok(turnSpan, 'should have a turn span')
           })
 
@@ -112,7 +112,7 @@ if (NODE_MAJOR >= 22) {
 
           const reqs = agent.getLlmObsSpanEventsRequests()
           const spans = reqs.flatMap(r => r).map(r => r.spans[0]).filter(Boolean)
-          const turnSpan = spans.find(s => s.name.startsWith('turn-'))
+          const turnSpan = spans.find(s => s.name === 'turn')
 
           assert.ok(turnSpan, 'should have an LLM Obs turn span event')
           assert.equal(turnSpan.meta['span.kind'], 'agent', 'should be an agent span')

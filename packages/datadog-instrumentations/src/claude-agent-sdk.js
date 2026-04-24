@@ -1,7 +1,8 @@
 'use strict'
 
 const { tracingChannel } = require('dc-polyfill')
-const { addHook } = require('./helpers/instrument')
+const { addHook, getHooks } = require('./helpers/instrument')
+const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
 
 const turnCh = tracingChannel('apm:claude-agent-sdk:turn')
 const toolCh = tracingChannel('apm:claude-agent-sdk:tool')
@@ -56,12 +57,9 @@ function buildTracerHooks (sessionCtx) {
           sessionCtx.sessionId = input.session_id
         }
 
-        sessionCtx.turnCount = (sessionCtx.turnCount || 0) + 1
-
         const turnCtx = {
           sessionId: input.session_id,
           prompt: input.prompt,
-          turnId: sessionCtx.turnCount,
           // Propagate session-level metadata so turn spans carry it
           model: sessionCtx.model,
           source: sessionCtx.source,
@@ -197,150 +195,51 @@ function finishSession (sessionCtx) {
   sessionCtx.pendingSubagents.clear()
 }
 
-// Wrap async iterable to finish the session span on break, return, or exhaustion.
-function wrapAsyncIterable (iterable, sessionCtx) {
-  if (!iterable || typeof iterable[Symbol.asyncIterator] !== 'function') return iterable
+// --- Orchestrion path (primary) ---
+// Subscribe to the orchestrion channel via getHooks/addHook. The rewriter
+// transforms the SDK at compile time, which works on Node 22 for ESM-via-require.
 
-  const origIterator = iterable[Symbol.asyncIterator]()
-
-  return {
-    [Symbol.asyncIterator] () {
-      return {
-        async next () {
-          let result
-          try {
-            result = await origIterator.next()
-          } catch (err) {
-            sessionCtx.error = err
-            finishSession(sessionCtx)
-            throw err
-          }
-          if (result.done) {
-            finishSession(sessionCtx)
-          }
-          return result
-        },
-        async return (value) {
-          finishSession(sessionCtx)
-          if (origIterator.return) return await origIterator.return(value)
-          return { done: true, value }
-        },
-        async throw (error) {
-          sessionCtx.error = error
-          finishSession(sessionCtx)
-          if (origIterator.throw) return await origIterator.throw(error)
-          throw error
-        },
-      }
-    },
-  }
-}
-
-// Guard against double-entry: the RITM path wraps query() via Proxy and calls
-// interceptQuery, which calls the original query(). If the orchestrion rewriter
-// is also active, the original query() publishes on the orchestrion channel,
-// which would fire sessionCh.start a second time. This flag prevents that.
-let _intercepting = false
-
-function interceptQuery (prompt, options, callOriginal) {
-  if (!turnCh.start.hasSubscribers) {
-    return callOriginal(prompt, options)
-  }
-  _intercepting = true
-
-  const resolvedOptions = options || {}
-  const sessionCtx = {
-    prompt: typeof prompt === 'string' ? prompt : '[async iterable]',
-    model: resolvedOptions.model,
-    resume: resolvedOptions.resume,
-    maxTurns: resolvedOptions.maxTurns,
-    permissionMode: resolvedOptions.permissionMode,
-    currentTurn: null,
-    pendingTools: new Map(),
-    pendingSubagents: new Map(),
+for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
+  if (hook.file === 'sdk.mjs') {
+    hook.file = null
   }
 
-  const tracerHooks = buildTracerHooks(sessionCtx)
-  const mergedOptions = {
-    ...resolvedOptions,
-    hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
-  }
+  addHook(hook, exports => {
+    queryChannel.subscribe({
+      start (ctx) {
+        const { arguments: args } = ctx
 
-  _intercepting = false
+        const queryArg = args[0]
+        if (!queryArg || !turnCh.start.hasSubscribers) return
 
-  let result
-  try {
-    result = callOriginal(prompt, mergedOptions)
-  } catch (err) {
-    finishSession(sessionCtx)
-    throw err
-  }
+        const prompt = queryArg.prompt
+        const resolvedOptions = queryArg.options || {}
 
-  return wrapAsyncIterable(result, sessionCtx)
-}
+        const sessionCtx = {
+          prompt: typeof prompt === 'string' ? prompt : '[async iterable]',
+          model: resolvedOptions.model,
+          resume: resolvedOptions.resume,
+          maxTurns: resolvedOptions.maxTurns,
+          permissionMode: resolvedOptions.permissionMode,
+          currentTurn: null,
+          pendingTools: new Map(),
+          pendingSubagents: new Map(),
+        }
 
-// --- Orchestrion path ---
-// Active when the esbuild/webpack rewriter transforms the SDK at compile time.
+        const tracerHooks = buildTracerHooks(sessionCtx)
 
-const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
-queryChannel.subscribe({
-  start (ctx) {
-    if (_intercepting) return
+        args[0] = {
+          ...queryArg,
+          options: {
+            ...resolvedOptions,
+            hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
+          },
+        }
 
-    const { arguments: args } = ctx
-
-    const queryArg = args[0]
-    if (!queryArg || !turnCh.start.hasSubscribers) return
-
-    const prompt = queryArg.prompt
-    const resolvedOptions = queryArg.options || {}
-
-    const sessionCtx = {
-      prompt: typeof prompt === 'string' ? prompt : '[async iterable]',
-      model: resolvedOptions.model,
-      resume: resolvedOptions.resume,
-      maxTurns: resolvedOptions.maxTurns,
-      permissionMode: resolvedOptions.permissionMode,
-      currentTurn: null,
-      pendingTools: new Map(),
-      pendingSubagents: new Map(),
-    }
-
-    const tracerHooks = buildTracerHooks(sessionCtx)
-
-    args[0] = {
-      ...queryArg,
-      options: {
-        ...resolvedOptions,
-        hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
+        ctx._sessionCtx = sessionCtx
       },
-    }
-
-    ctx._sessionCtx = sessionCtx
-  },
-})
-
-// --- RITM path ---
-// Active for standard Node.js require() without the orchestrion rewriter.
-// ESM namespace objects are sealed, so we use a Proxy instead of shimmer.wrap.
-
-addHook({
-  name: '@anthropic-ai/claude-agent-sdk',
-  versions: ['>=0.2.0'],
-}, (exports) => {
-  const originalQuery = exports.query
-  if (typeof originalQuery !== 'function') return exports
-
-  function wrappedQuery ({ prompt, options }) {
-    return interceptQuery(prompt, options, (p, opts) => {
-      return originalQuery({ prompt: p, options: opts })
     })
-  }
 
-  return new Proxy(exports, {
-    get (target, prop) {
-      if (prop === 'query') return wrappedQuery
-      return target[prop]
-    },
+    return exports
   })
-})
+}
