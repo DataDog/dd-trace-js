@@ -428,9 +428,9 @@ module.exports = {
 
     const innerAgent = agent
 
-    // `DD_TEST_AGENT_URL` is set by `.github/actions/testagent/start` after
-    // the agent has answered `/info`, so its presence is a sufficient
-    // signal here. Forward failures are handled per-request.
+    // Opt-in: set `DD_TEST_AGENT_URL` locally (e.g. `http://127.0.0.1:9126`)
+    // to mirror every trace to a running APM test agent. Forward failures
+    // are handled per-request.
     const useTestAgent = Boolean(process.env.DD_TEST_AGENT_URL)
 
     if (agent !== innerAgent) {

@@ -9,6 +9,3 @@ runs:
     - name: Wait for test agent to be ready
       run: timeout 30 bash -c 'until curl -sf http://127.0.0.1:9126/info >/dev/null; do sleep 1; done'
       shell: bash
-    - name: Signal test agent availability to the plugin test helper
-      run: echo "DD_TEST_AGENT_URL=http://127.0.0.1:9126" >> "$GITHUB_ENV"
-      shell: bash
