@@ -229,18 +229,22 @@ class Tracer extends NoopProxy {
       _dbgInit('after rewriter.enable')
 
       if (config.tracing && config.isManualApiEnabled) {
+        _dbgInit('testApiManualPlugin: start')
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
         this._testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
         // This is the only place where we need to do this because the rest of the plugins
         // are lazily configured when the library is imported.
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
+        _dbgInit('testApiManualPlugin: done')
       }
       if (config.ciVisAgentlessLogSubmissionEnabled) {
         if (config.apiKey) {
+          _dbgInit('logSubmissionPlugin: start')
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
+          _dbgInit('logSubmissionPlugin: done')
         } else {
           log.warn(
             // eslint-disable-next-line @stylistic/max-len
@@ -250,19 +254,25 @@ class Tracer extends NoopProxy {
       }
 
       if (config.otelLogsEnabled) {
+        _dbgInit('otelLogs: start')
         const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
         initializeOpenTelemetryLogs(config)
+        _dbgInit('otelLogs: done')
       }
 
       if (config.otelMetricsEnabled) {
+        _dbgInit('otelMetrics: start')
         const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
         initializeOpenTelemetryMetrics(config)
+        _dbgInit('otelMetrics: done')
       }
 
       if (config.isTestDynamicInstrumentationEnabled) {
+        _dbgInit('testDynamicInstrumentation: start')
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
+        _dbgInit('testDynamicInstrumentation: done')
       }
 
       _dbgInit('done')
