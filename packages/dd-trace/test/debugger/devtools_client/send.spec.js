@@ -20,7 +20,7 @@ const commitSHA = 'my-commit-sha'
 const repositoryUrl = 'my-repository-url'
 const url = 'my-url'
 const ddsource = 'dd_debugger'
-const hostname = getHostname()
+const host = getHostname()
 const message = { message: true }
 const logger = { logger: true }
 const dd = { dd: true }
@@ -95,7 +95,6 @@ describe('input message http requests', function () {
         `env%3A${env}%2C` +
         `version%3A${version}%2C` +
         `debugger_version%3A${debuggerVersion}%2C` +
-        `host_name%3A${hostname}%2C` +
         `git.commit.sha%3A${commitSHA}%2C` +
         `git.repository_url%3A${repositoryUrl}`)
 
@@ -132,7 +131,6 @@ describe('input message http requests', function () {
         `env%3A${env}%2C` +
         `version%3A${version}%2C` +
         `debugger_version%3A${debuggerVersion}%2C` +
-        `host_name%3A${hostname}%2C` +
         `git.commit.sha%3A${commitSHA}`)
 
     done()
@@ -354,7 +352,7 @@ describe('input message http requests', function () {
 function getPayload (_message = message, _snapshot = snapshot) {
   return {
     ddsource,
-    hostname,
+    host,
     service,
     message: _message,
     logger,

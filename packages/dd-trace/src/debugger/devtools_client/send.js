@@ -19,14 +19,13 @@ const MAX_LOG_PAYLOAD_SIZE_MB = 1
 const MAX_LOG_PAYLOAD_SIZE_BYTES = MAX_LOG_PAYLOAD_SIZE_MB * 1024 * 1024
 
 const ddsource = 'dd_debugger'
-const hostname = getHostname()
+const host = getHostname()
 const service = config.service
 
 const ddtags = buildTags([
   ['env', config.env],
   ['version', config.version],
   ['debugger_version', version],
-  ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
   [GIT_REPOSITORY_URL, config.repositoryUrl],
 ])
@@ -43,7 +42,7 @@ const jsonBuffer = new JSONBuffer({
 function send (message, logger, dd, snapshot) {
   const payload = {
     ddsource,
-    hostname,
+    host,
     service,
     message: message?.length > MAX_MESSAGE_LENGTH
       ? message.slice(0, MAX_MESSAGE_LENGTH) + '…'
