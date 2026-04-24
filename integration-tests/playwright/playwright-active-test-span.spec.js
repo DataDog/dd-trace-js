@@ -262,6 +262,7 @@ versions.forEach((version) => {
             }
           })
 
+        receiver.setKnownTests({ playwright: {} })
         receiver.setSettings({
           impacted_tests_enabled: true,
           early_flake_detection: {
