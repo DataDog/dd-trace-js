@@ -228,14 +228,14 @@ function wrapAsyncIterable (iterable, sessionCtx) {
         },
         async return (value) {
           finishSession(sessionCtx)
-          if (origIterator.return) return origIterator.return(value)
+          if (origIterator.return) return await origIterator.return(value)
           return { done: true, value }
         },
         async throw (error) {
           sessionCtx.error = error
           sessionCh.error.publish(sessionCtx)
           finishSession(sessionCtx)
-          if (origIterator.throw) return origIterator.throw(error)
+          if (origIterator.throw) return await origIterator.throw(error)
           throw error
         },
       }

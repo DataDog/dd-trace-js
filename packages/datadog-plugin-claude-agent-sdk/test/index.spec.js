@@ -38,7 +38,7 @@ if (NODE_MAJOR >= 22) {
         CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: 'true',
       })
 
-      withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', (version) => {
+      withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', '>=0.2.1', (version) => {
         let query
 
         before(async function () {
