@@ -16,7 +16,27 @@ const finishChannel = channel('apm:hono:middleware:finish')
 
 function wrapFetch (fetch) {
   return function (request, env, executionCtx) {
-    handleChannel.publish({ req: env.incoming })
+    const incoming = env.incoming
+    handleChannel.publish({ req: incoming })
+
+    // Hono uses a single-handler fast path (skipping compose()) when only one
+    // handler matches a request. Our wrapCompose hook never fires in that case,
+    // so the route is never published and the resource name stays as just the
+    // HTTP method. Detect this here and publish the route proactively.
+    if (routeChannel.hasSubscribers) {
+      try {
+        const method = request.method === 'HEAD' ? 'GET' : request.method
+        const path = this.getPath(request, { env })
+        const matchResult = this.router.match(method, path)
+        if (matchResult[0].length === 1) {
+          const route = matchResult[0][0][0][1]?.path
+          routeChannel.publish({ req: incoming, route })
+        }
+      } catch {
+        // Silently ignore; routing errors surface through normal Hono error handling
+      }
+    }
+
     return fetch.apply(this, arguments)
   }
 }
