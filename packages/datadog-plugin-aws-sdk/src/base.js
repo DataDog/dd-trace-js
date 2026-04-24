@@ -197,11 +197,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
 
   isEnabled (request) {
     const serviceId = this.serviceIdentifier.toUpperCase()
-    // Keep reading this from the live env sources: tests toggle
-    // `DD_TRACE_AWS_SDK_<SERVICE>_ENABLED` at runtime *after* the tracer has booted, which the
-    // Config singleton (captured at init) cannot observe.
-    const envVarValue = getValueFromEnvSources(`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`)
-    return envVarValue ? isTrue(envVarValue) : true
+    return this._tracerConfig[`DD_TRACE_AWS_SDK_${serviceId}_ENABLED`] ?? true
   }
 
   addResponseTags (span, response) {
