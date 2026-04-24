@@ -10,12 +10,11 @@ class TurnLLMObsPlugin extends LLMObsPlugin {
 
   getLLMObsSpanRegisterOptions (ctx) {
     const { modelName, modelProvider } = splitModel(ctx.model)
-    const turnId = ctx.turnId || 1
     return {
       kind: 'agent',
       modelName,
       modelProvider,
-      name: `turn-${turnId}`,
+      name: 'turn',
     }
   }
 
@@ -29,7 +28,6 @@ class TurnLLMObsPlugin extends LLMObsPlugin {
 
     const metadata = {}
     if (ctx.sessionId) metadata.session_id = ctx.sessionId
-    if (ctx.turnId) metadata.turn_id = ctx.turnId
     if (ctx.model) {
       const { modelName, modelProvider } = splitModel(ctx.model)
       if (modelName) metadata.model_name = modelName
