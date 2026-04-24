@@ -13,21 +13,21 @@ const cryptoCipherCh = channel('datadog:crypto:cipher:start')
 const hashMethods = ['createHash', 'createHmac', 'createSign', 'createVerify', 'sign', 'verify']
 const cipherMethods = ['createCipheriv', 'createDecipheriv']
 
-// Async crypto APIs that offload work to the libuv worker thread pool. The mapped array names each
-// callback-preceding argument position whose value should be captured on the context (string or
-// number only). `null` entries are unused positions. Consumers of the context (e.g. the events
-// profiler) read these fields as sample labels.
+// Async crypto APIs that offload work to the libuv worker thread pool. The mapped sparse array
+// names each callback-preceding argument position whose value should be captured on the context
+// (string or number only). Unused positions are elided so iteration can skip them. Consumers of
+// the context (e.g. the events profiler) read these fields as sample labels.
 const asyncParamsByMethod = {
   checkPrime: [],
   generateKey: ['type'],
   generateKeyPair: ['type'],
   generatePrime: ['size'],
-  hkdf: ['digest', null, null, null, 'keylen'],
-  pbkdf2: [null, null, 'iterations', 'keylen', 'digest'],
+  hkdf: ['digest', , , , 'keylen'], // eslint-disable-line no-sparse-arrays
+  pbkdf2: [, , 'iterations', 'keylen', 'digest'], // eslint-disable-line no-sparse-arrays
   randomBytes: ['size'],
-  randomFill: [null, 'offset', 'size'],
+  randomFill: [, 'offset', 'size'], // eslint-disable-line no-sparse-arrays
   randomInt: [],
-  scrypt: [null, null, 'keylen'],
+  scrypt: [, , 'keylen'], // eslint-disable-line no-sparse-arrays
   sign: ['algorithm'],
   verify: ['algorithm'],
 }
@@ -59,16 +59,17 @@ function wrapCryptoMethod (channel) {
 }
 
 function buildAsyncContext (operation, paramNames) {
-  return function (thisArg, args) {
+  return function (_, args) {
     const ctx = { operation }
-    const paramCount = Math.min(paramNames.length, args.length - 1)
-    for (let i = 0; i < paramCount; i++) {
+    const lastIndex = args.length - 1
+    // paramNames is a sparse array; for-in yields only populated slot indices, in ascending
+    // numeric order, so we can break once we pass the callback position.
+    for (const i in paramNames) {
+      if (i >= lastIndex) break
       const name = paramNames[i]
-      if (name) {
-        const value = args[i]
-        if (typeof value === 'string' || typeof value === 'number') {
-          ctx[name] = value
-        }
+      const value = args[i]
+      if (typeof value === 'string' || typeof value === 'number') {
+        ctx[name] = value
       }
     }
     return ctx
