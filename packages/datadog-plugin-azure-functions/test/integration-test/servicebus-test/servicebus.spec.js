@@ -47,7 +47,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-message-1',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assertObjectContains(sbGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -69,7 +69,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-messages-1',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 2)
             for (const group of sbGroups) {
               assertObjectContains(group[0], {
@@ -93,7 +93,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-amqp-message-1',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assertObjectContains(sbGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -115,7 +115,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-amqp-messages-1',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 2)
             for (const group of sbGroups) {
               assertObjectContains(group[0], {
@@ -139,7 +139,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-message-batch-1',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 2)
             for (const group of sbGroups) {
               assertObjectContains(group[0], {
@@ -163,7 +163,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-message-2',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assertObjectContains(sbGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -185,7 +185,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-messages-2',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assertObjectContains(sbGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -207,7 +207,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-amqp-message-2',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assertObjectContains(sbGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -229,7 +229,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-amqp-messages-2',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assertObjectContains(sbGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -251,7 +251,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-message-batch-2',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assertObjectContains(sbGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -292,8 +292,8 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-messages-2',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
-            const nonSbGroups = allGroups.filter(g => !g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
+            const nonSbGroups = allGroups.filter(g => !isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assert.ok(nonSbGroups.length > 0)
             const hasCreateSpan = nonSbGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
@@ -308,8 +308,8 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/send-message-batch-2',
           collectingAssert(allGroups => {
-            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
-            const nonSbGroups = allGroups.filter(g => !g.some(s => s.name === 'azure.functions.invoke'))
+            const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
+            const nonSbGroups = allGroups.filter(g => !isSbInvokeGroup(g))
             assert.strictEqual(sbGroups.length, 1)
             assert.ok(nonSbGroups.length > 0)
             const hasCreateSpan = nonSbGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
@@ -321,6 +321,10 @@ describe('esm', () => {
     })
   })
 })
+
+function isSbInvokeGroup (group) {
+  return group.some(s => s.name === 'azure.functions.invoke' && s.resource?.startsWith('ServiceBus'))
+}
 
 function collectingAssert (fn) {
   const allGroups = []
