@@ -102,6 +102,41 @@ describe('input message http requests', function () {
     done()
   })
 
+  it('should drop tag values containing commas', function (done) {
+    const logStub = {
+      debug: sinon.stub(),
+      error: sinon.stub(),
+      warn: sinon.stub(),
+      '@noCallThru': true,
+    }
+
+    const sendWithInvalidTag = proxyquire('../../../src/debugger/devtools_client/send', {
+      './config': createConfigMock({ repositoryUrl: 'my-repository-url,forged:value' }),
+      './json-buffer': JSONBuffer,
+      './log': logStub,
+      '../../exporters/common/request': request,
+      './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+    })
+
+    sendWithInvalidTag(message, logger, dd, snapshot)
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    sinon.assert.calledOnceWithExactly(logStub.warn,
+      '[debugger:devtools_client] Skipping invalid tag value for %s',
+      'git.repository_url')
+
+    const opts = getRequestOptions(request)
+    assert.strictEqual(opts.path,
+      '/debugger/v2/input?ddtags=' +
+        `env%3A${process.env.DD_ENV}%2C` +
+        `version%3A${process.env.DD_VERSION}%2C` +
+        `debugger_version%3A${version}%2C` +
+        `git.commit.sha%3A${commitSHA}`)
+
+    done()
+  })
+
   it('should use /debugger/v2/input when configured', function (done) {
     // Create a new send module with v2 endpoint configured
     const sendV2 = proxyquire('../../../src/debugger/devtools_client/send', {

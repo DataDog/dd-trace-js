@@ -23,14 +23,14 @@ const ddsource = 'dd_debugger'
 const hostname = getHostname()
 const service = config.service
 
-const ddtags = [
+const ddtags = buildTags([
   ['env', getValueFromEnvSources('DD_ENV')],
   ['version', getValueFromEnvSources('DD_VERSION')],
   ['debugger_version', version],
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
   [GIT_REPOSITORY_URL, config.repositoryUrl],
-].filter(([, value]) => value !== undefined).map((pair) => pair.join(':')).join(',')
+])
 
 let path
 setInputPath(config.inputPath)
@@ -135,4 +135,39 @@ function buildRequestOpts () {
 function setInputPath (newPath) {
   config.inputPath = newPath
   path = `${newPath}?${stringify({ ddtags })}`
+}
+
+/**
+ * @param {Array<[string, string | undefined]>} tags - The tags to serialize.
+ * @returns {string} The serialized tags.
+ */
+function buildTags (tags) {
+  const serializedTags = []
+
+  for (const [key, rawValue] of tags) {
+    const tag = buildTag(key, rawValue)
+
+    if (tag !== undefined) {
+      serializedTags.push(tag)
+    }
+  }
+
+  return serializedTags.join(',')
+}
+
+/**
+ * @param {string} key - The tag key.
+ * @param {string | undefined} rawValue - The tag value.
+ * @returns {string | undefined} The serialized tag.
+ */
+function buildTag (key, rawValue) {
+  if (rawValue === undefined) {
+    return
+  }
+
+  if (!rawValue.includes(',')) {
+    return `${key}:${rawValue}`
+  }
+
+  log.warn('[debugger:devtools_client] Skipping invalid tag value for %s', key)
 }
