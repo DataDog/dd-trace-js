@@ -100,6 +100,9 @@ const {
 } = require('../../dd-trace/src/plugins/util/env')
 const { DD_MAJOR } = require('../../../version')
 const {
+  resolveCoverageToSourceFiles,
+} = require('../../dd-trace/src/ci-visibility/code-coverage/source-map-resolver')
+const {
   resolveOriginalSourcePosition,
   resolveSourceLineForTest,
   shouldTrustInvocationDetailsLine,
@@ -1026,6 +1029,10 @@ class CypressPlugin {
           isModifiedTest: this.getIsTestModified(testSuiteAbsolutePath),
           repositoryRoot: this.repositoryRoot,
           isTestIsolationEnabled: this.isTestIsolationEnabled,
+          // Zero-config CDP coverage in the browser. Skipped when the user
+          // has their own istanbul setup (detected client-side by the
+          // presence of `window.__coverage__`).
+          isV8CoverageEnabled: !!this.isCodeCoverageEnabled,
           rumFlushWaitMillis: this.rumFlushWaitMillis,
         }
 
@@ -1070,7 +1077,7 @@ class CypressPlugin {
 
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
-      'dd:afterEach': ({ test, coverage }) => {
+      'dd:afterEach': async ({ test, coverage, v8Coverage }) => {
         if (!this.activeTestSpan) {
           log.warn('There is no active test span in dd:afterEach handler')
           return null
@@ -1091,11 +1098,30 @@ class CypressPlugin {
           isModified,
           isQuarantined: isQuarantinedFromSupport,
         } = test
+
+        // Pick the coverage source: user-provided istanbul (full counter
+        // map) wins over zero-config CDP coverage (hit ranges resolved via
+        // source maps to original source files).
+        let relativeCoverageFiles
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
+          relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
             file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
           )
+        } else if (Array.isArray(v8Coverage) && this.isCodeCoverageEnabled &&
+          this.tracer._tracer._exporter?.exportCoverage) {
+          // CDP `Profiler.takePreciseCoverage` result — resolve bundle
+          // offsets back to original sources via source maps.
+          let resolved = []
+          try {
+            resolved = await resolveCoverageToSourceFiles(v8Coverage)
+          } catch (err) {
+            log.debug('Cypress CDP coverage resolution failed: %s', err?.message)
+          }
+          const suitePath = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot || this.rootDir)
+          relativeCoverageFiles = [...resolved, suitePath]
+        }
+        if (relativeCoverageFiles) {
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
           }
