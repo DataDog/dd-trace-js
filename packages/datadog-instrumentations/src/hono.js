@@ -1,6 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
+const log = require('../../dd-trace/src/log')
 const {
   addHook,
   channel,
@@ -29,11 +30,14 @@ function wrapFetch (fetch) {
         const path = this.getPath(request, { env })
         const matchResult = this.router.match(method, path)
         if (matchResult[0].length === 1) {
-          const route = matchResult[0][0][0][1]?.path
-          routeChannel.publish({ req: incoming, route })
+          const meta = matchResult[0][0][0][1]
+          // Skip middleware-only matches (method === 'ALL'); only publish for real route handlers
+          if (meta?.method !== 'ALL') {
+            routeChannel.publish({ req: incoming, route: meta?.path })
+          }
         }
-      } catch {
-        // Silently ignore; routing errors surface through normal Hono error handling
+      } catch (e) {
+        log.error('hono: error detecting single-handler route: %s', e.message)
       }
     }
 
