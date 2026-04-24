@@ -152,25 +152,50 @@ function wrapPoolGetConnectionMethod (getConnection) {
 
 const name = 'mariadb'
 
-addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'] }, (Query) => {
-  return wrapCommand(Query)
+addHook({ name, file: 'lib/cmd/query.js', versions: ['>=3'] }, (exports) => {
+  const Query = exports.default || exports
+  const wrapped = wrapCommand(Query)
+
+  if (exports.default) {
+    exports.default = wrapped
+    return exports
+  }
+
+  return wrapped
 })
 
-addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
-  return wrapCommand(Execute)
+addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (exports) => {
+  const Execute = exports.default || exports
+  const wrapped = wrapCommand(Execute)
+
+  if (exports.default) {
+    exports.default = wrapped
+    return exports
+  }
+
+  return wrapped
 })
 
 // in 3.4.1 getConnection method start to use callbacks instead of promises
-addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
+addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (exports) => {
+  const Pool = exports.default || exports
   shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
 
-  return Pool
+  return exports
 })
 
-addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
+addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (exports) => {
+  const Pool = exports.default || exports
+  shimmer.wrap(Pool.prototype, '_createPoolConnection', wrapPoolMethod)
+
+  return exports
+})
+
+addHook({ name, file: 'lib/pool.js', versions: ['>=3 <3.4.1'] }, (exports) => {
+  const Pool = exports.default || exports
   shimmer.wrap(Pool.prototype, '_createConnection', wrapPoolMethod)
 
-  return Pool
+  return exports
 })
 
 addHook({ name, file: 'lib/connection.js', versions: ['>=2.5.2 <3'] }, (Connection) => {
