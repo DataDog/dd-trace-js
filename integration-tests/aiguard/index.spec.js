@@ -17,6 +17,16 @@ function assertHasGuardSpan (payload, predicate) {
   assert.notStrictEqual(matching, undefined)
 }
 
+function findMetric (series, metricName) {
+  return series.find(s => s.metric === metricName)
+}
+
+function assertHasTags (metric, expectedTags) {
+  for (const tag of expectedTags) {
+    assert.ok(metric.tags.includes(tag), `Expected tag "${tag}" in [${metric.tags}]`)
+  }
+}
+
 describe('AIGuard SDK integration tests', () => {
   let cwd, appFile, agent, proc, api, url
 
@@ -32,22 +42,25 @@ describe('AIGuard SDK integration tests', () => {
     await api.close()
   })
 
+  const baseEnv = () => ({
+    DD_SERVICE: 'ai_guard_integration_test',
+    DD_ENV: 'test',
+    DD_TRACE_ENABLED: 'true',
+    DD_TRACE_CLIENT_IP_ENABLED: 'false',
+    DD_TRACE_AGENT_PORT: String(agent.port),
+    DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+    DD_AI_GUARD_ENABLED: 'true',
+    DD_AI_GUARD_BLOCK: 'true',
+    DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
+    DD_API_KEY: 'DD_API_KEY',
+    DD_APP_KEY: 'DD_APP_KEY',
+  })
+
   beforeEach(async () => {
     agent = await new FakeAgent().start()
     proc = await spawnProc(appFile, {
       cwd,
-      env: {
-        DD_SERVICE: 'ai_guard_integration_test',
-        DD_ENV: 'test',
-        DD_TRACE_ENABLED: 'true',
-        DD_TRACE_CLIENT_IP_ENABLED: 'false',
-        DD_TRACE_AGENT_PORT: String(agent.port),
-        DD_AI_GUARD_ENABLED: 'true',
-        DD_AI_GUARD_BLOCK: 'true',
-        DD_AI_GUARD_ENDPOINT: `http://localhost:${api.address().port}`,
-        DD_API_KEY: 'DD_API_KEY',
-        DD_APP_KEY: 'DD_APP_KEY',
-      },
+      env: baseEnv(),
     })
     url = `${proc.url}`
   })
@@ -189,4 +202,115 @@ describe('AIGuard SDK integration tests', () => {
       })
     })
   }
+
+  describe('telemetry metrics', () => {
+    it('reports requests metric with sdk source on direct SDK call', async () => {
+      let telemetryReceived = false
+
+      await executeRequest(`${url}/allow`, 'GET')
+
+      const checkTelemetry = agent.assertTelemetryReceived(({ payload }) => {
+        const namespace = payload.payload.namespace
+        if (namespace !== 'ai_guard') return
+
+        const series = payload.payload.series
+        const requests = findMetric(series, 'requests')
+        if (!requests) return
+
+        telemetryReceived = true
+        assert.strictEqual(requests.type, 'count')
+        assertHasTags(requests, ['source:sdk', 'integration:none', 'action:allow', 'error:false'])
+      }, 'generate-metrics', 30_000, 2)
+
+      await checkTelemetry
+      assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
+    })
+
+    it('reports requests metric with auto source on auto-instrumented call', async () => {
+      let telemetryReceived = false
+
+      await executeRequest(`${url}/auto?mode=point1&deny=false`)
+
+      const checkTelemetry = agent.assertTelemetryReceived(({ payload }) => {
+        const namespace = payload.payload.namespace
+        if (namespace !== 'ai_guard') return
+
+        const series = payload.payload.series
+        const requests = findMetric(series, 'requests')
+        if (!requests) return
+
+        telemetryReceived = true
+        assert.strictEqual(requests.type, 'count')
+        assertHasTags(requests, ['source:auto', 'integration:ai', 'action:allow', 'error:false'])
+      }, 'generate-metrics', 30_000, 2)
+
+      await checkTelemetry
+      assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
+    })
+
+    it('reports requests metric with block tag on blocked evaluation', async () => {
+      let telemetryReceived = false
+
+      await executeRequest(`${url}/deny`, 'GET', { 'x-blocking-enabled': 'true' })
+
+      const checkTelemetry = agent.assertTelemetryReceived(({ payload }) => {
+        const namespace = payload.payload.namespace
+        if (namespace !== 'ai_guard') return
+
+        const series = payload.payload.series
+        const requests = findMetric(series, 'requests')
+        if (!requests) return
+
+        telemetryReceived = true
+        assert.strictEqual(requests.type, 'count')
+        assertHasTags(requests, ['source:sdk', 'integration:none', 'action:deny', 'error:false', 'block:true'])
+      }, 'generate-metrics', 30_000, 2)
+
+      await checkTelemetry
+      assert.ok(telemetryReceived, 'Expected ai_guard telemetry metrics to be received')
+    })
+
+    it('reports error metric on API failure', async () => {
+      const agent2 = await new FakeAgent().start()
+      const proc2 = await spawnProc(appFile, {
+        cwd,
+        env: {
+          ...baseEnv(),
+          DD_TRACE_AGENT_PORT: String(agent2.port),
+          DD_AI_GUARD_ENDPOINT: 'http://localhost:1',
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: '1',
+        },
+      })
+
+      try {
+        let telemetryReceived = false
+
+        // This will fail because the endpoint is unreachable
+        await executeRequest(`${proc2.url}/allow`, 'GET').catch(() => {})
+
+        const checkTelemetry = agent2.assertTelemetryReceived(({ payload }) => {
+          const namespace = payload.payload.namespace
+          if (namespace !== 'ai_guard') return
+
+          const series = payload.payload.series
+          const errorMetric = findMetric(series, 'error')
+          if (!errorMetric) return
+
+          telemetryReceived = true
+          assert.strictEqual(errorMetric.type, 'count')
+          assertHasTags(errorMetric, ['type:client_error', 'source:sdk', 'integration:none'])
+
+          const requests = findMetric(series, 'requests')
+          assert.ok(requests)
+          assertHasTags(requests, ['error:true', 'source:sdk', 'integration:none'])
+        }, 'generate-metrics', 30_000, 2)
+
+        await checkTelemetry
+        assert.ok(telemetryReceived, 'Expected ai_guard error telemetry to be received')
+      } finally {
+        await stopProc(proc2)
+        await agent2.stop()
+      }
+    })
+  })
 })

@@ -20,7 +20,7 @@ const wrappedModels = new WeakSet()
  */
 function publishToAIGuard (messages) {
   return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, resolve, reject })
+    aiguardChannel.publish({ messages, integration: 'ai', resolve, reject })
   })
 }
 
