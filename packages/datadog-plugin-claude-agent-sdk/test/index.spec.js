@@ -15,8 +15,27 @@ const VCR_URL = 'http://127.0.0.1:9126/vcr/claude-agent-sdk'
 if (NODE_MAJOR >= 22) {
   describe('Plugin', () => {
     describe('claude-agent-sdk', () => {
+      // Clear OTEL exporter env vars so dd-trace uses the agent exporter
+      // (sends to /v0.4/traces) instead of OTLP (which the mock agent
+      // does not handle).
+      const otelVarsToReset = {}
+      before(() => {
+        for (const key of Object.keys(process.env)) {
+          if (key.startsWith('OTEL_')) {
+            otelVarsToReset[key] = process.env[key]
+            delete process.env[key]
+          }
+        }
+      })
+      after(() => {
+        for (const [key, val] of Object.entries(otelVarsToReset)) {
+          process.env[key] = val
+        }
+      })
+
       useEnv({
         ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
+        CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: 'true',
       })
 
       withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', (version) => {
@@ -25,9 +44,7 @@ if (NODE_MAJOR >= 22) {
         before(async function () {
           this.timeout(10000)
           await agent.load('claude-agent-sdk')
-          const modPath = `../../../versions/@anthropic-ai/claude-agent-sdk@${version}`
-          const sdk = await import(`${modPath}/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs`)
-          query = sdk.query
+          query = require('@anthropic-ai/claude-agent-sdk').query
         })
 
         after(() => agent.close({ ritmReset: false }))

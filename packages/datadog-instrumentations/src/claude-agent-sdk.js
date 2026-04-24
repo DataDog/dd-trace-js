@@ -1,7 +1,6 @@
 'use strict'
 
 const { tracingChannel } = require('dc-polyfill')
-const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
 
 const sessionCh = tracingChannel('apm:claude-agent-sdk:session')
@@ -39,7 +38,7 @@ function buildTracerHooks (sessionCtx) {
         sessionCtx.cwd = input.cwd
         sessionCtx.transcriptPath = input.transcript_path
         sessionCtx.agentType = input.agent_type
-        sessionCtx.permissionMode = input.permission_mode
+        sessionCtx.permissionMode = sessionCtx.permissionMode || input.permission_mode
         return {}
       }],
     }],
@@ -47,13 +46,18 @@ function buildTracerHooks (sessionCtx) {
     SessionEnd: [{
       hooks: [function onSessionEnd (input) {
         sessionCtx.endReason = input.reason
-        sessionCh.asyncEnd.publish(sessionCtx)
+        finishSession(sessionCtx)
         return {}
       }],
     }],
 
     UserPromptSubmit: [{
       hooks: [function onUserPromptSubmit (input) {
+        // Enrich session context with session_id (SessionStart may not fire)
+        if (!sessionCtx.sessionId && input.session_id) {
+          sessionCtx.sessionId = input.session_id
+        }
+
         const turnCtx = {
           sessionId: input.session_id,
           prompt: input.prompt,
@@ -167,6 +171,86 @@ function buildTracerHooks (sessionCtx) {
 }
 
 /**
+ * Publish asyncEnd for the session exactly once (SessionEnd hook or iterator
+ * completion may both trigger it; only the first wins).
+ */
+function finishSession (sessionCtx) {
+  if (sessionCtx._finished) return
+  sessionCtx._finished = true
+
+  // Close any pending child spans (turns, tools, subagents) so the trace
+  // can be flushed.  Without this, the SpanProcessor holds back the export
+  // because started.length > finished.length in the trace.
+  if (sessionCtx.currentTurn) {
+    turnCh.asyncEnd.publish(sessionCtx.currentTurn)
+    sessionCtx.currentTurn = null
+  }
+  for (const toolCtx of sessionCtx.pendingTools.values()) {
+    toolCh.asyncEnd.publish(toolCtx)
+  }
+  sessionCtx.pendingTools.clear()
+  for (const subCtx of sessionCtx.pendingSubagents.values()) {
+    subagentCh.asyncEnd.publish(subCtx)
+  }
+  sessionCtx.pendingSubagents.clear()
+
+  sessionCh.asyncEnd.publish(sessionCtx)
+}
+
+/**
+ * Wrap an async iterable so that when the consumer stops iterating (break,
+ * return, or natural exhaustion) we finish the session span.
+ */
+function wrapAsyncIterable (iterable, sessionCtx) {
+  if (!iterable || typeof iterable[Symbol.asyncIterator] !== 'function') return iterable
+
+  const origIterator = iterable[Symbol.asyncIterator]()
+
+  return {
+    [Symbol.asyncIterator] () {
+      return {
+        async next () {
+          let result
+          try {
+            result = await origIterator.next()
+          } catch (err) {
+            // for-await-of does NOT call return() when next() rejects,
+            // so we must finish the session here.
+            sessionCtx.error = err
+            sessionCh.error.publish(sessionCtx)
+            finishSession(sessionCtx)
+            throw err
+          }
+          if (result.done) {
+            finishSession(sessionCtx)
+          }
+          return result
+        },
+        async return (value) {
+          finishSession(sessionCtx)
+          if (origIterator.return) return origIterator.return(value)
+          return { done: true, value }
+        },
+        async throw (error) {
+          sessionCtx.error = error
+          sessionCh.error.publish(sessionCtx)
+          finishSession(sessionCtx)
+          if (origIterator.throw) return origIterator.throw(error)
+          throw error
+        },
+      }
+    },
+  }
+}
+
+// Guard against double-entry: the shimmer (Proxy) path wraps query() and calls
+// interceptQuery, which then calls the original query(). If the rewriter is
+// active, the original query() has been transformed to publish on the
+// orchestrion channel, which triggers the orchestrion subscriber (below) and
+// fires sessionCh.start a second time. This flag prevents that duplication.
+let _intercepting = false
+
+/**
  * Core interception logic: build a sessionCtx, inject tracer hooks into
  * options.hooks, and run the call inside sessionCh tracing stores.
  */
@@ -174,6 +258,7 @@ function interceptQuery (prompt, options, callOriginal) {
   if (!sessionCh.start.hasSubscribers) {
     return callOriginal(prompt, options)
   }
+  _intercepting = true
 
   const resolvedOptions = options || {}
   const sessionCtx = {
@@ -193,30 +278,37 @@ function interceptQuery (prompt, options, callOriginal) {
     hooks: mergeHooks(resolvedOptions.hooks, tracerHooks),
   }
 
-  return sessionCh.start.runStores(sessionCtx, () => {
-    let result
-    try {
-      result = callOriginal(prompt, mergedOptions)
-    } catch (err) {
-      sessionCtx.error = err
-      sessionCh.error.publish(sessionCtx)
-      sessionCh.asyncEnd.publish(sessionCtx)
-      throw err
-    }
-
-    sessionCh.end.publish(sessionCtx)
-
-    // If query() returns a promise/thenable, catch rejections
-    if (result && typeof result.then === 'function') {
-      result.then(null, (err) => {
+  try {
+    return sessionCh.start.runStores(sessionCtx, () => {
+      let result
+      try {
+        result = callOriginal(prompt, mergedOptions)
+      } catch (err) {
         sessionCtx.error = err
         sessionCh.error.publish(sessionCtx)
-        sessionCh.asyncEnd.publish(sessionCtx)
-      })
-    }
+        finishSession(sessionCtx)
+        throw err
+      }
 
-    return result
-  })
+      sessionCh.end.publish(sessionCtx)
+
+      // Wrap async iterable to detect completion/cancellation
+      result = wrapAsyncIterable(result, sessionCtx)
+
+      // If query() returns a promise/thenable, catch rejections
+      if (result && typeof result.then === 'function') {
+        result.then(null, (err) => {
+          sessionCtx.error = err
+          sessionCh.error.publish(sessionCtx)
+          finishSession(sessionCtx)
+        })
+      }
+
+      return result
+    })
+  } finally {
+    _intercepting = false
+  }
 }
 
 // --- Orchestrion path (primary) ---
@@ -228,6 +320,10 @@ function interceptQuery (prompt, options, callOriginal) {
 const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
 queryChannel.subscribe({
   start (ctx) {
+    // If the shimmer path (interceptQuery) is already handling this call,
+    // skip the orchestrion path to avoid duplicate session spans.
+    if (_intercepting) return
+
     const { arguments: args } = ctx
 
     const queryArg = args[0]
@@ -291,15 +387,23 @@ queryChannel.subscribe({
 
 addHook({
   name: '@anthropic-ai/claude-agent-sdk',
-  file: 'sdk.mjs',
   versions: ['>=0.2.0'],
 }, (exports) => {
-  shimmer.wrap(exports, 'query', function wrapQuery (originalQuery) {
-    return function wrappedQuery ({ prompt, options }) {
-      return interceptQuery(prompt, options, (p, opts) => {
-        return originalQuery.call(this, { prompt: p, options: opts })
-      })
-    }
+  // ESM namespace objects are sealed — shimmer.wrap can't replace properties.
+  // Return a new object with the wrapped query function instead.
+  const originalQuery = exports.query
+  if (typeof originalQuery !== 'function') return exports
+
+  function wrappedQuery ({ prompt, options }) {
+    return interceptQuery(prompt, options, (p, opts) => {
+      return originalQuery({ prompt: p, options: opts })
+    })
+  }
+
+  return new Proxy(exports, {
+    get (target, prop) {
+      if (prop === 'query') return wrappedQuery
+      return target[prop]
+    },
   })
-  return exports
 })

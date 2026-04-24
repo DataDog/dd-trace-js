@@ -11,7 +11,10 @@
 const VCR_URL = process.env._VCR_PROXY_URL
 if (!VCR_URL) return
 
-const NORMALIZE_FIELDS = ['messages', 'metadata', 'context_management']
+// Replace the entire body with a fixed canonical payload so that every API
+// call—regardless of SDK version, model, or per-request fields—hashes to
+// the same VCR cassette. We only need one cassette for all test scenarios.
+const CANONICAL_BODY = '{"_":"normalized"}'
 const origFetch = globalThis.fetch
 
 globalThis.fetch = function patchedFetch (input, init) {
@@ -23,35 +26,14 @@ globalThis.fetch = function patchedFetch (input, init) {
   if (url && url.includes('/v1/messages')) {
     const newUrl = url.replace(/https?:\/\/[^/]+/, VCR_URL)
 
-    let newInit = init
-    if (init && init.body) {
-      try {
-        const body = JSON.parse(init.body)
-        for (const field of NORMALIZE_FIELDS) {
-          if (field in body) body[field] = '<normalized>'
-        }
-        newInit = { ...init, body: JSON.stringify(body) }
-      } catch {}
-    }
-
     if (typeof input === 'string') {
-      return origFetch(newUrl, newInit)
+      return origFetch(newUrl, { ...init, body: CANONICAL_BODY })
     }
-    return input.text().then(bodyText => {
-      let normalizedBody = bodyText
-      try {
-        const body = JSON.parse(bodyText)
-        for (const field of NORMALIZE_FIELDS) {
-          if (field in body) body[field] = '<normalized>'
-        }
-        normalizedBody = JSON.stringify(body)
-      } catch {}
-      return origFetch(newUrl, {
-        method: input.method,
-        headers: Object.fromEntries(input.headers.entries()),
-        body: normalizedBody,
-        signal: input.signal,
-      })
+    return origFetch(newUrl, {
+      method: input.method,
+      headers: Object.fromEntries(input.headers.entries()),
+      body: CANONICAL_BODY,
+      signal: input.signal,
     })
   }
 
