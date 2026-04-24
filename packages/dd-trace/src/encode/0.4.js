@@ -1,9 +1,8 @@
 'use strict'
 
+const getConfig = require('../config')
 const { MsgpackChunk, MsgpackEncoder } = require('../msgpack')
 const log = require('../log')
-const { isTrue } = require('../util')
-const { getValueFromEnvSources } = require('../config/helper')
 const { truncateSpan, normalizeSpan } = require('./tags-processors')
 
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -12,7 +11,7 @@ function formatSpan (span, config) {
   span = normalizeSpan(truncateSpan(span, false))
   if (span.span_events) {
     // ensure span events are encoded as tags if agent doesn't support native top level span events
-    if (config?.trace?.nativeSpanEvents) {
+    if (config.trace.nativeSpanEvents) {
       formatSpanEvents(span)
     } else {
       span.meta.events = JSON.stringify(span.span_events)
@@ -30,8 +29,8 @@ class AgentEncoder {
     this._stringBytes = new MsgpackChunk()
     this._writer = writer
     this._reset()
-    this._debugEncoding = isTrue(getValueFromEnvSources('DD_TRACE_ENCODING_DEBUG'))
-    this._config = this._writer?._config
+    this._config = getConfig()
+    this._debugEncoding = this._config.DD_TRACE_ENCODING_DEBUG
   }
 
   count () {
