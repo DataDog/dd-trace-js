@@ -170,17 +170,12 @@ function buildTracerHooks (sessionCtx) {
   }
 }
 
-/**
- * Publish asyncEnd for the session exactly once (SessionEnd hook or iterator
- * completion may both trigger it; only the first wins).
- */
+// Publish asyncEnd exactly once — SessionEnd hook or iterator completion race.
 function finishSession (sessionCtx) {
   if (sessionCtx._finished) return
   sessionCtx._finished = true
 
-  // Close any pending child spans (turns, tools, subagents) so the trace
-  // can be flushed.  Without this, the SpanProcessor holds back the export
-  // because started.length > finished.length in the trace.
+  // Close pending child spans so SpanProcessor can flush the trace.
   if (sessionCtx.currentTurn) {
     turnCh.asyncEnd.publish(sessionCtx.currentTurn)
     sessionCtx.currentTurn = null
@@ -197,10 +192,7 @@ function finishSession (sessionCtx) {
   sessionCh.asyncEnd.publish(sessionCtx)
 }
 
-/**
- * Wrap an async iterable so that when the consumer stops iterating (break,
- * return, or natural exhaustion) we finish the session span.
- */
+// Wrap async iterable to finish the session span on break, return, or exhaustion.
 function wrapAsyncIterable (iterable, sessionCtx) {
   if (!iterable || typeof iterable[Symbol.asyncIterator] !== 'function') return iterable
 
@@ -243,17 +235,12 @@ function wrapAsyncIterable (iterable, sessionCtx) {
   }
 }
 
-// Guard against double-entry: the shimmer (Proxy) path wraps query() and calls
-// interceptQuery, which then calls the original query(). If the rewriter is
-// active, the original query() has been transformed to publish on the
-// orchestrion channel, which triggers the orchestrion subscriber (below) and
-// fires sessionCh.start a second time. This flag prevents that duplication.
+// Guard against double-entry: the RITM path wraps query() via Proxy and calls
+// interceptQuery, which calls the original query(). If the orchestrion rewriter
+// is also active, the original query() publishes on the orchestrion channel,
+// which would fire sessionCh.start a second time. This flag prevents that.
 let _intercepting = false
 
-/**
- * Core interception logic: build a sessionCtx, inject tracer hooks into
- * options.hooks, and run the call inside sessionCh tracing stores.
- */
 function interceptQuery (prompt, options, callOriginal) {
   if (!sessionCh.start.hasSubscribers) {
     return callOriginal(prompt, options)
@@ -292,10 +279,8 @@ function interceptQuery (prompt, options, callOriginal) {
 
       sessionCh.end.publish(sessionCtx)
 
-      // Wrap async iterable to detect completion/cancellation
       result = wrapAsyncIterable(result, sessionCtx)
 
-      // If query() returns a promise/thenable, catch rejections
       if (result && typeof result.then === 'function') {
         result.then(null, (err) => {
           sessionCtx.error = err
@@ -311,17 +296,13 @@ function interceptQuery (prompt, options, callOriginal) {
   }
 }
 
-// --- Orchestrion path (primary) ---
-// Subscribe eagerly to the orchestrion channel. The rewriter transforms the SDK
-// at _compile time (which works on Node 22 for ESM-via-require), but RITM can't
-// match ESM modules on Node 22. Subscribing outside addHook ensures the channel
-// has a listener before query() is called regardless of RITM.
+// --- Orchestrion path ---
+// Active when the esbuild/webpack rewriter transforms the SDK at compile time.
 
 const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
 queryChannel.subscribe({
   start (ctx) {
-    // If the shimmer path (interceptQuery) is already handling this call,
-    // skip the orchestrion path to avoid duplicate session spans.
+    // Skip if the RITM path is already handling this call.
     if (_intercepting) return
 
     const { arguments: args } = ctx
@@ -380,17 +361,14 @@ queryChannel.subscribe({
   },
 })
 
-// --- Shimmer fallback path ---
-// Kept for environments where the orchestrion rewriter is not active.
-// The addHook registration ensures shimmer.wrap runs when the module is loaded
-// without rewriting.
+// --- RITM path ---
+// Active for standard Node.js require() without the orchestrion rewriter.
+// ESM namespace objects are sealed, so we use a Proxy instead of shimmer.wrap.
 
 addHook({
   name: '@anthropic-ai/claude-agent-sdk',
   versions: ['>=0.2.0'],
 }, (exports) => {
-  // ESM namespace objects are sealed — shimmer.wrap can't replace properties.
-  // Return a new object with the wrapped query function instead.
   const originalQuery = exports.query
   if (typeof originalQuery !== 'function') return exports
 
