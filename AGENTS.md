@@ -212,6 +212,9 @@ Avoid try/catch in hot paths - validate inputs early
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
 - **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests. Write blackbox tests instead of testing internal exports directly
+- **Isolate test/DX concerns**: Always verify first whether a behavior is test-only or developer-experience only. If it is, no production code may be impacted — contain the fix inside the test harness or DX tooling.
+- **Never skip tests**: `it.skip` / `describe.skip` / `return`-early in a describe / wrapping in a conditional that routes to a no-op is not an acceptable fix for any kind of failure. Fix the underlying cause (product, test, or infra). If a test is truly obsolete (not broken) remove it.
+- **Prevent comments**: Code should be self explanatory! Do not add comments, if not essential to follow. If they are, keep them super brief. Question the comment afterwards and likely remove, if not essential.
 
 ### Implementation and Testing Workflow
 
