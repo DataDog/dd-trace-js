@@ -1,8 +1,8 @@
 'use strict'
 
+const getConfig = require('../../config')
 const request = require('../requests/request')
 const id = require('../../id')
-const { getValueFromEnvSources } = require('../../config/helper')
 const log = require('../../log')
 
 const {
@@ -121,7 +121,7 @@ function fetchFromApi ({
     options.path = `${evpProxyPrefix}/api/v2/test/libraries/test-management/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getValueFromEnvSources('DD_API_KEY')
+    const { apiKey } = getConfig()
     if (!apiKey) {
       return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
     }
