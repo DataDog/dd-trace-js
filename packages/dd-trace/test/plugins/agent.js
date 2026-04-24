@@ -28,6 +28,7 @@ let plugins = []
 const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
+let loaded = false
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -436,39 +437,46 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    dbg('proxyquire:config/defaults start')
-    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
-    dbg('proxyquire:config/defaults done')
+    if (loaded) {
+      dbg('proxyquire:config/defaults start')
+      const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+      dbg('proxyquire:config/defaults done')
 
-    dbg('proxyquire:config start')
-    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
-      './defaults': defaults,
-    })
-    dbg('proxyquire:config done')
+      dbg('proxyquire:config start')
+      const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
+        './defaults': defaults,
+      })
+      dbg('proxyquire:config done')
 
-    // Reload dogstatsd to avoid adding new events to the global process object
-    dbg('proxyquire:dogstatsd start')
-    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-    dbg('proxyquire:dogstatsd done')
+      // Reload dogstatsd to avoid adding new events to the global process object
+      dbg('proxyquire:dogstatsd start')
+      const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+      dbg('proxyquire:dogstatsd done')
 
-    dbg('proxyquire:proxy start')
-    const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh,
-      './dogstatsd': dogstatsd,
-    })
-    dbg('proxyquire:proxy done')
+      dbg('proxyquire:proxy start')
+      const proxy = proxyquire('../../src/proxy', {
+        './config': getConfigFresh,
+        './dogstatsd': dogstatsd,
+      })
+      dbg('proxyquire:proxy done')
 
-    dbg('proxyquire:TracerProxy start')
-    const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy,
-    })
-    dbg('proxyquire:TracerProxy done')
+      dbg('proxyquire:TracerProxy start')
+      const TracerProxy = proxyquire('../../src', {
+        './proxy': proxy,
+      })
+      dbg('proxyquire:TracerProxy done')
 
-    dbg('proxyquire:tracer start')
-    tracer = proxyquire('../../', {
-      './src': TracerProxy,
-    })
-    dbg('proxyquire:tracer done')
+      dbg('proxyquire:tracer start')
+      tracer = proxyquire('../../', {
+        './src': TracerProxy,
+      })
+      dbg('proxyquire:tracer done')
+    } else {
+      dbg('require:tracer start')
+      tracer = require('../..')
+      loaded = true
+      dbg('require:tracer done')
+    }
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
