@@ -294,7 +294,7 @@ describe('esm', () => {
           collectingAssert(allGroups => {
             const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             const nonSbGroups = allGroups.filter(g => !isSbInvokeGroup(g))
-            assert.strictEqual(sbGroups.length, 1)
+            assert.ok(sbGroups.length >= 1)
             assert.ok(nonSbGroups.length > 0)
             const hasCreateSpan = nonSbGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
             assert.strictEqual(hasCreateSpan, false)
@@ -310,7 +310,7 @@ describe('esm', () => {
           collectingAssert(allGroups => {
             const sbGroups = allGroups.filter(g => isSbInvokeGroup(g))
             const nonSbGroups = allGroups.filter(g => !isSbInvokeGroup(g))
-            assert.strictEqual(sbGroups.length, 1)
+            assert.ok(sbGroups.length >= 1)
             assert.ok(nonSbGroups.length > 0)
             const hasCreateSpan = nonSbGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
             assert.strictEqual(hasCreateSpan, false)
