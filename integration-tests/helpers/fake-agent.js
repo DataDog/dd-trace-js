@@ -178,6 +178,7 @@ module.exports = class FakeAgent extends EventEmitter {
     const errors = []
 
     const timeoutObj = setTimeout(() => {
+      this.removeListener('message', messageHandler)
       const errorsMsg = errors.length === 0 ? '' : `, additionally:\n${errors.map(e => e.stack).join('\n')}\n===\n`
       resultReject(new Error(`timeout${errorsMsg}`, { cause: { errors } }))
     }, timeout)
