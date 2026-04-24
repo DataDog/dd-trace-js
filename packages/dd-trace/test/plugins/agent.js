@@ -15,7 +15,6 @@ const { assertObjectContains } = require('../../../../integration-tests/helpers'
 const { storage } = require('../../../datadog-core')
 const ritm = require('../../src/ritm')
 
-const beforeExitHandlers = globalThis[Symbol.for('dd-trace')].beforeExitHandlers
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
@@ -592,9 +591,6 @@ module.exports = {
     for (const plugin of plugins) {
       tracer.use(plugin, { enabled: false })
     }
-    // Drop any beforeExit handlers registered by this load (e.g. CustomMetrics
-    // flush, telemetry). They'd otherwise accumulate across test files.
-    beforeExitHandlers.clear()
     if (ritmReset !== false) {
       ritm.reset()
     }
