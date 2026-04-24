@@ -3,7 +3,6 @@
 const log = require('../log')
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
-const { getValueFromEnvSources } = require('../config/helper')
 const { ImpendingTimeout } = require('./runtime/errors')
 const { extractContext } = require('./context')
 
@@ -27,8 +26,7 @@ let __lambdaTimeout
 function checkTimeout (context) {
   const remainingTimeInMillis = context.getRemainingTimeInMillis()
 
-  let apmFlushDeadline = Number.parseInt(getValueFromEnvSources('DD_APM_FLUSH_DEADLINE_MILLISECONDS')) || 100
-  apmFlushDeadline = apmFlushDeadline < 0 ? 100 : apmFlushDeadline
+  const apmFlushDeadline = tracer._config.DD_APM_FLUSH_DEADLINE_MILLISECONDS
 
   __lambdaTimeout = setTimeout(() => {
     timeoutChannel.publish()

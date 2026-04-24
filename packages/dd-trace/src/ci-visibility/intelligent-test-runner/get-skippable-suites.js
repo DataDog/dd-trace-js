@@ -1,8 +1,8 @@
 'use strict'
 
+const getConfig = require('../../config')
 const request = require('../requests/request')
 const log = require('../../log')
-const { getValueFromEnvSources } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -120,7 +120,7 @@ function fetchFromApi ({
     options.path = `${evpProxyPrefix}/api/v2/ci/tests/skippable`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getValueFromEnvSources('DD_API_KEY')
+    const { apiKey } = getConfig()
     if (!apiKey) {
       return done(new Error('Skippable suites were not fetched because Datadog API key is not defined.'))
     }
