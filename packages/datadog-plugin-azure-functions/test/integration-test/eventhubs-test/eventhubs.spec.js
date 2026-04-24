@@ -333,7 +333,7 @@ describe('esm', () => {
       let agent
       let proc
 
-      beforeEach(async function () {
+      before(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
@@ -342,23 +342,13 @@ describe('esm', () => {
         })
       })
 
-      afterEach(async () => {
+      after(async () => {
         await stopProc(proc, { signal: 'SIGINT' })
         await agent.stop()
       })
 
-      it('should add span links to non-batched messages when batch links are disabled', async () => {
-        return curlAndAssertMessage(
-          agent,
-          'http://127.0.0.1:7071/api/eh2-eventdata',
-          collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
-            assert.strictEqual(ehGroups.length, 1)
-            assert.ok('_dd.span_links' in ehGroups[0][0].meta)
-          })
-        )
-      }).timeout(60000)
-
+      // Batch test runs first so its re-triggers (no span links) don't contaminate the
+      // eventdata test, which looks for span links.
       it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
         return curlAndAssertMessage(
           agent,
@@ -371,6 +361,21 @@ describe('esm', () => {
             const hasCreateSpan = nonEhGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
             assert.strictEqual(hasCreateSpan, false)
             assert.ok(!('_dd.span_links' in ehGroups[0][0].meta))
+          })
+        )
+      }).timeout(60000)
+
+      // Re-triggers from the previous test (batch, no span links) may arrive during this
+      // window, so we look for any EH group that has span links rather than asserting on
+      // a fixed count.
+      it('should add span links to non-batched messages when batch links are disabled', async () => {
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-eventdata',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            assert.ok(ehGroups.length >= 1)
+            assert.ok(ehGroups.some(g => '_dd.span_links' in g[0].meta))
           })
         )
       }).timeout(60000)
