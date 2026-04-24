@@ -49,11 +49,12 @@ class TurnLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_claude_agent_sdk_turn'
   static prefix = 'tracing:apm:claude-agent-sdk:turn'
 
-  getLLMObsSpanRegisterOptions () {
+  getLLMObsSpanRegisterOptions (ctx) {
+    const turnId = ctx.turnId || 1
     return {
       kind: 'agent',
       modelProvider: 'anthropic',
-      name: 'turn',
+      name: `turn-${turnId}`,
     }
   }
 
@@ -67,6 +68,7 @@ class TurnLLMObsPlugin extends LLMObsPlugin {
 
     const metadata = {}
     if (ctx.sessionId) metadata.session_id = ctx.sessionId
+    if (ctx.turnId) metadata.turn_id = ctx.turnId
 
     this._tagger.tagMetadata(span, metadata)
   }

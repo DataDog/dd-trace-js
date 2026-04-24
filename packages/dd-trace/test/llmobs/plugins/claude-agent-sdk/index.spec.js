@@ -1,11 +1,16 @@
 'use strict'
 
 const assert = require('node:assert')
+const path = require('path')
+const { spawn } = require('child_process')
 const { describe, before, after, it } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
 const { NODE_MAJOR } = require('../../../../../../version')
 const agent = require('../../../plugins/agent')
+
+const FETCH_VCR_PROXY = path.join(__dirname, 'fetch-vcr-proxy.js')
+const VCR_URL = 'http://127.0.0.1:9126/vcr/claude-agent-sdk'
 
 if (NODE_MAJOR >= 22) {
   describe('Plugin', () => {
@@ -60,17 +65,42 @@ if (NODE_MAJOR >= 22) {
           })
 
           const abortController = new AbortController()
-          const timeout = setTimeout(() => abortController.abort(), 5000)
+          const timeout = setTimeout(() => abortController.abort(), 15000)
 
           try {
             for await (const msg of query({
               prompt: 'Say hello',
-              options: { maxTurns: 1, abortController },
+              options: {
+                maxTurns: 1,
+                abortController,
+                spawnClaudeCodeProcess (opts) {
+                  const env = {
+                    ...opts.env,
+                    NODE_OPTIONS: `--require ${FETCH_VCR_PROXY}`,
+                    _VCR_PROXY_URL: VCR_URL,
+                  }
+                  const proc = spawn(opts.command, opts.args, {
+                    cwd: opts.cwd,
+                    env,
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    signal: opts.signal,
+                    windowsHide: true,
+                  })
+                  return {
+                    stdin: proc.stdin,
+                    stdout: proc.stdout,
+                    get killed () { return proc.killed },
+                    get exitCode () { return proc.exitCode },
+                    kill: proc.kill.bind(proc),
+                    on: proc.on.bind(proc),
+                    once: proc.once.bind(proc),
+                    off: proc.off.bind(proc),
+                  }
+                },
+              },
             })) {
               if (msg.type === 'result') break
             }
-          } catch {
-            // abort expected
           } finally {
             clearTimeout(timeout)
           }

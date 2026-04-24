@@ -53,14 +53,16 @@ function buildTracerHooks (sessionCtx) {
 
     UserPromptSubmit: [{
       hooks: [function onUserPromptSubmit (input) {
-        // Enrich session context with session_id (SessionStart may not fire)
         if (!sessionCtx.sessionId && input.session_id) {
           sessionCtx.sessionId = input.session_id
         }
 
+        sessionCtx.turnCount = (sessionCtx.turnCount || 0) + 1
+
         const turnCtx = {
           sessionId: input.session_id,
           prompt: input.prompt,
+          turnId: sessionCtx.turnCount,
         }
 
         sessionCtx.currentTurn = turnCtx

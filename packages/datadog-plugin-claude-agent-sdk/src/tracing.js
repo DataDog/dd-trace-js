@@ -27,8 +27,9 @@ class TurnTracingPlugin extends TracingPlugin {
   static prefix = 'tracing:apm:claude-agent-sdk:turn'
 
   bindStart (ctx) {
-    this.startSpan('turn', {
-      meta: { 'resource.name': 'turn' },
+    const name = ctx.turnId ? `turn-${ctx.turnId}` : 'turn'
+    this.startSpan(name, {
+      meta: { 'resource.name': name },
     }, ctx)
     return ctx.currentStore
   }
