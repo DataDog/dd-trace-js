@@ -6,7 +6,7 @@ const { SOURCE_TO_TRIGGER, safeStringify, splitModel } = require('./utils')
 class SessionLLMObsPlugin extends LLMObsPlugin {
   static integration = 'claude-agent-sdk'
   static id = 'llmobs_claude_agent_sdk_session'
-  static prefix = 'tracing:apm:claude-agent-sdk:session'
+  static prefix = 'tracing:orchestrion:@anthropic-ai/claude-agent-sdk:query'
 
   getLLMObsSpanRegisterOptions (ctx) {
     const { modelName, modelProvider } = splitModel(ctx.model)
@@ -18,9 +18,22 @@ class SessionLLMObsPlugin extends LLMObsPlugin {
     }
   }
 
+  asyncEnd () {}
+}
+
+class SessionLLMObsPluginNext extends LLMObsPlugin {
+  static integration = 'claude-agent-sdk'
+  static id = 'llmobs_claude_agent_sdk_session_next'
+  static prefix = 'tracing:orchestrion:@anthropic-ai/claude-agent-sdk:query_next'
+
+  start () {} // no-op: span was already registered by SessionLLMObsPlugin
+
+  end () {} // no-op: context restore is handled by SessionLLMObsPlugin
+
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
+    if (!ctx.result.done) return // no chunk accumulation needed
 
     const input = ctx.prompt || ''
     const output = ctx.lastAssistantMessage || ctx.endReason || ''
@@ -139,6 +152,7 @@ class SubagentLLMObsPlugin extends LLMObsPlugin {
 
 module.exports = [
   SessionLLMObsPlugin,
+  SessionLLMObsPluginNext,
   TurnLLMObsPlugin,
   ToolLLMObsPlugin,
   SubagentLLMObsPlugin,

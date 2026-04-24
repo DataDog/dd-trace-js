@@ -4,23 +4,49 @@
 
 const { parse, query, traverse } = require('./compiler')
 
-const tracingChannelPredicate = (node) => (
-  node.specifiers?.[0]?.local?.name === 'tr_ch_apm_tracingChannel' ||
-    node.declarations?.[0]?.id?.properties?.[0]?.value?.name === 'tr_ch_apm_tracingChannel'
-)
+/** @param {object} node Program body statement */
+function hasOrchestrionDcPolyfill (node) {
+  if (node.type === 'ImportDeclaration') {
+    const local = node.specifiers?.[0]?.local?.name
+    return local === 'tr_ch_apm_tracingChannel' || local === 'tr_ch_apm_dc'
+  }
+  return (
+    node.type === 'VariableDeclaration' &&
+    node.declarations?.[0]?.init?.name === 'tr_ch_apm_dc'
+  )
+}
+
+/** Index of the statement after which orchestrion channel consts should be inserted. */
+function tracingChannelBindingStatementIndex (node) {
+  return (
+    (node.type === 'VariableDeclaration' &&
+      node.declarations?.[0]?.init?.name === 'tr_ch_apm_dc') ||
+    (node.type === 'ImportDeclaration' &&
+      node.specifiers?.[0]?.local?.name === 'tr_ch_apm_tracingChannel')
+  )
+}
 
 const transforms = module.exports = {
-  tracingChannelImport ({ dcModule, sourceType }, node) {
-    if (node.body.some(tracingChannelPredicate)) return
+  tracingChannelImport ({ dcModule, sourceType, moduleType }, node) {
+    if (node.body.some(hasOrchestrionDcPolyfill)) return
+
+    // `@apm-js-collab/code-transformer` passes `moduleType` ('esm' | 'cjs'); older paths used `sourceType`.
+    const moduleKind = sourceType ?? moduleType
 
     const index = node.body.findIndex(child => child.directive === 'use strict')
-    const code = isModuleSourceType(sourceType)
-      ? `import { tracingChannel as tr_ch_apm_tracingChannel } from "${dcModule}"`
-      : `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
-
-    node.body.splice(index + 1, 0, parse(code, {
-      isModule: isModuleSourceType(sourceType),
-    }).body[0])
+    const isModule = isModuleSourceType(moduleKind)
+    if (isModule) {
+      // `dcModule` is usually `…/dc-polyfill.js` (CJS). Named ESM import fails; default-import then destructure.
+      const defaultImport = parse(`import tr_ch_apm_dc from "${dcModule}"`, { isModule: true }).body[0]
+      const destructure = parse(
+        'const { tracingChannel: tr_ch_apm_tracingChannel } = tr_ch_apm_dc',
+        { isModule: true }
+      ).body[0]
+      node.body.splice(index + 1, 0, defaultImport, destructure)
+    } else {
+      const code = `const {tracingChannel: tr_ch_apm_tracingChannel} = require("${dcModule}")`
+      node.body.splice(index + 1, 0, parse(code, { isModule: false }).body[0])
+    }
   },
 
   tracingChannelDeclaration (state, node) {
@@ -31,7 +57,7 @@ const transforms = module.exports = {
 
     transforms.tracingChannelImport(state, node)
 
-    const index = node.body.findIndex(tracingChannelPredicate)
+    const index = node.body.findIndex(tracingChannelBindingStatementIndex)
     const code = `
       const ${channelVariable} = tr_ch_apm_tracingChannel("orchestrion:${name}:${channelName}")
     `
@@ -54,10 +80,10 @@ function traceAny (state, node, _parent, ancestry) {
 }
 
 /**
- * @param {string} sourceType
+ * @param {string} [moduleKind] `sourceType` or `moduleType` from the transformer (`'module'`, `'esm'`, `'cjs'`).
  */
-function isModuleSourceType (sourceType) {
-  return sourceType === 'module' || sourceType === 'esm'
+function isModuleSourceType (moduleKind) {
+  return moduleKind === 'module' || moduleKind === 'esm'
 }
 
 function traceFunction (state, node, program) {
@@ -201,11 +227,28 @@ function wrapIterator (state, node, program) {
 
       {
         const wrap = iter => {
+          if (iter != null && typeof iter === 'object') {
+            const apmIterWrappedSym = Symbol.for('dd.apm.wrappedAsyncIter');
+            if (iter[apmIterWrappedSym]) return iter;
+            iter[apmIterWrappedSym] = true;
+          }
+
           const { next: iterNext, return: iterReturn, throw: iterThrow } = iter;
 
           iter.next = (...args) => ${traceNext}(iterNext, ctx, iter, ...args);
           iter.return = (...args) => ${traceNext}(iterReturn, ctx, iter, ...args);
           iter.throw = (...args) => ${traceNext}(iterThrow, ctx, iter, ...args);
+
+          const origAsyncIterator = iter[Symbol.asyncIterator];
+          if (typeof origAsyncIterator === 'function') {
+            iter[Symbol.asyncIterator] = function apmWrappedAsyncIterator () {
+              const inner = origAsyncIterator.call(iter);
+              if (inner === iter) {
+                return iter;
+              }
+              return wrap(inner);
+            };
+          }
 
           return iter;
         };

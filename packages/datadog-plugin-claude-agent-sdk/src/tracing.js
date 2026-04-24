@@ -1,22 +1,34 @@
 'use strict'
 
+const { spanHasError } = require('../../dd-trace/src/llmobs/util')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 class SessionTracingPlugin extends TracingPlugin {
   static id = 'claude_agent_sdk_session'
-  static operation = 'session'
-  static system = 'claude-agent-sdk'
-  static prefix = 'tracing:apm:claude-agent-sdk:session'
+  static prefix = 'tracing:orchestrion:@anthropic-ai/claude-agent-sdk:query'
 
   bindStart (ctx) {
-    this.startSpan('session', {
+    this.startSpan('starting session', {
       meta: { 'resource.name': 'session' },
     }, ctx)
     return ctx.currentStore
   }
+}
+
+class SessionTracingPluginNext extends TracingPlugin {
+  static id = 'claude_agent_sdk_session_next'
+  static prefix = 'tracing:orchestrion:@anthropic-ai/claude-agent-sdk:query_next'
+
+  bindStart (ctx) {
+    return ctx.currentStore
+  }
 
   asyncEnd (ctx) {
-    ctx.currentStore?.span?.finish()
+    const span = ctx.currentStore?.span
+    if (!span) return
+    if (ctx.result.done === true || spanHasError(span)) {
+      span.finish()
+    }
   }
 }
 
@@ -78,6 +90,7 @@ class SubagentTracingPlugin extends TracingPlugin {
 
 module.exports = [
   SessionTracingPlugin,
+  SessionTracingPluginNext,
   TurnTracingPlugin,
   ToolTracingPlugin,
   SubagentTracingPlugin,

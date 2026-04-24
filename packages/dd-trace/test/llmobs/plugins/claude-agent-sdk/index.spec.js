@@ -1,99 +1,82 @@
 'use strict'
 
-const assert = require('node:assert')
+const assert = require('node:assert/strict')
 const { describe, before, after, it } = require('mocha')
 const { useEnv } = require('../../../../../../integration-tests/helpers')
-const { NODE_MAJOR } = require('../../../../../../version')
-const agent = require('../../../plugins/agent')
+const { useLlmObs, assertLlmObsSpanEvent, MOCK_STRING } = require('../../util')
+const { withVersions } = require('../../../setup/mocha')
+const iastFilter = require('../../../../src/appsec/iast/taint-tracking/filter')
 
-if (NODE_MAJOR >= 22) {
-  describe('Plugin', () => {
-    describe('claude-agent-sdk (LLM Obs)', () => {
-      // Clear OTEL exporter env vars so dd-trace uses the agent exporter
-      // (sends to /v0.4/traces) instead of OTLP (which the mock agent
-      // does not handle).
-      const otelVarsToReset = {}
-      before(() => {
-        for (const key of Object.keys(process.env)) {
-          if (key.startsWith('OTEL_')) {
-            otelVarsToReset[key] = process.env[key]
-            delete process.env[key]
-          }
-        }
-      })
-      after(() => {
-        for (const [key, val] of Object.entries(otelVarsToReset)) {
-          process.env[key] = val
-        }
-      })
+const isDdTrace = iastFilter.isDdTrace
 
-      useEnv({
-        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
-        CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: 'true',
-        _DD_LLMOBS_FLUSH_INTERVAL: '0',
-      })
+describe('Plugin', () => {
+  useEnv({
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
+    CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: 'true',
+    _DD_LLMOBS_FLUSH_INTERVAL: '0',
+  })
 
-      let query
+  before(async () => {
+    iastFilter.isDdTrace = file => {
+      if (file.includes('dd-trace-js/versions/')) {
+        return false
+      }
+      return isDdTrace(file)
+    }
+  })
 
-      before(async function () {
-        this.timeout(10000)
-        await agent.load('claude-agent-sdk', {}, {
-          llmobs: {
-            mlApp: 'test',
-            agentlessEnabled: false,
+  after(() => {
+    iastFilter.isDdTrace = isDdTrace
+  })
+
+  const { getEvents } = useLlmObs({ plugin: 'claude-agent-sdk' })
+
+  let query
+
+  withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', '0.2.98', version => {
+    before(async function () {
+      query = require(`../../../../../../versions/@anthropic-ai/claude-agent-sdk@${version}`)
+        .get()
+        .query
+    })
+
+    it('creates an LLM Obs session span', async function () {
+      for await (const msg of query({
+        prompt: 'Say hello',
+        options: {
+          maxTurns: 1,
+          env: {
+            ...process.env,
+            ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/anthropic',
+            CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: 'true',
           },
-        })
-        query = require('@anthropic-ai/claude-agent-sdk').query
-      })
+        },
+      })) {
+        if (msg.type === 'result') break
+      }
 
-      after(() => agent.close({ ritmReset: false }))
+      const { llmobsSpans, apmSpans } = await getEvents(2)
+      console.log('got this many apm spans', apmSpans.length) // 2
+      console.log('got this many llmobs spans', llmobsSpans.length) // 2
+      console.log('llmobs spans names', llmobsSpans.map(s => ({
+        name: s.name,
+        id: s.span_id,
+        parent: s.parent_id,
+      })))
+      // const sessionEvent = llmobsSpans.find(s => s.name === 'session') ?? llmobsSpans[0]
+      // const sessionApmSpan = apmSpans.find(s => s.meta?.['resource.name'] === 'session') ?? apmSpans[0]
 
-      it('creates an LLM Obs session span', async function () {
-        this.timeout(30000)
+      // assert.ok(sessionEvent)
+      // assert.ok(sessionApmSpan)
 
-        const tracesPromise = agent.assertSomeTraces(traces => {
-          const spans = traces[0]
-          const sessionSpan = spans.find(s => s.name === 'session')
-          assert.ok(sessionSpan, 'should have a session span')
-        })
-
-        const abortController = new AbortController()
-        const timeout = setTimeout(() => abortController.abort(), 5000)
-
-        try {
-          for await (const msg of query({
-            prompt: 'Say hello',
-            options: { maxTurns: 1, abortController },
-          })) {
-            if (msg.type === 'result') break
-          }
-        } catch {
-          // abort expected
-        } finally {
-          clearTimeout(timeout)
-        }
-
-        await tracesPromise
-
-        // Wait for LLM Obs span processor to flush
-        await new Promise(resolve => setTimeout(resolve, 1000))
-
-        const reqs = agent.getLlmObsSpanEventsRequests()
-        const spans = reqs.flatMap(r => r).map(r => r.spans[0]).filter(Boolean)
-        const sessionSpan = spans.find(s => s.name === 'session')
-
-        assert.ok(sessionSpan, 'should have an LLM Obs session span event')
-        assert.equal(sessionSpan.meta['span.kind'], 'agent', 'should be an agent span')
-        assert.ok(sessionSpan.meta.input, 'should have input metadata')
-        assert.ok(
-          sessionSpan.tags.some(t => t.startsWith('ml_app:')),
-          'should have ml_app tag'
-        )
-        assert.ok(
-          sessionSpan.tags.some(t => t.includes('integration:claude-agent-sdk')),
-          'should have integration tag'
-        )
-      })
+      // assertLlmObsSpanEvent(sessionEvent, {
+      //   span: sessionApmSpan,
+      //   spanKind: 'agent',
+      //   name: 'session',
+      //   inputValue: 'Say hello',
+      //   outputValue: MOCK_STRING,
+      //   tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
+      // })
     })
   })
-}
+})

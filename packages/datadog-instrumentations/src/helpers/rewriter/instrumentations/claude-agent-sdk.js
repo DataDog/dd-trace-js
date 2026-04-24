@@ -9,9 +9,9 @@ module.exports = [
     },
     functionQuery: {
       functionName: 'query',
-      kind: 'Async',
       isExportAlias: true,
     },
     channelName: 'query',
+    transform: 'traceAsyncIterator',
   },
 ]
