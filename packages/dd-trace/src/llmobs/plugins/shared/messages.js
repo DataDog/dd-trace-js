@@ -35,6 +35,10 @@ function getContentFromMessage (message) {
   }
 }
 
+function isBaseMessage (data) {
+  return typeof data._getType === 'function' || typeof data.getType === 'function'
+}
+
 function formatIO (data) {
   if (data == null) return ''
 
@@ -54,7 +58,16 @@ function formatIO (data) {
     return data.map(item => formatIO(item))
   }
 
-  return getContentFromMessage(data)
+  // Only duck-typed BaseMessage instances collapse to { content, role }.
+  // Other class instances (e.g. LangChain Document) preserve their shape via JSON.stringify,
+  // otherwise they'd reduce to { content: '' } and lose data.
+  if (isBaseMessage(data)) return getContentFromMessage(data)
+
+  try {
+    return JSON.stringify(data)
+  } catch {
+    return String(data)
+  }
 }
 
 module.exports = {

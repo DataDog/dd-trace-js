@@ -126,5 +126,23 @@ describe('llmobs shared messages util', () => {
         ],
       })
     })
+
+    it('preserves non-message class instances via JSON.stringify instead of collapsing to {content: ""}', () => {
+      // Addresses PR #8097 review: LangGraph state may contain class instances that
+      // are not chat messages (e.g. Document-like objects). Routing them through
+      // getContentFromMessage would produce { content: '' } and lose the payload.
+      class DocumentStub {
+        constructor (pageContent, metadata) {
+          this.pageContent = pageContent
+          this.metadata = metadata
+        }
+      }
+
+      const doc = new DocumentStub('hello', { source: 'test' })
+      assert.strictEqual(
+        formatIO(doc),
+        JSON.stringify({ pageContent: 'hello', metadata: { source: 'test' } })
+      )
+    })
   })
 })
