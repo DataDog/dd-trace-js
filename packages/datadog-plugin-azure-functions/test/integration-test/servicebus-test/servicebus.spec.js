@@ -273,7 +273,7 @@ describe('esm', () => {
       let agent
       let proc
 
-      before(async function () {
+      beforeEach(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
@@ -282,7 +282,7 @@ describe('esm', () => {
         })
       })
 
-      after(async () => {
+      afterEach(async () => {
         await stopProc(proc, { signal: 'SIGINT' })
         await agent.stop()
       })

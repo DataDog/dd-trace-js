@@ -333,7 +333,7 @@ describe('esm', () => {
       let agent
       let proc
 
-      before(async function () {
+      beforeEach(async function () {
         this.timeout(60000)
         agent = await new FakeAgent().start()
         proc = await spawnPluginIntegrationTestProc(sandboxCwd(), 'func', ['start'], agent.port, undefined, {
@@ -342,7 +342,7 @@ describe('esm', () => {
         })
       })
 
-      after(async () => {
+      afterEach(async () => {
         await stopProc(proc, { signal: 'SIGINT' })
         await agent.stop()
       })
@@ -364,14 +364,13 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh2-batch',
           collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
             const nonEhGroups = allGroups.filter(g => !isEhInvokeGroup(g))
-            // Re-triggers from the previous test (individual events) still have span links.
-            // The batch trigger with links disabled is the first EH group without span links.
-            const batchEhGroup = allGroups.filter(isEhInvokeGroup).find(g => !('_dd.span_links' in g[0].meta))
-            assert.ok(batchEhGroup)
+            assert.strictEqual(ehGroups.length, 1)
             assert.ok(nonEhGroups.length > 0)
             const hasCreateSpan = nonEhGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
             assert.strictEqual(hasCreateSpan, false)
+            assert.ok(!('_dd.span_links' in ehGroups[0][0].meta))
           })
         )
       }).timeout(60000)
