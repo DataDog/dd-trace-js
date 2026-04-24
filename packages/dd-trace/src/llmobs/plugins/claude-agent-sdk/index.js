@@ -3,57 +3,18 @@
 const LLMObsPlugin = require('../base')
 const { SOURCE_TO_TRIGGER, safeStringify, splitModel } = require('./utils')
 
-class SessionLLMObsPlugin extends LLMObsPlugin {
-  static integration = 'claude-agent-sdk'
-  static id = 'llmobs_claude_agent_sdk_session'
-  static prefix = 'tracing:apm:claude-agent-sdk:session'
-
-  getLLMObsSpanRegisterOptions (ctx) {
-    const { modelName, modelProvider } = splitModel(ctx.model)
-    return {
-      kind: 'agent',
-      modelName,
-      modelProvider,
-      name: 'session',
-    }
-  }
-
-  setLLMObsTags (ctx) {
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    const input = ctx.prompt || ''
-    const output = ctx.lastAssistantMessage || ctx.endReason || ''
-    this._tagger.tagTextIO(span, input, output)
-
-    const metadata = {}
-    if (ctx.sessionId) metadata.session_id = ctx.sessionId
-    if (ctx.model) {
-      const { modelName, modelProvider } = splitModel(ctx.model)
-      if (modelName) metadata.model_name = modelName
-      if (modelProvider) metadata.model_provider = modelProvider
-    }
-    if (ctx.source) metadata.start_trigger = SOURCE_TO_TRIGGER[ctx.source] || ctx.source
-    if (ctx.permissionMode) metadata.permission_mode = ctx.permissionMode
-    if (ctx.cwd) metadata.project_dir = ctx.cwd
-    if (ctx.agentType) metadata.agent_type = ctx.agentType
-    if (ctx.endReason) metadata.exit_reason = ctx.endReason
-    if (ctx.transcriptPath) metadata.transcript_path = ctx.transcriptPath
-
-    this._tagger.tagMetadata(span, metadata)
-  }
-}
-
 class TurnLLMObsPlugin extends LLMObsPlugin {
   static integration = 'claude-agent-sdk'
   static id = 'llmobs_claude_agent_sdk_turn'
   static prefix = 'tracing:apm:claude-agent-sdk:turn'
 
   getLLMObsSpanRegisterOptions (ctx) {
+    const { modelName, modelProvider } = splitModel(ctx.model)
     const turnId = ctx.turnId || 1
     return {
       kind: 'agent',
-      modelProvider: 'anthropic',
+      modelName,
+      modelProvider,
       name: `turn-${turnId}`,
     }
   }
@@ -69,6 +30,16 @@ class TurnLLMObsPlugin extends LLMObsPlugin {
     const metadata = {}
     if (ctx.sessionId) metadata.session_id = ctx.sessionId
     if (ctx.turnId) metadata.turn_id = ctx.turnId
+    if (ctx.model) {
+      const { modelName, modelProvider } = splitModel(ctx.model)
+      if (modelName) metadata.model_name = modelName
+      if (modelProvider) metadata.model_provider = modelProvider
+    }
+    if (ctx.source) metadata.start_trigger = SOURCE_TO_TRIGGER[ctx.source] || ctx.source
+    if (ctx.permissionMode) metadata.permission_mode = ctx.permissionMode
+    if (ctx.cwd) metadata.project_dir = ctx.cwd
+    if (ctx.agentType) metadata.agent_type = ctx.agentType
+    if (ctx.transcriptPath) metadata.transcript_path = ctx.transcriptPath
 
     this._tagger.tagMetadata(span, metadata)
   }
@@ -140,7 +111,6 @@ class SubagentLLMObsPlugin extends LLMObsPlugin {
 }
 
 module.exports = [
-  SessionLLMObsPlugin,
   TurnLLMObsPlugin,
   ToolLLMObsPlugin,
   SubagentLLMObsPlugin,

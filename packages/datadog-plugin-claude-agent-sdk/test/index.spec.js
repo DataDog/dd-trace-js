@@ -49,13 +49,13 @@ if (NODE_MAJOR >= 22) {
 
         after(() => agent.close({ ritmReset: false }))
 
-        it('creates a session span', async function () {
+        it('creates a turn span', async function () {
           this.timeout(30000)
 
           const tracesPromise = agent.assertSomeTraces(traces => {
             const spans = traces[0]
-            const sessionSpan = spans.find(s => s.name === 'session')
-            assert.ok(sessionSpan, 'should have a session span')
+            const turnSpan = spans.find(s => s.name.startsWith('turn-'))
+            assert.ok(turnSpan, 'should have a turn span')
           })
 
           const abortController = new AbortController()

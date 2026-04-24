@@ -60,8 +60,8 @@ if (NODE_MAJOR >= 22) {
 
           const tracesPromise = agent.assertSomeTraces(traces => {
             const spans = traces[0]
-            const sessionSpan = spans.find(s => s.name === 'session')
-            assert.ok(sessionSpan, 'should have a session span')
+            const turnSpan = spans.find(s => s.name.startsWith('turn-'))
+            assert.ok(turnSpan, 'should have a turn span')
           })
 
           const abortController = new AbortController()
@@ -112,17 +112,17 @@ if (NODE_MAJOR >= 22) {
 
           const reqs = agent.getLlmObsSpanEventsRequests()
           const spans = reqs.flatMap(r => r).map(r => r.spans[0]).filter(Boolean)
-          const sessionSpan = spans.find(s => s.name === 'session')
+          const turnSpan = spans.find(s => s.name.startsWith('turn-'))
 
-          assert.ok(sessionSpan, 'should have an LLM Obs session span event')
-          assert.equal(sessionSpan.meta['span.kind'], 'agent', 'should be an agent span')
-          assert.ok(sessionSpan.meta.input, 'should have input metadata')
+          assert.ok(turnSpan, 'should have an LLM Obs turn span event')
+          assert.equal(turnSpan.meta['span.kind'], 'agent', 'should be an agent span')
+          assert.ok(turnSpan.meta.input, 'should have input metadata')
           assert.ok(
-            sessionSpan.tags.some(t => t.startsWith('ml_app:')),
+            turnSpan.tags.some(t => t.startsWith('ml_app:')),
             'should have ml_app tag'
           )
           assert.ok(
-            sessionSpan.tags.some(t => t.includes('integration:claude-agent-sdk')),
+            turnSpan.tags.some(t => t.includes('integration:claude-agent-sdk')),
             'should have integration tag'
           )
         })

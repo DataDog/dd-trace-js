@@ -2,24 +2,6 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-class SessionTracingPlugin extends TracingPlugin {
-  static id = 'claude_agent_sdk_session'
-  static operation = 'session'
-  static system = 'claude-agent-sdk'
-  static prefix = 'tracing:apm:claude-agent-sdk:session'
-
-  bindStart (ctx) {
-    this.startSpan('session', {
-      meta: { 'resource.name': 'session' },
-    }, ctx)
-    return ctx.currentStore
-  }
-
-  asyncEnd (ctx) {
-    ctx.currentStore?.span?.finish()
-  }
-}
-
 class TurnTracingPlugin extends TracingPlugin {
   static id = 'claude_agent_sdk_turn'
   static operation = 'turn'
@@ -78,7 +60,6 @@ class SubagentTracingPlugin extends TracingPlugin {
 }
 
 module.exports = [
-  SessionTracingPlugin,
   TurnTracingPlugin,
   ToolTracingPlugin,
   SubagentTracingPlugin,
