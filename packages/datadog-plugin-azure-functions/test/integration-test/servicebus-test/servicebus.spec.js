@@ -43,206 +43,229 @@ describe('esm', () => {
       })
 
       it('propagates a single message through a queue with cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-1', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-message-1',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assertObjectContains(sbGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'ServiceBus queueTest1',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'servicebus',
+                'messaging.destination.name': 'queue.1',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(sbGroups[0][0]).length, 1)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates multiple messages through a queue with cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-1', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 3)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-messages-1',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 2)
+            for (const group of sbGroups) {
+              assertObjectContains(group[0], {
+                name: 'azure.functions.invoke',
+                resource: 'ServiceBus queueTest1',
+                meta: {
+                  'messaging.operation': 'receive',
+                  'messaging.system': 'servicebus',
+                  'messaging.destination.name': 'queue.1',
+                  'span.kind': 'consumer',
+                },
+              })
+              assert.strictEqual(parseLinks(group[0]).length, 1)
+            }
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-          assertObjectContains(payload[2][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.1',
-              'span.kind': 'consumer',
-            },
-          })
-          assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates a single amqp message through a queue with cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-message-1', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-amqp-message-1',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assertObjectContains(sbGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'ServiceBus queueTest1',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'servicebus',
+                'messaging.destination.name': 'queue.1',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(sbGroups[0][0]).length, 1)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates multiple amqp messages through a queue with cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-messages-1', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 3)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-amqp-messages-1',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 2)
+            for (const group of sbGroups) {
+              assertObjectContains(group[0], {
+                name: 'azure.functions.invoke',
+                resource: 'ServiceBus queueTest1',
+                meta: {
+                  'messaging.operation': 'receive',
+                  'messaging.system': 'servicebus',
+                  'messaging.destination.name': 'queue.1',
+                  'span.kind': 'consumer',
+                },
+              })
+              assert.strictEqual(parseLinks(group[0]).length, 1)
+            }
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-          assertObjectContains(payload[2][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.1',
-              'span.kind': 'consumer',
-            },
-          })
-          assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates a message batch through a queue with cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-1', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 3)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-message-batch-1',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 2)
+            for (const group of sbGroups) {
+              assertObjectContains(group[0], {
+                name: 'azure.functions.invoke',
+                resource: 'ServiceBus queueTest1',
+                meta: {
+                  'messaging.operation': 'receive',
+                  'messaging.system': 'servicebus',
+                  'messaging.destination.name': 'queue.1',
+                  'span.kind': 'consumer',
+                },
+              })
+              assert.strictEqual(parseLinks(group[0]).length, 1)
+            }
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-          assertObjectContains(payload[2][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.1',
-              'span.kind': 'consumer',
-            },
-          })
-          assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates a single message through a queue with cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-2', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-message-2',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assertObjectContains(sbGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'ServiceBus queueTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'servicebus',
+                'messaging.destination.name': 'queue.2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(sbGroups[0][0]).length, 1)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates multiple messages through a queue with cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-2', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-messages-2',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assertObjectContains(sbGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'ServiceBus queueTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'servicebus',
+                'messaging.destination.name': 'queue.2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(sbGroups[0][0]).length, 2)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 2)
-        })
+        )
       }).timeout(60000)
 
       it('propagates a single amqp message through a queue with cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-message-2', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-amqp-message-2',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assertObjectContains(sbGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'ServiceBus queueTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'servicebus',
+                'messaging.destination.name': 'queue.2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(sbGroups[0][0]).length, 1)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates multiple amqp messages through a queue with cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-amqp-messages-2', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-amqp-messages-2',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assertObjectContains(sbGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'ServiceBus queueTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'servicebus',
+                'messaging.destination.name': 'queue.2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(sbGroups[0][0]).length, 2)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 2)
-        })
+        )
       }).timeout(60000)
 
       it('propagates a message batch through a queue with cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-2', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'ServiceBus queueTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'servicebus',
-              'messaging.destination.name': 'queue.2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-message-batch-2',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assertObjectContains(sbGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'ServiceBus queueTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'servicebus',
+                'messaging.destination.name': 'queue.2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(sbGroups[0][0]).length, 2)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 2)
-        })
+        )
       }).timeout(60000)
     })
 
@@ -265,23 +288,47 @@ describe('esm', () => {
       })
 
       it('should not create a tryAdd span or add span links to arrays when batch links are disabled', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-messages-2', ({ headers, payload }) => {
-          const hasCreateSpan = payload[0].some(obj => obj.name === 'azure.functions.create')
-          assert.strictEqual(hasCreateSpan, false)
-          assert.ok(!('_dd.span_links' in payload[1][0].meta))
-        })
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-messages-2',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const nonSbGroups = allGroups.filter(g => !g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assert.ok(nonSbGroups.length > 0)
+            const hasCreateSpan = nonSbGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
+            assert.strictEqual(hasCreateSpan, false)
+            assert.ok(!('_dd.span_links' in sbGroups[0][0].meta))
+          })
+        )
       }).timeout(60000)
 
       it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/send-message-batch-2', ({ headers, payload }) => {
-          const hasCreateSpan = payload[0].some(obj => obj.name === 'azure.functions.create')
-          assert.strictEqual(hasCreateSpan, false)
-          assert.ok(!('_dd.span_links' in payload[1][0].meta))
-        })
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/send-message-batch-2',
+          collectingAssert(allGroups => {
+            const sbGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const nonSbGroups = allGroups.filter(g => !g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(sbGroups.length, 1)
+            assert.ok(nonSbGroups.length > 0)
+            const hasCreateSpan = nonSbGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
+            assert.strictEqual(hasCreateSpan, false)
+            assert.ok(!('_dd.span_links' in sbGroups[0][0].meta))
+          })
+        )
       }).timeout(60000)
     })
   })
 })
+
+function collectingAssert (fn) {
+  const allGroups = []
+  return ({ payload }) => {
+    allGroups.push(...payload)
+    fn(allGroups)
+  }
+}
 
 function parseLinks (span) {
   return JSON.parse(span.meta['_dd.span_links'] || '[]')

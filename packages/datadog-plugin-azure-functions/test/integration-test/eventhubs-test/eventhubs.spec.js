@@ -43,269 +43,289 @@ describe('esm', () => {
       })
 
       it('propagates eventdata through an event hub with a cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-eventdata', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 3)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh1-eventdata',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 2)
+            for (const group of ehGroups) {
+              assertObjectContains(group[0], {
+                name: 'azure.functions.invoke',
+                resource: 'EventHubs eventHubTest1',
+                meta: {
+                  'messaging.operation': 'receive',
+                  'messaging.system': 'eventhubs',
+                  'messaging.destination.name': 'eh1',
+                  'span.kind': 'consumer',
+                },
+              })
+              assert.strictEqual(parseLinks(group[0]).length, 1)
+            }
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-          assertObjectContains(payload[2][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
-          })
-          assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates amqp messages through an event hub with a cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-amqpmessages', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 3)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh1-amqpmessages',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 2)
+            for (const group of ehGroups) {
+              assertObjectContains(group[0], {
+                name: 'azure.functions.invoke',
+                resource: 'EventHubs eventHubTest1',
+                meta: {
+                  'messaging.operation': 'receive',
+                  'messaging.system': 'eventhubs',
+                  'messaging.destination.name': 'eh1',
+                  'span.kind': 'consumer',
+                },
+              })
+              assert.strictEqual(parseLinks(group[0]).length, 1)
+            }
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-          assertObjectContains(payload[2][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
-          })
-          assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates a batch through an event hub with a cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-batch', ({ headers, payload }) => {
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh1-batch',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 2)
+            for (const group of ehGroups) {
+              assertObjectContains(group[0], {
+                name: 'azure.functions.invoke',
+                resource: 'EventHubs eventHubTest1',
+                meta: {
+                  'messaging.operation': 'receive',
+                  'messaging.system': 'eventhubs',
+                  'messaging.destination.name': 'eh1',
+                  'span.kind': 'consumer',
+                },
+              })
+              assert.strictEqual(parseLinks(group[0]).length, 1)
+            }
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-          assertObjectContains(payload[2][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
-          })
-          assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('propagates eventData through an event hub with a cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-eventdata',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 1)
+            assertObjectContains(ehGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'EventHubs eventHubTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'eventhubs',
+                'messaging.destination.name': 'eh2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(ehGroups[0][0]).length, 2)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 2)
-        })
+        )
       }).timeout(60000)
 
       it('propagates amqp messages through an event hub with a cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-amqpmessages', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-amqpmessages',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 1)
+            assertObjectContains(ehGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'EventHubs eventHubTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'eventhubs',
+                'messaging.destination.name': 'eh2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(ehGroups[0][0]).length, 2)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 2)
-        })
+        )
       }).timeout(60000)
 
       it('propagates a batch through an event hub with a cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-batch', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-batch',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 1)
+            assertObjectContains(ehGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'EventHubs eventHubTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'eventhubs',
+                'messaging.destination.name': 'eh2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(ehGroups[0][0]).length, 2)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 2)
-        })
+        )
       }).timeout(60000)
 
       it('enqueues a single event to an event hub with a cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueEvent', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh1-enqueueEvent',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 1)
+            assertObjectContains(ehGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'EventHubs eventHubTest1',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'eventhubs',
+                'messaging.destination.name': 'eh1',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(ehGroups[0][0]).length, 1)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('enqueues events to an event hub with a cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueEvents', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 3)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh1-enqueueEvents',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 2)
+            for (const group of ehGroups) {
+              assertObjectContains(group[0], {
+                name: 'azure.functions.invoke',
+                resource: 'EventHubs eventHubTest1',
+                meta: {
+                  'messaging.operation': 'receive',
+                  'messaging.system': 'eventhubs',
+                  'messaging.destination.name': 'eh1',
+                  'span.kind': 'consumer',
+                },
+              })
+              assert.strictEqual(parseLinks(group[0]).length, 1)
+            }
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-          assertObjectContains(payload[2][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
-          })
-          assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('enqueues amqp messages to an event hub with a cardinality of one', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh1-enqueueAmqp', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 3)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh1-enqueueAmqp',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 2)
+            for (const group of ehGroups) {
+              assertObjectContains(group[0], {
+                name: 'azure.functions.invoke',
+                resource: 'EventHubs eventHubTest1',
+                meta: {
+                  'messaging.operation': 'receive',
+                  'messaging.system': 'eventhubs',
+                  'messaging.destination.name': 'eh1',
+                  'span.kind': 'consumer',
+                },
+              })
+              assert.strictEqual(parseLinks(group[0]).length, 1)
+            }
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-          assertObjectContains(payload[2][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest1',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh1',
-              'span.kind': 'consumer',
-            },
-          })
-          assert.strictEqual(parseLinks(payload[2][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('enqueues a single event to an event hub with a cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueEvent', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-enqueueEvent',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 1)
+            assertObjectContains(ehGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'EventHubs eventHubTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'eventhubs',
+                'messaging.destination.name': 'eh2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(ehGroups[0][0]).length, 1)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 1)
-        })
+        )
       }).timeout(60000)
 
       it('enqueues events to an event hub with a cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueEvents', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assert.strictEqual(payload[0][1].name, 'azure.eventhubs.create')
-          assert.strictEqual(payload[0][2].name, 'azure.eventhubs.create')
-          assert.strictEqual(payload[0][3].name, 'azure.eventhubs.send')
-          assert.strictEqual(parseLinks(payload[0][3]).length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-enqueueEvents',
+          collectingAssert(allGroups => {
+            const senderGroup = allGroups.find(g => g.some(s => s.name === 'azure.eventhubs.send'))
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.ok(senderGroup)
+            assert.strictEqual(ehGroups.length, 1)
+            assert.strictEqual(senderGroup[1].name, 'azure.eventhubs.create')
+            assert.strictEqual(senderGroup[2].name, 'azure.eventhubs.create')
+            assert.strictEqual(senderGroup[3].name, 'azure.eventhubs.send')
+            assert.strictEqual(parseLinks(senderGroup[3]).length, 2)
+            assertObjectContains(ehGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'EventHubs eventHubTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'eventhubs',
+                'messaging.destination.name': 'eh2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(ehGroups[0][0]).length, 2)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 2)
-        })
+        )
       }).timeout(60000)
 
       it('enqueues amqp messages to an event hub with a cardinality of many', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-enqueueAmqp', ({ headers, payload }) => {
-          assert.strictEqual(payload.length, 2)
-          assert.strictEqual(payload[0][1].name, 'azure.eventhubs.create')
-          assert.strictEqual(payload[0][2].name, 'azure.eventhubs.create')
-          assert.strictEqual(payload[0][3].name, 'azure.eventhubs.send')
-          assert.strictEqual(parseLinks(payload[0][3]).length, 2)
-          assertObjectContains(payload[1][0], {
-            name: 'azure.functions.invoke',
-            resource: 'EventHubs eventHubTest2',
-            meta: {
-              'messaging.operation': 'receive',
-              'messaging.system': 'eventhubs',
-              'messaging.destination.name': 'eh2',
-              'span.kind': 'consumer',
-            },
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-enqueueAmqp',
+          collectingAssert(allGroups => {
+            const senderGroup = allGroups.find(g => g.some(s => s.name === 'azure.eventhubs.send'))
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.ok(senderGroup)
+            assert.strictEqual(ehGroups.length, 1)
+            assert.strictEqual(senderGroup[1].name, 'azure.eventhubs.create')
+            assert.strictEqual(senderGroup[2].name, 'azure.eventhubs.create')
+            assert.strictEqual(senderGroup[3].name, 'azure.eventhubs.send')
+            assert.strictEqual(parseLinks(senderGroup[3]).length, 2)
+            assertObjectContains(ehGroups[0][0], {
+              name: 'azure.functions.invoke',
+              resource: 'EventHubs eventHubTest2',
+              meta: {
+                'messaging.operation': 'receive',
+                'messaging.system': 'eventhubs',
+                'messaging.destination.name': 'eh2',
+                'span.kind': 'consumer',
+              },
+            })
+            assert.strictEqual(parseLinks(ehGroups[0][0]).length, 2)
           })
-          assert.strictEqual(parseLinks(payload[1][0]).length, 2)
-        })
+        )
       }).timeout(60000)
     })
 
@@ -328,21 +348,43 @@ describe('esm', () => {
       })
 
       it('should add span links to non-batched messages when batch links are disabled', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-eventdata', ({ headers, payload }) => {
-          assert.ok('_dd.span_links' in payload[1][0].meta)
-        })
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-eventdata',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 1)
+            assert.ok('_dd.span_links' in ehGroups[0][0].meta)
+          })
+        )
       }).timeout(60000)
 
       it('should not create a tryAdd span or add span links to batches when batch links are disabled', async () => {
-        return curlAndAssertMessage(agent, 'http://127.0.0.1:7071/api/eh2-batch', ({ headers, payload }) => {
-          const hasCreateSpan = payload[0].some(obj => obj.name === 'azure.functions.create')
-          assert.strictEqual(hasCreateSpan, false)
-          assert.ok(!('_dd.span_links' in payload[1][0].meta))
-        })
+        return curlAndAssertMessage(
+          agent,
+          'http://127.0.0.1:7071/api/eh2-batch',
+          collectingAssert(allGroups => {
+            const ehGroups = allGroups.filter(g => g.some(s => s.name === 'azure.functions.invoke'))
+            const nonEhGroups = allGroups.filter(g => !g.some(s => s.name === 'azure.functions.invoke'))
+            assert.strictEqual(ehGroups.length, 1)
+            assert.ok(nonEhGroups.length > 0)
+            const hasCreateSpan = nonEhGroups.some(g => g.some(s => s.name === 'azure.functions.create'))
+            assert.strictEqual(hasCreateSpan, false)
+            assert.ok(!('_dd.span_links' in ehGroups[0][0].meta))
+          })
+        )
       }).timeout(60000)
     })
   })
 })
+
+function collectingAssert (fn) {
+  const allGroups = []
+  return ({ payload }) => {
+    allGroups.push(...payload)
+    fn(allGroups)
+  }
+}
 
 function parseLinks (span) {
   return JSON.parse(span.meta['_dd.span_links'] || '[]')
