@@ -23,6 +23,11 @@ const AIGUARD_CONVERSATIONAL_RESOURCES = new Set(['chat.completions', 'responses
  * yielding the body. When either evaluation rejects with `AIGuardAbortError`, the
  * caller's `.parse()` promise rejects with the same error.
  *
+ * Also wraps `apiProm.asResponse` so callers that consume the raw `Response` object
+ * still receive the Before Model verdict — without this, DENY/ABORT would be swallowed
+ * for anyone who skips `.parse()`. After Model evaluation is not performed on this path
+ * because the response body has not been parsed.
+ *
  * @param {object} apiProm - APIPromise returned from the OpenAI SDK method
  * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
  * @param {Array<object>} inputMessages - Already-converted AI Guard style input messages
@@ -32,13 +37,34 @@ function wrapAPIPromiseForAIGuard (apiProm, baseResource, inputMessages, inputEv
   shimmer.wrap(apiProm, 'parse', origParse => function () {
     const parsed = origParse.apply(this, arguments)
     return Promise.all([inputEval, parsed]).then(([, body]) => {
-      const outputMessages = baseResource === 'chat.completions'
-        ? buildChatCompletionOutputMessages(inputMessages, body?.choices?.[0]?.message)
-        : buildResponsesOutputMessages(inputMessages, body?.output)
-      if (!outputMessages) return body
-      return publishToAIGuard(outputMessages).then(() => body)
+      let evalPromise
+      if (baseResource === 'chat.completions') {
+        // Chat completions may return multiple choices when `n > 1`. Screen every choice
+        // so any unsafe assistant output rejects `.parse()`, regardless of which choice
+        // the caller ends up using.
+        const choices = Array.isArray(body?.choices) ? body.choices : []
+        const evals = []
+        for (const choice of choices) {
+          const outputMessages = buildChatCompletionOutputMessages(inputMessages, choice?.message)
+          if (outputMessages) evals.push(publishToAIGuard(outputMessages))
+        }
+        if (!evals.length) return body
+        evalPromise = Promise.all(evals)
+      } else {
+        const outputMessages = buildResponsesOutputMessages(inputMessages, body?.output)
+        if (!outputMessages) return body
+        evalPromise = publishToAIGuard(outputMessages)
+      }
+      return evalPromise.then(() => body)
     })
   })
+
+  if (typeof apiProm.asResponse === 'function') {
+    shimmer.wrap(apiProm, 'asResponse', origAsResponse => function () {
+      const responsePromise = origAsResponse.apply(this, arguments)
+      return Promise.all([inputEval, responsePromise]).then(([, response]) => response)
+    })
+  }
 }
 
 const V4_PACKAGE_SHIMS = [

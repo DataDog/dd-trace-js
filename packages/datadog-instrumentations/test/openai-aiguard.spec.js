@@ -14,10 +14,17 @@ class FakeAPIPromise {
   constructor (body, responsePromise = Promise.resolve({ response: { headers: {}, url: '/' }, options: {} })) {
     this._body = body
     this.responsePromise = responsePromise
+    this._rawResponse = { ok: true }
   }
 
   parse () {
     return Promise.resolve(this._body)
+  }
+
+  // Mirrors openai SDK's APIPromise.asResponse which returns the raw Response without
+  // parsing the body. AI Guard must still gate Before Model rejection on this path.
+  asResponse () {
+    return Promise.resolve(this._rawResponse)
   }
 
   then (onFulfilled, onRejected) {
@@ -259,6 +266,73 @@ describe('openai AI Guard instrumentation', () => {
 
       return completions.create({ messages: [{ role: 'user', content: 'Hi' }], stream: true }).parse()
         .then(() => assert.strictEqual(calls.length, 0))
+        .finally(unsubscribe)
+    })
+
+    it('evaluates every choice when n > 1', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({
+        choices: [
+          { message: { role: 'assistant', content: 'safe one' } },
+          { message: { role: 'assistant', content: 'safe two' } },
+          { message: { role: 'assistant', content: 'safe three' } },
+        ],
+      })
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }], n: 3 }).parse()
+        .then(() => {
+          // 1 Before Model + 3 After Model (one per choice)
+          assert.strictEqual(calls.length, 4)
+          assert.deepStrictEqual(calls[1].messages[1], { role: 'assistant', content: 'safe one' })
+          assert.deepStrictEqual(calls[2].messages[1], { role: 'assistant', content: 'safe two' })
+          assert.deepStrictEqual(calls[3].messages[1], { role: 'assistant', content: 'safe three' })
+        })
+        .finally(unsubscribe)
+    })
+
+    it('rejects when any choice fails After Model evaluation', () => {
+      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      let count = 0
+      const unsubscribe = subscribeWithHandler(ctx => {
+        count++
+        // Before Model passes; first choice passes; second choice rejects
+        count === 3 ? ctx.reject(err) : ctx.resolve()
+      })
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({
+        choices: [
+          { message: { role: 'assistant', content: 'safe' } },
+          { message: { role: 'assistant', content: 'unsafe' } },
+        ],
+      })
+
+      return assert.rejects(
+        () => completions.create({ messages: [{ role: 'user', content: 'Hi' }], n: 2 }).parse(),
+        e => e === err
+      ).finally(unsubscribe)
+    })
+
+    it('propagates Before Model rejection through asResponse()', () => {
+      const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
+
+      return assert.rejects(
+        () => completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse(),
+        e => e === err
+      ).finally(unsubscribe)
+    })
+
+    it('returns the raw response from asResponse() when Before Model resolves', () => {
+      const { unsubscribe } = subscribeAutoResolve()
+      const completions = new Completions()
+      const apiProm = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
+      completions._nextApiPromise = apiProm
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+        .then(resp => assert.strictEqual(resp, apiProm._rawResponse))
         .finally(unsubscribe)
     })
   })
