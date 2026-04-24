@@ -48,7 +48,7 @@ describe('Plugin', () => {
           env: {
             ...process.env,
             ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/anthropic',
-            CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: 'true',
+            // CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: 'true',
           },
         },
       })) {
