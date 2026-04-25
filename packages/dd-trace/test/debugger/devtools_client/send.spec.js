@@ -138,6 +138,27 @@ describe('input message http requests', function () {
     done()
   })
 
+  it('should coerce non-string tag values to strings', function (done) {
+    const sendWithNumericTag = proxyquire('../../../src/debugger/devtools_client/send', {
+      './config': createConfigMock({ commitSHA: 123 }),
+      './json-buffer': JSONBuffer,
+      '../../exporters/common/request': request,
+      './snapshot-pruner': { pruneSnapshot: pruneSnapshotStub },
+    })
+
+    sendWithNumericTag(message, logger, dd, snapshot)
+    clock.tick(1000)
+
+    sinon.assert.calledOnce(request)
+    const opts = getRequestOptions(request)
+    assert.ok(
+      opts.path.includes('git.commit.sha%3A123'),
+      `Expected path to include git.commit.sha%3A123 but got ${opts.path}`
+    )
+
+    done()
+  })
+
   it('should use /debugger/v2/input when configured', function (done) {
     // Create a new send module with v2 endpoint configured
     const sendV2 = proxyquire('../../../src/debugger/devtools_client/send', {

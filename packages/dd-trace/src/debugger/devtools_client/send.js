@@ -137,36 +137,22 @@ function setInputPath (newPath) {
 }
 
 /**
- * @param {Array<[string, string | undefined]>} tags - The tags to serialize.
+ * @param {Array<[string, unknown]>} tags - The tags to serialize.
  * @returns {string} The serialized tags.
  */
 function buildTags (tags) {
   const serializedTags = []
 
   for (const [key, rawValue] of tags) {
-    const tag = buildTag(key, rawValue)
+    if (rawValue === undefined) continue
 
-    if (tag !== undefined) {
-      serializedTags.push(tag)
+    if (String(rawValue).includes(',')) {
+      log.warn('[debugger:devtools_client] Skipping invalid tag value for %s', key)
+      continue
     }
+
+    serializedTags.push(`${key}:${rawValue}`)
   }
 
   return serializedTags.join(',')
-}
-
-/**
- * @param {string} key - The tag key.
- * @param {string | undefined} rawValue - The tag value.
- * @returns {string | undefined} The serialized tag.
- */
-function buildTag (key, rawValue) {
-  if (rawValue === undefined) {
-    return
-  }
-
-  if (!rawValue.includes(',')) {
-    return `${key}:${rawValue}`
-  }
-
-  log.warn('[debugger:devtools_client] Skipping invalid tag value for %s', key)
 }
