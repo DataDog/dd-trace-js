@@ -454,8 +454,8 @@ module.exports = {
 
     const innerAgent = agent
 
-    // EXP: minimal await to test if microtask yield is what matters
-    await new Promise(resolve => setImmediate(resolve))
+    // EXP: just a microtask
+    await Promise.resolve()
     const useTestAgent = false
 
     if (agent !== innerAgent) {
