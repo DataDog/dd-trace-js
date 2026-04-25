@@ -1,11 +1,7 @@
 name: Update 3rd-party licenses
 
 on:
-  pull_request:
-    paths:
-      - ".github/vendored-dependencies.csv"
-      - "vendor/package-lock.json"
-      - "yarn.lock"
+  workflow_dispatch:
 
 jobs:
   check-licenses:

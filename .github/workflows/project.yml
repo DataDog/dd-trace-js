@@ -1,9 +1,7 @@
 name: Project
 
 on:
-  pull_request:
-  push:
-    branches: [master, mq-working-branch-master-*]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}

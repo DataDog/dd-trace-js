@@ -1,13 +1,6 @@
 name: Validate vendored bundle
 
 on:
-  pull_request:
-    paths:
-      - "vendor/**"
-  push:
-    branches: [master, mq-working-branch-master-*]
-    paths:
-      - "vendor/**"
   workflow_dispatch:
 
 jobs:

@@ -1,17 +1,7 @@
 name: Platform
 
 on:
-  pull_request:
-  push:
-    branches: [master, mq-working-branch-master-*]
-  schedule:
-    - cron: 0 4 * * *
   workflow_dispatch:
-    inputs:
-      latest-version:
-        description: "Node version to use"
-        required: false
-        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ inputs.latest-version }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}

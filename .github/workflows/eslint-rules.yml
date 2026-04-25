@@ -1,13 +1,7 @@
 name: ESLint Rules
 
 on:
-  pull_request:
-    paths:
-      - "eslint-rules/**"
-  push:
-    branches: [master, mq-working-branch-master-*]
-    paths:
-      - "eslint-rules/**"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}

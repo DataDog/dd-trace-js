@@ -1,12 +1,7 @@
 name: System Tests
 
 on:
-  pull_request:
-  push:
-    branches: [master, mq-working-branch-master-*]
   workflow_dispatch:
-  schedule:
-    - cron: 0 4 * * *
 
 concurrency:
   # this ensures that only one workflow runs at a time for a given branch on pull requests

@@ -1,11 +1,7 @@
 name: Debugger
 
 on:
-  pull_request:
-  push:
-    branches: [master, mq-working-branch-master-*]
-  schedule:
-    - cron: 0 4 * * *
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}

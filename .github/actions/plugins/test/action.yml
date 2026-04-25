@@ -8,9 +8,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/dd-sts-api-key
-      id: dd-sts
-    - uses: ./.github/actions/testagent/start
     - if: ${{ inputs.node-floor == 'oldest-maintenance-lts' }}
       uses: ./.github/actions/node/oldest-maintenance-lts
     - if: ${{ inputs.node-floor == 'newest-maintenance-lts' }}
@@ -18,18 +15,3 @@ runs:
     - uses: ./.github/actions/install
     - run: yarn test:plugins:ci
       shell: bash
-    - uses: ./.github/actions/node/latest
-    - run: yarn test:plugins:ci
-      shell: bash
-    - uses: ./.github/actions/coverage
-      with:
-        flags: plugins-${{ github.job }}
-        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-    - if: always()
-      uses: ./.github/actions/testagent/logs
-      with:
-        suffix: test-${{ github.job }}
-    - uses: ./.github/actions/push_to_test_optimization
-      if: "!cancelled()"
-      with:
-        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

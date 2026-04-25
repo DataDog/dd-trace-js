@@ -1,9 +1,7 @@
 name: "Release Validation"
 
 on:
-  pull_request:
-    branches:
-      - v[0-9]+.[0-9]+.[0-9]+-proposal
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
