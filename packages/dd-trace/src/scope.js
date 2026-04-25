@@ -18,12 +18,13 @@ class Scope {
   activate (span, callback) {
     if (typeof callback !== 'function') return callback
 
-    if (span instanceof PublicSpan) {
-      cacheWrapper(span)
-      span = span?._span
-    } else {
-      span = undefined
-    }
+    span = span?._span
+    // if (span instanceof PublicSpan) {
+    //   cacheWrapper(span)
+    //   span = span?._span
+    // } else {
+    //   span = undefined
+    // }
 
     const oldStore = storage('legacy').getStore()
     const newStore = span ? storage('legacy').getStore(span._store) : oldStore

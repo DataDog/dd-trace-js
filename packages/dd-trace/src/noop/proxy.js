@@ -102,7 +102,8 @@ class NoopProxy {
       options.childOf = options.childOf._span
     }
 
-    return uncachedWrapper(this._tracer.startSpan.apply(this._tracer, arguments))
+    // return uncachedWrapper(this._tracer.startSpan.apply(this._tracer, arguments))
+    return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 
   inject (context, format, carrier) {
