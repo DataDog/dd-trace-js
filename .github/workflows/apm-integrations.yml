@@ -1,9 +1,7 @@
 name: APM Integrations
 
 on:
-  pull_request:
   push:
-    branches: [master, mq-working-branch-master-*]
   workflow_dispatch:
 
 concurrency:
