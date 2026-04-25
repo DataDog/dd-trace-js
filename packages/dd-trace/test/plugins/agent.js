@@ -21,8 +21,6 @@ let llmobsEvaluationMetricsRequests = []
 let sockets = []
 let agent = null
 let listener = null
-/** @type {Promise<void> | null} */
-let pendingClose = null
 /** @type {import('../../src/index') | null} */
 let tracer = null
 /** @type {string[]} */
@@ -424,11 +422,13 @@ module.exports = {
       config = [config]
     }
 
-    // EXP: wait for the previous server to fully close before reloading.
-    if (pendingClose) {
-      await pendingClose
-      pendingClose = null
-    }
+    // Yield one event-loop iteration so any pending I/O from the previous
+    // test (writer flushes finishing, sockets draining, the previous server
+    // emitting `'close'`) settles before we set up new tracer state.
+    // Without this yield the `ws` plugin tests intermittently fail with
+    // 5 s mocha timeouts on CI: the `connection`/`message` events are
+    // observed but `websocket.send` spans never reach the trace handler.
+    await new Promise(resolve => setImmediate(resolve))
 
     currentIntegrationName = getCurrentIntegrationName()
 
@@ -725,14 +725,13 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    pendingClose = /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
+    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
 
         resolve()
       })
     }))
-    return pendingClose
   },
 
   setAvailableEndpoints (newEndpoints) {
