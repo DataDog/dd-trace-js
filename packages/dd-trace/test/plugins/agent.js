@@ -21,6 +21,8 @@ let llmobsEvaluationMetricsRequests = []
 let sockets = []
 let agent = null
 let listener = null
+/** @type {Promise<void> | null} */
+let pendingClose = null
 /** @type {import('../../src/index') | null} */
 let tracer = null
 /** @type {string[]} */
@@ -422,6 +424,12 @@ module.exports = {
       config = [config]
     }
 
+    // EXP: wait for the previous server to fully close before reloading.
+    if (pendingClose) {
+      await pendingClose
+      pendingClose = null
+    }
+
     currentIntegrationName = getCurrentIntegrationName()
 
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
@@ -539,12 +547,8 @@ module.exports = {
 
     plugins = pluginNames
 
-    // EXP: capture tracer ref so old server's close doesn't null the new one
-    const tracerForThisServer = tracer
     server.on('close', () => {
-      if (tracer === tracerForThisServer) {
-        tracer = null
-      }
+      tracer = null
       dsmStats = []
       currentIntegrationName = null
     })
@@ -721,13 +725,14 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
+    pendingClose = /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
 
         resolve()
       })
     }))
+    return pendingClose
   },
 
   setAvailableEndpoints (newEndpoints) {
