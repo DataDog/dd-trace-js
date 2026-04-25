@@ -48,12 +48,14 @@ jobs:
       id-token: write
     strategy:
       matrix:
-        node-version: [oldest-maintenance-lts, newest-maintenance-lts, active-lts, latest]
+        node-version: [oldest, maintenance, active, latest]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - uses: ./.github/actions/node/${{ matrix.node-version }}
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
       - run: yarn test:trace:core:ci
       - uses: ./.github/actions/coverage
