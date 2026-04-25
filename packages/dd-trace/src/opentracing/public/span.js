@@ -15,10 +15,6 @@ const cache = createPrivateMap('dd.publicSpan')
  */
 class PublicSpan {
   constructor (span) {
-    if (span instanceof PublicSpan) {
-      return span
-    }
-
     const cached = cache.get(span)
     if (cached) return cached
 
