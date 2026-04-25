@@ -454,8 +454,6 @@ module.exports = {
 
     const innerAgent = agent
 
-    // EXP: process.nextTick (between microtask and setImmediate)
-    await new Promise(resolve => process.nextTick(resolve))
     const useTestAgent = false
 
     if (agent !== innerAgent) {
@@ -541,8 +539,12 @@ module.exports = {
 
     plugins = pluginNames
 
+    // EXP: capture tracer ref so old server's close doesn't null the new one
+    const tracerForThisServer = tracer
     server.on('close', () => {
-      tracer = null
+      if (tracer === tracerForThisServer) {
+        tracer = null
+      }
       dsmStats = []
       currentIntegrationName = null
     })
