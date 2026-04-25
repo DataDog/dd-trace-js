@@ -121,10 +121,11 @@ describe('Tracer', () => {
     it('should allow overriding the parent span', () => {
       const root = tracer.startSpan('root')
       const childOf = tracer.startSpan('parent')
-
       storage('legacy').run({ span: root }, () => {
-        tracer.trace('name', { childOf }, span => {
-          assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
+        storage('legacy').run({ span: childOf }, () => {
+          tracer.trace('name', {}, span => {
+            assert.strictEqual(span.context()._parentId.toString(10), childOf.context().toSpanId())
+          })
         })
       })
     })
