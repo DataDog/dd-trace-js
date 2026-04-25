@@ -422,14 +422,6 @@ module.exports = {
       config = [config]
     }
 
-    // Yield one event-loop iteration so any pending I/O from the previous
-    // test (writer flushes finishing, sockets draining, the previous server
-    // emitting `'close'`) settles before we set up new tracer state.
-    // Without this yield the `ws` plugin tests intermittently fail with
-    // 5 s mocha timeouts on CI: the `connection`/`message` events are
-    // observed but `websocket.send` spans never reach the trace handler.
-    await new Promise(resolve => setImmediate(resolve))
-
     currentIntegrationName = getCurrentIntegrationName()
 
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
@@ -462,6 +454,10 @@ module.exports = {
 
     const innerAgent = agent
 
+    // Yield one event-loop iteration so pending I/O from the previous test
+    // (writer flushes, socket drains, server `'close'` emission) settles
+    // before the new tracer wires routes and starts listening.
+    await new Promise(resolve => setImmediate(resolve))
     const useTestAgent = false
 
     if (agent !== innerAgent) {
