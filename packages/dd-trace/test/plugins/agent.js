@@ -454,8 +454,8 @@ module.exports = {
 
     const innerAgent = agent
 
-    // EXP: just a microtask
-    await Promise.resolve()
+    // EXP: process.nextTick (between microtask and setImmediate)
+    await new Promise(resolve => process.nextTick(resolve))
     const useTestAgent = false
 
     if (agent !== innerAgent) {
