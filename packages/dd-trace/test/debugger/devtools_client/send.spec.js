@@ -8,13 +8,13 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const JSONBuffer = require('../../../src/debugger/devtools_client/json-buffer')
-const { version } = require('../../../../../package.json')
+const { version: debuggerVersion } = require('../../../../../package.json')
 const { getRequestOptions } = require('./utils')
 
 require('../../setup/mocha')
 
-process.env.DD_ENV = 'my-env'
-process.env.DD_VERSION = 'my-version'
+const env = 'my-env'
+const version = 'my-version'
 const service = 'my-service'
 const commitSHA = 'my-commit-sha'
 const repositoryUrl = 'my-repository-url'
@@ -92,9 +92,9 @@ describe('input message http requests', function () {
     assert.strictEqual(opts.method, 'POST')
     assert.strictEqual(opts.path,
       '/debugger/v2/input?ddtags=' +
-        `env%3A${process.env.DD_ENV}%2C` +
-        `version%3A${process.env.DD_VERSION}%2C` +
-        `debugger_version%3A${version}%2C` +
+        `env%3A${env}%2C` +
+        `version%3A${version}%2C` +
+        `debugger_version%3A${debuggerVersion}%2C` +
         `host_name%3A${hostname}%2C` +
         `git.commit.sha%3A${commitSHA}%2C` +
         `git.repository_url%3A${repositoryUrl}`)
@@ -129,9 +129,10 @@ describe('input message http requests', function () {
     const opts = getRequestOptions(request)
     assert.strictEqual(opts.path,
       '/debugger/v2/input?ddtags=' +
-        `env%3A${process.env.DD_ENV}%2C` +
-        `version%3A${process.env.DD_VERSION}%2C` +
-        `debugger_version%3A${version}%2C` +
+        `env%3A${env}%2C` +
+        `version%3A${version}%2C` +
+        `debugger_version%3A${debuggerVersion}%2C` +
+        `host_name%3A${hostname}%2C` +
         `git.commit.sha%3A${commitSHA}`)
 
     done()
@@ -348,6 +349,8 @@ function getPayload (_message = message, _snapshot = snapshot) {
  */
 function createConfigMock (overrides = {}) {
   return {
+    env,
+    version,
     service,
     commitSHA,
     repositoryUrl,

@@ -6,7 +6,6 @@ const { stringify } = require('querystring')
 const { version } = require('../../../../../package.json')
 const request = require('../../exporters/common/request')
 const { GIT_COMMIT_SHA, GIT_REPOSITORY_URL } = require('../../plugins/util/tags')
-const { getValueFromEnvSources } = require('../../config/helper')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('../constants')
 const log = require('./log')
 const JSONBuffer = require('./json-buffer')
@@ -24,8 +23,8 @@ const hostname = getHostname()
 const service = config.service
 
 const ddtags = buildTags([
-  ['env', getValueFromEnvSources('DD_ENV')],
-  ['version', getValueFromEnvSources('DD_VERSION')],
+  ['env', config.env],
+  ['version', config.version],
   ['debugger_version', version],
   ['host_name', hostname],
   [GIT_COMMIT_SHA, config.commitSHA],
