@@ -1068,6 +1068,59 @@ versions.forEach((version) => {
       )
     })
 
+    contextNewVersions('intelligent test runner', () => {
+      it('skips test files reported by the skippable API', (done) => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: true,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/playwright-tests/landing-page-test.js',
+          },
+        }])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const skippedSuite = events.find(event =>
+              event.type === 'test_suite_end' &&
+              event.content.resource === 'test_suite.ci-visibility/playwright-tests/landing-page-test.js'
+            )
+            assert.ok(skippedSuite, 'landing-page-test.js should be reported as a skipped suite')
+            assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(skippedSuite.content.meta['test.skipped_by_itr'], 'true')
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta['test.itr.tests_skipping.enabled'], 'true')
+            assert.strictEqual(testSession.meta['_dd.ci.itr.tests_skipped'], 'true')
+            assert.strictEqual(testSession.meta['test.itr.tests_skipping.type'], 'suite')
+            assert.strictEqual(testSession.metrics['test.itr.tests_skipping.count'], 1)
+          }, 60000)
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${webAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests',
+            },
+          }
+        )
+
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => done()).catch(done)
+        })
+      })
+    })
+
     context('flaky test retries', () => {
       it('can automatically retry flaky tests', (done) => {
         receiver.setSettings({

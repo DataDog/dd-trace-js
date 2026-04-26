@@ -464,6 +464,13 @@
         "default": "false"
       }
     ],
+    "DD_CIVISIBILITY_V8_COVERAGE_WORKERS": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": [
       {
         "implementation": "B",

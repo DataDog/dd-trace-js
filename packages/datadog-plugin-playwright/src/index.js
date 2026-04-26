@@ -40,6 +40,12 @@ const {
   TEST_SUITE,
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_TYPE,
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_CODE_COVERAGE_ENABLED,
+  ITR_CORRELATION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -76,6 +82,11 @@ class PlaywrightPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isSuitesSkipped,
+      numSkippedSuites,
+      itrCorrelationId,
       onDone,
     }) => {
       this.testModuleSpan.setTag(TEST_STATUS, status)
@@ -99,6 +110,28 @@ class PlaywrightPlugin extends CiPlugin {
 
       if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+      }
+      if (isCodeCoverageEnabled) {
+        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, 'true')
+        this.testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, 'true')
+      }
+      if (isSuitesSkippingEnabled) {
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, 'true')
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_TYPE, 'suite')
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_TYPE, 'suite')
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_COUNT, numSkippedSuites || 0)
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, numSkippedSuites || 0)
+      }
+      if (isSuitesSkipped) {
+        this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+      } else if (isSuitesSkippingEnabled) {
+        this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
+        this.testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
+      }
+      if (itrCorrelationId) {
+        this.testSessionSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
 
       this.testModuleSpan.finish()
@@ -156,6 +189,7 @@ class PlaywrightPlugin extends CiPlugin {
       ctx.currentStore = { ...store, testSuiteSpan }
 
       this._testSuiteSpansByTestSuiteAbsolutePath.set(testSuiteAbsolutePath, testSuiteSpan)
+      this._testSuiteAbsolutePathBySpan.set(testSuiteSpan, testSuiteAbsolutePath)
 
       return ctx.currentStore
     })
@@ -173,8 +207,37 @@ class PlaywrightPlugin extends CiPlugin {
         this.numFailedSuites++
       }
 
+      // Export TIA coverage for this suite if workers reported any files.
+      const absolutePath = this._testSuiteAbsolutePathBySpan?.get(testSuiteSpan)
+      const coverageFiles = absolutePath && this._coverageFilesByTestSuite?.get(absolutePath)
+      if (coverageFiles?.size && this.tracer._exporter?.exportCoverage) {
+        const { _traceId, _spanId } = testSuiteSpan.context()
+        const relativeCoverageFiles = [...coverageFiles, absolutePath]
+          .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.rootDir))
+        this.tracer._exporter.exportCoverage({
+          sessionId: _traceId,
+          suiteId: _spanId,
+          files: relativeCoverageFiles,
+        })
+        this._coverageFilesByTestSuite.delete(absolutePath)
+      }
+
       testSuiteSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
+    })
+
+    // Aggregate per-test coverage payloads reported by workers so we can
+    // export one coverage event per test suite once it finishes.
+    this._coverageFilesByTestSuite = new Map()
+    this._testSuiteAbsolutePathBySpan = new Map()
+    this.addSub('ci:playwright:worker-report:coverage', ({ testSuiteAbsolutePath, coverageFiles }) => {
+      if (!testSuiteAbsolutePath || !coverageFiles?.length) return
+      let set = this._coverageFilesByTestSuite.get(testSuiteAbsolutePath)
+      if (!set) {
+        set = new Set()
+        this._coverageFilesByTestSuite.set(testSuiteAbsolutePath, set)
+      }
+      for (const file of coverageFiles) set.add(file)
     })
 
     this.addSub('ci:playwright:test:page-goto', ({

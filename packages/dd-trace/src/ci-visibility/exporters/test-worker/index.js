@@ -8,6 +8,7 @@ const {
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_LOGS_PAYLOAD_CODE,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
 } = require('../../../plugins/util/test')
@@ -40,6 +41,9 @@ function getInterprocessTraceCode () {
 function getInterprocessCoverageCode () {
   if (getEnvironmentVariable('JEST_WORKER_ID')) {
     return JEST_WORKER_COVERAGE_PAYLOAD_CODE
+  }
+  if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
+    return PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE
   }
   return null
 }

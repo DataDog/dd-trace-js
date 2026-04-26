@@ -10,10 +10,17 @@ const {
   parseAnnotations,
   getTestSuitePath,
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
+  PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
   logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
+const {
+  startV8Coverage,
+  getV8CoverageCollector,
+} = require('../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
+const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
+const { isTrue } = require('../../dd-trace/src/util')
 const log = require('../../dd-trace/src/log')
 const {
   getValueFromEnvSources,
@@ -33,11 +40,14 @@ const knownTestsCh = channel('ci:playwright:known-tests')
 const testManagementTestsCh = channel('ci:playwright:test-management-tests')
 const modifiedFilesCh = channel('ci:playwright:modified-files')
 const isModifiedCh = channel('ci:playwright:test:is-modified')
+const skippableSuitesCh = channel('ci:playwright:test-suite:skippable')
+const itrSkippedSuitesCh = channel('ci:playwright:itr:skipped-suites')
 
 const testSuiteStartCh = channel('ci:playwright:test-suite:start')
 const testSuiteFinishCh = channel('ci:playwright:test-suite:finish')
 
 const workerReportCh = channel('ci:playwright:worker:report')
+const workerReportCoverageCh = channel('ci:playwright:worker-report:coverage')
 const testPageGotoCh = channel('ci:playwright:test:page-goto')
 
 const testToCtx = new WeakMap()
@@ -76,6 +86,13 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
+// ITR / TIA (Node-side V8 coverage)
+let isCodeCoverageEnabledForRun = false
+let isSuitesSkippingEnabledForRun = false
+let suitesToSkip = []
+let skippedSuites = []
+let isSuitesSkipped = false
+let itrCorrelationId = ''
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 const newTestsWithDynamicNames = new Set()
@@ -527,6 +544,14 @@ function dispatcherRunWrapperNew (run) {
       testGroups = testGroups.filter(group => group.tests.length > 0)
     }
 
+    // Filter out ITR-skipped test files so workers never execute them.
+    if (isSuitesSkippingEnabledForRun) {
+      for (const group of testGroups) {
+        group.tests = group.tests.filter(test => !test._ddIsSkippedByItr)
+      }
+      testGroups = testGroups.filter(group => group.tests.length > 0)
+    }
+
     if (!this._allTests) {
       // Removed in https://github.com/microsoft/playwright/commit/1e52c37b254a441cccf332520f60225a5acc14c7
       // Not available from >=1.44.0
@@ -664,13 +689,31 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+        isCodeCoverageEnabledForRun = !!libraryConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabledForRun = !!libraryConfig.isSuitesSkippingEnabled
       }
     } catch (e) {
       isEarlyFlakeDetectionEnabled = false
       isKnownTestsEnabled = false
       isTestManagementTestsEnabled = false
       isImpactedTestsEnabled = false
+      isCodeCoverageEnabledForRun = false
+      isSuitesSkippingEnabledForRun = false
       log.error('Playwright session start error', e)
+    }
+
+    if (isSuitesSkippingEnabledForRun) {
+      try {
+        const { err: skippableErr, skippableSuites: receivedSkippableSuites, itrCorrelationId: receivedCorrelationId } =
+          await getChannelPromise(skippableSuitesCh)
+        if (!skippableErr) {
+          suitesToSkip = receivedSkippableSuites || []
+          itrCorrelationId = receivedCorrelationId || ''
+        }
+      } catch (err) {
+        log.error('Playwright skippable suites error', err)
+        isSuitesSkippingEnabledForRun = false
+      }
     }
 
     if (isKnownTestsEnabled && satisfies(playwrightVersion, MINIMUM_SUPPORTED_VERSION_RANGE_EFD)) {
@@ -807,6 +850,11 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled: isCodeCoverageEnabledForRun,
+      isSuitesSkippingEnabled: isSuitesSkippingEnabledForRun,
+      isSuitesSkipped,
+      numSkippedSuites: skippedSuites.length,
+      itrCorrelationId,
       onDone,
     })
     await flushWait
@@ -929,11 +977,12 @@ addHook({
   name: 'playwright',
   file: 'lib/runner/loadUtils.js',
   versions: ['>=1.38.0'],
-}, (loadUtilsPackage) => {
+}, (loadUtilsPackage, playwrightVersion) => {
   const oldCreateRootSuite = loadUtilsPackage.createRootSuite
 
   async function newCreateRootSuite () {
-    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled) {
+    if (!isKnownTestsEnabled && !isTestManagementTestsEnabled && !isImpactedTestsEnabled &&
+        !(isSuitesSkippingEnabledForRun && suitesToSkip.length)) {
       return oldCreateRootSuite.apply(this, arguments)
     }
 
@@ -942,6 +991,30 @@ addHook({
     const rootSuite = createRootSuiteReturnValue.rootSuite || createRootSuiteReturnValue
 
     const allTests = rootSuite.allTests()
+
+    if (isSuitesSkippingEnabledForRun && suitesToSkip.length) {
+      // The skippable API returns suite paths relative to the repository
+      // root (that's how coverage is uploaded). Playwright's `rootDir` is
+      // the testDir, which can be a subdirectory, so we must resolve test
+      // file paths against the repository root for a correct comparison.
+      const repoRoot = getRepositoryRoot() || rootDir
+      const skippedFiles = new Set()
+      const skipSet = new Set(suitesToSkip)
+      for (const test of allTests) {
+        const testSuiteAbsolutePath = test._requireFile
+        const relative = getTestSuitePath(testSuiteAbsolutePath, repoRoot)
+        if (skipSet.has(relative)) {
+          test._ddIsSkippedByItr = true
+          test.expectedStatus = 'skipped'
+          skippedFiles.add(relative)
+        }
+      }
+      if (skippedFiles.size) {
+        skippedSuites = [...skippedFiles]
+        isSuitesSkipped = true
+        itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion: playwrightVersion })
+      }
+    }
 
     if (isTestManagementTestsEnabled) {
       const fileSuitesWithManagedTestsToProjects = new Map()
@@ -1090,15 +1163,28 @@ addHook({
       ...this._extraEnv,
       // Used to detect that we're in a playwright worker
       DD_PLAYWRIGHT_WORKER: '1',
+      // Enable V8 precise coverage in the worker when the backend has
+      // turned on code coverage / TIA **and** the user has opted in with
+      // DD_CIVISIBILITY_V8_COVERAGE_WORKERS=1. Playwright's app code runs
+      // in the browser, so Node-side coverage is only meaningful for
+      // tests that exercise Node helpers/fixtures; we keep it opt-in to
+      // avoid adding inspector overhead to browser-heavy suites.
+      ...(isCodeCoverageEnabledForRun &&
+        isTrue(getValueFromEnvSources('DD_CIVISIBILITY_V8_COVERAGE_WORKERS'))
+        ? { DD_CIVISIBILITY_V8_COVERAGE_WORKERS: '1' }
+        : {}),
     }
 
     const res = await startRunner.apply(this, arguments)
 
     // We add a new listener to `this.process`, which is represents the worker
     this.process.on('message', (message) => {
-      // These messages are [code, payload]. The payload is test data
-      if (Array.isArray(message) && message[0] === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
-        workerReportCh.publish(message[1])
+      if (!Array.isArray(message)) return
+      const [code, payload] = message
+      if (code === PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE) {
+        workerReportCh.publish(payload)
+      } else if (code === PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE) {
+        workerReportCoverageCh.publish(payload)
       }
     })
 
@@ -1153,11 +1239,23 @@ addHook({
   let steps = []
   const stepInfoByStepId = {}
 
+  // Lazy V8 coverage startup in the worker. Controlled by the main process
+  // via the DD_CIVISIBILITY_V8_COVERAGE_WORKERS env var set on the worker's
+  // `_extraEnv` after the main fetched the library configuration.
+  let workerV8Collector = null
+  if (isTrue(getValueFromEnvSources('DD_CIVISIBILITY_V8_COVERAGE_WORKERS'))) {
+    workerV8Collector = getV8CoverageCollector() || startV8Coverage()
+  }
+
   shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test) {
     if (test.expectedStatus === 'skipped') {
       return _runTest.apply(this, arguments)
     }
     steps = []
+
+    // Reset the V8 coverage baseline so the delta we compute after the test
+    // reflects only what this test touched.
+    if (workerV8Collector) workerV8Collector.resetBaseline()
 
     const {
       _requireFile: testSuiteAbsolutePath,
@@ -1274,6 +1372,18 @@ addHook({
 
     // Wait for the properties to be received
     await ddPropertiesPromise
+
+    // Emit per-test coverage delta to the main process. The main aggregates
+    // per-suite and exports once testSuiteFinishCh fires.
+    if (workerV8Collector && process.send) {
+      const coverageFiles = workerV8Collector.getFilesCoveredSinceLastSnapshot()
+      if (coverageFiles.length) {
+        process.send([
+          PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
+          { testSuiteAbsolutePath, coverageFiles },
+        ])
+      }
+    }
 
     testFinishCh.publish({
       testStatus: STATUS_TO_TEST_STATUS[status],
