@@ -19,6 +19,10 @@ const {
   startV8Coverage,
   getV8CoverageCollector,
 } = require('../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
+const {
+  resolveCoverageToSourceFiles,
+  resetCache: resetCoverageSourceMapCache,
+} = require('../../dd-trace/src/ci-visibility/code-coverage/source-map-resolver')
 const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
 const { isTrue } = require('../../dd-trace/src/util')
 const log = require('../../dd-trace/src/log')
@@ -57,6 +61,8 @@ const testSuiteToErrors = new Map()
 const testsToTestStatuses = new Map()
 
 const RUM_FLUSH_WAIT_TIME = Number(getValueFromEnvSources('DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS')) || 500
+const PLAYWRIGHT_BROWSER_COVERAGE_ENABLED_ENV = 'DATADOG_PLAYWRIGHT_BROWSER_COVERAGE_ENABLED'
+const PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT_ENV = 'DATADOG_PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT'
 
 let applyRepeatEachIndex = null
 
@@ -98,6 +104,7 @@ let quarantinedButNotAttemptToFixFqns = new Set()
 const newTestsWithDynamicNames = new Set()
 let rootDir = ''
 let sessionProjects = []
+let activeBrowserCoverage = null
 
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
@@ -298,6 +305,182 @@ function getChannelPromise (channelToPublishTo, params) {
   return new Promise(resolve => {
     channelToPublishTo.publish({ onDone: resolve, ...params })
   })
+}
+
+function isBrowserCoverageEnabledForWorker () {
+  return isTrue(getValueFromEnvSources(PLAYWRIGHT_BROWSER_COVERAGE_ENABLED_ENV))
+}
+
+function getBrowserCoverageRepositoryRoot () {
+  return getValueFromEnvSources(PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT_ENV) || process.cwd()
+}
+
+/**
+ * Execute a CDP command and swallow failures so coverage never breaks a test.
+ *
+ * @param {{send: Function}} session
+ * @param {string} method
+ * @param {object} [params]
+ * @returns {Promise<object|null>}
+ */
+async function cdpCommand (session, method, params) {
+  try {
+    return await session.send(method, params)
+  } catch (err) {
+    log.debug('Playwright CDP command %s failed: %s', method, err?.message)
+    return null
+  }
+}
+
+function isSupportedCoverageUrl (url) {
+  try {
+    const { protocol } = new URL(url)
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'file:'
+  } catch {
+    return false
+  }
+}
+
+function shouldSkipCoverageUrl (url) {
+  if (!isSupportedCoverageUrl(url)) return true
+  return url.startsWith('chrome-extension://') ||
+    url.startsWith('devtools://') ||
+    url.startsWith('data:') ||
+    url.startsWith('blob:') ||
+    url.includes('__playwright') ||
+    url.includes('playwright-core')
+}
+
+/**
+ * Extract executed V8 block ranges from a CDP precise coverage snapshot.
+ *
+ * @param {{result?: Array}} payload
+ * @returns {Array<{scriptId: string, url: string, ranges: number[]}>}
+ */
+function extractHitCoverage (payload) {
+  if (!payload || !Array.isArray(payload.result)) return []
+  const out = []
+  for (const script of payload.result) {
+    const url = script.url
+    if (!url || shouldSkipCoverageUrl(url)) continue
+
+    const ranges = []
+    if (Array.isArray(script.functions)) {
+      for (const fn of script.functions) {
+        if (!Array.isArray(fn.ranges)) continue
+        for (const range of fn.ranges) {
+          if (range.count > 0) {
+            ranges.push(range.startOffset, range.endOffset)
+          }
+        }
+      }
+    }
+    if (ranges.length) {
+      out.push({ scriptId: script.scriptId, url, ranges })
+    }
+  }
+  return out
+}
+
+async function addScriptSource (session, coverage) {
+  const { scriptId } = coverage
+  if (scriptId) {
+    const source = await cdpCommand(session, 'Debugger.getScriptSource', { scriptId })
+    if (typeof source?.scriptSource === 'string') {
+      coverage.source = source.scriptSource
+    }
+  }
+  delete coverage.scriptId
+}
+
+async function addScriptSources (session, coverages) {
+  await Promise.all(coverages.map(coverage => addScriptSource(session, coverage)))
+  return coverages
+}
+
+async function detachCdpSession (session) {
+  try {
+    await session.detach()
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Start browser V8 coverage for a Playwright page via Chromium CDP.
+ *
+ * @param {object} page
+ * @returns {Promise<void>}
+ */
+async function startBrowserCoverageForPage (page) {
+  if (!activeBrowserCoverage || !page?.context) return
+  if (activeBrowserCoverage.pageStatesByPage.has(page)) return
+
+  let session
+  try {
+    session = await page.context().newCDPSession(page)
+  } catch (err) {
+    log.debug('Playwright CDP coverage is unavailable for this page: %s', err?.message)
+    return
+  }
+
+  const enabled = await cdpCommand(session, 'Profiler.enable')
+  if (enabled === null) {
+    await detachCdpSession(session)
+    return
+  }
+
+  const started = await cdpCommand(session, 'Profiler.startPreciseCoverage', {
+    callCount: true,
+    detailed: false,
+  })
+  if (started === null) {
+    await detachCdpSession(session)
+    return
+  }
+
+  await cdpCommand(session, 'Debugger.enable')
+
+  const pageState = { session }
+  activeBrowserCoverage.pageStatesByPage.set(page, pageState)
+  activeBrowserCoverage.pageStates.push(pageState)
+}
+
+async function takeBrowserCoverageForPage (pageState) {
+  const { session } = pageState
+  try {
+    const snapshot = await cdpCommand(session, 'Profiler.takePreciseCoverage')
+    await cdpCommand(session, 'Profiler.stopPreciseCoverage')
+    if (!snapshot) return []
+
+    const coverages = extractHitCoverage(snapshot)
+    if (!coverages.length) return []
+
+    await addScriptSources(session, coverages)
+    return coverages
+  } finally {
+    await detachCdpSession(session)
+  }
+}
+
+async function finishBrowserCoverage () {
+  const coverageState = activeBrowserCoverage
+  activeBrowserCoverage = null
+
+  if (!coverageState?.pageStates.length) return []
+
+  const coverageLists = await Promise.all(coverageState.pageStates.map(takeBrowserCoverageForPage))
+  const coverages = coverageLists.flat()
+  if (!coverages.length) return []
+
+  try {
+    return await resolveCoverageToSourceFiles(coverages, {
+      repositoryRoot: getBrowserCoverageRepositoryRoot(),
+    })
+  } catch (err) {
+    log.debug('Playwright CDP coverage resolution failed: %s', err?.message)
+    return []
+  }
 }
 
 // Inspired by https://github.com/microsoft/playwright/blob/2b77ed4d7aafa85a600caa0b0d101b72c8437eeb/packages/playwright/src/reporters/base.ts#L293
@@ -669,6 +852,37 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     let onDone
 
     rootDir = getRootDir(this, config)
+    startedSuites = []
+    remainingTestsByFile = {}
+    testSuiteToCtx.clear()
+    testSuiteToTestStatuses.clear()
+    testSuiteToErrors.clear()
+    testsToTestStatuses.clear()
+    isKnownTestsEnabled = false
+    isEarlyFlakeDetectionEnabled = false
+    earlyFlakeDetectionNumRetries = 0
+    isEarlyFlakeDetectionFaulty = false
+    earlyFlakeDetectionFaultyThreshold = 0
+    isFlakyTestRetriesEnabled = false
+    flakyTestRetriesCount = 0
+    knownTests = {}
+    isTestManagementTestsEnabled = false
+    testManagementAttemptToFixRetries = 0
+    testManagementTests = {}
+    isImpactedTestsEnabled = false
+    modifiedFiles = {}
+    isCodeCoverageEnabledForRun = false
+    isSuitesSkippingEnabledForRun = false
+    suitesToSkip = []
+    skippedSuites = []
+    isSuitesSkipped = false
+    itrCorrelationId = ''
+    sessionProjects = []
+    activeBrowserCoverage = null
+    quarantinedOrDisabledTestsAttemptToFix.length = 0
+    quarantinedButNotAttemptToFixFqns = new Set()
+    newTestsWithDynamicNames.clear()
+    resetCoverageSourceMapCache()
 
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
@@ -706,12 +920,18 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       try {
         const { err: skippableErr, skippableSuites: receivedSkippableSuites, itrCorrelationId: receivedCorrelationId } =
           await getChannelPromise(skippableSuitesCh)
-        if (!skippableErr) {
+        if (skippableErr) {
+          suitesToSkip = []
+          itrCorrelationId = ''
+          isSuitesSkippingEnabledForRun = false
+        } else {
           suitesToSkip = receivedSkippableSuites || []
           itrCorrelationId = receivedCorrelationId || ''
         }
       } catch (err) {
         log.error('Playwright skippable suites error', err)
+        suitesToSkip = []
+        itrCorrelationId = ''
         isSuitesSkippingEnabledForRun = false
       }
     }
@@ -1159,10 +1379,17 @@ addHook({
   versions: ['>=1.38.0'],
 }, (processHostPackage) => {
   shimmer.wrap(processHostPackage.ProcessHost.prototype, 'startRunner', startRunner => async function () {
+    const repositoryRoot = getRepositoryRoot() || rootDir
     this._extraEnv = {
       ...this._extraEnv,
       // Used to detect that we're in a playwright worker
       DD_PLAYWRIGHT_WORKER: '1',
+      ...(isCodeCoverageEnabledForRun
+        ? {
+            [PLAYWRIGHT_BROWSER_COVERAGE_ENABLED_ENV]: '1',
+            [PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT_ENV]: repositoryRoot,
+          }
+        : {}),
       // Enable V8 precise coverage in the worker when the backend has
       // turned on code coverage / TIA **and** the user has opted in with
       // DD_CIVISIBILITY_V8_COVERAGE_WORKERS=1. Playwright's app code runs
@@ -1200,6 +1427,10 @@ addHook({
   versions: ['>=1.38.0'],
 }, (pagePackage) => {
   shimmer.wrap(pagePackage.Page.prototype, 'goto', goto => async function (url, options) {
+    if (activeBrowserCoverage) {
+      await startBrowserCoverageForPage(this)
+    }
+
     const response = await goto.apply(this, arguments)
 
     const page = this
@@ -1246,12 +1477,19 @@ addHook({
   if (isTrue(getValueFromEnvSources('DD_CIVISIBILITY_V8_COVERAGE_WORKERS'))) {
     workerV8Collector = getV8CoverageCollector() || startV8Coverage()
   }
+  const isBrowserCoverageEnabled = isBrowserCoverageEnabledForWorker()
 
   shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test) {
     if (test.expectedStatus === 'skipped') {
       return _runTest.apply(this, arguments)
     }
     steps = []
+    if (isBrowserCoverageEnabled) {
+      activeBrowserCoverage = {
+        pageStates: [],
+        pageStatesByPage: new WeakMap(),
+      }
+    }
 
     // Reset the V8 coverage baseline so the delta we compute after the test
     // reflects only what this test touched.
@@ -1284,6 +1522,32 @@ addHook({
     // TODO - In the future we may need to implement a mechanism to send test properties
     // to the worker process before _runTest is called
     testStartCh.runStores(testCtx, () => {
+      if (isBrowserCoverageEnabled) {
+        let existsBeforeEachCoverageHook = false
+        for (const hook of test.parent._hooks) {
+          if (hook.type === 'beforeEach' && hook._ddCoverageHook) {
+            existsBeforeEachCoverageHook = true
+            break
+          }
+        }
+        if (!existsBeforeEachCoverageHook) {
+          test.parent._hooks.push({
+            type: 'beforeEach',
+            fn: async function ({ page }) {
+              try {
+                if (page) {
+                  await startBrowserCoverageForPage(page)
+                }
+              } catch (e) {
+                log.error('beforeEach coverage hook error', e)
+              }
+            },
+            title: 'beforeEach coverage hook',
+            _ddCoverageHook: true,
+          })
+        }
+      }
+
       let existAfterEachHook = false
 
       // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
@@ -1324,6 +1588,15 @@ addHook({
               // ignore errors
               log.error('afterEach hook error', e)
             }
+            if (isBrowserCoverageEnabled) {
+              const browserCoverageFiles = await finishBrowserCoverage()
+              if (browserCoverageFiles.length && process.send) {
+                process.send([
+                  PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
+                  { testSuiteAbsolutePath, coverageFiles: browserCoverageFiles },
+                ])
+              }
+            }
           },
           title: 'afterEach hook',
           _ddHook: true,
@@ -1334,7 +1607,14 @@ addHook({
 
       testInfo = this._currentTest
     })
-    await res
+    try {
+      await res
+    } catch (err) {
+      if (isBrowserCoverageEnabled) {
+        await finishBrowserCoverage()
+      }
+      throw err
+    }
 
     const { status, error, annotations, retry, testId } = testInfo
 
@@ -1373,16 +1653,22 @@ addHook({
     // Wait for the properties to be received
     await ddPropertiesPromise
 
+    const coverageFiles = []
+    if (workerV8Collector) {
+      coverageFiles.push(...workerV8Collector.getFilesCoveredSinceLastSnapshot())
+    }
+    if (isBrowserCoverageEnabled) {
+      coverageFiles.push(...await finishBrowserCoverage())
+    }
+
     // Emit per-test coverage delta to the main process. The main aggregates
     // per-suite and exports once testSuiteFinishCh fires.
-    if (workerV8Collector && process.send) {
-      const coverageFiles = workerV8Collector.getFilesCoveredSinceLastSnapshot()
-      if (coverageFiles.length) {
-        process.send([
-          PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
-          { testSuiteAbsolutePath, coverageFiles },
-        ])
-      }
+    if (coverageFiles.length && process.send) {
+      const dedupedCoverageFiles = [...new Set(coverageFiles)]
+      process.send([
+        PLAYWRIGHT_WORKER_COVERAGE_PAYLOAD_CODE,
+        { testSuiteAbsolutePath, coverageFiles: dedupedCoverageFiles },
+      ])
     }
 
     testFinishCh.publish({

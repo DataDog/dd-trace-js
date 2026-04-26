@@ -1119,6 +1119,62 @@ versions.forEach((version) => {
           eventsPromise.then(() => done()).catch(done)
         })
       })
+
+      it('reports zero-config browser code coverage for web app source files', async () => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+
+        const zeroConfigWebAppServer = createWebAppServer({ skipIstanbulFixture: true })
+        const zeroConfigWebAppPort = await new Promise((resolve, reject) => {
+          zeroConfigWebAppServer.once('error', reject)
+          zeroConfigWebAppServer.listen(0, (err) => {
+            zeroConfigWebAppServer.off('error', reject)
+            if (err) return reject(err)
+            resolve(zeroConfigWebAppServer.address().port)
+          })
+        })
+
+        const coveragePromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+            const coveredFiles = payloads
+              .flatMap(({ payload }) => payload)
+              .flatMap(({ content: { coverages } }) => coverages)
+              .flatMap(({ files }) => files)
+              .map(({ filename }) => filename)
+
+            assertObjectContains(coveredFiles, [
+              'src/greeting.js',
+              'src/math.js',
+              'ci-visibility/playwright-tests-test-capabilities/passing-test.js',
+            ])
+          }, 60000)
+
+        childProcess = exec(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              PW_BASE_URL: `http://localhost:${zeroConfigWebAppPort}`,
+              TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
+            },
+          }
+        )
+
+        try {
+          await Promise.all([
+            once(childProcess, 'exit'),
+            coveragePromise,
+          ])
+        } finally {
+          await new Promise(resolve => zeroConfigWebAppServer.close(resolve))
+        }
+      })
     })
 
     context('flaky test retries', () => {
@@ -2213,9 +2269,9 @@ versions.forEach((version) => {
 
             assert.ok(metadataDicts.length > 0)
             metadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
               assert.strictEqual(metadata.test[DD_CAPABILITIES_AUTO_TEST_RETRIES], '1')
               if (satisfies(version, '>=1.38.0') || version === 'latest') {
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], '1')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], '1')
@@ -2223,6 +2279,7 @@ versions.forEach((version) => {
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
               } else {
+                assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], undefined)
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], undefined)
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_IMPACTED_TESTS], undefined)
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE], undefined)

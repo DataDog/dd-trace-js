@@ -1,5 +1,7 @@
 'use strict'
 
+const path = require('node:path')
+
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
@@ -64,6 +66,9 @@ class PlaywrightPlugin extends CiPlugin {
     super(...args)
 
     this._testSuiteSpansByTestSuiteAbsolutePath = new Map()
+    this._coverageFilesByTestSuite = new Map()
+    this._finishedTestSuites = new Set()
+    this._testSuiteAbsolutePathBySpan = new Map()
     this.numFailedTests = 0
     this.numFailedSuites = 0
 
@@ -146,6 +151,11 @@ class PlaywrightPlugin extends CiPlugin {
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
       this.numFailedTests = 0
+      this.numFailedSuites = 0
+      this._coverageFilesByTestSuite.clear()
+      this._finishedTestSuites.clear()
+      this._testSuiteAbsolutePathBySpan.clear()
+      this._testSuiteSpansByTestSuiteAbsolutePath.clear()
     })
 
     this.addBind('ci:playwright:test-suite:start', (ctx) => {
@@ -210,16 +220,11 @@ class PlaywrightPlugin extends CiPlugin {
       // Export TIA coverage for this suite if workers reported any files.
       const absolutePath = this._testSuiteAbsolutePathBySpan?.get(testSuiteSpan)
       const coverageFiles = absolutePath && this._coverageFilesByTestSuite?.get(absolutePath)
-      if (coverageFiles?.size && this.tracer._exporter?.exportCoverage) {
-        const { _traceId, _spanId } = testSuiteSpan.context()
-        const relativeCoverageFiles = [...coverageFiles, absolutePath]
-          .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.rootDir))
-        this.tracer._exporter.exportCoverage({
-          sessionId: _traceId,
-          suiteId: _spanId,
-          files: relativeCoverageFiles,
-        })
-        this._coverageFilesByTestSuite.delete(absolutePath)
+      if (absolutePath) {
+        this._finishedTestSuites.add(absolutePath)
+      }
+      if (coverageFiles?.size) {
+        this._exportCoverageFiles(testSuiteSpan, absolutePath, coverageFiles)
       }
 
       testSuiteSpan.finish()
@@ -228,8 +233,6 @@ class PlaywrightPlugin extends CiPlugin {
 
     // Aggregate per-test coverage payloads reported by workers so we can
     // export one coverage event per test suite once it finishes.
-    this._coverageFilesByTestSuite = new Map()
-    this._testSuiteAbsolutePathBySpan = new Map()
     this.addSub('ci:playwright:worker-report:coverage', ({ testSuiteAbsolutePath, coverageFiles }) => {
       if (!testSuiteAbsolutePath || !coverageFiles?.length) return
       let set = this._coverageFilesByTestSuite.get(testSuiteAbsolutePath)
@@ -238,6 +241,10 @@ class PlaywrightPlugin extends CiPlugin {
         this._coverageFilesByTestSuite.set(testSuiteAbsolutePath, set)
       }
       for (const file of coverageFiles) set.add(file)
+      if (this._finishedTestSuites.has(testSuiteAbsolutePath)) {
+        const testSuiteSpan = this._testSuiteSpansByTestSuiteAbsolutePath.get(testSuiteAbsolutePath)
+        this._exportCoverageFiles(testSuiteSpan, testSuiteAbsolutePath, set)
+      }
     })
 
     this.addSub('ci:playwright:test:page-goto', ({
@@ -531,6 +538,31 @@ class PlaywrightPlugin extends CiPlugin {
 
       span.finish()
     })
+  }
+
+  /**
+   * Export a Playwright suite coverage event from worker-reported files.
+   *
+   * @param {{ context: Function } | undefined} testSuiteSpan
+   * @param {string | undefined} absolutePath
+   * @param {Set<string> | undefined} coverageFiles
+   * @returns {void}
+   */
+  _exportCoverageFiles (testSuiteSpan, absolutePath, coverageFiles) {
+    if (!testSuiteSpan || !absolutePath || !coverageFiles?.size || !this.tracer._exporter?.exportCoverage) return
+
+    const { _traceId, _spanId } = testSuiteSpan.context()
+    const relativeCoverageFiles = [...coverageFiles, absolutePath]
+      .map(filename => {
+        if (!path.isAbsolute(filename)) return filename
+        return getTestSuitePath(filename, this.repositoryRoot || this.rootDir)
+      })
+    this.tracer._exporter.exportCoverage({
+      sessionId: _traceId,
+      suiteId: _spanId,
+      files: relativeCoverageFiles,
+    })
+    this._coverageFilesByTestSuite.delete(absolutePath)
   }
 
   // TODO: this runs both in worker and main process (main process: skipped tests that do not go through _runTest)

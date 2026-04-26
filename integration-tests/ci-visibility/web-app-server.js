@@ -4,10 +4,44 @@
 const http = require('http')
 const coverage = require('../ci-visibility/fixtures/istanbul-map-fixture.json')
 
-function createWebAppServer () {
+// Tiny single-line bundle plus source map used to validate zero-config CDP
+// coverage against original web-app source files.
+const BUNDLED_BUILT_SOURCE =
+  'function greet(){document.body.classList.add("greeted");}' +
+  'function add(a,b){return a+b;}greet();add(1,2);\n' +
+  '//# sourceMappingURL=bundle.js.map\n'
+const BUNDLED_SOURCE_MAP = {
+  version: 3,
+  file: 'bundle.js',
+  sources: ['src/greeting.js', 'src/math.js'],
+  names: [],
+  mappings: 'AAAA,wCCAA',
+}
+
+function createWebAppServer ({ skipIstanbulFixture = false } = {}) {
   const server = http.createServer((req, res) => {
+    if (req.url === '/bundle.js') {
+      res.setHeader('Content-Type', 'application/javascript')
+      res.writeHead(200)
+      res.end(BUNDLED_BUILT_SOURCE)
+      return
+    }
+    if (req.url === '/bundle.js.map') {
+      res.setHeader('Content-Type', 'application/json')
+      res.writeHead(200)
+      res.end(JSON.stringify(BUNDLED_SOURCE_MAP))
+      return
+    }
     res.setHeader('Content-Type', 'text/html')
     res.writeHead(200)
+    const istanbulScript = skipIstanbulFixture
+      ? ''
+      : `<script>
+          window.__coverage__ = ${JSON.stringify(coverage)}
+        </script>`
+    const bundleScript = skipIstanbulFixture
+      ? '<script src="/bundle.js"></script>'
+      : ''
     res.end(`
       <!DOCTYPE html>
       <html>
@@ -25,9 +59,8 @@ function createWebAppServer () {
         <body>
           <div class="hello-world">Hello World</div>
         </body>
-        <script>
-          window.__coverage__ = ${JSON.stringify(coverage)}
-        </script>
+        ${bundleScript}
+        ${istanbulScript}
       </html>
     `)
   })
