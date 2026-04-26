@@ -35,7 +35,14 @@ const {
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
   TEST_FINAL_STATUS,
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_SKIPPING_TYPE,
+  TEST_ITR_SKIPPING_COUNT,
+  TEST_CODE_COVERAGE_ENABLED,
+  ITR_CORRELATION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
+const id = require('../../dd-trace/src/id')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
   TELEMETRY_EVENT_CREATED,
@@ -355,9 +362,36 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, onFinish }) => {
+    this.addSub('ci:vitest:test-suite:finish', ({
+      testSuiteSpan,
+      status,
+      onFinish,
+      coverageFiles,
+      testSuiteAbsolutePath,
+    }) => {
       if (testSuiteSpan) {
         testSuiteSpan.setTag(TEST_STATUS, status)
+
+        // TIA code coverage reporting: the worker collected a list of files
+        // whose code executed during this suite. Serialize it and hand it to
+        // the worker exporter, which forwards to the main process.
+        if (coverageFiles && this.tracer._exporter?.exportCoverage) {
+          const suiteRelative = getTestSuitePath(
+            testSuiteAbsolutePath,
+            this.repositoryRoot || this.sourceRoot
+          )
+          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath]
+            .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.sourceRoot))
+
+          const { _traceId, _spanId } = testSuiteSpan.context()
+          this.tracer._exporter.exportCoverage({
+            sessionId: _traceId,
+            suiteId: _spanId,
+            testSuite: suiteRelative,
+            files: relativeCoverageFiles,
+          })
+        }
+
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
@@ -365,6 +399,19 @@ class VitestPlugin extends CiPlugin {
       this.tracer._exporter.flush(onFinish)
       if (this.runningTestProbe) {
         this.removeDiProbe(this.runningTestProbe)
+      }
+    })
+
+    // Main-process handler: receive per-suite coverage payloads from workers
+    // and forward them to the agent/backend via the real exporter.
+    this.addSub('ci:vitest:worker-report:coverage', data => {
+      const formattedCoverages = JSON.parse(data).map(coverage => ({
+        sessionId: id(coverage.sessionId),
+        suiteId: id(coverage.suiteId),
+        files: coverage.files,
+      }))
+      for (const formattedCoverage of formattedCoverages) {
+        this.tracer._exporter.exportCoverage(formattedCoverage)
       }
     })
 
@@ -390,6 +437,11 @@ class VitestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isSuitesSkipped,
+      numSkippedSuites,
+      itrCorrelationId,
       vitestPool,
       onFinish,
     }) => {
@@ -411,6 +463,28 @@ class VitestPlugin extends CiPlugin {
       }
       if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
+      }
+      if (isCodeCoverageEnabled) {
+        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, 'true')
+        this.testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, 'true')
+      }
+      if (isSuitesSkippingEnabled) {
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, 'true')
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_TYPE, 'suite')
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_TYPE, 'suite')
+        this.testSessionSpan.setTag(TEST_ITR_SKIPPING_COUNT, numSkippedSuites || 0)
+        this.testModuleSpan.setTag(TEST_ITR_SKIPPING_COUNT, numSkippedSuites || 0)
+      }
+      if (isSuitesSkipped) {
+        this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'true')
+      } else if (isSuitesSkippingEnabled) {
+        this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
+        this.testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
+      }
+      if (itrCorrelationId) {
+        this.testSessionSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
       }
       if (vitestPool) {
         this.testSessionSpan.setTag(VITEST_POOL, vitestPool)

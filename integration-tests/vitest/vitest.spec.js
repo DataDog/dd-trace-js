@@ -2763,6 +2763,79 @@ versions.forEach((version) => {
       })
     }
 
+    context('intelligent test runner', () => {
+      it('skips suites and reports code coverage (built-in V8 coverage)', async () => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: true,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/vitest-tests/itr-suite-one.mjs',
+          },
+        }])
+
+        const skippablePromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+        const coveragePromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const skippedSuite = events.find(event =>
+              event.type === 'test_suite_end' &&
+              event.content.resource === 'test_suite.ci-visibility/vitest-tests/itr-suite-one.mjs'
+            )
+            assert.ok(skippedSuite, 'skipped suite test_suite_end event is expected')
+            assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(skippedSuite.content.meta['test.skipped_by_itr'], 'true')
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta['test.code_coverage.enabled'], 'true')
+            assert.strictEqual(testSession.meta['test.itr.tests_skipping.enabled'], 'true')
+            assert.strictEqual(testSession.meta['_dd.ci.itr.tests_skipped'], 'true')
+            assert.strictEqual(testSession.meta['test.itr.tests_skipping.type'], 'suite')
+            assert.strictEqual(testSession.metrics['test.itr.tests_skipping.count'], 1)
+          }, 25000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        const [skippableReq, coverageReq] = await Promise.all([
+          skippablePromise,
+          coveragePromise,
+          eventsPromise,
+          once(childProcess, 'exit'),
+        ])
+
+        assert.strictEqual(skippableReq.headers['dd-api-key'], '1')
+        assert.strictEqual(coverageReq.headers['dd-api-key'], '1')
+
+        const allCoverageFiles = coverageReq.payload
+          .flatMap(cov => cov.content.coverages)
+          .flatMap(item => item.files)
+          .map(f => f.filename)
+        // The not-skipped suite imports sum.mjs, so it should appear in the
+        // reported coverage files.
+        assert.ok(
+          allCoverageFiles.some(f => f.endsWith('ci-visibility/vitest-tests/sum.mjs')),
+          `expected sum.mjs in coverage files, got: ${JSON.stringify(allCoverageFiles)}`
+        )
+      })
+    })
+
     context('final status tag', () => {
       it('sets final_status tag to test status on regular tests without retry features', async () => {
         receiver.setSettings({

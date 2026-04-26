@@ -10,6 +10,7 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
 } = require('../../../plugins/util/test')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../../../config/helper')
 const Writer = require('./writer')
@@ -40,6 +41,12 @@ function getInterprocessTraceCode () {
 function getInterprocessCoverageCode () {
   if (getEnvironmentVariable('JEST_WORKER_ID')) {
     return JEST_WORKER_COVERAGE_PAYLOAD_CODE
+  }
+  if (getEnvironmentVariable('TINYPOOL_WORKER_ID')) {
+    return VITEST_WORKER_COVERAGE_PAYLOAD_CODE
+  }
+  if (getValueFromEnvSources('DD_VITEST_WORKER')) {
+    return VITEST_WORKER_COVERAGE_PAYLOAD_CODE
   }
   return null
 }

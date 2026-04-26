@@ -10,10 +10,14 @@ const log = require('../../dd-trace/src/log')
 const {
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
   logDynamicNamesWarning,
+  getTestSuitePath,
 } = require('../../dd-trace/src/plugins/util/test')
+const { startV8Coverage, getV8CoverageCollector } =
+  require('../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
 const { addHook, channel } = require('./helpers/instrument')
 
 // test hooks
@@ -45,7 +49,13 @@ const modifiedFilesCh = channel('ci:vitest:modified-files')
 
 const workerReportTraceCh = channel('ci:vitest:worker-report:trace')
 const workerReportLogsCh = channel('ci:vitest:worker-report:logs')
+const workerReportCoverageCh = channel('ci:vitest:worker-report:coverage')
 const codeCoverageReportCh = channel('ci:vitest:coverage-report')
+
+// ITR / skippable suites (main process)
+const skippableSuitesCh = channel('ci:vitest:test-suite:skippable')
+// Emit fake skipped test_suite spans for the files we're not running
+const itrSkippedSuitesCh = channel('ci:vitest:itr:skipped-suites')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
@@ -69,6 +79,11 @@ let isEarlyFlakeDetectionFaulty = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
+let isCodeCoverageEnabled = false
+let isSuitesSkippingEnabled = false
+let isSuitesSkipped = false
+let skippedSuites = []
+let itrCorrelationId = ''
 let vitestGetFn = null
 let vitestSetFn = null
 let vitestGetHooks = null
@@ -112,6 +127,8 @@ function getProvidedContext () {
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddModifiedFiles: modifiedFiles,
+      _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+      _ddIsSuitesSkippingEnabled: isSuitesSkippingEnabled,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -127,6 +144,8 @@ function getProvidedContext () {
       flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
       isImpactedTestsEnabled,
       modifiedFiles,
+      _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
+      _ddIsSuitesSkippingEnabled: isSuitesSkippingEnabled,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -143,6 +162,8 @@ function getProvidedContext () {
       flakyTestRetriesCount: 0,
       isImpactedTestsEnabled: false,
       modifiedFiles: {},
+      _ddIsCodeCoverageEnabled: false,
+      _ddIsSuitesSkippingEnabled: false,
     }
   }
 }
@@ -286,11 +307,22 @@ function wrapBeforeEachCleanupResult (task, result) {
   return result
 }
 
+/**
+ * `sort` receives a list of file "specs". Depending on the vitest version,
+ * each entry is either a plain file path (string) or an object carrying
+ * `moduleId`/`filepath`. Return the absolute file path for either shape.
+ */
+function getFileSpecPath (spec) {
+  if (typeof spec === 'string') return spec
+  return spec?.moduleId || spec?.filepath || spec?.[1] || null
+}
+
 function getSortWrapper (sort, frameworkVersion) {
   return async function () {
     if (!testSessionFinishCh.hasSubscribers) {
       return sort.apply(this, arguments)
     }
+    const originalFiles = arguments[0]
     // There isn't any other async function that we seem to be able to hook into
     // So we will use the sort from BaseSequencer. This means that a custom sequencer
     // will not work. This will be a known limitation.
@@ -307,6 +339,8 @@ function getSortWrapper (sort, frameworkVersion) {
         isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
         testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
         isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+        isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+        isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
       }
     } catch {
       isFlakyTestRetriesEnabled = false
@@ -314,6 +348,67 @@ function getSortWrapper (sort, frameworkVersion) {
       isDiEnabled = false
       isKnownTestsEnabled = false
       isImpactedTestsEnabled = false
+      isCodeCoverageEnabled = false
+      isSuitesSkippingEnabled = false
+    }
+
+    // Propagate TIA flags to workers so they can start/stop V8 coverage
+    // and tag the suite span appropriately.
+    if (isCodeCoverageEnabled || isSuitesSkippingEnabled) {
+      try {
+        const workspaceProject = this.ctx.getCoreWorkspaceProject
+          ? this.ctx.getCoreWorkspaceProject()
+          : this.ctx.getRootProject()
+        workspaceProject._provided._ddIsCodeCoverageEnabled = !!isCodeCoverageEnabled
+        workspaceProject._provided._ddIsSuitesSkippingEnabled = !!isSuitesSkippingEnabled
+      } catch {
+        log.warn('Could not send ITR configuration to workers.')
+      }
+    }
+
+    if (isSuitesSkippingEnabled) {
+      try {
+        const skippableResponse = await getChannelPromise(skippableSuitesCh)
+        if (!skippableResponse.err) {
+          const skippableSuites = skippableResponse.skippableSuites || []
+          itrCorrelationId = skippableResponse.itrCorrelationId || ''
+
+          if (skippableSuites.length && Array.isArray(originalFiles)) {
+            const cwd = this.ctx.config?.root || process.cwd()
+            const skippedSet = new Set(skippableSuites)
+
+            const toSkip = []
+            const filteredFiles = []
+            for (const entry of originalFiles) {
+              const absolutePath = getFileSpecPath(entry)
+              if (!absolutePath) {
+                filteredFiles.push(entry)
+                continue
+              }
+              const relativePath = getTestSuitePath(absolutePath, cwd)
+              if (skippedSet.has(relativePath)) {
+                toSkip.push(relativePath)
+              } else {
+                filteredFiles.push(entry)
+              }
+            }
+
+            if (toSkip.length) {
+              skippedSuites = toSkip
+              isSuitesSkipped = true
+              arguments[0] = filteredFiles
+              if (this.ctx.getTestFilepaths) {
+                const filteredAbs = filteredFiles.map(getFileSpecPath).filter(Boolean)
+                this.ctx.getTestFilepaths = () => Promise.resolve(filteredAbs)
+              }
+              itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+            }
+          }
+        }
+      } catch (err) {
+        log.warn('Could not fetch skippable suites: %s', err?.message)
+        isSuitesSkippingEnabled = false
+      }
     }
 
     if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
@@ -476,6 +571,11 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      isCodeCoverageEnabled,
+      isSuitesSkippingEnabled,
+      isSuitesSkipped,
+      numSkippedSuites: skippedSuites.length,
+      itrCorrelationId,
       vitestPool,
       onFinish,
     })
@@ -546,6 +646,8 @@ function threadHandler (thread) {
         workerReportTraceCh.publish(message.data)
       } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
         workerReportLogsCh.publish(message.data)
+      } else if (message.interprocessCode === VITEST_WORKER_COVERAGE_PAYLOAD_CODE) {
+        workerReportCoverageCh.publish(message.data)
       }
     }
   })
@@ -588,6 +690,8 @@ function getWrappedOn (on) {
           workerReportTraceCh.publish(data)
         } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
           workerReportLogsCh.publish(data)
+        } else if (interprocessCode === VITEST_WORKER_COVERAGE_PAYLOAD_CODE) {
+          workerReportCoverageCh.publish(data)
         }
         // If we execute the callback vitest crashes, as the message is not supported
         return
@@ -1147,6 +1251,18 @@ addHook({
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
 
+    // Start V8 coverage in the worker once TIA/code coverage is enabled for
+    // this run (flag is propagated from main via _provided). Reset the
+    // baseline so the coverage we report for this file is not polluted by
+    // earlier files processed on the same worker.
+    const providedContext = getProvidedContext()
+    const v8CoverageEnabledForRun = !!providedContext._ddIsCodeCoverageEnabled
+    let workerCollector = null
+    if (v8CoverageEnabledForRun) {
+      workerCollector = getV8CoverageCollector() || startV8Coverage()
+      if (workerCollector) workerCollector.resetBaseline()
+    }
+
     const testSuiteCtx = { testSuiteAbsolutePath, frameworkVersion }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
@@ -1285,7 +1401,17 @@ addHook({
       testSuiteErrorCh.runStores(testSuiteCtx, () => {})
     }
 
-    testSuiteFinishCh.publish({ status: testSuiteResult.state, onFinish, ...testSuiteCtx.currentStore })
+    const workerCoverageFiles = workerCollector
+      ? workerCollector.getFilesCoveredSinceLastSnapshot()
+      : null
+
+    testSuiteFinishCh.publish({
+      status: testSuiteResult.state,
+      onFinish,
+      coverageFiles: workerCoverageFiles,
+      testSuiteAbsolutePath,
+      ...testSuiteCtx.currentStore,
+    })
 
     await onFinishPromise
 
