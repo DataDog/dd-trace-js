@@ -13,6 +13,100 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
 let isTestIsolationEnabled = false
+
+// Zero-config V8 coverage via Cypress's built-in CDP channel.
+// This kicks in when the backend enables code coverage AND the app under
+// test has NOT been instrumented with istanbul (no `window.__coverage__`).
+let isV8CoverageEnabled = false
+let isV8CoverageStarted = false
+const scriptsWithSourceSent = new Set()
+
+/**
+ * Call a Chrome DevTools Protocol command through Cypress's existing
+ * `remote:debugger:protocol` automation channel. Returns the response
+ * (promisified). Silently swallows errors so coverage collection never
+ * breaks the test.
+ *
+ * @param {string} command  CDP command name (e.g. `Profiler.enable`).
+ * @param {object} [params] CDP command parameters.
+ * @returns {Promise<object|null>}
+ */
+function cdpCommand (command, params) {
+  return Cypress.automation('remote:debugger:protocol', { command, params })
+    .catch(() => null)
+}
+
+async function startV8Coverage () {
+  if (isV8CoverageStarted) return true
+  const enabled = await cdpCommand('Profiler.enable')
+  if (enabled === null) return false
+
+  const started = await cdpCommand('Profiler.startPreciseCoverage', { callCount: true, detailed: false })
+  if (started === null) return false
+
+  // Used only to avoid refetching bundles from Node. Coverage collection still
+  // works if this fails, but source-map resolution may have to use HTTP.
+  await cdpCommand('Debugger.enable')
+
+  isV8CoverageStarted = true
+  return true
+}
+
+/**
+ * Extract hit ranges per user script from a `Profiler.takePreciseCoverage`
+ * CDP response. Skips cypress internals, browser extensions, data URIs and
+ * scripts that produced no executed blocks.
+ *
+ * @param {{result: Array}} payload
+ * @returns {Array<{scriptId: string, url: string, ranges: number[]}>}
+ *   `ranges` is a flat `[start, end, start, end, ...]` array of byte offsets
+ *   from the bundle's source text, for blocks with `count > 0`. The Node
+ *   side resolves these to original sources via source maps.
+ */
+function extractHitCoverage (payload) {
+  if (!payload || !Array.isArray(payload.result)) return []
+  const out = []
+  for (const script of payload.result) {
+    const url = script.url
+    if (!url) continue
+    if (url.startsWith('chrome-extension://') || url.startsWith('devtools://') ||
+        url.startsWith('data:') || url.startsWith('blob:')) continue
+    if (url.includes('/__cypress/') || url.includes('cypress_runner') ||
+        url.includes('cypress-runner')) continue
+    const ranges = []
+    if (Array.isArray(script.functions)) {
+      for (const fn of script.functions) {
+        if (!Array.isArray(fn.ranges)) continue
+        for (const r of fn.ranges) {
+          if (r.count > 0) {
+            ranges.push(r.startOffset, r.endOffset)
+          }
+        }
+      }
+    }
+    if (ranges.length > 0) out.push({ scriptId: script.scriptId, url, ranges })
+  }
+  return out
+}
+
+async function addScriptSource (coverage) {
+  const { scriptId, url } = coverage
+  if (scriptId && !scriptsWithSourceSent.has(url)) {
+    scriptsWithSourceSent.add(url)
+    const source = await cdpCommand('Debugger.getScriptSource', { scriptId })
+    if (source && typeof source.scriptSource === 'string') {
+      coverage.source = source.scriptSource
+    } else {
+      scriptsWithSourceSent.delete(url)
+    }
+  }
+  delete coverage.scriptId
+}
+
+async function addScriptSources (coverages) {
+  await Promise.all(coverages.map(addScriptSource))
+  return coverages
+}
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
 // Track quarantined test errors - we catch them in Cypress.on('fail') but need to report to Datadog
@@ -224,9 +318,16 @@ before(function () {
       isImpactedTestsEnabled = suiteConfig.isImpactedTestsEnabled
       isModifiedTest = suiteConfig.isModifiedTest
       isTestIsolationEnabled = suiteConfig.isTestIsolationEnabled
+      isV8CoverageEnabled = !!suiteConfig.isV8CoverageEnabled
       if (Number.isFinite(suiteConfig.rumFlushWaitMillis)) {
         rumFlushWaitMillis = suiteConfig.rumFlushWaitMillis
       }
+    }
+    if (isV8CoverageEnabled) {
+      scriptsWithSourceSent.clear()
+      cy.then(() => startV8Coverage()).then((started) => {
+        isV8CoverageEnabled = !!started
+      })
     }
   })
 })
@@ -297,5 +398,27 @@ afterEach(function () {
     quarantinedTestErrors.delete(testName)
   }
 
-  cy.task('dd:afterEach', { test: testInfo, coverage })
+  // If the user has no istanbul counters but zero-config V8 coverage is on,
+  // snapshot CDP coverage and forward the raw hit ranges to Node. Node
+  // resolves bundles via source maps before exporting.
+  if (!coverage && isV8CoverageEnabled && isV8CoverageStarted) {
+    cy.then(async () => {
+      const snapshot = await cdpCommand('Profiler.takePreciseCoverage')
+      if (!snapshot) {
+        isV8CoverageStarted = false
+        return cy.task('dd:afterEach', { test: testInfo })
+      }
+      const v8Coverage = extractHitCoverage(snapshot)
+      if (!v8Coverage.length) {
+        return cy.task('dd:afterEach', { test: testInfo })
+      }
+      await addScriptSources(v8Coverage)
+      return cy.task('dd:afterEach', {
+        test: testInfo,
+        v8Coverage,
+      })
+    })
+  } else {
+    cy.task('dd:afterEach', { test: testInfo, coverage })
+  }
 })

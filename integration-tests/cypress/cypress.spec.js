@@ -1970,6 +1970,124 @@ moduleTypes.forEach(({
         ])
       })
 
+      it(
+        'reports code coverage via zero-config CDP when the app has no window.__coverage__',
+        async () => {
+          // Spin a server that does NOT inject `window.__coverage__`: the
+          // support file's V8/CDP path should pick up coverage instead.
+          const altServer = createWebAppServer({ skipIstanbulFixture: true })
+          const altPort = await /** @type {Promise<number>} */ (new Promise((resolve, reject) => {
+            altServer.once('error', reject)
+            altServer.listen(0, 'localhost', () => {
+              altServer.removeListener('error', reject)
+              resolve(altServer.address().port)
+            })
+          }))
+
+          receiver.setSettings({ code_coverage: true, tests_skipping: false })
+
+          const coverageReqPromise = receiver
+            .payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'), 25000)
+
+          const envVars = getCiVisAgentlessConfig(receiver.port)
+          childProcess = exec(
+            testCommand,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: `http://localhost:${altPort}`,
+                SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
+              },
+            }
+          )
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
+
+          try {
+            const [, coverageReq] = await Promise.all([
+              once(childProcess, 'exit'),
+              coverageReqPromise,
+            ])
+            // The payload is msgpack-packed; the CI viz intake decodes it for us.
+            const allFiles = coverageReq.payload
+              .flatMap(cov => cov.content.coverages)
+              .flatMap(entry => entry.files)
+              .map(f => f.filename)
+            assert.ok(
+              allFiles.includes('src/greeting.js') || allFiles.includes('src/math.js'),
+              `expected app source file in coverage, got: ${JSON.stringify(allFiles)}`
+            )
+          } finally {
+            await /** @type {Promise<void>} */ (
+              new Promise(resolve => altServer.close(() => resolve()))
+            )
+          }
+        }
+      )
+
+      it(
+        'resolves bundled CDP coverage back to original sources via source maps',
+        async () => {
+          // Bundle served at /bundle.js with //# sourceMappingURL pragma.
+          // The sources array maps cols 0..39 → src/greeting.js, cols 40+ → src/math.js.
+          const altServer = createWebAppServer({ skipIstanbulFixture: true })
+          const altPort = await /** @type {Promise<number>} */ (new Promise((resolve, reject) => {
+            altServer.once('error', reject)
+            altServer.listen(0, 'localhost', () => {
+              altServer.removeListener('error', reject)
+              resolve(altServer.address().port)
+            })
+          }))
+
+          receiver.setSettings({ code_coverage: true, tests_skipping: false })
+
+          const coverageReqPromise = receiver
+            .payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'), 30000)
+
+          const envVars = getCiVisAgentlessConfig(receiver.port)
+          childProcess = exec(
+            testCommand,
+            {
+              cwd,
+              env: {
+                ...envVars,
+                CYPRESS_BASE_URL: `http://localhost:${altPort}`,
+                SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
+              },
+            }
+          )
+          childProcess.stdout?.pipe(process.stdout)
+          childProcess.stderr?.pipe(process.stderr)
+
+          try {
+            const [, coverageReq] = await Promise.all([
+              once(childProcess, 'exit'),
+              coverageReqPromise,
+            ])
+            const allFiles = coverageReq.payload
+              .flatMap(cov => cov.content.coverages)
+              .flatMap(entry => entry.files)
+              .map(f => f.filename)
+            // The two original sources declared in the source map must show
+            // up — this validates that the bundle URL was resolved to its
+            // original files via `//# sourceMappingURL`.
+            assert.ok(
+              allFiles.includes('src/greeting.js'),
+              `expected src/greeting.js in coverage, got: ${JSON.stringify(allFiles)}`
+            )
+            assert.ok(
+              allFiles.includes('src/math.js'),
+              `expected src/math.js in coverage, got: ${JSON.stringify(allFiles)}`
+            )
+          } finally {
+            await /** @type {Promise<void>} */ (
+              new Promise(resolve => altServer.close(() => resolve()))
+            )
+          }
+        }
+      )
+
       it('does not skip tests if test skipping is disabled by the API', async () => {
         let hasRequestedSkippable = false
         receiver.setSettings({
