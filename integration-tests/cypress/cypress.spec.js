@@ -2014,11 +2014,9 @@ moduleTypes.forEach(({
               .flatMap(cov => cov.content.coverages)
               .flatMap(entry => entry.files)
               .map(f => f.filename)
-            // At minimum the spec file itself must land in the coverage list
-            // (we push it in the plugin). Any user-page script URL is a bonus.
             assert.ok(
-              allFiles.some(f => f.endsWith('cypress/e2e/spec.cy.js')),
-              `expected spec file in coverage, got: ${JSON.stringify(allFiles)}`
+              allFiles.includes('src/greeting.js') || allFiles.includes('src/math.js'),
+              `expected app source file in coverage, got: ${JSON.stringify(allFiles)}`
             )
           } finally {
             await /** @type {Promise<void>} */ (

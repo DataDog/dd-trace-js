@@ -101,6 +101,7 @@ const {
 const { DD_MAJOR } = require('../../../version')
 const {
   resolveCoverageToSourceFiles,
+  resetCache: resetCoverageSourceMapCache,
 } = require('../../dd-trace/src/ci-visibility/code-coverage/source-map-resolver')
 const {
   resolveOriginalSourcePosition,
@@ -411,6 +412,7 @@ class CypressPlugin {
     this.libraryConfigurationPromise = undefined
     this._timeOrigin = 0
     this._perfOrigin = 0
+    resetCoverageSourceMapCache()
   }
 
   /**
@@ -1108,18 +1110,24 @@ class CypressPlugin {
           relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
             file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
           )
-        } else if (Array.isArray(v8Coverage) && this.isCodeCoverageEnabled &&
+        } else if (Array.isArray(v8Coverage) && v8Coverage.length && this.isCodeCoverageEnabled &&
           this.tracer._tracer._exporter?.exportCoverage) {
           // CDP `Profiler.takePreciseCoverage` result — resolve bundle
           // offsets back to original sources via source maps.
           let resolved = []
           try {
-            resolved = await resolveCoverageToSourceFiles(v8Coverage)
+            resolved = await resolveCoverageToSourceFiles(v8Coverage, {
+              repositoryRoot: this.repositoryRoot || this.rootDir,
+            })
           } catch (err) {
             log.debug('Cypress CDP coverage resolution failed: %s', err?.message)
           }
-          const suitePath = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot || this.rootDir)
-          relativeCoverageFiles = [...resolved, suitePath]
+          if (resolved.length) {
+            const suitePath = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot || this.rootDir)
+            relativeCoverageFiles = [...new Set([...resolved, suitePath])]
+          } else {
+            incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
+          }
         }
         if (relativeCoverageFiles) {
           if (!relativeCoverageFiles.length) {

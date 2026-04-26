@@ -2,8 +2,9 @@
 
 const http = require('node:http')
 const https = require('node:https')
-const { URL } = require('node:url')
 const { SourceMap } = require('node:module')
+const path = require('node:path')
+const { URL, fileURLToPath } = require('node:url')
 
 const log = require('../../log')
 
@@ -13,7 +14,7 @@ const SOURCE_MAP_PRAGMA_RE = /\/\/[#@]\s*sourceMappingURL=([^\s'"]+)/
 // and the line-length table for offset-to-position conversion.
 const BUNDLE_CACHE = new Map()
 
-function fetchText (url, timeoutMs = 3000) {
+function fetchText (url, timeoutMs = 3000, redirects = 3) {
   return new Promise((resolve, reject) => {
     let client
     let u
@@ -30,6 +31,10 @@ function fetchText (url, timeoutMs = 3000) {
       return reject(new Error(`Unsupported protocol ${u.protocol}`))
     }
     const request = client.get(u, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && redirects > 0) {
+        res.resume()
+        return resolve(fetchText(new URL(res.headers.location, url).toString(), timeoutMs, redirects - 1))
+      }
       if (res.statusCode !== 200) {
         res.resume()
         return reject(new Error(`HTTP ${res.statusCode} for ${url}`))
@@ -67,11 +72,17 @@ async function loadMapFromReference (bundleUrl, reference) {
     const decoded = isBase64
       ? Buffer.from(body, 'base64').toString('utf8')
       : decodeURIComponent(body)
-    return JSON.parse(decoded)
+    return {
+      mapJson: JSON.parse(decoded),
+      mapUrl: bundleUrl,
+    }
   }
   const mapUrl = new URL(reference, bundleUrl).toString()
   const text = await fetchText(mapUrl)
-  return JSON.parse(text)
+  return {
+    mapJson: JSON.parse(text),
+    mapUrl,
+  }
 }
 
 /**
@@ -100,62 +111,174 @@ function offsetToPosition (lineStarts, offset) {
   return { line: lo, column: offset - lineStarts[lo] }
 }
 
-async function getBundleInfo (bundleUrl) {
-  if (BUNDLE_CACHE.has(bundleUrl)) return BUNDLE_CACHE.get(bundleUrl)
-  let info = null
+async function getBundleInfo (entry) {
+  const bundleUrl = entry.url
+  const cached = BUNDLE_CACHE.get(bundleUrl)
+  if (cached && (cached.hasSource || !entry.source)) return cached
+
+  let info = {
+    hasSource: false,
+    hasSourceMap: false,
+    mapLoadFailed: false,
+    sourceMap: null,
+    sourceRoot: '',
+    mapUrl: bundleUrl,
+    lineStarts: null,
+  }
   try {
-    const source = await fetchText(bundleUrl)
+    const source = entry.source || await fetchText(bundleUrl)
+    info.hasSource = true
     const mapRef = extractSourceMapReference(source)
     if (mapRef) {
+      info.hasSourceMap = true
       try {
-        const mapJson = await loadMapFromReference(bundleUrl, mapRef)
+        const { mapJson, mapUrl } = await loadMapFromReference(bundleUrl, mapRef)
         if (mapJson && mapJson.mappings) {
           info = {
+            ...info,
             sourceMap: new SourceMap(mapJson),
             lineStarts: computeLineStarts(source),
+            sourceRoot: mapJson.sourceRoot || '',
+            mapUrl,
           }
         }
       } catch (err) {
+        info.mapLoadFailed = true
         log.debug('Source map load failed for %s: %s', bundleUrl, err?.message)
       }
+    } else {
+      info.lineStarts = computeLineStarts(source)
     }
   } catch (err) {
+    info = null
     log.debug('Bundle fetch failed for %s: %s', bundleUrl, err?.message)
   }
-  // Cache even a null miss so we don't re-fetch repeatedly for bundles that
-  // legitimately have no source map.
+  // Cache misses too so repeated per-test snapshots don't refetch bundles and
+  // maps that cannot be resolved in this process.
   BUNDLE_CACHE.set(bundleUrl, info)
   return info
 }
 
-function normalizeSource (source, bundleUrl) {
-  if (!source) return null
-  if (source.startsWith('webpack://')) {
-    // webpack:///./src/foo.js → src/foo.js
-    return source.replace(/^webpack:\/\/[^/]*\/\.?\//, '')
-  }
-  if (source.startsWith('http://') || source.startsWith('https://')) {
-    try {
-      return new URL(source).pathname.replace(/^\//, '')
-    } catch {
-      return source
-    }
-  }
-  if (source.startsWith('file://')) {
-    return source.slice(7)
-  }
-  if (source.startsWith('/')) {
-    // already an absolute-looking path; let the caller strip repo root.
-    return source.slice(1)
-  }
-  return source
+function toPosixPath (filePath) {
+  return filePath.replaceAll('\\', '/')
 }
 
-function urlToPath (url) {
+function stripQueryAndHash (filePath) {
+  return filePath.replace(/[?#].*$/, '')
+}
+
+function stripLeadingParentSegments (filePath) {
+  return filePath.replace(/^(\.\.\/)+/, '')
+}
+
+function toRepositoryRelativePath (filePath, repositoryRoot) {
+  const normalizedPath = toPosixPath(filePath)
+  if (!repositoryRoot) return normalizedPath.replace(/^\/+/, '')
+
+  const normalizedRoot = toPosixPath(repositoryRoot).replace(/\/+$/, '')
+  if (normalizedPath === normalizedRoot) return path.basename(normalizedRoot)
+  if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
+    return normalizedPath.slice(normalizedRoot.length + 1)
+  }
+  return null
+}
+
+function normalizeRelativePath (filePath) {
+  const normalized = path.posix.normalize(toPosixPath(filePath))
+  return stripLeadingParentSegments(normalized).replace(/^\.\//, '').replace(/^\/+/, '')
+}
+
+function resolveUrlPath (url, repositoryRoot) {
+  const pathname = decodeURIComponent(url.pathname)
+  if (pathname.startsWith('/@fs/')) {
+    return toRepositoryRelativePath(pathname.slice(4), repositoryRoot)
+  }
+  return normalizeRelativePath(pathname)
+}
+
+function normalizeSource (source, options = {}) {
+  if (!source) return null
+  if (typeof options === 'string') {
+    options = { bundleUrl: options }
+  }
+  const { bundleUrl, mapUrl, sourceRoot, repositoryRoot } = options
+  source = stripQueryAndHash(source)
+
+  if (source.startsWith('webpack://')) {
+    return normalizeRelativePath(source.replace(/^webpack:\/\/[^/]*\/\.?\//, ''))
+  }
+
+  if (source.startsWith('file://')) {
+    try {
+      return toRepositoryRelativePath(fileURLToPath(source), repositoryRoot)
+    } catch {
+      return null
+    }
+  }
+
+  if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(source)) {
+    try {
+      return resolveUrlPath(new URL(source), repositoryRoot)
+    } catch {
+      return null
+    }
+  }
+
+  if (source.startsWith('/@fs/')) {
+    return toRepositoryRelativePath(source.slice(4), repositoryRoot)
+  }
+
+  if (source.startsWith('/')) {
+    const repositoryRelative = toRepositoryRelativePath(source, repositoryRoot)
+    return repositoryRelative || normalizeRelativePath(source)
+  }
+
+  if (sourceRoot) {
+    if (sourceRoot.startsWith('file://')) {
+      try {
+        const sourceRootPath = fileURLToPath(sourceRoot)
+        return toRepositoryRelativePath(path.resolve(sourceRootPath, source), repositoryRoot)
+      } catch {
+        return null
+      }
+    }
+    if (/^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(sourceRoot)) {
+      try {
+        return resolveUrlPath(new URL(source, sourceRoot), repositoryRoot)
+      } catch {
+        return null
+      }
+    }
+    if (path.isAbsolute(sourceRoot)) {
+      const sourcePath = path.resolve(sourceRoot, source)
+      return toRepositoryRelativePath(sourcePath, repositoryRoot) || normalizeRelativePath(sourcePath)
+    }
+    const rootedSource = path.posix.join(toPosixPath(sourceRoot), source)
+    if (mapUrl || bundleUrl) {
+      try {
+        return resolveUrlPath(new URL(rootedSource, mapUrl || bundleUrl), repositoryRoot)
+      } catch {
+        return normalizeRelativePath(rootedSource)
+      }
+    }
+    return normalizeRelativePath(rootedSource)
+  }
+
+  if (mapUrl || bundleUrl) {
+    try {
+      return resolveUrlPath(new URL(source, mapUrl || bundleUrl), repositoryRoot)
+    } catch {
+      // fall through to path normalization
+    }
+  }
+
+  return normalizeRelativePath(source)
+}
+
+function urlToPath (url, repositoryRoot) {
   try {
     const u = new URL(url)
-    const p = u.pathname.replace(/^\//, '')
-    return p || null
+    return resolveUrlPath(u, repositoryRoot)
   } catch {
     return null
   }
@@ -165,44 +288,48 @@ function urlToPath (url) {
  * Resolve CDP coverage entries to original source file paths. Uses source
  * maps when available, otherwise falls back to the bundle URL's pathname.
  *
- * @param {Array<{url: string, ranges: number[]}>} coverages
+ * @param {Array<{url: string, ranges: number[], source?: string}>} coverages
  *   `ranges` is a flat array `[start, end, start, end, ...]` of byte offsets
  *   that had `count > 0` in the CDP Profiler snapshot.
+ * @param {{repositoryRoot?: string}} [options]
  * @returns {Promise<string[]>} Deduped list of touched source file paths.
  */
-async function resolveCoverageToSourceFiles (coverages) {
+async function resolveCoverageToSourceFiles (coverages, options = {}) {
   // Fetch bundles + source maps in parallel (cached per URL) before resolving.
-  const validEntries = coverages.filter(e => e.url)
-  const infos = await Promise.all(validEntries.map(e => getBundleInfo(e.url)))
+  const validEntries = coverages.filter(e => e.url && e.ranges?.length)
+  const infos = await Promise.all(validEntries.map(e => getBundleInfo(e)))
 
   const files = new Set()
   for (const [i, entry] of validEntries.entries()) {
     const { url, ranges } = entry
     const info = infos[i]
-    if (!info || !ranges?.length) {
-      const p = urlToPath(url)
-      if (p) files.add(p)
+    if (!info) {
       continue
     }
+    if (!info.sourceMap) {
+      if (!info.hasSourceMap && !info.mapLoadFailed) {
+        const p = urlToPath(url, options.repositoryRoot)
+        if (p) files.add(p)
+      }
+      continue
+    }
+
     const { sourceMap, lineStarts } = info
-    let mapped = false
     for (let j = 0; j < ranges.length; j += 2) {
       const startOffset = ranges[j]
       const { line, column } = offsetToPosition(lineStarts, startOffset)
       const hit = sourceMap.findEntry(line, column)
       if (hit?.originalSource) {
-        const norm = normalizeSource(hit.originalSource, url)
+        const norm = normalizeSource(hit.originalSource, {
+          bundleUrl: url,
+          mapUrl: info.mapUrl,
+          sourceRoot: info.sourceRoot,
+          repositoryRoot: options.repositoryRoot,
+        })
         if (norm) {
           files.add(norm)
-          mapped = true
         }
       }
-    }
-    if (!mapped) {
-      // Source map existed but none of our offsets resolved — fall back so
-      // the bundle itself is still recorded.
-      const p = urlToPath(url)
-      if (p) files.add(p)
     }
   }
   return [...files]

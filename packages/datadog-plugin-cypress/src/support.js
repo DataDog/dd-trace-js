@@ -19,6 +19,7 @@ let isTestIsolationEnabled = false
 // test has NOT been instrumented with istanbul (no `window.__coverage__`).
 let isV8CoverageEnabled = false
 let isV8CoverageStarted = false
+const scriptsWithSourceSent = new Set()
 
 /**
  * Call a Chrome DevTools Protocol command through Cypress's existing
@@ -28,7 +29,7 @@ let isV8CoverageStarted = false
  *
  * @param {string} command  CDP command name (e.g. `Profiler.enable`).
  * @param {object} [params] CDP command parameters.
- * @returns {Promise<object|undefined>}
+ * @returns {Promise<object|null>}
  */
 function cdpCommand (command, params) {
   return Cypress.automation('remote:debugger:protocol', { command, params })
@@ -36,10 +37,19 @@ function cdpCommand (command, params) {
 }
 
 async function startV8Coverage () {
-  if (isV8CoverageStarted) return
+  if (isV8CoverageStarted) return true
+  const enabled = await cdpCommand('Profiler.enable')
+  if (enabled === null) return false
+
+  const started = await cdpCommand('Profiler.startPreciseCoverage', { callCount: true, detailed: false })
+  if (started === null) return false
+
+  // Used only to avoid refetching bundles from Node. Coverage collection still
+  // works if this fails, but source-map resolution may have to use HTTP.
+  await cdpCommand('Debugger.enable')
+
   isV8CoverageStarted = true
-  await cdpCommand('Profiler.enable')
-  await cdpCommand('Profiler.startPreciseCoverage', { callCount: true, detailed: false })
+  return true
 }
 
 /**
@@ -48,7 +58,7 @@ async function startV8Coverage () {
  * scripts that produced no executed blocks.
  *
  * @param {{result: Array}} payload
- * @returns {Array<{url: string, ranges: number[]}>}
+ * @returns {Array<{scriptId: string, url: string, ranges: number[]}>}
  *   `ranges` is a flat `[start, end, start, end, ...]` array of byte offsets
  *   from the bundle's source text, for blocks with `count > 0`. The Node
  *   side resolves these to original sources via source maps.
@@ -74,9 +84,28 @@ function extractHitCoverage (payload) {
         }
       }
     }
-    if (ranges.length > 0) out.push({ url, ranges })
+    if (ranges.length > 0) out.push({ scriptId: script.scriptId, url, ranges })
   }
   return out
+}
+
+async function addScriptSource (coverage) {
+  const { scriptId, url } = coverage
+  if (scriptId && !scriptsWithSourceSent.has(url)) {
+    scriptsWithSourceSent.add(url)
+    const source = await cdpCommand('Debugger.getScriptSource', { scriptId })
+    if (source && typeof source.scriptSource === 'string') {
+      coverage.source = source.scriptSource
+    } else {
+      scriptsWithSourceSent.delete(url)
+    }
+  }
+  delete coverage.scriptId
+}
+
+async function addScriptSources (coverages) {
+  await Promise.all(coverages.map(addScriptSource))
+  return coverages
 }
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
@@ -295,9 +324,10 @@ before(function () {
       }
     }
     if (isV8CoverageEnabled) {
-      // Chromium CDP only — other browsers will simply see these commands
-      // ignored by Cypress.automation and return silently.
-      cy.then(() => startV8Coverage())
+      scriptsWithSourceSent.clear()
+      cy.then(() => startV8Coverage()).then((started) => {
+        isV8CoverageEnabled = !!started
+      })
     }
   })
 })
@@ -374,7 +404,15 @@ afterEach(function () {
   if (!coverage && isV8CoverageEnabled && isV8CoverageStarted) {
     cy.then(async () => {
       const snapshot = await cdpCommand('Profiler.takePreciseCoverage')
+      if (!snapshot) {
+        isV8CoverageStarted = false
+        return cy.task('dd:afterEach', { test: testInfo })
+      }
       const v8Coverage = extractHitCoverage(snapshot)
+      if (!v8Coverage.length) {
+        return cy.task('dd:afterEach', { test: testInfo })
+      }
+      await addScriptSources(v8Coverage)
       return cy.task('dd:afterEach', {
         test: testInfo,
         v8Coverage,
