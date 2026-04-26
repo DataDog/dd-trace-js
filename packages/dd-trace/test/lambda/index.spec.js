@@ -376,7 +376,7 @@ describe('lambda', () => {
       },
       {
         envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '-100', // will default to 0
+        value: '-100', // will default to 100
       },
       {
         envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
