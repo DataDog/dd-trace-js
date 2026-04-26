@@ -4,7 +4,7 @@ const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopFlaggingProvider = require('../openfeature/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
-const { PublicSpan, uncachedWrapper } = require('../opentracing/public/span')
+const { PublicSpan } = require('../opentracing/public/span')
 const { SVC_SRC_KEY } = require('../../src/constants')
 const NoopDogStatsDClient = require('./dogstatsd')
 const NoopTracer = require('./tracer')
@@ -102,7 +102,6 @@ class NoopProxy {
       options.childOf = options.childOf._span
     }
 
-    // return uncachedWrapper(this._tracer.startSpan.apply(this._tracer, arguments))
     return new PublicSpan(this._tracer.startSpan.apply(this._tracer, arguments))
   }
 

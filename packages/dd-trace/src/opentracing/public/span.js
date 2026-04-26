@@ -39,20 +39,6 @@ class PublicSpan {
   }
 }
 
-// This is only used for startSpan which is guaranteed to not be activated.
-function uncachedWrapper (span) {
-  // Skips the cache entirely — intentional for startSpan.
-  const wrapper = Object.create(PublicSpan.prototype)
-  wrapper._span = span
-  return wrapper
-}
-
-function cacheWrapper (wrapper) {
-  if (!cache.has(wrapper._span)) {
-    cache.set(wrapper._span, wrapper)
-  }
-}
-
 // Whenever a method needs to be modified to have a unique public behavior, it
 // should be implemented on `PublicSpan` directly so it is skipped here.
 for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
@@ -66,4 +52,4 @@ for (const method of Object.getOwnPropertyNames(DatadogSpan.prototype)) {
   }
 }
 
-module.exports = { PublicSpan, uncachedWrapper, cacheWrapper }
+module.exports = { PublicSpan }
