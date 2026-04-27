@@ -17,6 +17,10 @@ const {
   collectDynamicNamesFromTraces,
   logDynamicNamesWarning,
 } = require('../../../dd-trace/src/plugins/util/test')
+const {
+  getV8CoverageCollector,
+  startV8Coverage,
+} = require('../../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
 
 const {
   isNewTest,
@@ -184,7 +188,8 @@ function getOnEndHandler (isParallel) {
     testFileToSuiteCtx.clear()
 
     let testCodeCoverageLinesTotal
-    if (global.__coverage__) {
+    const v8CollectorActive = !!getV8CoverageCollector()
+    if (global.__coverage__ && !v8CollectorActive) {
       try {
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
@@ -195,6 +200,20 @@ function getOnEndHandler (isParallel) {
       }
       // restore the original coverage
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
+    } else if (global.__coverage__) {
+      // V8 collector owned per-suite deltas; `global.__coverage__` was
+      // untouched and already holds cumulative nyc counters. Compute the
+      // coverage percentage without mutating it so nyc's own reporters
+      // still see the right data at process exit.
+      try {
+        const cumulativeMap = createCoverageMap(global.__coverage__)
+        if (untestedCoverage) {
+          cumulativeMap.merge(fromCoverageMapToCoverage(untestedCoverage))
+        }
+        testCodeCoverageLinesTotal = cumulativeMap.getCoverageSummary().lines.pct
+      } catch {
+        // ignore errors
+      }
     }
 
     testSessionFinishCh.publish({
@@ -323,6 +342,13 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    // Start the built-in V8 code coverage collector only when the backend has
+    // enabled ITR/coverage and the user is not already running nyc. This runs
+    // before any test body executes (mocha is in delay mode), so test code is
+    // tracked end-to-end.
+    if (libraryConfig.isCodeCoverageEnabled) {
+      startV8Coverage()
+    }
 
     if (config.isKnownTestsEnabled) {
       ctx.onDone = onReceivedKnownTests
@@ -518,15 +544,28 @@ addHook({
         })
       }
 
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
-
+      // ITR/TIA coverage: prefer the built-in V8 collector when it is
+      // running. V8 precise coverage is our canonical TIA feed and works
+      // whether or not the user runs nyc. When V8 is not running (eg.
+      // TIA was disabled by the backend, or someone explicitly opted out),
+      // fall back to `global.__coverage__` if istanbul (nyc) populated it.
+      const v8Collector = getV8CoverageCollector()
+      if (v8Collector) {
+        const coverageFiles = v8Collector.getFilesCoveredSinceLastSnapshot()
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
           suiteFile: suite.file,
         })
-        // We need to reset coverage to get a code coverage per suite
-        // Before that, we preserve the original coverage
+      } else if (global.__coverage__) {
+        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+        testSuiteCodeCoverageCh.publish({
+          coverageFiles,
+          suiteFile: suite.file,
+        })
+        // Reset per-suite after preserving originals so istanbul can report
+        // accurate totals at process exit — this path does not interfere
+        // with nyc's own reporters, which read fresh counters from
+        // `global.__coverage__` after each require hook.
         mergeCoverage(global.__coverage__, originalCoverageMap)
         resetCoverage(global.__coverage__)
       }
