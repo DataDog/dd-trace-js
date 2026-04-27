@@ -111,7 +111,7 @@ describe('Plugin', () => {
       it('does not modify the `system` property', async () => {
         const params = Object.freeze({
           model: 'claude-haiku-4-5-20251001',
-          messages: Object.freeze([{ role: 'user', content: 'Hello, world!' }]),
+          messages: Object.freeze([Object.freeze({ role: 'user', content: 'Hello, world!' })]),
           max_tokens: 100,
           temperature: 0.5,
           system: 'talk like a pirate',
