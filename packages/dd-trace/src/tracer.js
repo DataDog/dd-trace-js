@@ -18,19 +18,29 @@ const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
+    const _d = process.env.DD_TRACE_INIT_DEBUG === '1'
+    let _t = _d ? Date.now() : 0
+    // eslint-disable-next-line no-console
+    const _s = _d ? (l) => { console.log(`[DatadogTracer] ${l}: +${Date.now() - _t}ms`); _t = Date.now() } : () => {}
+
     super(config, prioritySampler)
+    _s('super()')
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
+    _s('DataStreams')
     this._scope = new Scope()
+    _s('Scope')
     setStartupLogConfig(config)
     flushStartupLogs(log)
+    _s('startupLog')
 
     if (!IS_SERVERLESS) {
       const storeConfig = require('./tracer_metadata')
       // Keep a reference to the handle, to keep the memfd alive in memory.
       // It is read by the service discovery feature.
       const metadata = storeConfig(config)
+      _s('tracer_metadata')
       if (metadata === undefined) {
         log.warn('Could not store tracer configuration for service discovery')
       }

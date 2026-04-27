@@ -21,6 +21,11 @@ const REFERENCE_FOLLOWS_FROM = 'follows_from'
 
 class DatadogTracer {
   constructor (config, prioritySampler) {
+    const _d = process.env.DD_TRACE_INIT_DEBUG === '1'
+    let _t = _d ? Date.now() : 0
+    // eslint-disable-next-line no-console
+    const _s = _d ? (l) => { console.log(`[opentracing/tracer] ${l}: +${Date.now() - _t}ms`); _t = Date.now() } : () => {}
+
     this._config = config
     this._service = config.service
     this._version = config.version
@@ -28,6 +33,7 @@ class DatadogTracer {
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
+    _s('PrioritySampler')
 
     // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
     // exporter when the tracer is running in Test Optimization mode. Test spans
@@ -42,8 +48,10 @@ class DatadogTracer {
       const Exporter = getExporter(config.experimental.exporter)
       this._exporter = new Exporter(config, this._prioritySampler)
     }
+    _s('Exporter')
 
     this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
+    _s('SpanProcessor')
     this._url = this._exporter._url
     this._enableGetRumData = config.experimental.enableGetRumData
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
@@ -54,6 +62,7 @@ class DatadogTracer {
       [formats.LOG]: new LogPropagator(config),
       [formats.TEXT_MAP_DSM]: new DSMTextMapPropagator(config),
     }
+    _s('propagators')
     if (config.reportHostname) {
       this._hostname = os.hostname()
     }

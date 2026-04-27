@@ -103,29 +103,42 @@ class Tracer extends NoopProxy {
 
     this._initialized = true
 
+    const _initDebug = process.env.DD_TRACE_INIT_DEBUG === '1'
+    const _t0 = _initDebug ? Date.now() : 0
+    let _t = _t0
+    // eslint-disable-next-line no-console
+    const _step = _initDebug ? (label) => { console.log(`[tracer.init] ${label}: +${Date.now() - _t}ms`); _t = Date.now() } : () => {}
+
     try {
       const config = getConfig(options) // TODO: support dynamic code config
+      _step('getConfig')
 
       // Add config dependent process tags
       processTags.initialize(config)
+      _step('processTags')
 
       // Configure propagation hash manager for process tags + container tags
       const propagationHash = require('./propagation-hash')
       propagationHash.configure(config)
+      _step('propagationHash')
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
+        _step('crashtracking')
       }
 
       if (config.heapSnapshot.count > 0) {
         require('./heap_snapshots').start(config)
+        _step('heapSnapshot')
       }
 
       telemetry.start(config, this._pluginManager)
+      _step('telemetry')
 
       if (config.dogstatsd) {
         // Custom Metrics
         lazyProxy(this, 'dogstatsd', () => require('./dogstatsd').CustomMetrics, config)
+        _step('dogstatsd')
       }
 
       if (config.spanLeakDebug > 0) {
@@ -136,6 +149,7 @@ class Tracer extends NoopProxy {
           spanleak.enableGarbageCollection()
         }
         spanleak.startScrubber()
+        _step('spanLeakDebug')
       }
 
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
@@ -178,10 +192,12 @@ class Tracer extends NoopProxy {
 
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
         openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
+        _step('remoteConfig')
       }
 
       if (config.profiling.enabled === 'true') {
         this._profilerStarted = this._startProfiler(config)
+        _step('profiler')
       } else {
         this._profilerStarted = false
         if (config.profiling.enabled === 'auto') {
@@ -197,11 +213,14 @@ class Tracer extends NoopProxy {
 
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
+        _step('runtimeMetrics')
       }
 
       this.#updateTracing(config)
+      _step('updateTracing')
 
       this._modules.rewriter.enable(config)
+      _step('rewriter')
 
       if (config.tracing && config.isManualApiEnabled) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
@@ -239,6 +258,11 @@ class Tracer extends NoopProxy {
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
       }
+
+      if (_initDebug) {
+        // eslint-disable-next-line no-console
+        console.log(`[tracer.init] total: ${Date.now() - _t0}ms`)
+      }
     } catch (e) {
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
@@ -267,18 +291,27 @@ class Tracer extends NoopProxy {
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   #updateTracing (config) {
+    const _d = process.env.DD_TRACE_INIT_DEBUG === '1'
+    let _t = _d ? Date.now() : 0
+    // eslint-disable-next-line no-console
+    const _s = _d ? (l) => { console.log(`[tracer.init#updateTracing] ${l}: +${Date.now() - _t}ms`); _t = Date.now() } : () => {}
+
     if (config.tracing !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
+        _s('appsec.enable')
       }
       if (config.llmobs.enabled) {
         this._modules.llmobs.enable(config)
+        _s('llmobs.enable')
       }
       if (!this._tracingInitialized) {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
           : undefined
+        _s('prioritySampler')
         this._tracer = new DatadogTracer(config, prioritySampler)
+        _s('new DatadogTracer')
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
         lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
         lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
@@ -288,6 +321,7 @@ class Tracer extends NoopProxy {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
+        _s('tracingInitialized')
       }
       if (config.experimental.flaggingProvider.enabled) {
         this._modules.openfeature.enable(config)
@@ -295,6 +329,7 @@ class Tracer extends NoopProxy {
       }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
+        _s('iast.enable')
       }
       // This needs to be after the IAST module is enabled
     } else if (this._tracingInitialized) {
@@ -307,10 +342,14 @@ class Tracer extends NoopProxy {
 
     if (this._tracingInitialized) {
       this._tracer.configure(config)
+      _s('tracer.configure')
       this._pluginManager.configure(config)
+      _s('pluginManager.configure')
       DynamicInstrumentation.configure(config)
+      _s('DynamicInstrumentation.configure')
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
+      _s('startupLog')
     }
   }
 

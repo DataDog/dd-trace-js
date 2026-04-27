@@ -429,26 +429,42 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
+    const _loadDebug = process.env.DD_TRACE_INIT_DEBUG === '1'
+    // eslint-disable-next-line no-console
+    const _loadLog = _loadDebug ? (label) => console.log(`[agent.load] ${label}`) : () => {}
+    const _loadTime = _loadDebug ? (label, fn) => {
+      const t = Date.now()
+      const r = fn()
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load] ${label}: ${Date.now() - t}ms`)
+      return r
+    } : (_, fn) => fn()
+
+    const _loadStart = _loadDebug ? Date.now() : 0
+
     if (loaded || require.cache[require.resolve('../..')]) {
-      const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
-      const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
-        './defaults': defaults,
-      })
+      _loadLog('proxyquire path (cached/reloaded)')
+      const defaults = _loadTime('proxyquire:config/defaults', () =>
+        proxyquire.noPreserveCache()('../../src/config/defaults', {}))
+      const getConfigFresh = _loadTime('proxyquire:config', () =>
+        proxyquire.noPreserveCache()('../../src/config', { './defaults': defaults }))
       // Reload dogstatsd to avoid adding new events to the global process object
-      const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-      const proxy = proxyquire('../../src/proxy', {
-        './config': getConfigFresh,
-        './dogstatsd': dogstatsd,
-      })
-      const TracerProxy = proxyquire('../../src', {
-        './proxy': proxy,
-      })
-      tracer = proxyquire('../../', {
-        './src': TracerProxy,
-      })
+      const dogstatsd = _loadTime('proxyquire:dogstatsd', () =>
+        proxyquire.noPreserveCache()('../../src/dogstatsd', {}))
+      const proxy = _loadTime('proxyquire:proxy', () =>
+        proxyquire('../../src/proxy', { './config': getConfigFresh, './dogstatsd': dogstatsd }))
+      const TracerProxy = _loadTime('proxyquire:TracerProxy', () =>
+        proxyquire('../../src', { './proxy': proxy }))
+      tracer = _loadTime('proxyquire:tracer', () =>
+        proxyquire('../../', { './src': TracerProxy }))
     } else {
+      _loadLog('fast path (first load, plain require)')
       tracer = require('../..')
       loaded = true
+    }
+    if (_loadDebug) {
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load] module load total: ${Date.now() - _loadStart}ms`)
     }
 
     agent = express()
@@ -464,7 +480,13 @@ module.exports = {
 
     const innerAgent = agent
 
+    _loadLog('checkAgentStatus start')
+    const _tCheck = _loadDebug ? Date.now() : 0
     const useTestAgent = await checkAgentStatus()
+    if (_loadDebug) {
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load] checkAgentStatus: ${Date.now() - _tCheck}ms useTestAgent=${useTestAgent}`)
+    }
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
@@ -524,10 +546,18 @@ module.exports = {
 
     server.on('connection', socket => sockets.push(socket))
 
+    _loadLog('server.listen start')
+    const _tListen = _loadDebug ? Date.now() : 0
     const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
+        if (_loadDebug) {
+          // eslint-disable-next-line no-console
+          console.log(`[agent.load] server.listen callback: ${Date.now() - _tListen}ms`)
+        }
         const port = listener.address().port
 
+        _loadLog('tracer.init start')
+        const _tInit = _loadDebug ? Date.now() : 0
         tracer.init({
           service: 'test',
           env: 'tester',
@@ -536,6 +566,12 @@ module.exports = {
           plugins: false,
           ...tracerConfig,
         })
+        if (_loadDebug) {
+          // eslint-disable-next-line no-console
+          console.log(`[agent.load] tracer.init: ${Date.now() - _tInit}ms`)
+          // eslint-disable-next-line no-console
+          console.log(`[agent.load] total load: ${Date.now() - _loadStart}ms`)
+        }
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
