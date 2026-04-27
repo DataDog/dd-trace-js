@@ -301,6 +301,12 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
   }
 }
 
+/**
+ * @param {object} metrics - WAF run metrics
+ * @param {string} [raspRule] - RASP rule identifier
+ * @param {object} [req] - Request key (plain object for lambda)
+ * @param {object} [rootSpan] - Root span (required for lambda)
+ */
 function reportMetrics (metrics, raspRule, req, rootSpan) {
   if (!req) {
     req = storage('legacy').getStore()?.req
@@ -338,6 +344,16 @@ function reportTruncationMetrics (rootSpan, metrics) {
   }
 }
 
+// NOTE: `req` in the WAF execution path may be any object, not necessarily
+// an HTTP IncomingMessage. In Lambda, it is a plain context key ({}) with no
+// HTTP properties. Always guard HTTP-specific property access
+// See tests in lambda.spec.js for enforcement.
+
+/**
+ * @param {{ events: Array, actions: object }} result - WAF result with attack data
+ * @param {object} [req] - Request key. May be an HTTP IncomingMessage or a plain object (Lambda)
+ * @param {object} [rootSpan] - Root span (required for lambda)
+ */
 function reportAttack ({ events: attackData, actions }, req, rootSpan) {
   if (!req) {
     req = storage('legacy').getStore()?.req
@@ -367,11 +383,13 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
     ? currentJson.slice(0, -2) + ',' + attackDataStr.slice(1) + '}'
     : '{"triggers":' + attackDataStr + '}'
 
-  if (req.socket) {
+  if (req?.socket) {
     newTags[NETWORK_CLIENT_IP] = req.socket.remoteAddress
   }
 
   rootSpan.addTags(newTags)
+
+  if (!req) return
 
   // Add _dd.appsec.json tag to inferred proxy span
   if (config.inferredProxyServicesEnabled) {
@@ -482,6 +500,11 @@ function isSchemaAttribute (attribute) {
   return attribute.startsWith('_dd.appsec.s.')
 }
 
+/**
+ * @param {object} [attributes] - WAF result attributes
+ * @param {object} [req] - Request key (plain object for lambda)
+ * @param {object} [rootSpan] - Root span (required for lambda)
+ */
 function reportAttributes (attributes, req, rootSpan) {
   if (!attributes) return
 
@@ -507,6 +530,13 @@ function reportAttributes (attributes, req, rootSpan) {
   rootSpan.addTags(tags)
 }
 
+/**
+ * @param {object} [req] - Request key (null for Lambda)
+ * @param {object} [res] - Response object (null for lambda)
+ * @param {object} storedResponseHeaders
+ * @param {object} [requestBody]
+ * @param {object} [rootSpan] - Root span (required for lambda)
+ */
 function finishRequest (req, res, storedResponseHeaders, requestBody, rootSpan) {
   if (!rootSpan) {
     rootSpan = web.root(req)

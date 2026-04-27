@@ -110,6 +110,18 @@ function removeConfig (configPath) {
   }
 }
 
+// `req` in the WAF execution path may be any object, not necessarily
+// an HTTP IncomingMessage (it is a plain object for lambda).
+// Always guard HTTP-specific property access.
+// @see packages/dd-trace/test/appsec/lambda.spec.js
+
+/**
+ * @param {object} data - WAF address data ({ persistent, ephemeral })
+ * @param {object} req - Request key for WAF context lookup. May be an HTTP
+ *   IncomingMessage or a plain object (Lambda invocation key).
+ * @param {string} [raspRule] - RASP rule identifier
+ * @param {object} [rootSpan] - Root span to tag (required for Lambda)
+ */
 function run (data, req, raspRule, rootSpan) {
   if (!req) {
     const store = storage('legacy').getStore()
