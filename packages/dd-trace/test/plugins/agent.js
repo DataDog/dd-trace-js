@@ -28,6 +28,7 @@ let plugins = []
 const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
+let loaded = false
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -229,9 +230,12 @@ function handleTraceRequest (req, res, sendToTestAgent) {
 function checkAgentStatus () {
   return new Promise((resolve) => {
     const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
-    const timeoutMs = 2000
+    const timeoutMs = 500
+    let done = false
 
     const request = http.request(`${agentUrl}/info`, { method: 'GET', timeout: timeoutMs }, response => {
+      response.resume() // drain body so the socket is released before the idle timer re-fires
+      done = true
       resolve(response.statusCode === 200)
     })
 
@@ -241,12 +245,13 @@ function checkAgentStatus () {
         `checkAgentStatus: Timed out after ${timeoutMs}ms trying to reach test agent at ${agentUrl}. ` +
         'Proceeding without test agent. If this happens frequently, investigate what is listening on that port.'
       )
+      done = true
       request.destroy()
       resolve(false)
     })
 
     request.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
-      if (err.code !== 'ECONNREFUSED') {
+      if (!done && err.code !== 'ECONNREFUSED') {
         // eslint-disable-next-line no-console
         console.warn(`checkAgentStatus: Unexpected error reaching test agent at ${agentUrl}`, err)
       }
@@ -424,22 +429,27 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
-    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
-      './defaults': defaults,
-    })
-    // Reload dogstatsd to avoid adding new events to the global process object
-    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-    const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh,
-      './dogstatsd': dogstatsd,
-    })
-    const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy,
-    })
-    tracer = proxyquire('../../', {
-      './src': TracerProxy,
-    })
+    if (loaded || require.cache[require.resolve('../..')]) {
+      const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+      const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
+        './defaults': defaults,
+      })
+      // Reload dogstatsd to avoid adding new events to the global process object
+      const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+      const proxy = proxyquire('../../src/proxy', {
+        './config': getConfigFresh,
+        './dogstatsd': dogstatsd,
+      })
+      const TracerProxy = proxyquire('../../src', {
+        './proxy': proxy,
+      })
+      tracer = proxyquire('../../', {
+        './src': TracerProxy,
+      })
+    } else {
+      tracer = require('../..')
+      loaded = true
+    }
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
