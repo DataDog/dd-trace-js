@@ -168,8 +168,6 @@ function addEnvironmentVariablesToHeaders (headers) {
   headers['X-Datadog-Trace-Env-Variables'] = serializedEnvVars
 }
 
-let testAgentForwardFailureLogged = false
-
 /**
  * Handles the received trace request and sends trace to Test Agent if bool enabled.
  *
@@ -178,14 +176,17 @@ let testAgentForwardFailureLogged = false
  * @param {boolean} sendToTestAgent
  */
 function handleTraceRequest (req, res, sendToTestAgent) {
+  // handles the received trace request and sends trace to Test Agent if bool enabled.
   if (sendToTestAgent) {
-    const testAgentUrl = process.env.DD_TEST_AGENT_URL
+    const testAgentUrl = process.env.DD_TEST_AGENT_URL || 'http://127.0.0.1:9126'
     const replacer = (k, v) => typeof v === 'bigint' ? Number(v) : v
 
+    // remove incorrect headers
     delete req.headers.host
     delete req.headers['content-type']
     delete req.headers['content-length']
 
+    // add current environment variables to trace headers
     addEnvironmentVariablesToHeaders(req.headers)
 
     const testAgentReq = http.request(
@@ -200,6 +201,7 @@ function handleTraceRequest (req, res, sendToTestAgent) {
 
     testAgentReq.on('response', testAgentRes => {
       if (testAgentRes.statusCode !== 200) {
+        // handle request failures from the Test Agent here
         let body = ''
         testAgentRes.on('data', chunk => {
           body += chunk
@@ -208,13 +210,6 @@ function handleTraceRequest (req, res, sendToTestAgent) {
           // eslint-disable-next-line no-console
           console.warn(`handleTraceRequest: Test agent returned ${testAgentRes.statusCode}: ${body}`)
         })
-      }
-    })
-    testAgentReq.on('error', err => {
-      if (!testAgentForwardFailureLogged) {
-        testAgentForwardFailureLogged = true
-        // eslint-disable-next-line no-console
-        console.warn(`handleTraceRequest: failed forwarding to ${testAgentUrl}: ${err.message}`)
       }
     })
     testAgentReq.write(JSON.stringify(req.body, replacer))
@@ -228,6 +223,37 @@ function handleTraceRequest (req, res, sendToTestAgent) {
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
     }
+  })
+}
+
+function checkAgentStatus () {
+  return new Promise((resolve) => {
+    const agentUrl = process.env.DD_TRACE_AGENT_URL || 'http://127.0.0.1:9126'
+    const timeoutMs = 2000
+
+    const request = http.request(`${agentUrl}/info`, { method: 'GET', timeout: timeoutMs }, response => {
+      resolve(response.statusCode === 200)
+    })
+
+    request.on('timeout', () => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `checkAgentStatus: Timed out after ${timeoutMs}ms trying to reach test agent at ${agentUrl}. ` +
+        'Proceeding without test agent. If this happens frequently, investigate what is listening on that port.'
+      )
+      request.destroy()
+      resolve(false)
+    })
+
+    request.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+      if (err.code !== 'ECONNREFUSED') {
+        // eslint-disable-next-line no-console
+        console.warn(`checkAgentStatus: Unexpected error reaching test agent at ${agentUrl}`, err)
+      }
+      resolve(false)
+    })
+
+    request.end()
   })
 }
 
@@ -428,10 +454,7 @@ module.exports = {
 
     const innerAgent = agent
 
-    // Opt-in: set `DD_TEST_AGENT_URL` locally (e.g. `http://127.0.0.1:9126`)
-    // to mirror every trace to a running APM test agent. Forward failures
-    // are handled per-request.
-    const useTestAgent = Boolean(process.env.DD_TEST_AGENT_URL)
+    const useTestAgent = await checkAgentStatus()
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
