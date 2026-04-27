@@ -732,6 +732,62 @@ describe(`cucumber@${version} commonJS`, () => {
             )
           })
 
+        it(
+          'can skip suites and report code coverage WITHOUT nyc (built-in V8 coverage)',
+          (done) => {
+            receiver.setSuitesToSkip([{
+              type: 'suite',
+              attributes: {
+                suite: `${featuresPath}farewell.feature`,
+              },
+            }])
+
+            const skippableRequestPromise = receiver
+              .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+            const coverageRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
+            const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
+
+            Promise.all([
+              skippableRequestPromise,
+              coverageRequestPromise,
+              eventsRequestPromise,
+            ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
+              if (isAgentless) {
+                assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
+              }
+
+              const skippedSuite = eventsRequest.payload.events.find(event =>
+                event.content.resource === `test_suite.${featuresPath}farewell.feature`
+              ).content
+              assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+              const testSession = eventsRequest.payload.events
+                .find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+              assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+
+              const allCoverageFiles = coverageRequest.payload
+                .flatMap(coverage => coverage.content.coverages)
+                .flatMap(file => file.files)
+                .map(file => file.filename)
+
+              // Expect at least one non-empty user file to be reported.
+              assert.ok(allCoverageFiles.length > 0, 'expected at least one covered file')
+              done()
+            }).catch(done)
+
+            childProcess = exec(
+              runTestsCommand,
+              {
+                cwd,
+                env: envVars,
+              }
+            )
+          }
+        )
+
         it('does not skip tests if git metadata upload fails', (done) => {
           receiver.setSuitesToSkip([{
             type: 'suite',

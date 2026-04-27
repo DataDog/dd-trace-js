@@ -13,6 +13,10 @@ const {
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
 } = require('../../dd-trace/src/plugins/util/test')
+const {
+  getV8CoverageCollector,
+  startV8Coverage,
+} = require('../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
 const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -583,6 +587,10 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
     isImpactedTestsEnabled = configurationResponse.libraryConfig?.isImpactedTestsEnabled
 
+    if (configurationResponse.libraryConfig?.isCodeCoverageEnabled) {
+      startV8Coverage()
+    }
+
     if (isKnownTestsEnabled) {
       const knownTestsResponse = await getChannelPromise(knownTestsCh)
       if (knownTestsResponse.err) {
@@ -676,7 +684,11 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     let testCodeCoverageLinesTotal
 
-    if (global.__coverage__) {
+    // If V8 is the active TIA collector we never mutated `global.__coverage__`
+    // per suite, so nyc already sees the full accumulated counters. Only the
+    // legacy istanbul-per-suite path needs the restore below.
+    const v8CollectorActive = !!getV8CoverageCollector()
+    if (global.__coverage__ && !v8CollectorActive) {
       try {
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
@@ -687,6 +699,16 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       }
       // restore the original coverage
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
+    } else if (global.__coverage__) {
+      try {
+        const cumulativeMap = createCoverageMap(global.__coverage__)
+        if (untestedCoverage) {
+          cumulativeMap.merge(fromCoverageMapToCoverage(untestedCoverage))
+        }
+        testCodeCoverageLinesTotal = cumulativeMap.getCoverageSummary().lines.pct
+      } catch {
+        // ignore errors
+      }
     }
 
     sessionFinishCh.publish({
@@ -842,7 +864,15 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
     if (!isWorker && pickleResultByFile[testFileAbsolutePath].length === pickleByFile[testFileAbsolutePath].length) {
       // last test in suite
       const testSuiteStatus = getSuiteStatusFromTestStatuses(pickleResultByFile[testFileAbsolutePath])
-      if (global.__coverage__) {
+      const v8Collector = getV8CoverageCollector()
+      if (v8Collector) {
+        const coverageFiles = v8Collector.getFilesCoveredSinceLastSnapshot()
+        testSuiteCodeCoverageCh.publish({
+          coverageFiles,
+          suiteFile: testFileAbsolutePath,
+          testSuitePath,
+        })
+      } else if (global.__coverage__) {
         const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
 
         testSuiteCodeCoverageCh.publish({
