@@ -372,7 +372,7 @@ function execHelper (command, options) {
     if (command.startsWith(BUN)) {
       try {
         log('Exec RETRY BACKOFF: 60 seconds')
-        execSync('sleep 60')
+        execSync('sleep 30')
         log('Exec RETRY START: ', command)
         execSync(command, options)
         log('Exec RETRY SUCCESS: ', command)
