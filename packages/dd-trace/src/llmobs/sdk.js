@@ -2,7 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
-const { isTrue, isError } = require('../util')
+const { isError, isTrue } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
@@ -436,7 +436,7 @@ class LLMObs extends NoopLLMObs {
       }
 
       // When OTel tracing is enabled, add source:otel tag to allow backend to wait for OTel span conversion
-      if (isTrue(getValueFromEnvSources('DD_TRACE_OTEL_ENABLED'))) {
+      if (this._config.DD_TRACE_OTEL_ENABLED) {
         evaluationTags.source = 'otel'
       }
 
