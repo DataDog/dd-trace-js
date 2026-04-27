@@ -3,19 +3,22 @@
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const { storage } = require('../../../../datadog-core')
 const addresses = require('../../../src/appsec/addresses')
 const { childProcessExecutionTracingChannel } = require('../../../src/appsec/channels')
+const { withRequest } = require('../../../src/appsec/store')
+const web = require('../../../src/plugins/util/web')
 
 const { start } = childProcessExecutionTracingChannel
 
 describe('RASP - command_injection.js', () => {
-  let waf, legacyStorage, commandInjection, utils, config
+  let waf, commandInjection, utils, config
+
+  const enterStore = (store) => {
+    storage('legacy').enterWith(store)
+  }
 
   beforeEach(() => {
-    legacyStorage = {
-      getStore: sinon.stub(),
-    }
-
     waf = {
       run: sinon.stub(),
     }
@@ -25,7 +28,6 @@ describe('RASP - command_injection.js', () => {
     }
 
     commandInjection = proxyquire('../../../src/appsec/rasp/command_injection', {
-      '../../../../datadog-core': { storage: () => legacyStorage },
       '../waf': waf,
       './utils': utils,
     })
@@ -46,6 +48,7 @@ describe('RASP - command_injection.js', () => {
   afterEach(() => {
     sinon.restore()
     commandInjection.disable()
+    enterStore({})
   })
 
   describe('analyzeCommandInjection', () => {
@@ -55,7 +58,7 @@ describe('RASP - command_injection.js', () => {
         file: 'cmd',
       }
       const req = {}
-      legacyStorage.getStore.returns({ req })
+      enterStore(withRequest(undefined, req))
 
       start.publish(ctx)
 
@@ -66,7 +69,7 @@ describe('RASP - command_injection.js', () => {
       const ctx = {
         file: 'cmd',
       }
-      legacyStorage.getStore.returns(undefined)
+      enterStore(undefined)
 
       start.publish(ctx)
 
@@ -77,7 +80,7 @@ describe('RASP - command_injection.js', () => {
       const ctx = {
         file: 'cmd',
       }
-      legacyStorage.getStore.returns({})
+      enterStore({})
 
       start.publish(ctx)
 
@@ -89,7 +92,7 @@ describe('RASP - command_injection.js', () => {
         fileArgs: ['arg0'],
       }
       const req = {}
-      legacyStorage.getStore.returns({ req })
+      enterStore(withRequest(undefined, req))
 
       start.publish(ctx)
 
@@ -103,7 +106,7 @@ describe('RASP - command_injection.js', () => {
           shell: true,
         }
         const req = {}
-        legacyStorage.getStore.returns({ req })
+        enterStore(withRequest(undefined, req))
 
         start.publish(ctx)
 
@@ -120,7 +123,7 @@ describe('RASP - command_injection.js', () => {
           shell: true,
         }
         const req = {}
-        legacyStorage.getStore.returns({ req })
+        enterStore(withRequest(undefined, req))
 
         start.publish(ctx)
 
@@ -138,7 +141,8 @@ describe('RASP - command_injection.js', () => {
         const res = { res: 'res' }
         const raspRule = { type: 'command_injection', variant: 'shell' }
         waf.run.returns(wafResult)
-        legacyStorage.getStore.returns({ req, res })
+        web.patch(req).res = res
+        enterStore(withRequest(undefined, req))
 
         start.publish(ctx)
 
@@ -153,7 +157,7 @@ describe('RASP - command_injection.js', () => {
           shell: false,
         }
         const req = {}
-        legacyStorage.getStore.returns({ req })
+        enterStore(withRequest(undefined, req))
 
         start.publish(ctx)
 
@@ -170,7 +174,7 @@ describe('RASP - command_injection.js', () => {
           shell: false,
         }
         const req = {}
-        legacyStorage.getStore.returns({ req })
+        enterStore(withRequest(undefined, req))
 
         start.publish(ctx)
 
@@ -188,7 +192,8 @@ describe('RASP - command_injection.js', () => {
         const res = { res: 'res' }
         const raspRule = { type: 'command_injection', variant: 'exec' }
         waf.run.returns(wafResult)
-        legacyStorage.getStore.returns({ req, res })
+        web.patch(req).res = res
+        enterStore(withRequest(undefined, req))
 
         start.publish(ctx)
 

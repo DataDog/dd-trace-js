@@ -1,12 +1,12 @@
 'use strict'
 
-const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const Reporter = require('../reporter')
 const Limiter = require('../../rate_limiter')
 const { keepTrace } = require('../../priority_sampler')
 const { ASM } = require('../../standalone/product')
 const web = require('../../plugins/util/web')
+const { getActiveRequest } = require('../store')
 const { updateRateLimitedMetric } = require('../telemetry')
 
 class WafUpdateError extends Error {
@@ -112,13 +112,11 @@ function removeConfig (configPath) {
 
 function run (data, req, raspRule) {
   if (!req) {
-    const store = storage('legacy').getStore()
-    if (!store || !store.req) {
+    req = getActiveRequest()
+    if (!req) {
       log.warn('[ASM] Request object not available in waf.run')
       return
     }
-
-    req = store.req
   }
 
   const wafContext = waf.wafManager.getWAFContext(req)
