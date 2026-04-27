@@ -130,8 +130,6 @@ moduleTypes.forEach(({
       cwd = sandboxCwd()
     })
 
-    after(async () => {})
-
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
 
