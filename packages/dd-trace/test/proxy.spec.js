@@ -33,6 +33,7 @@ describe('TracerProxy', () => {
   let telemetry
   let iast
   let openfeature
+  let rewriter
   let PluginManager
   let pluginManager
   let flare
@@ -198,6 +199,11 @@ describe('TracerProxy', () => {
       disable: sinon.spy(),
     }
 
+    rewriter = {
+      enable: sinon.spy(),
+      disable: sinon.spy(),
+    }
+
     openfeatureProvider = {
       _setConfiguration: sinon.spy(),
     }
@@ -246,6 +252,7 @@ describe('TracerProxy', () => {
       './profiler': profiler,
       './appsec': appsec,
       './appsec/iast': iast,
+      './appsec/iast/taint-tracking/rewriter': rewriter,
       './telemetry': telemetry,
       './remote_config': RemoteConfig,
       './aiguard/sdk': AIGuardSdk,
@@ -525,6 +532,7 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.calledOnce(iast.enable)
+        sinon.assert.calledOnceWithExactly(rewriter.enable, config)
       })
 
       it('should not enable iast when it is not configured', () => {
@@ -533,6 +541,7 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.notCalled(iast.enable)
+        sinon.assert.notCalled(rewriter.enable)
       })
 
       it('should not load the profiler when not configured', () => {

@@ -3,11 +3,21 @@
 const log = require('../log')
 const { updateConfig } = require('../telemetry')
 const RemoteConfigCapabilities = require('../remote_config/capabilities')
-const { setCollectionMode } = require('./user_tracking')
 const Activation = require('./activation')
 
 let autoUserInstrumModeId
 let rc
+let userTracking
+
+/**
+ * Updates AppSec auto user instrumentation collection mode.
+ *
+ * @param {string} mode - Collection mode to apply.
+ */
+function setCollectionMode (mode) {
+  userTracking ??= require('./user_tracking')
+  userTracking.setCollectionMode(mode)
+}
 
 /**
  * Configures remote config handlers for appsec features

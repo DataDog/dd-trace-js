@@ -78,6 +78,22 @@ describe('AppSec Remote Config', () => {
       assert.strictEqual(typeof rc.setProductHandler.firstCall.args[1], 'function')
     })
 
+    it('should not load user tracking when registering remote config handlers', () => {
+      const getUserTracking = sinon.stub().throws(new Error('user tracking should be lazy'))
+
+      const appsecRemoteConfig = proxyquire('../../src/appsec/remote_config', {
+        './user_tracking': {
+          get setCollectionMode () {
+            return getUserTracking()
+          },
+        },
+      })
+
+      appsecRemoteConfig.enable(rc, config, appsec)
+
+      sinon.assert.notCalled(getUserTracking)
+    })
+
     it('should listen to remote config when appsec is explicitly configured as enabled=true', () => {
       config.appsec.enabled = true
 
