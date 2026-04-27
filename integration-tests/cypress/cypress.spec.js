@@ -354,6 +354,10 @@ moduleTypes.forEach(({
 
     // These tests require Cypress >=10 features (defineConfig, setupNodeEvents)
     const over10It = (version !== '6.7.0') ? it : it.skip
+    // Cypress <14 shipped an older ts-node ESM loader that doesn't implement the
+    // current Node.js ESM hooks chain (ERR_LOADER_CHAIN_INCOMPLETE), so TS configs
+    // under `"type": "module"` can't be loaded at all, regardless of dd-trace.
+    const over14It = (version === 'latest' || semver.gte(version, '14.0.0')) ? it : it.skip
     over10It('is backwards compatible with the old manual plugin approach', async () => {
       receiver.setInfoResponse({ endpoints: [] })
 
@@ -736,6 +740,177 @@ moduleTypes.forEach(({
           cwd,
           env: {
             ...envVars,
+            CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+    })
+
+    // Regression guard: when the surrounding package has "type": "module",
+    // the .ts config is transpiled and loaded as ESM. Cypress's CJS
+    // addHook path cannot intercept the ESM `import 'cypress'`, so the
+    // only route to `wrapConfig` is the CLI-wrap path that rewrites
+    // --config-file to a wrapper. An earlier version bailed out on `.ts`
+    // here and silently skipped instrumentation — no test_session /
+    // test_module / test_suite / test spans reached the intake.
+    //
+    // Set up the ESM project inside a dedicated subdirectory so Cypress
+    // resolves `type: module` and the tsconfig only for this test. Using
+    // the sandbox root would leak cached ts-node / webpack state into
+    // later tests (Cypress caches based on the project root).
+    over14It('reports tests with a TypeScript config file under "type": "module"', async () => {
+      const subprojectDir = path.join(cwd, 'esm-ts-subproject')
+      fs.rmSync(subprojectDir, { recursive: true, force: true })
+      fs.mkdirSync(path.join(subprojectDir, 'cypress', 'e2e'), { recursive: true })
+      fs.writeFileSync(path.join(subprojectDir, 'package.json'), JSON.stringify({
+        name: 'esm-ts-subproject',
+        type: 'module',
+      }, null, 2))
+      // `module: nodenext` so ts-node transpiles the `.ts` as ESM — real-world
+      // ESM TS projects already ship this; the default (CommonJS) emit would
+      // produce `exports is not defined in ES module scope` at runtime.
+      fs.writeFileSync(path.join(subprojectDir, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { module: 'nodenext', moduleResolution: 'nodenext', target: 'ES2022' },
+      }, null, 2))
+      // Minimal self-contained config so the subproject doesn't depend on
+      // anything under the sandbox's `cypress/` tree beyond the support
+      // file (which wires dd-trace's browser-side hooks via the shared
+      // `dd-trace` package already installed in the sandbox).
+      fs.writeFileSync(path.join(subprojectDir, 'cypress.config.ts'), [
+        "import { defineConfig } from 'cypress'",
+        '',
+        'export default defineConfig({',
+        '  defaultCommandTimeout: 1000,',
+        '  e2e: {',
+        "    specPattern: 'cypress/e2e/**/*.cy.js',",
+        "    supportFile: 'cypress/support/e2e.js',",
+        '  },',
+        '  video: false,',
+        '  screenshotOnRunFailure: false,',
+        '})',
+        '',
+      ].join('\n'))
+      fs.mkdirSync(path.join(subprojectDir, 'cypress', 'support'), { recursive: true })
+      fs.copyFileSync(
+        path.join(cwd, 'cypress', 'support', 'e2e.js'),
+        path.join(subprojectDir, 'cypress', 'support', 'e2e.js')
+      )
+      // Minimal passing spec so the test is self-contained and doesn't
+      // depend on the rest of the sandbox's e2e tree.
+      fs.writeFileSync(path.join(subprojectDir, 'cypress', 'e2e', 'basic-pass.cy.js'), [
+        '/* eslint-disable */',
+        "describe('basic pass suite', () => {",
+        "  it('can pass', () => {",
+        "    cy.visit('/')",
+        "    cy.get('.hello-world').should('have.text', 'Hello World')",
+        '  })',
+        '})',
+        '',
+      ].join('\n'))
+
+      let testOutput = ''
+      try {
+        const receiverPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            // Full span hierarchy must be present — not just a stray telemetry span.
+            const sessionEvents = events.filter(event => event.type === 'test_session_end')
+            const moduleEvents = events.filter(event => event.type === 'test_module_end')
+            const suiteEvents = events.filter(event => event.type === 'test_suite_end')
+            const testEvents = events.filter(event => event.type === 'test')
+
+            assert.strictEqual(sessionEvents.length, 1, `one test_session span\n${testOutput}`)
+            assert.strictEqual(moduleEvents.length, 1, `one test_module span\n${testOutput}`)
+            assert.ok(suiteEvents.length >= 1, `at least one test_suite span\n${testOutput}`)
+
+            const passedTest = testEvents.find(event =>
+              event.content.resource === 'cypress/e2e/basic-pass.cy.js.basic pass suite can pass'
+            )
+            assertObjectContains(passedTest?.content, {
+              meta: {
+                [TEST_STATUS]: 'pass',
+                [TEST_FRAMEWORK]: 'cypress',
+              },
+            })
+          }, 20000)
+
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+
+        // Run Cypress *from* the subproject so its project root is the
+        // ESM-configured directory; keeping the original `cwd` would pick
+        // up the sandbox's own package.json (no `type: module`).
+        childProcess = exec(
+          path.join(cwd, 'node_modules/.bin/cypress') + ' run',
+          {
+            cwd: subprojectDir,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+            },
+          }
+        )
+        childProcess.stdout?.on('data', (d) => { testOutput += d })
+        childProcess.stderr?.on('data', (d) => { testOutput += d })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, `cypress process should exit successfully\n${testOutput}`)
+      } finally {
+        fs.rmSync(subprojectDir, { recursive: true, force: true })
+      }
+    })
+
+    // Regression guard: when OTEL_TRACES_EXPORTER=otlp is set in the
+    // environment (e.g. by an unrelated OpenTelemetry-instrumented shell),
+    // the tracer must still ship Test Optimization spans to
+    // /api/v2/citestcycle instead of silently replacing the Test
+    // Optimization exporter with OtlpHttpTraceExporter and dropping all
+    // test_session / test_module / test_suite / test spans.
+    over10It('keeps Test Optimization exporter when OTEL_TRACES_EXPORTER=otlp is set', async () => {
+      const receiverPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+
+          const sessionEvents = events.filter(event => event.type === 'test_session_end')
+          const testEvents = events.filter(event => event.type === 'test')
+
+          assert.strictEqual(sessionEvents.length, 1, 'one test_session span must reach citestcycle')
+
+          const passedTest = testEvents.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          )
+          assertObjectContains(passedTest?.content, {
+            meta: {
+              [TEST_STATUS]: 'pass',
+              [TEST_FRAMEWORK]: 'cypress',
+            },
+          })
+        }, 20000)
+
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            // Simulates a user shell that already exports OTEL_* vars for
+            // a separate OTEL collector. The Test Optimization exporter
+            // must win inside isCiVisibility mode.
+            OTEL_TRACES_EXPORTER: 'otlp',
             CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
             SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
           },

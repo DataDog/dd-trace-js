@@ -34,11 +34,11 @@ const compiler = {
 
       const meriyah = require('../../../../../vendor/dist/meriyah')
 
-      compiler.parse = (sourceText, { range, sourceType } = {}) => {
+      compiler.parse = (sourceText, { range, isModule } = {}) => {
         return meriyah.parse(sourceText.toString(), {
           loc: range,
           ranges: range,
-          module: sourceType === 'module',
+          module: isModule,
         })
       }
     }

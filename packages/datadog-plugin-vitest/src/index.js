@@ -2,7 +2,6 @@
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   TEST_STATUS,
@@ -34,6 +33,7 @@ const {
   isModifiedTest,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -213,10 +213,13 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
+        if (finalStatus) {
+          span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
       }
@@ -230,6 +233,7 @@ class VitestPlugin extends CiPlugin {
       promises,
       hasFailedAllRetries,
       attemptToFixFailed,
+      finalStatus,
     }) => {
       if (!span) {
         return
@@ -255,6 +259,9 @@ class VitestPlugin extends CiPlugin {
       if (attemptToFixFailed) {
         span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
       }
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
       if (duration) {
         span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
       } else {
@@ -273,6 +280,7 @@ class VitestPlugin extends CiPlugin {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',
+          [TEST_FINAL_STATUS]: 'skip',
           ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
         }
@@ -285,12 +293,12 @@ class VitestPlugin extends CiPlugin {
       const { testSuiteAbsolutePath, frameworkVersion } = ctx
 
       // TODO: Handle case where the command is not set
-      this.command = getValueFromEnvSources('DD_CIVISIBILITY_TEST_COMMAND')
+      this.command = this._tracerConfig.DD_CIVISIBILITY_TEST_COMMAND
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = this.tracer.extract('text_map', {
         // TODO: Handle case where the session ID or module ID is not set
-        'x-datadog-trace-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_SESSION_ID'),
-        'x-datadog-parent-id': getValueFromEnvSources('DD_CIVISIBILITY_TEST_MODULE_ID'),
+        'x-datadog-trace-id': this._tracerConfig.DD_CIVISIBILITY_TEST_SESSION_ID,
+        'x-datadog-parent-id': this._tracerConfig.DD_CIVISIBILITY_TEST_MODULE_ID,
       })
 
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
@@ -415,7 +423,7 @@ class VitestPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
       this.tracer._exporter.flush(onFinish)
     })
