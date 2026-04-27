@@ -67,7 +67,8 @@ class AzureCosmosPlugin extends DatabasePlugin {
       const resourceType = requestContext.resourceType
       if (pluginOn === 'request' && ((operationType !== 'read' && operationType !== 'query') ||
         (operationType === 'read' && resourceType !== 'docs'))) {
-        ctx.currentStore = { ...storage('legacy').getStore() }
+        const store = storage('legacy').getStore() || {}
+        ctx.currentStore = { ...store }
         return ctx.currentStore
       }
 
