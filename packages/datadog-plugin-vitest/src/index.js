@@ -368,9 +368,13 @@ class VitestPlugin extends CiPlugin {
       onFinish,
       coverageFiles,
       testSuiteAbsolutePath,
+      itrCorrelationId,
     }) => {
       if (testSuiteSpan) {
         testSuiteSpan.setTag(TEST_STATUS, status)
+        if (itrCorrelationId) {
+          testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+        }
 
         // TIA code coverage reporting: the worker collected a list of files
         // whose code executed during this suite. Serialize it and hand it to

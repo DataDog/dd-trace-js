@@ -83,6 +83,7 @@ let isImpactedTestsEnabled = false
 let isCodeCoverageEnabled = false
 let isSuitesSkippingEnabled = false
 let isSuitesSkipped = false
+let allSuitesSkippedByItr = false
 let skippedSuites = []
 let itrCorrelationId = ''
 let vitestGetFn = null
@@ -131,6 +132,7 @@ function getProvidedContext () {
       _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
       _ddIsSuitesSkippingEnabled: isSuitesSkippingEnabled,
       _ddCoverageRoot: coverageRoot,
+      _ddItrCorrelationId: itrCorrelationId,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -149,6 +151,7 @@ function getProvidedContext () {
       _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
       _ddIsSuitesSkippingEnabled: isSuitesSkippingEnabled,
       coverageRoot,
+      itrCorrelationId: itrCorrelationId || '',
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -168,6 +171,7 @@ function getProvidedContext () {
       _ddIsCodeCoverageEnabled: false,
       _ddIsSuitesSkippingEnabled: false,
       coverageRoot: process.cwd(),
+      itrCorrelationId: '',
     }
   }
 }
@@ -229,6 +233,9 @@ function getThreadsPoolWorkerExport (vitestPackage) {
 function getSessionStatus (state) {
   if (state.getCountOfFailedTests() > 0) {
     return 'fail'
+  }
+  if (allSuitesSkippedByItr) {
+    return 'skip'
   }
   if (state.pathsSet.size === 0) {
     return 'skip'
@@ -402,12 +409,23 @@ function getSortWrapper (sort, frameworkVersion) {
             if (toSkip.length) {
               skippedSuites = toSkip
               isSuitesSkipped = true
+              allSuitesSkippedByItr = filteredFiles.length === 0
               arguments[0] = filteredFiles
               if (this.ctx.getTestFilepaths) {
                 const filteredAbs = filteredFiles.map(getFileSpecPath).filter(Boolean)
                 this.ctx.getTestFilepaths = () => Promise.resolve(filteredAbs)
               }
               itrSkippedSuitesCh.publish({ skippedSuites, frameworkVersion })
+            }
+            if (itrCorrelationId) {
+              try {
+                const workspaceProject = this.ctx.getCoreWorkspaceProject
+                  ? this.ctx.getCoreWorkspaceProject()
+                  : this.ctx.getRootProject()
+                workspaceProject._provided._ddItrCorrelationId = itrCorrelationId
+              } catch {
+                log.warn('Could not propagate ITR correlation id to workers.')
+              }
             }
           }
         }
@@ -1416,6 +1434,7 @@ addHook({
       onFinish,
       coverageFiles: workerCoverageFiles,
       testSuiteAbsolutePath,
+      itrCorrelationId: providedContext.itrCorrelationId,
       ...testSuiteCtx.currentStore,
     })
 

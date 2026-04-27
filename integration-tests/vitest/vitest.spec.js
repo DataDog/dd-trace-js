@@ -3051,6 +3051,45 @@ versions.forEach((version) => {
         )
       })
 
+      it('marks the test session as skipped if every suite is skipped', (done) => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/vitest-tests/itr-suite-one.mjs',
+            },
+          },
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/vitest-tests/itr-suite-two.mjs',
+            },
+          },
+        ])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'skip')
+          }, 25000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => done()).catch(done)
+        })
+      })
+
       it('does not skip tests if git metadata upload fails', (done) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -3146,6 +3185,46 @@ versions.forEach((version) => {
             assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
             assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
             assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          }, 25000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => done()).catch(done)
+        })
+      })
+
+      it('reports itr_correlation_id in test suites', (done) => {
+        const itrCorrelationId = '4321'
+        receiver.setItrCorrelationId(itrCorrelationId)
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/vitest-tests/itr-suite-one.mjs',
+          },
+        }])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
+            assert.ok(testSuites.length > 0, 'expected at least one test_suite_end event')
+            for (const testSuite of testSuites) {
+              assert.strictEqual(
+                testSuite.itr_correlation_id,
+                itrCorrelationId,
+                `expected itr_correlation_id ${itrCorrelationId} on suite ${testSuite.resource}`
+              )
+            }
           }, 25000)
 
         childProcess = exec(
