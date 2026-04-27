@@ -144,7 +144,7 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     const inputMessages = []
 
     if (system) {
-      messages.unshift({ content: system, role: 'system' })
+      inputMessages.push({ content: system, role: 'system' })
     }
 
     for (const message of messages) {

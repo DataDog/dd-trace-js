@@ -107,6 +107,29 @@ describe('Plugin', () => {
           assertLLMObsSpan(apmSpans, llmobsSpans)
         })
       })
+
+      it('does not modify the `system` property', async () => {
+        const params = {
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content: 'Hello, world!' }],
+          max_tokens: 100,
+          temperature: 0.5,
+          system: 'talk like a pirate',
+        }
+
+        const response = await client.messages.create(params)
+
+        assert.deepEqual(params.messages, [{ role: 'user', content: 'Hello, world!' }])
+        assert.ok(response)
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+
+        assert.deepEqual(llmobsSpans[0].meta.input.messages, [
+          { role: 'system', content: 'talk like a pirate' },
+          { role: 'user', content: 'Hello, world!' },
+        ])
+      })
     })
 
     describe('messages.stream', () => {
