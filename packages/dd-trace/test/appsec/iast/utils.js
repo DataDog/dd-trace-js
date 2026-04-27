@@ -97,13 +97,14 @@ function testOutsideRequestHasVulnerability (fnToTest, vulnerability, plugins, t
     this.timeout(timeout || 10000)
     agent
       .assertSomeTraces(traces => {
-        assert.ok(traces[0][0].meta['_dd.iast.json'])
+        const span = traces[0].find(s => s.meta?.['_dd.iast.json'])
+        assert.ok(span)
         require('util').inspect.defaultOptions.depth = null
         assertObjectContains(
-          JSON.parse(traces[0][0].meta['_dd.iast.json']),
+          JSON.parse(span.meta['_dd.iast.json']),
           { vulnerabilities: [{ type: vulnerability }] }
         )
-        assert.strictEqual(traces[0][0].metrics['_dd.iast.enabled'], 1)
+        assert.strictEqual(span.metrics['_dd.iast.enabled'], 1)
       }, { timeoutMs: 10000 })
       .then(done)
       .catch(done)
@@ -191,13 +192,12 @@ function checkVulnerabilityInRequest (
   }
   agent
     .assertSomeTraces(traces => {
-      assert.strictEqual(traces[0][0].metrics['_dd.iast.enabled'], 1)
-      assert.ok('_dd.iast.json' in traces[0][0].meta)
-
       const span = getWebSpan(traces)
+      assert.strictEqual(span.metrics['_dd.iast.enabled'], 1)
+      assert.ok('_dd.iast.json' in span.meta)
       assert.ok(Object.hasOwn(span.meta_struct, '_dd.stack'))
 
-      const vulnerabilitiesTrace = JSON.parse(traces[0][0].meta['_dd.iast.json'])
+      const vulnerabilitiesTrace = JSON.parse(span.meta['_dd.iast.json'])
       assert.notStrictEqual(vulnerabilitiesTrace, null)
       const vulnerabilitiesCount = new Map()
       vulnerabilitiesTrace.vulnerabilities.forEach(v => {
