@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 const { storage } = require('../../../datadog-core')
 const addresses = require('../../src/appsec/addresses')
+const { withRequest } = require('../../src/appsec/store')
 const waf = require('../../src/appsec/waf')
 const web = require('../../src/plugins/util/web')
 const {
@@ -101,7 +102,7 @@ describe('GraphQL', () => {
   describe('onGraphqlStartResolve', () => {
     beforeEach(() => {
       sinon.stub(waf, 'run').returns([''])
-      sinon.stub(storage('legacy'), 'getStore').returns({ req: {} })
+      sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, {}))
       sinon.stub(web, 'root').returns({})
       graphql.enable()
     })
@@ -137,7 +138,7 @@ describe('GraphQL', () => {
         user: [{ id: '1234' }],
       }
 
-      storage('legacy').getStore().req = undefined
+      storage('legacy').getStore.returns({})
 
       startGraphqlResolve.publish({ context, resolverInfo })
 
@@ -176,7 +177,7 @@ describe('GraphQL', () => {
     let context, rootSpan
 
     beforeEach(() => {
-      sinon.stub(storage('legacy'), 'getStore').returns({ req, res })
+      sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
 
       graphql.enable()
       graphqlMiddlewareChannel.start.publish({ req, res })
