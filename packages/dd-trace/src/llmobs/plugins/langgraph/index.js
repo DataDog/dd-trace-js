@@ -1,7 +1,7 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
-const { formatIO } = require('../shared/messages')
+const { formatIO } = require('../langchain/messages')
 const { spanHasError } = require('../../util')
 
 const streamDataMap = new WeakMap()

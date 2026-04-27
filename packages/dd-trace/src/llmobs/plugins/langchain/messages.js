@@ -71,8 +71,6 @@ function formatIO (data) {
 }
 
 module.exports = {
-  ROLE_MAPPINGS,
   getRole,
-  getContentFromMessage,
   formatIO,
 }

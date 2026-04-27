@@ -1,11 +1,5 @@
 'use strict'
 
-const {
-  formatIO,
-  getContentFromMessage,
-  getRole,
-} = require('../../shared/messages')
-
 class LangChainLLMObsHandler {
   constructor (tagger) {
     /** @type {import('../../../tagger')} */
@@ -17,18 +11,6 @@ class LangChainLLMObsHandler {
   }
 
   setMetaTags () {}
-
-  formatIO (messages) {
-    return formatIO(messages)
-  }
-
-  getContentFromMessage (message) {
-    return getContentFromMessage(message)
-  }
-
-  getRole (message) {
-    return getRole(message)
-  }
 
   checkTokenUsageChatOrLLMResult (results) {
     const llmOutput = results.llmOutput
