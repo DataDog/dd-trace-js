@@ -4,6 +4,7 @@ const { fork, exec, execSync } = require('child_process')
 const fs = require('fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const os = require('os')
 const path = require('path')
 const { assertObjectContains } = require('../helpers')
 
@@ -91,6 +92,33 @@ const extraStdout = 'end event: can add event listeners to mocha'
 
 const MOCHA_VERSION = process.env.MOCHA_VERSION || 'latest'
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
+const typeScriptRegisterSource = `
+'use strict'
+
+const fs = require('node:fs')
+const path = require('node:path')
+
+const typescript = require(path.join(process.cwd(), 'node_modules/typescript'))
+
+require.extensions['.ts'] = function (module, filename) {
+  const source = fs.readFileSync(filename, 'utf8')
+  const { outputText } = typescript.transpileModule(source, {
+    compilerOptions: {
+      module: typescript.ModuleKind.CommonJS,
+      target: typescript.ScriptTarget.ES2020,
+    },
+    fileName: filename,
+  })
+  module._compile(outputText, filename)
+}
+`
+
+function createTypeScriptRegisterFile () {
+  const registerDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-mocha-ts-register-'))
+  const registerFile = path.join(registerDirectory, 'register.js')
+  fs.writeFileSync(registerFile, typeScriptRegisterSource)
+  return registerFile
+}
 
 describe(`mocha@${MOCHA_VERSION}`, function () {
   let receiver
@@ -106,6 +134,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       'mocha-each',
       'workerpool',
       'sinon',
+      'typescript@5',
     ],
     true
   )
@@ -1772,6 +1801,160 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       )
     })
 
+    it(
+      'can skip suites and report code coverage WITHOUT nyc (built-in V8 coverage)',
+      (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/test/ci-visibility-test.js',
+          },
+        }])
+
+        const skippableRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/ci/tests/skippable')
+        const coverageRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
+        const eventsRequestPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle')
+
+        Promise.all([
+          skippableRequestPromise,
+          coverageRequestPromise,
+          eventsRequestPromise,
+        ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
+          assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
+
+          const allCoverageFiles = coverageRequest.payload
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(file => file.files)
+            .map(file => file.filename)
+
+          // sum.js is loaded by the not-skipped ci-visibility-test-2.js.
+          // The exact set of files reported depends on what V8 tracked since
+          // the last snapshot, but we require at least the application module.
+          assert.ok(
+            allCoverageFiles.some(f => f.endsWith('ci-visibility/test/sum.js')),
+            `expected coverage to include ci-visibility/test/sum.js. Got: ${JSON.stringify(allCoverageFiles)}`
+          )
+
+          const skippedSuite = eventsRequest.payload.events.find(event =>
+            event.content.resource === 'test_suite.ci-visibility/test/ci-visibility-test.js'
+          ).content
+          assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          const testSession = eventsRequest.payload.events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+          done()
+        }).catch(done)
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: getCiVisAgentlessConfig(receiver.port),
+          }
+        )
+      }
+    )
+
+    it('reports code coverage for top-level imports WITHOUT nyc', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      })
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/top-level-side-effect.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/top-level-side-effect-test.js'))
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha ./ci-visibility/test/top-level-side-effect-test.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        coverageRequestPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
+    it('reports TypeScript coverage as root-relative TypeScript files WITHOUT nyc', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      })
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          const tsFixtureCoverageFiles = allCoverageFiles.filter(filename =>
+            filename.startsWith('ci-visibility/typescript/')
+          )
+
+          const expectedTypeScriptFiles = [
+            'ci-visibility/typescript/transpiled-module.ts',
+            'ci-visibility/typescript/transpiled-test.ts',
+          ]
+          assertObjectContains(
+            tsFixtureCoverageFiles,
+            expectedTypeScriptFiles,
+            `Expected TypeScript coverage files. Got: ${JSON.stringify(allCoverageFiles)}`
+          )
+          assert.ok(
+            tsFixtureCoverageFiles.every(filename => filename.endsWith('.ts')),
+            `Expected only TypeScript fixture files. Got: ${JSON.stringify(tsFixtureCoverageFiles)}`
+          )
+          assert.ok(
+            tsFixtureCoverageFiles.every(filename => !path.isAbsolute(filename)),
+            `Expected root-relative TypeScript fixture files. Got: ${JSON.stringify(tsFixtureCoverageFiles)}`
+          )
+          assert.ok(!allCoverageFiles.some(filename =>
+            filename.startsWith('ci-visibility/typescript/') && filename.endsWith('.js')
+          ), `Expected no generated JavaScript fixture files. Got: ${JSON.stringify(allCoverageFiles)}`)
+        })
+
+      const typeScriptRegisterFile = createTypeScriptRegisterFile()
+      try {
+        childProcess = exec(
+          'node ./ci-visibility/run-mocha-typescript.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TYPESCRIPT_REGISTER: typeScriptRegisterFile,
+            },
+          }
+        )
+
+        await Promise.all([
+          coverageRequestPromise,
+          once(childProcess, 'exit'),
+        ])
+      } finally {
+        fs.rmSync(path.dirname(typeScriptRegisterFile), { recursive: true, force: true })
+      }
+    })
+
     it('marks the test session as skipped if every suite is skipped', (done) => {
       receiver.setSuitesToSkip(
         [
@@ -2133,6 +2316,41 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    it('reports built-in code coverage relative to the repository root WITHOUT nyc', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      })
+
+      const codeCoveragesPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const coveredFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(({ content: { coverages } }) => coverages)
+            .flatMap(({ files }) => files)
+            .map(({ filename }) => filename)
+
+          assert.ok(coveredFiles.includes('ci-visibility/shared-dependency.js'))
+          assert.ok(coveredFiles.includes('ci-visibility/subproject/external-dependency-test.js'))
+        })
+
+      childProcess = exec(
+        'node ../../node_modules/mocha/bin/mocha external-dependency-test.js',
+        {
+          cwd: `${cwd}/ci-visibility/subproject`,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+          },
+        }
+      )
+
+      await Promise.all([
+        codeCoveragesPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
     onlyLatestIt('can skip suites in parallel mode', async () => {
       receiver.setSuitesToSkip([{
         type: 'suite',
@@ -2140,6 +2358,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           suite: 'ci-visibility/test/ci-visibility-test.js',
         },
       }])
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/sum.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/ci-visibility-test-2.js'))
+          assert.ok(!allCoverageFiles.includes('ci-visibility/test/ci-visibility-test.js'))
+        })
 
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -2182,7 +2413,93 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       )
 
       await Promise.all([
+        coverageRequestPromise,
         eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
+    onlyLatestIt('can skip suites and report code coverage with nyc in parallel mode', async () => {
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/sum.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/ci-visibility-test-2.js'))
+          assert.ok(!allCoverageFiles.includes('ci-visibility/test/ci-visibility-test.js'))
+        })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        })
+
+      childProcess = exec(
+        './node_modules/nyc/bin/nyc.js -r=text-summary node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test/ci-visibility-test.js' +
+        ' ./ci-visibility/test/ci-visibility-test-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        coverageRequestPromise,
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
+    onlyLatestIt('reports code coverage WITHOUT nyc in parallel mode', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      })
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/sum.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/ci-visibility-test.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/ci-visibility-test-2.js'))
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test/ci-visibility-test.js' +
+        ' ./ci-visibility/test/ci-visibility-test-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        coverageRequestPromise,
         once(childProcess, 'exit'),
       ])
     })

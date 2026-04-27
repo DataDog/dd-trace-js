@@ -17,6 +17,12 @@ const {
   collectDynamicNamesFromTraces,
   logDynamicNamesWarning,
 } = require('../../../dd-trace/src/plugins/util/test')
+const {
+  getV8CoverageCollector,
+  startV8Coverage,
+  stopV8Coverage,
+} = require('../../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
+const { getRepositoryRoot } = require('../../../dd-trace/src/plugins/util/git')
 
 const {
   isNewTest,
@@ -50,6 +56,8 @@ let skippedSuites = []
 let itrCorrelationId = ''
 let isForcedToRun = false
 const config = {}
+let coverageRoot
+let isExecutionConfigurationRequested = false
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -78,6 +86,75 @@ const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+
+function getCoverageRoot () {
+  if (!coverageRoot) {
+    coverageRoot = getRepositoryRoot() || process.cwd()
+  }
+  return coverageRoot
+}
+
+function startMochaV8Coverage () {
+  return startV8Coverage({ cwd: getCoverageRoot() })
+}
+
+function getNycAllCoverage (onDone) {
+  let nycConfig
+  try {
+    nycConfig = JSON.parse(getEnvironmentVariable('NYC_CONFIG'))
+  } catch {
+    onDone()
+    return
+  }
+  if (!nycConfig?.all) {
+    onDone()
+    return
+  }
+
+  let NYC
+  try {
+    // eslint-disable-next-line n/no-unpublished-require
+    NYC = require('nyc')
+  } catch {
+    onDone()
+    return
+  }
+
+  let nyc
+  try {
+    nyc = new NYC(nycConfig)
+  } catch {
+    onDone()
+    return
+  }
+
+  if (!nyc.getCoverageMapFromAllCoverageFiles) {
+    onDone()
+    return
+  }
+  nyc.getCoverageMapFromAllCoverageFiles().then(onDone, () => onDone())
+}
+
+function getUntestedCoverage (onDone) {
+  if (getCodeCoverageCh.hasSubscribers) {
+    getCodeCoverageCh.publish({ onDone })
+  } else {
+    getNycAllCoverage(onDone)
+  }
+}
+
+function getTestFilesFromSuite (suite) {
+  const files = new Set()
+  for (const childSuite of suite.suites) {
+    if (childSuite.file) {
+      files.add(childSuite.file)
+    }
+    for (const file of getTestFilesFromSuite(childSuite)) {
+      files.add(file)
+    }
+  }
+  return [...files]
+}
 
 // Tests from workers do not come with `isFailed` method
 function isTestFailed (test) {
@@ -211,6 +288,8 @@ function getOnEndHandler (isParallel) {
       isParallel,
     })
 
+    stopV8Coverage()
+    isExecutionConfigurationRequested = false
     logDynamicNamesWarning(newTestsWithDynamicNames)
   }
 }
@@ -309,6 +388,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 
   const onReceivedConfiguration = ({ err, libraryConfig }) => {
     if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
+      stopV8Coverage()
       return mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
       })
@@ -323,6 +403,12 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    config.isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+    if (libraryConfig.isCodeCoverageEnabled) {
+      startMochaV8Coverage()
+    } else {
+      stopV8Coverage()
+    }
 
     if (config.isKnownTestsEnabled) {
       ctx.onDone = onReceivedKnownTests
@@ -356,11 +442,26 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/mocha.js',
 }, (Mocha, frameworkVersion) => {
+  shimmer.wrap(Mocha.prototype, 'loadFiles', loadFiles => function () {
+    if (testFinishCh.hasSubscribers && !this.options.parallel) {
+      startMochaV8Coverage()
+    }
+    return loadFiles.apply(this, arguments)
+  })
+
+  shimmer.wrap(Mocha.prototype, 'loadFilesAsync', loadFilesAsync => function () {
+    if (testFinishCh.hasSubscribers && !this.options.parallel) {
+      startMochaV8Coverage()
+    }
+    return loadFilesAsync.apply(this, arguments)
+  })
+
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
       return run.apply(this, arguments)
     }
+    isExecutionConfigurationRequested = true
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
@@ -390,16 +491,10 @@ addHook({
           config.isKnownTestsEnabled = false
         }
       }
-      if (getCodeCoverageCh.hasSubscribers) {
-        getCodeCoverageCh.publish({
-          onDone: (receivedCodeCoverage) => {
-            untestedCoverage = receivedCodeCoverage
-            global.run()
-          },
-        })
-      } else {
+      getUntestedCoverage((receivedCodeCoverage) => {
+        untestedCoverage = receivedCodeCoverage
         global.run()
-      }
+      })
     })
 
     return runner
@@ -452,6 +547,13 @@ addHook({
   shimmer.wrap(Runner.prototype, 'run', run => function () {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
+    }
+
+    const shouldRequestExecutionConfiguration = !isExecutionConfigurationRequested &&
+      !getEnvironmentVariable('MOCHA_WORKER_ID')
+    if (shouldRequestExecutionConfiguration) {
+      isExecutionConfigurationRequested = true
+      this._delay = true
     }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
@@ -518,15 +620,33 @@ addHook({
         })
       }
 
-      if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
-
+      // ITR/TIA coverage: prefer the built-in V8 collector when it is
+      // running. V8 precise coverage is our canonical TIA feed and works
+      // whether or not the user runs nyc. When V8 is not running (eg.
+      // TIA was disabled by the backend, or someone explicitly opted out),
+      // fall back to `global.__coverage__` if istanbul (nyc) populated it.
+      const v8Collector = getV8CoverageCollector()
+      if (v8Collector) {
+        const coverageFiles = v8Collector.getFilesCoveredSinceLastSnapshot()
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
           suiteFile: suite.file,
         })
-        // We need to reset coverage to get a code coverage per suite
-        // Before that, we preserve the original coverage
+      }
+
+      if (global.__coverage__) {
+        if (!v8Collector) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+          testSuiteCodeCoverageCh.publish({
+            coverageFiles,
+            suiteFile: suite.file,
+          })
+        }
+
+        // Reset per-suite after preserving originals so istanbul can report
+        // accurate totals at process exit — this path does not interfere
+        // with nyc's own reporters, which read fresh counters from
+        // `global.__coverage__` after each require hook.
         mergeCoverage(global.__coverage__, originalCoverageMap)
         resetCoverage(global.__coverage__)
       }
@@ -539,7 +659,39 @@ addHook({
       }
     })
 
-    return run.apply(this, arguments)
+    const runner = run.apply(this, arguments)
+
+    if (shouldRequestExecutionConfiguration) {
+      const files = getTestFilesFromSuite(this.suite)
+      for (const file of files) {
+        const isUnskippable = isMarkedAsUnskippable({ path: file })
+        if (isUnskippable) {
+          unskippableSuites.push(file)
+        }
+      }
+
+      getExecutionConfiguration(this, false, frameworkVersion, () => {
+        if (config.isKnownTestsEnabled) {
+          const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
+          const isFaulty = getIsFaultyEarlyFlakeDetection(
+            testSuites,
+            config.knownTests?.mocha || {},
+            config.earlyFlakeDetectionFaultyThreshold
+          )
+          if (isFaulty) {
+            config.isEarlyFlakeDetectionEnabled = false
+            config.isEarlyFlakeDetectionFaulty = true
+            config.isKnownTestsEnabled = false
+          }
+        }
+        getUntestedCoverage((receivedCodeCoverage) => {
+          untestedCoverage = receivedCodeCoverage
+          this.suite.emit('run')
+        })
+      })
+    }
+
+    return runner
   })
 
   return Runner
@@ -561,6 +713,16 @@ function onMessage (message) {
       workerReportTraceCh.publish(payload)
     }
   }
+}
+
+function publishWorkerCodeCoverage (result, suiteFile) {
+  if (!config.isCodeCoverageEnabled || !Array.isArray(result?._ddCoverageFiles)) {
+    return
+  }
+  testSuiteCodeCoverageCh.publish({
+    coverageFiles: result._ddCoverageFiles,
+    suiteFile,
+  })
 }
 
 // Only used in parallel mode (--parallel flag is passed)
@@ -593,6 +755,7 @@ addHook({
       promise.then(
         (result) => {
           const status = result.failureCount === 0 ? 'pass' : 'fail'
+          publishWorkerCodeCoverage(result, testSuiteAbsolutePath)
           testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         },
@@ -694,7 +857,8 @@ addHook({
         (!config.isKnownTestsEnabled &&
          !config.isTestManagementTestsEnabled &&
          !config.isImpactedTestsEnabled &&
-         !config.isFlakyTestRetriesEnabled)) {
+         !config.isFlakyTestRetriesEnabled &&
+         !config.isCodeCoverageEnabled)) {
       return run.apply(this, arguments)
     }
 
@@ -742,6 +906,11 @@ addHook({
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
+    }
+
+    if (config.isCodeCoverageEnabled) {
+      newWorkerArgs._ddIsCodeCoverageEnabled = true
+      newWorkerArgs._ddCoverageRoot = getCoverageRoot()
     }
 
     // We pass the known tests for the test file to the worker
