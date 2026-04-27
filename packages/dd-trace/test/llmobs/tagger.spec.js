@@ -260,6 +260,26 @@ describe('tagger', () => {
       })
     })
 
+    describe('tagToolDefinitions', () => {
+      it('tags a span with tool definitions', () => {
+        const toolDefinitions = [
+          { name: 'get_weather', description: 'Get the weather for a city.', schema: { type: 'object' } },
+        ]
+        tagger._register(span)
+        tagger.tagToolDefinitions(span, toolDefinitions)
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.tool_definitions': toolDefinitions,
+        })
+      })
+
+      it('throws for malformed tool definitions', () => {
+        tagger._register(span)
+        assert.throws(() => tagger.tagToolDefinitions(span, 'not an array'))
+        assert.throws(() => tagger.tagToolDefinitions(span, []))
+        assert.throws(() => tagger.tagToolDefinitions(span))
+      })
+    })
+
     describe('tagSpanTags', () => {
       it('sets tags on a span', () => {
         const tags = { foo: 'bar' }
