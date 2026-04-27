@@ -429,7 +429,7 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    const _loadDebug = process.env.DD_TRACE_INIT_DEBUG === '1'
+    const _loadDebug = true
     // eslint-disable-next-line no-console
     const _loadLog = _loadDebug ? (label) => console.log(`[agent.load] ${label}`) : () => {}
     const _loadTime = _loadDebug ? (label, fn) => {

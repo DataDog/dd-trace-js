@@ -18,7 +18,7 @@ const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
-    const _d = process.env.DD_TRACE_INIT_DEBUG === '1'
+    const _d = true
     let _t = _d ? Date.now() : 0
     // eslint-disable-next-line no-console
     const _s = _d ? (l) => { console.log(`[DatadogTracer] ${l}: +${Date.now() - _t}ms`); _t = Date.now() } : () => {}

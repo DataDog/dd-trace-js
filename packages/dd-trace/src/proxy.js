@@ -103,7 +103,7 @@ class Tracer extends NoopProxy {
 
     this._initialized = true
 
-    const _initDebug = process.env.DD_TRACE_INIT_DEBUG === '1'
+    const _initDebug = true
     const _t0 = _initDebug ? Date.now() : 0
     let _t = _t0
     // eslint-disable-next-line no-console
@@ -291,7 +291,7 @@ class Tracer extends NoopProxy {
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   #updateTracing (config) {
-    const _d = process.env.DD_TRACE_INIT_DEBUG === '1'
+    const _d = true
     let _t = _d ? Date.now() : 0
     // eslint-disable-next-line no-console
     const _s = _d ? (l) => { console.log(`[tracer.init#updateTracing] ${l}: +${Date.now() - _t}ms`); _t = Date.now() } : () => {}
