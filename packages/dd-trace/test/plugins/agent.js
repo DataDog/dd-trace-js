@@ -29,6 +29,88 @@ const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
 
+const allInstrumentationNames = Object.keys(require('../../../datadog-instrumentations/src/helpers/hooks'))
+const allInstrumentationNamesSet = new Set(allInstrumentationNames)
+
+/**
+ * @param {string} pluginName
+ * @returns {string}
+ */
+function getInstrumentationName (pluginName) {
+  switch (pluginName) {
+    case 'global:fetch':
+      return 'fetch'
+    case 'node:dns':
+      return 'dns'
+    case 'node:http':
+      return 'http'
+    case 'node:http2':
+      return 'http2'
+    case 'node:https':
+      return 'https'
+    case 'node:net':
+      return 'net'
+    default:
+      return pluginName
+  }
+}
+
+/**
+ * @param {string[]} pluginNames
+ * @returns {{
+ *   originalValue: string | undefined,
+ *   disabledCount: number,
+ *   enabledInstrumentations: Set<string>,
+ *   skipped: boolean
+ * }}
+ */
+function disableUnusedInstrumentations (pluginNames) {
+  const enabledInstrumentations = new Set()
+  for (const pluginName of pluginNames) {
+    const instrumentationName = getInstrumentationName(pluginName)
+    if (instrumentationName) {
+      if (!allInstrumentationNamesSet.has(instrumentationName)) {
+        return {
+          originalValue: process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS,
+          disabledCount: 0,
+          enabledInstrumentations,
+          skipped: true,
+        }
+      }
+      enabledInstrumentations.add(instrumentationName)
+    }
+  }
+
+  const originalValue = process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+  const disabledInstrumentations = new Set(originalValue ? originalValue.split(',') : [])
+
+  for (const name of allInstrumentationNames) {
+    if (!enabledInstrumentations.has(name)) {
+      disabledInstrumentations.add(name)
+    }
+  }
+
+  process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = [...disabledInstrumentations].join(',')
+
+  return {
+    originalValue,
+    disabledCount: disabledInstrumentations.size,
+    enabledInstrumentations,
+    skipped: false,
+  }
+}
+
+/**
+ * @param {string | undefined} disabledInstrumentations
+ */
+function restoreDisabledInstrumentations (disabledInstrumentations) {
+  if (disabledInstrumentations === undefined) {
+    delete process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS
+  } else {
+    process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = disabledInstrumentations
+  }
+}
+
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
     return true
@@ -426,47 +508,63 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
+    const disabledInstrumentations = disableUnusedInstrumentations(pluginNames)
+    // eslint-disable-next-line no-console
+    console.log(
+      `[agent.load] instrumentation filter: skipped=${disabledInstrumentations.skipped} ` +
+      `disabled=${disabledInstrumentations.disabledCount} ` +
+      `enabled=${[...disabledInstrumentations.enabledInstrumentations].join('|') || 'none'}`
+    )
     const proxyquireStart = performance.now()
+    let defaults
+    let getConfigFresh
+    let dogstatsd
+    let proxy
+    let TracerProxy
 
     let t = performance.now()
-    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   config/defaults: ${(performance.now() - t).toFixed(3)}ms`)
+    try {
+      defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load]   config/defaults: ${(performance.now() - t).toFixed(3)}ms`)
 
-    t = performance.now()
-    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
-      './defaults': defaults,
-    })
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   src/config:      ${(performance.now() - t).toFixed(3)}ms`)
+      t = performance.now()
+      getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
+        './defaults': defaults,
+      })
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load]   src/config:      ${(performance.now() - t).toFixed(3)}ms`)
 
-    // Reload dogstatsd to avoid adding new events to the global process object
-    t = performance.now()
-    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   src/dogstatsd:   ${(performance.now() - t).toFixed(3)}ms`)
+      // Reload dogstatsd to avoid adding new events to the global process object
+      t = performance.now()
+      dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load]   src/dogstatsd:   ${(performance.now() - t).toFixed(3)}ms`)
 
-    t = performance.now()
-    const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh,
-      './dogstatsd': dogstatsd,
-    })
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   src/proxy:       ${(performance.now() - t).toFixed(3)}ms`)
+      t = performance.now()
+      proxy = proxyquire('../../src/proxy', {
+        './config': getConfigFresh,
+        './dogstatsd': dogstatsd,
+      })
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load]   src/proxy:       ${(performance.now() - t).toFixed(3)}ms`)
 
-    t = performance.now()
-    const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy,
-    })
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   src/index:       ${(performance.now() - t).toFixed(3)}ms`)
+      t = performance.now()
+      TracerProxy = proxyquire('../../src', {
+        './proxy': proxy,
+      })
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load]   src/index:       ${(performance.now() - t).toFixed(3)}ms`)
 
-    t = performance.now()
-    tracer = proxyquire('../../', {
-      './src': TracerProxy,
-    })
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   root/index:      ${(performance.now() - t).toFixed(3)}ms`)
+      t = performance.now()
+      tracer = proxyquire('../../', {
+        './src': TracerProxy,
+      })
+      // eslint-disable-next-line no-console
+      console.log(`[agent.load]   root/index:      ${(performance.now() - t).toFixed(3)}ms`)
+    } finally {
+      restoreDisabledInstrumentations(disabledInstrumentations.originalValue)
+    }
 
     // eslint-disable-next-line no-console
     console.log(`[agent.load] proxyquire phase:  ${(performance.now() - proxyquireStart).toFixed(3)}ms`)
