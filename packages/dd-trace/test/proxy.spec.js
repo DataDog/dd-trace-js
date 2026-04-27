@@ -283,6 +283,16 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(RemoteConfig, config)
       })
 
+      it('should expose appsec sdk lazily', () => {
+        proxy.init()
+
+        sinon.assert.notCalled(AppsecSdk)
+
+        proxy.appsec
+
+        sinon.assert.calledOnceWithExactly(AppsecSdk, tracer, config)
+      })
+
       it('should not initialize twice', () => {
         proxy.init()
         proxy.init()

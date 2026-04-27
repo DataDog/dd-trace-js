@@ -326,12 +326,12 @@ class Tracer extends NoopProxy {
         console.log(`[proxy.#updateTracing]   new DatadogTracer:     ${(performance.now() - _tut).toFixed(3)}ms`)
 
         _tut = performance.now()
-        lazyProxy(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
-        lazyProxy(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
+        defineLazily(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
+        defineLazily(this, 'llmobs', () => require('./llmobs/sdk'), this._tracer, this._modules.llmobs, config)
 
         if (config.experimental?.aiguard?.enabled) {
           this._modules.aiguard.enable(this._tracer, config)
-          lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
+          defineLazily(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
         // eslint-disable-next-line no-console

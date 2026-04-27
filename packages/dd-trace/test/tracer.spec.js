@@ -47,6 +47,23 @@ describe('Tracer', () => {
       tracer.setUrl('http://example.com')
       sinon.assert.calledWith(tracer._exporter.setUrl, 'http://example.com')
     })
+
+    it('should not configure data streams when disabled', () => {
+      tracer._dataStreamsProcessor.setUrl = sinon.stub()
+
+      tracer.setUrl('http://example.com')
+
+      sinon.assert.notCalled(tracer._dataStreamsProcessor.setUrl)
+    })
+
+    it('should configure data streams when enabled', () => {
+      tracer._config.dsmEnabled = true
+      tracer._dataStreamsProcessor.setUrl = sinon.stub()
+
+      tracer.setUrl('http://example.com')
+
+      sinon.assert.calledWith(tracer._dataStreamsProcessor.setUrl, 'http://example.com')
+    })
   })
 
   describe('trace', () => {

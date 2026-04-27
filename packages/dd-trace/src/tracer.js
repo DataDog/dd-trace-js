@@ -18,15 +18,27 @@ const MEASURED = tags.MEASURED
 
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
+    let _t = performance.now()
     super(config, prioritySampler)
+    // eslint-disable-next-line no-console
+    console.log(`[tracer.constructor] super:              ${(performance.now() - _t).toFixed(3)}ms`)
+
+    _t = performance.now()
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
+    // eslint-disable-next-line no-console
+    console.log(`[tracer.constructor] dataStreams handles:${(performance.now() - _t).toFixed(3)}ms`)
+
+    _t = performance.now()
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
+    // eslint-disable-next-line no-console
+    console.log(`[tracer.constructor] scope+startup logs: ${(performance.now() - _t).toFixed(3)}ms`)
 
     if (!IS_SERVERLESS) {
+      _t = performance.now()
       const storeConfig = require('./tracer_metadata')
       // Keep a reference to the handle, to keep the memfd alive in memory.
       // It is read by the service discovery feature.
@@ -35,6 +47,8 @@ class DatadogTracer extends Tracer {
         log.warn('Could not store tracer configuration for service discovery')
       }
       this._inmem_cfg = metadata
+      // eslint-disable-next-line no-console
+      console.log(`[tracer.constructor] tracer_metadata:   ${(performance.now() - _t).toFixed(3)}ms`)
     }
   }
 
@@ -126,7 +140,9 @@ class DatadogTracer extends Tracer {
 
   setUrl (url) {
     this._exporter.setUrl(url)
-    this._dataStreamsProcessor.setUrl(url)
+    if (this._config.dsmEnabled) {
+      this._dataStreamsProcessor.setUrl(url)
+    }
   }
 
   scope () {
