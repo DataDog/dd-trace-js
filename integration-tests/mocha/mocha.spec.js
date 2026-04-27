@@ -4,6 +4,7 @@ const { fork, exec, execSync } = require('child_process')
 const fs = require('fs')
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const os = require('os')
 const path = require('path')
 const { assertObjectContains } = require('../helpers')
 
@@ -91,6 +92,33 @@ const extraStdout = 'end event: can add event listeners to mocha'
 
 const MOCHA_VERSION = process.env.MOCHA_VERSION || 'latest'
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
+const typeScriptRegisterSource = `
+'use strict'
+
+const fs = require('node:fs')
+const path = require('node:path')
+
+const typescript = require(path.join(process.cwd(), 'node_modules/typescript'))
+
+require.extensions['.ts'] = function (module, filename) {
+  const source = fs.readFileSync(filename, 'utf8')
+  const { outputText } = typescript.transpileModule(source, {
+    compilerOptions: {
+      module: typescript.ModuleKind.CommonJS,
+      target: typescript.ScriptTarget.ES2020,
+    },
+    fileName: filename,
+  })
+  module._compile(outputText, filename)
+}
+`
+
+function createTypeScriptRegisterFile () {
+  const registerDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-mocha-ts-register-'))
+  const registerFile = path.join(registerDirectory, 'register.js')
+  fs.writeFileSync(registerFile, typeScriptRegisterSource)
+  return registerFile
+}
 
 describe(`mocha@${MOCHA_VERSION}`, function () {
   let receiver
@@ -106,6 +134,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       'mocha-each',
       'workerpool',
       'sinon',
+      'typescript@5',
     ],
     true
   )
@@ -1861,6 +1890,69 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         coverageRequestPromise,
         once(childProcess, 'exit'),
       ])
+    })
+
+    it('reports TypeScript coverage as root-relative TypeScript files WITHOUT nyc', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      })
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          const tsFixtureCoverageFiles = allCoverageFiles.filter(filename =>
+            filename.startsWith('ci-visibility/typescript/')
+          )
+
+          const expectedTypeScriptFiles = [
+            'ci-visibility/typescript/transpiled-module.ts',
+            'ci-visibility/typescript/transpiled-test.ts',
+          ]
+          assertObjectContains(
+            tsFixtureCoverageFiles,
+            expectedTypeScriptFiles,
+            `Expected TypeScript coverage files. Got: ${JSON.stringify(allCoverageFiles)}`
+          )
+          assert.ok(
+            tsFixtureCoverageFiles.every(filename => filename.endsWith('.ts')),
+            `Expected only TypeScript fixture files. Got: ${JSON.stringify(tsFixtureCoverageFiles)}`
+          )
+          assert.ok(
+            tsFixtureCoverageFiles.every(filename => !path.isAbsolute(filename)),
+            `Expected root-relative TypeScript fixture files. Got: ${JSON.stringify(tsFixtureCoverageFiles)}`
+          )
+          assert.ok(!allCoverageFiles.some(filename =>
+            filename.startsWith('ci-visibility/typescript/') && filename.endsWith('.js')
+          ), `Expected no generated JavaScript fixture files. Got: ${JSON.stringify(allCoverageFiles)}`)
+        })
+
+      const typeScriptRegisterFile = createTypeScriptRegisterFile()
+      try {
+        childProcess = exec(
+          'node ./ci-visibility/run-mocha-typescript.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TYPESCRIPT_REGISTER: typeScriptRegisterFile,
+            },
+          }
+        )
+
+        await Promise.all([
+          coverageRequestPromise,
+          once(childProcess, 'exit'),
+        ])
+      } finally {
+        fs.rmSync(path.dirname(typeScriptRegisterFile), { recursive: true, force: true })
+      }
     })
 
     it('marks the test session as skipped if every suite is skipped', (done) => {
