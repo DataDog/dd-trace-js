@@ -225,11 +225,14 @@ module.exports = class FakeAgent extends EventEmitter {
    * @param {string} requestType - The request type to assert.
    * @param {number} [timeout=30_000] - The timeout in milliseconds.
    * @param {number} [expectedMessageCount=1] - The number of messages to expect.
+   * @param {boolean} [resolveAtFirstSuccess=false] - Resolve as soon as `fn` first runs without throwing.
+   * @param {string} [namespace] - If set, only consider messages whose payload namespace equals this value.
    * @returns {Promise<void>} A promise that resolves when the telemetry message of type `requestType` is received and
    *     the function `fn` has finished running. If `fn` throws an error, the promise will be rejected once `timeout`
    *     is reached.
    */
-  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1, resolveAtFirstSuccess = false) {
+  assertTelemetryReceived (fn, requestType, timeout = 30_000, expectedMessageCount = 1, resolveAtFirstSuccess = false,
+    namespace) {
     if (typeof fn !== 'function') {
       expectedMessageCount = timeout
       timeout = requestType
@@ -260,6 +263,7 @@ module.exports = class FakeAgent extends EventEmitter {
 
     const messageHandler = msg => {
       if (msg.payload.request_type !== requestType) return
+      if (namespace !== undefined && msg.payload.payload?.namespace !== namespace) return
       msgCount += 1
       try {
         fn(msg)
