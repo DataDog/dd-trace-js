@@ -1,6 +1,5 @@
 'use strict'
 
-const {globSync, hasMagic} = require('glob')
 const { readFileSync, readdirSync, existsSync } = require('fs')
 const path = require('path')
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
@@ -104,7 +103,7 @@ function getGitHubEventPayload () {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
-const uniq = (items) => Array.from(new Set(items));
+const uniq = (items) => [...new Set(items)]
 
 /**
  * GitHub runner diagnostic logs live under the runner installation directory in `_diag`.
@@ -117,22 +116,65 @@ const uniq = (items) => Array.from(new Set(items));
 function getGithubDiagnosticDirsFromEnv () {
   const dirs = []
 
-  const runnerTemp = process.env.RUNNER_TEMP
+  const runnerTemp = getValueFromEnvSources('RUNNER_TEMP')
   if (runnerTemp) {
     // RUNNER_TEMP is typically: <runnerRoot>/_work/_temp
     const runnerRoot = path.resolve(runnerTemp, '..', '..')
     // Bounded-depth patterns cover every runner layout we've observed
     // (including cached/<version>/_diag) without assuming a `cached` wrapper
     // and without walking the whole tree.
-    dirs.push(`${runnerRoot}/*/_diag`)
-    dirs.push(`${runnerRoot}/*/*/_diag`)
-    dirs.push(path.join(runnerRoot, '_diag'))
-    dirs.push(`${runnerRoot}/actions-runner/*/_diag`)
-    dirs.push(`${runnerRoot}/actions-runner/*/*/_diag`)
-    dirs.push(path.join(runnerRoot, 'actions-runner', '_diag'))
+    dirs.push(
+      `${runnerRoot}/*/_diag`, `${runnerRoot}/*/*/_diag`,
+      path.join(runnerRoot, '_diag'),
+      `${runnerRoot}/actions-runner/*/_diag`,
+      `${runnerRoot}/actions-runner/*/*/_diag`,
+      path.join(runnerRoot, 'actions-runner', '_diag')
+    )
   }
 
   return uniq(dirs.filter(Boolean))
+}
+
+function hasMagicChars (str) {
+  return str.includes('*') || str.includes('?')
+}
+
+// Expands a glob pattern with only `*`/`?` at path-segment boundaries (no `**`)
+// into matching concrete paths using readdirSync — no external dependency needed.
+function expandGlobPattern (pattern) {
+  const parts = pattern.split(/[/\\]/)
+  const wildcardIdx = parts.findIndex(p => hasMagicChars(p))
+  if (wildcardIdx === -1) return [pattern]
+
+  const prefix = parts.slice(0, wildcardIdx).join('/')
+  const results = []
+
+  function walk (dir, segIdx) {
+    if (segIdx === parts.length) {
+      results.push(dir)
+      return
+    }
+    const seg = parts[segIdx]
+    if (!hasMagicChars(seg)) {
+      walk(`${dir}/${seg}`, segIdx + 1)
+      return
+    }
+    try {
+      const re = new RegExp(
+        '^' + seg.replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`).replaceAll('*', String.raw`[^/\\]*`).replaceAll('?', String.raw`[^/\\]`) + '$'
+      )
+      for (const entry of readdirSync(dir)) {
+        if (re.test(entry)) {
+          walk(`${dir}/${entry}`, segIdx + 1)
+        }
+      }
+    } catch {
+      // directory doesn't exist or isn't accessible
+    }
+  }
+
+  walk(prefix, wildcardIdx)
+  return results
 }
 
 /**
@@ -140,14 +182,10 @@ function getGithubDiagnosticDirsFromEnv () {
  * directories. Literals pass through unchanged (existence is checked later).
  */
 function expandDiagnosticDirCandidates (candidates) {
-  const expanded= []
+  const expanded = []
   for (const candidate of candidates) {
-    if (hasMagic(candidate)) {
-      try {
-        expanded.push(...globSync(candidate))
-      } catch {
-        // If the glob walk fails for any reason (permissions, etc.), skip.
-      }
+    if (hasMagicChars(candidate)) {
+      expanded.push(...expandGlobPattern(candidate))
     } else {
       expanded.push(candidate)
     }
@@ -179,7 +217,7 @@ const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C
 const githubJodIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
 
 function getJobIDFromDiagFile () {
-  const runnerTemp = process.env.RUNNER_TEMP
+  const runnerTemp = getValueFromEnvSources('RUNNER_TEMP')
   if (!runnerTemp || !existsSync(runnerTemp)) { return null }
 
   const isWin = process.platform === 'win32'
@@ -423,7 +461,6 @@ module.exports = {
         GITHUB_RUN_ATTEMPT,
         GITHUB_JOB,
         GITHUB_BASE_REF,
-        RUNNER_TEMP,
         JOB_CHECK_RUN_ID,
       } = env
 
