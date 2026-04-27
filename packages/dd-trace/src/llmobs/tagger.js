@@ -163,6 +163,8 @@ class LLMObsTagger {
   tagToolDefinitions (span, toolDefinitions) {
     if (Array.isArray(toolDefinitions) && toolDefinitions.length > 0) {
       this._setTag(span, TOOL_DEFINITIONS, toolDefinitions)
+    } else {
+      this.#handleFailure('Tool definitions must be a non-empty array.', 'invalid_tool_definitions')
     }
   }
 
