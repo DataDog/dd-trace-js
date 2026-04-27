@@ -126,7 +126,23 @@ describe('test getJobIDFromDiagFile function', () => {
 
   for (const { runnerTemp, expected } of runnerTempPaths) {
     it(`returns ${expected} for runnerTemp: ${runnerTemp}`, () => {
-      assert.strictEqual(getJobIDFromDiagFile(runnerTemp), expected)
+      const original = process.env.RUNNER_TEMP
+      try {
+        // getJobIDFromDiagFile reads RUNNER_TEMP from the environment
+        if (runnerTemp == null) {
+          delete process.env.RUNNER_TEMP
+        } else {
+          process.env.RUNNER_TEMP = runnerTemp
+        }
+        assert.strictEqual(getJobIDFromDiagFile(), expected)
+      } finally {
+        // restore original value to avoid leaking into other tests
+        if (original == null) {
+          delete process.env.RUNNER_TEMP
+        } else {
+          process.env.RUNNER_TEMP = original
+        }
+      }
     })
   }
 })

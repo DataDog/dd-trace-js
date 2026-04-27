@@ -1,5 +1,6 @@
 'use strict'
 
+const {globSync, hasMagic} = require('glob')
 const { readFileSync, readdirSync, existsSync } = require('fs')
 const path = require('path')
 const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
@@ -103,42 +104,98 @@ function getGitHubEventPayload () {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
-function getJobIDFromDiagFile (runnerTemp) {
+const uniq = (items) => Array.from(new Set(items));
+
+/**
+ * GitHub runner diagnostic logs live under the runner installation directory in `_diag`.
+ * On many runners, we can derive the installation directory from RUNNER_TEMP:
+ *   <runnerRoot>/_work/_temp  ->  <runnerRoot>/_diag
+ *
+ * This is much more robust than relying on hardcoded paths, especially on self-hosted runners
+ * and GHES environments where the runner may be installed under arbitrary directories/users.
+ */
+function getGithubDiagnosticDirsFromEnv () {
+  const dirs = []
+
+  const runnerTemp = process.env.RUNNER_TEMP
+  if (runnerTemp) {
+    // RUNNER_TEMP is typically: <runnerRoot>/_work/_temp
+    const runnerRoot = path.resolve(runnerTemp, '..', '..')
+    // Bounded-depth patterns cover every runner layout we've observed
+    // (including cached/<version>/_diag) without assuming a `cached` wrapper
+    // and without walking the whole tree.
+    dirs.push(`${runnerRoot}/*/_diag`)
+    dirs.push(`${runnerRoot}/*/*/_diag`)
+    dirs.push(path.join(runnerRoot, '_diag'))
+    dirs.push(`${runnerRoot}/actions-runner/*/_diag`)
+    dirs.push(`${runnerRoot}/actions-runner/*/*/_diag`)
+    dirs.push(path.join(runnerRoot, 'actions-runner', '_diag'))
+  }
+
+  return uniq(dirs.filter(Boolean))
+}
+
+/**
+ * Expands a mixed list of literal directories and glob patterns into concrete
+ * directories. Literals pass through unchanged (existence is checked later).
+ */
+function expandDiagnosticDirCandidates (candidates) {
+  const expanded= []
+  for (const candidate of candidates) {
+    if (hasMagic(candidate)) {
+      try {
+        expanded.push(...globSync(candidate))
+      } catch {
+        // If the glob walk fails for any reason (permissions, etc.), skip.
+      }
+    } else {
+      expanded.push(candidate)
+    }
+  }
+
+  return uniq(expanded)
+}
+
+const githubWellKnownDiagnosticDirsUnix = [
+  '/home/runner/actions-runner/_diag',
+  '/opt/actions-runner/_diag',
+]
+const githubWellKnownDiagnosticDirsWin = [
+  'C:/actions-runner/_diag',
+]
+
+// Glob patterns covering layouts that namespace `_diag` under one or two
+// intermediate directories. This includes both observed SaaS layouts
+// (<runnerRoot>/cached/_diag pre-2.334.0, <runnerRoot>/cached/<version>/_diag
+// since v2.334.0) and hypothetical future layouts that follow the same shape
+// without a `cached` wrapper (e.g. <runnerRoot>/<version>/_diag). Depth is
+// bounded on purpose: `*` matches a single segment, so no filesystem walk.
+const githubWellKnownDiagnosticDirPatternsUnix = [
+  '/home/runner/actions-runner/*/_diag',
+  '/home/runner/actions-runner/*/*/_diag',
+]
+const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C:/actions-runner/*/*/_diag']
+
+const githubJodIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
+
+function getJobIDFromDiagFile () {
+  const runnerTemp = process.env.RUNNER_TEMP
   if (!runnerTemp || !existsSync(runnerTemp)) { return null }
-
-  // RUNNER_TEMP usually looks like:
-  // Linux/mac hosted:   /home/runner/work/_temp
-  // Windows hosted:     C:\actions-runner\_work\_temp
-  // Self-hosted (unix): /opt/actions-runner/_work/_temp
-
-  const workDir = path.dirname(runnerTemp) // .../work or .../_work
-  const runnerRoot = path.dirname(workDir) // /home/runner/ (runner root)
-
-  const dirs = [
-    path.join(runnerRoot, 'cached', '_diag'),
-    path.join(runnerRoot, '_diag'),
-    path.join(runnerRoot, 'actions-runner', 'cached', '_diag'),
-    path.join(runnerRoot, 'actions-runner', '_diag'),
-  ]
 
   const isWin = process.platform === 'win32'
 
-  // Hardcoded fallbacks
+  let possibleDiagsPaths = expandDiagnosticDirCandidates([
+    ...getGithubDiagnosticDirsFromEnv(),
+    ...githubWellKnownDiagnosticDirPatternsUnix,
+    ...githubWellKnownDiagnosticDirsUnix,
+  ])
   if (isWin) {
-    dirs.push(
-      'C:/actions-runner/cached/_diag',
-      'C:/actions-runner/_diag',
-    )
-  } else {
-    dirs.push(
-      '/home/runner/actions-runner/cached/_diag',
-      '/home/runner/actions-runner/_diag',
-      '/opt/actions-runner/_diag',
-    )
+    possibleDiagsPaths = expandDiagnosticDirCandidates([
+      ...getGithubDiagnosticDirsFromEnv(),
+      ...githubWellKnownDiagnosticDirPatternsWin,
+      ...githubWellKnownDiagnosticDirsWin,
+    ])
   }
-
-  // Remove duplicates
-  const possibleDiagsPaths = [...new Set(dirs)]
 
   // This will hold the names of the worker log files that (potentially) contain the Job ID
   let workerLogFiles = []
@@ -177,7 +234,7 @@ function getJobIDFromDiagFile (runnerTemp) {
     const filePath = path.posix.join(chosenDiagPath, logFile)
     const content = readFileSync(filePath, 'utf8')
 
-    const match = content.match(/"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
+    const match = content.match(githubJodIDRegex)
 
     // match[1] is the captured group with the display name
     if (match && match[1]) { return match[1] }
@@ -378,7 +435,7 @@ module.exports = {
       }
 
       // Build the job url extracting the job ID. If extraction fails, job url is constructed as a generalized url
-      const GITHUB_JOB_ID = JOB_CHECK_RUN_ID ?? getJobIDFromDiagFile(RUNNER_TEMP)
+      const GITHUB_JOB_ID = JOB_CHECK_RUN_ID ?? getJobIDFromDiagFile()
       const jobUrl =
         GITHUB_JOB_ID === null
           ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
