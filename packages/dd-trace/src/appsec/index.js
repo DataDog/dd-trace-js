@@ -4,7 +4,6 @@ const log = require('../log')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { storage } = require('../../../datadog-core')
 const { IS_SERVERLESS } = require('../serverless')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
@@ -40,6 +39,7 @@ const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecuritySampler = require('./api_security_sampler')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
+const { getActiveRequest } = require('./store')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
@@ -116,8 +116,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
 
   if (!req) {
-    const store = storage('legacy').getStore()
-    req = store?.req
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
@@ -258,8 +257,8 @@ function incomingHttpEndTranslator ({ req, res }) {
 }
 
 function onPassportVerify ({ framework, login, user, success, abortController }) {
-  const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+  const req = getActiveRequest()
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportVerify')
@@ -268,12 +267,12 @@ function onPassportVerify ({ framework, login, user, success, abortController })
 
   const results = UserTracking.trackLogin(framework, login, user, success, rootSpan)
 
-  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, req, web.getContext(req)?.res, rootSpan, abortController)
 }
 
 function onPassportDeserializeUser ({ user, abortController }) {
-  const store = storage('legacy').getStore()
-  const rootSpan = store?.req && web.root(store.req)
+  const req = getActiveRequest()
+  const rootSpan = req && web.root(req)
 
   if (!rootSpan) {
     log.warn('[ASM] No rootSpan found in onPassportDeserializeUser')
@@ -282,7 +281,7 @@ function onPassportDeserializeUser ({ user, abortController }) {
 
   const results = UserTracking.trackUser(user, rootSpan)
 
-  handleResults(results?.actions, store.req, store.req.res, rootSpan, abortController)
+  handleResults(results?.actions, req, web.getContext(req)?.res, rootSpan, abortController)
 }
 
 function onExpressSession ({ req, res, sessionId, abortController }) {
@@ -308,8 +307,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!query || typeof query !== 'object') return
 
   if (!req) {
-    const store = storage('legacy').getStore()
-    req = store?.req
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
