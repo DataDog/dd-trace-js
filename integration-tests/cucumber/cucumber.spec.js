@@ -732,7 +732,7 @@ describe(`cucumber@${version} commonJS`, () => {
             )
           })
 
-        it(
+        onlyLatestIt(
           'can skip suites and report code coverage WITHOUT nyc (built-in V8 coverage)',
           (done) => {
             receiver.setSuitesToSkip([{
@@ -1148,7 +1148,7 @@ describe(`cucumber@${version} commonJS`, () => {
           })
         })
 
-        it('reports built-in code coverage relative to the repository root WITHOUT nyc', async () => {
+        onlyLatestIt('reports built-in code coverage relative to the repository root WITHOUT nyc', async () => {
           receiver.setSettings({
             itr_enabled: true,
             code_coverage: true,

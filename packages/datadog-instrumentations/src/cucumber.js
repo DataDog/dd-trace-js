@@ -52,8 +52,6 @@ const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
-const CUCUMBER_CODE_COVERAGE_ENABLED_ENV = 'DD_CUCUMBER_CODE_COVERAGE_ENABLED'
-const CUCUMBER_CODE_COVERAGE_ROOT_ENV = 'DD_CUCUMBER_CODE_COVERAGE_ROOT'
 
 function getCoverageRoot () {
   return getRepositoryRoot() || process.cwd()
@@ -63,29 +61,9 @@ function startCucumberV8Coverage (cwd) {
   return startV8Coverage({ cwd: cwd || getCoverageRoot() })
 }
 
-function setWorkerCodeCoverageEnv () {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  process.env[CUCUMBER_CODE_COVERAGE_ENABLED_ENV] = '1'
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  process.env[CUCUMBER_CODE_COVERAGE_ROOT_ENV] = getCoverageRoot()
-}
-
-function unsetWorkerCodeCoverageEnv () {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  delete process.env[CUCUMBER_CODE_COVERAGE_ENABLED_ENV]
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  delete process.env[CUCUMBER_CODE_COVERAGE_ROOT_ENV]
-}
-
-function getWorkerCodeCoverageEnv (envName) {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  return process.env[envName]
-}
-
 if (
   libraryConfigurationCh.hasSubscribers &&
-  !getEnvironmentVariable('CUCUMBER_WORKER_ID') &&
-  getWorkerCodeCoverageEnv(CUCUMBER_CODE_COVERAGE_ENABLED_ENV) !== '1'
+  !getEnvironmentVariable('CUCUMBER_WORKER_ID')
 ) {
   startCucumberV8Coverage()
 }
@@ -136,14 +114,6 @@ let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
 let supportCodeCoverageFiles = []
-
-if (
-  getEnvironmentVariable('CUCUMBER_WORKER_ID') &&
-  getWorkerCodeCoverageEnv(CUCUMBER_CODE_COVERAGE_ENABLED_ENV) === '1'
-) {
-  isCodeCoverageEnabled = true
-  startCucumberV8Coverage(getWorkerCodeCoverageEnv(CUCUMBER_CODE_COVERAGE_ROOT_ENV))
-}
 
 function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.cucumber
@@ -204,8 +174,7 @@ function sendWorkerCodeCoverage (suiteFile) {
   if (!isCodeCoverageEnabled || !process.send) {
     return
   }
-  const v8Collector = getV8CoverageCollector() ||
-    startCucumberV8Coverage(getWorkerCodeCoverageEnv(CUCUMBER_CODE_COVERAGE_ROOT_ENV))
+  const v8Collector = getV8CoverageCollector()
   if (!v8Collector) {
     return
   }
@@ -688,11 +657,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     if (isCodeCoverageEnabled) {
       startCucumberV8Coverage()
-      setWorkerCodeCoverageEnv()
     } else {
       supportCodeCoverageFiles = []
       stopV8Coverage()
-      unsetWorkerCodeCoverageEnv()
     }
 
     if (isKnownTestsEnabled) {
@@ -828,7 +795,6 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isParallel,
     })
     stopV8Coverage()
-    unsetWorkerCodeCoverageEnv()
     supportCodeCoverageFiles = []
     eventDataCollector = null
     return success
