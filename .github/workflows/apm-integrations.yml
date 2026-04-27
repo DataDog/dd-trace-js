@@ -20,6 +20,7 @@ concurrency:
 env:
   MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
+  DD_REMOTE_CONFIGURATION_ENABLED: false
 
 # TODO: upstream jobs
 
