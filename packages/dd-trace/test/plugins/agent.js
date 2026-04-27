@@ -414,6 +414,8 @@ module.exports = {
    * @returns Promise<void>
    */
   async load (pluginNames, config, tracerConfig = {}) {
+    const loadStart = performance.now()
+
     if (!Array.isArray(pluginNames)) {
       pluginNames = [pluginNames]
     }
@@ -424,6 +426,7 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
+    const proxyquireStart = performance.now()
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
     const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
       './defaults': defaults,
@@ -440,6 +443,8 @@ module.exports = {
     tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load] proxyquire phase: ${(performance.now() - proxyquireStart).toFixed(3)}ms`)
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -454,7 +459,10 @@ module.exports = {
 
     const innerAgent = agent
 
+    const checkAgentStart = performance.now()
     const useTestAgent = await checkAgentStatus()
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load] checkAgentStatus phase: ${(performance.now() - checkAgentStart).toFixed(3)}ms (useTestAgent=${useTestAgent})`)
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
@@ -514,10 +522,15 @@ module.exports = {
 
     server.on('connection', socket => sockets.push(socket))
 
+    const listenStart = performance.now()
     const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load] server.listen phase: ${(performance.now() - listenStart).toFixed(3)}ms`)
+
         const port = listener.address().port
 
+        const tracerInitStart = performance.now()
         tracer.init({
           service: 'test',
           env: 'tester',
@@ -532,6 +545,10 @@ module.exports = {
         for (let i = 0, l = pluginNames.length; i < l; i++) {
           tracer.use(pluginNames[i], config[i])
         }
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load] tracer.init+use phase: ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load] total load() duration: ${(performance.now() - loadStart).toFixed(3)}ms`)
 
         resolve()
       })
