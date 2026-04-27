@@ -579,9 +579,14 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: '1',
         },
       })
-      const checkTelemetry = agent.assertTelemetryReceived({ requestType: 'generate-metrics', timeout: 1000 })
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
-      // so expect telemetry callback to time out
+      // so expect telemetry callback to time out. expectedMessageCount: Infinity keeps the listener
+      // from ever resolving, so the only outcome is the timeout that expectTimeout requires.
+      const checkTelemetry = agent.assertTelemetryReceived({
+        requestType: 'generate-metrics',
+        timeout: 1000,
+        expectedMessageCount: Infinity,
+      })
       await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
     })
 
