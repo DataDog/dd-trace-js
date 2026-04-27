@@ -63,6 +63,8 @@ const {
   TEST_FINAL_STATUS,
   TEST_ITR_TESTS_SKIPPED,
   TEST_ITR_SKIPPING_ENABLED,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN,
   TEST_CODE_COVERAGE_ENABLED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
@@ -3194,6 +3196,134 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => done()).catch(done)
+        })
+      })
+
+      it('does not skip suites if suite is marked as unskippable', (done) => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/vitest-tests/unskippable-to-skip.mjs',
+            },
+          },
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/vitest-tests/unskippable-marked.mjs',
+            },
+          },
+        ])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
+            assert.strictEqual(suites.length, 3)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.strictEqual(testSession.meta[TEST_ITR_FORCED_RUN], 'true')
+            assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
+            assert.strictEqual(testModule.meta[TEST_ITR_FORCED_RUN], 'true')
+            assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
+
+            const passedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/vitest-tests/unskippable-to-run.mjs'
+            ).content
+            const skippedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/vitest-tests/unskippable-to-skip.mjs'
+            ).content
+            const forcedToRunSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/vitest-tests/unskippable-marked.mjs'
+            ).content
+
+            assert.strictEqual(passedSuite.meta[TEST_STATUS], 'pass')
+            assert.ok(!(TEST_ITR_UNSKIPPABLE in passedSuite.meta))
+            assert.ok(!(TEST_ITR_FORCED_RUN in passedSuite.meta))
+
+            assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+            assert.ok(!(TEST_ITR_UNSKIPPABLE in skippedSuite.meta))
+            assert.ok(!(TEST_ITR_FORCED_RUN in skippedSuite.meta))
+
+            assert.strictEqual(forcedToRunSuite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(forcedToRunSuite.meta[TEST_ITR_UNSKIPPABLE], 'true')
+            assert.strictEqual(forcedToRunSuite.meta[TEST_ITR_FORCED_RUN], 'true')
+          }, 25000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/unskippable-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => done()).catch(done)
+        })
+      })
+
+      it('only sets forced to run if suite was going to be skipped by ITR', (done) => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'suite',
+            attributes: {
+              suite: 'ci-visibility/vitest-tests/unskippable-to-skip.mjs',
+            },
+          },
+        ])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const suites = events.filter(event => event.type === 'test_suite_end')
+            assert.strictEqual(suites.length, 3)
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.ok(!(TEST_ITR_FORCED_RUN in testSession.meta))
+            assert.strictEqual(testSession.meta[TEST_ITR_UNSKIPPABLE], 'true')
+            assert.ok(!(TEST_ITR_FORCED_RUN in testModule.meta))
+            assert.strictEqual(testModule.meta[TEST_ITR_UNSKIPPABLE], 'true')
+
+            const passedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/vitest-tests/unskippable-to-run.mjs'
+            ).content
+            const skippedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/vitest-tests/unskippable-to-skip.mjs'
+            ).content
+            const nonSkippedSuite = suites.find(
+              event => event.content.resource === 'test_suite.ci-visibility/vitest-tests/unskippable-marked.mjs'
+            ).content
+
+            assert.strictEqual(passedSuite.meta[TEST_STATUS], 'pass')
+            assert.ok(!(TEST_ITR_UNSKIPPABLE in passedSuite.meta))
+            assert.ok(!(TEST_ITR_FORCED_RUN in passedSuite.meta))
+
+            assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+
+            assert.strictEqual(nonSkippedSuite.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(nonSkippedSuite.meta[TEST_ITR_UNSKIPPABLE], 'true')
+            assert.ok(!(TEST_ITR_FORCED_RUN in nonSkippedSuite.meta))
+          }, 25000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/unskippable-*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             },
           }

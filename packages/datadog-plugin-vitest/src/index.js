@@ -39,6 +39,8 @@ const {
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_SKIPPING_TYPE,
   TEST_ITR_SKIPPING_COUNT,
+  TEST_ITR_UNSKIPPABLE,
+  TEST_ITR_FORCED_RUN,
   TEST_CODE_COVERAGE_ENABLED,
   ITR_CORRELATION_ID,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -369,11 +371,19 @@ class VitestPlugin extends CiPlugin {
       coverageFiles,
       testSuiteAbsolutePath,
       itrCorrelationId,
+      isUnskippable,
+      isForcedToRun,
     }) => {
       if (testSuiteSpan) {
         testSuiteSpan.setTag(TEST_STATUS, status)
         if (itrCorrelationId) {
           testSuiteSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
+        }
+        if (isUnskippable) {
+          testSuiteSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+        }
+        if (isForcedToRun) {
+          testSuiteSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
         }
 
         // TIA code coverage reporting: the worker collected a list of files
@@ -445,6 +455,8 @@ class VitestPlugin extends CiPlugin {
       isSuitesSkippingEnabled,
       isSuitesSkipped,
       numSkippedSuites,
+      hasUnskippableSuites,
+      hasForcedToRunSuites,
       itrCorrelationId,
       vitestPool,
       onFinish,
@@ -486,6 +498,14 @@ class VitestPlugin extends CiPlugin {
       } else if (isSuitesSkippingEnabled) {
         this.testSessionSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
         this.testModuleSpan.setTag(TEST_ITR_TESTS_SKIPPED, 'false')
+      }
+      if (hasUnskippableSuites) {
+        this.testSessionSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_UNSKIPPABLE, 'true')
+      }
+      if (hasForcedToRunSuites) {
+        this.testSessionSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
+        this.testModuleSpan.setTag(TEST_ITR_FORCED_RUN, 'true')
       }
       if (itrCorrelationId) {
         this.testSessionSpan.setTag(ITR_CORRELATION_ID, itrCorrelationId)
