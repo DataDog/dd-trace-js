@@ -104,14 +104,20 @@ class Tracer extends NoopProxy {
     this._initialized = true
 
     try {
+      let _t = performance.now()
       const config = getConfig(options) // TODO: support dynamic code config
+      // eslint-disable-next-line no-console
+      console.log(`[proxy.init]   getConfig:         ${(performance.now() - _t).toFixed(3)}ms`)
 
       // Add config dependent process tags
+      _t = performance.now()
       processTags.initialize(config)
 
       // Configure propagation hash manager for process tags + container tags
       const propagationHash = require('./propagation-hash')
       propagationHash.configure(config)
+      // eslint-disable-next-line no-console
+      console.log(`[proxy.init]   processTags+hash:  ${(performance.now() - _t).toFixed(3)}ms`)
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
@@ -121,7 +127,10 @@ class Tracer extends NoopProxy {
         require('./heap_snapshots').start(config)
       }
 
+      _t = performance.now()
       telemetry.start(config, this._pluginManager)
+      // eslint-disable-next-line no-console
+      console.log(`[proxy.init]   telemetry.start:   ${(performance.now() - _t).toFixed(3)}ms`)
 
       if (config.dogstatsd) {
         // Custom Metrics
@@ -138,6 +147,7 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
+      _t = performance.now()
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
         const rc = new RemoteConfig(config)
@@ -179,6 +189,8 @@ class Tracer extends NoopProxy {
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
         openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
       }
+      // eslint-disable-next-line no-console
+      console.log(`[proxy.init]   remoteConfig:      ${(performance.now() - _t).toFixed(3)}ms (enabled=${config.remoteConfig.enabled})`)
 
       if (config.profiling.enabled === 'true') {
         this._profilerStarted = this._startProfiler(config)
@@ -195,13 +207,22 @@ class Tracer extends NoopProxy {
         }
       }
 
+      _t = performance.now()
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
       }
+      // eslint-disable-next-line no-console
+      console.log(`[proxy.init]   runtimeMetrics:    ${(performance.now() - _t).toFixed(3)}ms (enabled=${config.runtimeMetrics.enabled})`)
 
+      _t = performance.now()
       this.#updateTracing(config)
+      // eslint-disable-next-line no-console
+      console.log(`[proxy.init]   updateTracing:     ${(performance.now() - _t).toFixed(3)}ms`)
 
+      _t = performance.now()
       this._modules.rewriter.enable(config)
+      // eslint-disable-next-line no-console
+      console.log(`[proxy.init]   rewriter.enable:   ${(performance.now() - _t).toFixed(3)}ms`)
 
       if (config.tracing && config.isManualApiEnabled) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')

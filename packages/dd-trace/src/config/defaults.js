@@ -4,10 +4,17 @@ const dns = require('dns')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
+const _parsersStart = performance.now()
 const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
+// eslint-disable-next-line no-console
+console.log(`[defaults] require parsers:                  ${(performance.now() - _parsersStart).toFixed(3)}ms`)
+
+const _jsonStart = performance.now()
 const {
   supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
+// eslint-disable-next-line no-console
+console.log(`[defaults] require supported-configurations: ${(performance.now() - _jsonStart).toFixed(3)}ms`)
 
 let log
 let seqId = 0
@@ -203,6 +210,7 @@ const fallbackConfigurations = new Map()
 
 const regExps = {}
 
+const _loopStart = performance.now()
 for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
   if (entries.length !== 1) {
     // TODO: Determine if we really want to support multiple entries for a canonical name.
@@ -275,6 +283,9 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     }
   }
 }
+
+// eslint-disable-next-line no-console
+console.log(`[defaults] supportedConfigurations loop:     ${(performance.now() - _loopStart).toFixed(3)}ms`)
 
 // Replace the alias with the canonical property name.
 for (const [fullPropertyName, alias] of fallbackConfigurations) {
