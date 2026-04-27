@@ -109,6 +109,7 @@ describe('Plugin', () => {
               'aws.bedrock.request.model_provider': converseRequest.provider.toLowerCase(),
             },
           })
+          tracesPromise.catch(() => {}) // silence unhandled rejection if `send` throws first
 
           await bedrockRuntimeClient.send(command)
           await tracesPromise
@@ -128,6 +129,7 @@ describe('Plugin', () => {
               'aws.bedrock.request.model_provider': converseRequest.provider.toLowerCase(),
             },
           })
+          tracesPromise.catch(() => {}) // silence unhandled rejection if stream iteration throws first
 
           const result = await bedrockRuntimeClient.send(command)
           for await (const _event of result.stream) { // eslint-disable-line no-unused-vars
