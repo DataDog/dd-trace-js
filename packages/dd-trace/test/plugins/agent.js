@@ -14,6 +14,12 @@ const semifies = require('semifies')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
 const ritm = require('../../src/ritm')
+
+// Pre-warm modules that are cold-loaded inside tracer.init() so they land in
+// require.cache before any mocha before-all hook runs (and its timeout ticks).
+try { require('../../src/dogstatsd') } catch (_) {}
+try { require('../../src/exporters/agent') } catch (_) {}
+try { require('../../src/appsec/iast/taint-tracking/rewriter') } catch (_) {}
 const traceHandlers = new Set()
 const statsHandlers = new Set()
 let llmobsSpanEventsRequests = []
