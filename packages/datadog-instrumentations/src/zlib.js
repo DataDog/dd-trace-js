@@ -14,6 +14,8 @@ const asyncMethods = [
   'inflate',
   'inflateRaw',
   'unzip',
+  'zstdCompress', // Node 22.15+ / 23.8+ / 24+
+  'zstdDecompress', // Node 22.15+ / 23.8+ / 24+
 ]
 
 addHook({ name: 'zlib' }, zlib => {
