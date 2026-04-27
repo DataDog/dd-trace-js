@@ -109,13 +109,13 @@ describe('Plugin', () => {
       })
 
       it('does not modify the `system` property', async () => {
-        const params = {
+        const params = Object.freeze({
           model: 'claude-haiku-4-5-20251001',
-          messages: [{ role: 'user', content: 'Hello, world!' }],
+          messages: Object.freeze([{ role: 'user', content: 'Hello, world!' }]),
           max_tokens: 100,
           temperature: 0.5,
           system: 'talk like a pirate',
-        }
+        })
 
         const response = await client.messages.create(params)
 
