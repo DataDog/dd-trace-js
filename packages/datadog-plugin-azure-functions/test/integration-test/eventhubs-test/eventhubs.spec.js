@@ -47,7 +47,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh1-eventdata',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest1'))
             assert.strictEqual(ehGroups.length, 2)
             for (const group of ehGroups) {
               assertObjectContains(group[0], {
@@ -71,7 +71,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh1-amqpmessages',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest1'))
             assert.strictEqual(ehGroups.length, 2)
             for (const group of ehGroups) {
               assertObjectContains(group[0], {
@@ -95,7 +95,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh1-batch',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest1'))
             assert.strictEqual(ehGroups.length, 2)
             for (const group of ehGroups) {
               assertObjectContains(group[0], {
@@ -119,7 +119,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh2-eventdata',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest2'))
             assert.strictEqual(ehGroups.length, 1)
             assertObjectContains(ehGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -141,7 +141,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh2-amqpmessages',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest2'))
             assert.strictEqual(ehGroups.length, 1)
             assertObjectContains(ehGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -163,7 +163,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh2-batch',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest2'))
             assert.strictEqual(ehGroups.length, 1)
             assertObjectContains(ehGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -185,7 +185,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh1-enqueueEvent',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest1'))
             assert.strictEqual(ehGroups.length, 1)
             assertObjectContains(ehGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -207,7 +207,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh1-enqueueEvents',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest1'))
             assert.strictEqual(ehGroups.length, 2)
             for (const group of ehGroups) {
               assertObjectContains(group[0], {
@@ -231,7 +231,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh1-enqueueAmqp',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest1'))
             assert.strictEqual(ehGroups.length, 2)
             for (const group of ehGroups) {
               assertObjectContains(group[0], {
@@ -255,7 +255,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh2-enqueueEvent',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest2'))
             assert.strictEqual(ehGroups.length, 1)
             assertObjectContains(ehGroups[0][0], {
               name: 'azure.functions.invoke',
@@ -278,7 +278,7 @@ describe('esm', () => {
           'http://127.0.0.1:7071/api/eh2-enqueueEvents',
           collectingAssert(allGroups => {
             const senderGroup = allGroups.find(g => g.some(s => s.name === 'azure.eventhubs.send'))
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest2'))
             assert.ok(senderGroup)
             assert.strictEqual(ehGroups.length, 1)
             assert.strictEqual(senderGroup[1].name, 'azure.eventhubs.create')
@@ -306,7 +306,7 @@ describe('esm', () => {
           'http://127.0.0.1:7071/api/eh2-enqueueAmqp',
           collectingAssert(allGroups => {
             const senderGroup = allGroups.find(g => g.some(s => s.name === 'azure.eventhubs.send'))
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest2'))
             assert.ok(senderGroup)
             assert.strictEqual(ehGroups.length, 1)
             assert.strictEqual(senderGroup[1].name, 'azure.eventhubs.create')
@@ -354,7 +354,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh2-batch',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest2'))
             const nonEhGroups = allGroups.filter(g => !isEhInvokeGroup(g))
             assert.strictEqual(ehGroups.length, 1)
             assert.ok(nonEhGroups.length > 0)
@@ -373,7 +373,7 @@ describe('esm', () => {
           agent,
           'http://127.0.0.1:7071/api/eh2-eventdata',
           collectingAssert(allGroups => {
-            const ehGroups = allGroups.filter(g => isEhInvokeGroup(g))
+            const ehGroups = allGroups.filter(g => isEhInvokeGroupFor(g, 'EventHubs eventHubTest2'))
             assert.ok(ehGroups.length >= 1)
             assert.ok(ehGroups.some(g => '_dd.span_links' in g[0].meta))
           })
@@ -385,6 +385,10 @@ describe('esm', () => {
 
 function isEhInvokeGroup (group) {
   return group.some(s => s.name === 'azure.functions.invoke' && s.resource?.startsWith('EventHubs'))
+}
+
+function isEhInvokeGroupFor (group, resource) {
+  return group.some(s => s.name === 'azure.functions.invoke' && s.resource === resource)
 }
 
 function collectingAssert (fn) {
