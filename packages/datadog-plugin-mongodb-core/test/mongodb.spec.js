@@ -124,7 +124,7 @@ describe('Plugin', () => {
                   'out.host': '127.0.0.1',
                   component: 'mongodb',
                 },
-              })
+              }, { spanResourceMatch: new RegExp(`^insert test\\.${collectionName}$`) })
               .then(done)
               .catch(done)
 
