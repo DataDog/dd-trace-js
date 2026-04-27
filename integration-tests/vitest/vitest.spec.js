@@ -2372,9 +2372,8 @@ versions.forEach((version) => {
 
             assert.ok(metadataDicts.length > 0)
             metadataDicts.forEach(metadata => {
-              assert.ok(!Object.hasOwn(metadata.test, DD_CAPABILITIES_TEST_IMPACT_ANALYSIS))
-
               assertObjectContains(metadata.test, {
+                [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: '1',
                 [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
                 [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
                 [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
@@ -2832,6 +2831,73 @@ versions.forEach((version) => {
         assert.ok(
           allCoverageFiles.some(f => f.endsWith('ci-visibility/vitest-tests/sum.mjs')),
           `expected sum.mjs in coverage files, got: ${JSON.stringify(allCoverageFiles)}`
+        )
+      })
+
+      it('uses repository root for skipping and coverage when run from a subdirectory', async () => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: true,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/subproject/vitest-repo-root-skip.mjs',
+          },
+        }])
+
+        const skippablePromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+        const coveragePromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+
+            const skippedSuite = events.find(event =>
+              event.type === 'test_suite_end' &&
+              event.content.resource === 'test_suite.ci-visibility/subproject/vitest-repo-root-skip.mjs'
+            )
+            assert.ok(skippedSuite, 'repo-relative skipped suite test_suite_end event is expected')
+            assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(skippedSuite.content.meta['test.skipped_by_itr'], 'true')
+
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta['_dd.ci.itr.tests_skipped'], 'true')
+            assert.strictEqual(testSession.metrics['test.itr.tests_skipping.count'], 1)
+          }, 25000)
+
+        childProcess = exec(
+          '../../node_modules/.bin/vitest run --root .',
+          {
+            cwd: path.join(cwd, 'ci-visibility/subproject'),
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: './vitest-repo-root-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        const [skippableReq, coverageReq] = await Promise.all([
+          skippablePromise,
+          coveragePromise,
+          eventsPromise,
+          once(childProcess, 'exit'),
+        ])
+
+        assert.strictEqual(skippableReq.headers['dd-api-key'], '1')
+        assert.strictEqual(coverageReq.headers['dd-api-key'], '1')
+
+        const allCoverageFiles = coverageReq.payload
+          .flatMap(cov => cov.content.coverages)
+          .flatMap(item => item.files)
+          .map(f => f.filename)
+
+        assert.ok(
+          allCoverageFiles.some(f => f.endsWith('ci-visibility/vitest-shared/shared-sum.mjs')),
+          `expected shared-sum.mjs in coverage files, got: ${JSON.stringify(allCoverageFiles)}`
         )
       })
     })

@@ -168,11 +168,12 @@ function isIstanbulCoverageActive () {
  * Lazily start a process-wide V8 coverage collector. Subsequent calls return
  * the same instance. Safe to run in parallel with nyc/istanbul.
  *
+ * @param {{ cwd?: string }} [options]
  * @returns {V8CoverageCollector | null}
  */
-function startV8Coverage () {
+function startV8Coverage (options) {
   if (singleton) return singleton
-  const collector = new V8CoverageCollector({ cwd: process.cwd() })
+  const collector = new V8CoverageCollector({ cwd: options?.cwd || process.cwd() })
   if (!collector.start()) return null
   singleton = collector
   return collector

@@ -18,6 +18,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { startV8Coverage, getV8CoverageCollector } =
   require('../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
+const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
 const { addHook, channel } = require('./helpers/instrument')
 
 // test hooks
@@ -129,6 +130,7 @@ function getProvidedContext () {
       _ddModifiedFiles: modifiedFiles,
       _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
       _ddIsSuitesSkippingEnabled: isSuitesSkippingEnabled,
+      _ddCoverageRoot: coverageRoot,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -146,6 +148,7 @@ function getProvidedContext () {
       modifiedFiles,
       _ddIsCodeCoverageEnabled: isCodeCoverageEnabled,
       _ddIsSuitesSkippingEnabled: isSuitesSkippingEnabled,
+      coverageRoot,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -164,6 +167,7 @@ function getProvidedContext () {
       modifiedFiles: {},
       _ddIsCodeCoverageEnabled: false,
       _ddIsSuitesSkippingEnabled: false,
+      coverageRoot: process.cwd(),
     }
   }
 }
@@ -352,6 +356,8 @@ function getSortWrapper (sort, frameworkVersion) {
       isSuitesSkippingEnabled = false
     }
 
+    const repositoryRoot = getRepositoryRoot() || this.ctx.config?.root || process.cwd()
+
     // Propagate TIA flags to workers so they can start/stop V8 coverage
     // and tag the suite span appropriately.
     if (isCodeCoverageEnabled || isSuitesSkippingEnabled) {
@@ -361,6 +367,7 @@ function getSortWrapper (sort, frameworkVersion) {
           : this.ctx.getRootProject()
         workspaceProject._provided._ddIsCodeCoverageEnabled = !!isCodeCoverageEnabled
         workspaceProject._provided._ddIsSuitesSkippingEnabled = !!isSuitesSkippingEnabled
+        workspaceProject._provided._ddCoverageRoot = repositoryRoot
       } catch {
         log.warn('Could not send ITR configuration to workers.')
       }
@@ -374,7 +381,6 @@ function getSortWrapper (sort, frameworkVersion) {
           itrCorrelationId = skippableResponse.itrCorrelationId || ''
 
           if (skippableSuites.length && Array.isArray(originalFiles)) {
-            const cwd = this.ctx.config?.root || process.cwd()
             const skippedSet = new Set(skippableSuites)
 
             const toSkip = []
@@ -385,7 +391,7 @@ function getSortWrapper (sort, frameworkVersion) {
                 filteredFiles.push(entry)
                 continue
               }
-              const relativePath = getTestSuitePath(absolutePath, cwd)
+              const relativePath = getTestSuitePath(absolutePath, repositoryRoot)
               if (skippedSet.has(relativePath)) {
                 toSkip.push(relativePath)
               } else {
@@ -1259,7 +1265,7 @@ addHook({
     const v8CoverageEnabledForRun = !!providedContext._ddIsCodeCoverageEnabled
     let workerCollector = null
     if (v8CoverageEnabledForRun) {
-      workerCollector = getV8CoverageCollector() || startV8Coverage()
+      workerCollector = getV8CoverageCollector() || startV8Coverage({ cwd: providedContext.coverageRoot })
       if (workerCollector) workerCollector.resetBaseline()
     }
 
