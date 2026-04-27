@@ -10,20 +10,19 @@ function hasOrchestrionDcPolyfill (node) {
     const local = node.specifiers?.[0]?.local?.name
     return local === 'tr_ch_apm_tracingChannel' || local === 'tr_ch_apm_dc'
   }
-  return (
-    node.type === 'VariableDeclaration' &&
-    node.declarations?.[0]?.init?.name === 'tr_ch_apm_dc'
-  )
+  if (node.type !== 'VariableDeclaration') return false
+  const decl = node.declarations?.[0]
+  if (!decl) return false
+  // Two-step CJS: const tr_ch_apm_dc = require(…)
+  if (decl.init?.name === 'tr_ch_apm_dc') return true
+  // Single-step CJS: const {tracingChannel: tr_ch_apm_tracingChannel} = require(…)
+  const prop = decl.id?.properties?.[0]
+  return prop?.value?.name === 'tr_ch_apm_tracingChannel'
 }
 
 /** Index of the statement after which orchestrion channel consts should be inserted. */
 function tracingChannelBindingStatementIndex (node) {
-  return (
-    (node.type === 'VariableDeclaration' &&
-      node.declarations?.[0]?.init?.name === 'tr_ch_apm_dc') ||
-    (node.type === 'ImportDeclaration' &&
-      node.specifiers?.[0]?.local?.name === 'tr_ch_apm_tracingChannel')
-  )
+  return hasOrchestrionDcPolyfill(node)
 }
 
 const transforms = module.exports = {
