@@ -2,7 +2,7 @@
 
 const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
 const LLMObsPlugin = require('../base')
-const { formatMessage } = require('./util')
+const { appendMessage } = require('./util')
 
 const ALLOWED_METADATA_KEYS = new Set([
   'max_tokens',
@@ -145,15 +145,11 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     const inputMessages = []
 
     if (system) {
-      const formattedSystemMessage = formatMessage('system', system)
-      inputMessages.push(...formattedSystemMessage)
+      appendMessage(inputMessages, { role: 'system', content: system })
     }
 
     for (const message of messages) {
-      const { content, role } = message
-
-      const formattedInputMessage = formatMessage(role, content)
-      inputMessages.push(...formattedInputMessage)
+      appendMessage(inputMessages, message)
     }
 
     this._tagger.tagLLMIO(span, inputMessages)

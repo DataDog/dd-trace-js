@@ -11,6 +11,22 @@
  *  tool_use_id: string,
  *  content: string | Array<{type: string, text?: string}>
  * }} ToolResultBlock
+ *
+ * @typedef {{
+ *   content: string,
+ *   role: string,
+ *   toolCalls?: Array<{
+ *     name: string,
+ *     arguments: string | Record<string, unknown>,
+ *     toolId: string,
+ *     type: string
+ *   }>,
+ *   toolResults?: Array<{
+ *     result: string,
+ *     toolId: string,
+ *     type: 'tool_result'
+ *   }>
+ * }} AnthropicLlmObsMessage
  */
 
 /**
@@ -39,16 +55,15 @@ function formatAnthropicToolResultContent (content) {
  * Normalizes and formats a message into LLM Observability compatible contents.
  * Can be spread into a list of other messages.
  *
- * @param {string} role
- * @param {string | Array<TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock>} content
- * @returns {Array}
+ * @param {AnthropicLlmObsMessage[]} messages
+ * @param {{ role: string, content: string | Array<TextBlock | ImageBlock | ToolUseBlock | ToolResultBlock> }} message
+ * @returns {void}
  */
-function formatMessage (role, content) {
+function appendMessage (messages, { role, content }) {
   if (typeof content === 'string') {
-    return [{ content, role }]
+    messages.push({ content, role })
+    return
   }
-
-  const messages = []
 
   for (const block of content) {
     if (block.type === 'text') {
@@ -84,10 +99,8 @@ function formatMessage (role, content) {
       messages.push({ content: JSON.stringify(block), role })
     }
   }
-
-  return messages
 }
 
 module.exports = {
-  formatMessage,
+  appendMessage,
 }
