@@ -2,11 +2,7 @@
 
 const assert = require('assert')
 const { When, Then } = require('@cucumber/cucumber')
-class Greeter {
-  sayGreetings () {
-    return 'greetings'
-  }
-}
+const Greeter = require('../../../shared-greeter')
 
 When('the greeter says greetings', function () {
   this.whatIHeard = new Greeter().sayGreetings()

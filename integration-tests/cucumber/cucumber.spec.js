@@ -732,6 +732,64 @@ describe(`cucumber@${version} commonJS`, () => {
             )
           })
 
+        onlyLatestIt(
+          'can skip suites and report code coverage WITHOUT nyc (built-in V8 coverage)',
+          (done) => {
+            receiver.setSuitesToSkip([{
+              type: 'suite',
+              attributes: {
+                suite: `${featuresPath}farewell.feature`,
+              },
+            }])
+
+            const skippableRequestPromise = receiver
+              .payloadReceived(({ url }) => url.endsWith('/api/v2/ci/tests/skippable'))
+            const coverageRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcov'))
+            const eventsRequestPromise = receiver.payloadReceived(({ url }) => url.endsWith('/api/v2/citestcycle'))
+
+            Promise.all([
+              skippableRequestPromise,
+              coverageRequestPromise,
+              eventsRequestPromise,
+            ]).then(([skippableRequest, coverageRequest, eventsRequest]) => {
+              if (isAgentless) {
+                assert.strictEqual(skippableRequest.headers['dd-api-key'], '1')
+              }
+
+              const skippedSuite = eventsRequest.payload.events.find(event =>
+                event.content.resource === `test_suite.${featuresPath}farewell.feature`
+              ).content
+              assert.strictEqual(skippedSuite.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(skippedSuite.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+              const testSession = eventsRequest.payload.events
+                .find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+              assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+              assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+
+              const allCoverageFiles = coverageRequest.payload
+                .flatMap(coverage => coverage.content.coverages)
+                .flatMap(file => file.files)
+                .map(file => file.filename)
+
+              assert.ok(
+                allCoverageFiles.includes(`${featuresPath}support/steps.${fileExtension}`),
+                `expected coverage to include support steps. Got: ${JSON.stringify(allCoverageFiles)}`
+              )
+              done()
+            }).catch(done)
+
+            childProcess = exec(
+              runTestsCommand,
+              {
+                cwd,
+                env: envVars,
+              }
+            )
+          }
+        )
+
         it('does not skip tests if git metadata upload fails', (done) => {
           receiver.setSuitesToSkip([{
             type: 'suite',
@@ -1090,6 +1148,44 @@ describe(`cucumber@${version} commonJS`, () => {
           })
         })
 
+        onlyLatestIt('reports built-in code coverage relative to the repository root WITHOUT nyc', async () => {
+          receiver.setSettings({
+            itr_enabled: true,
+            code_coverage: true,
+            tests_skipping: false,
+          })
+
+          const codeCoveragesPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+              const coveredFiles = payloads
+                .flatMap(({ payload }) => payload)
+                .flatMap(({ content: { coverages } }) => coverages)
+                .flatMap(({ files }) => files)
+                .map(({ filename }) => filename)
+
+              assert.ok(
+                coveredFiles.includes('ci-visibility/shared-greeter.js'),
+                `expected coverage to include shared-greeter.js. Got: ${JSON.stringify(coveredFiles)}`
+              )
+              assert.ok(coveredFiles.includes('ci-visibility/subproject/features/support/steps.js'))
+            })
+
+          childProcess = exec(
+            'node ../../node_modules/.bin/cucumber-js features/*.feature',
+            {
+              cwd: `${cwd}/ci-visibility/subproject`,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+              },
+            }
+          )
+
+          await Promise.all([
+            codeCoveragesPromise,
+            once(childProcess, 'exit'),
+          ])
+        })
+
         onlyLatestIt('can skip suites in parallel mode', async () => {
           receiver.setSuitesToSkip([{
             type: 'suite',
@@ -1141,6 +1237,47 @@ describe(`cucumber@${version} commonJS`, () => {
           )
           await Promise.all([
             eventsPromise,
+            once(childProcess, 'exit'),
+          ])
+        })
+
+        onlyLatestIt('reports code coverage WITHOUT nyc in parallel mode', async () => {
+          receiver.setSettings({
+            itr_enabled: true,
+            code_coverage: true,
+            tests_skipping: false,
+          })
+
+          const coverageRequestPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+              const allCoverageFiles = payloads
+                .flatMap(({ payload }) => payload)
+                .flatMap(coverage => coverage.content.coverages)
+                .flatMap(coverage => coverage.files)
+                .map(file => file.filename)
+
+              assert.ok(
+                allCoverageFiles.includes(`${featuresPath}support/steps.${fileExtension}`),
+                `expected coverage to include support steps. Got: ${JSON.stringify(allCoverageFiles)}`
+              )
+              assert.ok(
+                allCoverageFiles.includes('ci-visibility/shared-greeter.js'),
+                `expected coverage to include shared-greeter.js. Got: ${JSON.stringify(allCoverageFiles)}`
+              )
+              assert.ok(allCoverageFiles.includes(`${featuresPath}farewell.feature`))
+              assert.ok(allCoverageFiles.includes(`${featuresPath}greetings.feature`))
+            })
+
+          childProcess = exec(
+            parallelModeCommand,
+            {
+              cwd,
+              env: getCiVisAgentlessConfig(receiver.port),
+            }
+          )
+
+          await Promise.all([
+            coverageRequestPromise,
             once(childProcess, 'exit'),
           ])
         })
