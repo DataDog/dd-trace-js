@@ -28,9 +28,9 @@ describe('esm', () => {
       'azure-functions-core-tools@4',
       '@azure/cosmos',
     ],
-      false,
-      ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
-        './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
+    false,
+    ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
+      './packages/datadog-plugin-azure-functions/test/integration-test/cosmosdb-test/*'])
 
     before(async function () {
       const helpers = await import(pathToFileURL(path.join(sandboxCwd(), 'cosmosdb-helpers.mjs')).href)
@@ -91,7 +91,7 @@ describe('esm', () => {
   })
 })
 
-async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
+async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
     NODE_OPTIONS: `--loader=${hookFile}`,
     DD_TRACE_AGENT_PORT: agentPort,
@@ -104,7 +104,7 @@ async function spawnPluginIntegrationTestProc(cwd, command, args, agentPort, std
   }, stdioHandler)
 }
 
-function spawnProc(command, args, options = {}, stdioHandler, stderrHandler) {
+function spawnProc (command, args, options = {}, stdioHandler, stderrHandler) {
   const proc = spawn(command, args, { ...options, stdio: 'pipe' })
   return new Promise((resolve, reject) => {
     proc
