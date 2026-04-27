@@ -150,6 +150,7 @@ const PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE = 90
 // vitest worker variables
 const VITEST_WORKER_TRACE_PAYLOAD_CODE = 100
 const VITEST_WORKER_LOGS_PAYLOAD_CODE = 102
+const VITEST_WORKER_COVERAGE_PAYLOAD_CODE = 103
 
 const TEST_IS_TEST_FRAMEWORK_WORKER = 'test.is_test_framework_worker'
 
@@ -166,7 +167,7 @@ const DD_CAPABILITIES_FAILED_TEST_REPLAY = '_dd.library_capabilities.failed_test
 // Library configuration request error tag
 const DD_CI_LIBRARY_CONFIGURATION_ERROR = '_dd.ci.library_configuration_error'
 
-const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright', 'vitest'])
+const UNSUPPORTED_TIA_FRAMEWORKS = new Set(['playwright'])
 const MINIMUM_FRAMEWORK_VERSION_FOR_EFD = {
   playwright: '>=1.38.0',
 }
@@ -268,6 +269,7 @@ module.exports = {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_TRACE_PAYLOAD_CODE,
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
+  VITEST_WORKER_COVERAGE_PAYLOAD_CODE,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   TEST_SOURCE_START,
   TEST_SKIPPED_BY_ITR,
