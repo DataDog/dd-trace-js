@@ -40,7 +40,6 @@ if (Number(process.env.EVERYTHING)) {
     'glob',
     'globals',
     'graphql',
-    'ignore',
     'import-in-the-middle',
     'istanbul-lib-coverage',
     'jest-docblock',

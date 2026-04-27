@@ -103,6 +103,10 @@ jobs:
         with:
           path: /github/home/.cache/ms-playwright
           key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
+      - name: Configure Git safe directory
+        # The Playwright job runs in a container where the checkout can be owned by a different UID.
+        # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: "-r ./ci/init"
