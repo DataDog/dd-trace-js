@@ -579,7 +579,7 @@ describe('profiler', () => {
           DD_PROFILING_ENABLED: '1',
         },
       })
-      const checkTelemetry = agent.assertTelemetryReceived('generate-metrics', 1000)
+      const checkTelemetry = agent.assertTelemetryReceived({ requestType: 'generate-metrics', timeout: 1000 })
       // SSI telemetry is not supposed to have been emitted when DD_INJECTION_ENABLED is absent,
       // so expect telemetry callback to time out
       await Promise.all([checkProfiles(agent, proc, timeout), expectTimeout(checkTelemetry)])
@@ -703,36 +703,47 @@ describe('profiler', () => {
       let requestCount = 0
       let pointsCount = 0
 
-      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload
-        const series = pp.series
-        const requests = series.find(s => s.metric === 'profile_api.requests')
-        assert.strictEqual(requests.type, 'count')
-        // There's a race between the periodic uploader and the on-shutdown
-        // upload, so the count can include up to one extra request.
-        requestCount = requests.points[0][1]
-        assert.ok(requestCount >= 1)
-        assert.ok(requestCount <= 4)
+      const checkMetrics = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload
+          const series = pp.series
+          const requests = series.find(s => s.metric === 'profile_api.requests')
+          assert.strictEqual(requests.type, 'count')
+          // There's a race between the periodic uploader and the on-shutdown
+          // upload, so the count can include up to one extra request.
+          requestCount = requests.points[0][1]
+          assert.ok(requestCount >= 1)
+          assert.ok(requestCount <= 4)
 
-        const responses = series.find(s => s.metric === 'profile_api.responses')
-        assert.strictEqual(responses.type, 'count')
-        assert.deepStrictEqual(responses.tags, ['status_code:200'])
+          const responses = series.find(s => s.metric === 'profile_api.responses')
+          assert.strictEqual(responses.type, 'count')
+          assert.deepStrictEqual(responses.tags, ['status_code:200'])
 
-        // Same number of requests and responses
-        assert.strictEqual(responses.points[0][1], requestCount)
-      }, 'generate-metrics', timeout, 1, true, 'profilers')
+          // Same number of requests and responses
+          assert.strictEqual(responses.points[0][1], requestCount)
+        },
+        requestType: 'generate-metrics',
+        timeout,
+        resolveAtFirstSuccess: true,
+        namespace: 'profilers',
+      })
 
-      const checkDistributions = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload
-        const series = pp.series
-        assert.strictEqual(series.length, 2)
-        assert.strictEqual(series[0].metric, 'profile_api.bytes')
-        assert.strictEqual(series[1].metric, 'profile_api.ms')
+      const checkDistributions = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload
+          const series = pp.series
+          assert.strictEqual(series.length, 2)
+          assert.strictEqual(series[0].metric, 'profile_api.bytes')
+          assert.strictEqual(series[1].metric, 'profile_api.ms')
 
-        // Same number of points
-        pointsCount = series[0].points.length
-        assert.strictEqual(pointsCount, series[1].points.length)
-      }, 'distributions', timeout, 1, false, 'profilers')
+          // Same number of points
+          pointsCount = series[0].points.length
+          assert.strictEqual(pointsCount, series[1].points.length)
+        },
+        requestType: 'distributions',
+        timeout,
+        namespace: 'profilers',
+      })
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics, checkDistributions])
 
@@ -759,15 +770,21 @@ describe('profiler', () => {
         },
       })
 
-      const checkMetrics = agent.assertTelemetryReceived(({ _, payload }) => {
-        const pp = payload.payload;
-        ['live', 'used'].forEach(metricName => {
-          const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
-          assert.notStrictEqual(sampleContexts, undefined)
-          assert.strictEqual(sampleContexts.type, 'gauge')
-          assert.ok(sampleContexts.points[0][1] >= 1)
-        })
-      }, 'generate-metrics', timeout, 1, true, 'profilers')
+      const checkMetrics = agent.assertTelemetryReceived({
+        fn: ({ _, payload }) => {
+          const pp = payload.payload;
+          ['live', 'used'].forEach(metricName => {
+            const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
+            assert.notStrictEqual(sampleContexts, undefined)
+            assert.strictEqual(sampleContexts.type, 'gauge')
+            assert.ok(sampleContexts.points[0][1] >= 1)
+          })
+        },
+        requestType: 'generate-metrics',
+        timeout,
+        resolveAtFirstSuccess: true,
+        namespace: 'profilers',
+      })
 
       await Promise.all([checkProfiles(agent, proc, timeout), checkMetrics])
     })
