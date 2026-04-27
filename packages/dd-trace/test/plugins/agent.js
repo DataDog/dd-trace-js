@@ -4,6 +4,7 @@ const assert = require('assert')
 const http = require('http')
 const path = require('path')
 const util = require('util')
+const { setImmediate } = require('timers/promises')
 
 const bodyParser = require('body-parser')
 const express = require('express')
@@ -312,14 +313,12 @@ module.exports = {
       config = [config]
     }
 
+    // We sometimes reload the agent too fast. This workaround ensures that the agent is ready to receive requests.
+    // TODO: Fix the root cause.
+    await setImmediate()
+
     currentIntegrationName = getCurrentIntegrationName()
 
-    // Rebuild the tracer on every `agent.load()`. Reusing a cached tracer
-    // from a previous test causes `tracer.init()` to no-op (its
-    // `_initialized` guard and the `configInstance` singleton in `./config`)
-    // so the `service`, `env`, `port`, ... options we pass below would be
-    // silently dropped. Reload `./config/defaults` and `./dogstatsd` too to
-    // avoid accumulating process listeners and stale defaults across loads.
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
     const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
       './defaults': defaults,
@@ -332,7 +331,7 @@ module.exports = {
     const TracerProxy = proxyquire('../../src', {
       './proxy': proxy,
     })
-    tracer = proxyquire('../..', {
+    tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
 
@@ -622,7 +621,7 @@ module.exports = {
     delete require.cache[require.resolve('../..')]
     delete global._ddtrace
 
-    // Tracer initialisations across `agent.load()` cycles leave behind
+    // Tracer initializations across `agent.load()` cycles leave behind
     // `exit` / `beforeExit` listeners from dogstatsd, telemetry, heap
     // snapshots, etc. Without sweeping them here they accumulate and
     // either leak memory (aws-sdk OOM) or fire against a torn-down tracer.
