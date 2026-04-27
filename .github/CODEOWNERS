@@ -254,6 +254,7 @@
 /packages/dd-trace/test/histogram.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/id.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/iitm.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/index.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/log.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/msgpack/ @DataDog/lang-platform-js
 /packages/dd-trace/test/noop.spec.js @DataDog/lang-platform-js
