@@ -2,7 +2,6 @@
 
 const { storage } = require('../../../datadog-core')
 
-// The legacy storage is a singleton, so resolve it once at module load.
 const legacyStorage = storage('legacy')
 
 const kReq = Symbol('dd-trace.appsec.req')
@@ -36,8 +35,7 @@ function getRequest (store) {
 
 /**
  * Resolve the inbound request attached to the currently active legacy store.
- * Shortcut for `getRequest(storage('legacy').getStore())`, implemented with
- * a single optional chain so it stays cheap in AppSec hot paths.
+ * Shortcut for `getRequest(storage('legacy').getStore())`.
  *
  * @returns {object|undefined}
  */

@@ -60,11 +60,11 @@ function analyzeLfiInResponseRender (ctx) {
 
 function analyzeLfi (ctx) {
   const store = storage('legacy').getStore()
-  if (!store) return
+  const fs = store?.fs
+  if (!fs) return
 
   const req = getRequest(store)
-  const fs = store.fs
-  if (!req || !fs) return
+  if (!req) return
 
   const res = web.getContext(req)?.res
   for (const path of getPaths(ctx, fs)) {

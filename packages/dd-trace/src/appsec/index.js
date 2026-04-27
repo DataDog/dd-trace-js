@@ -4,7 +4,6 @@ const log = require('../log')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { storage } = require('../../../datadog-core')
 const { IS_SERVERLESS } = require('../serverless')
 const RuleManager = require('./rule_manager')
 const appsecRemoteConfig = require('./remote_config')
@@ -40,7 +39,7 @@ const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecuritySampler = require('./api_security_sampler')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
-const { getActiveRequest, getRequest } = require('./store')
+const { getActiveRequest } = require('./store')
 const UserTracking = require('./user_tracking')
 const graphql = require('./graphql')
 const rasp = require('./rasp')
@@ -117,8 +116,7 @@ function onRequestBodyParsed ({ req, res, body, abortController }) {
   if (body === undefined || body === null) return
 
   if (!req) {
-    const store = storage('legacy').getStore()
-    req = getRequest(store)
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
@@ -309,8 +307,7 @@ function onRequestQueryParsed ({ req, res, query, abortController }) {
   if (!query || typeof query !== 'object') return
 
   if (!req) {
-    const store = storage('legacy').getStore()
-    req = getRequest(store)
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
