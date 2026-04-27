@@ -47,6 +47,7 @@ function onLambdaStartInvocation (data) {
     }
 
     if (headers) {
+      // Cookie header is already stripped by the Lambda layer's event-data-extractor
       persistent[addresses.HTTP_INCOMING_HEADERS] = headers
     }
 
