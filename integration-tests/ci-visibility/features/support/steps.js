@@ -4,22 +4,9 @@ const tracer = require('dd-trace')
 const assert = require('assert')
 const { When, Then, Before, After } = require('@cucumber/cucumber')
 
-class Greeter {
-  sayFarewell () {
-    return 'farewell'
-  }
-
-  sayGreetings () {
-    return 'greetings'
-  }
-
-  sayYo () {
-    return 'yo'
-  }
-
-  sayYeah () {
-    return 'yeah whatever'
-  }
+function getGreeter () {
+  const Greeter = require('../../shared-greeter')
+  return new Greeter()
 }
 
 Before('@skip', function () {
@@ -43,22 +30,22 @@ Then('I should have heard {string}', function (expectedResponse) {
 })
 
 When('the greeter says farewell', function () {
-  this.whatIHeard = new Greeter().sayFarewell()
+  this.whatIHeard = getGreeter().sayFarewell()
 })
 
 When('the greeter says yo', function () {
-  this.whatIHeard = new Greeter().sayYo()
+  this.whatIHeard = getGreeter().sayYo()
 })
 
 When('the greeter says yeah', function () {
-  this.whatIHeard = new Greeter().sayYeah()
+  this.whatIHeard = getGreeter().sayYeah()
 })
 
 When('the greeter says greetings', function () {
   tracer.scope().active().addTags({
     'custom_tag.when': 'hello when',
   })
-  this.whatIHeard = new Greeter().sayGreetings()
+  this.whatIHeard = getGreeter().sayGreetings()
 })
 
 When('the greeter says whatever', function () {

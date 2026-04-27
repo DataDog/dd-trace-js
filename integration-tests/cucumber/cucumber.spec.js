@@ -773,8 +773,10 @@ describe(`cucumber@${version} commonJS`, () => {
                 .flatMap(file => file.files)
                 .map(file => file.filename)
 
-              // Expect at least one non-empty user file to be reported.
-              assert.ok(allCoverageFiles.length > 0, 'expected at least one covered file')
+              assert.ok(
+                allCoverageFiles.includes(`${featuresPath}support/steps.${fileExtension}`),
+                `expected coverage to include support steps. Got: ${JSON.stringify(allCoverageFiles)}`
+              )
               done()
             }).catch(done)
 
@@ -1146,6 +1148,44 @@ describe(`cucumber@${version} commonJS`, () => {
           })
         })
 
+        it('reports built-in code coverage relative to the repository root WITHOUT nyc', async () => {
+          receiver.setSettings({
+            itr_enabled: true,
+            code_coverage: true,
+            tests_skipping: false,
+          })
+
+          const codeCoveragesPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+              const coveredFiles = payloads
+                .flatMap(({ payload }) => payload)
+                .flatMap(({ content: { coverages } }) => coverages)
+                .flatMap(({ files }) => files)
+                .map(({ filename }) => filename)
+
+              assert.ok(
+                coveredFiles.includes('ci-visibility/shared-greeter.js'),
+                `expected coverage to include shared-greeter.js. Got: ${JSON.stringify(coveredFiles)}`
+              )
+              assert.ok(coveredFiles.includes('ci-visibility/subproject/features/support/steps.js'))
+            })
+
+          childProcess = exec(
+            'node ../../node_modules/.bin/cucumber-js features/*.feature',
+            {
+              cwd: `${cwd}/ci-visibility/subproject`,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+              },
+            }
+          )
+
+          await Promise.all([
+            codeCoveragesPromise,
+            once(childProcess, 'exit'),
+          ])
+        })
+
         onlyLatestIt('can skip suites in parallel mode', async () => {
           receiver.setSuitesToSkip([{
             type: 'suite',
@@ -1197,6 +1237,47 @@ describe(`cucumber@${version} commonJS`, () => {
           )
           await Promise.all([
             eventsPromise,
+            once(childProcess, 'exit'),
+          ])
+        })
+
+        onlyLatestIt('reports code coverage WITHOUT nyc in parallel mode', async () => {
+          receiver.setSettings({
+            itr_enabled: true,
+            code_coverage: true,
+            tests_skipping: false,
+          })
+
+          const coverageRequestPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+              const allCoverageFiles = payloads
+                .flatMap(({ payload }) => payload)
+                .flatMap(coverage => coverage.content.coverages)
+                .flatMap(coverage => coverage.files)
+                .map(file => file.filename)
+
+              assert.ok(
+                allCoverageFiles.includes(`${featuresPath}support/steps.${fileExtension}`),
+                `expected coverage to include support steps. Got: ${JSON.stringify(allCoverageFiles)}`
+              )
+              assert.ok(
+                allCoverageFiles.includes('ci-visibility/shared-greeter.js'),
+                `expected coverage to include shared-greeter.js. Got: ${JSON.stringify(allCoverageFiles)}`
+              )
+              assert.ok(allCoverageFiles.includes(`${featuresPath}farewell.feature`))
+              assert.ok(allCoverageFiles.includes(`${featuresPath}greetings.feature`))
+            })
+
+          childProcess = exec(
+            parallelModeCommand,
+            {
+              cwd,
+              env: getCiVisAgentlessConfig(receiver.port),
+            }
+          )
+
+          await Promise.all([
+            coverageRequestPromise,
             once(childProcess, 'exit'),
           ])
         })

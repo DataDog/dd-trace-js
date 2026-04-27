@@ -1,5 +1,7 @@
 'use strict'
 
+const path = require('node:path')
+
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -11,12 +13,15 @@ const {
   fromCoverageMapToCoverage,
   getTestSuitePath,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
+  CUCUMBER_WORKER_COVERAGE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   getV8CoverageCollector,
   startV8Coverage,
+  stopV8Coverage,
 } = require('../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
+const { getRepositoryRoot } = require('../../dd-trace/src/plugins/util/git')
 const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -47,6 +52,43 @@ const workerReportTraceCh = channel('ci:cucumber:worker-report:trace')
 const itrSkippedSuitesCh = channel('ci:cucumber:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+const CUCUMBER_CODE_COVERAGE_ENABLED_ENV = 'DD_CUCUMBER_CODE_COVERAGE_ENABLED'
+const CUCUMBER_CODE_COVERAGE_ROOT_ENV = 'DD_CUCUMBER_CODE_COVERAGE_ROOT'
+
+function getCoverageRoot () {
+  return getRepositoryRoot() || process.cwd()
+}
+
+function startCucumberV8Coverage (cwd) {
+  return startV8Coverage({ cwd: cwd || getCoverageRoot() })
+}
+
+function setWorkerCodeCoverageEnv () {
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  process.env[CUCUMBER_CODE_COVERAGE_ENABLED_ENV] = '1'
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  process.env[CUCUMBER_CODE_COVERAGE_ROOT_ENV] = getCoverageRoot()
+}
+
+function unsetWorkerCodeCoverageEnv () {
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  delete process.env[CUCUMBER_CODE_COVERAGE_ENABLED_ENV]
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  delete process.env[CUCUMBER_CODE_COVERAGE_ROOT_ENV]
+}
+
+function getWorkerCodeCoverageEnv (envName) {
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  return process.env[envName]
+}
+
+if (
+  libraryConfigurationCh.hasSubscribers &&
+  !getEnvironmentVariable('CUCUMBER_WORKER_ID') &&
+  getWorkerCodeCoverageEnv(CUCUMBER_CODE_COVERAGE_ENABLED_ENV) !== '1'
+) {
+  startCucumberV8Coverage()
+}
 
 const isMarkedAsUnskippable = (pickle) => {
   return pickle.tags.some(tag => tag.name === '@datadog:unskippable')
@@ -85,6 +127,7 @@ let isFlakyTestRetriesEnabled = false
 let isKnownTestsEnabled = false
 let isTestManagementTestsEnabled = false
 let isImpactedTestsEnabled = false
+let isCodeCoverageEnabled = false
 let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let modifiedFiles = {}
@@ -92,6 +135,15 @@ let numTestRetries = 0
 let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
+let supportCodeCoverageFiles = []
+
+if (
+  getEnvironmentVariable('CUCUMBER_WORKER_ID') &&
+  getWorkerCodeCoverageEnv(CUCUMBER_CODE_COVERAGE_ENABLED_ENV) === '1'
+) {
+  isCodeCoverageEnabled = true
+  startCucumberV8Coverage(getWorkerCodeCoverageEnv(CUCUMBER_CODE_COVERAGE_ROOT_ENV))
+}
 
 function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.cucumber
@@ -131,6 +183,48 @@ function getStatusFromResultLatest (result) {
     return { status: 'skip', skipReason: 'not implemented' }
   }
   return { status: 'fail', errorMessage: result.message }
+}
+
+function publishTestSuiteCodeCoverage (suiteFile, testSuitePath, coverageFiles) {
+  testSuiteCodeCoverageCh.publish({
+    coverageFiles,
+    suiteFile,
+    testSuitePath,
+  })
+}
+
+function addWorkerCodeCoverage ({ suiteFile, coverageFiles }) {
+  if (!suiteFile || !Array.isArray(coverageFiles)) {
+    return
+  }
+  publishTestSuiteCodeCoverage(suiteFile, getTestSuitePath(suiteFile, process.cwd()), coverageFiles)
+}
+
+function sendWorkerCodeCoverage (suiteFile) {
+  if (!isCodeCoverageEnabled || !process.send) {
+    return
+  }
+  const v8Collector = getV8CoverageCollector() ||
+    startCucumberV8Coverage(getWorkerCodeCoverageEnv(CUCUMBER_CODE_COVERAGE_ROOT_ENV))
+  if (!v8Collector) {
+    return
+  }
+  process.send([
+    CUCUMBER_WORKER_COVERAGE_PAYLOAD_CODE,
+    {
+      suiteFile,
+      coverageFiles: v8Collector.getFilesCoveredSinceLastSnapshot(),
+    },
+  ])
+}
+
+function getSupportCodeCoverageFiles (supportCodeLibrary) {
+  const { importPaths = [], requirePaths = [] } = supportCodeLibrary?.originalCoordinates || {}
+  const supportCodeFiles = []
+  for (const file of [...requirePaths, ...importPaths]) {
+    supportCodeFiles.push(path.isAbsolute(file) ? file : path.resolve(process.cwd(), file))
+  }
+  return [...new Set(supportCodeFiles)]
 }
 
 function isNewTest (testSuite, testName) {
@@ -491,6 +585,7 @@ function wrapRun (pl, isLatestVersion, version) {
           ...attemptCtx.currentStore,
           finalStatus,
         })
+        sendWorkerCodeCoverage(testFileAbsolutePath)
       })
       return promise
     } catch (err) {
@@ -566,6 +661,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     if (!libraryConfigurationCh.hasSubscribers) {
       return start.apply(this, arguments)
     }
+    if (!getEnvironmentVariable('CUCUMBER_WORKER_ID')) {
+      startCucumberV8Coverage()
+    }
     const options = getCucumberOptions(this)
 
     if (!isParallel && this.adapter?.options) {
@@ -586,9 +684,15 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     isTestManagementTestsEnabled = configurationResponse.libraryConfig?.isTestManagementEnabled
     testManagementAttemptToFixRetries = configurationResponse.libraryConfig?.testManagementAttemptToFixRetries
     isImpactedTestsEnabled = configurationResponse.libraryConfig?.isImpactedTestsEnabled
+    isCodeCoverageEnabled = !!configurationResponse.libraryConfig?.isCodeCoverageEnabled
 
-    if (configurationResponse.libraryConfig?.isCodeCoverageEnabled) {
-      startV8Coverage()
+    if (isCodeCoverageEnabled) {
+      startCucumberV8Coverage()
+      setWorkerCodeCoverageEnv()
+    } else {
+      supportCodeCoverageFiles = []
+      stopV8Coverage()
+      unsetWorkerCodeCoverageEnv()
     }
 
     if (isKnownTestsEnabled) {
@@ -723,6 +827,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isTestManagementTestsEnabled,
       isParallel,
     })
+    stopV8Coverage()
+    unsetWorkerCodeCoverageEnv()
+    supportCodeCoverageFiles = []
     eventDataCollector = null
     return success
   }
@@ -867,19 +974,11 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
       const v8Collector = getV8CoverageCollector()
       if (v8Collector) {
         const coverageFiles = v8Collector.getFilesCoveredSinceLastSnapshot()
-        testSuiteCodeCoverageCh.publish({
-          coverageFiles,
-          suiteFile: testFileAbsolutePath,
-          testSuitePath,
-        })
+        publishTestSuiteCodeCoverage(testFileAbsolutePath, testSuitePath, coverageFiles)
       } else if (global.__coverage__) {
         const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
 
-        testSuiteCodeCoverageCh.publish({
-          coverageFiles,
-          suiteFile: testFileAbsolutePath,
-          testSuitePath,
-        })
+        publishTestSuiteCodeCoverage(testFileAbsolutePath, testSuitePath, coverageFiles)
         // We need to reset coverage to get a code coverage per suite
         // Before that, we preserve the original coverage
         mergeCoverage(global.__coverage__, originalCoverageMap)
@@ -913,6 +1012,10 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       const [messageCode, payload] = message
       if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
         workerReportTraceCh.publish(payload)
+        return
+      }
+      if (messageCode === CUCUMBER_WORKER_COVERAGE_PAYLOAD_CODE) {
+        addWorkerCodeCoverage(payload)
         return
       }
     }
@@ -999,9 +1102,16 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
       }
 
       if (finished.length === pickleByFile[testFileAbsolutePath].length) {
+        const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
+        const v8Collector = getV8CoverageCollector()
+        if (v8Collector || supportCodeCoverageFiles.length) {
+          const coverageFiles = v8Collector ? v8Collector.getFilesCoveredSinceLastSnapshot() : []
+          const allCoverageFiles = [...new Set([...coverageFiles, ...supportCodeCoverageFiles])]
+          publishTestSuiteCodeCoverage(testFileAbsolutePath, testSuitePath, allCoverageFiles)
+        }
         testSuiteFinishCh.publish({
           status: getSuiteStatusFromTestStatuses(finished),
-          testSuitePath: getTestSuitePath(testFileAbsolutePath, process.cwd()),
+          testSuitePath,
         })
       }
     }
@@ -1158,6 +1268,12 @@ addHook({
       this.options.worldParameters._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
     }
 
+    if (isCodeCoverageEnabled) {
+      this.options.worldParameters._ddIsCodeCoverageEnabled = true
+      this.options.worldParameters._ddCoverageRoot = getCoverageRoot()
+      supportCodeCoverageFiles = getSupportCodeCoverageFiles(this.supportCodeLibrary)
+    }
+
     return startWorker.apply(this, arguments)
   })
   return adapterPackage
@@ -1175,6 +1291,14 @@ addHook({
     workerPackage.ChildProcessWorker.prototype,
     'initialize',
     initialize => async function () {
+      const [{ options }] = arguments
+      const worldParameters = options?.worldParameters || {}
+
+      isCodeCoverageEnabled = !!worldParameters._ddIsCodeCoverageEnabled
+      if (isCodeCoverageEnabled) {
+        startCucumberV8Coverage(worldParameters._ddCoverageRoot)
+      }
+
       await initialize.apply(this, arguments)
       isKnownTestsEnabled = !!this.options.worldParameters._ddIsKnownTestsEnabled
       if (isKnownTestsEnabled) {
