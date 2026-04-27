@@ -57,6 +57,7 @@ let itrCorrelationId = ''
 let isForcedToRun = false
 const config = {}
 let coverageRoot
+let isExecutionConfigurationRequested = false
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -95,6 +96,64 @@ function getCoverageRoot () {
 
 function startMochaV8Coverage () {
   return startV8Coverage({ cwd: getCoverageRoot() })
+}
+
+function getNycAllCoverage (onDone) {
+  let nycConfig
+  try {
+    nycConfig = JSON.parse(getEnvironmentVariable('NYC_CONFIG'))
+  } catch {
+    onDone()
+    return
+  }
+  if (!nycConfig?.all) {
+    onDone()
+    return
+  }
+
+  let NYC
+  try {
+    // eslint-disable-next-line n/no-unpublished-require
+    NYC = require('nyc')
+  } catch {
+    onDone()
+    return
+  }
+
+  let nyc
+  try {
+    nyc = new NYC(nycConfig)
+  } catch {
+    onDone()
+    return
+  }
+
+  if (!nyc.getCoverageMapFromAllCoverageFiles) {
+    onDone()
+    return
+  }
+  nyc.getCoverageMapFromAllCoverageFiles().then(onDone, () => onDone())
+}
+
+function getUntestedCoverage (onDone) {
+  if (getCodeCoverageCh.hasSubscribers) {
+    getCodeCoverageCh.publish({ onDone })
+  } else {
+    getNycAllCoverage(onDone)
+  }
+}
+
+function getTestFilesFromSuite (suite) {
+  const files = new Set()
+  for (const childSuite of suite.suites) {
+    if (childSuite.file) {
+      files.add(childSuite.file)
+    }
+    for (const file of getTestFilesFromSuite(childSuite)) {
+      files.add(file)
+    }
+  }
+  return [...files]
 }
 
 // Tests from workers do not come with `isFailed` method
@@ -202,8 +261,7 @@ function getOnEndHandler (isParallel) {
     testFileToSuiteCtx.clear()
 
     let testCodeCoverageLinesTotal
-    const v8CollectorActive = !!getV8CoverageCollector()
-    if (global.__coverage__ && !v8CollectorActive) {
+    if (global.__coverage__) {
       try {
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
@@ -214,20 +272,6 @@ function getOnEndHandler (isParallel) {
       }
       // restore the original coverage
       global.__coverage__ = fromCoverageMapToCoverage(originalCoverageMap)
-    } else if (global.__coverage__) {
-      // V8 collector owned per-suite deltas; `global.__coverage__` was
-      // untouched and already holds cumulative nyc counters. Compute the
-      // coverage percentage without mutating it so nyc's own reporters
-      // still see the right data at process exit.
-      try {
-        const cumulativeMap = createCoverageMap(global.__coverage__)
-        if (untestedCoverage) {
-          cumulativeMap.merge(fromCoverageMapToCoverage(untestedCoverage))
-        }
-        testCodeCoverageLinesTotal = cumulativeMap.getCoverageSummary().lines.pct
-      } catch {
-        // ignore errors
-      }
     }
 
     testSessionFinishCh.publish({
@@ -245,6 +289,7 @@ function getOnEndHandler (isParallel) {
     })
 
     stopV8Coverage()
+    isExecutionConfigurationRequested = false
     logDynamicNamesWarning(newTestsWithDynamicNames)
   }
 }
@@ -416,6 +461,7 @@ addHook({
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
       return run.apply(this, arguments)
     }
+    isExecutionConfigurationRequested = true
 
     // `options.delay` does not work in parallel mode, so we can't delay the execution this way
     // This needs to be both here and in `runMocha` hook. Read the comment in `runMocha` hook for more info.
@@ -445,16 +491,10 @@ addHook({
           config.isKnownTestsEnabled = false
         }
       }
-      if (getCodeCoverageCh.hasSubscribers) {
-        getCodeCoverageCh.publish({
-          onDone: (receivedCodeCoverage) => {
-            untestedCoverage = receivedCodeCoverage
-            global.run()
-          },
-        })
-      } else {
+      getUntestedCoverage((receivedCodeCoverage) => {
+        untestedCoverage = receivedCodeCoverage
         global.run()
-      }
+      })
     })
 
     return runner
@@ -507,6 +547,13 @@ addHook({
   shimmer.wrap(Runner.prototype, 'run', run => function () {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
+    }
+
+    const shouldRequestExecutionConfiguration = !isExecutionConfigurationRequested &&
+      !getEnvironmentVariable('MOCHA_WORKER_ID')
+    if (shouldRequestExecutionConfiguration) {
+      isExecutionConfigurationRequested = true
+      this._delay = true
     }
 
     const { suitesByTestFile, numSuitesByTestFile } = getSuitesByTestFile(this.suite)
@@ -585,12 +632,17 @@ addHook({
           coverageFiles,
           suiteFile: suite.file,
         })
-      } else if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
-        testSuiteCodeCoverageCh.publish({
-          coverageFiles,
-          suiteFile: suite.file,
-        })
+      }
+
+      if (global.__coverage__) {
+        if (!v8Collector) {
+          const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+          testSuiteCodeCoverageCh.publish({
+            coverageFiles,
+            suiteFile: suite.file,
+          })
+        }
+
         // Reset per-suite after preserving originals so istanbul can report
         // accurate totals at process exit — this path does not interfere
         // with nyc's own reporters, which read fresh counters from
@@ -607,7 +659,39 @@ addHook({
       }
     })
 
-    return run.apply(this, arguments)
+    const runner = run.apply(this, arguments)
+
+    if (shouldRequestExecutionConfiguration) {
+      const files = getTestFilesFromSuite(this.suite)
+      for (const file of files) {
+        const isUnskippable = isMarkedAsUnskippable({ path: file })
+        if (isUnskippable) {
+          unskippableSuites.push(file)
+        }
+      }
+
+      getExecutionConfiguration(this, false, frameworkVersion, () => {
+        if (config.isKnownTestsEnabled) {
+          const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
+          const isFaulty = getIsFaultyEarlyFlakeDetection(
+            testSuites,
+            config.knownTests?.mocha || {},
+            config.earlyFlakeDetectionFaultyThreshold
+          )
+          if (isFaulty) {
+            config.isEarlyFlakeDetectionEnabled = false
+            config.isEarlyFlakeDetectionFaulty = true
+            config.isKnownTestsEnabled = false
+          }
+        }
+        getUntestedCoverage((receivedCodeCoverage) => {
+          untestedCoverage = receivedCodeCoverage
+          this.suite.emit('run')
+        })
+      })
+    }
+
+    return runner
   })
 
   return Runner

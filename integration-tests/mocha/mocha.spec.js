@@ -2267,6 +2267,19 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         },
       }])
 
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/sum.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/ci-visibility-test-2.js'))
+          assert.ok(!allCoverageFiles.includes('ci-visibility/test/ci-visibility-test.js'))
+        })
+
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2308,6 +2321,56 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       )
 
       await Promise.all([
+        coverageRequestPromise,
+        eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
+    onlyLatestIt('can skip suites and report code coverage with nyc in parallel mode', async () => {
+      receiver.setSuitesToSkip([{
+        type: 'suite',
+        attributes: {
+          suite: 'ci-visibility/test/ci-visibility-test.js',
+        },
+      }])
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/sum.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/ci-visibility-test-2.js'))
+          assert.ok(!allCoverageFiles.includes('ci-visibility/test/ci-visibility-test.js'))
+        })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.meta[MOCHA_IS_PARALLEL], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'true')
+          assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_TYPE], 'suite')
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 1)
+        })
+
+      childProcess = exec(
+        './node_modules/nyc/bin/nyc.js -r=text-summary node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test/ci-visibility-test.js' +
+        ' ./ci-visibility/test/ci-visibility-test-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        coverageRequestPromise,
         eventsPromise,
         once(childProcess, 'exit'),
       ])
