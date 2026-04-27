@@ -110,7 +110,7 @@ describe('Plugin', () => {
                 'db.type': 'mysql',
                 component: 'mysql2',
               },
-            })
+            }, { spanResourceMatch: /SELECT 1 \+ 1 AS solution/ })
             .then(done)
             .catch(done)
 
@@ -133,7 +133,7 @@ describe('Plugin', () => {
                 'db.type': 'mysql',
                 component: 'mysql2',
               },
-            })
+            }, { spanResourceMatch: /SELECT \? \+ \? AS solution/ })
             .then(done)
             .catch(done)
 
@@ -158,7 +158,7 @@ describe('Plugin', () => {
                 'db.type': 'mysql',
                 component: 'mysql2',
               },
-            })
+            }, { spanResourceMatch: /SELECT \? \+ \? AS solution/ })
             .then(done)
             .catch(done)
 

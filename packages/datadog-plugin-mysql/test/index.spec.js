@@ -93,7 +93,7 @@ describe('Plugin', () => {
                 component: 'mysql',
                 '_dd.integration': 'mysql',
               },
-            })
+            }, { spanResourceMatch: /SELECT 1 \+ 1 AS solution/ })
             .then(done)
             .catch(done)
 
