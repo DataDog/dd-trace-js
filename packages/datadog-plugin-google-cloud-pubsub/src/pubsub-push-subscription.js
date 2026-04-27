@@ -150,7 +150,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       childOf: parentContext,
       startTime,
       kind: 'consumer',
-      service: this.config.service || { name: `${this.tracer._service}-pubsub`, source: this.tracer._service },
+      service: this.config.service ||
+        this.serviceName({ type: 'messaging', kind: 'consumer', id: 'google-cloud-pubsub' }),
       meta: {
         component: 'google-cloud-pubsub',
         'pubsub.method': 'receive',
