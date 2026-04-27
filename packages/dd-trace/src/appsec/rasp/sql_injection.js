@@ -6,8 +6,9 @@ const {
   wafRunFinished,
   mysql2OuterQueryStart,
 } = require('../channels')
-const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
+const web = require('../../plugins/util/web')
+const { getActiveRequest } = require('../store')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 
@@ -49,10 +50,7 @@ function analyzePgSqlInjection (ctx) {
 }
 
 function analyzeSqlInjection (query, dbSystem, abortController) {
-  const store = storage('legacy').getStore()
-  if (!store) return
-
-  const { req, res } = store
+  const req = getActiveRequest()
 
   if (!req) return
 
@@ -76,7 +74,7 @@ function analyzeSqlInjection (query, dbSystem, abortController) {
 
   const result = waf.run({ ephemeral }, req, raspRule)
 
-  handleResult(result, req, res, abortController, config, raspRule)
+  handleResult(result, req, web.getContext(req)?.res, abortController, config, raspRule)
 }
 
 function hasInputAddress (payload) {
@@ -91,10 +89,7 @@ function hasAddressesObjectInputAddress (addressesObject) {
 function clearQuerySet ({ payload }) {
   if (!payload) return
 
-  const store = storage('legacy').getStore()
-  if (!store) return
-
-  const { req } = store
+  const req = getActiveRequest()
   if (!req) return
 
   const executedQueries = reqQueryMap.get(req)

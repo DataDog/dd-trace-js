@@ -11,6 +11,7 @@ const sinon = require('sinon')
 const { USER_KEEP } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 const { ASM } = require('../../src/standalone/product')
+const { withRequest } = require('../../src/appsec/store')
 const { getConfigFresh } = require('../helpers/config')
 function getAppSecConfig (options) {
   return getConfigFresh({ appsec: options }).appsec
@@ -183,7 +184,7 @@ describe('reporter', () => {
 
     beforeEach(() => {
       req = {}
-      storage('legacy').enterWith({ req })
+      storage('legacy').enterWith(withRequest(undefined, req))
     })
 
     afterEach(() => {
@@ -221,11 +222,10 @@ describe('reporter', () => {
 
     it('should call updateWafRequestsMetricTags', () => {
       const metrics = { rulesVersion: '1.2.3' }
-      const store = storage('legacy').getStore()
 
       Reporter.reportMetrics(metrics)
 
-      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, store.req)
+      sinon.assert.calledOnceWithExactly(telemetry.updateWafRequestsMetricTags, metrics, req)
       sinon.assert.notCalled(telemetry.updateRaspRequestsMetricTags)
     })
 
@@ -290,13 +290,12 @@ describe('reporter', () => {
 
     it('should call updateRaspRequestsMetricTags when raspRule is provided', () => {
       const metrics = { rulesVersion: '1.2.3' }
-      const store = storage('legacy').getStore()
 
       const raspRule = { type: 'rule_type', variant: 'rule_variant' }
 
       Reporter.reportMetrics(metrics, raspRule)
 
-      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRequestsMetricTags, metrics, store.req, raspRule)
+      sinon.assert.calledOnceWithExactly(telemetry.updateRaspRequestsMetricTags, metrics, req, raspRule)
       sinon.assert.notCalled(telemetry.updateWafRequestsMetricTags)
     })
   })
@@ -380,7 +379,7 @@ describe('reporter', () => {
           'user-agent': 'arachni',
         },
       }
-      storage('legacy').enterWith({ req })
+      storage('legacy').enterWith(withRequest(undefined, req))
     })
 
     afterEach(() => {
