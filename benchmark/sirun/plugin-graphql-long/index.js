@@ -45,7 +45,7 @@ const source = `
 
 const variableValues = { who: 'world' }
 
-const queries = Number(process.env.QUERIES || 150)
+const queries = Number(process.env.QUERIES || 100)
 for (let i = 0; i < queries; i++) {
   graphql.graphql({ schema, source, variableValues })
 }

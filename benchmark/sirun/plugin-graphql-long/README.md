@@ -22,23 +22,23 @@ it makes real applications faster.
 
 ## Default query count
 
-`QUERIES=150` by default. At that size, load is:
+`QUERIES=100` by default. At that size, load is:
 
-| | load share @ 150q |
+| | load share @ 100q |
 |---|---|
-| master, depth-on-max | ~17% |
-| master, collapse-off | ~12% |
+| master, depth-on-max | ~23% |
+| master, collapse-off | ~16% |
 
-Per-query cost dominates the measurement (~12-17% load share vs
+Per-query cost dominates the measurement (~16-23% load share vs
 ~77-83% at 6 queries), which is the metric that matters for servers
 handling many requests per process lifetime.
 
 `QUERIES` is parametric so the same bench can be re-aimed at larger
 sizes (e.g. `QUERIES=500` for load <6%) without forking the directory.
-The default is tuned to keep the 6-variant × 30-iteration matrix at
-~4 min per Node version — roughly 5-6× the existing `plugin-graphql`
-bench (~45s per Node version) while still dropping load share from
-~80% to ~15%.
+The default is tuned to keep the 6-variant × 10-iteration matrix at
+~1 min per Node version — comparable to the existing `plugin-graphql`
+bench (~45s per Node version) while dropping load share from ~80% to
+~20%.
 
 ## Relationship to `plugin-graphql`
 
