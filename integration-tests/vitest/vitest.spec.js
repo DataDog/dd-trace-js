@@ -61,6 +61,9 @@ const {
   GIT_REPOSITORY_URL,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
   TEST_FINAL_STATUS,
+  TEST_ITR_TESTS_SKIPPED,
+  TEST_ITR_SKIPPING_ENABLED,
+  TEST_CODE_COVERAGE_ENABLED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/env')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
@@ -2899,6 +2902,266 @@ versions.forEach((version) => {
           allCoverageFiles.some(f => f.endsWith('ci-visibility/vitest-shared/shared-sum.mjs')),
           `expected shared-sum.mjs in coverage files, got: ${JSON.stringify(allCoverageFiles)}`
         )
+      })
+
+      context('if the agent is not event platform proxy compatible', () => {
+        it('does not do any intelligent test runner request', (done) => {
+          receiver.setInfoResponse({ endpoints: [] })
+
+          receiver.assertPayloadReceived(() => {
+            done(new Error('should not request search_commits'))
+          }, ({ url }) => url === '/evp_proxy/v2/api/v2/git/repository/search_commits').catch(() => {})
+          receiver.assertPayloadReceived(() => {
+            done(new Error('should not request search_commits'))
+          }, ({ url }) => url === '/api/v2/git/repository/search_commits').catch(() => {})
+          receiver.assertPayloadReceived(() => {
+            done(new Error('should not request setting'))
+          }, ({ url }) => url === '/api/v2/libraries/tests/services/setting').catch(() => {})
+          receiver.assertPayloadReceived(() => {
+            done(new Error('should not request setting'))
+          }, ({ url }) => url === '/evp_proxy/v2/api/v2/libraries/tests/services/setting').catch(() => {})
+          receiver.assertPayloadReceived(() => {
+            done(new Error('should not request skippable'))
+          }, ({ url }) => url === '/api/v2/ci/tests/skippable').catch(() => {})
+
+          receiver.assertPayloadReceived(({ payload }) => {
+            const testSpans = payload.flatMap(trace => trace)
+            const resourceNames = testSpans.map(span => span.resource).sort()
+
+            assertObjectContains(
+              resourceNames,
+              [
+                'ci-visibility/vitest-tests/itr-suite-one.mjs.itr suite one adds one and two',
+                'ci-visibility/vitest-tests/itr-suite-two.mjs.itr suite two adds two and three',
+              ].sort()
+            )
+          }, ({ url }) => url === '/v0.4/traces').then(() => done()).catch(done)
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisEvpProxyConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              },
+            }
+          )
+        })
+      })
+
+      it('reports the citestcov payload shape and includes session/suite ids', async () => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+
+        const libraryConfigPromise = receiver.payloadReceived(
+          ({ url }) => url === '/api/v2/libraries/tests/services/setting'
+        )
+        const codeCovPromise = receiver.payloadReceived(({ url }) => url === '/api/v2/citestcov')
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const eventTypes = events.map(event => event.type)
+            assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+            const numSuites = eventTypes.reduce(
+              (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+            )
+            assert.strictEqual(numSuites, 2)
+          }, 25000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        const [libraryConfigRequest, codeCovRequest] = await Promise.all([
+          libraryConfigPromise,
+          codeCovPromise,
+          eventsPromise,
+          once(childProcess, 'exit'),
+        ])
+
+        assert.strictEqual(libraryConfigRequest.headers['dd-api-key'], '1')
+        assertObjectContains(codeCovRequest, {
+          headers: {
+            'dd-api-key': '1',
+          },
+          payload: [{
+            name: 'coverage1',
+            filename: 'coverage1.msgpack',
+            type: 'application/msgpack',
+            content: {
+              version: 2,
+            },
+          }],
+        })
+
+        const [coveragePayload] = codeCovRequest.payload
+        assert.ok(coveragePayload.content.coverages[0].test_session_id)
+        assert.ok(coveragePayload.content.coverages[0].test_suite_id)
+      })
+
+      it('does not report code coverage if disabled by the API', (done) => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+        })
+
+        receiver.assertPayloadReceived(() => {
+          done(new Error('should not report code coverage'))
+        }, ({ url }) => url === '/api/v2/citestcov').catch(() => {})
+
+        receiver.assertPayloadReceived(({ headers, payload }) => {
+          assert.strictEqual(headers['dd-api-key'], '1')
+          const eventTypes = payload.events.map(event => event.type)
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+          const testSession = payload.events.find(event => event.type === 'test_session_end').content
+          assert.ok(!(TEST_CODE_COVERAGE_ENABLED in testSession.meta),
+            `${TEST_CODE_COVERAGE_ENABLED} should not be set when API disables coverage`)
+          assert.ok(!(TEST_ITR_SKIPPING_ENABLED in testSession.meta),
+            `${TEST_ITR_SKIPPING_ENABLED} should not be set when API disables skipping`)
+          assert.ok(!(TEST_ITR_TESTS_SKIPPED in testSession.meta),
+            `${TEST_ITR_TESTS_SKIPPED} should not be set when ITR is off`)
+        }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+      })
+
+      it('does not skip tests if git metadata upload fails', (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/vitest-tests/itr-suite-one.mjs',
+          },
+        }])
+        receiver.setGitUploadStatus(404)
+
+        receiver.assertPayloadReceived(() => {
+          done(new Error('should not request skippable'))
+        }, ({ url }) => url === '/api/v2/ci/tests/skippable').catch(() => {})
+
+        receiver.assertPayloadReceived(({ headers, payload }) => {
+          assert.strictEqual(headers['dd-api-key'], '1')
+          const eventTypes = payload.events.map(event => event.type)
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          // both suites should run since skippable was never requested
+          assert.strictEqual(numSuites, 2)
+        }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+      })
+
+      it('does not skip tests if test skipping is disabled by the API', (done) => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: false,
+        })
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/vitest-tests/itr-suite-one.mjs',
+          },
+        }])
+
+        receiver.assertPayloadReceived(() => {
+          done(new Error('should not request skippable'))
+        }, ({ url }) => url === '/api/v2/ci/tests/skippable').catch(() => {})
+
+        receiver.assertPayloadReceived(({ payload }) => {
+          const eventTypes = payload.events.map(event => event.type)
+          assertObjectContains(eventTypes, ['test', 'test_suite_end', 'test_session_end', 'test_module_end'])
+          const numSuites = eventTypes.reduce(
+            (acc, type) => type === 'test_suite_end' ? acc + 1 : acc, 0
+          )
+          assert.strictEqual(numSuites, 2)
+        }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+      })
+
+      it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', (done) => {
+        receiver.setSuitesToSkip([{
+          type: 'suite',
+          attributes: {
+            suite: 'ci-visibility/vitest-tests/not-existing-suite.mjs',
+          },
+        }])
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+            assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+            assert.strictEqual(testSession.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            assert.strictEqual(testModule.meta[TEST_ITR_TESTS_SKIPPED], 'false')
+            assert.strictEqual(testModule.meta[TEST_CODE_COVERAGE_ENABLED], 'true')
+            assert.strictEqual(testModule.meta[TEST_ITR_SKIPPING_ENABLED], 'true')
+          }, 25000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/itr-suite-*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+        childProcess.on('exit', () => {
+          eventsPromise.then(() => done()).catch(done)
+        })
       })
     })
 
