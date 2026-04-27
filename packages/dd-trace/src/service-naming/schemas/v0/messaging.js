@@ -81,7 +81,8 @@ const messaging = {
     },
     'google-cloud-pubsub': {
       opName: () => 'pubsub.receive',
-      serviceName: identityService,
+      serviceName: ({ tracerService }) => `${tracerService}-pubsub`,
+      serviceSource: integrationSource('google-cloud-pubsub'),
     },
     kafkajs: {
       opName: () => 'kafka.consume',
