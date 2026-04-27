@@ -559,9 +559,9 @@ function finishRequest (req, res, storedResponseHeaders, requestBody, rootSpan) 
     rootSpan.setTag('_dd.appsec.rasp.rule.eval', metrics.raspEvalCount)
   }
 
-  incrementWafRequestsMetric(req)
-
   if (!req) return
+
+  incrementWafRequestsMetric(req)
 
   const tags = rootSpan.context()._tags
 
