@@ -7,7 +7,13 @@ const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
 const Span = require('../opentracing/span')
-const { SPAN_KIND, OUTPUT_VALUE, INPUT_VALUE } = require('./constants/tags')
+const {
+  SPAN_KIND,
+  OUTPUT_VALUE,
+  INPUT_VALUE,
+  LLMOBS_TRACE_ID_BRIDGE_KEY,
+  LLMOBS_PARENT_ID_BRIDGE_KEY,
+} = require('./constants/tags')
 const {
   getFunctionArguments,
   validateKind,
@@ -527,6 +533,17 @@ class LLMObs extends NoopLLMObs {
   _activate (span, options, fn) {
     const parentStore = storage.getStore()
     if (this.enabled) storage.enterWith({ ...parentStore, span })
+
+    // Bridge tags read by the dd-go LLMObs trace-indexer to correlate OTel
+    // gen_ai.* spans with SDK LLMObs spans. Written once per local trace, on
+    // the first SDK LLMObs span activation. The shared _trace.tags bag is
+    // serialized to the first span in every flushed chunk's meta, so partial
+    // flush is covered automatically without a separate flush-time processor.
+    const traceTags = span?.context?.()._trace?.tags
+    if (this.enabled && traceTags && !traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) {
+      traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
+      traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
+    }
 
     if (options) {
       this._tagger.registerLLMObsSpan(span, {

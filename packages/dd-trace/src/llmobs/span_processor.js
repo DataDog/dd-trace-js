@@ -30,6 +30,7 @@ const {
   INPUT_PROMPT,
   ROUTING_API_KEY,
   ROUTING_SITE,
+  LLMOBS_SUBMITTED_TAG_KEY,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -75,6 +76,11 @@ class LLMObsSpanProcessor {
     if (!this.#config.llmobs.enabled) return
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
+
+    // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
+    // gen_ai.* spans, the parent-chain walk stops at any span carrying this
+    // tag, preserving the SDK span as the immediate LLMObs parent.
+    span.context()._tags[LLMOBS_SUBMITTED_TAG_KEY] = '1'
 
     try {
       const formattedEvent = this.format(span)

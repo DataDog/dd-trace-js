@@ -356,5 +356,68 @@ describe('span processor', () => {
 
       assertObjectContains(payload.tags, ['source:mySource', 'hostname:localhost', 'foo:bar'])
     })
+
+    it('marks the apm span with _dd.llmobs.submitted=1 for sdk-tagged spans', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
+    })
+
+    it('does not mark non-llmobs apm spans with _dd.llmobs.submitted', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+      // intentionally not registered with the tagger
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+    })
+
+    it('marks the apm span even when format throws during processing', () => {
+      const apmTags = {}
+      span = {
+        _name: 'broken',
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      // simulate format failing
+      sinon.stub(processor, 'format').throws(new Error('boom'))
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
+      sinon.assert.notCalled(writer.append)
+    })
   })
 })
