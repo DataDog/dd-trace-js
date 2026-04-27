@@ -9,9 +9,11 @@ const inJestWorker = typeof jest !== 'undefined'
 const ddTraceDisabled = getValueFromEnvSources('DD_TRACE_ENABLED')
   ? isFalse(getValueFromEnvSources('DD_TRACE_ENABLED'))
   : String(getValueFromEnvSources('OTEL_TRACES_EXPORTER')).toLowerCase() === 'none'
+const profilingEnabled = String(getValueFromEnvSources('DD_PROFILING_ENABLED') ?? '').toLowerCase()
 const shouldUseProxyWhenTracingDisabled =
   isTrue(getValueFromEnvSources('DD_DYNAMIC_INSTRUMENTATION_ENABLED')) ||
-  isTrue(getValueFromEnvSources('DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED'))
+  isTrue(getValueFromEnvSources('DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED')) ||
+  isTrue(profilingEnabled) || profilingEnabled === 'auto'
 
 module.exports = (ddTraceDisabled && !shouldUseProxyWhenTracingDisabled) || inJestWorker
   ? require('./noop/proxy')
