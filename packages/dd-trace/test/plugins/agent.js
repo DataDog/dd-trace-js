@@ -29,6 +29,15 @@ const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
 
+const traceTimingEnabled = process.env.DD_TRACE_AGENT_LOAD_TIMING === 'true'
+
+function traceTiming (message) {
+  if (traceTimingEnabled) {
+    // eslint-disable-next-line no-console
+    console.log(message)
+  }
+}
+
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
     return true
@@ -430,46 +439,39 @@ module.exports = {
 
     let t = performance.now()
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   config/defaults: ${(performance.now() - t).toFixed(3)}ms`)
+    traceTiming(`[agent.load]   config/defaults: ${(performance.now() - t).toFixed(3)}ms`)
 
     t = performance.now()
     const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
       './defaults': defaults,
     })
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   src/config:      ${(performance.now() - t).toFixed(3)}ms`)
+    traceTiming(`[agent.load]   src/config:      ${(performance.now() - t).toFixed(3)}ms`)
 
     // Reload dogstatsd to avoid adding new events to the global process object
     t = performance.now()
     const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   src/dogstatsd:   ${(performance.now() - t).toFixed(3)}ms`)
+    traceTiming(`[agent.load]   src/dogstatsd:   ${(performance.now() - t).toFixed(3)}ms`)
 
     t = performance.now()
     const proxy = proxyquire('../../src/proxy', {
       './config': getConfigFresh,
       './dogstatsd': dogstatsd,
     })
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   src/proxy:       ${(performance.now() - t).toFixed(3)}ms`)
+    traceTiming(`[agent.load]   src/proxy:       ${(performance.now() - t).toFixed(3)}ms`)
 
     t = performance.now()
     const TracerProxy = proxyquire('../../src', {
       './proxy': proxy,
     })
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   src/index:       ${(performance.now() - t).toFixed(3)}ms`)
+    traceTiming(`[agent.load]   src/index:       ${(performance.now() - t).toFixed(3)}ms`)
 
     t = performance.now()
     tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load]   root/index:      ${(performance.now() - t).toFixed(3)}ms`)
+    traceTiming(`[agent.load]   root/index:      ${(performance.now() - t).toFixed(3)}ms`)
 
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load] proxyquire phase:  ${(performance.now() - proxyquireStart).toFixed(3)}ms`)
+    traceTiming(`[agent.load] proxyquire phase:  ${(performance.now() - proxyquireStart).toFixed(3)}ms`)
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -486,8 +488,10 @@ module.exports = {
 
     const checkAgentStart = performance.now()
     const useTestAgent = await checkAgentStatus()
-    // eslint-disable-next-line no-console
-    console.log(`[agent.load] checkAgentStatus phase: ${(performance.now() - checkAgentStart).toFixed(3)}ms (useTestAgent=${useTestAgent})`)
+    traceTiming(
+      `[agent.load] checkAgentStatus phase: ${(performance.now() - checkAgentStart).toFixed(3)}ms ` +
+      `(useTestAgent=${useTestAgent})`
+    )
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
@@ -550,8 +554,7 @@ module.exports = {
     const listenStart = performance.now()
     const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
-        // eslint-disable-next-line no-console
-        console.log(`[agent.load] server.listen phase: ${(performance.now() - listenStart).toFixed(3)}ms`)
+        traceTiming(`[agent.load] server.listen phase: ${(performance.now() - listenStart).toFixed(3)}ms`)
 
         const port = listener.address().port
 
@@ -564,25 +567,20 @@ module.exports = {
           plugins: false,
           ...tracerConfig,
         })
-        // eslint-disable-next-line no-console
-        console.log(`[agent.load]   tracer.init:     ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
+        traceTiming(`[agent.load]   tracer.init:     ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
 
         let tUse = performance.now()
         tracer.setUrl(`http://127.0.0.1:${port}`)
-        // eslint-disable-next-line no-console
-        console.log(`[agent.load]   tracer.setUrl:   ${(performance.now() - tUse).toFixed(3)}ms`)
+        traceTiming(`[agent.load]   tracer.setUrl:   ${(performance.now() - tUse).toFixed(3)}ms`)
 
         tUse = performance.now()
         for (let i = 0, l = pluginNames.length; i < l; i++) {
           tracer.use(pluginNames[i], config[i])
         }
-        // eslint-disable-next-line no-console
-        console.log(`[agent.load]   tracer.use:      ${(performance.now() - tUse).toFixed(3)}ms`)
+        traceTiming(`[agent.load]   tracer.use:      ${(performance.now() - tUse).toFixed(3)}ms`)
 
-        // eslint-disable-next-line no-console
-        console.log(`[agent.load] tracer.init+use phase: ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
-        // eslint-disable-next-line no-console
-        console.log(`[agent.load] total load() duration: ${(performance.now() - loadStart).toFixed(3)}ms`)
+        traceTiming(`[agent.load] tracer.init+use phase: ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
+        traceTiming(`[agent.load] total load() duration: ${(performance.now() - loadStart).toFixed(3)}ms`)
 
         resolve()
       })

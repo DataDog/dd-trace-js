@@ -15,27 +15,32 @@ const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SERVICE_NAME = tags.SERVICE_NAME
 const MEASURED = tags.MEASURED
+const traceTimingEnabled = process.env.DD_TRACE_AGENT_LOAD_TIMING === 'true'
+
+function traceTiming (message) {
+  if (traceTimingEnabled) {
+    // eslint-disable-next-line no-console
+    console.log(message)
+  }
+}
 
 class DatadogTracer extends Tracer {
   constructor (config, prioritySampler) {
     let _t = performance.now()
     super(config, prioritySampler)
-    // eslint-disable-next-line no-console
-    console.log(`[tracer.constructor] super:              ${(performance.now() - _t).toFixed(3)}ms`)
+    traceTiming(`[tracer.constructor] super:              ${(performance.now() - _t).toFixed(3)}ms`)
 
     _t = performance.now()
     this._dataStreamsProcessor = new DataStreamsProcessor(config)
     this._dataStreamsManager = new DataStreamsManager(this._dataStreamsProcessor)
     this.dataStreamsCheckpointer = new DataStreamsCheckpointer(this)
-    // eslint-disable-next-line no-console
-    console.log(`[tracer.constructor] dataStreams handles:${(performance.now() - _t).toFixed(3)}ms`)
+    traceTiming(`[tracer.constructor] dataStreams handles:${(performance.now() - _t).toFixed(3)}ms`)
 
     _t = performance.now()
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
-    // eslint-disable-next-line no-console
-    console.log(`[tracer.constructor] scope+startup logs: ${(performance.now() - _t).toFixed(3)}ms`)
+    traceTiming(`[tracer.constructor] scope+startup logs: ${(performance.now() - _t).toFixed(3)}ms`)
 
     if (!IS_SERVERLESS) {
       _t = performance.now()
@@ -47,8 +52,7 @@ class DatadogTracer extends Tracer {
         log.warn('Could not store tracer configuration for service discovery')
       }
       this._inmem_cfg = metadata
-      // eslint-disable-next-line no-console
-      console.log(`[tracer.constructor] tracer_metadata:   ${(performance.now() - _t).toFixed(3)}ms`)
+      traceTiming(`[tracer.constructor] tracer_metadata:   ${(performance.now() - _t).toFixed(3)}ms`)
     }
   }
 

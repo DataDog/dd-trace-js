@@ -21,6 +21,15 @@ const {
   removeAllBaggageItems,
 } = require('./baggage')
 
+const traceTimingEnabled = process.env.DD_TRACE_AGENT_LOAD_TIMING === 'true'
+
+function traceTiming (message) {
+  if (traceTimingEnabled) {
+    // eslint-disable-next-line no-console
+    console.log(message)
+  }
+}
+
 class LazyModule {
   constructor (provider) {
     this.provider = provider
@@ -106,8 +115,7 @@ class Tracer extends NoopProxy {
     try {
       let _t = performance.now()
       const config = getConfig(options) // TODO: support dynamic code config
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.init]   getConfig:         ${(performance.now() - _t).toFixed(3)}ms`)
+      traceTiming(`[proxy.init]   getConfig:         ${(performance.now() - _t).toFixed(3)}ms`)
 
       // Add config dependent process tags
       _t = performance.now()
@@ -116,8 +124,7 @@ class Tracer extends NoopProxy {
       // Configure propagation hash manager for process tags + container tags
       const propagationHash = require('./propagation-hash')
       propagationHash.configure(config)
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.init]   processTags+hash:  ${(performance.now() - _t).toFixed(3)}ms`)
+      traceTiming(`[proxy.init]   processTags+hash:  ${(performance.now() - _t).toFixed(3)}ms`)
 
       if (config.crashtracking.enabled) {
         require('./crashtracking').start(config)
@@ -129,8 +136,7 @@ class Tracer extends NoopProxy {
 
       _t = performance.now()
       telemetry.start(config, this._pluginManager)
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.init]   telemetry.start:   ${(performance.now() - _t).toFixed(3)}ms`)
+      traceTiming(`[proxy.init]   telemetry.start:   ${(performance.now() - _t).toFixed(3)}ms`)
 
       if (config.dogstatsd) {
         // Custom Metrics
@@ -151,13 +157,11 @@ class Tracer extends NoopProxy {
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         let _trc = performance.now()
         const RemoteConfig = require('./remote_config')
-        // eslint-disable-next-line no-console
-        console.log(`[proxy.init]     require remote_config:       ${(performance.now() - _trc).toFixed(3)}ms`)
+        traceTiming(`[proxy.init]     require remote_config:       ${(performance.now() - _trc).toFixed(3)}ms`)
 
         _trc = performance.now()
         const rc = new RemoteConfig(config)
-        // eslint-disable-next-line no-console
-        console.log(`[proxy.init]     new RemoteConfig:            ${(performance.now() - _trc).toFixed(3)}ms`)
+        traceTiming(`[proxy.init]     new RemoteConfig:            ${(performance.now() - _trc).toFixed(3)}ms`)
 
         _trc = performance.now()
         const tracingRemoteConfig = require('./config/remote_config')
@@ -165,8 +169,7 @@ class Tracer extends NoopProxy {
           this.#updateTracing(config)
           this.#updateDebugger(config, rc)
         })
-        // eslint-disable-next-line no-console
-        console.log(`[proxy.init]     tracingRemoteConfig.enable:  ${(performance.now() - _trc).toFixed(3)}ms`)
+        traceTiming(`[proxy.init]     tracingRemoteConfig.enable:  ${(performance.now() - _trc).toFixed(3)}ms`)
 
         rc.setProductHandler('AGENT_CONFIG', (action, conf) => {
           if (!conf?.name?.startsWith('flare-log-level.')) return
@@ -192,8 +195,7 @@ class Tracer extends NoopProxy {
           const appsecRemoteConfig = require('./appsec/remote_config')
           appsecRemoteConfig.enable(rc, config, this._modules.appsec)
         }
-        // eslint-disable-next-line no-console
-        console.log(`[proxy.init]     appsecRemoteConfig.enable:   ${(performance.now() - _trc).toFixed(3)}ms`)
+        traceTiming(`[proxy.init]     appsecRemoteConfig.enable:   ${(performance.now() - _trc).toFixed(3)}ms`)
 
         if (config.dynamicInstrumentation.enabled) {
           DynamicInstrumentation.start(config, rc)
@@ -202,11 +204,12 @@ class Tracer extends NoopProxy {
         _trc = performance.now()
         const openfeatureRemoteConfig = require('./openfeature/remote_config')
         openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
-        // eslint-disable-next-line no-console
-        console.log(`[proxy.init]     openfeatureRemoteConfig:     ${(performance.now() - _trc).toFixed(3)}ms`)
+        traceTiming(`[proxy.init]     openfeatureRemoteConfig:     ${(performance.now() - _trc).toFixed(3)}ms`)
       }
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.init]   remoteConfig:      ${(performance.now() - _t).toFixed(3)}ms (enabled=${config.remoteConfig.enabled})`)
+      traceTiming(
+        `[proxy.init]   remoteConfig:      ${(performance.now() - _t).toFixed(3)}ms ` +
+        `(enabled=${config.remoteConfig.enabled})`
+      )
 
       if (config.profiling.enabled === 'true') {
         this._profilerStarted = this._startProfiler(config)
@@ -227,13 +230,17 @@ class Tracer extends NoopProxy {
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
       }
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.init]   runtimeMetrics:    ${(performance.now() - _t).toFixed(3)}ms (enabled=${config.runtimeMetrics.enabled})`)
+      traceTiming(
+        `[proxy.init]   runtimeMetrics:    ${(performance.now() - _t).toFixed(3)}ms ` +
+        `(enabled=${config.runtimeMetrics.enabled})`
+      )
 
       _t = performance.now()
       this.#updateTracing(config)
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.init]   updateTracing:     ${(performance.now() - _t).toFixed(3)}ms (tracingInitialized=${this._tracingInitialized})`)
+      traceTiming(
+        `[proxy.init]   updateTracing:     ${(performance.now() - _t).toFixed(3)}ms ` +
+        `(tracingInitialized=${this._tracingInitialized})`
+      )
 
       _t = performance.now()
       if (config.iast.enabled) {
@@ -241,8 +248,10 @@ class Tracer extends NoopProxy {
       } else {
         this._modules.rewriter.disable()
       }
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.init]   rewriter.enable:   ${(performance.now() - _t).toFixed(3)}ms (enabled=${config.iast.enabled})`)
+      traceTiming(
+        `[proxy.init]   rewriter.enable:   ${(performance.now() - _t).toFixed(3)}ms ` +
+        `(enabled=${config.iast.enabled})`
+      )
 
       if (config.tracing && config.isManualApiEnabled) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
@@ -322,8 +331,7 @@ class Tracer extends NoopProxy {
           : undefined
         this._tracer = new DatadogTracer(config, prioritySampler)
         this.dataStreamsCheckpointer = this._tracer.dataStreamsCheckpointer
-        // eslint-disable-next-line no-console
-        console.log(`[proxy.#updateTracing]   new DatadogTracer:     ${(performance.now() - _tut).toFixed(3)}ms`)
+        traceTiming(`[proxy.#updateTracing]   new DatadogTracer:     ${(performance.now() - _tut).toFixed(3)}ms`)
 
         _tut = performance.now()
         defineLazily(this, 'appsec', () => require('./appsec/sdk'), this._tracer, config)
@@ -334,8 +342,7 @@ class Tracer extends NoopProxy {
           defineLazily(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
-        // eslint-disable-next-line no-console
-        console.log(`[proxy.#updateTracing]   lazyProxy setup:       ${(performance.now() - _tut).toFixed(3)}ms`)
+        traceTiming(`[proxy.#updateTracing]   lazyProxy setup:       ${(performance.now() - _tut).toFixed(3)}ms`)
       }
       if (config.experimental.flaggingProvider.enabled) {
         this._modules.openfeature.enable(config)
@@ -356,20 +363,17 @@ class Tracer extends NoopProxy {
     if (this._tracingInitialized) {
       let _tut = performance.now()
       this._tracer.configure(config)
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.#updateTracing]   tracer.configure:      ${(performance.now() - _tut).toFixed(3)}ms`)
+      traceTiming(`[proxy.#updateTracing]   tracer.configure:      ${(performance.now() - _tut).toFixed(3)}ms`)
 
       _tut = performance.now()
       this._pluginManager.configure(config)
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.#updateTracing]   pluginManager.configure:${(performance.now() - _tut).toFixed(3)}ms`)
+      traceTiming(`[proxy.#updateTracing]   pluginManager.configure:${(performance.now() - _tut).toFixed(3)}ms`)
 
       _tut = performance.now()
       DynamicInstrumentation.configure(config)
       setStartupLogPluginManager(this._pluginManager)
       startupLog()
-      // eslint-disable-next-line no-console
-      console.log(`[proxy.#updateTracing]   DI+startupLog:         ${(performance.now() - _tut).toFixed(3)}ms`)
+      traceTiming(`[proxy.#updateTracing]   DI+startupLog:         ${(performance.now() - _tut).toFixed(3)}ms`)
     }
   }
 
