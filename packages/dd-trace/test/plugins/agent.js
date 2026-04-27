@@ -236,11 +236,20 @@ function checkAgentStatus () {
     })
 
     request.on('timeout', () => {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `checkAgentStatus: Timed out after ${timeoutMs}ms trying to reach test agent at ${agentUrl}. ` +
+        'Proceeding without test agent. If this happens frequently, investigate what is listening on that port.'
+      )
       request.destroy()
       resolve(false)
     })
 
-    request.on('error', () => {
+    request.on('error', (/** @type {NodeJS.ErrnoException} */ err) => {
+      if (err.code !== 'ECONNREFUSED') {
+        // eslint-disable-next-line no-console
+        console.warn(`checkAgentStatus: Unexpected error reaching test agent at ${agentUrl}`, err)
+      }
       resolve(false)
     })
 
@@ -405,6 +414,8 @@ module.exports = {
    * @returns Promise<void>
    */
   async load (pluginNames, config, tracerConfig = {}) {
+    const loadStart = performance.now()
+
     if (!Array.isArray(pluginNames)) {
       pluginNames = [pluginNames]
     }
@@ -415,22 +426,50 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
+    const proxyquireStart = performance.now()
+
+    let t = performance.now()
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load]   config/defaults: ${(performance.now() - t).toFixed(3)}ms`)
+
+    t = performance.now()
     const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
       './defaults': defaults,
     })
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load]   src/config:      ${(performance.now() - t).toFixed(3)}ms`)
+
     // Reload dogstatsd to avoid adding new events to the global process object
+    t = performance.now()
     const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load]   src/dogstatsd:   ${(performance.now() - t).toFixed(3)}ms`)
+
+    t = performance.now()
     const proxy = proxyquire('../../src/proxy', {
       './config': getConfigFresh,
       './dogstatsd': dogstatsd,
     })
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load]   src/proxy:       ${(performance.now() - t).toFixed(3)}ms`)
+
+    t = performance.now()
     const TracerProxy = proxyquire('../../src', {
       './proxy': proxy,
     })
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load]   src/index:       ${(performance.now() - t).toFixed(3)}ms`)
+
+    t = performance.now()
     tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load]   root/index:      ${(performance.now() - t).toFixed(3)}ms`)
+
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load] proxyquire phase:  ${(performance.now() - proxyquireStart).toFixed(3)}ms`)
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
@@ -445,7 +484,10 @@ module.exports = {
 
     const innerAgent = agent
 
+    const checkAgentStart = performance.now()
     const useTestAgent = await checkAgentStatus()
+    // eslint-disable-next-line no-console
+    console.log(`[agent.load] checkAgentStatus phase: ${(performance.now() - checkAgentStart).toFixed(3)}ms (useTestAgent=${useTestAgent})`)
 
     if (agent !== innerAgent) {
       throw new Error('Agent got replaced since last load')
@@ -505,10 +547,15 @@ module.exports = {
 
     server.on('connection', socket => sockets.push(socket))
 
+    const listenStart = performance.now()
     const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
       listener = server.listen(0, () => {
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load] server.listen phase: ${(performance.now() - listenStart).toFixed(3)}ms`)
+
         const port = listener.address().port
 
+        const tracerInitStart = performance.now()
         tracer.init({
           service: 'test',
           env: 'tester',
@@ -517,12 +564,25 @@ module.exports = {
           plugins: false,
           ...tracerConfig,
         })
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load]   tracer.init:     ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
 
+        let tUse = performance.now()
         tracer.setUrl(`http://127.0.0.1:${port}`)
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load]   tracer.setUrl:   ${(performance.now() - tUse).toFixed(3)}ms`)
 
+        tUse = performance.now()
         for (let i = 0, l = pluginNames.length; i < l; i++) {
           tracer.use(pluginNames[i], config[i])
         }
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load]   tracer.use:      ${(performance.now() - tUse).toFixed(3)}ms`)
+
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load] tracer.init+use phase: ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
+        // eslint-disable-next-line no-console
+        console.log(`[agent.load] total load() duration: ${(performance.now() - loadStart).toFixed(3)}ms`)
 
         resolve()
       })
