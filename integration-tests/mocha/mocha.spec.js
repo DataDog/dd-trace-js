@@ -1830,6 +1830,39 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       }
     )
 
+    it('reports code coverage for top-level imports WITHOUT nyc', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      })
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/top-level-side-effect.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/top-level-side-effect-test.js'))
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha ./ci-visibility/test/top-level-side-effect-test.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        coverageRequestPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
     it('marks the test session as skipped if every suite is skipped', (done) => {
       receiver.setSuitesToSkip(
         [
@@ -2191,6 +2224,41 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    it('reports built-in code coverage relative to the repository root WITHOUT nyc', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      })
+
+      const codeCoveragesPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const coveredFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(({ content: { coverages } }) => coverages)
+            .flatMap(({ files }) => files)
+            .map(({ filename }) => filename)
+
+          assert.ok(coveredFiles.includes('ci-visibility/shared-dependency.js'))
+          assert.ok(coveredFiles.includes('ci-visibility/subproject/external-dependency-test.js'))
+        })
+
+      childProcess = exec(
+        'node ../../node_modules/mocha/bin/mocha external-dependency-test.js',
+        {
+          cwd: `${cwd}/ci-visibility/subproject`,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+          },
+        }
+      )
+
+      await Promise.all([
+        codeCoveragesPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
     onlyLatestIt('can skip suites in parallel mode', async () => {
       receiver.setSuitesToSkip([{
         type: 'suite',
@@ -2241,6 +2309,42 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
 
       await Promise.all([
         eventsPromise,
+        once(childProcess, 'exit'),
+      ])
+    })
+
+    onlyLatestIt('reports code coverage WITHOUT nyc in parallel mode', async () => {
+      receiver.setSettings({
+        itr_enabled: true,
+        code_coverage: true,
+        tests_skipping: false,
+      })
+
+      const coverageRequestPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+          const allCoverageFiles = payloads
+            .flatMap(({ payload }) => payload)
+            .flatMap(coverage => coverage.content.coverages)
+            .flatMap(coverage => coverage.files)
+            .map(file => file.filename)
+
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/sum.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/ci-visibility-test.js'))
+          assert.ok(allCoverageFiles.includes('ci-visibility/test/ci-visibility-test-2.js'))
+        })
+
+      childProcess = exec(
+        'node node_modules/mocha/bin/mocha --parallel --jobs 2' +
+        ' ./ci-visibility/test/ci-visibility-test.js' +
+        ' ./ci-visibility/test/ci-visibility-test-2.js',
+        {
+          cwd,
+          env: getCiVisAgentlessConfig(receiver.port),
+        }
+      )
+
+      await Promise.all([
+        coverageRequestPromise,
         once(childProcess, 'exit'),
       ])
     })

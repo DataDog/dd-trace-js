@@ -13,10 +13,10 @@ const log = require('../../log')
  * `node:inspector` `Profiler.startPreciseCoverage` and takes diff snapshots
  * between suites to return the list of files that were touched.
  *
- * Start/stop is controlled by the framework instrumentation: it should only
- * run once the backend library configuration confirms that TIA/code coverage
- * is enabled, and must never run concurrently with `nyc` (detected via
- * `global.__coverage__`), which owns the same counters via istanbul.
+ * Start/stop is controlled by the framework instrumentation. Some frameworks
+ * start it before test files load so module-load side effects can be captured;
+ * if backend configuration later disables coverage, instrumentation stops it
+ * without publishing snapshots.
  */
 class V8CoverageCollector {
   #session

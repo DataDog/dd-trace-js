@@ -20,7 +20,9 @@ const {
 const {
   getV8CoverageCollector,
   startV8Coverage,
+  stopV8Coverage,
 } = require('../../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
+const { getRepositoryRoot } = require('../../../dd-trace/src/plugins/util/git')
 
 const {
   isNewTest,
@@ -54,6 +56,7 @@ let skippedSuites = []
 let itrCorrelationId = ''
 let isForcedToRun = false
 const config = {}
+let coverageRoot
 
 // We'll preserve the original coverage here
 const originalCoverageMap = createCoverageMap()
@@ -82,6 +85,17 @@ const testSessionFinishCh = channel('ci:mocha:session:finish')
 const itrSkippedSuitesCh = channel('ci:mocha:itr:skipped-suites')
 
 const getCodeCoverageCh = channel('ci:nyc:get-coverage')
+
+function getCoverageRoot () {
+  if (!coverageRoot) {
+    coverageRoot = getRepositoryRoot() || process.cwd()
+  }
+  return coverageRoot
+}
+
+function startMochaV8Coverage () {
+  return startV8Coverage({ cwd: getCoverageRoot() })
+}
 
 // Tests from workers do not come with `isFailed` method
 function isTestFailed (test) {
@@ -230,6 +244,7 @@ function getOnEndHandler (isParallel) {
       isParallel,
     })
 
+    stopV8Coverage()
     logDynamicNamesWarning(newTestsWithDynamicNames)
   }
 }
@@ -328,6 +343,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
 
   const onReceivedConfiguration = ({ err, libraryConfig }) => {
     if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
+      stopV8Coverage()
       return mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
       })
@@ -342,12 +358,11 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
-    // Start the built-in V8 code coverage collector only when the backend has
-    // enabled ITR/coverage and the user is not already running nyc. This runs
-    // before any test body executes (mocha is in delay mode), so test code is
-    // tracked end-to-end.
+    config.isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
     if (libraryConfig.isCodeCoverageEnabled) {
-      startV8Coverage()
+      startMochaV8Coverage()
+    } else {
+      stopV8Coverage()
     }
 
     if (config.isKnownTestsEnabled) {
@@ -382,6 +397,20 @@ addHook({
   versions: ['>=5.2.0'],
   file: 'lib/mocha.js',
 }, (Mocha, frameworkVersion) => {
+  shimmer.wrap(Mocha.prototype, 'loadFiles', loadFiles => function () {
+    if (testFinishCh.hasSubscribers && !this.options.parallel) {
+      startMochaV8Coverage()
+    }
+    return loadFiles.apply(this, arguments)
+  })
+
+  shimmer.wrap(Mocha.prototype, 'loadFilesAsync', loadFilesAsync => function () {
+    if (testFinishCh.hasSubscribers && !this.options.parallel) {
+      startMochaV8Coverage()
+    }
+    return loadFilesAsync.apply(this, arguments)
+  })
+
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
     // Workers do not need to request any data, just run the tests
     if (!testFinishCh.hasSubscribers || getEnvironmentVariable('MOCHA_WORKER_ID') || this.options.parallel) {
@@ -602,6 +631,16 @@ function onMessage (message) {
   }
 }
 
+function publishWorkerCodeCoverage (result, suiteFile) {
+  if (!config.isCodeCoverageEnabled || !Array.isArray(result?._ddCoverageFiles)) {
+    return
+  }
+  testSuiteCodeCoverageCh.publish({
+    coverageFiles: result._ddCoverageFiles,
+    suiteFile,
+  })
+}
+
 // Only used in parallel mode (--parallel flag is passed)
 // Used to generate suite events and receive test payloads from workers
 addHook({
@@ -632,6 +671,7 @@ addHook({
       promise.then(
         (result) => {
           const status = result.failureCount === 0 ? 'pass' : 'fail'
+          publishWorkerCodeCoverage(result, testSuiteAbsolutePath)
           testSuiteFinishCh.publish({ status, ...testSuiteContext.currentStore }, () => {})
           this.worker.off('message', onMessage)
         },
@@ -733,7 +773,8 @@ addHook({
         (!config.isKnownTestsEnabled &&
          !config.isTestManagementTestsEnabled &&
          !config.isImpactedTestsEnabled &&
-         !config.isFlakyTestRetriesEnabled)) {
+         !config.isFlakyTestRetriesEnabled &&
+         !config.isCodeCoverageEnabled)) {
       return run.apply(this, arguments)
     }
 
@@ -781,6 +822,11 @@ addHook({
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
+    }
+
+    if (config.isCodeCoverageEnabled) {
+      newWorkerArgs._ddIsCodeCoverageEnabled = true
+      newWorkerArgs._ddCoverageRoot = getCoverageRoot()
     }
 
     // We pass the known tests for the test file to the worker

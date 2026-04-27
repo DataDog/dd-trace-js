@@ -2,6 +2,11 @@
 
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const {
+  getV8CoverageCollector,
+  startV8Coverage,
+  stopV8Coverage,
+} = require('../../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
 
 const {
   runnableWrapper,
@@ -24,7 +29,15 @@ addHook({
   versions: ['>=8.0.0'],
   file: 'lib/mocha.js',
 }, (Mocha) => {
+  shimmer.wrap(Mocha.prototype, 'loadFilesAsync', loadFilesAsync => function () {
+    if (this.options._ddIsCodeCoverageEnabled) {
+      startV8Coverage({ cwd: this.options._ddCoverageRoot || process.cwd() })
+    }
+    return loadFilesAsync.apply(this, arguments)
+  })
+
   shimmer.wrap(Mocha.prototype, 'run', run => function () {
+    const isCodeCoverageEnabled = this.options._ddIsCodeCoverageEnabled
     if (this.options._ddIsKnownTestsEnabled) {
       config.isKnownTestsEnabled = true
       config.isEarlyFlakeDetectionEnabled = this.options._ddIsEfdEnabled
@@ -55,7 +68,25 @@ addHook({
       delete this.options._ddIsFlakyTestRetriesEnabled
       delete this.options._ddFlakyTestRetriesCount
     }
-    return run.apply(this, arguments)
+    if (isCodeCoverageEnabled) {
+      delete this.options._ddIsCodeCoverageEnabled
+      delete this.options._ddCoverageRoot
+    }
+
+    const args = Array.prototype.slice.call(arguments)
+    const done = args[0]
+    if (isCodeCoverageEnabled && typeof done === 'function') {
+      args[0] = function (result) {
+        const v8Collector = getV8CoverageCollector()
+        if (v8Collector && result && typeof result === 'object') {
+          result._ddCoverageFiles = v8Collector.getFilesCoveredSinceLastSnapshot()
+        }
+        stopV8Coverage()
+        return done.apply(this, arguments)
+      }
+    }
+
+    return run.apply(this, args)
   })
 
   return Mocha
