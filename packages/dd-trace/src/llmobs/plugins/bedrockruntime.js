@@ -100,7 +100,8 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       ? buildConverseStreamGeneration(ctx.chunks)
       : extractTextAndResponseReasonConverse(response)
 
-    this._tagger.tagToolDefinitions(span, extractConverseToolDefinitions(request.params))
+    const toolDefinitions = extractConverseToolDefinitions(request.params)
+    if (toolDefinitions.length > 0) this._tagger.tagToolDefinitions(span, toolDefinitions)
     if (generation.finishReason) {
       this._tagger.tagMetadata(span, { stop_reason: generation.finishReason })
     }
