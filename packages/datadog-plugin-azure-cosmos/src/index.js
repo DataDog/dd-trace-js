@@ -42,13 +42,11 @@ class AzureCosmosPlugin extends DatabasePlugin {
     if (span != null) {
       this.addError(ctx.error, span)
       const error = ctx.error
-      if (error != null) {
-        if (error.code != null) {
-          span.setTag('http.status_code', error.code)
-        }
-        if (error.substatus !== undefined) {
-          span.setTag('http.status_subcode', error.substatus)
-        }
+      if (error?.code != null) {
+        span.setTag('http.status_code', error.code)
+      }
+      if (error?.substatus != null) {
+        span.setTag('http.status_subcode', error.substatus)
       }
     }
   }
@@ -102,12 +100,9 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   getResource (requestContext) {
-    if (requestContext != null) {
-      const operationType = requestContext.operationType
-      const resourceLink = requestContext.path
-      return operationType + ' ' + resourceLink
-    }
-    return null
+    return requestContext
+      ? `${requestContext.operationType} ${requestContext.path}`
+      : null
   }
 
   getDbInfo (requestContext) {
@@ -120,14 +115,12 @@ class AzureCosmosPlugin extends DatabasePlugin {
       }
 
       let resourceLink = requestContext.path
-      if (resourceLink != null) {
-        if (resourceLink.startsWith('/') && resourceLink.length > 1) {
-          resourceLink = resourceLink.slice(1)
-        }
+      if (resourceLink?.length > 1 && resourceLink.startsWith('/')) {
+        resourceLink = resourceLink.slice(1)
         const parts = resourceLink.split('/')
         if (parts.length > 0 && parts[0].toLowerCase() === 'dbs' && parts.length >= 2) {
           dbName = parts[1]
-          if (parts.length >= 4 && parts[2].toLowerCase() === 'colls' && parts[3].toLowerCase() !== '') {
+          if (parts.length >= 4 && parts[2].toLowerCase() === 'colls' && parts[3] !== '') {
             containerName = parts[3]
           }
         }
@@ -138,28 +131,21 @@ class AzureCosmosPlugin extends DatabasePlugin {
   }
 
   getConnectionMode (requestContext) {
-    if (requestContext != null) {
-      const mode = requestContext.client?.connectionPolicy?.connectionMode
-      if (mode === 0) {
-        return 'gateway'
-      } else if (mode === 1) {
-        return 'direct'
-      }
-      return 'other'
+    if (!requestContext) {
+      return null
     }
-    return null
+    const mode = requestContext.client?.connectionPolicy?.connectionMode
+    if (mode === 0) {
+      return 'gateway'
+    } else if (mode === 1) {
+      return 'direct'
+    }
+    return 'other'
   }
 
   getHttpInfo (requestContext) {
-    let outHost = null
-    let userAgent = null
-    if (requestContext != null) {
-      outHost = requestContext.client?.cosmosClientOptions?.endpoint
-      const headers = requestContext.headers
-      if (headers != null) {
-        userAgent = headers['User-Agent']
-      }
-    }
+    const outHost = requestContext?.client?.cosmosClientOptions?.endpoint
+    const userAgent = requestContext?.headers?.['User-Agent']
     return { outHost, userAgent }
   }
 }

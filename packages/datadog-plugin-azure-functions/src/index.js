@@ -129,10 +129,7 @@ function getMetaForTrigger ({ functionName, methodName, invocationContext }) {
       'span.kind': 'consumer',
     }
   } else if (triggerMap[methodName] === 'CosmosDB') {
-    meta = {
-      ...meta,
-      'resource.name': `CosmosDB ${functionName}`,
-    }
+    meta['resource.name'] = `CosmosDB ${functionName}`
   }
 
   return meta

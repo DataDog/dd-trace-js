@@ -93,39 +93,45 @@ describe('Plugin', () => {
       })
 
       it('should create spans if an error occurs', async () => {
-        const expectedResources = ['create /dbs/testDatabase/colls/testContainer/docs',
-          'upsert /dbs/testDatabase/colls/testContainer/docs']
-        // Callback-based assertion — for complex multi-span assertions
-        const expectedSpanPromise = agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
-          assert(expectedResources.includes(span.resource))
-          if (span.resource === 'create /dbs/testDatabase/colls/testContainer/docs') {
-            assertObjectContains(span, {
+        const expectedSpanPromise = agent.assertSomeTraces(
+          traces => {
+            const allSpans = traces.filter(Array.isArray).flat()
+
+            const conflictCreate = allSpans.find(
+              s =>
+                s?.resource === 'create /dbs/testDatabase/colls/testContainer/docs' &&
+                s?.meta?.['http.status_code'] === '409'
+            )
+            assert.ok(
+              conflictCreate,
+              'expected 409 create span in payload'
+            )
+
+            assertObjectContains(conflictCreate, {
               name: 'cosmosdb.query',
               service: 'test-azure-cosmos',
               type: 'cosmosdb',
               resource: 'create /dbs/testDatabase/colls/testContainer/docs',
+              error: 1,
               meta: {
                 component: 'azure_cosmos',
                 'db.system': 'cosmosdb',
                 'db.name': 'testDatabase',
                 'cosmosdb.container': 'testContainer',
                 'cosmosdb.connection.mode': 'gateway',
+                'error.message': 'The document already exists in the collection.',
+                'error.type': 'Error',
+                'http.status_code': '409',
               },
             })
 
-            assert.strictEqual(span.error, 1)
-            assert.strictEqual(span.meta['error.message'], 'The document already exists in the collection.')
-            assert.strictEqual(span.meta['error.type'], 'Error')
-            assert.strictEqual(span.meta['http.status_code'], '409')
-
-            assert(span.meta['http.useragent'].includes('azure-cosmos-js/'))
+            assert(conflictCreate.meta['http.useragent'].includes('azure-cosmos-js/'))
           }
-        })
+        )
 
-        container.items.upsert({ id: 'item1', productName: 'Test Product', productModel: 'Model 1' })
-
-        container.items.create({ id: 'item1', productName: 'Test Product', productModel: 'Model 1' })
+        await container.items.upsert({ id: 'item1', productName: 'Test Product', productModel: 'Model 1' })
+        void container.items.create({ id: 'item1', productName: 'Test Product', productModel: 'Model 1' })
+          .catch(() => { })
 
         await expectedSpanPromise
       })

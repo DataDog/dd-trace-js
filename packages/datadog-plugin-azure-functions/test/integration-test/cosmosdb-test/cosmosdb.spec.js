@@ -26,8 +26,6 @@ describe('esm', () => {
     useSandbox([
       `@azure/functions@${version}`,
       'azure-functions-core-tools@4',
-      '@azure/event-hubs@6.0.0',
-      '@azure/cosmos@4.9.2',
     ],
     false,
     ['./packages/datadog-plugin-azure-functions/test/fixtures/*',
