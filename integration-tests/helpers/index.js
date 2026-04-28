@@ -2,16 +2,14 @@
 
 const assert = require('assert')
 const childProcess = require('child_process')
-const { exec, execSync, fork, spawn } = childProcess
+const { execSync, fork, spawn } = childProcess
 const { existsSync, readFileSync, unlinkSync, writeFileSync } = require('fs')
 const fs = require('fs/promises')
 const http = require('http')
 const { builtinModules } = require('module')
 const os = require('os')
 const path = require('path')
-const { inspect, promisify } = require('util')
-
-const execAsync = promisify(exec)
+const { inspect } = require('util')
 
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
@@ -387,59 +385,14 @@ function execHelper (command, options) {
 }
 
 /**
- * Async sibling of {@link execHelper}. Runs in parallel with other awaited operations and
- * preserves the bun-only 60s retry semantics.
- *
- * @param {string} command - Command to run.
- * @param {import('child_process').ExecOptions} [options] - Exec options.
- * @returns {Promise<void>}
- */
-async function execHelperAsync (command, options) {
-  try {
-    log('Exec START: ', command)
-    await execAsync(command, options)
-    log('Exec SUCCESS: ', command)
-    return
-  } catch (execError) {
-    error('Exec ERROR: ', command, execError)
-    if (!command.startsWith(BUN)) throw execError
-  }
-  log('Exec RETRY BACKOFF: 60 seconds')
-  await new Promise(resolve => setTimeout(resolve, 60_000))
-  try {
-    log('Exec RETRY START: ', command)
-    await execAsync(command, options)
-    log('Exec RETRY SUCCESS: ', command)
-  } catch (retryError) {
-    error('Exec RETRY ERROR', command, retryError)
-    throw retryError
-  }
-}
-
-/**
  * Pack dd-trace into a tarball at the specified path.
  *
  * @param {string} tarballPath - The path where the tarball should be created
  * @param {NodeJS.ProcessEnv} env - The environment to use for the pack command
- * @returns {Promise<void>}
  */
-async function packTarball (tarballPath, env) {
-  await execHelperAsync(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
+function packTarball (tarballPath, env) {
+  execHelper(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
   log('Tarball packed successfully:', tarballPath)
-}
-
-/**
- * Copy each integration-tests path into the sandbox folder concurrently.
- *
- * @param {string[]} integrationTestsPaths - Source paths to copy from.
- * @param {string} folder - Destination sandbox folder.
- * @returns {Promise<void>}
- */
-async function copyIntegrationTests (integrationTestsPaths, folder) {
-  await Promise.all(integrationTestsPaths.map(p => process.platform === 'win32'
-    ? execHelperAsync(`Copy-Item -Recurse -Path "${p}" -Destination "${folder}"`, { shell: 'powershell.exe' })
-    : execHelperAsync(`cp -R ${p} ${folder}`)
-  ))
 }
 
 /**
@@ -471,7 +424,7 @@ async function packTarballWithLock (tarballPath, env) {
     }
 
     // We have the lock, pack the tarball
-    await packTarball(tarballPath, env)
+    packTarball(tarballPath, env)
   } catch (err) {
     if (err.code === 'EEXIST') {
       // Lock exists, another process is packing - wait for the tarball to appear
@@ -543,12 +496,7 @@ async function createSandbox (
   const addOptions = { cwd: folder, env: restOfEnv }
   const addFlags = ['--trust']
 
-  // Tarball packing and integration-tests copy touch independent paths (sandbox root vs. the
-  // sandbox folder) and neither writes anything `bun add` will read, so run them concurrently.
-  await Promise.all([
-    packTarballWithLock(out, restOfEnv),
-    copyIntegrationTests(integrationTestsPaths, folder),
-  ])
+  await packTarballWithLock(out, restOfEnv)
 
   if (process.env.OFFLINE === '1' || process.env.OFFLINE === 'true') {
     addFlags.push('--prefer-offline')
@@ -566,6 +514,14 @@ async function createSandbox (
     ...addOptions,
     timeout: 90_000,
   })
+
+  for (const path of integrationTestsPaths) {
+    if (process.platform === 'win32') {
+      execHelper(`Copy-Item -Recurse -Path "${path}" -Destination "${folder}"`, { shell: 'powershell.exe' })
+    } else {
+      execHelper(`cp -R ${path} ${folder}`)
+    }
+  }
   if (process.platform === 'win32') {
     // On Windows, we can only sync entire filesystem volume caches.
     execHelper(`Write-VolumeCache ${folder[0]}`, { shell: 'powershell.exe' })
