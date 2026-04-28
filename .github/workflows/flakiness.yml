@@ -2,6 +2,11 @@ name: "[Flakiness Report]"
 
 on:
   workflow_dispatch:
+    inputs:
+      days:
+        description: "Number of days for the report"
+        required: false
+        type: string
   schedule:
     - cron: "0 6 * * 1"
 
@@ -12,7 +17,7 @@ jobs:
       actions: read
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      DAYS: "7"
+      DAYS: ${{ inputs.days || "7" }}
       OCCURRENCES: "2"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
