@@ -104,6 +104,8 @@ const newTestsWithDynamicNames = new Set()
 let rootDir = ''
 let sessionProjects = []
 let activeBrowserCoverage = null
+let hasWarnedNoChromiumBrowserCoverage = false
+let hasWarnedBrowserSourceMapUnavailable = false
 
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
 
@@ -258,6 +260,41 @@ function getBrowserNameFromProjects (projects, test) {
     }
     return name === testProjectId
   })?.name
+}
+
+/**
+ * Resolve the configured Playwright browser for a project.
+ *
+ * @param {object} project
+ * @returns {string|undefined}
+ */
+function getProjectBrowserName (project) {
+  return project?.use?.browserName || project?.use?.defaultBrowserType || project?.browserName || project?.name
+}
+
+/**
+ * Check whether a Playwright project runs on Chromium.
+ *
+ * @param {object} project
+ * @returns {boolean}
+ */
+function isChromiumProject (project) {
+  return getProjectBrowserName(project) === 'chromium'
+}
+
+/**
+ * Warn once when TIA browser coverage is enabled but no project can collect CDP coverage.
+ *
+ * @param {object[]} projects
+ * @returns {void}
+ */
+function warnIfNoChromiumProjectsForBrowserCoverage (projects) {
+  if (hasWarnedNoChromiumBrowserCoverage || !projects?.length || projects.some(isChromiumProject)) return
+
+  hasWarnedNoChromiumBrowserCoverage = true
+  const message = 'Playwright TIA browser coverage requires Chromium. No Chromium project was detected, so browser ' +
+    'coverage will not be collected and TIA may not skip suites for this run.'
+  log.warn('%s', message)
 }
 
 function formatTestHookError (error, hookType, isTimeout) {
@@ -475,6 +512,18 @@ async function finishBrowserCoverage () {
   try {
     return await resolveCoverageToSourceFiles(coverages, {
       repositoryRoot: getBrowserCoverageRepositoryRoot(),
+      onSourceMapUnavailable: ({ url, reason }) => {
+        if (hasWarnedBrowserSourceMapUnavailable) return
+        hasWarnedBrowserSourceMapUnavailable = true
+        const reasonMessage = reason === 'load-failed' ? 'could not load a source map' : 'did not find a source map'
+        const message = 'Playwright TIA browser coverage %s for %s. Coverage for bundled applications may be ' +
+          'reported against generated files instead of original source files; expose source maps to make TIA accurate.'
+        log.warn(
+          message,
+          reasonMessage,
+          url
+        )
+      },
     })
   } catch (err) {
     log.debug('Playwright CDP coverage resolution failed: %s', err?.message)
@@ -899,6 +948,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     isSuitesSkipped = false
     hasUnskippableSuites = false
     hasForcedToRunSuites = false
+    hasWarnedNoChromiumBrowserCoverage = false
+    hasWarnedBrowserSourceMapUnavailable = false
     itrCorrelationId = ''
     sessionProjects = []
     activeBrowserCoverage = null
@@ -1009,6 +1060,9 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     }
 
     const projects = getProjectsFromRunner(this, config)
+    if (isCodeCoverageEnabledForRun) {
+      warnIfNoChromiumProjectsForBrowserCoverage(projects)
+    }
 
     // ATR and `--retries` are now compatible with Test Management.
     // Test Management tests have their retries set to 0 at the test level,

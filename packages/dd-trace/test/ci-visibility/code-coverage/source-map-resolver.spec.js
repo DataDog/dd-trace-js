@@ -127,16 +127,24 @@ describe('ci-visibility/code-coverage/source-map-resolver', () => {
     })
 
     it('falls back to URL paths only when there is no source map to resolve', async () => {
+      const unavailableSourceMaps = []
       const files = await resolveCoverageToSourceFiles([{
         url: 'http://localhost:3000/src/app.js',
         source: 'window.app = true',
         ranges: [0, 6],
-      }])
+      }], {
+        onSourceMapUnavailable: event => unavailableSourceMaps.push(event),
+      })
 
       assert.deepStrictEqual(files, ['src/app.js'])
+      assert.deepStrictEqual(unavailableSourceMaps, [{
+        url: 'http://localhost:3000/src/app.js',
+        reason: 'missing',
+      }])
     })
 
     it('does not report bundle paths when a declared source map cannot be loaded', async () => {
+      const unavailableSourceMaps = []
       const source = [
         'function greet(){return "hi"}',
         '//# sourceMappingURL=data:application/json;base64,bm90LWpzb24=',
@@ -146,9 +154,15 @@ describe('ci-visibility/code-coverage/source-map-resolver', () => {
         url: 'http://localhost:3000/assets/bundle.js',
         source,
         ranges: [0, 8],
-      }])
+      }], {
+        onSourceMapUnavailable: event => unavailableSourceMaps.push(event),
+      })
 
       assert.deepStrictEqual(files, [])
+      assert.deepStrictEqual(unavailableSourceMaps, [{
+        url: 'http://localhost:3000/assets/bundle.js',
+        reason: 'load-failed',
+      }])
     })
   })
 })

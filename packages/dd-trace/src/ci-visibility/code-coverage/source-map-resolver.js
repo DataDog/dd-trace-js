@@ -419,11 +419,24 @@ function urlToPath (url, repositoryRoot) {
 }
 
 /**
+ * Notify callers that an executed script could not be mapped back to original sources.
+ *
+ * @param {{onSourceMapUnavailable?: function({url: string, reason: string}): void}} options
+ * @param {string} url
+ * @param {string} reason
+ * @returns {void}
+ */
+function notifySourceMapUnavailable (options, url, reason) {
+  if (typeof options.onSourceMapUnavailable !== 'function') return
+  options.onSourceMapUnavailable({ url, reason })
+}
+
+/**
  * Resolve CDP coverage entries to original source file paths. Uses source maps
  * when available, otherwise falls back to the bundle URL path.
  *
  * @param {Array<{url: string, ranges: number[], source?: string}>} coverages
- * @param {{repositoryRoot?: string}} [options]
+ * @param {{repositoryRoot?: string, onSourceMapUnavailable?: function({url: string, reason: string}): void}} [options]
  * @returns {Promise<string[]>}
  */
 async function resolveCoverageToSourceFiles (coverages, options = {}) {
@@ -439,8 +452,11 @@ async function resolveCoverageToSourceFiles (coverages, options = {}) {
     }
     if (!info.sourceMap) {
       if (!info.hasSourceMap && !info.mapLoadFailed) {
+        notifySourceMapUnavailable(options, url, 'missing')
         const filename = urlToPath(url, options.repositoryRoot)
         if (filename) files.add(filename)
+      } else if (info.mapLoadFailed) {
+        notifySourceMapUnavailable(options, url, 'load-failed')
       }
       continue
     }
