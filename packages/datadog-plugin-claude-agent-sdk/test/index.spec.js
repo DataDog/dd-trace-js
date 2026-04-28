@@ -80,6 +80,7 @@ if (NODE_MAJOR >= 22) {
                     signal: opts.signal,
                     windowsHide: true,
                   })
+                  proc.stdin.on('error', () => {}) // suppress write-after-end during teardown
                   return {
                     stdin: proc.stdin,
                     stdout: proc.stdout,
