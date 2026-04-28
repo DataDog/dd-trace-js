@@ -28,6 +28,7 @@ let plugins = []
 const testedPlugins = []
 let dsmStats = []
 let currentIntegrationName = null
+let loaded = false
 
 function isMatchingTrace (spans, spanResourceMatch) {
   if (!spanResourceMatch) {
@@ -424,22 +425,27 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
-    const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
-    const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
-      './defaults': defaults,
-    })
-    // Reload dogstatsd to avoid adding new events to the global process object
-    const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
-    const proxy = proxyquire('../../src/proxy', {
-      './config': getConfigFresh,
-      './dogstatsd': dogstatsd,
-    })
-    const TracerProxy = proxyquire('../../src', {
-      './proxy': proxy,
-    })
-    tracer = proxyquire('../../', {
-      './src': TracerProxy,
-    })
+    if (loaded) {
+      const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
+      const getConfigFresh = proxyquire.noPreserveCache()('../../src/config', {
+        './defaults': defaults,
+      })
+      // Reload dogstatsd to avoid adding new events to the global process object
+      const dogstatsd = proxyquire.noPreserveCache()('../../src/dogstatsd', {})
+      const proxy = proxyquire('../../src/proxy', {
+        './config': getConfigFresh,
+        './dogstatsd': dogstatsd,
+      })
+      const TracerProxy = proxyquire('../../src', {
+        './proxy': proxy,
+      })
+      tracer = proxyquire('../../', {
+        './src': TracerProxy,
+      })
+    } else {
+      tracer = require('../..')
+      loaded = true
+    }
 
     agent = express()
     agent.use(bodyParser.raw({ limit: Infinity, type: 'application/msgpack' }))
