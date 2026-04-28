@@ -415,7 +415,7 @@ describe('Plugin', () => {
                 'prisma.method': 'findMany',
                 'prisma.model': 'users',
               },
-            })
+            }, { spanResourceMatch: /^users\.findMany$/ })
 
             tracingHelper.runInChildSpan(
               {
