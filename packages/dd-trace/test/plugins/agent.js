@@ -565,7 +565,22 @@ module.exports = {
           port,
           flushInterval: 0,
           plugins: false,
+          startupLogs: false,
+          remoteConfig: {
+            enabled: false,
+          },
+          dynamicInstrumentation: {
+            enabled: false,
+          },
           ...tracerConfig,
+          remoteConfig: {
+            enabled: false,
+            ...tracerConfig.remoteConfig,
+          },
+          dynamicInstrumentation: {
+            enabled: false,
+            ...tracerConfig.dynamicInstrumentation,
+          },
         })
         traceTiming(`[agent.load]   tracer.init:     ${(performance.now() - tracerInitStart).toFixed(3)}ms`)
 
