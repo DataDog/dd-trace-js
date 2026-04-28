@@ -175,6 +175,34 @@ describe('Config', () => {
     })
   })
 
+  it('should accept a circular logger instance without overflowing the stack (issue #8122)', () => {
+    // Shape mirrors winston: log methods, transports with a parent back-reference,
+    // and stream-state self-references (Transform's _readableState.pipes).
+    const logger = {
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      transports: [],
+    }
+    logger.transports.push({ name: 'console', log: () => {}, parent: logger })
+    logger._readableState = { pipes: logger }
+    logger._writableState = { pipes: logger }
+
+    // Previously this threw `RangeError: Maximum call stack size exceeded`
+    // from the rfdc baseline-clone in setAndTrack.
+    const config = getConfig({ logger, logInjection: true })
+
+    assert.strictEqual(config.logger, logger)
+    assert.strictEqual(config.logInjection, true)
+  })
+
+  it('should hold a custom lookup function by reference', () => {
+    const lookup = (_h, _o, cb) => cb(null, '127.0.0.1', 4)
+    const config = getConfig({ lookup })
+    assert.strictEqual(config.lookup, lookup)
+  })
+
   it('should initialize from environment variables with DD env vars taking precedence OTEL env vars', () => {
     process.env.DD_SERVICE = 'service'
     process.env.OTEL_SERVICE_NAME = 'otel_service'
