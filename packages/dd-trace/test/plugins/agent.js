@@ -4,7 +4,7 @@ const assert = require('assert')
 const http = require('http')
 const path = require('path')
 const util = require('util')
-const { setImmediate } = require('timers/promises')
+const { setTimeout } = require('timers/promises')
 
 const bodyParser = require('body-parser')
 const express = require('express')
@@ -313,10 +313,6 @@ module.exports = {
       config = [config]
     }
 
-    // We sometimes reload the agent too fast. This workaround ensures that the agent is ready to receive requests.
-    // TODO: Fix the root cause.
-    await setImmediate()
-
     currentIntegrationName = getCurrentIntegrationName()
 
     const defaults = proxyquire.noPreserveCache()('../../src/config/defaults', {})
@@ -345,6 +341,17 @@ module.exports = {
       }
       next()
     })
+
+    // This is a workaround to ensure that the agent is ready to receive
+    // requests without being cleaned up properly.
+    // TODO: Fix the root cause.
+    const innerAgent = agent
+
+    await setTimeout(1)
+
+    if (agent !== innerAgent) {
+      throw new Error('Agent got replaced since last load')
+    }
 
     agent.get('/info', (req, res) => {
       res.status(202).send({
