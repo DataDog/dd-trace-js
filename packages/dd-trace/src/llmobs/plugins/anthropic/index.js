@@ -1,7 +1,8 @@
 'use strict'
 
-const { UNKNOWN_MODEL_PROVIDER } = require('../constants/tags')
-const LLMObsPlugin = require('./base')
+const { UNKNOWN_MODEL_PROVIDER } = require('../../constants/tags')
+const LLMObsPlugin = require('../base')
+const { appendMessage } = require('./util')
 
 const ALLOWED_METADATA_KEYS = new Set([
   'max_tokens',
@@ -144,51 +145,11 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     const inputMessages = []
 
     if (system) {
-      messages.unshift({ content: system, role: 'system' })
+      appendMessage(inputMessages, { role: 'system', content: system })
     }
 
     for (const message of messages) {
-      const { content, role } = message
-
-      if (typeof content === 'string') {
-        inputMessages.push({ content, role })
-        continue
-      }
-
-      for (const block of content) {
-        if (block.type === 'text') {
-          inputMessages.push({ content: block.text, role })
-        } else if (block.type === 'image') {
-          inputMessages.push({ content: '([IMAGE DETECTED])', role })
-        } else if (block.type === 'tool_use') {
-          const { text, name, id, type } = block
-          let input = block.input
-          if (typeof input === 'string') {
-            input = JSON.parse(input)
-          }
-
-          const toolCall = {
-            name,
-            arguments: input,
-            toolId: id,
-            type,
-          }
-
-          inputMessages.push({ content: text ?? '', role, toolCalls: [toolCall] })
-        } else if (block.type === 'tool_result') {
-          const { content } = block
-          const formattedContent = this.#formatAnthropicToolResultContent(content)
-          const toolResult = {
-            result: formattedContent,
-            toolId: block.tool_use_id,
-            type: 'tool_result',
-          }
-
-          inputMessages.push({ content: '', role, toolResults: [toolResult] })
-        } else {
-          inputMessages.push({ content: JSON.stringify(block), role })
-        }
-      }
+      appendMessage(inputMessages, message)
     }
 
     this._tagger.tagLLMIO(span, inputMessages)
@@ -272,25 +233,6 @@ class AnthropicLLMObsPlugin extends LLMObsPlugin {
     }
 
     this._tagger.tagMetrics(span, metrics)
-  }
-
-  // maybe can make into a util file
-  #formatAnthropicToolResultContent (content) {
-    if (typeof content === 'string') {
-      return content
-    } else if (Array.isArray(content)) {
-      const formattedContent = []
-      for (const toolResultBlock of content) {
-        if (toolResultBlock.text) {
-          formattedContent.push(toolResultBlock.text)
-        } else if (toolResultBlock.type === 'image') {
-          formattedContent.push('([IMAGE DETECTED])')
-        }
-      }
-
-      return formattedContent.join(',')
-    }
-    return JSON.stringify(content)
   }
 }
 
