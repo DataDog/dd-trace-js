@@ -5,21 +5,66 @@ inputs:
     description: 'Lower Node alias: oldest-maintenance-lts or newest-maintenance-lts.'
     required: false
     default: oldest-maintenance-lts
+  node-version:
+    description: 'Specific Node version/alias (e.g. 18, oldest, maintenance). When set, runs tests once on this version instead of the dual-version run.'
+    required: false
+    default: ''
+  command:
+    description: 'Main test command.'
+    required: false
+    default: 'yarn test:plugins:ci'
+  upstream:
+    description: 'Also run yarn test:plugins:upstream after each test.'
+    required: false
+    default: 'false'
+  extra-command:
+    description: 'Additional shell command to run after each test.'
+    required: false
+    default: ''
+  ignore-engines:
+    description: 'Set yarn ignore-engines=true before install.'
+    required: false
+    default: 'false'
+  log-suffix:
+    description: 'Suffix for testagent log artifact names. Defaults to the job name.'
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
     - uses: ./.github/actions/dd-sts-api-key
       id: dd-sts
     - uses: ./.github/actions/testagent/start
-    - if: ${{ inputs.node-floor == 'oldest-maintenance-lts' }}
+    - if: ${{ inputs.node-version != '' }}
+      uses: ./.github/actions/node
+      with:
+        version: ${{ inputs.node-version }}
+    - if: ${{ inputs.node-version == '' && inputs.node-floor == 'oldest-maintenance-lts' }}
       uses: ./.github/actions/node/oldest-maintenance-lts
-    - if: ${{ inputs.node-floor == 'newest-maintenance-lts' }}
+    - if: ${{ inputs.node-version == '' && inputs.node-floor == 'newest-maintenance-lts' }}
       uses: ./.github/actions/node/newest-maintenance-lts
-    - uses: ./.github/actions/install
-    - run: yarn test:plugins:ci
+    - if: ${{ inputs.ignore-engines == 'true' }}
+      run: yarn config set ignore-engines true
       shell: bash
-    - uses: ./.github/actions/node/latest
-    - run: yarn test:plugins:ci
+    - uses: ./.github/actions/install
+    - run: ${{ inputs.command }}
+      shell: bash
+    - if: ${{ inputs.upstream == 'true' }}
+      run: yarn test:plugins:upstream
+      shell: bash
+    - if: ${{ inputs.extra-command != '' }}
+      run: ${{ inputs.extra-command }}
+      shell: bash
+    - if: ${{ inputs.node-version == '' }}
+      uses: ./.github/actions/node/latest
+    - if: ${{ inputs.node-version == '' }}
+      run: ${{ inputs.command }}
+      shell: bash
+    - if: ${{ inputs.node-version == '' && inputs.upstream == 'true' }}
+      run: yarn test:plugins:upstream
+      shell: bash
+    - if: ${{ inputs.node-version == '' && inputs.extra-command != '' }}
+      run: ${{ inputs.extra-command }}
       shell: bash
     - uses: ./.github/actions/coverage
       with:
@@ -28,7 +73,7 @@ runs:
     - if: always()
       uses: ./.github/actions/testagent/logs
       with:
-        suffix: test-${{ github.job }}
+        suffix: ${{ inputs.log-suffix != '' && inputs.log-suffix || format('test-{0}', github.job) }}
     - uses: ./.github/actions/push_to_test_optimization
       if: "!cancelled()"
       with:

@@ -113,26 +113,10 @@ jobs:
       DD_DATA_STREAMS_ENABLED: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node
+      - uses: ./.github/actions/plugins/test
         with:
-          version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - if: always()
-        uses: ./.github/actions/testagent/logs
-        with:
-          suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.spec }}
-      - uses: ./.github/actions/coverage
-        with:
-          flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: ${{ matrix.node-version }}
+          log-suffix: plugins-${{ github.job }}-${{ matrix.node-version }}-${{ matrix.spec }}
 
   azure-event-hubs:
     runs-on: ubuntu-latest
@@ -210,9 +194,6 @@ jobs:
       SPEC: ${{ matrix.spec }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-
       - name: Copy emulator config files
         run: |
           docker cp \
@@ -226,19 +207,12 @@ jobs:
         run: |
           docker restart ${{ job.services.azureeventhubsemulator.id }}
           docker restart ${{ job.services.azureservicebusemulator.id }}
-      - uses: ./.github/actions/node/newest-maintenance-lts
-      - uses: ./.github/actions/install
       - run: npm install -g azure-functions-core-tools@4.3.0
       - run: echo "$(dirname $(which func))" >> $GITHUB_PATH
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - uses: ./.github/actions/plugins/test
         with:
-          flags: serverless-azure-functions-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
-        if: "!cancelled()"
-        with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          node-version: maintenance
+          log-suffix: plugins-${{ github.job }}-${{ matrix.spec }}
 
   azure-service-bus:
     runs-on: ubuntu-latest

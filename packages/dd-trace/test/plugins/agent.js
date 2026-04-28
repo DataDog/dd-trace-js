@@ -414,6 +414,7 @@ module.exports = {
    * @returns Promise<void>
    */
   async load (pluginNames, config, tracerConfig = {}) {
+    console.time('load')
     if (!Array.isArray(pluginNames)) {
       pluginNames = [pluginNames]
     }
@@ -515,9 +516,12 @@ module.exports = {
     server.on('connection', socket => sockets.push(socket))
 
     const promise = /** @type {Promise<void>} */ (new Promise((resolve, _reject) => {
+      console.time('listen')
       listener = server.listen(0, () => {
+        console.timeEnd('listen')
         const port = listener.address().port
 
+        console.time('init')
         tracer.init({
           service: 'test',
           env: 'tester',
@@ -526,6 +530,7 @@ module.exports = {
           plugins: false,
           ...tracerConfig,
         })
+        console.timeEnd('init')
 
         tracer.setUrl(`http://127.0.0.1:${port}`)
 
@@ -533,6 +538,7 @@ module.exports = {
           tracer.use(pluginNames[i], config[i])
         }
 
+        console.timeEnd('load')
         resolve()
       })
     }))
