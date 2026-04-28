@@ -227,9 +227,10 @@ describe('Plugin', function () {
           it('should handle routes not found', done => {
             agent
               .assertSomeTraces(traces => {
-                const spans = traces[0]
+                const nextRequestSpan = traces[0].find(span => span.name === 'next.request')
+                assert.ok(nextRequestSpan, 'next.request span should exist')
 
-                assertObjectContains(spans[1], {
+                assertObjectContains(nextRequestSpan, {
                   name: 'next.request',
                   service: 'test',
                   type: 'web',
@@ -252,9 +253,10 @@ describe('Plugin', function () {
           it('should handle invalid catch all parameters', done => {
             agent
               .assertSomeTraces(traces => {
-                const spans = traces[0]
+                const nextRequestSpan = traces[0].find(span => span.name === 'next.request')
+                assert.ok(nextRequestSpan, 'next.request span should exist')
 
-                assertObjectContains(spans[1], {
+                assertObjectContains(nextRequestSpan, {
                   name: 'next.request',
                   service: 'test',
                   type: 'web',
