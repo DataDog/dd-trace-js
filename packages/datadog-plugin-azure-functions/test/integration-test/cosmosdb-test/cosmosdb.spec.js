@@ -93,7 +93,7 @@ describe('esm', () => {
 
 async function spawnPluginIntegrationTestProc (cwd, command, args, agentPort, stdioHandler, additionalEnvArgs = {}) {
   let env = {
-    NODE_OPTIONS: `--loader=${hookFile}`,
+    NODE_OPTIONS: `--loader=${hookFile} --experimental-global-webcrypto`,
     DD_TRACE_AGENT_PORT: agentPort,
     DD_TRACE_DISABLED_PLUGINS: 'http,dns,net',
   }
