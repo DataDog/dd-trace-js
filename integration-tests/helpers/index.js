@@ -942,6 +942,7 @@ function useSandbox (...args) {
 
   after(function () {
     this.timeout(30_000)
+    if (!sandbox) return
     return sandbox.remove()
   })
 }

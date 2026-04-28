@@ -51,6 +51,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
+          if (!aerospike) return
           aerospike.releaseEventLoop()
         })
 
@@ -306,6 +307,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
+          if (!aerospike) return
           aerospike.releaseEventLoop()
         })
 
