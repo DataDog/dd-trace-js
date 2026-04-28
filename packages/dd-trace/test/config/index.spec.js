@@ -3041,13 +3041,11 @@ describe('Config', () => {
       })
     })
 
-    it('should only accept allowed values for DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER', () => {
-      for (const provider of ['github', 'gitlab', 'circleci']) {
+    it('should accept all values for DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER', () => {
+      for (const provider of ['github', 'gitlab', 'circleci', 'jenkins']) {
         process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = provider
         assert.strictEqual(getConfig(options).DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
       }
-      process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = 'jenkins'
-      assert.strictEqual(getConfig(options).DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, undefined)
     })
 
     it('disables telemetry if inside a jest worker', () => {

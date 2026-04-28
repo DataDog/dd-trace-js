@@ -448,8 +448,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "allowed": "github|gitlab|circleci"
+        "default": null
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
