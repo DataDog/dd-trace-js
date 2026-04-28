@@ -77,11 +77,6 @@ class LLMObsSpanProcessor {
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
 
-    // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
-    // gen_ai.* spans, the parent-chain walk stops at any span carrying this
-    // tag, preserving the SDK span as the immediate LLMObs parent.
-    span.context()._tags[LLMOBS_SUBMITTED_TAG_KEY] = '1'
-
     try {
       const formattedEvent = this.format(span)
       telemetry.incrementLLMObsSpanFinishedCount(span)
@@ -92,6 +87,15 @@ class LLMObsSpanProcessor {
         apiKey: mlObsTags[ROUTING_API_KEY],
         site: mlObsTags[ROUTING_SITE],
       }
+
+      // Marker read by the dd-go LLMObs trace-indexer: when reparenting OTel
+      // gen_ai.* spans, the parent-chain walk stops at any span carrying this
+      // tag, preserving this span as the immediate LLMObs parent. Set only
+      // when an LLMObs event is actually being submitted — if format dropped
+      // the event (user processor returned null) or threw, leaving this tag
+      // off avoids dd-go reparenting OTel children under a span that has no
+      // corresponding LLMObs event.
+      span.context()._tags[LLMOBS_SUBMITTED_TAG_KEY] = '1'
 
       this.#writer.append(formattedEvent, routing)
     } catch (e) {

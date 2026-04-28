@@ -396,7 +396,7 @@ describe('span processor', () => {
       assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
     })
 
-    it('marks the apm span even when format throws during processing', () => {
+    it('does not mark the apm span when format throws (no event submitted)', () => {
       const apmTags = {}
       span = {
         _name: 'broken',
@@ -411,12 +411,37 @@ describe('span processor', () => {
 
       LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
 
-      // simulate format failing
+      // simulate format failing — no LLMObs event will be submitted
       sinon.stub(processor, 'format').throws(new Error('boom'))
 
       processor.process(span)
 
-      assert.strictEqual(apmTags['_dd.llmobs.submitted'], '1')
+      // Without an LLMObs event, dd-go would otherwise reparent OTel children
+      // under a span that produced no event. Tag must stay off.
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
+      sinon.assert.notCalled(writer.append)
+    })
+
+    it('does not mark the apm span when format returns null (event dropped)', () => {
+      const apmTags = {}
+      span = {
+        context () {
+          return {
+            _tags: apmTags,
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, { '_ml_obs.meta.span.kind': 'llm' })
+
+      // simulate user span processor dropping the event
+      sinon.stub(processor, 'format').returns(null)
+
+      processor.process(span)
+
+      assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
       sinon.assert.notCalled(writer.append)
     })
   })
