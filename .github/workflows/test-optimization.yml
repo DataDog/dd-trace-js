@@ -65,14 +65,7 @@ jobs:
       matrix:
         node-version: [oldest, latest]
         playwright-version: [oldest, latest]
-        spec:
-          - playwright-reporting
-          - playwright-efd
-          - playwright-atr
-          - playwright-test-management
-          - playwright-active-test-span
-          - playwright-impacted-tests
-    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }}, ${{ matrix.spec }})
+    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -118,7 +111,6 @@ jobs:
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-          SPEC: ${{ matrix.spec }}
 
   integration-mocha:
     strategy:
@@ -246,14 +238,6 @@ jobs:
         # The logic to decide whether the tests run lives in the individual spec files
         cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
         module-type: ["commonJS", "esm"]
-        spec:
-          - cypress-reporting
-          - cypress-itr
-          - cypress-efd
-          - cypress-atr
-          - cypress-test-management
-          - cypress-impacted-tests
-          - cypress-final-status
         exclude:
           # eol = Node 16: shouldTestsRun() always returns false for DD_MAJOR >= 6
           - version: eol
@@ -262,7 +246,7 @@ jobs:
           # Node 18 (oldest) only supports 10.2.0 and 14.5.4, not latest
           - version: oldest
             cypress-version: latest
-    name: integration-cypress (${{ matrix.cypress-version }}, node-${{ matrix.version }}, ${{ matrix.module-type }}, ${{ matrix.spec }})
+    name: integration-cypress (${{ matrix.cypress-version }}, node-${{ matrix.version }}, ${{ matrix.module-type }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -292,7 +276,6 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
-          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:
