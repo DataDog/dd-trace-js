@@ -14,7 +14,7 @@ runs:
       # >  from a forked repository, and are also subject to these restrictions.
       #
       # Which means they do not have access to secrets.
-      uses: DataDog/junit-upload-github-action@24449d01fc01e721fa36ccd2caa3caae6922f0e8 # v3.0.0
+      uses: DataDog/junit-upload-github-action@ce82dc1f14a32888a057bfeeb47adfd0fd96e555 # v3.1.0
       with:
         api_key: ${{ inputs.dd_api_key }}
         service: dd-trace-js-tests

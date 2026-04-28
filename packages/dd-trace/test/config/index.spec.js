@@ -320,11 +320,13 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector:4318',
-      otelLogsUrl: 'http://collector:4318',
-      otelMetricsUrl: 'http://collector:4318',
-      otelHeaders: 'x-test=value',
-      otelLogsHeaders: 'x-test=value',
-      otelMetricsHeaders: 'x-test=value',
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: 'http://collector:4318/v1/traces',
+      otelLogsUrl: 'http://collector:4318/v1/logs',
+      otelMetricsUrl: 'http://collector:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: { 'x-test': 'value' },
+      OTEL_EXPORTER_OTLP_HEADERS: { 'x-test': 'value' },
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: { 'x-test': 'value' },
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: { 'x-test': 'value' },
       otelProtocol: 'grpc',
       otelLogsProtocol: 'grpc',
       otelMetricsProtocol: 'grpc',
@@ -351,20 +353,32 @@ describe('Config', () => {
   })
 
   // TODO: update default when adding grpc support
-  it('should set default otelTracesUrl to localhost', () => {
+  it('should default OTLP endpoints to the DD agent host with the signal subpath', () => {
     delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
     delete process.env.DD_AGENT_HOST
     const config = getConfig()
-    assert.strictEqual(config.otelTracesUrl, 'http://localhost:4318/v1/traces')
+    // Host follows the DD agent (default 127.0.0.1); the signal subpath is baked into the default
+    // so telemetry reports the full URL users will hit.
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://127.0.0.1:4318/v1/traces')
+    assert.strictEqual(config.otelMetricsUrl, 'http://127.0.0.1:4318/v1/metrics')
+    assert.strictEqual(config.otelLogsUrl, 'http://127.0.0.1:4318/v1/logs')
   })
 
-  it('should set otelTracesUrl using DD_AGENT_HOST', () => {
+  it('should default OTLP endpoints to the agent host when DD_AGENT_HOST is set', () => {
     delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
     delete process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
     process.env.DD_AGENT_HOST = 'myHostName'
     const config = getConfig()
-    assert.strictEqual(config.otelTracesUrl, `http://${process.env.DD_AGENT_HOST}:4318/v1/traces`)
+    // In the unified-agent model, OTLP lives on the same host as the DD agent (different port),
+    // so DD_AGENT_HOST drives the default OTLP host too.
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, 'http://myHostName:4318/v1/traces')
+    assert.strictEqual(config.otelMetricsUrl, 'http://myHostName:4318/v1/metrics')
+    assert.strictEqual(config.otelLogsUrl, 'http://myHostName:4318/v1/logs')
   })
 
   it('should correctly map OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG', () => {
@@ -437,33 +451,28 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, undefined)
   })
 
-  it('should enable OTLP traces export when OTEL_TRACES_EXPORTER is set to otlp', () => {
+  it('should keep OTEL_TRACES_EXPORTER=otlp', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     const config = getConfig()
-    assert.strictEqual(config.otelTracesEnabled, true)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'otlp')
   })
 
-  it('should not enable OTLP traces export when OTEL_TRACES_EXPORTER is not set', () => {
+  it('should default OTEL_TRACES_EXPORTER to undefined when not set (opt-in)', () => {
     const config = getConfig()
-    assert.strictEqual(config.otelTracesEnabled, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, undefined)
   })
 
   it('should disable OTLP traces export when DD_TRACE_AGENT_PROTOCOL_VERSION is set', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
     const config = getConfig()
-    assert.strictEqual(config.otelTracesEnabled, false)
+    assert.strictEqual(config.OTEL_TRACES_EXPORTER, 'none')
   })
 
-  it('should warn and fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
+  it('should fall back to http/json when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is unsupported', () => {
     process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
     const config = getConfig()
-    assert.strictEqual(config.otelTracesProtocol, 'http/json')
-    sinon.assert.calledWith(
-      log.warn,
-      'OTEL_EXPORTER_OTLP_TRACES_PROTOCOL=%s is not yet supported; only http/json is currently implemented',
-      'grpc'
-    )
+    assert.strictEqual(config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL, 'http/json')
   })
 
   it('should not warn when OTEL_EXPORTER_OTLP_TRACES_PROTOCOL is http/json', () => {

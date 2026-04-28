@@ -197,7 +197,8 @@ describe('Plugin', () => {
 
             it('should propagate context', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
+                const span = traces[0].find(s => s.name === 'kafka.consume')
+                assert.ok(span)
 
                 assertObjectContains(span, {
                   name: 'kafka.consume',
@@ -523,7 +524,8 @@ describe('Plugin', () => {
 
             it('should propagate context', async () => {
               const expectedSpanPromise = agent.assertSomeTraces(traces => {
-                const span = traces[0][0]
+                const span = traces[0].find(s => s.name === 'kafka.consume')
+                assert.ok(span)
 
                 assertObjectContains(span, {
                   name: 'kafka.consume',

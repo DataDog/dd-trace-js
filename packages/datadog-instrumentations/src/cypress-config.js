@@ -230,28 +230,83 @@ function wrapConfig (config) {
 }
 
 /**
+ * Returns `true` if the nearest package.json walking up from `filePath`
+ * sets `"type": "module"`. Used to decide whether ambiguous extensions
+ * (`.js`, `.ts`) are loaded as ESM or CJS.
+ *
+ * @param {string} filePath absolute path to a file under the project
+ * @returns {boolean}
+ */
+function isUnderEsmPackage (filePath) {
+  let dir = path.dirname(filePath)
+  while (true) {
+    const candidate = path.join(dir, 'package.json')
+    try {
+      const pkg = JSON.parse(fs.readFileSync(candidate, 'utf8'))
+      return pkg && pkg.type === 'module'
+    } catch { /* no package.json at this level */ }
+    const parent = path.dirname(dir)
+    if (parent === dir) return false
+    dir = parent
+  }
+}
+
+/**
  * @param {string} originalConfigFile absolute path to the original config file
  * @returns {string} path to the generated wrapper file
  */
 function createConfigWrapper (originalConfigFile) {
+  // Decide the wrapper's module mode (ESM vs CJS). It must match how
+  // Cypress would interpret the user's original config so that (1) Cypress
+  // keeps the loader it would have used (notably the ts-node registration
+  // for `.ts` configs), and (2) the wrapper body parses in that mode.
+  const originalExt = path.extname(originalConfigFile)
+  const isEsm = originalExt === '.mjs' || originalExt === '.mts' ||
+    (originalExt !== '.cjs' && originalExt !== '.cts' && isUnderEsmPackage(originalConfigFile))
+
+  // Preserve `.ts`/`.cts`/`.mts` so Cypress keeps ts-node registered for
+  // the wrapper. For plain JS originals, pick the extension that encodes
+  // the chosen module mode directly.
+  let wrapperExt
+  if (originalExt === '.ts' || originalExt === '.cts' || originalExt === '.mts') {
+    wrapperExt = originalExt
+  } else {
+    wrapperExt = isEsm ? '.mjs' : '.cjs'
+  }
+
   const wrapperFile = path.join(
     path.dirname(originalConfigFile),
-    `.dd-cypress-config-${process.pid}.mjs`
+    `.dd-cypress-config-${process.pid}${wrapperExt}`
   )
 
   const cypressConfigPath = require.resolve('./cypress-config')
 
-  // Always use ESM: it can import both CJS and ESM configs, so it works
-  // regardless of the original file's extension or "type": "module" in package.json.
-  // Import cypress-config.js directly (CJS default = module.exports object).
-  fs.writeFileSync(wrapperFile, [
-    `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
-    `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
-    '',
-    'export default cypressConfig.wrapConfig(originalConfig)',
-    '',
-  ].join('\n'))
+  // ESM body: `import` default-interops a CJS module (cypress-config.js)
+  //   by exposing its `module.exports` as the default binding, and handles
+  //   both CJS and ESM user configs transparently.
+  // CJS body: avoids top-level `import` — older Cypress transpiles `.ts`
+  //   configs through CJS ts-node, where `require('file://...')` is not
+  //   supported. Guards against ES-module-default shape so TS-authored
+  //   configs using `export default` still work.
+  const body = isEsm
+    ? [
+        `import originalConfig from ${JSON.stringify(pathToFileURL(originalConfigFile).href)}`,
+        `import cypressConfig from ${JSON.stringify(pathToFileURL(cypressConfigPath).href)}`,
+        '',
+        'export default cypressConfig.wrapConfig(originalConfig)',
+        '',
+      ].join('\n')
+    : [
+        `const cypressConfig = require(${JSON.stringify(cypressConfigPath)})`,
+        `const originalExports = require(${JSON.stringify(originalConfigFile)})`,
+        'const originalConfig = originalExports && originalExports.__esModule',
+        '  ? originalExports.default',
+        '  : originalExports',
+        'module.exports = cypressConfig.wrapConfig(originalConfig)',
+        '',
+      ].join('\n')
 
+  fs.writeFileSync(wrapperFile, body)
   return wrapperFile
 }
 
@@ -291,10 +346,7 @@ function wrapCliConfigFileOptions (options) {
     }
   }
 
-  // Skip .ts files — Cypress transpiles them internally via its own loader.
-  // The ESM wrapper can't import .ts directly. The defineConfig shimmer
-  // handles .ts configs since they're transpiled to CJS by Cypress.
-  if (!configFilePath || !fs.existsSync(configFilePath) || path.extname(configFilePath) === '.ts') return noop
+  if (!configFilePath || !fs.existsSync(configFilePath)) return noop
 
   try {
     const wrapperFile = createConfigWrapper(configFilePath)

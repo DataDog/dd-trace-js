@@ -515,4 +515,15 @@ describe('check-require-cache', () => {
 
     assert.ok(subs.start.called)
   })
+
+  it('should use import when rewriting esm modules', () => {
+    const filename = resolve(__dirname, 'node_modules', 'test', 'trace-generator-async.js')
+
+    content = readFileSync(filename, 'utf8')
+    content = rewriter.rewrite(content, filename, 'module')
+
+    assert.match(content, /\bimport\s+.+\s+from\s+"/)
+    assert.match(content, /tr_ch_apm_tracingChannel/)
+    assert.doesNotMatch(content, /require\("/)
+  })
 })

@@ -61,7 +61,7 @@ function initializeOpenTelemetryLogs (config) {
   // Create OTLP exporter using resolved config values
   const exporter = new OtlpHttpLogExporter(
     config.otelLogsUrl,
-    config.otelLogsHeaders,
+    config.OTEL_EXPORTER_OTLP_LOGS_HEADERS,
     config.otelLogsTimeout,
     config.otelLogsProtocol,
     resourceAttributes
