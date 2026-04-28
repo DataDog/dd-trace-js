@@ -700,6 +700,7 @@ moduleTypes.forEach(({
     )
 
     over10It('reports tests with a TypeScript config file', async () => {
+      let testOutput = ''
       const receiverPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads
@@ -714,7 +715,13 @@ moduleTypes.forEach(({
               [TEST_STATUS]: 'pass',
               [TEST_FRAMEWORK]: 'cypress',
             },
-          })
+          }, `got events: ${JSON.stringify(events.map(event => ({
+            resource: event.content.resource,
+            sourceFile: event.content.meta?.[TEST_SOURCE_FILE],
+            status: event.content.meta?.[TEST_STATUS],
+            framework: event.content.meta?.[TEST_FRAMEWORK],
+            error: event.content.meta?.[ERROR_MESSAGE],
+          })), null, 2)}\nCypress output:\n${testOutput}`)
         }, 20000)
 
       const envVars = getCiVisAgentlessConfig(receiver.port)
@@ -730,6 +737,12 @@ moduleTypes.forEach(({
           },
         }
       )
+      childProcess.stdout?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', chunk => {
+        testOutput += chunk.toString()
+      })
 
       const [[exitCode]] = await Promise.all([
         once(childProcess, 'exit'),
