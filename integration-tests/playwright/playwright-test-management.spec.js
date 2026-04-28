@@ -338,6 +338,7 @@ versions.forEach((version) => {
             isQuarantined,
             shouldIncludeFlakyTest,
           })
+          let stdout = ''
 
           childProcess = exec(
             `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
@@ -355,10 +356,44 @@ versions.forEach((version) => {
             }
           )
 
+          childProcess.stdout?.on('data', data => {
+            stdout += data
+          })
+
+          childProcess.stderr?.on('data', data => {
+            stdout += data
+          })
+
           const [[exitCode]] = await Promise.all([
             once(childProcess, 'exit'),
             testAssertionsPromise,
           ])
+
+          if (isAttemptingToFix) {
+            assert.match(stdout, /Datadog Test Optimization: attempting to fix .*should attempt to fix failed test/)
+            assert.strictEqual(
+              (stdout.match(
+                /Datadog Test Optimization: attempting to fix .*should attempt to fix failed test/g
+              ) || []).length,
+              1
+            )
+            assert.match(stdout, /Datadog Test Optimization/)
+            if (shouldAlwaysPass) {
+              assert.match(stdout, /Attempt to fix passed/)
+            } else {
+              assert.match(stdout, /Attempt to fix failed/)
+              assert.match(
+                stdout,
+                shouldFailSometimes ? /execution(?:s)? [\d, -]+:/ : /execution(?:s)? 1(?:-\d+)?:/
+              )
+            }
+            if (isQuarantined) {
+              assert.match(stdout, /Errors are suppressed because this test is quarantined\./)
+            }
+            if (isDisabled) {
+              assert.match(stdout, /Errors are suppressed because this test is disabled\./)
+            }
+          }
 
           if (isQuarantined || isDisabled || shouldAlwaysPass) {
             // even though a test fails, the exit code is 0 because the test is quarantined

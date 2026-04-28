@@ -12,7 +12,9 @@ const {
   PLAYWRIGHT_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
   DYNAMIC_NAME_RE,
-  logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
 const {
@@ -79,6 +81,8 @@ let modifiedFiles = {}
 const quarantinedOrDisabledTestsAttemptToFix = []
 let quarantinedButNotAttemptToFixFqns = new Set()
 const newTestsWithDynamicNames = new Set()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 let rootDir = ''
 let sessionProjects = []
 
@@ -337,6 +341,11 @@ function testBeginHandler (test, browserName, shouldCreateTestSpan) {
   // We disable retries by default if attemptToFix is true
   if (getTestProperties(test).attemptToFix) {
     test.retries = 0
+    logAttemptToFixTestExecution(
+      getTestSuitePath(testSuiteAbsolutePath, rootDir),
+      getTestFullname(test),
+      loggedAttemptToFixTests
+    )
   }
 
   // this handles tests that do not go through the worker process (because they're skipped)
@@ -398,6 +407,17 @@ function testEndHandler ({
   }
 
   const testProperties = getTestProperties(test)
+
+  if (testProperties.attemptToFix) {
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: getTestSuitePath(test._requireFile, rootDir),
+      testName: getTestFullname(test),
+      status: testStatus,
+      error,
+      isQuarantined: testProperties.quarantined,
+      isDisabled: testProperties.disabled,
+    })
+  }
 
   if (testStatuses.length === testManagementAttemptToFixRetries + 1 && testProperties.attemptToFix) {
     if (testStatuses.includes('fail')) {
@@ -797,7 +817,8 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
       }
     }
 
-    logDynamicNamesWarning(newTestsWithDynamicNames)
+    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    loggedAttemptToFixTests.clear()
 
     const flushWait = new Promise(resolve => {
       onDone = resolve

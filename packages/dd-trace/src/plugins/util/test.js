@@ -217,6 +217,9 @@ const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 const TEST_MANAGEMENT_ENABLED = 'test.test_management.enabled'
 const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
 
+const MAX_ATTEMPT_TO_FIX_ERROR_MESSAGE_LENGTH = 500
+const MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS = 10
+
 // Impacted tests
 const POSSIBLE_BASE_BRANCHES = ['main', 'master', 'preprod', 'prod', 'dev', 'development', 'trunk']
 const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trunk|release\/.*|hotfix\/.*)$/
@@ -359,6 +362,13 @@ module.exports = {
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
   logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  formatAttemptToFixSummary,
+  logAttemptToFixSummary,
+  logAttemptToFixTestExecution,
+  formatDynamicNamesSummary,
+  logTestOptimizationSummary,
 }
 
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
@@ -1353,33 +1363,463 @@ function collectDynamicNamesFromTraces (data, newTestsWithDynamicNames) {
 }
 
 /**
+ * @typedef {object} AttemptToFixFailedExecution
+ * @property {number} execution
+ * @property {string} errorMessage
+ */
+
+/**
+ * @typedef {object} AttemptToFixExecutionResult
+ * @property {string} name
+ * @property {number} executions
+ * @property {AttemptToFixFailedExecution[]} failedExecutions
+ * @property {boolean} isQuarantined
+ * @property {boolean} isDisabled
+ */
+
+/**
+ * @typedef {Map<string, AttemptToFixExecutionResult>} AttemptToFixExecutions
+ */
+
+const ATTEMPT_TO_FIX_INTERNAL_STACK_FRAME_RE = new RegExp([
+  String.raw`packages[\\/](?:datadog-instrumentations|dd-trace|datadog-core)[\\/]`,
+  'node:diagnostics_channel',
+  String.raw`node:internal[\\/]`,
+  'node:async_hooks',
+].join('|'))
+
+/**
+ * Normalizes an attempt-to-fix error message for a user-facing summary.
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+function normalizeAttemptToFixErrorMessage (message) {
+  return message
+    .replaceAll(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trimEnd())
+    .join('\n')
+    .trim() || 'No error message available'
+}
+
+/**
+ * Checks whether a stack frame is implementation plumbing that does not help explain the failed test.
+ *
+ * @param {string} line
+ * @returns {boolean}
+ */
+function isAttemptToFixInternalStackFrame (line) {
+  return ATTEMPT_TO_FIX_INTERNAL_STACK_FRAME_RE.test(line)
+}
+
+/**
+ * Keeps the useful part of an attempt-to-fix stack while hiding Datadog and Node internals.
+ *
+ * @param {string} stack
+ * @returns {string}
+ */
+function formatAttemptToFixStackTrace (stack) {
+  const message = normalizeAttemptToFixErrorMessage(stack)
+  const lines = message.split('\n')
+  if (lines.length <= 1) return message
+
+  const filteredLines = [lines[0]]
+  let hiddenFrames = 0
+
+  for (let lineIndex = 1; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex]
+    if (isAttemptToFixInternalStackFrame(line)) {
+      hiddenFrames++
+      continue
+    }
+
+    filteredLines.push(line)
+  }
+
+  if (hiddenFrames > 0) {
+    filteredLines.push(`... ${hiddenFrames} internal frame(s) hidden`)
+  }
+
+  return filteredLines.join('\n')
+}
+
+/**
+ * Gets a compact error report for an attempt-to-fix execution.
+ *
+ * @param {Error | { message?: string, stack?: string } | string | undefined} error
+ * @returns {string}
+ */
+function getAttemptToFixErrorMessage (error) {
+  if (!error) return 'No error message available'
+
+  let message
+  let isStack = false
+  if (typeof error === 'string') {
+    message = error
+  } else if (error.stack) {
+    message = error.stack
+    isStack = true
+  } else if (error.message) {
+    message = error.message
+  } else {
+    message = String(error)
+  }
+
+  return isStack
+    ? formatAttemptToFixStackTrace(message)
+    : normalizeAttemptToFixErrorMessage(message)
+}
+
+/**
+ * Truncates an attempt-to-fix error message to the user-facing summary limit.
+ *
+ * @param {string} message
+ * @returns {string}
+ */
+function truncateAttemptToFixErrorMessage (message) {
+  if (message.length <= MAX_ATTEMPT_TO_FIX_ERROR_MESSAGE_LENGTH) return message
+
+  return `${message.slice(0, MAX_ATTEMPT_TO_FIX_ERROR_MESSAGE_LENGTH - 3)}...`
+}
+
+/**
+ * Formats execution numbers, collapsing consecutive numbers into ranges.
+ *
+ * @param {number[]} executions
+ * @returns {string}
+ */
+function formatAttemptToFixExecutionNumbers (executions) {
+  const ranges = []
+  let start
+  let previous
+
+  for (const execution of executions) {
+    if (start === undefined) {
+      start = execution
+      previous = execution
+      continue
+    }
+
+    if (execution === previous + 1) {
+      previous = execution
+      continue
+    }
+
+    ranges.push(start === previous ? `${start}` : `${start}-${previous}`)
+    start = execution
+    previous = execution
+  }
+
+  if (start !== undefined) {
+    ranges.push(start === previous ? `${start}` : `${start}-${previous}`)
+  }
+
+  return ranges.join(', ')
+}
+
+/**
+ * Groups failed attempt-to-fix executions that have the same error report.
+ *
+ * @param {AttemptToFixFailedExecution[]} failedExecutions
+ * @returns {Array<{ executions: number[], errorMessage: string }>}
+ */
+function groupAttemptToFixFailedExecutions (failedExecutions) {
+  const groups = []
+  const groupsByErrorMessage = new Map()
+
+  for (const failedExecution of failedExecutions) {
+    let group = groupsByErrorMessage.get(failedExecution.errorMessage)
+
+    if (!group) {
+      group = {
+        executions: [],
+        errorMessage: failedExecution.errorMessage,
+      }
+      groupsByErrorMessage.set(failedExecution.errorMessage, group)
+      groups.push(group)
+    }
+
+    group.executions.push(failedExecution.execution)
+  }
+
+  return groups
+}
+
+/**
+ * Appends a grouped failed attempt-to-fix execution report to the summary.
+ *
+ * @param {string[]} lines
+ * @param {{ executions: number[], errorMessage: string }} failedExecutionGroup
+ */
+function addAttemptToFixFailedExecutionLines (lines, failedExecutionGroup) {
+  const { executions, errorMessage } = failedExecutionGroup
+  const executionNumbers = formatAttemptToFixExecutionNumbers(executions)
+  const label = executions.length === 1 ? `execution ${executionNumbers}` : `executions ${executionNumbers}`
+  const messageLines = errorMessage.split('\n')
+
+  lines.push(`    - ${label}: ${messageLines[0]}`)
+
+  for (let lineIndex = 1; lineIndex < messageLines.length; lineIndex++) {
+    lines.push(`      ${messageLines[lineIndex]}`)
+  }
+}
+
+/**
+ * Formats a test name for user-facing Test Optimization summaries.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ * @returns {string}
+ */
+function formatTestOptimizationName (testSuite, testName) {
+  return testSuite ? `${testSuite} › ${testName}` : testName
+}
+
+/**
+ * Renders a bounded bullet list for Test Optimization summaries.
+ *
+ * @param {Array<{ text: string, suffix?: string }>} items
+ * @returns {string}
+ */
+function formatTestOptimizationList (items) {
+  const shown = items.slice(0, MAX_TEST_OPTIMIZATION_SUMMARY_ITEMS)
+  const more = items.length - shown.length
+  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
+
+  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+}
+
+/**
+ * Logs a compact message when an attempt-to-fix test execution starts.
+ *
+ * @param {string | undefined} testSuite
+ * @param {string} testName
+ * @param {Set<string>} [loggedAttemptToFixTests]
+ */
+function logAttemptToFixTestExecution (testSuite, testName, loggedAttemptToFixTests) {
+  if (!testName) return
+
+  const name = formatTestOptimizationName(testSuite, testName)
+  if (loggedAttemptToFixTests) {
+    if (loggedAttemptToFixTests.has(name)) return
+
+    loggedAttemptToFixTests.add(name)
+  }
+
+  // eslint-disable-next-line no-console -- Intentional user-facing attempt-to-fix progress report
+  console.warn(`Datadog Test Optimization: attempting to fix ${name}`)
+}
+
+/**
+ * Records a single attempt-to-fix execution for the end-of-session user summary.
+ *
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ * @param {{
+ *   testSuite?: string,
+ *   testName: string,
+ *   status: string,
+ *   error?: Error | { message?: string, stack?: string } | string,
+ *   isQuarantined?: boolean,
+ *   isDisabled?: boolean
+ * }} execution
+ */
+function recordAttemptToFixExecution (attemptToFixExecutions, execution) {
+  if (!execution?.testName) return
+
+  const { testSuite, testName, status, error, isQuarantined, isDisabled } = execution
+  const name = formatTestOptimizationName(testSuite, testName)
+  let result = attemptToFixExecutions.get(name)
+
+  if (!result) {
+    result = {
+      name,
+      executions: 0,
+      failedExecutions: [],
+      isQuarantined: false,
+      isDisabled: false,
+    }
+    attemptToFixExecutions.set(name, result)
+  }
+
+  result.executions++
+  result.isQuarantined = result.isQuarantined || !!isQuarantined
+  result.isDisabled = result.isDisabled || !!isDisabled
+
+  if (status === 'fail') {
+    result.failedExecutions.push({
+      execution: result.executions,
+      errorMessage: truncateAttemptToFixErrorMessage(getAttemptToFixErrorMessage(error)),
+    })
+  }
+}
+
+/**
+ * Scans serialized worker trace payloads for attempt-to-fix test spans.
+ *
+ * @param {string} data - JSON-serialized traces from a worker
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ */
+function collectAttemptToFixExecutionsFromTraces (data, attemptToFixExecutions) {
+  try {
+    const traces = JSON.parse(data)
+    for (const trace of traces) {
+      for (const span of trace) {
+        const meta = span.meta
+        if (meta?.[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] !== 'true') continue
+        const error = meta['error.stack']
+          ? { message: meta['error.message'], stack: meta['error.stack'] }
+          : meta['error.message']
+
+        recordAttemptToFixExecution(attemptToFixExecutions, {
+          testSuite: meta[TEST_SUITE],
+          testName: meta[TEST_NAME],
+          status: meta[TEST_STATUS],
+          error,
+          isQuarantined: meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true',
+          isDisabled: meta[TEST_MANAGEMENT_IS_DISABLED] === 'true',
+        })
+      }
+    }
+  } catch {
+    // ignore parse errors
+  }
+}
+
+/**
+ * Gets the suppression reason shown for quarantined or disabled attempt-to-fix tests.
+ *
+ * @param {AttemptToFixExecutionResult} result
+ * @returns {string | undefined}
+ */
+function getSuppressedReason (result) {
+  if (result.isQuarantined && result.isDisabled) {
+    return 'this test is quarantined and disabled'
+  }
+  if (result.isQuarantined) {
+    return 'this test is quarantined'
+  }
+  if (result.isDisabled) {
+    return 'this test is disabled'
+  }
+}
+
+/**
+ * Formats the attempt-to-fix end-of-session summary.
+ *
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ * @returns {string}
+ */
+function formatAttemptToFixSummary (attemptToFixExecutions) {
+  if (attemptToFixExecutions.size === 0) return ''
+
+  const results = [...attemptToFixExecutions.values()]
+  const failedResults = results.filter(result => result.failedExecutions.length > 0)
+  const totalExecutions = results.reduce((total, result) => total + result.executions, 0)
+
+  if (failedResults.length === 0) {
+    return `Attempt to fix passed: all ${totalExecutions} execution(s) passed for ${results.length} test(s).`
+  }
+
+  const totalFailedExecutions = failedResults.reduce(
+    (total, result) => total + result.failedExecutions.length,
+    0
+  )
+  const lines = [
+    `Attempt to fix failed: ${totalFailedExecutions} of ${totalExecutions} execution(s) failed ` +
+      `across ${failedResults.length} of ${results.length} test(s).`,
+  ]
+
+  for (const result of failedResults) {
+    lines.push(`  • ${result.name}`)
+
+    const suppressedReason = getSuppressedReason(result)
+    if (suppressedReason) {
+      lines.push(`    Errors are suppressed because ${suppressedReason}.`)
+    }
+
+    for (const failedExecutionGroup of groupAttemptToFixFailedExecutions(result.failedExecutions)) {
+      addAttemptToFixFailedExecutionLines(lines, failedExecutionGroup)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Formats the dynamic-name warning section of the Test Optimization summary.
+ *
+ * @param {Set<string>} newTestsWithDynamicNames
+ * @returns {string}
+ */
+function formatDynamicNamesSummary (newTestsWithDynamicNames) {
+  if (newTestsWithDynamicNames.size === 0) return ''
+
+  const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
+  return (
+    `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
+    'dynamic data (timestamps, UUIDs, etc.).\n' +
+    'Tests with changing names are always treated as new on every run, ' +
+    'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
+    'Consider using stable, deterministic test names.\n\n' +
+    formatTestOptimizationList(items)
+  )
+}
+
+/**
+ * Logs a single Test Optimization session summary.
+ *
+ * @param {{
+ *   attemptToFixExecutions?: AttemptToFixExecutions,
+ *   newTestsWithDynamicNames?: Set<string>,
+ *   extraSections?: string[]
+ * }} summary
+ */
+function logTestOptimizationSummary (summary) {
+  const { attemptToFixExecutions, newTestsWithDynamicNames, extraSections = [] } = summary
+  const sections = []
+  const attemptToFixSummary = attemptToFixExecutions
+    ? formatAttemptToFixSummary(attemptToFixExecutions)
+    : ''
+  const dynamicNamesSummary = newTestsWithDynamicNames
+    ? formatDynamicNamesSummary(newTestsWithDynamicNames)
+    : ''
+
+  if (attemptToFixSummary) sections.push(attemptToFixSummary)
+  sections.push(...extraSections.filter(Boolean))
+  if (dynamicNamesSummary) sections.push(dynamicNamesSummary)
+
+  if (sections.length === 0) return
+
+  const line = '-'.repeat(50)
+  // eslint-disable-next-line no-console -- Intentional user-facing session summary
+  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
+
+  if (attemptToFixExecutions) {
+    attemptToFixExecutions.clear()
+  }
+  if (newTestsWithDynamicNames) {
+    newTestsWithDynamicNames.clear()
+  }
+}
+
+/**
+ * Logs and clears the attempt-to-fix end-of-session summary.
+ *
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ */
+function logAttemptToFixSummary (attemptToFixExecutions) {
+  logTestOptimizationSummary({ attemptToFixExecutions })
+}
+
+/**
  * Logs a "Datadog Test Optimization" warning about new tests with dynamic names.
  * Clears the Set after logging. No-op if the Set is empty.
  *
  * @param {Set<string>} newTestsWithDynamicNames
  */
 function logDynamicNamesWarning (newTestsWithDynamicNames) {
-  if (newTestsWithDynamicNames.size === 0) return
-
-  const MAX_SHOWN = 10
-  const names = [...newTestsWithDynamicNames]
-  const shown = names.slice(0, MAX_SHOWN)
-  const more = names.length - shown.length
-  const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  const nameList = shown.map(n => `  • ${n}`).join('\n') + moreSuffix
-
-  const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing session summary
-  console.warn(
-    `\n${line}\nDatadog Test Optimization\n${line}\n` +
-    `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
-    'dynamic data (timestamps, UUIDs, etc.).\n' +
-    'Tests with changing names are always treated as new on every run, ' +
-    'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
-    'Consider using stable, deterministic test names.\n\n' +
-    `${nameList}\n`
-  )
-  newTestsWithDynamicNames.clear()
+  logTestOptimizationSummary({ newTestsWithDynamicNames })
 }
 
 function isModifiedTest (testPath, testStartLine, testEndLine, modifiedFiles, testFramework) {

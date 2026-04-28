@@ -21,6 +21,10 @@ const {
   isModifiedTest,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
+  collectAttemptToFixExecutionsFromTraces,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
   SEED_SUFFIX_RE,
@@ -107,6 +111,8 @@ const wrappedWorkerChannels = new WeakMap()
 // New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
 // Populated in-process for runInBand, and via worker-report:trace for parallel mode.
 const newTestsWithDynamicNames = new Set()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
 // Per-test: how many EFD retries were determined after the first execution.
@@ -185,6 +191,18 @@ function getTestEnvironmentOptions (config) {
 
 const MAX_IGNORED_TEST_NAMES = 10
 
+/**
+ * @typedef {object} AttemptToFixExecutionResult
+ * @property {string} name
+ * @property {{ execution: number, errorMessage: string }[]} failedExecutions
+ * @property {boolean} isQuarantined
+ * @property {boolean} isDisabled
+ */
+
+/**
+ * @typedef {Map<string, AttemptToFixExecutionResult>} AttemptToFixExecutions
+ */
+
 function getTestStats (testStatuses) {
   return testStatuses.reduce((acc, testStatus) => {
     acc[testStatus]++
@@ -193,64 +211,74 @@ function getTestStats (testStatuses) {
 }
 
 /**
- * @param {string[]} efdNames
- * @param {string[]} quarantineNames
- * @param {number} totalCount
- */
-/**
- * Renders a truncated bullet list from an array of items.
+ * Formats the ignored-failure section for the Test Optimization summary.
  *
- * @param {Array<{ text: string, suffix?: string }>} items
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
  * @returns {string}
  */
-function formatList (items) {
+function formatIgnoredFailuresSummary (ignoredFailures, attemptToFixExecutions) {
+  if (!ignoredFailures) return ''
+
+  const attemptToFixSuppressedNames = getSuppressedAttemptToFixTestNames(attemptToFixExecutions)
+  const items = []
+  let totalCount = ignoredFailures.totalCount
+
+  for (const n of ignoredFailures.efdNames) {
+    items.push({ text: n, suffix: 'Early Flake Detection' })
+  }
+  for (const n of ignoredFailures.quarantineNames) {
+    if (attemptToFixSuppressedNames.has(n)) {
+      totalCount--
+      continue
+    }
+
+    items.push({ text: n, suffix: 'Quarantine' })
+  }
+
+  if (items.length === 0 || totalCount <= 0) return ''
+
   const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
   const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+  const formattedItems = shown
+    .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
+    .join('\n') + moreSuffix
+
+  return `${totalCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
 
 /**
- * Logs a single "Datadog Test Optimization" summary at session end,
- * combining all relevant sections (ignored failures, dynamic names).
+ * Gets attempt-to-fix tests whose failures are already explained by the attempt-to-fix summary.
+ *
+ * @param {AttemptToFixExecutions} attemptToFixExecutions
+ * @returns {Set<string>}
+ */
+function getSuppressedAttemptToFixTestNames (attemptToFixExecutions) {
+  const names = new Set()
+
+  for (const result of attemptToFixExecutions.values()) {
+    if (result.failedExecutions.length === 0) continue
+    if (!result.isQuarantined && !result.isDisabled) continue
+
+    names.add(result.name)
+  }
+
+  return names
+}
+
+/**
+ * Logs a single "Datadog Test Optimization" summary at session end.
  *
  * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
  */
 function logSessionSummary (ignoredFailures) {
-  const sections = []
-
-  if (ignoredFailures) {
-    const items = []
-    for (const n of ignoredFailures.efdNames) {
-      items.push({ text: n, suffix: 'Early Flake Detection' })
-    }
-    for (const n of ignoredFailures.quarantineNames) {
-      items.push({ text: n, suffix: 'Quarantine' })
-    }
-    sections.push(
-      `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
-      formatList(items)
-    )
-  }
-
-  if (newTestsWithDynamicNames.size > 0) {
-    const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
-    sections.push(
-      `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
-      'dynamic data (timestamps, UUIDs, etc.).\n' +
-      'Tests with changing names are always treated as new on every run, ' +
-      'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
-      'Consider using stable, deterministic test names.\n\n' +
-      formatList(items)
-    )
-    newTestsWithDynamicNames.clear()
-  }
-
-  if (sections.length === 0) return
-
-  const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing session summary
-  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
+  logTestOptimizationSummary({
+    attemptToFixExecutions,
+    extraSections: [formatIgnoredFailuresSummary(ignoredFailures, attemptToFixExecutions)],
+    newTestsWithDynamicNames,
+  })
+  loggedAttemptToFixTests.clear()
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -556,6 +584,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         testContexts.set(event.test, ctx)
 
+        if (isAttemptToFix) {
+          logAttemptToFixTestExecution(this.testSuite, testName, loggedAttemptToFixTests)
+        }
+
         testStartCh.runStores(ctx, () => {
           let p = event.test.parent
           const hooks = []
@@ -805,6 +837,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (!ctx) {
           log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
           return
+        }
+
+        if (isAttemptToFix) {
+          recordAttemptToFixExecution(attemptToFixExecutions, {
+            testSuite: ctx.suite,
+            testName,
+            status,
+            error: formatJestError(originalError),
+            isQuarantined: ctx.isQuarantined,
+            isDisabled: ctx.isDisabled,
+          })
         }
 
         const finalStatus = this.getFinalStatus(testName,
@@ -1936,6 +1979,7 @@ function onMessageWrapper (onMessage) {
     const [code, data] = response
     if (code === JEST_WORKER_TRACE_PAYLOAD_CODE) { // datadog trace payload
       collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
+      collectAttemptToFixExecutionsFromTraces(data, attemptToFixExecutions)
       workerReportTraceCh.publish(data)
       return
     }

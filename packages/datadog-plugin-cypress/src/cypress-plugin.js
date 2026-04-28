@@ -55,7 +55,9 @@ const {
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
-  logDynamicNamesWarning,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
@@ -322,6 +324,8 @@ class CypressPlugin {
   isImpactedTestsEnabled = false
   modifiedFiles = []
   newTestsWithDynamicNames = new Set()
+  attemptToFixExecutions = new Map()
+  loggedAttemptToFixTests = new Set()
 
   constructor () {
     const {
@@ -394,6 +398,8 @@ class CypressPlugin {
     this.testManagementTests = undefined
     this.isImpactedTestsEnabled = false
     this.modifiedFiles = []
+    this.attemptToFixExecutions = new Map()
+    this.loggedAttemptToFixTests = new Set()
     this.activeTestSpan = null
     this.testSuiteSpan = null
     this.testModuleSpan = null
@@ -801,7 +807,10 @@ class CypressPlugin {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
 
-      logDynamicNamesWarning(this.newTestsWithDynamicNames)
+      logTestOptimizationSummary({
+        attemptToFixExecutions: this.attemptToFixExecutions,
+        newTestsWithDynamicNames: this.newTestsWithDynamicNames,
+      })
 
       this.testModuleSpan.finish()
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
@@ -1050,6 +1059,10 @@ class CypressPlugin {
           return { shouldSkip: true }
         }
 
+        if (isAttemptToFix) {
+          logAttemptToFixTestExecution(testSuite, testName, this.loggedAttemptToFixTests)
+        }
+
         // For disabled tests (not attemptToFix), skip them
         if (!isAttemptToFix && isDisabled) {
           return { shouldSkip: true }
@@ -1090,6 +1103,7 @@ class CypressPlugin {
           isAttemptToFix,
           isModified,
           isQuarantined: isQuarantinedFromSupport,
+          isDisabled: isDisabledFromSupport,
         } = test
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
           const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
@@ -1194,6 +1208,15 @@ class CypressPlugin {
               this.activeTestSpan.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'true')
             }
           }
+          const { isDisabled, isQuarantined } = this.getTestProperties(testSuite, testName)
+          recordAttemptToFixExecution(this.attemptToFixExecutions, {
+            testSuite,
+            testName,
+            status: testStatus,
+            error,
+            isQuarantined: isQuarantined || isQuarantinedFromSupport,
+            isDisabled: isDisabled || isDisabledFromSupport,
+          })
         }
         // ATR: set TEST_HAS_FAILED_ALL_RETRIES when all auto test retries were exhausted and every attempt failed
         if (this.isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry &&
@@ -1206,6 +1229,9 @@ class CypressPlugin {
         // (This catches cases where the test ran but failed, but Cypress saw it as passed)
         if (isQuarantinedFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_QUARANTINED, 'true')
+        }
+        if (isDisabledFromSupport) {
+          this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
         }
 
         const finishedTest = {

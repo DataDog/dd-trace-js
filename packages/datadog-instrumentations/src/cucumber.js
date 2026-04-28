@@ -12,6 +12,10 @@ const {
   getTestSuitePath,
   CUCUMBER_WORKER_TRACE_PAYLOAD_CODE,
   getIsFaultyEarlyFlakeDetection,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const satisfies = require('../../../vendor/dist/semifies')
 const { addHook, channel } = require('./helpers/instrument')
@@ -63,6 +67,8 @@ const newTestsByTestFullname = new Map()
 const modifiedTestsByPickleId = new Map()
 // Pickle IDs for tests that are genuinely new (not in known tests list).
 const newTestPickleIds = new Set()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 
 let eventDataCollector = null
 let pickleByFile = {}
@@ -282,6 +288,7 @@ function wrapRun (pl, isLatestVersion, version) {
     let numAttempt = 0
 
     const testFileAbsolutePath = this.pickle.uri
+    const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
 
     const testSourceLine = this.gherkinDocument?.feature?.location?.line
 
@@ -293,6 +300,9 @@ function wrapRun (pl, isLatestVersion, version) {
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
+    if (isTestManagementTestsEnabled && getTestProperties(testSuitePath, this.pickle.name).attemptToFix) {
+      logAttemptToFixTestExecution(testSuitePath, this.pickle.name, loggedAttemptToFixTests)
+    }
     testStartCh.runStores(ctx, () => {})
     const promises = {}
     try {
@@ -440,6 +450,17 @@ function wrapRun (pl, isLatestVersion, version) {
         const attemptCtx = numAttemptToCtx.get(numAttempt)
 
         const error = getErrorFromCucumberResult(result)
+
+        if (isAttemptToFix) {
+          recordAttemptToFixExecution(attemptToFixExecutions, {
+            testSuite: getTestSuitePath(testFileAbsolutePath, process.cwd()),
+            testName: this.pickle.name,
+            status,
+            error,
+            isQuarantined,
+            isDisabled,
+          })
+        }
 
         if (promises.hitBreakpointPromise) {
           await promises.hitBreakpointPromise
@@ -701,6 +722,8 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
       isTestManagementTestsEnabled,
       isParallel,
     })
+    logTestOptimizationSummary({ attemptToFixExecutions })
+    loggedAttemptToFixTests.clear()
     eventDataCollector = null
     return success
   }
@@ -882,6 +905,7 @@ function getWrappedParseWorkerMessage (parseWorkerMessageFunction, isNewVersion)
     if (Array.isArray(message)) {
       const [messageCode, payload] = message
       if (messageCode === CUCUMBER_WORKER_TRACE_PAYLOAD_CODE) {
+        collectAttemptToFixExecutionsFromTraces(payload, attemptToFixExecutions)
         workerReportTraceCh.publish(payload)
         return
       }

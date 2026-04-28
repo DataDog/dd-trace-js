@@ -1945,9 +1945,41 @@ versions.forEach((version) => {
               stdout += data
             })
 
+            childProcess.stderr?.on('data', (data) => {
+              stdout += data
+            })
+
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 assert.match(stdout, /I am running/)
+                if (isAttemptingToFix) {
+                  assert.match(
+                    stdout,
+                    /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/
+                  )
+                  assert.strictEqual(
+                    (stdout.match(
+                      /Datadog Test Optimization: attempting to fix .*attempt to fix tests can attempt to fix a test/g
+                    ) || []).length,
+                    1
+                  )
+                  assert.match(stdout, /Datadog Test Optimization/)
+                  if (shouldAlwaysPass) {
+                    assert.match(stdout, /Attempt to fix passed/)
+                  } else {
+                    assert.match(stdout, /Attempt to fix failed/)
+                    assert.match(
+                      stdout,
+                      shouldFailSometimes ? /execution(?:s)? [\d, -]+:/ : /execution(?:s)? 1(?:-\d+)?:/
+                    )
+                  }
+                  if (isQuarantining) {
+                    assert.match(stdout, /Errors are suppressed because this test is quarantined\./)
+                  }
+                  if (isDisabling) {
+                    assert.match(stdout, /Errors are suppressed because this test is disabled\./)
+                  }
+                }
                 if (shouldAlwaysPass || (isAttemptingToFix && isQuarantining) || (isAttemptingToFix && isDisabling)) {
                   assert.strictEqual(exitCode, 0)
                 } else {

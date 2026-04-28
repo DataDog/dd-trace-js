@@ -26,6 +26,12 @@ const {
   getNumFromKnownTests,
   getModifiedFilesFromDiff,
   isModifiedTest,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  formatAttemptToFixSummary,
+  logAttemptToFixSummary,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../../src/plugins/util/test')
 
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
@@ -113,6 +119,209 @@ describe('getTestSessionName', () => {
     process.env.LAGE_PACKAGE_NAME = 'lage-package-b'
 
     assert.strictEqual(getTestSessionName({}, 'jest', {}), 'lage-package-b')
+  })
+})
+
+describe('attempt to fix summary', () => {
+  it('reports when every attempt to fix execution passes', () => {
+    const executions = new Map()
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    assert.strictEqual(
+      formatAttemptToFixSummary(executions),
+      'Attempt to fix passed: all 2 execution(s) passed for 1 test(s).'
+    )
+  })
+
+  it('reports failed executions with truncated error messages and suppressed failure context', () => {
+    const executions = new Map()
+    const longMessage = 'x'.repeat(600)
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'fails',
+      status: 'fail',
+      error: new Error(longMessage),
+      isQuarantined: true,
+      isDisabled: true,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /Attempt to fix failed: 1 of 1 execution\(s\) failed across 1 of 1 test\(s\)\./)
+    assert.match(summary, /suite\.js › fails/)
+    assert.match(summary, /Errors are suppressed because this test is quarantined and disabled\./)
+    assert.match(summary, /execution 1: Error: x+\.\.\./)
+    assert.ok(!summary.includes(longMessage))
+  })
+
+  it('reports stack traces and collapses identical failed executions', () => {
+    const executions = new Map()
+    const error = new Error('same failure')
+    error.stack = [
+      'Error: same failure',
+      '    at Object.<anonymous> (suite.js:10:5)',
+      '    at /repo/packages/datadog-instrumentations/src/jest.js:572:57',
+      '    at run (node:diagnostics_channel:162:14)',
+      '    at processTicksAndRejections (node:internal/process/task_queues:95:5)',
+    ].join('\n')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'collapses repeated stack',
+      status: 'fail',
+      error,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'collapses repeated stack',
+      status: 'pass',
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'collapses repeated stack',
+      status: 'fail',
+      error,
+    })
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'collapses repeated stack',
+      status: 'fail',
+      error,
+    })
+
+    const summary = formatAttemptToFixSummary(executions)
+
+    assert.match(summary, /executions 1, 3-4: Error: same failure/)
+    assert.match(summary, /\n\s+at Object\.<anonymous> \(suite\.js:10:5\)/)
+    assert.match(summary, /\n\s+\.\.\. 3 internal frame\(s\) hidden/)
+    assert.ok(!summary.includes('packages/datadog-instrumentations'))
+    assert.ok(!summary.includes('node:diagnostics_channel'))
+    assert.ok(!summary.includes('node:internal'))
+    assert.strictEqual(summary.match(/Error: same failure/g).length, 1)
+    assert.ok(!summary.includes('execution 3:'))
+  })
+
+  it('collects attempt to fix executions from worker traces', () => {
+    const executions = new Map()
+    const payload = JSON.stringify([
+      [
+        {
+          meta: {
+            'test.test_management.is_attempt_to_fix': 'true',
+            'test.suite': 'worker-suite.js',
+            'test.name': 'worker test',
+            'test.status': 'fail',
+            'test.test_management.is_quarantined': 'true',
+            'error.message': 'worker failure',
+            'error.stack': 'Error: worker failure\n    at worker-suite.js:10:5',
+          },
+        },
+      ],
+    ])
+
+    collectAttemptToFixExecutionsFromTraces(payload, executions)
+
+    const summary = formatAttemptToFixSummary(executions)
+    assert.match(summary, /worker-suite\.js › worker test/)
+    assert.match(summary, /execution 1: Error: worker failure/)
+    assert.match(summary, /\n\s+at worker-suite\.js:10:5/)
+    assert.match(summary, /Errors are suppressed because this test is quarantined\./)
+  })
+
+  it('logs and clears the attempt to fix summary', () => {
+    const executions = new Map()
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    try {
+      logAttemptToFixSummary(executions)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.match(consoleWarn.firstCall.args[0], /Datadog Test Optimization/)
+    assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
+  })
+
+  it('logs a compact progress line when an attempt to fix execution starts', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    try {
+      logAttemptToFixTestExecution('suite.js', 'test name')
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+  })
+
+  it('logs the attempt to fix progress line once for a test effort', () => {
+    const consoleWarn = sinon.stub(console, 'warn')
+    const loggedAttemptToFixTests = new Set()
+
+    try {
+      logAttemptToFixTestExecution('suite.js', 'test name', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('suite.js', 'test name', loggedAttemptToFixTests)
+      logAttemptToFixTestExecution('suite.js', 'other test', loggedAttemptToFixTests)
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 2)
+    assert.strictEqual(
+      consoleWarn.firstCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › test name'
+    )
+    assert.strictEqual(
+      consoleWarn.secondCall.args[0],
+      'Datadog Test Optimization: attempting to fix suite.js › other test'
+    )
+  })
+
+  it('combines attempt to fix and dynamic name sections into one session report', () => {
+    const executions = new Map()
+    const newTestsWithDynamicNames = new Set(['dynamic-suite.js › dynamic test 123'])
+    const consoleWarn = sinon.stub(console, 'warn')
+
+    recordAttemptToFixExecution(executions, {
+      testSuite: 'suite.js',
+      testName: 'passes',
+      status: 'pass',
+    })
+
+    try {
+      logTestOptimizationSummary({ attemptToFixExecutions: executions, newTestsWithDynamicNames })
+    } finally {
+      consoleWarn.restore()
+    }
+
+    assert.strictEqual(consoleWarn.callCount, 1)
+    assert.strictEqual(executions.size, 0)
+    assert.strictEqual(newTestsWithDynamicNames.size, 0)
+    assert.match(consoleWarn.firstCall.args[0], /Attempt to fix passed/)
+    assert.match(consoleWarn.firstCall.args[0], /dynamic-suite\.js › dynamic test 123/)
   })
 })
 

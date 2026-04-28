@@ -3,7 +3,12 @@
 // Capture real timers at module load time, before any test can install fake timers.
 const realSetTimeout = setTimeout
 
-const { getTestSuitePath, DYNAMIC_NAME_RE } = require('../../../dd-trace/src/plugins/util/test')
+const {
+  getTestSuitePath,
+  DYNAMIC_NAME_RE,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+} = require('../../../dd-trace/src/plugins/util/test')
 const { channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 
@@ -30,6 +35,8 @@ const newTestsWithDynamicNames = new Set()
 const testsAttemptToFix = new Set()
 const testsQuarantined = new Set()
 const testsStatuses = new Map()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 
 function getAfterEachHooks (testOrHook) {
   const hooks = []
@@ -229,6 +236,13 @@ function getOnTestHandler (isMain) {
     if (testInfo.hasDynamicName) {
       newTestsWithDynamicNames.add(`${getTestSuitePath(test.file, process.cwd())} › ${test.fullTitle()}`)
     }
+    if (isAttemptToFix) {
+      logAttemptToFixTestExecution(
+        getTestSuitePath(test.file, process.cwd()),
+        test.fullTitle(),
+        loggedAttemptToFixTests
+      )
+    }
     // We want to store the result of the new tests
     if (isNew) {
       const testFullName = getTestFullName(test)
@@ -375,6 +389,17 @@ function getOnTestEndHandler (config) {
       isDisabled: _ddIsDisabled,
     })
 
+    if (_ddIsAttemptToFix) {
+      recordAttemptToFixExecution(attemptToFixExecutions, {
+        testSuite: getTestSuitePath(test.file, process.cwd()),
+        testName: test.fullTitle(),
+        status,
+        error: ctx?.err || test.err,
+        isQuarantined: _ddIsQuarantined,
+        isDisabled: _ddIsDisabled,
+      })
+    }
+
     // If there are afterEach to be run, we don't finish the test yet.
     // Disabled tests (marked pending by us) are finished immediately without waiting for afterEach hooks.
     // In older mocha versions, pending tests don't run afterEach hooks, so we can't rely on
@@ -451,6 +476,16 @@ function getOnFailHandler (isMain) {
         err.message = `${testOrHook.fullTitle()}: ${err.message}`
         testContext.err = err
         errorCh.runStores(testContext, () => {})
+        if (test?._ddIsAttemptToFix) {
+          recordAttemptToFixExecution(attemptToFixExecutions, {
+            testSuite: getTestSuitePath(test.file, process.cwd()),
+            testName: test.fullTitle(),
+            status: 'fail',
+            error: err,
+            isQuarantined: test._ddIsQuarantined,
+            isDisabled: test._ddIsDisabled,
+          })
+        }
         // if it's a hook and it has failed, 'test end' will not be called
         // quarantined and disabled tests always report 'skip'
         // as final status, even when hooks fail
@@ -627,4 +662,6 @@ module.exports = {
   testsQuarantined,
   testsAttemptToFix,
   testsStatuses,
+  attemptToFixExecutions,
+  loggedAttemptToFixTests,
 }

@@ -12,7 +12,11 @@ const {
   VITEST_WORKER_LOGS_PAYLOAD_CODE,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
-  logDynamicNamesWarning,
+  getTestSuitePath,
+  recordAttemptToFixExecution,
+  collectAttemptToFixExecutionsFromTraces,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -57,6 +61,8 @@ const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
 const modifiedTasks = new WeakSet()
+const attemptToFixExecutions = new Map()
+const loggedAttemptToFixTests = new Set()
 let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
@@ -480,7 +486,8 @@ function getFinishWrapper (exitOrClose) {
       onFinish,
     })
 
-    logDynamicNamesWarning(newTestsWithDynamicNames)
+    logTestOptimizationSummary({ attemptToFixExecutions, newTestsWithDynamicNames })
+    loggedAttemptToFixTests.clear()
 
     await flushPromise
 
@@ -543,6 +550,7 @@ function threadHandler (thread) {
     if (message.__tinypool_worker_message__ && message.data) {
       if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
         collectDynamicNamesFromTraces(message.data, newTestsWithDynamicNames)
+        collectAttemptToFixExecutionsFromTraces(message.data, attemptToFixExecutions)
         workerReportTraceCh.publish(message.data)
       } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
         workerReportLogsCh.publish(message.data)
@@ -585,6 +593,7 @@ function getWrappedOn (on) {
         const [interprocessCode, data] = message
         if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
           collectDynamicNamesFromTraces(data, newTestsWithDynamicNames)
+          collectAttemptToFixExecutionsFromTraces(data, attemptToFixExecutions)
           workerReportTraceCh.publish(data)
         } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
           workerReportLogsCh.publish(data)
@@ -893,6 +902,14 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
     taskToCtx.set(task, ctx)
 
+    if (attemptToFixTasks.has(task)) {
+      logAttemptToFixTestExecution(
+        getTestSuitePath(task.file.filepath, process.cwd()),
+        testName,
+        loggedAttemptToFixTests
+      )
+    }
+
     testStartCh.runStores(ctx, () => {})
 
     // Wrap the test function so it runs inside the test span context.
@@ -968,6 +985,17 @@ function wrapVitestTestRunner (VitestTestRunner) {
             attemptToFixFailed = true
           }
         }
+      }
+
+      if (attemptToFixTasks.has(task)) {
+        recordAttemptToFixExecution(attemptToFixExecutions, {
+          testSuite: getTestSuitePath(task.file.filepath, process.cwd()),
+          testName: getTestName(task),
+          status,
+          error: task.result?.errors?.[0],
+          isQuarantined: quarantinedTasks.has(task),
+          isDisabled: disabledTasks.has(task),
+        })
       }
 
       if (ctx) {

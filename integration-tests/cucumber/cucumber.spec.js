@@ -2592,9 +2592,38 @@ describe(`cucumber@${version} commonJS`, () => {
           stdout += data.toString()
         })
 
+        childProcess.stderr?.on('data', (data) => {
+          stdout += data.toString()
+        })
+
         childProcess.on('exit', exitCode => {
           testAssertions.then(() => {
             assert.match(stdout, /I am running/)
+            if (isAttemptToFix) {
+              assert.match(stdout, /Datadog Test Optimization: attempting to fix .*Say attempt to fix/)
+              assert.strictEqual(
+                (stdout.match(
+                  /Datadog Test Optimization: attempting to fix .*Say attempt to fix/g
+                ) || []).length,
+                1
+              )
+              assert.match(stdout, /Datadog Test Optimization/)
+              if (shouldAlwaysPass) {
+                assert.match(stdout, /Attempt to fix passed/)
+              } else {
+                assert.match(stdout, /Attempt to fix failed/)
+                assert.match(
+                  stdout,
+                  shouldFailSometimes ? /execution(?:s)? [\d, -]+:/ : /execution(?:s)? 1(?:-\d+)?:/
+                )
+              }
+              if (isQuarantined) {
+                assert.match(stdout, /Errors are suppressed because this test is quarantined\./)
+              }
+              if (isDisabled) {
+                assert.match(stdout, /Errors are suppressed because this test is disabled\./)
+              }
+            }
             if (isQuarantined || isDisabled || shouldAlwaysPass) {
               assert.strictEqual(exitCode, 0)
             } else {

@@ -15,8 +15,8 @@ let isModifiedTest = false
 let isTestIsolationEnabled = false
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
-// Track quarantined test errors - we catch them in Cypress.on('fail') but need to report to Datadog
-const quarantinedTestErrors = new Map()
+// Track test errors suppressed by test management so we can still report them to Datadog.
+const suppressedTestFailures = new Map()
 
 // Track the most recently loaded window in the AUT. Updated via the 'window:load'
 // event so we always get the real app window (after cy.visit()), not the
@@ -67,7 +67,7 @@ Cypress.on('fail', (err, runnable) => {
   // This applies regardless of attempt-to-fix status: per spec, quarantined/disabled test
   // results are always ignored.
   if (isQuarantined || isDisabled) {
-    quarantinedTestErrors.set(testName, err)
+    suppressedTestFailures.set(testName, { error: err, isQuarantined, isDisabled })
     return
   }
 
@@ -245,13 +245,14 @@ afterEach(function () {
   const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
   const testName = currentTest.fullTitle()
 
-  // Check if this was a quarantined test that we suppressed the failure for
-  const quarantinedError = quarantinedTestErrors.get(testName)
-  const isQuarantinedTestThatFailed = !!quarantinedError
+  // Check if this was a test management test that we suppressed the failure for.
+  const suppressedTestFailure = suppressedTestFailures.get(testName)
+  const suppressedError = suppressedTestFailure && suppressedTestFailure.error
+  const isTestManagementTestThatFailed = !!suppressedError
 
-  // For quarantined tests, convert Error to a serializable format for cy.task
-  const errorToReport = isQuarantinedTestThatFailed
-    ? { message: quarantinedError.message, stack: quarantinedError.stack }
+  // For suppressed test management tests, convert Error to a serializable format for cy.task.
+  const errorToReport = isTestManagementTestThatFailed
+    ? { message: suppressedError.message, stack: suppressedError.stack }
     : currentTest.err
 
   const testInfo = {
@@ -259,16 +260,17 @@ afterEach(function () {
     testItTitle: currentTest.title,
     testSuite: Cypress.mocha.getRootSuite().file,
     testSuiteAbsolutePath: Cypress.spec && Cypress.spec.absolute,
-    // For quarantined tests, report the actual state (failed) to Datadog, not what Cypress thinks (passed)
-    state: isQuarantinedTestThatFailed ? 'failed' : currentTest.state,
-    // For quarantined tests, include the actual error that was suppressed
+    // Report the actual failed state to Datadog, not the pass state Cypress sees after suppression.
+    state: isTestManagementTestThatFailed ? 'failed' : currentTest.state,
+    // Include the actual error that was suppressed.
     error: errorToReport,
     isNew: currentTest._ddIsNew,
     isEfdRetry: currentTest._ddIsEfdRetry,
     isAttemptToFix: currentTest._ddIsAttemptToFix,
     isModified: currentTest._ddIsModified,
-    // Mark quarantined tests that failed so the plugin knows to tag them appropriately
-    isQuarantined: isQuarantinedTestThatFailed,
+    // Mark suppressed tests so the plugin can tag them with the correct test management reason.
+    isQuarantined: isTestManagementTestThatFailed && suppressedTestFailure.isQuarantined,
+    isDisabled: isTestManagementTestThatFailed && suppressedTestFailure.isDisabled,
   }
   try {
     const invocationDetails = Cypress.mocha.getRunner().currentRunnable.invocationDetails
@@ -292,9 +294,9 @@ afterEach(function () {
     // ignore error and continue
   }
 
-  // Clean up the quarantined error tracking
-  if (isQuarantinedTestThatFailed) {
-    quarantinedTestErrors.delete(testName)
+  // Clean up the suppressed error tracking.
+  if (isTestManagementTestThatFailed) {
+    suppressedTestFailures.delete(testName)
   }
 
   cy.task('dd:afterEach', { test: testInfo, coverage })
