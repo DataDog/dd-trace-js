@@ -65,7 +65,7 @@ temporaryWarningExceptions.add = (warning) => {
 }
 
 process.on('warning', (warning) => {
-  if (warning.name === 'MaxListenersExceededWarning' && !warning.message.includes('[Runner]')) {
+  if (warning.name === 'MaxListenersExceededWarning') {
     throw warning
   }
   if (temporaryWarningExceptions.has(warning.message)) {

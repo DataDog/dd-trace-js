@@ -15,6 +15,8 @@ describe('FlaggingProvider', () => {
   let mockChannel
   let log
   let channelStub
+  let mockEvalMetricsHook
+  let mockEvalMetricsHookClass
 
   beforeEach(() => {
     mockTracer = {
@@ -45,11 +47,17 @@ describe('FlaggingProvider', () => {
       warn: sinon.spy(),
     }
 
+    mockEvalMetricsHook = {
+      record: sinon.spy(),
+    }
+    mockEvalMetricsHookClass = sinon.stub().returns(mockEvalMetricsHook)
+
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
       '../log': log,
+      './eval-metrics-hook': mockEvalMetricsHookClass,
     })
   })
 
@@ -93,6 +101,21 @@ describe('FlaggingProvider', () => {
 
       provider._setConfiguration(null)
       provider._setConfiguration(undefined)
+    })
+  })
+
+  describe('hooks', () => {
+    it('should create EvalMetricsHook with config', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledOnceWithExactly(mockEvalMetricsHookClass, mockConfig)
+    })
+
+    it('should register EvalMetricsHook as a hook', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      assert.strictEqual(provider.hooks.length, 1)
+      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
     })
   })
 
