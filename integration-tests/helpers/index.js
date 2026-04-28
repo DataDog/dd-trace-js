@@ -561,7 +561,10 @@ async function createSandbox (
     addFlags.push('--silent')
   }
 
-  execHelper(`${BUN} add ${cappedDependencies.join(' ')} ${addFlags.join(' ')}`, addOptions)
+  if (cappedDependencies.length > 0) {
+    execHelper(`${BUN} add ${cappedDependencies.join(' ')} ${addFlags.join(' ')}`, addOptions)
+  }
+
   execHelper(`${BUN} add file:${out} ${[...addFlags, '--ignore-scripts'].join(' ')}`, addOptions)
 
   if (process.platform === 'win32') {
