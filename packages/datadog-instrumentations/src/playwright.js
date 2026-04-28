@@ -89,7 +89,7 @@ let testManagementAttemptToFixRetries = 0
 let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
-// ITR / TIA (Node-side V8 coverage)
+// TIA (Node-side V8 coverage)
 let isCodeCoverageEnabledForRun = false
 let isSuitesSkippingEnabledForRun = false
 let suitesToSkip = []
@@ -748,7 +748,7 @@ function dispatcherRunWrapperNew (run) {
       testGroups = testGroups.filter(group => group.tests.length > 0)
     }
 
-    // Filter out ITR-skipped test files so workers never execute them.
+    // Filter out TIA-skipped test files so workers never execute them.
     if (isSuitesSkippingEnabledForRun) {
       for (const group of testGroups) {
         group.tests = group.tests.filter(test => !test._ddIsSkippedByItr)

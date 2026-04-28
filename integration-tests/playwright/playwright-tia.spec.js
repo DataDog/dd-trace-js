@@ -122,7 +122,7 @@ versions.forEach((version) => {
       await receiver.stop()
     })
 
-    contextNewVersions('intelligent test runner', () => {
+    contextNewVersions('test impact analysis', () => {
       it('skips test files reported by the skippable API and still reports code coverage', async () => {
         setTiaSettings(receiver)
         receiver.setSuitesToSkip([{
@@ -298,7 +298,7 @@ versions.forEach((version) => {
         }
       })
 
-      it('keeps tests_skipped false if only unskippable suites are returned by ITR', async () => {
+      it('keeps tests_skipped false if only unskippable suites are returned by TIA', async () => {
         setTiaSettings(receiver)
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -359,7 +359,7 @@ versions.forEach((version) => {
         }
       })
 
-      it('only sets forced to run if the unskippable suite was going to be skipped by ITR', async () => {
+      it('only sets forced to run if the unskippable suite was going to be skipped by TIA', async () => {
         setTiaSettings(receiver)
         receiver.setSuitesToSkip([{
           type: 'suite',
@@ -430,7 +430,7 @@ versions.forEach((version) => {
         }
       })
 
-      it('sets _dd.ci.itr.tests_skipped to false if the received suite is not skipped', async () => {
+      it('sets _dd.ci.itr.tests_skipped to false if TIA receives a suite that is not skipped', async () => {
         setTiaSettings(receiver)
         receiver.setSuitesToSkip([{
           type: 'suite',
