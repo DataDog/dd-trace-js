@@ -1,12 +1,14 @@
 'use strict'
 
 const assert = require('assert')
+const dc = require('node:diagnostics_channel')
+const events = require('node:events')
 const fs = require('fs')
 const { platform } = require('os')
 const path = require('path')
 const util = require('util')
 
-const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it, Runner } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
 require('./core')
@@ -19,6 +21,11 @@ const { SVC_SRC_KEY } = require('../../src/constants')
 const extraServices = require('../../src/service-naming/extra-services')
 const { storage } = require('../../../datadog-core')
 const { getInstrumentation } = require('./helpers/load-inst')
+
+// dd-trace's mocha CI Visibility hook adds extra Runner listeners.
+if (dc.channel('ci:mocha:test:finish').hasSubscribers) {
+  Runner.prototype.setMaxListeners(events.defaultMaxListeners + 2)
+}
 
 const NODE_PATH_SEP = platform() === 'win32' ? ';' : ':'
 
