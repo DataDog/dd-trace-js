@@ -1,5 +1,6 @@
 'use strict'
 
+const fs = require('node:fs')
 const http = require('node:http')
 const https = require('node:https')
 const { SourceMap } = require('node:module')
@@ -13,6 +14,11 @@ const SOURCE_MAP_PRAGMA_RE = /\/\/[#@]\s*sourceMappingURL=([^\s'"]+)/
 // Cache per-bundle URL work so per-test snapshots do not repeatedly fetch
 // the same bundle or source map.
 const BUNDLE_CACHE = new Map()
+const BASE64_DIGITS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+const BASE64_VALUES = new Int8Array(128).fill(-1)
+for (let i = 0; i < BASE64_DIGITS.length; i++) {
+  BASE64_VALUES[BASE64_DIGITS.charCodeAt(i)] = i
+}
 
 function fetchText (url, timeoutMs = 3000, redirects = 3) {
   return new Promise((resolve, reject) => {
@@ -116,6 +122,114 @@ function offsetToPosition (lineStarts, offset) {
   return { line: lo, column: offset - lineStarts[lo] }
 }
 
+function decodeVlq (mappings, index) {
+  let result = 0
+  let shift = 0
+  let continuation
+  do {
+    const value = BASE64_VALUES[mappings.charCodeAt(index++)]
+    continuation = value & 32
+    result += (value & 31) << shift
+    shift += 5
+  } while (continuation)
+
+  const shouldNegate = result & 1
+  result >>>= 1
+  return {
+    index,
+    value: shouldNegate ? -result : result,
+  }
+}
+
+function decodeMappings (mappings) {
+  const lines = []
+  let line = []
+  let generatedColumn = 0
+  let sourceIndex = 0
+  let originalLine = 0
+  let originalColumn = 0
+  let nameIndex = 0
+
+  for (let index = 0; index < mappings.length;) {
+    const char = mappings[index]
+    if (char === ';') {
+      lines.push(line)
+      line = []
+      generatedColumn = 0
+      index++
+      continue
+    }
+    if (char === ',') {
+      index++
+      continue
+    }
+
+    let decoded = decodeVlq(mappings, index)
+    generatedColumn += decoded.value
+    index = decoded.index
+
+    if (index >= mappings.length || mappings[index] === ',' || mappings[index] === ';') {
+      line.push({ generatedColumn })
+      continue
+    }
+
+    decoded = decodeVlq(mappings, index)
+    sourceIndex += decoded.value
+    index = decoded.index
+
+    decoded = decodeVlq(mappings, index)
+    originalLine += decoded.value
+    index = decoded.index
+
+    decoded = decodeVlq(mappings, index)
+    originalColumn += decoded.value
+    index = decoded.index
+
+    if (index < mappings.length && mappings[index] !== ',' && mappings[index] !== ';') {
+      decoded = decodeVlq(mappings, index)
+      nameIndex += decoded.value
+      index = decoded.index
+    }
+
+    line.push({
+      generatedColumn,
+      sourceIndex,
+      originalLine,
+      originalColumn,
+      nameIndex,
+    })
+  }
+  lines.push(line)
+  return lines
+}
+
+function getSegmentsForRange (decodedMappings, start, end) {
+  const segments = []
+  for (let line = start.line; line <= end.line; line++) {
+    const lineSegments = decodedMappings[line]
+    if (!lineSegments?.length) continue
+
+    const startColumn = line === start.line ? start.column : 0
+    const endColumn = line === end.line ? end.column : Infinity
+    let activeSegment = null
+
+    for (const segment of lineSegments) {
+      if (segment.generatedColumn <= startColumn) {
+        activeSegment = segment
+        continue
+      }
+      if (segment.generatedColumn > endColumn) {
+        break
+      }
+      segments.push(segment)
+    }
+    if (activeSegment) {
+      segments.push(activeSegment)
+    }
+  }
+  return segments
+}
+
 async function getBundleInfo (entry) {
   const bundleUrl = entry.url
   const cached = BUNDLE_CACHE.get(bundleUrl)
@@ -143,6 +257,8 @@ async function getBundleInfo (entry) {
           info = {
             ...info,
             sourceMap: new SourceMap(loadedMap.mapJson),
+            decodedMappings: decodeMappings(loadedMap.mapJson.mappings),
+            sources: loadedMap.mapJson.sources || [],
             lineStarts: computeLineStarts(source),
             sourceRoot: loadedMap.mapJson.sourceRoot || '',
             mapUrl: loadedMap.mapUrl,
@@ -176,11 +292,25 @@ function stripLeadingParentSegments (filePath) {
   return filePath.replace(/^(\.\.\/)+/, '')
 }
 
+/**
+ * Canonicalize filesystem paths before comparing them to the repository root.
+ *
+ * @param {string} filePath
+ * @returns {string}
+ */
+function realpathSync (filePath) {
+  try {
+    return fs.realpathSync.native(filePath)
+  } catch {
+    return filePath
+  }
+}
+
 function toRepositoryRelativePath (filePath, repositoryRoot) {
-  const normalizedPath = toPosixPath(filePath)
+  const normalizedPath = toPosixPath(realpathSync(filePath))
   if (!repositoryRoot) return normalizedPath.replace(/^\/+/, '')
 
-  const normalizedRoot = toPosixPath(repositoryRoot).replace(/\/+$/, '')
+  const normalizedRoot = toPosixPath(realpathSync(repositoryRoot)).replace(/\/+$/, '')
   if (normalizedPath === normalizedRoot) return path.basename(normalizedRoot)
   if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
     return normalizedPath.slice(normalizedRoot.length + 1)
@@ -315,13 +445,17 @@ async function resolveCoverageToSourceFiles (coverages, options = {}) {
       continue
     }
 
-    const { sourceMap, lineStarts } = info
+    const { decodedMappings, lineStarts, sources } = info
     for (let j = 0; j < ranges.length; j += 2) {
       const startOffset = ranges[j]
-      const { line, column } = offsetToPosition(lineStarts, startOffset)
-      const hit = sourceMap.findEntry(line, column)
-      if (hit?.originalSource) {
-        const normalized = normalizeSource(hit.originalSource, {
+      const endOffset = ranges[j + 1]
+      const start = offsetToPosition(lineStarts, startOffset)
+      const end = offsetToPosition(lineStarts, Math.max(startOffset, endOffset - 1))
+      const segments = getSegmentsForRange(decodedMappings, start, end)
+      for (const segment of segments) {
+        const originalSource = sources[segment.sourceIndex]
+        if (!originalSource) continue
+        const normalized = normalizeSource(originalSource, {
           bundleUrl: url,
           mapUrl: info.mapUrl,
           sourceRoot: info.sourceRoot,

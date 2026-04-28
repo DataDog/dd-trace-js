@@ -116,10 +116,8 @@ class PlaywrightPlugin extends CiPlugin {
       if (isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
       }
-      if (isCodeCoverageEnabled) {
-        this.testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, 'true')
-        this.testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, 'true')
-      }
+      this.testSessionSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
+      this.testModuleSpan.setTag(TEST_CODE_COVERAGE_ENABLED, isCodeCoverageEnabled ? 'true' : 'false')
       if (isSuitesSkippingEnabled) {
         this.testSessionSpan.setTag(TEST_ITR_SKIPPING_ENABLED, 'true')
         this.testModuleSpan.setTag(TEST_ITR_SKIPPING_ENABLED, 'true')

@@ -1,7 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const {
   normalizeSource,
@@ -49,6 +52,30 @@ describe('ci-visibility/code-coverage/source-map-resolver', () => {
         'src/app.js',
       ])
     })
+
+    it('canonicalizes symlinked file URLs before comparing with the repository root', function () {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-source-map-resolver-'))
+      try {
+        const repositoryRoot = path.join(tempRoot, 'repo')
+        const symlinkRoot = path.join(tempRoot, 'repo-link')
+        const sourceFile = path.join(repositoryRoot, 'src', 'app.ts')
+        fs.mkdirSync(path.dirname(sourceFile), { recursive: true })
+        fs.writeFileSync(sourceFile, '')
+        fs.symlinkSync(repositoryRoot, symlinkRoot, 'dir')
+
+        assert.strictEqual(
+          normalizeSource(pathToFileURL(path.join(symlinkRoot, 'src', 'app.ts')).toString(), { repositoryRoot }),
+          'src/app.ts'
+        )
+      } catch (err) {
+        if (err.code === 'EPERM' || err.code === 'EACCES') {
+          this.skip()
+        }
+        throw err
+      } finally {
+        fs.rmSync(tempRoot, { recursive: true, force: true })
+      }
+    })
   })
 
   describe('resolveCoverageToSourceFiles', () => {
@@ -72,6 +99,31 @@ describe('ci-visibility/code-coverage/source-map-resolver', () => {
       }], { repositoryRoot })
 
       assert.deepStrictEqual(files, ['src/greeting.js'])
+    })
+
+    it('reports every original source touched by a generated coverage range', async () => {
+      const repositoryRoot = path.join('/Users', 'me', 'repo')
+      const source = [
+        'function greet(){return "hi"}function add(a,b){return a+b}greet();add(1,2);',
+        `//# sourceMappingURL=${inlineMap({
+          version: 3,
+          file: 'bundle.js',
+          sources: [
+            `file://${repositoryRoot}/src/greeting.ts`,
+            `file://${repositoryRoot}/src/math.ts`,
+          ],
+          names: [],
+          mappings: 'AAAA,+CCAA',
+        })}`,
+      ].join('\n')
+
+      const files = await resolveCoverageToSourceFiles([{
+        url: 'http://localhost:3000/assets/bundle.js',
+        source,
+        ranges: [0, source.indexOf('\n')],
+      }], { repositoryRoot })
+
+      assert.deepStrictEqual(files.sort(), ['src/greeting.ts', 'src/math.ts'])
     })
 
     it('falls back to URL paths only when there is no source map to resolve', async () => {

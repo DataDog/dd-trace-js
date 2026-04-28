@@ -2,6 +2,7 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
+const { pathToFileURL } = require('node:url')
 const { exec, execSync } = require('child_process')
 const path = require('path')
 const fs = require('fs')
@@ -52,6 +53,7 @@ const {
   TEST_BROWSER_VERSION,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
+  TEST_CODE_COVERAGE_ENABLED,
   DD_CAPABILITIES_IMPACTED_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
@@ -66,6 +68,37 @@ const NUM_RETRIES_EFD = 3
 const latest = 'latest'
 const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
 const versions = [oldest, latest]
+
+function getCoverageFilenames (payloads) {
+  return payloads
+    .flatMap(({ payload }) => payload)
+    .flatMap(({ content: { coverages } }) => coverages)
+    .flatMap(({ files }) => files)
+    .map(({ filename }) => filename)
+}
+
+function assertCoverageIncludes (coveredFiles, expectedFiles) {
+  for (const filename of expectedFiles) {
+    assert.ok(coveredFiles.includes(filename), `Expected coverage files ${coveredFiles} to include ${filename}`)
+  }
+}
+
+function getBundledSourceMapSources (cwd, sourceRoot = 'ci-visibility/web-app-src') {
+  return ['greeting.ts', 'math.ts'].map(filename =>
+    pathToFileURL(path.join(cwd, sourceRoot, filename)).toString()
+  )
+}
+
+function listen (server) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, (err) => {
+      server.off('error', reject)
+      if (err) return reject(err)
+      resolve(server.address().port)
+    })
+  })
+}
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
@@ -1069,7 +1102,7 @@ versions.forEach((version) => {
     })
 
     contextNewVersions('intelligent test runner', () => {
-      it('skips test files reported by the skippable API', (done) => {
+      it('skips test files reported by the skippable API and still reports code coverage', async () => {
         receiver.setSettings({
           itr_enabled: true,
           code_coverage: true,
@@ -1080,9 +1113,29 @@ versions.forEach((version) => {
         receiver.setSuitesToSkip([{
           type: 'suite',
           attributes: {
-            suite: 'ci-visibility/playwright-tests/landing-page-test.js',
+            suite: 'ci-visibility/playwright-tests-zero-config-tia/skipped-test.js',
           },
         }])
+
+        const zeroConfigWebAppServer = createWebAppServer({
+          skipIstanbulFixture: true,
+          bundledSourceMapSources: getBundledSourceMapSources(cwd),
+        })
+        const zeroConfigWebAppPort = await listen(zeroConfigWebAppServer)
+
+        const coveragePromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+            const coveredFiles = getCoverageFilenames(payloads)
+
+            assertCoverageIncludes(coveredFiles, [
+              'ci-visibility/web-app-src/greeting.ts',
+              'ci-visibility/web-app-src/math.ts',
+              'ci-visibility/playwright-tests-zero-config-tia/covered-test.js',
+            ])
+            assert.ok(!coveredFiles.includes('ci-visibility/playwright-tests-zero-config-tia/skipped-test.js'))
+            assert.ok(!coveredFiles.some(filename => filename.endsWith('/bundle.js') || filename === 'bundle.js'))
+            assert.ok(coveredFiles.every(filename => !path.isAbsolute(filename)))
+          }, 60000)
 
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
@@ -1090,9 +1143,9 @@ versions.forEach((version) => {
 
             const skippedSuite = events.find(event =>
               event.type === 'test_suite_end' &&
-              event.content.resource === 'test_suite.ci-visibility/playwright-tests/landing-page-test.js'
+              event.content.resource === 'test_suite.ci-visibility/playwright-tests-zero-config-tia/skipped-test.js'
             )
-            assert.ok(skippedSuite, 'landing-page-test.js should be reported as a skipped suite')
+            assert.ok(skippedSuite, 'skipped-test.js should be reported as a skipped suite')
             assert.strictEqual(skippedSuite.content.meta[TEST_STATUS], 'skip')
             assert.strictEqual(skippedSuite.content.meta['test.skipped_by_itr'], 'true')
 
@@ -1103,24 +1156,30 @@ versions.forEach((version) => {
             assert.strictEqual(testSession.metrics['test.itr.tests_skipping.count'], 1)
           }, 60000)
 
-        childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests',
-            },
-          }
-        )
+        try {
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${zeroConfigWebAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-zero-config-tia',
+              },
+            }
+          )
 
-        childProcess.on('exit', () => {
-          eventsPromise.then(() => done()).catch(done)
-        })
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+            coveragePromise,
+          ])
+        } finally {
+          await new Promise(resolve => zeroConfigWebAppServer.close(resolve))
+        }
       })
 
-      it('reports zero-config browser code coverage for web app source files', async () => {
+      it('reports zero-config browser code coverage for bundled TypeScript web app source files', async () => {
         receiver.setSettings({
           itr_enabled: true,
           code_coverage: true,
@@ -1129,29 +1188,23 @@ versions.forEach((version) => {
           early_flake_detection: { enabled: false },
         })
 
-        const zeroConfigWebAppServer = createWebAppServer({ skipIstanbulFixture: true })
-        const zeroConfigWebAppPort = await new Promise((resolve, reject) => {
-          zeroConfigWebAppServer.once('error', reject)
-          zeroConfigWebAppServer.listen(0, (err) => {
-            zeroConfigWebAppServer.off('error', reject)
-            if (err) return reject(err)
-            resolve(zeroConfigWebAppServer.address().port)
-          })
+        const zeroConfigWebAppServer = createWebAppServer({
+          skipIstanbulFixture: true,
+          bundledSourceMapSources: getBundledSourceMapSources(cwd),
         })
+        const zeroConfigWebAppPort = await listen(zeroConfigWebAppServer)
 
         const coveragePromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
-            const coveredFiles = payloads
-              .flatMap(({ payload }) => payload)
-              .flatMap(({ content: { coverages } }) => coverages)
-              .flatMap(({ files }) => files)
-              .map(({ filename }) => filename)
+            const coveredFiles = getCoverageFilenames(payloads)
 
-            assertObjectContains(coveredFiles, [
-              'src/greeting.js',
-              'src/math.js',
+            assertCoverageIncludes(coveredFiles, [
+              'ci-visibility/web-app-src/greeting.ts',
+              'ci-visibility/web-app-src/math.ts',
               'ci-visibility/playwright-tests-test-capabilities/passing-test.js',
             ])
+            assert.ok(!coveredFiles.some(filename => filename.endsWith('/bundle.js') || filename === 'bundle.js'))
+            assert.ok(coveredFiles.every(filename => !path.isAbsolute(filename)))
           }, 60000)
 
         childProcess = exec(
@@ -1167,6 +1220,160 @@ versions.forEach((version) => {
         )
 
         try {
+          await Promise.all([
+            once(childProcess, 'exit'),
+            coveragePromise,
+          ])
+        } finally {
+          await new Promise(resolve => zeroConfigWebAppServer.close(resolve))
+        }
+      })
+
+      it('does not report zero-config browser code coverage if disabled by the API', async () => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+
+        const coverageRequests = []
+        const onMessage = message => {
+          if (message.url?.endsWith('/api/v2/citestcov')) {
+            coverageRequests.push(message)
+          }
+        }
+        receiver.on('message', onMessage)
+
+        const zeroConfigWebAppServer = createWebAppServer({
+          skipIstanbulFixture: true,
+          bundledSourceMapSources: getBundledSourceMapSources(cwd),
+        })
+        const zeroConfigWebAppPort = await listen(zeroConfigWebAppServer)
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            assert.strictEqual(testSession.meta[TEST_CODE_COVERAGE_ENABLED], 'false')
+          }, 60000)
+
+        try {
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${zeroConfigWebAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-test-capabilities',
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+          assert.deepStrictEqual(coverageRequests, [])
+        } finally {
+          receiver.off('message', onMessage)
+          await new Promise(resolve => zeroConfigWebAppServer.close(resolve))
+        }
+      })
+
+      it('reports zero-config browser code coverage with multiple workers', async () => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+
+        const zeroConfigWebAppServer = createWebAppServer({
+          skipIstanbulFixture: true,
+          bundledSourceMapSources: getBundledSourceMapSources(cwd),
+        })
+        const zeroConfigWebAppPort = await listen(zeroConfigWebAppServer)
+
+        const coveragePromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+            const coveredFiles = getCoverageFilenames(payloads)
+
+            assertCoverageIncludes(coveredFiles, [
+              'ci-visibility/web-app-src/greeting.ts',
+              'ci-visibility/web-app-src/math.ts',
+              'ci-visibility/playwright-tests-zero-config-tia/covered-test.js',
+              'ci-visibility/playwright-tests-zero-config-tia/skipped-test.js',
+            ])
+            assert.ok(coveredFiles.every(filename => !path.isAbsolute(filename)))
+          }, 60000)
+
+        try {
+          childProcess = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                FULLY_PARALLEL: 'true',
+                PLAYWRIGHT_WORKERS: '2',
+                PW_BASE_URL: `http://localhost:${zeroConfigWebAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-zero-config-tia',
+              },
+            }
+          )
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            coveragePromise,
+          ])
+        } finally {
+          await new Promise(resolve => zeroConfigWebAppServer.close(resolve))
+        }
+      })
+
+      it('reports zero-config browser code coverage relative to the repository root', async () => {
+        receiver.setSettings({
+          itr_enabled: true,
+          code_coverage: true,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: { enabled: false },
+        })
+
+        const zeroConfigWebAppServer = createWebAppServer({
+          skipIstanbulFixture: true,
+          bundledSourceMapSources: getBundledSourceMapSources(cwd, 'ci-visibility/subproject/src'),
+        })
+        const zeroConfigWebAppPort = await listen(zeroConfigWebAppServer)
+
+        const coveragePromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcov'), (payloads) => {
+            const coveredFiles = getCoverageFilenames(payloads)
+
+            assertCoverageIncludes(coveredFiles, [
+              'ci-visibility/subproject/src/greeting.ts',
+              'ci-visibility/subproject/src/math.ts',
+              'ci-visibility/subproject/playwright-tests/landing-page-test.js',
+            ])
+            assert.ok(coveredFiles.every(filename => !path.isAbsolute(filename)))
+          }, 60000)
+
+        try {
+          childProcess = exec(
+            '../../node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd: `${cwd}/ci-visibility/subproject`,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${zeroConfigWebAppPort}`,
+              },
+            }
+          )
+
           await Promise.all([
             once(childProcess, 'exit'),
             coveragePromise,

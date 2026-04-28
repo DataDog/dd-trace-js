@@ -16,10 +16,6 @@ const {
   logDynamicNamesWarning,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
-  startV8Coverage,
-  getV8CoverageCollector,
-} = require('../../dd-trace/src/ci-visibility/code-coverage/v8-coverage')
-const {
   resolveCoverageToSourceFiles,
   resetCache: resetCoverageSourceMapCache,
 } = require('../../dd-trace/src/ci-visibility/code-coverage/source-map-resolver')
@@ -1390,16 +1386,6 @@ addHook({
             [PLAYWRIGHT_BROWSER_COVERAGE_REPOSITORY_ROOT_ENV]: repositoryRoot,
           }
         : {}),
-      // Enable V8 precise coverage in the worker when the backend has
-      // turned on code coverage / TIA **and** the user has opted in with
-      // DD_CIVISIBILITY_V8_COVERAGE_WORKERS=1. Playwright's app code runs
-      // in the browser, so Node-side coverage is only meaningful for
-      // tests that exercise Node helpers/fixtures; we keep it opt-in to
-      // avoid adding inspector overhead to browser-heavy suites.
-      ...(isCodeCoverageEnabledForRun &&
-        isTrue(getValueFromEnvSources('DD_CIVISIBILITY_V8_COVERAGE_WORKERS'))
-        ? { DD_CIVISIBILITY_V8_COVERAGE_WORKERS: '1' }
-        : {}),
     }
 
     const res = await startRunner.apply(this, arguments)
@@ -1470,13 +1456,6 @@ addHook({
   let steps = []
   const stepInfoByStepId = {}
 
-  // Lazy V8 coverage startup in the worker. Controlled by the main process
-  // via the DD_CIVISIBILITY_V8_COVERAGE_WORKERS env var set on the worker's
-  // `_extraEnv` after the main fetched the library configuration.
-  let workerV8Collector = null
-  if (isTrue(getValueFromEnvSources('DD_CIVISIBILITY_V8_COVERAGE_WORKERS'))) {
-    workerV8Collector = getV8CoverageCollector() || startV8Coverage()
-  }
   const isBrowserCoverageEnabled = isBrowserCoverageEnabledForWorker()
 
   shimmer.wrap(workerPackage.WorkerMain.prototype, '_runTest', _runTest => async function (test) {
@@ -1490,10 +1469,6 @@ addHook({
         pageStatesByPage: new WeakMap(),
       }
     }
-
-    // Reset the V8 coverage baseline so the delta we compute after the test
-    // reflects only what this test touched.
-    if (workerV8Collector) workerV8Collector.resetBaseline()
 
     const {
       _requireFile: testSuiteAbsolutePath,
@@ -1522,32 +1497,6 @@ addHook({
     // TODO - In the future we may need to implement a mechanism to send test properties
     // to the worker process before _runTest is called
     testStartCh.runStores(testCtx, () => {
-      if (isBrowserCoverageEnabled) {
-        let existsBeforeEachCoverageHook = false
-        for (const hook of test.parent._hooks) {
-          if (hook.type === 'beforeEach' && hook._ddCoverageHook) {
-            existsBeforeEachCoverageHook = true
-            break
-          }
-        }
-        if (!existsBeforeEachCoverageHook) {
-          test.parent._hooks.push({
-            type: 'beforeEach',
-            fn: async function ({ page }) {
-              try {
-                if (page) {
-                  await startBrowserCoverageForPage(page)
-                }
-              } catch (e) {
-                log.error('beforeEach coverage hook error', e)
-              }
-            },
-            title: 'beforeEach coverage hook',
-            _ddCoverageHook: true,
-          })
-        }
-      }
-
       let existAfterEachHook = false
 
       // We try to find an existing afterEach hook with _ddHook to avoid adding a new one
@@ -1653,13 +1602,7 @@ addHook({
     // Wait for the properties to be received
     await ddPropertiesPromise
 
-    const coverageFiles = []
-    if (workerV8Collector) {
-      coverageFiles.push(...workerV8Collector.getFilesCoveredSinceLastSnapshot())
-    }
-    if (isBrowserCoverageEnabled) {
-      coverageFiles.push(...await finishBrowserCoverage())
-    }
+    const coverageFiles = isBrowserCoverageEnabled ? await finishBrowserCoverage() : []
 
     // Emit per-test coverage delta to the main process. The main aggregates
     // per-suite and exports once testSuiteFinishCh fires.

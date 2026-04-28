@@ -10,15 +10,18 @@ const BUNDLED_BUILT_SOURCE =
   'function greet(){document.body.classList.add("greeted");}' +
   'function add(a,b){return a+b;}greet();add(1,2);\n' +
   '//# sourceMappingURL=bundle.js.map\n'
-const BUNDLED_SOURCE_MAP = {
-  version: 3,
-  file: 'bundle.js',
-  sources: ['src/greeting.js', 'src/math.js'],
-  names: [],
-  mappings: 'AAAA,wCCAA',
+
+function getBundledSourceMap (sources) {
+  return {
+    version: 3,
+    file: 'bundle.js',
+    sources: sources || ['src/greeting.ts', 'src/math.ts'],
+    names: [],
+    mappings: 'AAAA,wCCAA',
+  }
 }
 
-function createWebAppServer ({ skipIstanbulFixture = false } = {}) {
+function createWebAppServer ({ skipIstanbulFixture = false, bundledSourceMapSources } = {}) {
   const server = http.createServer((req, res) => {
     if (req.url === '/bundle.js') {
       res.setHeader('Content-Type', 'application/javascript')
@@ -29,7 +32,7 @@ function createWebAppServer ({ skipIstanbulFixture = false } = {}) {
     if (req.url === '/bundle.js.map') {
       res.setHeader('Content-Type', 'application/json')
       res.writeHead(200)
-      res.end(JSON.stringify(BUNDLED_SOURCE_MAP))
+      res.end(JSON.stringify(getBundledSourceMap(bundledSourceMapSources)))
       return
     }
     res.setHeader('Content-Type', 'text/html')
