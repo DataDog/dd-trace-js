@@ -108,7 +108,11 @@ describe('debugger -> devtools client -> snapshot collector deadline', function 
   it('should cache deadline reached state in ctx', async function () {
     let hrtimeCallCount = 0
 
-    // Same workaround as the previous test: avoid the fake-timers clock for `process.hrtime.bigint()`.
+    // Override the hrtime stub to track calls and advance time
+    // Drive process.hrtime.bigint() with a plain monotonic counter instead of reading
+    // `clock.now`. This works around a sinon fake-timers regression.
+watson marked this conversation as resolved.
+    // TODO: Revert when a fix for https://github.com/sinonjs/fake-timers/pull/549#pullrequestreview-4158432441 lands.
     sinon.restore()
     let nowNs = 0n
     sinon.stub(process.hrtime, 'bigint').callsFake(() => {
