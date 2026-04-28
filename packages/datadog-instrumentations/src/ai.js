@@ -4,13 +4,25 @@ const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
 const { convertVercelPromptToMessages, buildOutputMessages } = require('./helpers/ai-messages')
-const { publishToAIGuard, aiguardChannel } = require('./helpers/ai-guard-publish')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
+const vercelAiEvaluateChannel = channel('dd-trace:vercel-ai:evaluate')
 
 const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
+
+/**
+ * Publishes already-converted AI-style messages to the Vercel AI evaluation channel.
+ *
+ * @param {Array<object>} messages - AI-style messages to evaluate.
+ * @returns {Promise<void>}
+ */
+function publishEvaluation (messages) {
+  return new Promise((resolve, reject) => {
+    vercelAiEvaluateChannel.publish({ messages, resolve, reject })
+  })
+}
 
 /**
  * Wraps a Vercel AI language model's doGenerate and doStream methods to evaluate
@@ -27,7 +39,7 @@ function wrapModelWithAIGuard (model) {
       return function (options) {
         const originalResult = original.call(this, options)
 
-        if (!aiguardChannel.hasSubscribers) return originalResult
+        if (!vercelAiEvaluateChannel.hasSubscribers) return originalResult
         if (!options.prompt?.length) return originalResult
 
         const inputMessages = convertVercelPromptToMessages(options.prompt)
@@ -35,10 +47,11 @@ function wrapModelWithAIGuard (model) {
 
         // Run AI Guard input evaluation and LLM call in parallel.
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
+        return Promise.all([publishEvaluation(inputMessages), originalResult])
           .then(([, result]) => {
             if (!result.content?.length) return result
-            return publishToAIGuard(buildOutputMessages(inputMessages, result.content))
+            const outputMessages = buildOutputMessages(inputMessages, result.content)
+            return publishEvaluation(outputMessages)
               .then(() => result)
           })
       }
@@ -50,7 +63,7 @@ function wrapModelWithAIGuard (model) {
       return function (options) {
         const originalResult = original.call(this, options)
 
-        if (!aiguardChannel.hasSubscribers) return originalResult
+        if (!vercelAiEvaluateChannel.hasSubscribers) return originalResult
         if (!options.prompt?.length) return originalResult
 
         const inputMessages = convertVercelPromptToMessages(options.prompt)
@@ -58,7 +71,7 @@ function wrapModelWithAIGuard (model) {
 
         // Run AI Guard input evaluation and LLM call in parallel.
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
+        return Promise.all([publishEvaluation(inputMessages), originalResult])
           .then(([, result]) => {
             const chunks = []
             const reader = result.stream.getReader()
@@ -77,7 +90,7 @@ function wrapModelWithAIGuard (model) {
               const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
 
               const evaluate = content.length
-                ? publishToAIGuard(buildOutputMessages(inputMessages, content))
+                ? publishEvaluation(buildOutputMessages(inputMessages, content))
                 : Promise.resolve()
 
               return evaluate.then(() => {

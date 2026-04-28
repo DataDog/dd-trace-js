@@ -16,6 +16,7 @@ function startOpenAIMock () {
     app.post('/v1/chat/completions', (req, res) => {
       const model = req.body?.model ?? 'gpt-4o-mini'
       const wantsToolCall = req.body?.messages?.some(m => m.content?.includes?.('use tool'))
+      const denyResponse = req.body?.metadata?.mock_response === 'deny'
       const message = wantsToolCall
         ? {
             role: 'assistant',
@@ -29,7 +30,7 @@ function startOpenAIMock () {
               },
             }],
           }
-        : { role: 'assistant', content: 'Hello from the mock!' }
+        : { role: 'assistant', content: denyResponse ? 'Unsafe mock response [deny]' : 'Hello from the mock!' }
 
       res.status(200).json({
         id: 'chatcmpl-mock',
@@ -47,6 +48,9 @@ function startOpenAIMock () {
 
     app.post('/v1/responses', (req, res) => {
       const model = req.body?.model ?? 'gpt-4o-mini'
+      const text = req.body?.metadata?.mock_response === 'deny'
+        ? 'Unsafe mock responses output [deny]'
+        : 'Hello from mock responses!'
       res.status(200).json({
         id: 'resp_mock',
         object: 'response',
@@ -58,7 +62,7 @@ function startOpenAIMock () {
           type: 'message',
           role: 'assistant',
           status: 'completed',
-          content: [{ type: 'output_text', text: 'Hello from mock responses!', annotations: [] }],
+          content: [{ type: 'output_text', text, annotations: [] }],
         }],
         usage: { input_tokens: 8, output_tokens: 4, total_tokens: 12 },
       })

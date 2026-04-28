@@ -3,68 +3,89 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
-const {
-  buildChatCompletionOutputMessages,
-  buildResponsesOutputMessages,
-  convertChatCompletionMessages,
-  convertResponsesInput,
-} = require('./helpers/ai-messages')
-const { aiguardChannel, publishToAIGuard } = require('./helpers/ai-guard-publish')
+const { convertOpenAIResponseItemsToMessages } = require('./helpers/ai-messages')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
+const evaluateCh = dc.channel('apm:openai:request:evaluate')
 
 const AIGUARD_CONVERSATIONAL_RESOURCES = new Set(['chat.completions', 'responses'])
 
 /**
- * Wraps `apiProm.parse` so that when the response body resolves, AI Guard "after model"
- * evaluation runs and the caller's promise waits for both the Before Model evaluation
- * (`inputEval`, already in flight) and the After Model evaluation to succeed before
- * yielding the body. When either evaluation rejects with `AIGuardAbortError`, the
- * caller's `.parse()` promise rejects with the same error.
+ * Publishes already-converted AI-style messages to the OpenAI evaluation channel.
  *
- * Also wraps `apiProm.asResponse` so callers that consume the raw `Response` object
- * still receive the Before Model verdict — without this, DENY/ABORT would be swallowed
- * for anyone who skips `.parse()`. After Model evaluation is not performed on this path
- * because the response body has not been parsed.
+ * @param {Array<object>} messages - AI-style messages to evaluate.
+ * @returns {Promise<void>}
+ */
+function publishEvaluation (messages) {
+  return new Promise((resolve, reject) => {
+    evaluateCh.publish({ messages, resolve, reject })
+  })
+}
+
+/**
+ * Wraps `apiProm.asResponse` so callers that consume the raw `Response` object still
+ * receive the Before Model verdict. After Model evaluation is not performed on this
+ * path because the response body has not been parsed.
  *
  * @param {object} apiProm - APIPromise returned from the OpenAI SDK method
- * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
- * @param {Array<object>} inputMessages - Already-converted AI Guard style input messages
  * @param {Promise<void>} inputEval - Promise for the Before Model evaluation
  */
-function wrapAPIPromiseForAIGuard (apiProm, baseResource, inputMessages, inputEval) {
-  shimmer.wrap(apiProm, 'parse', origParse => function () {
-    const parsed = origParse.apply(this, arguments)
-    return Promise.all([inputEval, parsed]).then(([, body]) => {
-      let evalPromise
-      if (baseResource === 'chat.completions') {
-        // Chat completions may return multiple choices when `n > 1`. Screen every choice
-        // so any unsafe assistant output rejects `.parse()`, regardless of which choice
-        // the caller ends up using.
-        const choices = Array.isArray(body?.choices) ? body.choices : []
-        const evals = []
-        for (const choice of choices) {
-          const outputMessages = buildChatCompletionOutputMessages(inputMessages, choice?.message)
-          if (outputMessages) evals.push(publishToAIGuard(outputMessages))
-        }
-        if (!evals.length) return body
-        evalPromise = Promise.all(evals)
-      } else {
-        const outputMessages = buildResponsesOutputMessages(inputMessages, body?.output)
-        if (!outputMessages) return body
-        evalPromise = publishToAIGuard(outputMessages)
-      }
-      return evalPromise.then(() => body)
-    })
-  })
-
+function wrapAsResponseForAIGuard (apiProm, inputEval) {
   if (typeof apiProm.asResponse === 'function') {
     shimmer.wrap(apiProm, 'asResponse', origAsResponse => function () {
       const responsePromise = origAsResponse.apply(this, arguments)
       return Promise.all([inputEval, responsePromise]).then(([, response]) => response)
     })
   }
+}
+
+/**
+ * Extracts OpenAI output messages from parsed response bodies.
+ *
+ * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
+ * @param {object} body - Parsed response body
+ * @returns {Array<object>}
+ */
+function getOutputMessages (baseResource, body) {
+  if (baseResource === 'chat.completions') {
+    const messages = []
+    const choices = Array.isArray(body?.choices) ? body.choices : []
+    for (const choice of choices) {
+      const message = choice?.message
+      if (message?.content != null || message?.tool_calls?.length) {
+        messages.push(message)
+      }
+    }
+    return messages
+  }
+
+  return convertOpenAIResponseItemsToMessages(body?.output, 'assistant')
+}
+
+/**
+ * Publishes AI Guard After Model evaluation for extracted OpenAI output messages.
+ *
+ * @param {string} baseResource - Either `'chat.completions'` or `'responses'`
+ * @param {Array<object>} inputMessages - Already-converted AI Guard style input messages
+ * @param {Array<object>} outputMessages - Already-converted AI Guard style output messages
+ * @returns {Promise<void|Array<void>>}
+ */
+function publishOutputEvaluation (baseResource, inputMessages, outputMessages) {
+  if (!outputMessages.length) return Promise.resolve()
+
+  if (baseResource === 'chat.completions') {
+    // Chat completions may return multiple choices when `n > 1`. Screen every choice
+    // so any unsafe assistant output rejects `.parse()`, regardless of which choice
+    // the caller ends up using.
+    const evals = []
+    for (const message of outputMessages) {
+      evals.push(publishEvaluation([...inputMessages, message]))
+    }
+    return Promise.all(evals)
+  }
+
+  return publishEvaluation([...inputMessages, ...outputMessages])
 }
 
 const V4_PACKAGE_SHIMS = [
@@ -285,7 +306,7 @@ for (const extension of extensions) {
           // Guard only evaluates non-streaming responses.
           const aiguardApplicable = !stream &&
             AIGUARD_CONVERSATIONAL_RESOURCES.has(baseResource) &&
-            aiguardChannel.hasSubscribers
+            evaluateCh.hasSubscribers
 
           if (!ch.start.hasSubscribers && !aiguardApplicable) {
             return methodFn.apply(this, arguments)
@@ -305,9 +326,9 @@ for (const extension of extensions) {
           if (aiguardApplicable) {
             const callArgs = arguments[0]
             const messages = baseResource === 'chat.completions'
-              ? convertChatCompletionMessages(callArgs?.messages)
-              : convertResponsesInput(callArgs?.input)
-            if (messages.length) aiguardInputMessages = messages
+              ? Array.isArray(callArgs?.messages) ? callArgs.messages : undefined
+              : convertOpenAIResponseItemsToMessages(callArgs?.input, 'user')
+            if (messages?.length) aiguardInputMessages = messages
           }
 
           return ch.start.runStores(ctx, () => {
@@ -317,12 +338,16 @@ for (const extension of extensions) {
             // The LLM has no side effects, so it is safe to discard its response if AI Guard blocks.
             let aiguardInputEval
             if (aiguardInputMessages) {
-              aiguardInputEval = publishToAIGuard(aiguardInputMessages)
+              aiguardInputEval = publishEvaluation(aiguardInputMessages)
               // Silence the unhandled rejection in the edge case where `.parse()` is never
-              // called; `wrapAPIPromiseForAIGuard` re-awaits the same promise and propagates
+              // called; `handleUnwrappedAPIPromise` re-awaits the same promise and propagates
               // the rejection to the caller when it is.
               aiguardInputEval.catch(() => {})
             }
+
+            const aiguard = aiguardInputEval
+              ? { baseResource, inputMessages: aiguardInputMessages, inputEval: aiguardInputEval }
+              : undefined
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
               // this should only ever be invoked from a client.beta.chat.completions.parse call
@@ -337,15 +362,8 @@ for (const extension of extensions) {
                   const parsedPromise = origApiPromParse.apply(this, arguments)
                     .then(body => Promise.all([this.responsePromise, body]))
 
-                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
+                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, aiguard)
                 })
-
-                // Users of client.beta.chat.completions.parse() await the unwrapped promise, so
-                // the outer apiProm.parse AI Guard wrap below would never fire for them. Layer
-                // the same AI Guard evaluation onto the inner unwrappedPromise.parse too.
-                if (aiguardInputEval) {
-                  wrapAPIPromiseForAIGuard(unwrappedPromise, baseResource, aiguardInputMessages, aiguardInputEval)
-                }
 
                 return unwrappedPromise
               })
@@ -357,13 +375,11 @@ for (const extension of extensions) {
               const parsedPromise = origApiPromParse.apply(this, arguments)
                 .then(body => Promise.all([this.responsePromise, body]))
 
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
+              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, aiguard)
             })
 
-            // AI Guard layer wraps `.parse` on top of the tracing layer so it sees the fully
-            // parsed response body and can publish the After Model evaluation.
             if (aiguardInputEval) {
-              wrapAPIPromiseForAIGuard(apiProm, baseResource, aiguardInputMessages, aiguardInputEval)
+              wrapAsResponseForAIGuard(apiProm, aiguardInputEval)
             }
 
             ch.end.publish(ctx)
@@ -377,7 +393,7 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, aiguard) {
   return apiProm
     .then(([{ response, options }, body]) => {
       if (stream) {
@@ -388,20 +404,24 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
             body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, ctx)
           )
         }
-      } else {
-        finish(ctx, {
-          headers: response.headers,
-          data: body,
-          request: {
-            path: response.url,
-            method: options.method,
-          },
-        })
+        return body
       }
 
-      return body
-    })
-    .catch(error => {
+      finish(ctx, {
+        headers: response.headers,
+        data: body,
+        request: {
+          path: response.url,
+          method: options.method,
+        },
+      })
+
+      if (!aiguard) return body
+      return aiguard.inputEval
+        .then(() => getOutputMessages(aiguard.baseResource, body))
+        .then(outputMessages => publishOutputEvaluation(aiguard.baseResource, aiguard.inputMessages, outputMessages))
+        .then(() => body)
+    }, error => {
       finish(ctx, undefined, error)
 
       throw error

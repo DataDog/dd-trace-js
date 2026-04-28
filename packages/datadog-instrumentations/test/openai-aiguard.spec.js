@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { channel } = require('dc-polyfill')
 const { before, beforeEach, describe, it } = require('mocha')
 
-const aiguardChannel = channel('dd-trace:ai:aiguard')
+const evaluateChannel = channel('apm:openai:request:evaluate')
 
 // Minimal APIPromise stand-in. The real SDK APIPromise has a `parse()` method that
 // returns the parsed response body, and user-facing `.then` routes through `.parse()`.
@@ -62,13 +62,13 @@ function subscribeAutoResolve () {
     calls.push({ messages: ctx.messages })
     ctx.resolve()
   }
-  aiguardChannel.subscribe(handler)
-  return { calls, unsubscribe: () => aiguardChannel.unsubscribe(handler) }
+  evaluateChannel.subscribe(handler)
+  return { calls, unsubscribe: () => evaluateChannel.unsubscribe(handler) }
 }
 
 function subscribeWithHandler (handler) {
-  aiguardChannel.subscribe(handler)
-  return () => aiguardChannel.unsubscribe(handler)
+  evaluateChannel.subscribe(handler)
+  return () => evaluateChannel.unsubscribe(handler)
 }
 
 /**
@@ -236,7 +236,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('kicks off Before Model evaluation before waiting for the LLM response', () => {
       // The timing proof: the publish channel handler runs synchronously when we call
-      // publishToAIGuard, which happens right after methodFn is invoked. So by the time
+      // publishEvaluation, which happens right after methodFn is invoked. So by the time
       // the AI Guard handler observes the event, the LLM call has already been made.
       const observed = { llmCalledBeforeGuard: false }
       const unsubscribe = subscribeWithHandler(ctx => {
@@ -434,6 +434,31 @@ describe('openai AI Guard instrumentation', () => {
           assert.strictEqual(calls.length, 2)
           assert.deepStrictEqual(calls[1].messages[1], { role: 'assistant', content: 'Hello!' })
         })
+        .finally(unsubscribe)
+    })
+
+    it('converts responses input image parts for Before Model evaluation', () => {
+      const { calls, unsubscribe } = subscribeAutoResolve()
+      const responses = new Responses()
+      responses._nextApiPromise = new FakeAPIPromise({ output: [] })
+
+      return responses.create({
+        input: [{
+          type: 'message',
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'what is this?' },
+            { type: 'input_image', image_url: 'https://example.com/image.png' },
+          ],
+        }],
+      }).parse()
+        .then(() => assert.deepStrictEqual(calls[0].messages, [{
+          role: 'user',
+          content: [
+            { type: 'text', text: 'what is this?' },
+            { type: 'image_url', image_url: { url: 'https://example.com/image.png' } },
+          ],
+        }]))
         .finally(unsubscribe)
     })
 

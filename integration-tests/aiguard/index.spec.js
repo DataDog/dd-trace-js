@@ -21,7 +21,7 @@ function assertHasGuardSpan (payload, predicate) {
 describe('AIGuard SDK integration tests', () => {
   let cwd, appFile, agent, proc, api, openaiApi, url
 
-  useSandbox(['express', 'ai@6.0.39', 'openai@5'])
+  useSandbox(['express', 'ai@6.0.39', 'openai@6'])
 
   before(async function () {
     cwd = sandboxCwd()
@@ -217,6 +217,26 @@ describe('AIGuard SDK integration tests', () => {
 
     it(`blocks dangerous OpenAI ${name} requests at Before Model`, async () => {
       const response = await executeRequest(`${url}${endpoint}?deny=true`)
+      assert.strictEqual(response.status, 403)
+      assert.deepStrictEqual(JSON.parse(response.body), { blocked: true, reason: 'Blocked by policy' })
+
+      await agent.assertMessageReceived(({ payload }) => {
+        assertHasGuardSpan(payload, span =>
+          span.meta['ai_guard.action'] === 'DENY' &&
+          span.meta['ai_guard.blocked'] === 'true'
+        )
+      })
+    })
+  }
+
+  const openaiAfterModelSuite = [
+    { endpoint: '/openai-chat-after-deny', name: 'chat.completions.create' },
+    { endpoint: '/openai-responses-after-deny', name: 'responses.create' },
+  ]
+
+  for (const { endpoint, name } of openaiAfterModelSuite) {
+    it(`blocks dangerous OpenAI ${name} responses at After Model`, async () => {
+      const response = await executeRequest(`${url}${endpoint}`)
       assert.strictEqual(response.status, 403)
       assert.deepStrictEqual(JSON.parse(response.body), { blocked: true, reason: 'Blocked by policy' })
 
