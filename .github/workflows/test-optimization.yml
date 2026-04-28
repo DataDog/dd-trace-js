@@ -65,7 +65,15 @@ jobs:
       matrix:
         node-version: [oldest, latest]
         playwright-version: [oldest, latest]
-    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }})
+        spec:
+          - playwright-reporting
+          - playwright-efd
+          - playwright-atr
+          - playwright-test-management
+          - playwright-active-test-span
+          - playwright-impacted-tests
+          - playwright-itr
+    name: integration-playwright (${{ matrix.playwright-version}}, node-${{ matrix.node-version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -103,10 +111,15 @@ jobs:
         with:
           path: /github/home/.cache/ms-playwright
           key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
+      - name: Configure Git safe directory
+        # The Playwright job runs in a container where the checkout can be owned by a different UID.
+        # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: yarn test:integration:playwright
         env:
           NODE_OPTIONS: "-r ./ci/init"
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+          SPEC: ${{ matrix.spec }}
 
   integration-mocha:
     strategy:
@@ -231,9 +244,26 @@ jobs:
         # 6.7.0 is the minimum version we support in <=5
         # 10.2.0 is the minimum version we support in >=6
         # 14.5.4 is the latest version that supports Node 18
-        # The logic to decide whether the tests run lives in integration-tests/cypress/cypress.spec.js
+        # The logic to decide whether the tests run lives in the individual spec files
         cypress-version: [6.7.0, 10.2.0, 14.5.4, latest]
         module-type: ["commonJS", "esm"]
+        spec:
+          - cypress-reporting
+          - cypress-itr
+          - cypress-efd
+          - cypress-atr
+          - cypress-test-management
+          - cypress-impacted-tests
+          - cypress-final-status
+        exclude:
+          # eol = Node 16: shouldTestsRun() always returns false for DD_MAJOR >= 6
+          - version: eol
+          # 6.7.0 is only supported for DD_MAJOR <= 5; never runs on this branch
+          - cypress-version: 6.7.0
+          # Node 18 (oldest) only supports 10.2.0 and 14.5.4, not latest
+          - version: oldest
+            cypress-version: latest
+    name: integration-cypress (${{ matrix.cypress-version }}, node-${{ matrix.version }}, ${{ matrix.module-type }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -263,6 +293,7 @@ jobs:
           NODE_OPTIONS: "-r ./ci/init"
           CYPRESS_MODULE_TYPE: ${{ matrix.module-type }}
           OPTIONS_OVERRIDE: 1
+          SPEC: ${{ matrix.spec }}
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:

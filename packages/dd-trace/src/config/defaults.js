@@ -82,10 +82,6 @@ for (const [name, value] of Object.entries(defaults)) {
  */
 function generateTelemetry (value = null, origin, optionName) {
   const { type, canonicalName = optionName } = configurationsTable[optionName] ?? { type: typeof value }
-  // TODO: Consider adding a preParser hook to the parsers object.
-  if (canonicalName === 'OTEL_RESOURCE_ATTRIBUTES') {
-    value = telemetryTransformers.MAP(value)
-  }
   // TODO: Should we not send defaults to telemetry to reduce size?
   // TODO: How to handle aliases/actual names in the future? Optional fields? Normalize the name at intake?
   // TODO: Validate that space separated tags are parsed by the backend. Optimizations would be possible with that.

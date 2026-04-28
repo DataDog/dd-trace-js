@@ -179,7 +179,8 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "100"
+        "default": "100",
+        "allowed": "\\d+"
       }
     ],
     "DD_APM_TRACING_ENABLED": [
@@ -3903,18 +3904,16 @@
     ],
     "OTEL_EXPORTER_OTLP_HEADERS": [
       {
-        "implementation": "C",
-        "type": "string",
-        "default": null,
-        "internalPropertyName": "otelHeaders"
+        "implementation": "B",
+        "type": "map",
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "otelTracesUrl"
+        "default": null
       }
     ],
     "OTEL_EXPORTER_OTLP_TRACES_HEADERS": [
@@ -3922,7 +3921,6 @@
         "implementation": "B",
         "type": "map",
         "default": null,
-        "internalPropertyName": "otelTracesHeaders",
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
         ]
@@ -3933,7 +3931,7 @@
         "implementation": "B",
         "type": "string",
         "default": "http/json",
-        "internalPropertyName": "otelTracesProtocol",
+        "allowed": "http/json",
         "aliases": [
           "OTEL_EXPORTER_OTLP_PROTOCOL"
         ]
@@ -3943,7 +3941,6 @@
       {
         "implementation": "B",
         "type": "int",
-        "internalPropertyName": "otelTracesTimeout",
         "default": "10000",
         "aliases": [
           "OTEL_EXPORTER_OTLP_TIMEOUT"
@@ -3955,18 +3952,14 @@
         "implementation": "A",
         "type": "string",
         "default": null,
-        "internalPropertyName": "otelLogsUrl",
-        "aliases": [
-          "OTEL_EXPORTER_OTLP_ENDPOINT"
-        ]
+        "internalPropertyName": "otelLogsUrl"
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_HEADERS": [
       {
-        "implementation": "A",
-        "type": "string",
+        "implementation": "B",
+        "type": "map",
         "default": null,
-        "internalPropertyName": "otelLogsHeaders",
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
         ]
@@ -4000,18 +3993,14 @@
         "implementation": "A",
         "type": "string",
         "default": null,
-        "internalPropertyName": "otelMetricsUrl",
-        "aliases": [
-          "OTEL_EXPORTER_OTLP_ENDPOINT"
-        ]
+        "internalPropertyName": "otelMetricsUrl"
       }
     ],
     "OTEL_EXPORTER_OTLP_METRICS_HEADERS": [
       {
-        "implementation": "B",
-        "type": "string",
+        "implementation": "C",
+        "type": "map",
         "default": null,
-        "internalPropertyName": "otelMetricsHeaders",
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
         ]
@@ -4105,8 +4094,8 @@
     ],
     "OTEL_RESOURCE_ATTRIBUTES": [
       {
-        "implementation": "B",
-        "type": "string",
+        "implementation": "A",
+        "type": "map",
         "default": "",
         "transform": "parseOtelTags"
       }
@@ -4120,9 +4109,9 @@
     ],
     "OTEL_TRACES_EXPORTER": [
       {
-        "implementation": "F",
+        "implementation": "H",
         "type": "string",
-        "default": "otlp",
+        "default": null,
         "allowed": "none|otlp",
         "transform": "toLowerCase"
       }

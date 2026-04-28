@@ -8,7 +8,7 @@ function addNonEmpty (carrier, key, value) {
   }
 }
 
-function add (carrier, keyValuePairs) {
+function add (carrier, keyValuePairs, valueSeparator = ':') {
   if (!carrier) return
 
   if (typeof keyValuePairs === 'string') {
@@ -18,7 +18,7 @@ function add (carrier, keyValuePairs) {
     for (let i = 0; i < keyValuePairs.length; i++) {
       const char = keyValuePairs[i]
 
-      if (char === ':') {
+      if (char === valueSeparator) {
         if (valueStart === 0) {
           valueStart = i
         }

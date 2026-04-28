@@ -9,7 +9,6 @@ const { getEnvironmentVariable } = require('../../config/helper')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
-const ignore = require('../../../../../vendor/dist/ignore')
 
 const id = require('../../id')
 const {
@@ -676,24 +675,146 @@ function getCodeOwnersFileEntries (rootDir) {
     const trimmed = content.trim()
     if (trimmed === '') continue
     const [pattern, ...owners] = trimmed.split(/\s+/)
-    entries.push({ pattern, owners })
+    entries.push(setCodeOwnersPatternRegex({ pattern, owners }))
   }
   // Reverse because rules defined last take precedence
   return entries.reverse()
 }
 
-const codeOwnersPerFileName = new Map()
+const codeOwnersPerEntries = new WeakMap()
+
+/**
+ * @param {string} character
+ * @returns {string}
+ */
+function escapeRegexCharacter (character) {
+  return character.replaceAll(/[|\\{}()[\]^$+*?.]/g, String.raw`\$&`)
+}
+
+/**
+ * @param {string} pattern
+ * @returns {boolean}
+ */
+function hasUnescapedWildcard (pattern) {
+  for (let i = 0; i < pattern.length; i++) {
+    const character = pattern[i]
+    if (character === '\\') {
+      i++
+    } else if (character === '*' || character === '?') {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * @param {string} pattern
+ * @returns {string}
+ */
+function codeOwnersPatternToRegexSource (pattern) {
+  let source = ''
+  for (let i = 0; i < pattern.length; i++) {
+    const character = pattern[i]
+
+    if (character === '\\') {
+      const escapedCharacter = pattern[i + 1]
+      source += escapedCharacter === undefined
+        ? escapeRegexCharacter(character)
+        : escapeRegexCharacter(escapedCharacter)
+      i++
+    } else if (character === '*') {
+      if (pattern[i + 1] === '*') {
+        if (pattern[i + 2] === '/') {
+          source += '(?:.*/)?'
+          i += 2
+        } else {
+          source += '.*'
+          i++
+        }
+      } else {
+        source += '[^/]*'
+      }
+    } else if (character === '?') {
+      source += '[^/]'
+    } else {
+      source += escapeRegexCharacter(character)
+    }
+  }
+  return source
+}
+
+/**
+ * @param {string} pattern
+ * @returns {RegExp|null}
+ */
+function getCodeOwnersPatternRegex (pattern) {
+  if (!pattern || pattern[0] === '!') {
+    return null
+  }
+
+  const directoryOnly = pattern.endsWith('/')
+  const normalizedPattern = pattern.replace(/^\/+/, '').replace(/\/+$/, '')
+  const anchored = pattern.startsWith('/') || normalizedPattern.includes('/')
+
+  if (!normalizedPattern) {
+    return null
+  }
+
+  const lastSlashIndex = normalizedPattern.lastIndexOf('/')
+  const lastSegment = lastSlashIndex === -1 ? normalizedPattern : normalizedPattern.slice(lastSlashIndex + 1)
+  const descendantSuffix = directoryOnly || !hasUnescapedWildcard(lastSegment) ? '(?:/.*)?' : ''
+  const patternSource = codeOwnersPatternToRegexSource(normalizedPattern)
+  const regexSource = anchored
+    ? `^${patternSource}${descendantSuffix}$`
+    : `(?:^|/)${patternSource}${descendantSuffix}$`
+
+  return new RegExp(regexSource)
+}
+
+function setCodeOwnersPatternRegex (entry) {
+  Object.defineProperty(entry, 'regex', {
+    configurable: true,
+    value: getCodeOwnersPatternRegex(entry.pattern),
+    writable: true,
+  })
+  return entry
+}
+
+/**
+ * Match a repository-relative filename against a CODEOWNERS pattern.
+ * See GitHub's CODEOWNERS pattern rules:
+ * https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+ *
+ * @param {RegExp|null} regex
+ * @param {string} filename
+ * @returns {boolean}
+ */
+function isCodeOwnersPatternMatch (regex, filename) {
+  if (!regex || !filename) {
+    return false
+  }
+
+  const normalizedFilename = filename.replaceAll('\\', '/').replace(/^\/+/, '')
+  return regex.test(normalizedFilename)
+}
 
 function getCodeOwnersForFilename (filename, entries) {
   if (!entries) {
     return null
   }
-  if (codeOwnersPerFileName.has(filename)) {
+  let codeOwnersPerFileName = codeOwnersPerEntries.get(entries)
+
+  if (!codeOwnersPerFileName) {
+    codeOwnersPerFileName = new Map()
+    codeOwnersPerEntries.set(entries, codeOwnersPerFileName)
+  } else if (codeOwnersPerFileName.has(filename)) {
     return codeOwnersPerFileName.get(filename)
   }
+
   for (const entry of entries) {
     try {
-      const isResponsible = ignore().add(entry.pattern).ignores(filename)
+      const regex = entry.regex === undefined ? setCodeOwnersPatternRegex(entry).regex : entry.regex
+      const isResponsible = isCodeOwnersPatternMatch(regex, filename)
       if (isResponsible) {
         const codeOwners = JSON.stringify(entry.owners)
         codeOwnersPerFileName.set(filename, codeOwners)

@@ -5,7 +5,6 @@ const path = require('node:path')
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   finishAllTraceSpans,
@@ -158,7 +157,7 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
@@ -510,7 +509,7 @@ class PlaywrightPlugin extends CiPlugin {
       span.finish()
 
       finishAllTraceSpans(span)
-      if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
+      if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
         this.tracer._exporter.flush(onDone)
       }
     })

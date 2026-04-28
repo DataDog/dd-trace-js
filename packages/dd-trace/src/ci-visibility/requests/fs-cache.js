@@ -5,8 +5,8 @@ const path = require('node:path')
 const { createHash } = require('node:crypto')
 const { tmpdir } = require('node:os')
 
+const getConfig = require('../../config')
 const log = require('../../log')
-const { getValueFromEnvSources } = require('../../config/helper')
 
 const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 const CACHE_LOCK_POLL_MS = 500
@@ -14,13 +14,12 @@ const CACHE_LOCK_TIMEOUT_MS = 120_000 // 2 minutes
 const CACHE_LOCK_HEARTBEAT_MS = 30_000 // 30 seconds
 
 /**
- * Returns whether the filesystem cache is enabled via the env var.
+ * Returns whether the filesystem cache is enabled via config.
  *
  * @returns {boolean}
  */
 function isCacheEnabled () {
-  const { isTrue } = require('../../util')
-  return isTrue(getValueFromEnvSources('DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE'))
+  return getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
 }
 
 /**

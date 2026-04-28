@@ -23,7 +23,7 @@
     "@apollo/server": "5.5.0",
     "@koa/router": "15.4.0",
     "aws-sdk": "2.1693.0",
-    "axios": "1.15.1",
+    "axios": "1.15.2",
     "express": "4.22.1",
     "knex": "3.2.9",
     "koa": "3.2.0",
