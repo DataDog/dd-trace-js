@@ -472,7 +472,9 @@ describe('Plugin', () => {
 
           it('should propagate context via span links', async () => {
             const expectedSpanPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0][0]
+              const span = traces[0].find(s => s.name === expectedSchema.receive.opName)
+              assert.ok(span, `${expectedSchema.receive.opName} span should exist in trace`)
+
               const links = span.meta['_dd.span_links'] ? JSON.parse(span.meta['_dd.span_links']) : []
 
               assertObjectContains(span, {
