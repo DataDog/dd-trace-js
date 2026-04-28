@@ -190,7 +190,10 @@
         "configurationNames": [
           "apmTracingEnabled"
         ],
-        "default": "true"
+        "default": "true",
+        "aliases": [
+          "DD_TRACING_ENABLED"
+        ]
       }
     ],
     "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": [
@@ -2510,10 +2513,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "tracing",
-        "aliases": [
-          "DD_TRACING_ENABLED"
-        ]
+        "internalPropertyName": "tracing"
       }
     ],
     "DD_TRACE_ENCODING_DEBUG": [

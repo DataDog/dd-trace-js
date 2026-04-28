@@ -67,7 +67,7 @@ describe('Dynamic Instrumentation', function () {
     })
   })
 
-  describe('DD_TRACING_ENABLED=false', function () {
+  describe('DD_TRACING_ENABLED=false (standalone APM mode)', function () {
     const t = setup({
       testApp: 'target-app/basic.js',
       env: { DD_TRACING_ENABLED: 'false' },
@@ -75,10 +75,7 @@ describe('Dynamic Instrumentation', function () {
     })
 
     describe('input messages', function () {
-      it(
-        'should capture and send expected payload when a log line probe is triggered',
-        testBasicInputWithoutDD.bind(null, t)
-      )
+      it('should capture and send expected payload when a log line probe is triggered', testBasicInput.bind(null, t))
     })
   })
 
