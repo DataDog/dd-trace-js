@@ -942,7 +942,10 @@ function useSandbox (...args) {
 
   after(function () {
     this.timeout(30_000)
-    return sandbox.remove()
+    const oldSandbox = sandbox
+    sandbox = undefined
+    if (!oldSandbox) return
+    return oldSandbox.remove()
   })
 }
 
